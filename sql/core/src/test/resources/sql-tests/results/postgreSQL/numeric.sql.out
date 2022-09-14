@@ -4,8 +4,7 @@ CREATE TABLE num_data (id int, val decimal(38,10)) USING parquet
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`spark_catalog`.`default`.`num_data`'). The associated location('file:/Users/Daniel.Tenedorio/spark-2/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/num_data') already exists.
+
 
 
 -- !query
@@ -13,8 +12,7 @@ CREATE TABLE num_exp_add (id1 int, id2 int, expected decimal(38,10)) USING parqu
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`spark_catalog`.`default`.`num_exp_add`'). The associated location('file:/Users/Daniel.Tenedorio/spark-2/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/num_exp_add') already exists.
+
 
 
 -- !query
@@ -22,8 +20,7 @@ CREATE TABLE num_exp_sub (id1 int, id2 int, expected decimal(38,10)) USING parqu
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`spark_catalog`.`default`.`num_exp_sub`'). The associated location('file:/Users/Daniel.Tenedorio/spark-2/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/num_exp_sub') already exists.
+
 
 
 -- !query
@@ -31,8 +28,7 @@ CREATE TABLE num_exp_div (id1 int, id2 int, expected decimal(38,10)) USING parqu
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`spark_catalog`.`default`.`num_exp_div`'). The associated location('file:/Users/Daniel.Tenedorio/spark-2/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/num_exp_div') already exists.
+
 
 
 -- !query
@@ -40,8 +36,7 @@ CREATE TABLE num_exp_mul (id1 int, id2 int, expected decimal(38,10)) USING parqu
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`spark_catalog`.`default`.`num_exp_mul`'). The associated location('file:/Users/Daniel.Tenedorio/spark-2/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/num_exp_mul') already exists.
+
 
 
 -- !query
@@ -49,8 +44,7 @@ CREATE TABLE num_exp_sqrt (id int, expected decimal(38,10)) USING parquet
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`spark_catalog`.`default`.`num_exp_sqrt`'). The associated location('file:/Users/Daniel.Tenedorio/spark-2/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/num_exp_sqrt') already exists.
+
 
 
 -- !query
@@ -58,8 +52,7 @@ CREATE TABLE num_exp_ln (id int, expected decimal(38,10)) USING parquet
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`spark_catalog`.`default`.`num_exp_ln`'). The associated location('file:/Users/Daniel.Tenedorio/spark-2/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/num_exp_ln') already exists.
+
 
 
 -- !query
@@ -67,8 +60,7 @@ CREATE TABLE num_exp_log10 (id int, expected decimal(38,10)) USING parquet
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`spark_catalog`.`default`.`num_exp_log10`'). The associated location('file:/Users/Daniel.Tenedorio/spark-2/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/num_exp_log10') already exists.
+
 
 
 -- !query
@@ -76,8 +68,7 @@ CREATE TABLE num_exp_power_10_ln (id int, expected decimal(38,10)) USING parquet
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`spark_catalog`.`default`.`num_exp_power_10_ln`'). The associated location('file:/Users/Daniel.Tenedorio/spark-2/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/num_exp_power_10_ln') already exists.
+
 
 
 -- !query
@@ -93,8 +84,7 @@ INSERT INTO num_exp_add VALUES (0,0,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -102,8 +92,7 @@ INSERT INTO num_exp_sub VALUES (0,0,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -111,8 +100,7 @@ INSERT INTO num_exp_mul VALUES (0,0,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -120,8 +108,7 @@ INSERT INTO num_exp_div VALUES (0,0,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -129,8 +116,7 @@ INSERT INTO num_exp_add VALUES (0,1,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -138,8 +124,7 @@ INSERT INTO num_exp_sub VALUES (0,1,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -147,8 +132,7 @@ INSERT INTO num_exp_mul VALUES (0,1,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -156,8 +140,7 @@ INSERT INTO num_exp_div VALUES (0,1,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -165,8 +148,7 @@ INSERT INTO num_exp_add VALUES (0,2,-34338492.215397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -174,8 +156,7 @@ INSERT INTO num_exp_sub VALUES (0,2,34338492.215397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -183,8 +164,7 @@ INSERT INTO num_exp_mul VALUES (0,2,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -192,8 +172,7 @@ INSERT INTO num_exp_div VALUES (0,2,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -201,8 +180,7 @@ INSERT INTO num_exp_add VALUES (0,3,4.31)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -210,8 +188,7 @@ INSERT INTO num_exp_sub VALUES (0,3,-4.31)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -219,8 +196,7 @@ INSERT INTO num_exp_mul VALUES (0,3,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -228,8 +204,7 @@ INSERT INTO num_exp_div VALUES (0,3,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -237,8 +212,7 @@ INSERT INTO num_exp_add VALUES (0,4,7799461.4119)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -246,8 +220,7 @@ INSERT INTO num_exp_sub VALUES (0,4,-7799461.4119)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -255,8 +228,7 @@ INSERT INTO num_exp_mul VALUES (0,4,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -264,8 +236,7 @@ INSERT INTO num_exp_div VALUES (0,4,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -273,8 +244,7 @@ INSERT INTO num_exp_add VALUES (0,5,16397.038491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -282,8 +252,7 @@ INSERT INTO num_exp_sub VALUES (0,5,-16397.038491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -291,8 +260,7 @@ INSERT INTO num_exp_mul VALUES (0,5,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -300,8 +268,7 @@ INSERT INTO num_exp_div VALUES (0,5,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -309,8 +276,7 @@ INSERT INTO num_exp_add VALUES (0,6,93901.57763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -318,8 +284,7 @@ INSERT INTO num_exp_sub VALUES (0,6,-93901.57763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -327,8 +292,7 @@ INSERT INTO num_exp_mul VALUES (0,6,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -336,8 +300,7 @@ INSERT INTO num_exp_div VALUES (0,6,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -345,8 +308,7 @@ INSERT INTO num_exp_add VALUES (0,7,-83028485)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -354,8 +316,7 @@ INSERT INTO num_exp_sub VALUES (0,7,83028485)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -363,8 +324,7 @@ INSERT INTO num_exp_mul VALUES (0,7,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -372,8 +332,7 @@ INSERT INTO num_exp_div VALUES (0,7,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -381,8 +340,7 @@ INSERT INTO num_exp_add VALUES (0,8,74881)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -390,8 +348,7 @@ INSERT INTO num_exp_sub VALUES (0,8,-74881)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -399,8 +356,7 @@ INSERT INTO num_exp_mul VALUES (0,8,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -408,8 +364,7 @@ INSERT INTO num_exp_div VALUES (0,8,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -417,8 +372,7 @@ INSERT INTO num_exp_add VALUES (0,9,-24926804.045047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -426,8 +380,7 @@ INSERT INTO num_exp_sub VALUES (0,9,24926804.045047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -435,8 +388,7 @@ INSERT INTO num_exp_mul VALUES (0,9,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -444,8 +396,7 @@ INSERT INTO num_exp_div VALUES (0,9,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -453,8 +404,7 @@ INSERT INTO num_exp_add VALUES (1,0,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -462,8 +412,7 @@ INSERT INTO num_exp_sub VALUES (1,0,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -471,8 +420,7 @@ INSERT INTO num_exp_mul VALUES (1,0,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -480,8 +428,7 @@ INSERT INTO num_exp_div VALUES (1,0,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -489,8 +436,7 @@ INSERT INTO num_exp_add VALUES (1,1,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -498,8 +444,7 @@ INSERT INTO num_exp_sub VALUES (1,1,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -507,8 +452,7 @@ INSERT INTO num_exp_mul VALUES (1,1,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -516,8 +460,7 @@ INSERT INTO num_exp_div VALUES (1,1,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -525,8 +468,7 @@ INSERT INTO num_exp_add VALUES (1,2,-34338492.215397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -534,8 +476,7 @@ INSERT INTO num_exp_sub VALUES (1,2,34338492.215397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -543,8 +484,7 @@ INSERT INTO num_exp_mul VALUES (1,2,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -552,8 +492,7 @@ INSERT INTO num_exp_div VALUES (1,2,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -561,8 +500,7 @@ INSERT INTO num_exp_add VALUES (1,3,4.31)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -570,8 +508,7 @@ INSERT INTO num_exp_sub VALUES (1,3,-4.31)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -579,8 +516,7 @@ INSERT INTO num_exp_mul VALUES (1,3,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -588,8 +524,7 @@ INSERT INTO num_exp_div VALUES (1,3,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -597,8 +532,7 @@ INSERT INTO num_exp_add VALUES (1,4,7799461.4119)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -606,8 +540,7 @@ INSERT INTO num_exp_sub VALUES (1,4,-7799461.4119)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -615,8 +548,7 @@ INSERT INTO num_exp_mul VALUES (1,4,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -624,8 +556,7 @@ INSERT INTO num_exp_div VALUES (1,4,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -633,8 +564,7 @@ INSERT INTO num_exp_add VALUES (1,5,16397.038491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -642,8 +572,7 @@ INSERT INTO num_exp_sub VALUES (1,5,-16397.038491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -651,8 +580,7 @@ INSERT INTO num_exp_mul VALUES (1,5,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -660,8 +588,7 @@ INSERT INTO num_exp_div VALUES (1,5,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -669,8 +596,7 @@ INSERT INTO num_exp_add VALUES (1,6,93901.57763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -678,8 +604,7 @@ INSERT INTO num_exp_sub VALUES (1,6,-93901.57763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -687,8 +612,7 @@ INSERT INTO num_exp_mul VALUES (1,6,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -696,8 +620,7 @@ INSERT INTO num_exp_div VALUES (1,6,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -705,8 +628,7 @@ INSERT INTO num_exp_add VALUES (1,7,-83028485)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -714,8 +636,7 @@ INSERT INTO num_exp_sub VALUES (1,7,83028485)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -723,8 +644,7 @@ INSERT INTO num_exp_mul VALUES (1,7,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -732,8 +652,7 @@ INSERT INTO num_exp_div VALUES (1,7,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -741,8 +660,7 @@ INSERT INTO num_exp_add VALUES (1,8,74881)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -750,8 +668,7 @@ INSERT INTO num_exp_sub VALUES (1,8,-74881)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -759,8 +676,7 @@ INSERT INTO num_exp_mul VALUES (1,8,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -768,8 +684,7 @@ INSERT INTO num_exp_div VALUES (1,8,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -777,8 +692,7 @@ INSERT INTO num_exp_add VALUES (1,9,-24926804.045047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -786,8 +700,7 @@ INSERT INTO num_exp_sub VALUES (1,9,24926804.045047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -795,8 +708,7 @@ INSERT INTO num_exp_mul VALUES (1,9,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -804,8 +716,7 @@ INSERT INTO num_exp_div VALUES (1,9,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -813,8 +724,7 @@ INSERT INTO num_exp_add VALUES (2,0,-34338492.215397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -822,8 +732,7 @@ INSERT INTO num_exp_sub VALUES (2,0,-34338492.215397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -831,8 +740,7 @@ INSERT INTO num_exp_mul VALUES (2,0,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -840,8 +748,7 @@ INSERT INTO num_exp_div VALUES (2,0,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -849,8 +756,7 @@ INSERT INTO num_exp_add VALUES (2,1,-34338492.215397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -858,8 +764,7 @@ INSERT INTO num_exp_sub VALUES (2,1,-34338492.215397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -867,8 +772,7 @@ INSERT INTO num_exp_mul VALUES (2,1,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -876,8 +780,7 @@ INSERT INTO num_exp_div VALUES (2,1,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -885,8 +788,7 @@ INSERT INTO num_exp_add VALUES (2,2,-68676984.430794094)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -894,8 +796,7 @@ INSERT INTO num_exp_sub VALUES (2,2,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -903,8 +804,7 @@ INSERT INTO num_exp_mul VALUES (2,2,1179132047626883.596862135856320209)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -912,8 +812,7 @@ INSERT INTO num_exp_div VALUES (2,2,1.00000000000000000000)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -921,8 +820,7 @@ INSERT INTO num_exp_add VALUES (2,3,-34338487.905397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -930,8 +828,7 @@ INSERT INTO num_exp_sub VALUES (2,3,-34338496.525397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -939,8 +836,7 @@ INSERT INTO num_exp_mul VALUES (2,3,-147998901.44836127257)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -948,8 +844,7 @@ INSERT INTO num_exp_div VALUES (2,3,-7967167.56737750510440835266)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -957,8 +852,7 @@ INSERT INTO num_exp_add VALUES (2,4,-26539030.803497047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -966,8 +860,7 @@ INSERT INTO num_exp_sub VALUES (2,4,-42137953.627297047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -975,8 +868,7 @@ INSERT INTO num_exp_mul VALUES (2,4,-267821744976817.8111137106593)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -984,8 +876,7 @@ INSERT INTO num_exp_div VALUES (2,4,-4.40267480046830116685)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -993,8 +884,7 @@ INSERT INTO num_exp_add VALUES (2,5,-34322095.176906047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1002,8 +892,7 @@ INSERT INTO num_exp_sub VALUES (2,5,-34354889.253888047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1011,8 +900,7 @@ INSERT INTO num_exp_mul VALUES (2,5,-563049578578.769242506736077)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1020,8 +908,7 @@ INSERT INTO num_exp_div VALUES (2,5,-2094.18866914563535496429)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1029,8 +916,7 @@ INSERT INTO num_exp_add VALUES (2,6,-34244590.637766787)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1038,8 +924,7 @@ INSERT INTO num_exp_sub VALUES (2,6,-34432393.793027307)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1047,8 +932,7 @@ INSERT INTO num_exp_mul VALUES (2,6,-3224438592470.18449811926184222)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1056,8 +940,7 @@ INSERT INTO num_exp_div VALUES (2,6,-365.68599891479766440940)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1065,8 +948,7 @@ INSERT INTO num_exp_add VALUES (2,7,-117366977.215397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1074,8 +956,7 @@ INSERT INTO num_exp_sub VALUES (2,7,48689992.784602953)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1083,8 +964,7 @@ INSERT INTO num_exp_mul VALUES (2,7,2851072985828710.485883795)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1092,8 +972,7 @@ INSERT INTO num_exp_div VALUES (2,7,.41357483778485235518)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1101,8 +980,7 @@ INSERT INTO num_exp_add VALUES (2,8,-34263611.215397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1110,8 +988,7 @@ INSERT INTO num_exp_sub VALUES (2,8,-34413373.215397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1119,8 +996,7 @@ INSERT INTO num_exp_mul VALUES (2,8,-2571300635581.146276407)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1128,8 +1004,7 @@ INSERT INTO num_exp_div VALUES (2,8,-458.57416721727870888476)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1137,8 +1012,7 @@ INSERT INTO num_exp_add VALUES (2,9,-59265296.260444467)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1146,8 +1020,7 @@ INSERT INTO num_exp_sub VALUES (2,9,-9411688.170349627)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1155,8 +1028,7 @@ INSERT INTO num_exp_mul VALUES (2,9,855948866655588.453741509242968740)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1164,8 +1036,7 @@ INSERT INTO num_exp_div VALUES (2,9,1.37757299946438931811)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1173,8 +1044,7 @@ INSERT INTO num_exp_add VALUES (3,0,4.31)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1182,8 +1052,7 @@ INSERT INTO num_exp_sub VALUES (3,0,4.31)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1191,8 +1060,7 @@ INSERT INTO num_exp_mul VALUES (3,0,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1200,8 +1068,7 @@ INSERT INTO num_exp_div VALUES (3,0,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1209,8 +1076,7 @@ INSERT INTO num_exp_add VALUES (3,1,4.31)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1218,8 +1084,7 @@ INSERT INTO num_exp_sub VALUES (3,1,4.31)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1227,8 +1092,7 @@ INSERT INTO num_exp_mul VALUES (3,1,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1236,8 +1100,7 @@ INSERT INTO num_exp_div VALUES (3,1,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1245,8 +1108,7 @@ INSERT INTO num_exp_add VALUES (3,2,-34338487.905397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1254,8 +1116,7 @@ INSERT INTO num_exp_sub VALUES (3,2,34338496.525397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1263,8 +1124,7 @@ INSERT INTO num_exp_mul VALUES (3,2,-147998901.44836127257)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1272,8 +1132,7 @@ INSERT INTO num_exp_div VALUES (3,2,-.00000012551512084352)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1281,8 +1140,7 @@ INSERT INTO num_exp_add VALUES (3,3,8.62)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1290,8 +1148,7 @@ INSERT INTO num_exp_sub VALUES (3,3,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1299,8 +1156,7 @@ INSERT INTO num_exp_mul VALUES (3,3,18.5761)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1308,8 +1164,7 @@ INSERT INTO num_exp_div VALUES (3,3,1.00000000000000000000)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1317,8 +1172,7 @@ INSERT INTO num_exp_add VALUES (3,4,7799465.7219)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1326,8 +1180,7 @@ INSERT INTO num_exp_sub VALUES (3,4,-7799457.1019)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1335,8 +1188,7 @@ INSERT INTO num_exp_mul VALUES (3,4,33615678.685289)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1344,8 +1196,7 @@ INSERT INTO num_exp_div VALUES (3,4,.00000055260225961552)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1353,8 +1204,7 @@ INSERT INTO num_exp_add VALUES (3,5,16401.348491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1362,8 +1212,7 @@ INSERT INTO num_exp_sub VALUES (3,5,-16392.728491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1371,8 +1220,7 @@ INSERT INTO num_exp_mul VALUES (3,5,70671.23589621)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1380,8 +1228,7 @@ INSERT INTO num_exp_div VALUES (3,5,.00026285234387695504)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1389,8 +1236,7 @@ INSERT INTO num_exp_add VALUES (3,6,93905.88763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1398,8 +1244,7 @@ INSERT INTO num_exp_sub VALUES (3,6,-93897.26763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1407,8 +1252,7 @@ INSERT INTO num_exp_mul VALUES (3,6,404715.7995864206)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1416,8 +1260,7 @@ INSERT INTO num_exp_div VALUES (3,6,.00004589912234457595)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1425,8 +1268,7 @@ INSERT INTO num_exp_add VALUES (3,7,-83028480.69)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1434,8 +1276,7 @@ INSERT INTO num_exp_sub VALUES (3,7,83028489.31)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1443,8 +1284,7 @@ INSERT INTO num_exp_mul VALUES (3,7,-357852770.35)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1452,8 +1292,7 @@ INSERT INTO num_exp_div VALUES (3,7,-.00000005190989574240)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1461,8 +1300,7 @@ INSERT INTO num_exp_add VALUES (3,8,74885.31)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1470,8 +1308,7 @@ INSERT INTO num_exp_sub VALUES (3,8,-74876.69)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1479,8 +1316,7 @@ INSERT INTO num_exp_mul VALUES (3,8,322737.11)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1488,8 +1324,7 @@ INSERT INTO num_exp_div VALUES (3,8,.00005755799201399553)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1497,8 +1332,7 @@ INSERT INTO num_exp_add VALUES (3,9,-24926799.735047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1506,8 +1340,7 @@ INSERT INTO num_exp_sub VALUES (3,9,24926808.355047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1515,8 +1348,7 @@ INSERT INTO num_exp_mul VALUES (3,9,-107434525.43415438020)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1524,8 +1356,7 @@ INSERT INTO num_exp_div VALUES (3,9,-.00000017290624149854)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1533,8 +1364,7 @@ INSERT INTO num_exp_add VALUES (4,0,7799461.4119)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1542,8 +1372,7 @@ INSERT INTO num_exp_sub VALUES (4,0,7799461.4119)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1551,8 +1380,7 @@ INSERT INTO num_exp_mul VALUES (4,0,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1560,8 +1388,7 @@ INSERT INTO num_exp_div VALUES (4,0,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1569,8 +1396,7 @@ INSERT INTO num_exp_add VALUES (4,1,7799461.4119)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1578,8 +1404,7 @@ INSERT INTO num_exp_sub VALUES (4,1,7799461.4119)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1587,8 +1412,7 @@ INSERT INTO num_exp_mul VALUES (4,1,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1596,8 +1420,7 @@ INSERT INTO num_exp_div VALUES (4,1,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1605,8 +1428,7 @@ INSERT INTO num_exp_add VALUES (4,2,-26539030.803497047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1614,8 +1436,7 @@ INSERT INTO num_exp_sub VALUES (4,2,42137953.627297047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1623,8 +1444,7 @@ INSERT INTO num_exp_mul VALUES (4,2,-267821744976817.8111137106593)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1632,8 +1452,7 @@ INSERT INTO num_exp_div VALUES (4,2,-.22713465002993920385)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1641,8 +1460,7 @@ INSERT INTO num_exp_add VALUES (4,3,7799465.7219)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1650,8 +1468,7 @@ INSERT INTO num_exp_sub VALUES (4,3,7799457.1019)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1659,8 +1476,7 @@ INSERT INTO num_exp_mul VALUES (4,3,33615678.685289)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1668,8 +1484,7 @@ INSERT INTO num_exp_div VALUES (4,3,1809619.81714617169373549883)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1677,8 +1492,7 @@ INSERT INTO num_exp_add VALUES (4,4,15598922.8238)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1686,8 +1500,7 @@ INSERT INTO num_exp_sub VALUES (4,4,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1695,8 +1508,7 @@ INSERT INTO num_exp_mul VALUES (4,4,60831598315717.14146161)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1704,8 +1516,7 @@ INSERT INTO num_exp_div VALUES (4,4,1.00000000000000000000)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1713,8 +1524,7 @@ INSERT INTO num_exp_add VALUES (4,5,7815858.450391)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1722,8 +1532,7 @@ INSERT INTO num_exp_sub VALUES (4,5,7783064.373409)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1731,8 +1540,7 @@ INSERT INTO num_exp_mul VALUES (4,5,127888068979.9935054429)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1740,8 +1548,7 @@ INSERT INTO num_exp_div VALUES (4,5,475.66281046305802686061)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1749,8 +1556,7 @@ INSERT INTO num_exp_add VALUES (4,6,7893362.98953026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1758,8 +1564,7 @@ INSERT INTO num_exp_sub VALUES (4,6,7705559.83426974)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1767,8 +1572,7 @@ INSERT INTO num_exp_mul VALUES (4,6,732381731243.745115764094)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1776,8 +1580,7 @@ INSERT INTO num_exp_div VALUES (4,6,83.05996138436129499606)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1785,8 +1588,7 @@ INSERT INTO num_exp_add VALUES (4,7,-75229023.5881)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1794,8 +1596,7 @@ INSERT INTO num_exp_sub VALUES (4,7,90827946.4119)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1803,8 +1604,7 @@ INSERT INTO num_exp_mul VALUES (4,7,-647577464846017.9715)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1812,8 +1612,7 @@ INSERT INTO num_exp_div VALUES (4,7,-.09393717604145131637)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1821,8 +1620,7 @@ INSERT INTO num_exp_add VALUES (4,8,7874342.4119)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1830,8 +1628,7 @@ INSERT INTO num_exp_sub VALUES (4,8,7724580.4119)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1839,8 +1636,7 @@ INSERT INTO num_exp_mul VALUES (4,8,584031469984.4839)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1848,8 +1644,7 @@ INSERT INTO num_exp_div VALUES (4,8,104.15808298366741897143)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1857,8 +1652,7 @@ INSERT INTO num_exp_add VALUES (4,9,-17127342.633147420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1866,8 +1660,7 @@ INSERT INTO num_exp_sub VALUES (4,9,32726265.456947420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1875,8 +1668,7 @@ INSERT INTO num_exp_mul VALUES (4,9,-194415646271340.1815956522980)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1884,8 +1676,7 @@ INSERT INTO num_exp_div VALUES (4,9,-.31289456112403769409)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1893,8 +1684,7 @@ INSERT INTO num_exp_add VALUES (5,0,16397.038491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1902,8 +1692,7 @@ INSERT INTO num_exp_sub VALUES (5,0,16397.038491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1911,8 +1700,7 @@ INSERT INTO num_exp_mul VALUES (5,0,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1920,8 +1708,7 @@ INSERT INTO num_exp_div VALUES (5,0,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1929,8 +1716,7 @@ INSERT INTO num_exp_add VALUES (5,1,16397.038491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1938,8 +1724,7 @@ INSERT INTO num_exp_sub VALUES (5,1,16397.038491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1947,8 +1732,7 @@ INSERT INTO num_exp_mul VALUES (5,1,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1956,8 +1740,7 @@ INSERT INTO num_exp_div VALUES (5,1,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -1965,8 +1748,7 @@ INSERT INTO num_exp_add VALUES (5,2,-34322095.176906047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -1974,8 +1756,7 @@ INSERT INTO num_exp_sub VALUES (5,2,34354889.253888047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -1983,8 +1764,7 @@ INSERT INTO num_exp_mul VALUES (5,2,-563049578578.769242506736077)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -1992,8 +1772,7 @@ INSERT INTO num_exp_div VALUES (5,2,-.00047751189505192446)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2001,8 +1780,7 @@ INSERT INTO num_exp_add VALUES (5,3,16401.348491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2010,8 +1788,7 @@ INSERT INTO num_exp_sub VALUES (5,3,16392.728491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2019,8 +1796,7 @@ INSERT INTO num_exp_mul VALUES (5,3,70671.23589621)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2028,8 +1804,7 @@ INSERT INTO num_exp_div VALUES (5,3,3804.41728329466357308584)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2037,8 +1812,7 @@ INSERT INTO num_exp_add VALUES (5,4,7815858.450391)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2046,8 +1820,7 @@ INSERT INTO num_exp_sub VALUES (5,4,-7783064.373409)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2055,8 +1828,7 @@ INSERT INTO num_exp_mul VALUES (5,4,127888068979.9935054429)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2064,8 +1836,7 @@ INSERT INTO num_exp_div VALUES (5,4,.00210232958726897192)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2073,8 +1844,7 @@ INSERT INTO num_exp_add VALUES (5,5,32794.076982)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2082,8 +1852,7 @@ INSERT INTO num_exp_sub VALUES (5,5,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2091,8 +1860,7 @@ INSERT INTO num_exp_mul VALUES (5,5,268862871.275335557081)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2100,8 +1868,7 @@ INSERT INTO num_exp_div VALUES (5,5,1.00000000000000000000)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2109,8 +1876,7 @@ INSERT INTO num_exp_add VALUES (5,6,110298.61612126)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2118,8 +1884,7 @@ INSERT INTO num_exp_sub VALUES (5,6,-77504.53913926)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2127,8 +1892,7 @@ INSERT INTO num_exp_mul VALUES (5,6,1539707782.76899778633766)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2136,8 +1900,7 @@ INSERT INTO num_exp_div VALUES (5,6,.17461941433576102689)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2145,8 +1908,7 @@ INSERT INTO num_exp_add VALUES (5,7,-83012087.961509)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2154,8 +1916,7 @@ INSERT INTO num_exp_sub VALUES (5,7,83044882.038491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2163,8 +1924,7 @@ INSERT INTO num_exp_mul VALUES (5,7,-1361421264394.416135)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2172,8 +1932,7 @@ INSERT INTO num_exp_div VALUES (5,7,-.00019748690453643710)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2181,8 +1940,7 @@ INSERT INTO num_exp_add VALUES (5,8,91278.038491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2190,8 +1948,7 @@ INSERT INTO num_exp_sub VALUES (5,8,-58483.961509)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2199,8 +1956,7 @@ INSERT INTO num_exp_mul VALUES (5,8,1227826639.244571)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2208,8 +1964,7 @@ INSERT INTO num_exp_div VALUES (5,8,.21897461960978085228)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2217,8 +1972,7 @@ INSERT INTO num_exp_add VALUES (5,9,-24910407.006556420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2226,8 +1980,7 @@ INSERT INTO num_exp_sub VALUES (5,9,24943201.083538420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2235,8 +1988,7 @@ INSERT INTO num_exp_mul VALUES (5,9,-408725765384.257043660243220)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2244,8 +1996,7 @@ INSERT INTO num_exp_div VALUES (5,9,-.00065780749354660427)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2253,8 +2004,7 @@ INSERT INTO num_exp_add VALUES (6,0,93901.57763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2262,8 +2012,7 @@ INSERT INTO num_exp_sub VALUES (6,0,93901.57763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2271,8 +2020,7 @@ INSERT INTO num_exp_mul VALUES (6,0,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2280,8 +2028,7 @@ INSERT INTO num_exp_div VALUES (6,0,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2289,8 +2036,7 @@ INSERT INTO num_exp_add VALUES (6,1,93901.57763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2298,8 +2044,7 @@ INSERT INTO num_exp_sub VALUES (6,1,93901.57763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2307,8 +2052,7 @@ INSERT INTO num_exp_mul VALUES (6,1,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2316,8 +2060,7 @@ INSERT INTO num_exp_div VALUES (6,1,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2325,8 +2068,7 @@ INSERT INTO num_exp_add VALUES (6,2,-34244590.637766787)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2334,8 +2076,7 @@ INSERT INTO num_exp_sub VALUES (6,2,34432393.793027307)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2343,8 +2084,7 @@ INSERT INTO num_exp_mul VALUES (6,2,-3224438592470.18449811926184222)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2352,8 +2092,7 @@ INSERT INTO num_exp_div VALUES (6,2,-.00273458651128995823)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2361,8 +2100,7 @@ INSERT INTO num_exp_add VALUES (6,3,93905.88763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2370,8 +2108,7 @@ INSERT INTO num_exp_sub VALUES (6,3,93897.26763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2379,8 +2116,7 @@ INSERT INTO num_exp_mul VALUES (6,3,404715.7995864206)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2388,8 +2124,7 @@ INSERT INTO num_exp_div VALUES (6,3,21786.90896293735498839907)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2397,8 +2132,7 @@ INSERT INTO num_exp_add VALUES (6,4,7893362.98953026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2406,8 +2140,7 @@ INSERT INTO num_exp_sub VALUES (6,4,-7705559.83426974)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2415,8 +2148,7 @@ INSERT INTO num_exp_mul VALUES (6,4,732381731243.745115764094)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2424,8 +2156,7 @@ INSERT INTO num_exp_div VALUES (6,4,.01203949512295682469)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2433,8 +2164,7 @@ INSERT INTO num_exp_add VALUES (6,5,110298.61612126)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2442,8 +2172,7 @@ INSERT INTO num_exp_sub VALUES (6,5,77504.53913926)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2451,8 +2180,7 @@ INSERT INTO num_exp_mul VALUES (6,5,1539707782.76899778633766)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2460,8 +2188,7 @@ INSERT INTO num_exp_div VALUES (6,5,5.72674008674192359679)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2469,8 +2196,7 @@ INSERT INTO num_exp_add VALUES (6,6,187803.15526052)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2478,8 +2204,7 @@ INSERT INTO num_exp_sub VALUES (6,6,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2487,8 +2212,7 @@ INSERT INTO num_exp_mul VALUES (6,6,8817506281.4517452372676676)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2496,8 +2220,7 @@ INSERT INTO num_exp_div VALUES (6,6,1.00000000000000000000)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2505,8 +2228,7 @@ INSERT INTO num_exp_add VALUES (6,7,-82934583.42236974)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2514,8 +2236,7 @@ INSERT INTO num_exp_sub VALUES (6,7,83122386.57763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2523,8 +2244,7 @@ INSERT INTO num_exp_mul VALUES (6,7,-7796505729750.37795610)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2532,8 +2252,7 @@ INSERT INTO num_exp_div VALUES (6,7,-.00113095617281538980)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2541,8 +2260,7 @@ INSERT INTO num_exp_add VALUES (6,8,168782.57763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2550,8 +2268,7 @@ INSERT INTO num_exp_sub VALUES (6,8,19020.57763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2559,8 +2276,7 @@ INSERT INTO num_exp_mul VALUES (6,8,7031444034.53149906)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2568,8 +2284,7 @@ INSERT INTO num_exp_div VALUES (6,8,1.25401073209839612184)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2577,8 +2292,7 @@ INSERT INTO num_exp_add VALUES (6,9,-24832902.467417160)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2586,8 +2300,7 @@ INSERT INTO num_exp_sub VALUES (6,9,25020705.622677680)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2595,8 +2308,7 @@ INSERT INTO num_exp_mul VALUES (6,9,-2340666225110.29929521292692920)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2604,8 +2316,7 @@ INSERT INTO num_exp_div VALUES (6,9,-.00376709254265256789)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2613,8 +2324,7 @@ INSERT INTO num_exp_add VALUES (7,0,-83028485)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2622,8 +2332,7 @@ INSERT INTO num_exp_sub VALUES (7,0,-83028485)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2631,8 +2340,7 @@ INSERT INTO num_exp_mul VALUES (7,0,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2640,8 +2348,7 @@ INSERT INTO num_exp_div VALUES (7,0,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2649,8 +2356,7 @@ INSERT INTO num_exp_add VALUES (7,1,-83028485)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2658,8 +2364,7 @@ INSERT INTO num_exp_sub VALUES (7,1,-83028485)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2667,8 +2372,7 @@ INSERT INTO num_exp_mul VALUES (7,1,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2676,8 +2380,7 @@ INSERT INTO num_exp_div VALUES (7,1,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2685,8 +2388,7 @@ INSERT INTO num_exp_add VALUES (7,2,-117366977.215397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2694,8 +2396,7 @@ INSERT INTO num_exp_sub VALUES (7,2,-48689992.784602953)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2703,8 +2404,7 @@ INSERT INTO num_exp_mul VALUES (7,2,2851072985828710.485883795)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2712,8 +2412,7 @@ INSERT INTO num_exp_div VALUES (7,2,2.41794207151503385700)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2721,8 +2420,7 @@ INSERT INTO num_exp_add VALUES (7,3,-83028480.69)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2730,8 +2428,7 @@ INSERT INTO num_exp_sub VALUES (7,3,-83028489.31)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2739,8 +2436,7 @@ INSERT INTO num_exp_mul VALUES (7,3,-357852770.35)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2748,8 +2444,7 @@ INSERT INTO num_exp_div VALUES (7,3,-19264149.65197215777262180974)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2757,8 +2452,7 @@ INSERT INTO num_exp_add VALUES (7,4,-75229023.5881)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2766,8 +2460,7 @@ INSERT INTO num_exp_sub VALUES (7,4,-90827946.4119)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2775,8 +2468,7 @@ INSERT INTO num_exp_mul VALUES (7,4,-647577464846017.9715)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2784,8 +2476,7 @@ INSERT INTO num_exp_div VALUES (7,4,-10.64541262725136247686)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2793,8 +2484,7 @@ INSERT INTO num_exp_add VALUES (7,5,-83012087.961509)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2802,8 +2492,7 @@ INSERT INTO num_exp_sub VALUES (7,5,-83044882.038491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2811,8 +2500,7 @@ INSERT INTO num_exp_mul VALUES (7,5,-1361421264394.416135)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2820,8 +2508,7 @@ INSERT INTO num_exp_div VALUES (7,5,-5063.62688881730941836574)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2829,8 +2516,7 @@ INSERT INTO num_exp_add VALUES (7,6,-82934583.42236974)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2838,8 +2524,7 @@ INSERT INTO num_exp_sub VALUES (7,6,-83122386.57763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2847,8 +2532,7 @@ INSERT INTO num_exp_mul VALUES (7,6,-7796505729750.37795610)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2856,8 +2540,7 @@ INSERT INTO num_exp_div VALUES (7,6,-884.20756174009028770294)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2865,8 +2548,7 @@ INSERT INTO num_exp_add VALUES (7,7,-166056970)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2874,8 +2556,7 @@ INSERT INTO num_exp_sub VALUES (7,7,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2883,8 +2564,7 @@ INSERT INTO num_exp_mul VALUES (7,7,6893729321395225)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2892,8 +2572,7 @@ INSERT INTO num_exp_div VALUES (7,7,1.00000000000000000000)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2901,8 +2580,7 @@ INSERT INTO num_exp_add VALUES (7,8,-82953604)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2910,8 +2588,7 @@ INSERT INTO num_exp_sub VALUES (7,8,-83103366)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2919,8 +2596,7 @@ INSERT INTO num_exp_mul VALUES (7,8,-6217255985285)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2928,8 +2604,7 @@ INSERT INTO num_exp_div VALUES (7,8,-1108.80577182462841041118)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2937,8 +2612,7 @@ INSERT INTO num_exp_add VALUES (7,9,-107955289.045047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2946,8 +2620,7 @@ INSERT INTO num_exp_sub VALUES (7,9,-58101680.954952580)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2955,8 +2628,7 @@ INSERT INTO num_exp_mul VALUES (7,9,2069634775752159.035758700)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -2964,8 +2636,7 @@ INSERT INTO num_exp_div VALUES (7,9,3.33089171198810413382)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -2973,8 +2644,7 @@ INSERT INTO num_exp_add VALUES (8,0,74881)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -2982,8 +2652,7 @@ INSERT INTO num_exp_sub VALUES (8,0,74881)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -2991,8 +2660,7 @@ INSERT INTO num_exp_mul VALUES (8,0,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3000,8 +2668,7 @@ INSERT INTO num_exp_div VALUES (8,0,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3009,8 +2676,7 @@ INSERT INTO num_exp_add VALUES (8,1,74881)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3018,8 +2684,7 @@ INSERT INTO num_exp_sub VALUES (8,1,74881)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3027,8 +2692,7 @@ INSERT INTO num_exp_mul VALUES (8,1,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3036,8 +2700,7 @@ INSERT INTO num_exp_div VALUES (8,1,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3045,8 +2708,7 @@ INSERT INTO num_exp_add VALUES (8,2,-34263611.215397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3054,8 +2716,7 @@ INSERT INTO num_exp_sub VALUES (8,2,34413373.215397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3063,8 +2724,7 @@ INSERT INTO num_exp_mul VALUES (8,2,-2571300635581.146276407)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3072,8 +2732,7 @@ INSERT INTO num_exp_div VALUES (8,2,-.00218067233500788615)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3081,8 +2740,7 @@ INSERT INTO num_exp_add VALUES (8,3,74885.31)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3090,8 +2748,7 @@ INSERT INTO num_exp_sub VALUES (8,3,74876.69)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3099,8 +2756,7 @@ INSERT INTO num_exp_mul VALUES (8,3,322737.11)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3108,8 +2764,7 @@ INSERT INTO num_exp_div VALUES (8,3,17373.78190255220417633410)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3117,8 +2772,7 @@ INSERT INTO num_exp_add VALUES (8,4,7874342.4119)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3126,8 +2780,7 @@ INSERT INTO num_exp_sub VALUES (8,4,-7724580.4119)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3135,8 +2788,7 @@ INSERT INTO num_exp_mul VALUES (8,4,584031469984.4839)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3144,8 +2796,7 @@ INSERT INTO num_exp_div VALUES (8,4,.00960079113741758956)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3153,8 +2804,7 @@ INSERT INTO num_exp_add VALUES (8,5,91278.038491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3162,8 +2812,7 @@ INSERT INTO num_exp_sub VALUES (8,5,58483.961509)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3171,8 +2820,7 @@ INSERT INTO num_exp_mul VALUES (8,5,1227826639.244571)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3180,8 +2828,7 @@ INSERT INTO num_exp_div VALUES (8,5,4.56673929509287019456)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3189,8 +2836,7 @@ INSERT INTO num_exp_add VALUES (8,6,168782.57763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3198,8 +2844,7 @@ INSERT INTO num_exp_sub VALUES (8,6,-19020.57763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3207,8 +2852,7 @@ INSERT INTO num_exp_mul VALUES (8,6,7031444034.53149906)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3216,8 +2860,7 @@ INSERT INTO num_exp_div VALUES (8,6,.79744134113322314424)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3225,8 +2868,7 @@ INSERT INTO num_exp_add VALUES (8,7,-82953604)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3234,8 +2876,7 @@ INSERT INTO num_exp_sub VALUES (8,7,83103366)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3243,8 +2884,7 @@ INSERT INTO num_exp_mul VALUES (8,7,-6217255985285)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3252,8 +2892,7 @@ INSERT INTO num_exp_div VALUES (8,7,-.00090187120721280172)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3261,8 +2900,7 @@ INSERT INTO num_exp_add VALUES (8,8,149762)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3270,8 +2908,7 @@ INSERT INTO num_exp_sub VALUES (8,8,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3279,8 +2916,7 @@ INSERT INTO num_exp_mul VALUES (8,8,5607164161)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3288,8 +2924,7 @@ INSERT INTO num_exp_div VALUES (8,8,1.00000000000000000000)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3297,8 +2932,7 @@ INSERT INTO num_exp_add VALUES (8,9,-24851923.045047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3306,8 +2940,7 @@ INSERT INTO num_exp_sub VALUES (8,9,25001685.045047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3315,8 +2948,7 @@ INSERT INTO num_exp_mul VALUES (8,9,-1866544013697.195857020)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3324,8 +2956,7 @@ INSERT INTO num_exp_div VALUES (8,9,-.00300403532938582735)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3333,8 +2964,7 @@ INSERT INTO num_exp_add VALUES (9,0,-24926804.045047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3342,8 +2972,7 @@ INSERT INTO num_exp_sub VALUES (9,0,-24926804.045047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3351,8 +2980,7 @@ INSERT INTO num_exp_mul VALUES (9,0,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3360,8 +2988,7 @@ INSERT INTO num_exp_div VALUES (9,0,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3369,8 +2996,7 @@ INSERT INTO num_exp_add VALUES (9,1,-24926804.045047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3378,8 +3004,7 @@ INSERT INTO num_exp_sub VALUES (9,1,-24926804.045047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3387,8 +3012,7 @@ INSERT INTO num_exp_mul VALUES (9,1,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3396,8 +3020,7 @@ INSERT INTO num_exp_div VALUES (9,1,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3405,8 +3028,7 @@ INSERT INTO num_exp_add VALUES (9,2,-59265296.260444467)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3414,8 +3036,7 @@ INSERT INTO num_exp_sub VALUES (9,2,9411688.170349627)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3423,8 +3044,7 @@ INSERT INTO num_exp_mul VALUES (9,2,855948866655588.453741509242968740)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3432,8 +3052,7 @@ INSERT INTO num_exp_div VALUES (9,2,.72591434384152961526)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3441,8 +3060,7 @@ INSERT INTO num_exp_add VALUES (9,3,-24926799.735047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3450,8 +3068,7 @@ INSERT INTO num_exp_sub VALUES (9,3,-24926808.355047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3459,8 +3076,7 @@ INSERT INTO num_exp_mul VALUES (9,3,-107434525.43415438020)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3468,8 +3084,7 @@ INSERT INTO num_exp_div VALUES (9,3,-5783481.21694835730858468677)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3477,8 +3092,7 @@ INSERT INTO num_exp_add VALUES (9,4,-17127342.633147420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3486,8 +3100,7 @@ INSERT INTO num_exp_sub VALUES (9,4,-32726265.456947420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3495,8 +3108,7 @@ INSERT INTO num_exp_mul VALUES (9,4,-194415646271340.1815956522980)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3504,8 +3116,7 @@ INSERT INTO num_exp_div VALUES (9,4,-3.19596478892958416484)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3513,8 +3124,7 @@ INSERT INTO num_exp_add VALUES (9,5,-24910407.006556420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3522,8 +3132,7 @@ INSERT INTO num_exp_sub VALUES (9,5,-24943201.083538420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3531,8 +3140,7 @@ INSERT INTO num_exp_mul VALUES (9,5,-408725765384.257043660243220)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3540,8 +3148,7 @@ INSERT INTO num_exp_div VALUES (9,5,-1520.20159364322004505807)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3549,8 +3156,7 @@ INSERT INTO num_exp_add VALUES (9,6,-24832902.467417160)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3558,8 +3164,7 @@ INSERT INTO num_exp_sub VALUES (9,6,-25020705.622677680)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3567,8 +3172,7 @@ INSERT INTO num_exp_mul VALUES (9,6,-2340666225110.29929521292692920)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3576,8 +3180,7 @@ INSERT INTO num_exp_div VALUES (9,6,-265.45671195426965751280)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3585,8 +3188,7 @@ INSERT INTO num_exp_add VALUES (9,7,-107955289.045047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3594,8 +3196,7 @@ INSERT INTO num_exp_sub VALUES (9,7,58101680.954952580)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3603,8 +3204,7 @@ INSERT INTO num_exp_mul VALUES (9,7,2069634775752159.035758700)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3612,8 +3212,7 @@ INSERT INTO num_exp_div VALUES (9,7,.30021990699995814689)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3621,8 +3220,7 @@ INSERT INTO num_exp_add VALUES (9,8,-24851923.045047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3630,8 +3228,7 @@ INSERT INTO num_exp_sub VALUES (9,8,-25001685.045047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3639,8 +3236,7 @@ INSERT INTO num_exp_mul VALUES (9,8,-1866544013697.195857020)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3648,8 +3244,7 @@ INSERT INTO num_exp_div VALUES (9,8,-332.88556569820675471748)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3657,8 +3252,7 @@ INSERT INTO num_exp_add VALUES (9,9,-49853608.090094840)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_add; line 1 pos 12
+
 
 
 -- !query
@@ -3666,8 +3260,7 @@ INSERT INTO num_exp_sub VALUES (9,9,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sub; line 1 pos 12
+
 
 
 -- !query
@@ -3675,8 +3268,7 @@ INSERT INTO num_exp_mul VALUES (9,9,621345559900192.420120630048656400)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_mul; line 1 pos 12
+
 
 
 -- !query
@@ -3684,8 +3276,7 @@ INSERT INTO num_exp_div VALUES (9,9,1.00000000000000000000)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_div; line 1 pos 12
+
 
 
 -- !query
@@ -3693,8 +3284,7 @@ INSERT INTO num_exp_sqrt VALUES (0,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sqrt; line 1 pos 12
+
 
 
 -- !query
@@ -3702,8 +3292,7 @@ INSERT INTO num_exp_sqrt VALUES (1,0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sqrt; line 1 pos 12
+
 
 
 -- !query
@@ -3711,8 +3300,7 @@ INSERT INTO num_exp_sqrt VALUES (2,5859.90547836712524903505)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sqrt; line 1 pos 12
+
 
 
 -- !query
@@ -3720,8 +3308,7 @@ INSERT INTO num_exp_sqrt VALUES (3,2.07605394920266944396)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sqrt; line 1 pos 12
+
 
 
 -- !query
@@ -3729,8 +3316,7 @@ INSERT INTO num_exp_sqrt VALUES (4,2792.75158435189147418923)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sqrt; line 1 pos 12
+
 
 
 -- !query
@@ -3738,8 +3324,7 @@ INSERT INTO num_exp_sqrt VALUES (5,128.05092147657509145473)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sqrt; line 1 pos 12
+
 
 
 -- !query
@@ -3747,8 +3332,7 @@ INSERT INTO num_exp_sqrt VALUES (6,306.43364311096782703406)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sqrt; line 1 pos 12
+
 
 
 -- !query
@@ -3756,8 +3340,7 @@ INSERT INTO num_exp_sqrt VALUES (7,9111.99676251039939975230)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sqrt; line 1 pos 12
+
 
 
 -- !query
@@ -3765,8 +3348,7 @@ INSERT INTO num_exp_sqrt VALUES (8,273.64392922189960397542)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sqrt; line 1 pos 12
+
 
 
 -- !query
@@ -3774,8 +3356,7 @@ INSERT INTO num_exp_sqrt VALUES (9,4992.67503899937593364766)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_sqrt; line 1 pos 12
+
 
 
 -- !query
@@ -3783,8 +3364,7 @@ INSERT INTO num_exp_ln VALUES (0,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_ln; line 1 pos 12
+
 
 
 -- !query
@@ -3792,8 +3372,7 @@ INSERT INTO num_exp_ln VALUES (1,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_ln; line 1 pos 12
+
 
 
 -- !query
@@ -3801,8 +3380,7 @@ INSERT INTO num_exp_ln VALUES (2,17.35177750493897715514)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_ln; line 1 pos 12
+
 
 
 -- !query
@@ -3810,8 +3388,7 @@ INSERT INTO num_exp_ln VALUES (3,1.46093790411565641971)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_ln; line 1 pos 12
+
 
 
 -- !query
@@ -3819,8 +3396,7 @@ INSERT INTO num_exp_ln VALUES (4,15.86956523951936572464)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_ln; line 1 pos 12
+
 
 
 -- !query
@@ -3828,8 +3404,7 @@ INSERT INTO num_exp_ln VALUES (5,9.70485601768871834038)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_ln; line 1 pos 12
+
 
 
 -- !query
@@ -3837,8 +3412,7 @@ INSERT INTO num_exp_ln VALUES (6,11.45000246622944403127)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_ln; line 1 pos 12
+
 
 
 -- !query
@@ -3846,8 +3420,7 @@ INSERT INTO num_exp_ln VALUES (7,18.23469429965478772991)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_ln; line 1 pos 12
+
 
 
 -- !query
@@ -3855,8 +3428,7 @@ INSERT INTO num_exp_ln VALUES (8,11.22365546576315513668)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_ln; line 1 pos 12
+
 
 
 -- !query
@@ -3864,8 +3436,7 @@ INSERT INTO num_exp_ln VALUES (9,17.03145425013166006962)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_ln; line 1 pos 12
+
 
 
 -- !query
@@ -3873,8 +3444,7 @@ INSERT INTO num_exp_log10 VALUES (0,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_log10; line 1 pos 12
+
 
 
 -- !query
@@ -3882,8 +3452,7 @@ INSERT INTO num_exp_log10 VALUES (1,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_log10; line 1 pos 12
+
 
 
 -- !query
@@ -3891,8 +3460,7 @@ INSERT INTO num_exp_log10 VALUES (2,7.53578122160797276459)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_log10; line 1 pos 12
+
 
 
 -- !query
@@ -3900,8 +3468,7 @@ INSERT INTO num_exp_log10 VALUES (3,.63447727016073160075)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_log10; line 1 pos 12
+
 
 
 -- !query
@@ -3909,8 +3476,7 @@ INSERT INTO num_exp_log10 VALUES (4,6.89206461372691743345)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_log10; line 1 pos 12
+
 
 
 -- !query
@@ -3918,8 +3484,7 @@ INSERT INTO num_exp_log10 VALUES (5,4.21476541614777768626)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_log10; line 1 pos 12
+
 
 
 -- !query
@@ -3927,8 +3492,7 @@ INSERT INTO num_exp_log10 VALUES (6,4.97267288886207207671)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_log10; line 1 pos 12
+
 
 
 -- !query
@@ -3936,8 +3500,7 @@ INSERT INTO num_exp_log10 VALUES (7,7.91922711353275546914)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_log10; line 1 pos 12
+
 
 
 -- !query
@@ -3945,8 +3508,7 @@ INSERT INTO num_exp_log10 VALUES (8,4.87437163556421004138)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_log10; line 1 pos 12
+
 
 
 -- !query
@@ -3954,8 +3516,7 @@ INSERT INTO num_exp_log10 VALUES (9,7.39666659961986567059)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_log10; line 1 pos 12
+
 
 
 -- !query
@@ -3963,8 +3524,7 @@ INSERT INTO num_exp_power_10_ln VALUES (0,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_power_10_ln; line 1 pos 12
+
 
 
 -- !query
@@ -3972,8 +3532,7 @@ INSERT INTO num_exp_power_10_ln VALUES (1,double('NaN'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_power_10_ln; line 1 pos 12
+
 
 
 -- !query
@@ -3981,8 +3540,7 @@ INSERT INTO num_exp_power_10_ln VALUES (2,224790267919917955.1326161858364265318
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_power_10_ln; line 1 pos 12
+
 
 
 -- !query
@@ -3990,8 +3548,7 @@ INSERT INTO num_exp_power_10_ln VALUES (3,28.90266599445155957393)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_power_10_ln; line 1 pos 12
+
 
 
 -- !query
@@ -3999,8 +3556,7 @@ INSERT INTO num_exp_power_10_ln VALUES (4,7405685069594999.07733999469386277636)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_power_10_ln; line 1 pos 12
+
 
 
 -- !query
@@ -4008,8 +3564,7 @@ INSERT INTO num_exp_power_10_ln VALUES (5,5068226527.32127265408584640098)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_power_10_ln; line 1 pos 12
+
 
 
 -- !query
@@ -4017,8 +3572,7 @@ INSERT INTO num_exp_power_10_ln VALUES (6,281839893606.99372343357047819067)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_power_10_ln; line 1 pos 12
+
 
 
 -- !query
@@ -4038,8 +3592,7 @@ INSERT INTO num_exp_power_10_ln VALUES (8,167361463828.07491320069016125952)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_power_10_ln; line 1 pos 12
+
 
 
 -- !query
@@ -4047,8 +3600,7 @@ INSERT INTO num_exp_power_10_ln VALUES (9,107511333880052007.0414112467354033745
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_exp_power_10_ln; line 1 pos 12
+
 
 
 -- !query
@@ -4056,8 +3608,7 @@ INSERT INTO num_data VALUES (0, 0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_data; line 1 pos 12
+
 
 
 -- !query
@@ -4065,8 +3616,7 @@ INSERT INTO num_data VALUES (1, 0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_data; line 1 pos 12
+
 
 
 -- !query
@@ -4074,8 +3624,7 @@ INSERT INTO num_data VALUES (2, -34338492.215397047)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_data; line 1 pos 12
+
 
 
 -- !query
@@ -4083,8 +3632,7 @@ INSERT INTO num_data VALUES (3, 4.31)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_data; line 1 pos 12
+
 
 
 -- !query
@@ -4092,8 +3640,7 @@ INSERT INTO num_data VALUES (4, 7799461.4119)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_data; line 1 pos 12
+
 
 
 -- !query
@@ -4101,8 +3648,7 @@ INSERT INTO num_data VALUES (5, 16397.038491)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_data; line 1 pos 12
+
 
 
 -- !query
@@ -4110,8 +3656,7 @@ INSERT INTO num_data VALUES (6, 93901.57763026)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_data; line 1 pos 12
+
 
 
 -- !query
@@ -4119,8 +3664,7 @@ INSERT INTO num_data VALUES (7, -83028485)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_data; line 1 pos 12
+
 
 
 -- !query
@@ -4128,8 +3672,7 @@ INSERT INTO num_data VALUES (8, 74881)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_data; line 1 pos 12
+
 
 
 -- !query
@@ -4137,17 +3680,24 @@ INSERT INTO num_data VALUES (9, -24926804.045047420)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: num_data; line 1 pos 12
+
 
 
 -- !query
 SELECT * FROM num_data
 -- !query schema
-struct<>
+struct<id:int,val:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 1 pos 14
+0	0.0000000000
+1	0.0000000000
+2	-34338492.2153970470
+3	4.3100000000
+4	7799461.4119000000
+5	16397.0384910000
+6	93901.5776302600
+7	-83028485.0000000000
+8	74881.0000000000
+9	-24926804.0450474200
 
 
 -- !query
@@ -4164,8 +3714,7 @@ INSERT INTO num_result SELECT t1.id, t2.id, t1.val + t2.val
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 2 pos 9
+
 
 
 -- !query
@@ -4174,10 +3723,9 @@ SELECT t1.id1, t1.id2, t1.result, t2.expected
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != t2.expected
 -- !query schema
-struct<>
+struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_add; line 2 pos 24
+
 
 
 -- !query
@@ -4194,8 +3742,7 @@ INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val + t2.val, 10)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 2 pos 9
+
 
 
 -- !query
@@ -4204,10 +3751,9 @@ SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 10) as expected
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != round(t2.expected, 10)
 -- !query schema
-struct<>
+struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_add; line 2 pos 24
+
 
 
 -- !query
@@ -4224,8 +3770,7 @@ INSERT INTO num_result SELECT t1.id, t2.id, t1.val - t2.val
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 2 pos 9
+
 
 
 -- !query
@@ -4234,10 +3779,9 @@ SELECT t1.id1, t1.id2, t1.result, t2.expected
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != t2.expected
 -- !query schema
-struct<>
+struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_sub; line 2 pos 24
+
 
 
 -- !query
@@ -4254,8 +3798,7 @@ INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val - t2.val, 40)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 2 pos 9
+
 
 
 -- !query
@@ -4264,10 +3807,9 @@ SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 40)
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != round(t2.expected, 40)
 -- !query schema
-struct<>
+struct<id1:int,id2:int,result:decimal(38,10),round(expected, 40):decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_sub; line 2 pos 24
+
 
 
 -- !query
@@ -4285,7 +3827,7 @@ INSERT INTO num_result SELECT t1.id, t2.id, t1.val, t2.val, t1.val * t2.val
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 2 pos 9
+`spark_catalog`.`default`.`num_result` requires that the data to be inserted have the same number of columns as the target table: target table has 3 column(s) but the inserted data has 5 column(s), including 0 partition column(s) having constant value(s).
 
 
 -- !query
@@ -4294,10 +3836,9 @@ SELECT t1.id1, t1.id2, t1.result, t2.expected
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != t2.expected
 -- !query schema
-struct<>
+struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_mul; line 2 pos 24
+
 
 
 -- !query
@@ -4314,8 +3855,7 @@ INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val * t2.val, 30)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 2 pos 9
+
 
 
 -- !query
@@ -4324,10 +3864,53 @@ SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 30) as expected
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != round(t2.expected, 30)
 -- !query schema
-struct<>
+struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_mul; line 2 pos 24
+2	2	1179132047626883.5968620000	1179132047626883.5968621359
+2	3	-147998901.4483610000	-147998901.4483612726
+2	4	-267821744976817.8111140000	-267821744976817.8111137107
+2	5	-563049578578.7692430000	-563049578578.7692425067
+2	6	-3224438592470.1844980000	-3224438592470.1844981193
+2	7	2851072985828710.4858840000	2851072985828710.4858837950
+2	8	-2571300635581.1462760000	-2571300635581.1462764070
+2	9	855948866655588.4537420000	855948866655588.4537415092
+3	2	-147998901.4483610000	-147998901.4483612726
+3	5	70671.2358960000	70671.2358962100
+3	6	404715.7995860000	404715.7995864206
+3	9	-107434525.4341540000	-107434525.4341543802
+4	2	-267821744976817.8111140000	-267821744976817.8111137107
+4	4	60831598315717.1414620000	60831598315717.1414616100
+4	5	127888068979.9935050000	127888068979.9935054429
+4	6	732381731243.7451160000	732381731243.7451157641
+4	9	-194415646271340.1815960000	-194415646271340.1815956523
+5	2	-563049578578.7692430000	-563049578578.7692425067
+5	3	70671.2358960000	70671.2358962100
+5	4	127888068979.9935050000	127888068979.9935054429
+5	5	268862871.2753360000	268862871.2753355571
+5	6	1539707782.7689980000	1539707782.7689977863
+5	9	-408725765384.2570440000	-408725765384.2570436602
+6	2	-3224438592470.1844980000	-3224438592470.1844981193
+6	3	404715.7995860000	404715.7995864206
+6	4	732381731243.7451160000	732381731243.7451157641
+6	5	1539707782.7689980000	1539707782.7689977863
+6	6	8817506281.4517450000	8817506281.4517452373
+6	7	-7796505729750.3779560000	-7796505729750.3779561000
+6	8	7031444034.5314990000	7031444034.5314990600
+6	9	-2340666225110.2992950000	-2340666225110.2992952129
+7	2	2851072985828710.4858840000	2851072985828710.4858837950
+7	6	-7796505729750.3779560000	-7796505729750.3779561000
+7	9	2069634775752159.0357590000	2069634775752159.0357587000
+8	2	-2571300635581.1462760000	-2571300635581.1462764070
+8	6	7031444034.5314990000	7031444034.5314990600
+8	9	-1866544013697.1958570000	-1866544013697.1958570200
+9	2	855948866655588.4537420000	855948866655588.4537415092
+9	3	-107434525.4341540000	-107434525.4341543802
+9	4	-194415646271340.1815960000	-194415646271340.1815956523
+9	5	-408725765384.2570440000	-408725765384.2570436602
+9	6	-2340666225110.2992950000	-2340666225110.2992952129
+9	7	2069634775752159.0357590000	2069634775752159.0357587000
+9	8	-1866544013697.1958570000	-1866544013697.1958570200
+9	9	621345559900192.4201210000	621345559900192.4201206300
 
 
 -- !query
@@ -4345,8 +3928,7 @@ INSERT INTO num_result SELECT t1.id, t2.id, t1.val / t2.val
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 2 pos 9
+
 
 
 -- !query
@@ -4355,10 +3937,64 @@ SELECT t1.id1, t1.id2, t1.result, t2.expected
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != t2.expected
 -- !query schema
-struct<>
+struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_div; line 2 pos 24
+2	3	-7967167.5673780000	-7967167.5673775051
+2	4	-4.4026750000	-4.4026748005
+2	5	-2094.1886690000	-2094.1886691456
+2	6	-365.6859990000	-365.6859989148
+2	7	0.4135750000	0.4135748378
+2	8	-458.5741670000	-458.5741672173
+2	9	1.3775730000	1.3775729995
+3	2	0.0000000000	-0.0000001255
+3	4	0.0000010000	0.0000005526
+3	5	0.0002630000	0.0002628523
+3	6	0.0000460000	0.0000458991
+3	7	0.0000000000	-0.0000000519
+3	8	0.0000580000	0.0000575580
+3	9	0.0000000000	-0.0000001729
+4	2	-0.2271350000	-0.2271346500
+4	3	1809619.8171460000	1809619.8171461717
+4	5	475.6628100000	475.6628104631
+4	6	83.0599610000	83.0599613844
+4	7	-0.0939370000	-0.0939371760
+4	8	104.1580830000	104.1580829837
+4	9	-0.3128950000	-0.3128945611
+5	2	-0.0004780000	-0.0004775119
+5	3	3804.4172830000	3804.4172832947
+5	4	0.0021020000	0.0021023296
+5	6	0.1746190000	0.1746194143
+5	7	-0.0001970000	-0.0001974869
+5	8	0.2189750000	0.2189746196
+5	9	-0.0006580000	-0.0006578075
+6	2	-0.0027350000	-0.0027345865
+6	3	21786.9089630000	21786.9089629374
+6	4	0.0120390000	0.0120394951
+6	5	5.7267400000	5.7267400867
+6	7	-0.0011310000	-0.0011309562
+6	8	1.2540110000	1.2540107321
+6	9	-0.0037670000	-0.0037670925
+7	2	2.4179420000	2.4179420715
+7	3	-19264149.6519720000	-19264149.6519721578
+7	4	-10.6454130000	-10.6454126273
+7	5	-5063.6268890000	-5063.6268888173
+7	6	-884.2075620000	-884.2075617401
+7	8	-1108.8057720000	-1108.8057718246
+7	9	3.3308920000	3.3308917120
+8	2	-0.0021810000	-0.0021806723
+8	3	17373.7819030000	17373.7819025522
+8	4	0.0096010000	0.0096007911
+8	5	4.5667390000	4.5667392951
+8	6	0.7974410000	0.7974413411
+8	7	-0.0009020000	-0.0009018712
+8	9	-0.0030040000	-0.0030040353
+9	2	0.7259140000	0.7259143438
+9	3	-5783481.2169480000	-5783481.2169483573
+9	4	-3.1959650000	-3.1959647889
+9	5	-1520.2015940000	-1520.2015936432
+9	6	-265.4567120000	-265.4567119543
+9	7	0.3002200000	0.3002199070
+9	8	-332.8855660000	-332.8855656982
 
 
 -- !query
@@ -4376,8 +4012,7 @@ INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val / t2.val, 80)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 2 pos 9
+
 
 
 -- !query
@@ -4386,10 +4021,64 @@ SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 80) as expected
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != round(t2.expected, 80)
 -- !query schema
-struct<>
+struct<id1:int,id2:int,result:decimal(38,10),expected:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_div; line 2 pos 24
+2	3	-7967167.5673780000	-7967167.5673775051
+2	4	-4.4026750000	-4.4026748005
+2	5	-2094.1886690000	-2094.1886691456
+2	6	-365.6859990000	-365.6859989148
+2	7	0.4135750000	0.4135748378
+2	8	-458.5741670000	-458.5741672173
+2	9	1.3775730000	1.3775729995
+3	2	0.0000000000	-0.0000001255
+3	4	0.0000010000	0.0000005526
+3	5	0.0002630000	0.0002628523
+3	6	0.0000460000	0.0000458991
+3	7	0.0000000000	-0.0000000519
+3	8	0.0000580000	0.0000575580
+3	9	0.0000000000	-0.0000001729
+4	2	-0.2271350000	-0.2271346500
+4	3	1809619.8171460000	1809619.8171461717
+4	5	475.6628100000	475.6628104631
+4	6	83.0599610000	83.0599613844
+4	7	-0.0939370000	-0.0939371760
+4	8	104.1580830000	104.1580829837
+4	9	-0.3128950000	-0.3128945611
+5	2	-0.0004780000	-0.0004775119
+5	3	3804.4172830000	3804.4172832947
+5	4	0.0021020000	0.0021023296
+5	6	0.1746190000	0.1746194143
+5	7	-0.0001970000	-0.0001974869
+5	8	0.2189750000	0.2189746196
+5	9	-0.0006580000	-0.0006578075
+6	2	-0.0027350000	-0.0027345865
+6	3	21786.9089630000	21786.9089629374
+6	4	0.0120390000	0.0120394951
+6	5	5.7267400000	5.7267400867
+6	7	-0.0011310000	-0.0011309562
+6	8	1.2540110000	1.2540107321
+6	9	-0.0037670000	-0.0037670925
+7	2	2.4179420000	2.4179420715
+7	3	-19264149.6519720000	-19264149.6519721578
+7	4	-10.6454130000	-10.6454126273
+7	5	-5063.6268890000	-5063.6268888173
+7	6	-884.2075620000	-884.2075617401
+7	8	-1108.8057720000	-1108.8057718246
+7	9	3.3308920000	3.3308917120
+8	2	-0.0021810000	-0.0021806723
+8	3	17373.7819030000	17373.7819025522
+8	4	0.0096010000	0.0096007911
+8	5	4.5667390000	4.5667392951
+8	6	0.7974410000	0.7974413411
+8	7	-0.0009020000	-0.0009018712
+8	9	-0.0030040000	-0.0030040353
+9	2	0.7259140000	0.7259143438
+9	3	-5783481.2169480000	-5783481.2169483573
+9	4	-3.1959650000	-3.1959647889
+9	5	-1520.2015940000	-1520.2015936432
+9	6	-265.4567120000	-265.4567119543
+9	7	0.3002200000	0.3002199070
+9	8	-332.8855660000	-332.8855656982
 
 
 -- !query
@@ -4406,8 +4095,7 @@ INSERT INTO num_result SELECT id, 0, SQRT(ABS(val))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 2 pos 9
+
 
 
 -- !query
@@ -4416,10 +4104,9 @@ SELECT t1.id1, t1.result, t2.expected
     WHERE t1.id1 = t2.id
     AND t1.result != t2.expected
 -- !query schema
-struct<>
+struct<id1:int,result:decimal(38,10),expected:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_sqrt; line 2 pos 24
+
 
 
 -- !query
@@ -4437,8 +4124,7 @@ INSERT INTO num_result SELECT id, 0, LN(ABS(val))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 2 pos 9
+
 
 
 -- !query
@@ -4447,10 +4133,9 @@ SELECT t1.id1, t1.result, t2.expected
     WHERE t1.id1 = t2.id
     AND t1.result != t2.expected
 -- !query schema
-struct<>
+struct<id1:int,result:decimal(38,10),expected:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_ln; line 2 pos 24
+
 
 
 -- !query
@@ -4468,8 +4153,7 @@ INSERT INTO num_result SELECT id, 0, LOG(cast('10' as decimal(38, 18)), ABS(val)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 2 pos 9
+
 
 
 -- !query
@@ -4478,10 +4162,9 @@ SELECT t1.id1, t1.result, t2.expected
     WHERE t1.id1 = t2.id
     AND t1.result != t2.expected
 -- !query schema
-struct<>
+struct<id1:int,result:decimal(38,10),expected:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_log10; line 2 pos 24
+
 
 
 -- !query
@@ -4499,8 +4182,7 @@ INSERT INTO num_result SELECT id, 0, POWER(cast('10' as decimal(38, 18)), LN(ABS
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 2 pos 9
+
 
 
 -- !query
@@ -4509,19 +4191,22 @@ SELECT t1.id1, t1.result, t2.expected
     WHERE t1.id1 = t2.id
     AND t1.result != t2.expected
 -- !query schema
-struct<>
+struct<id1:int,result:decimal(38,10),expected:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_power_10_ln; line 2 pos 24
+2	224790267919917440.0000000000	224790267919917955.1326161858
+4	7405685069595001.0000000000	7405685069594999.0773399947
+5	5068226527.3212630000	5068226527.3212726541
+6	281839893606.9936500000	281839893606.9937234336
+8	167361463828.0749000000	167361463828.0749132007
+9	107511333880051872.0000000000	107511333880052007.0414112467
 
 
 -- !query
 SELECT AVG(val) FROM num_data
 -- !query schema
-struct<>
+struct<avg(val):decimal(38,14)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 1 pos 21
+-13430913.59224232070000
 
 
 -- !query
@@ -4910,47 +4595,87 @@ struct<>
 SELECT '' AS to_char_3, to_char(val, '9999999999999999.999999999999999PR'), val
 FROM num_data
 -- !query schema
-struct<>
+struct<to_char_3:string,to_char(val, 9999999999999999.999999999999999PR):string,val:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 2 pos 5
+	               0.000000000000000  	0.0000000000
+	               0.000000000000000  	0.0000000000
+	               4.310000000000000  	4.3100000000
+	           16397.038491000000000  	16397.0384910000
+	           74881.000000000000000  	74881.0000000000
+	           93901.577630260000000  	93901.5776302600
+	         7799461.411900000000000  	7799461.4119000000
+	        <24926804.045047420000000>	-24926804.0450474200
+	        <34338492.215397047000000>	-34338492.2153970470
+	        <83028485.000000000000000>	-83028485.0000000000
 
 
 -- !query
 SELECT '' AS to_char_4, to_char(val, '9999999999999999.999999999999999S'), val
 FROM num_data
 -- !query schema
-struct<>
+struct<to_char_4:string,to_char(val, 9999999999999999.999999999999999S):string,val:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 2 pos 5
+	               0.000000000000000+	0.0000000000
+	               0.000000000000000+	0.0000000000
+	               4.310000000000000+	4.3100000000
+	           16397.038491000000000+	16397.0384910000
+	           74881.000000000000000+	74881.0000000000
+	           93901.577630260000000+	93901.5776302600
+	         7799461.411900000000000+	7799461.4119000000
+	        24926804.045047420000000-	-24926804.0450474200
+	        34338492.215397047000000-	-34338492.2153970470
+	        83028485.000000000000000-	-83028485.0000000000
 
 
 -- !query
 SELECT '' AS to_char_5,  to_char(val, 'MI9999999999999999.999999999999999'), val     FROM num_data
 -- !query schema
-struct<>
+struct<to_char_5:string,to_char(val, MI9999999999999999.999999999999999):string,val:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 1 pos 90
+	                0.000000000000000	0.0000000000
+	                0.000000000000000	0.0000000000
+	                4.310000000000000	4.3100000000
+	            16397.038491000000000	16397.0384910000
+	            74881.000000000000000	74881.0000000000
+	            93901.577630260000000	93901.5776302600
+	          7799461.411900000000000	7799461.4119000000
+	        -24926804.045047420000000	-24926804.0450474200
+	        -34338492.215397047000000	-34338492.2153970470
+	        -83028485.000000000000000	-83028485.0000000000
 
 
 -- !query
 SELECT '' AS to_char_9,  to_char(val, '0999999999999999.999999999999999'), val       FROM num_data
 -- !query schema
-struct<>
+struct<to_char_9:string,to_char(val, 0999999999999999.999999999999999):string,val:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 1 pos 90
+	0000000000000000.000000000000000	0.0000000000
+	0000000000000000.000000000000000	0.0000000000
+	0000000000000004.310000000000000	4.3100000000
+	0000000000016397.038491000000000	16397.0384910000
+	0000000000074881.000000000000000	74881.0000000000
+	0000000000093901.577630260000000	93901.5776302600
+	0000000007799461.411900000000000	7799461.4119000000
+	0000000024926804.045047420000000	-24926804.0450474200
+	0000000034338492.215397047000000	-34338492.2153970470
+	0000000083028485.000000000000000	-83028485.0000000000
 
 
 -- !query
 SELECT '' AS to_char_10, to_char(val, 'S0999999999999999.999999999999999'), val      FROM num_data
 -- !query schema
-struct<>
+struct<to_char_10:string,to_char(val, S0999999999999999.999999999999999):string,val:decimal(38,10)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 1 pos 90
+	+0000000000000000.000000000000000	0.0000000000
+	+0000000000000000.000000000000000	0.0000000000
+	+0000000000000004.310000000000000	4.3100000000
+	+0000000000016397.038491000000000	16397.0384910000
+	+0000000000074881.000000000000000	74881.0000000000
+	+0000000000093901.577630260000000	93901.5776302600
+	+0000000007799461.411900000000000	7799461.4119000000
+	-0000000024926804.045047420000000	-24926804.0450474200
+	-0000000034338492.215397047000000	-34338492.2153970470
+	-0000000083028485.000000000000000	-83028485.0000000000
 
 
 -- !query
@@ -5390,8 +5115,7 @@ DROP TABLE num_data
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_data; line 1 pos 11
+
 
 
 -- !query
@@ -5399,8 +5123,7 @@ DROP TABLE num_exp_add
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_add; line 1 pos 11
+
 
 
 -- !query
@@ -5408,8 +5131,7 @@ DROP TABLE num_exp_sub
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_sub; line 1 pos 11
+
 
 
 -- !query
@@ -5417,8 +5139,7 @@ DROP TABLE num_exp_div
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_div; line 1 pos 11
+
 
 
 -- !query
@@ -5426,8 +5147,7 @@ DROP TABLE num_exp_mul
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_mul; line 1 pos 11
+
 
 
 -- !query
@@ -5435,8 +5155,7 @@ DROP TABLE num_exp_sqrt
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_sqrt; line 1 pos 11
+
 
 
 -- !query
@@ -5444,8 +5163,7 @@ DROP TABLE num_exp_ln
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_ln; line 1 pos 11
+
 
 
 -- !query
@@ -5453,8 +5171,7 @@ DROP TABLE num_exp_log10
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_log10; line 1 pos 11
+
 
 
 -- !query
@@ -5462,8 +5179,7 @@ DROP TABLE num_exp_power_10_ln
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: num_exp_power_10_ln; line 1 pos 11
+
 
 
 -- !query
