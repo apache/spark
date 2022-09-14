@@ -598,7 +598,7 @@ class Rolling(RollingLike[FrameLike]):
         -----
         `quantile` in pandas-on-Spark are using distributed percentile approximation
         algorithm unlike pandas, the result might different with pandas, also `interpolation`
-        parameters are not supported yet.
+        parameter is not supported yet.
 
         the current implementation of this API uses Spark's Window without
         specifying partition specification. This leads to move all data into
@@ -607,10 +607,10 @@ class Rolling(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.quantile : Equivalent method for Series.
-        DataFrame.quantile : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling rolling with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling rolling with DataFrames.
+        pyspark.pandas.Series.quantile : Aggregating quantile for Series.
+        pyspark.pandas.DataFrame.quantile : Aggregating quantile for DataFrame.
 
         Examples
         --------
@@ -1268,14 +1268,14 @@ class RollingGroupby(RollingLike[FrameLike]):
         -----
         `quantile` in pandas-on-Spark are using distributed percentile approximation
         algorithm unlike pandas, the result might different with pandas, also `interpolation`
-        parameters are not supported yet.
+        parameter is not supported yet.
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.quantile : Equivalent method for Series.
-        DataFrame.quantile : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling rolling with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling rolling with DataFrames.
+        pyspark.pandas.Series.quantile : Aggregating quantile for Series.
+        pyspark.pandas.DataFrame.quantile : Aggregating quantile for DataFrame.
 
         Examples
         --------
@@ -1684,7 +1684,7 @@ class Expanding(ExpandingLike[FrameLike]):
         -----
         `quantile` in pandas-on-Spark are using distributed percentile approximation
         algorithm unlike pandas, the result might different with pandas (the result is
-        similar to the interpolation set to `lower`), also `interpolation` parameters are
+        similar to the interpolation set to `lower`), also `interpolation` parameter is
         not supported yet.
 
         the current implementation of this API uses Spark's Window without
@@ -1694,10 +1694,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.quantile : Equivalent method for Series.
-        DataFrame.quantile : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling expanding with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling expanding with DataFrames.
+        pyspark.pandas.Series.quantile : Aggregating quantile for Series.
+        pyspark.pandas.DataFrame.quantile : Aggregating quantile for DataFrame.
 
         Examples
         --------
@@ -2241,14 +2241,14 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
         -----
         `quantile` in pandas-on-Spark are using distributed percentile approximation
         algorithm unlike pandas, the result might different with pandas, also `interpolation`
-        parameters are not supported yet.
+        parameter is not supported yet.
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.quantile : Equivalent method for Series.
-        DataFrame.quantile : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling expanding with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling expanding with DataFrames.
+        pyspark.pandas.Series.quantile : Aggregating quantile for Series.
+        pyspark.pandas.DataFrame.quantile : Aggregating quantile for DataFrame.
 
         Examples
         --------
