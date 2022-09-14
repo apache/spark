@@ -140,9 +140,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 24,
-    "stopIndex" : 77,
-    "fragment" : "limit (case when random() < 0.5 then bigint(null) end)"
+    "startIndex" : 31,
+    "stopIndex" : 76,
+    "fragment" : "case when random() < 0.5 then bigint(null) end"
   } ]
 }
 
@@ -162,9 +162,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 24,
-    "stopIndex" : 78,
-    "fragment" : "offset (case when random() < 0.5 then bigint(null) end)"
+    "startIndex" : 32,
+    "stopIndex" : 77,
+    "fragment" : "case when random() < 0.5 then bigint(null) end"
   } ]
 }
 

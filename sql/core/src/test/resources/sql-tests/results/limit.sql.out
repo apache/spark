@@ -59,9 +59,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 24,
+    "startIndex" : 30,
     "stopIndex" : 31,
-    "fragment" : "LIMIT -1"
+    "fragment" : "-1"
   } ]
 }
 
@@ -81,9 +81,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 44,
-    "fragment" : "SELECT * FROM testData TABLESAMPLE (-1 ROWS)"
+    "startIndex" : 37,
+    "stopIndex" : 38,
+    "fragment" : "-1"
   } ]
 }
 
@@ -108,9 +108,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 24,
+    "startIndex" : 30,
     "stopIndex" : 46,
-    "fragment" : "LIMIT CAST(NULL AS INT)"
+    "fragment" : "CAST(NULL AS INT)"
   } ]
 }
 
@@ -130,9 +130,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 24,
+    "startIndex" : 30,
     "stopIndex" : 36,
-    "fragment" : "LIMIT key > 3"
+    "fragment" : "key > 3"
   } ]
 }
 
@@ -148,14 +148,7 @@ org.apache.spark.sql.AnalysisException
   "errorSubClass" : "NON_INTEGER_TYPE",
   "messageParameters" : {
     "type" : "boolean"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 24,
-    "stopIndex" : 33,
-    "fragment" : "LIMIT true"
-  } ]
+  }
 }
 
 
@@ -174,9 +167,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 24,
+    "startIndex" : 30,
     "stopIndex" : 32,
-    "fragment" : "LIMIT 'a'"
+    "fragment" : "'a'"
   } ]
 }
 
