@@ -1135,8 +1135,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
       Unpivot(
         None,
-        Some(unpivotColumns.map(Seq(_))),
-        None,
+        Some(unpivotColumns.map(c => (Seq(c), None))),
         variableColumnName,
         valueColumnNames,
         query
@@ -1144,13 +1143,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     } else {
       val unpivotClause = ctx.unpivotOperator().unpivotMultiValueColumnClause()
       val variableColumnName = unpivotClause.unpivotNameColumn().identifier().getText
-      val (unpivotColumns, unpivotAliases) =
-        unpivotClause.unpivotColumnSets.asScala.map(visitUnpivotColumnSet).toSeq.unzip
+      val unpivotColumns = unpivotClause.unpivotColumnSets.asScala.map(visitUnpivotColumnSet).toSeq
 
       Unpivot(
         None,
         Some(unpivotColumns),
-        Some(unpivotAliases),
         variableColumnName,
         valueColumnNames,
         query
