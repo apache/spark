@@ -42,8 +42,8 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with SQLConfHelpe
     case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportPartitioning, _, None, _) =>
       val catalystPartitioning = scan.outputPartitioning() match {
         case kgp: KeyGroupedPartitioning =>
-          val partitioning = sequenceToOption(kgp.keys().map(
-          V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog)))
+          val partitioning = sequenceToOption(
+            kgp.keys().map(V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog)))
           if (partitioning.isEmpty) {
             None
           } else {

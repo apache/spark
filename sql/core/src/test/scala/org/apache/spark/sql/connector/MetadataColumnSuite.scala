@@ -217,7 +217,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
     checkAnswer(dfQuery, Row(1, "a", "b", Row(1, "a"), Row(1, "b")))
   }
 
-  test("Only set KeyGroupedPartitioning when the referenced column is in the output") {
+  test("SPARK-40429: Only set KeyGroupedPartitioning when the referenced column is in the output") {
     withTable(tbl) {
       sql(s"CREATE TABLE $tbl (id bigint, data string) PARTITIONED BY (id)")
       sql(s"INSERT INTO $tbl VALUES (1, 'a'), (2, 'b'), (3, 'c')")
