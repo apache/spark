@@ -522,9 +522,8 @@ class SubquerySuite extends QueryTest
     withTempView("t") {
       Seq((1, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
 
-      val str = "select (select sum(-1) from t t2 where t1.c2 = t2.c1 group by t2.c2) sum from t t1"
       val exception = intercept[AnalysisException] {
-        sql(str)
+        sql("select (select sum(-1) from t t2 where t1.c2 = t2.c1 group by t2.c2) sum from t t1")
       }
       checkError(
         exception,
@@ -532,24 +531,25 @@ class SubquerySuite extends QueryTest
         errorSubClass = "NON_CORRELATED_COLUMNS_IN_GROUP_BY",
         parameters = Map("value" -> "c2"),
         sqlState = None,
-        context = ExpectedContext(fragment = str, start = 0, stop = 81)) }
+        context = ExpectedContext(
+          fragment = "(select sum(-1) from t t2 where t1.c2 = t2.c1 group by t2.c2)",
+          start = 7, stop = 67)) }
   }
 
   test("non-aggregated correlated scalar subquery") {
-    val str1 = "select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1"
     val exception1 = intercept[AnalysisException] {
-      sql(str1)
+      sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1")
     }
     checkErrorMatchPVals(
       exception1,
       errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
       errorSubClass = "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
-      parameters = Map("planString" -> "(?s): Filter .*"),
+      parameters = Map("treeNode" -> "(?s)Filter .*"),
       sqlState = None,
-      context = ExpectedContext(fragment = str1, start = 0, stop = 63))
-    val str2 = "select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1"
+      context = ExpectedContext(
+        fragment = "(select b from l l2 where l2.a = l1.a)", start = 10, stop = 47))
     val exception2 = intercept[AnalysisException] {
-      sql(str2)
+      sql("select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1")
     }
     checkErrorMatchPVals(
       exception2,
@@ -557,21 +557,22 @@ class SubquerySuite extends QueryTest
       errorSubClass = "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT",
       parameters = Map.empty[String, String],
       sqlState = None,
-      context = ExpectedContext(fragment = str2, start = 0, stop = 74))
+      context = ExpectedContext(
+        fragment = "(select b from l l2 where l2.a = l1.a group by 1)", start = 10, stop = 58))
   }
 
   test("non-equal correlated scalar subquery") {
-    val str = "select a, (select sum(b) from l l2 where l2.a < l1.a) sum_b from l l1"
     val exception = intercept[AnalysisException] {
-      sql(str)
+      sql("select a, (select sum(b) from l l2 where l2.a < l1.a) sum_b from l l1")
     }
     checkErrorMatchPVals(
       exception,
       errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
       errorSubClass = "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-      parameters = Map("planString" -> "(?s).*"),
+      parameters = Map("treeNode" -> "(?s).*"),
       sqlState = None,
-      context = ExpectedContext(fragment = str, start = 0, stop = 68))
+      context = ExpectedContext(
+        fragment = "select sum(b) from l l2 where l2.a < l1.a", start = 11, stop = 51))
   }
 
   test("disjunctive correlated scalar subquery") {
@@ -2014,17 +2015,17 @@ class SubquerySuite extends QueryTest
     withTempView("t1", "t2") {
       Seq((0, 1)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq((1, 2), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
-      val str = "SELECT * FROM t1 JOIN LATERAL (SELECT DISTINCT c2 FROM t2 WHERE c1 > t1.c1)"
       val exception = intercept[AnalysisException] {
-        sql(str)
+        sql("SELECT * FROM t1 JOIN LATERAL (SELECT DISTINCT c2 FROM t2 WHERE c1 > t1.c1)")
       }
       checkErrorMatchPVals(
         exception,
         errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
         errorSubClass = "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-        parameters = Map("planString" -> "(?s).*"),
+        parameters = Map("treeNode" -> "(?s).*"),
         sqlState = None,
-        context = ExpectedContext(fragment = str, start = 0, stop = 74))
+        context = ExpectedContext(
+          fragment = "SELECT DISTINCT c2 FROM t2 WHERE c1 > t1.c1", start = 31, stop = 73))
     }
   }
 
@@ -2044,19 +2045,19 @@ class SubquerySuite extends QueryTest
           |FROM (SELECT CAST(c1 AS STRING) a FROM t1)
           |""".stripMargin),
         Row(5) :: Row(null) :: Nil)
-      val str =
-        """SELECT (SELECT SUM(c2) FROM t2 WHERE CAST(c1 AS SHORT) = a)
-          |FROM (SELECT CAST(c1 AS SHORT) a FROM t1)""".stripMargin
       val exception1 = intercept[AnalysisException] {
-        sql(str)
+        sql(
+          """SELECT (SELECT SUM(c2) FROM t2 WHERE CAST(c1 AS SHORT) = a)
+            |FROM (SELECT CAST(c1 AS SHORT) a FROM t1)""".stripMargin)
       }
       checkErrorMatchPVals(
         exception1,
         errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
         errorSubClass = "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-        parameters = Map("planString" -> "(?s).*"),
+        parameters = Map("treeNode" -> "(?s).*"),
         sqlState = None,
-        context = ExpectedContext(fragment = str, start = 0, stop = 100))
+        context = ExpectedContext(
+          fragment = "SELECT SUM(c2) FROM t2 WHERE CAST(c1 AS SHORT) = a", start = 8, stop = 57))
     }
   }
 

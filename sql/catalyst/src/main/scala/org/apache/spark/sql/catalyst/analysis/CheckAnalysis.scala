@@ -33,6 +33,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.Utils
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
@@ -224,7 +225,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case c: Cast if !c.resolved =>
             failAnalysis(s"invalid cast from ${c.child.dataType.catalogString} to " +
               c.dataType.catalogString)
-
           case e: RuntimeReplaceable if !e.replacement.resolved =>
             throw new IllegalStateException("Illegal RuntimeReplaceable: " + e +
               "\nReplacement is unresolved: " + e.replacement)
@@ -730,6 +730,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }
   }
 
+  private def planToString(expr: LogicalPlan): String =
+    if (Utils.isTesting) {
+      expr.toString.replaceAll("#\\d+", "#x")
+        .replaceAll("operator id = \\d+", "operator id = #x")
+    } else {
+      expr.toString
+    }
+
   /**
    * Validates subquery expressions in the plan. Upon failure, returns an user facing error.
    */
@@ -822,7 +830,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               expr.failAnalysis(
                 errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
                 errorSubClass = "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
-                treeNodes = Seq(other))
+                messageParameters = Map("treeNode" -> planToString(other)))
           }
 
           // Only certain operators are allowed to host subquery expression containing
@@ -837,13 +845,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 a.failAnalysis(
                   errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
                   errorSubClass = "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
-                  treeNodes = Seq(a))
+                  messageParameters = Map("treeNode" -> planToString(a)))
               }
             case other =>
               other.failAnalysis(
                 errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
                 errorSubClass = "UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY",
-                treeNodes = Seq(other))
+                messageParameters = Map("treeNode" -> planToString(other)))
           }
         }
         // Validate to make sure the correlations appearing in the query are valid and
@@ -859,7 +867,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           expr.failAnalysis(
             errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
             errorSubClass = "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
-            treeNodes = Seq(plan))
+            messageParameters = Map("treeNode" -> planToString(plan)))
         }
         // Check if the lateral join's join condition is deterministic.
         if (join.condition.exists(!_.deterministic)) {
@@ -880,7 +888,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             expr.failAnalysis(
               errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
               errorSubClass = "UNSUPPORTED_IN_EXISTS_SUBQUERY",
-              treeNodes = Seq(plan))
+              messageParameters = Map("treeNode" -> planToString(plan)))
         }
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.
@@ -949,7 +957,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         p.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
           errorSubClass = "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-          treeNodes = Seq(p))
+          messageParameters = Map("treeNode" -> planToString(p)))
       }
     }
 
@@ -971,7 +979,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         p.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
           errorSubClass = "UNSUPPORTED_CORRELATED_REFERENCE",
-          treeNodes = Seq(p))
+          messageParameters = Map("treeNode" -> planToString(p)))
       }
     }
 
@@ -1037,7 +1045,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         p.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
           errorSubClass = "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-          treeNodes = predicates)
+          messageParameters =
+            Map("treeNode" -> s"${predicates.map(_.sql).mkString}:\n${planToString(p)}"))
       }
     }
 
