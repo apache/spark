@@ -52,17 +52,10 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-
     TestUtils.configTestLog4j2("INFO")
-//    spark = SparkSession
-//      .builder()
-//      .master("local-cluster[2,1,512]")
-//      .config(EXECUTOR_MEMORY.key, "512m")
-//      .appName("testing")
-//      .getOrCreate()
   }
 
-  test("LIMIT simple") {
+  test("Simple Limit") {
     assertThrows[IndexOutOfBoundsException] {
       new SparkConnectPlanner(
         proto.Relation.newBuilder.setFetch(proto.Fetch.newBuilder.setLimit(10).build()).build(),
@@ -83,17 +76,19 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   }
 
-  test("READ simple") {
+  test("Simple Read") {
     val read = proto.Read.newBuilder().build()
     // Invalid read without Table name.
     intercept[InvalidPlanInput](transform(proto.Relation.newBuilder.setRead(read).build()))
     val readWithTable = read.toBuilder
       .setNamedTable(proto.Read.NamedTable.newBuilder.addParts("name").build())
       .build()
-    assert(transform(proto.Relation.newBuilder.setRead(readWithTable).build()) !== null)
+    val res = transform(proto.Relation.newBuilder.setRead(readWithTable).build())
+    assert(res !== null)
+    assert(res.nodeName == "UnresolvedRelation")
   }
 
-  test("SORT") {
+  test("Simple Sort") {
     val sort = proto.Sort.newBuilder
       .addAllSortFields(Seq(proto.Sort.SortField.newBuilder().build()).asJava)
       .build()
@@ -111,14 +106,14 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .build())
       .build()
 
-    transform(
+    val res = transform(
       proto.Relation.newBuilder
         .setSort(proto.Sort.newBuilder.addAllSortFields(Seq(f).asJava).setInput(readRel))
         .build())
-
+    assert(res.nodeName == "Sort")
   }
 
-  test("UNION") {
+  test("Simple Union") {
     intercept[AssertionError](
       transform(proto.Relation.newBuilder.setUnion(proto.Union.newBuilder.build()).build))
     val union = proto.Relation.newBuilder
@@ -129,7 +124,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     }
     assert(msg.getMessage.contains("Unsupported set operation"))
 
-    transform(
+    val res = transform(
       proto.Relation.newBuilder
         .setUnion(
           proto.Union.newBuilder
@@ -137,6 +132,84 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .setUnionType(proto.Union.UnionType.UNION_TYPE_ALL)
             .build())
         .build())
+    assert(res.nodeName == "Union")
+  }
+
+  test("Simple Join") {
+
+    val incompleteJoin =
+      proto.Relation.newBuilder.setJoin(proto.Join.newBuilder.setLeft(readRel)).build()
+    intercept[AssertionError](transform(incompleteJoin))
+
+    // Cartesian Product not supported.
+    intercept[InvalidPlanInput] {
+      val simpleJoin = proto.Relation.newBuilder
+        .setJoin(proto.Join.newBuilder.setLeft(readRel).setRight(readRel))
+        .build()
+      transform(simpleJoin)
+    }
+
+    // Construct a simple Join.
+    val unresolvedAttribute = proto.Expression
+      .newBuilder()
+      .setUnresolvedAttribute(
+        proto.Expression.UnresolvedAttribute.newBuilder().addAllParts(Seq("left").asJava).build())
+      .build()
+
+    val joinCondition = proto.Expression.newBuilder.setUnresolvedFunction(
+      proto.Expression.UnresolvedFunction.newBuilder
+        .addAllParts(Seq("eq").asJava)
+        .addArguments(unresolvedAttribute)
+        .addArguments(unresolvedAttribute)
+        .build())
+
+    val simpleJoin = proto.Relation.newBuilder
+      .setJoin(
+        proto.Join.newBuilder.setLeft(readRel).setRight(readRel).setOn(joinCondition).build())
+      .build()
+
+    val res = transform(simpleJoin)
+    assert(res.nodeName == "Join")
+    assert(res != null)
+  }
+
+  test("Simple Projection") {
+    val project = proto.Project.newBuilder
+      .setInput(readRel)
+      .addExpressions(
+        proto.Expression.newBuilder
+          .setLiteral(proto.Expression.Literal.newBuilder.setI32(32))
+          .build())
+      .build()
+
+    val res = transform(proto.Relation.newBuilder.setProject(project).build())
+    assert(res.nodeName == "Project")
+
+  }
+
+  test("Simple Aggregation") {
+    val unresolvedAttribute = proto.Expression
+      .newBuilder()
+      .setUnresolvedAttribute(
+        proto.Expression.UnresolvedAttribute.newBuilder().addAllParts(Seq("left").asJava).build())
+      .build()
+
+    val agg = proto.Aggregate.newBuilder
+      .setInput(readRel)
+      .addAllMeasures(
+        Seq(
+          proto.Aggregate.Measure.newBuilder
+            .setFunction(proto.Aggregate.AggregateFunction.newBuilder
+              .setName("sum")
+              .addArguments(unresolvedAttribute))
+            .build()).asJava)
+      .addGroupingSets(proto.Aggregate.GroupingSet.newBuilder
+        .addAggregateExpressions(unresolvedAttribute)
+        .build())
+      .build()
+
+    val res = transform(proto.Relation.newBuilder.setAggregate(agg).build())
+    assert(res.nodeName == "Aggregate")
   }
 
 }
