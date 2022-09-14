@@ -128,7 +128,7 @@ package object analysis {
       def normalizePlan(node: LogicalPlan): LogicalPlan = {
         node.withNewChildren(node.children.map(normalizePlan)).mapExpressions(normalizeExpr)
       }
-      val planString =
+      val treeNodeString =
         if (SQLConf.get.includePlansInErrors) {
           s": ${
             treeNodes.map {
@@ -142,7 +142,7 @@ package object analysis {
       throw new AnalysisException(
         errorClass = errorClass,
         errorSubClass = errorSubClass,
-        messageParameters = Map("planString" -> planString),
+        messageParameters = Map("treeNode" -> treeNodeString),
         origin = t.origin)
     }
 

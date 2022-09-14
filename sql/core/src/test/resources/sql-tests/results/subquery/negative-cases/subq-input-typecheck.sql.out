@@ -70,9 +70,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 109,
-    "fragment" : "SELECT \n  ( SELECT max(t2b), min(t2b) \n    FROM t2 \n    WHERE t2.t2b = t1.t1b\n    GROUP BY t2.t2b\n  )\nFROM t1"
+    "startIndex" : 11,
+    "stopIndex" : 101,
+    "fragment" : "( SELECT max(t2b), min(t2b) \n    FROM t2 \n    WHERE t2.t2b = t1.t1b\n    GROUP BY t2.t2b\n  )"
   } ]
 }
 
@@ -98,9 +98,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 104,
-    "fragment" : "SELECT \n  ( SELECT max(t2b), min(t2b) \n    FROM t2 \n    WHERE t2.t2b > 0\n    GROUP BY t2.t2b\n  )\nFROM t1"
+    "startIndex" : 11,
+    "stopIndex" : 96,
+    "fragment" : "( SELECT max(t2b), min(t2b) \n    FROM t2 \n    WHERE t2.t2b > 0\n    GROUP BY t2.t2b\n  )"
   } ]
 }
 
