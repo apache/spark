@@ -107,9 +107,6 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
                   new ArrowColumnVector(vector)
                 }.toArray[ColumnVector]
                 read()
-              case SpecialLengths.START_STATE_UPDATE =>
-                handleStateUpdate(stream)
-                read()
               case SpecialLengths.TIMING_DATA =>
                 handleTimingData()
                 read()

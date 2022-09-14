@@ -691,7 +691,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object FlatMapGroupsInPandasWithStateStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case FlatMapGroupsInPandasWithState(
-        func, groupAttr, outputAttr, stateType, outputMode, _, timeout, child) =>
+        func, groupAttr, outputAttr, stateType, outputMode, timeout, child) =>
         val stateVersion = conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
         val execPlan = python.FlatMapGroupsInPandasWithStateExec(
           func, groupAttr, outputAttr, stateType, None, stateVersion, outputMode, timeout,

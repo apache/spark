@@ -112,7 +112,6 @@ case class FlatMapCoGroupsInPandas(
  * @param outputAttrs used to define the output rows
  * @param stateType used to serialize/deserialize state before calling `functionExpr`
  * @param outputMode the output mode of `func`
- * @param isMapGroupsWithState whether it is created by the `mapGroupsWithState` method
  * @param timeout used to timeout groups that have not received data in a while
  * @param child logical plan of the underlying data
  */
@@ -122,12 +121,8 @@ case class FlatMapGroupsInPandasWithState(
     outputAttrs: Seq[Attribute],
     stateType: StructType,
     outputMode: OutputMode,
-    isMapGroupsWithState: Boolean = false,
     timeout: GroupStateTimeout,
     child: LogicalPlan) extends UnaryNode {
-  if (isMapGroupsWithState) {
-    assert(outputMode == OutputMode.Update)
-  }
 
   override def output: Seq[Attribute] = outputAttrs
 

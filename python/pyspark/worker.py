@@ -57,7 +57,8 @@ from pyspark.serializers import (
 from pyspark.sql.pandas.serializers import (
     ArrowStreamPandasUDFSerializer,
     CogroupUDFSerializer,
-    ArrowStreamUDFSerializer, ApplyInPandasWithStateSerializer,
+    ArrowStreamUDFSerializer,
+    ApplyInPandasWithStateSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
@@ -538,9 +539,7 @@ def read_udfs(pickleSer, infile, eval_type):
             idx += offsets_len
         return parsed
 
-    if eval_type in (
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-    ):
+    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
@@ -584,6 +583,8 @@ def read_udfs(pickleSer, infile, eval_type):
             keys_gen, values_gen = tee(data_gen)
             keys_elem = next(keys_gen)
             keys = [keys_elem[o] for o in parsed_offsets[0][0]]
+
+            # This must be generator comprehension - do not materialize.
             vals = ([x[o] for o in parsed_offsets[0][1]] for x in values_gen)
 
             return f(keys, vals, state)
@@ -687,7 +688,6 @@ def main(infile, outfile):
                 )
 
         # initialize global state
-        state_schema = None
         taskContext = None
         if isBarrier:
             taskContext = BarrierTaskContext._getOrCreate()
@@ -773,9 +773,7 @@ def main(infile, outfile):
         if eval_type == PythonEvalType.NON_UDF:
             func, profiler, deserializer, serializer = read_command(pickleSer, infile)
         else:
-            func, profiler, deserializer, serializer = read_udfs(
-                pickleSer, infile, eval_type
-            )
+            func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_type)
 
         func_init_time = time.time()
 
@@ -823,7 +821,6 @@ def main(infile, outfile):
             faulthandler.disable()
             faulthandler_log_file.close()
             os.remove(faulthandler_log_path)
-
     finish_time = time.time()
     report_times(outfile, boot_time, init_time, func_init_time, finish_time)
     write_long(shuffle.MemoryBytesSpilled, outfile)
@@ -831,7 +828,6 @@ def main(infile, outfile):
 
     # Mark the beginning of the accumulators section of the output
     write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
-
     write_int(len(_accumulatorRegistry), outfile)
     for (aid, accum) in _accumulatorRegistry.items():
         pickleSer._write_with_length((aid, accum._value), outfile)

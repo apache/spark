@@ -646,7 +646,6 @@ class RelationalGroupedDataset protected[sql](
       outputAttrs,
       stateStructType,
       outputMode,
-      isMapGroupsWithState = false,
       timeoutConf,
       child = df.logicalPlan)
     Dataset.ofRows(df.sparkSession, plan)
