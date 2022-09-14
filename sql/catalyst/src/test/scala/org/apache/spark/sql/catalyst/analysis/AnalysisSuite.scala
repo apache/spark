@@ -105,7 +105,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       "UNRESOLVED_COLUMN",
       "WITH_SUGGESTION",
-      Array("`tBl`.`a`", "`TbL`.`a`"),
+      Map("objectName" -> "`tBl`.`a`", "proposal" -> "`TbL`.`a`"),
       caseSensitive = true)
 
     checkAnalysisWithoutViewWrapper(
@@ -715,7 +715,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisErrorClass(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
       "UNRESOLVED_COLUMN",
       "WITH_SUGGESTION",
-      Array("`y`", "`t`.`x`"),
+      Map("objectName" -> "`y`", "proposal" -> "`t`.`x`"),
       caseSensitive = true)
   }
 
@@ -1155,7 +1155,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |""".stripMargin),
       "UNRESOLVED_COLUMN",
       "WITH_SUGGESTION",
-      Array("`c`.`y`", "`x`"),
+      Map("objectName" -> "`c`.`y`", "proposal" -> "`x`"),
       caseSensitive = true)
   }
 

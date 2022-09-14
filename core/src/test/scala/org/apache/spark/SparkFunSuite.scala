@@ -389,6 +389,19 @@ abstract class SparkFunSuite
       context: QueryContext): Unit =
     checkError(exception, errorClass, Some(errorSubClass), None, parameters, false, Array(context))
 
+  case class ExpectedContext(
+      objectType: String,
+      objectName: String,
+      startIndex: Int,
+      stopIndex: Int,
+      fragment: String) extends QueryContext
+
+  object ExpectedContext {
+    def apply(fragment: String, start: Int, stop: Int): ExpectedContext = {
+      ExpectedContext("", "", start, stop, fragment)
+    }
+  }
+
   class LogAppender(msg: String = "", maxEvents: Int = 1000)
       extends AbstractAppender("logAppender", null, null, true, Property.EMPTY_ARRAY) {
     private val _loggingEvents = new ArrayBuffer[LogEvent]()

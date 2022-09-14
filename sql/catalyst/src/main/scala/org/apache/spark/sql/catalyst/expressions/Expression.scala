@@ -224,43 +224,28 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def childrenResolved: Boolean = children.forall(_.resolved)
 
-  // Expression canonicalization is done in 2 phases:
-  //   1. Recursively canonicalize each node in the expression tree. This does not change the tree
-  //      structure and is more like "node-local" canonicalization.
-  //   2. Find adjacent commutative operators in the expression tree, reorder them to get a
-  //      static order and remove cosmetic variations. This may change the tree structure
-  //      dramatically and is more like a "global" canonicalization.
-  //
-  // The first phase is done by `preCanonicalized`. It's a `lazy val` which recursively calls
-  // `preCanonicalized` on the children. This means that almost every node in the expression tree
-  // will instantiate the `preCanonicalized` variable, which is good for performance as you can
-  // reuse the canonicalization result of the children when you construct a new expression node.
-  //
-  // The second phase is done by `canonicalized`, which simply calls `Canonicalize` and is kind of
-  // the actual "user-facing API" of expression canonicalization. Only the root node of the
-  // expression tree will instantiate the `canonicalized` variable. This is different from
-  // `preCanonicalized`, because `canonicalized` does "global" canonicalization and most of the time
-  // you cannot reuse the canonicalization result of the children.
-
-  /**
-   * An internal lazy val to implement expression canonicalization. It should only be called in
-   * `canonicalized`, or in subclass's `preCanonicalized` when the subclass overrides this lazy val
-   * to provide custom canonicalization logic.
-   */
-  lazy val preCanonicalized: Expression = {
-    val canonicalizedChildren = children.map(_.preCanonicalized)
-    withNewChildren(canonicalizedChildren)
-  }
-
   /**
    * Returns an expression where a best effort attempt has been made to transform `this` in a way
    * that preserves the result but removes cosmetic variations (case sensitivity, ordering for
-   * commutative operations, etc.)  See [[Canonicalize]] for more details.
+   * commutative operations, etc.).
    *
    * `deterministic` expressions where `this.canonicalized == other.canonicalized` will always
    * evaluate to the same result.
+   *
+   * The process of canonicalization is a one pass, bottum-up expression tree computation based on
+   * canonicalizing children before canonicalizing the current node. There is one exception though,
+   * as adjacent, same class [[CommutativeExpression]]s canonicalazion happens in a way that calling
+   * `canonicalized` on the root:
+   *   1. Gathers and canonicalizes the non-commutative (or commutative but not same class) child
+   *      expressions of the adjacent expressions.
+   *   2. Reorder the canonicalized child expressions by their hashcode.
+   * This means that the lazy `cannonicalized` is called and computed only on the root of the
+   * adjacent expressions.
    */
-  lazy val canonicalized: Expression = Canonicalize.reorderCommutativeOperators(preCanonicalized)
+  lazy val canonicalized: Expression = {
+    val canonicalizedChildren = children.map(_.canonicalized)
+    withNewChildren(canonicalizedChildren)
+  }
 
   /**
    * Returns true when two expressions will always compute the same result, even if they differ
@@ -364,7 +349,7 @@ trait RuntimeReplaceable extends Expression {
   // As this expression gets replaced at optimization with its `child" expression,
   // two `RuntimeReplaceable` are considered to be semantically equal if their "child" expressions
   // are semantically equal.
-  override lazy val preCanonicalized: Expression = replacement.preCanonicalized
+  override lazy val canonicalized: Expression = replacement.canonicalized
 
   final override def eval(input: InternalRow = null): Any =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
@@ -763,11 +748,15 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes wi
     if (!left.dataType.sameType(right.dataType)) {
       DataTypeMismatch(
         errorSubClass = "BINARY_OP_DIFF_TYPES",
-        messageParameters = Array(toSQLType(left.dataType), toSQLType(right.dataType)))
+        messageParameters = Map(
+          "left" -> toSQLType(left.dataType),
+          "right" -> toSQLType(right.dataType)))
     } else if (!inputType.acceptsType(left.dataType)) {
       DataTypeMismatch(
         errorSubClass = "BINARY_OP_WRONG_TYPE",
-        messageParameters = Array(toSQLType(inputType), toSQLType(left.dataType)))
+        messageParameters = Map(
+          "inputType" -> toSQLType(inputType),
+          "actualDataType" -> toSQLType(left.dataType)))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -1175,4 +1164,22 @@ trait ComplexTypeMergingExpression extends Expression {
  */
 trait UserDefinedExpression {
   def name: String
+}
+
+trait CommutativeExpression extends Expression {
+  /** Collects adjacent commutative operations. */
+  private def gatherCommutative(
+      e: Expression,
+      f: PartialFunction[CommutativeExpression, Seq[Expression]]): Seq[Expression] = e match {
+    case c: CommutativeExpression if f.isDefinedAt(c) => f(c).flatMap(gatherCommutative(_, f))
+    case other => other.canonicalized :: Nil
+  }
+
+  /**
+   * Reorders adjacent commutative operators such as [[And]] in the expression tree, according to
+   * the `hashCode` of non-commutative nodes, to remove cosmetic variations.
+   */
+  protected def orderCommutative(
+      f: PartialFunction[CommutativeExpression, Seq[Expression]]): Seq[Expression] =
+    gatherCommutative(this, f).sortBy(_.hashCode())
 }

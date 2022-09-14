@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.TableCatalog
-import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
@@ -29,8 +28,7 @@ import org.apache.spark.util.Utils
  * The class contains tests for the `DESCRIBE TABLE` command to check V2 table catalogs.
  */
 class DescribeTableSuite extends command.DescribeTableSuiteBase
-  with CommandSuiteBase
-  with QueryErrorsSuiteBase {
+  with CommandSuiteBase {
 
   test("Describing a partition is not supported") {
     withNamespaceAndTable("ns", "table") { tbl =>
@@ -114,7 +112,10 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           "objectName" -> "`key1`",
           "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`, `test_catalog`.`ns`.`tbl`.`col`"),
         context = ExpectedContext(
-          fragment = query, start = 0, stop = 28))
+          fragment = query,
+          start = 0,
+          stop = query.length -1)
+      )
     }
   }
 
@@ -143,7 +144,9 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
             "objectName" -> "`KEY`",
             "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`"),
           context = ExpectedContext(
-            fragment = query, start = 0, stop = 27))
+            fragment = query,
+            start = 0,
+            stop = query.length - 1))
       }
     }
   }

@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
@@ -59,7 +58,7 @@ import org.apache.spark.util.ResetSystemProperties
 
 @ExtendedSQLTest
 class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
-    with ResetSystemProperties with QueryErrorsSuiteBase {
+    with ResetSystemProperties {
   import testImplicits._
 
   setupTestData()
@@ -2677,9 +2676,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             "left" -> "\"STRUCT<f: INT>\"",
             "right" -> "\"STRUCT<F: INT>\""),
           context = ExpectedContext(
-            fragment = query,
-            start = 0,
-            stop = 29))
+            fragment = "c = C",
+            start = 25,
+            stop = 29
+          ))
       }
     }
   }

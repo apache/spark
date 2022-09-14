@@ -50,8 +50,7 @@ class QueryExecutionErrorsSuite
   extends QueryTest
   with ParquetTest
   with OrcTest
-  with SharedSparkSession
-  with QueryErrorsSuiteBase {
+  with SharedSparkSession {
 
   import testImplicits._
 
@@ -651,7 +650,7 @@ class QueryExecutionErrorsSuite
       parameters = Map(
         "message" -> "integer overflow",
         "alternative" -> "",
-        "config" -> SQLConf.ANSI_ENABLED.key))
+        "config" -> s""""${SQLConf.ANSI_ENABLED.key}""""))
   }
 
   test("CAST_OVERFLOW: from long to ANSI intervals") {
