@@ -41,10 +41,6 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
 
   protected def deserializeColumnarBatch(batch: ColumnarBatch, schema: StructType): OUT
 
-  protected def handleStateUpdate(stream: DataInputStream): Unit = {
-    new IllegalStateException("Should not reach here!")
-  }
-
   protected def newReaderIterator(
       stream: DataInputStream,
       writerThread: WriterThread,
