@@ -1430,11 +1430,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       Seq(1).toDF().repartition(1).write.parquet(dir.getCanonicalPath)
 
       val dataTypes =
-        Seq(StringType, BooleanType, ByteType, BinaryType, ShortType, IntegerType, LongType,
-          FloatType, DoubleType, DecimalType(25, 5), DateType, TimestampType)
+        Seq(NullType, StringType, BooleanType, ByteType, BinaryType, ShortType, IntegerType,
+          LongType, FloatType, DoubleType, DecimalType(25, 5), DateType, TimestampType)
 
       val constantValues =
         Seq(
+          null,
           UTF8String.fromString("a string"),
           true,
           1.toByte,
@@ -1461,10 +1462,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           vectorizedReader.initBatch(schema, partitionValues)
           vectorizedReader.nextKeyValue()
           val row = vectorizedReader.getCurrentValue.asInstanceOf[InternalRow]
-
-          // Use `GenericMutableRow` by explicitly copying rather than `ColumnarBatch`
-          // in order to use get(...) method which is not implemented in `ColumnarBatch`.
-          val actual = row.copy().get(1, dt)
+          val actual = row.get(1, dt)
           val expected = v
           if (dt.isInstanceOf[BinaryType]) {
             assert(actual.asInstanceOf[Array[Byte]] sameElements expected.asInstanceOf[Array[Byte]])
