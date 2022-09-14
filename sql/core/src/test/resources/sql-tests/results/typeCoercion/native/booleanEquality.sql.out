@@ -81,9 +81,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(true = CAST(1 AS BINARY))\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(true = CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -113,9 +113,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(true = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(true = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -137,9 +137,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(true = CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(true = CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -225,9 +225,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(true <=> CAST(1 AS BINARY))\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(true <=> CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -257,9 +257,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(true <=> CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(true <=> CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -281,9 +281,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(true <=> CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(true <=> CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -369,9 +369,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) = true)\"",
     "left" : "\"BINARY\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) = true)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -401,9 +401,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = true)\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = true)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -425,9 +425,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = true)\"",
     "left" : "\"DATE\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = true)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -513,9 +513,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) <=> true)\"",
     "left" : "\"BINARY\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) <=> true)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -545,9 +545,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <=> true)\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <=> true)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -569,9 +569,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <=> true)\"",
     "left" : "\"DATE\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <=> true)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -657,9 +657,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(false = CAST(0 AS BINARY))\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(false = CAST(0 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -689,9 +689,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(false = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(false = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -713,9 +713,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(false = CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(false = CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -801,9 +801,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(false <=> CAST(0 AS BINARY))\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(false <=> CAST(0 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -833,9 +833,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(false <=> CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(false <=> CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -857,9 +857,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(false <=> CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(false <=> CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -945,9 +945,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(0 AS BINARY) = false)\"",
     "left" : "\"BINARY\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(0 AS BINARY) = false)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -977,9 +977,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = false)\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = false)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1001,9 +1001,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = false)\"",
     "left" : "\"DATE\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = false)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1089,9 +1089,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(0 AS BINARY) <=> false)\"",
     "left" : "\"BINARY\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(0 AS BINARY) <=> false)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1121,9 +1121,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <=> false)\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <=> false)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1145,9 +1145,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <=> false)\"",
     "left" : "\"DATE\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <=> false)\""
   },
   "queryContext" : [ {
     "objectType" : "",
