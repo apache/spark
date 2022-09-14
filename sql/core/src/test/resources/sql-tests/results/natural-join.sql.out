@@ -240,9 +240,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 54,
-    "fragment" : "SELECT nt2.k FROM (SELECT * FROM nt1 natural join nt2)"
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "nt2.k"
   } ]
 }
 

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, LOGICAL_QUERY_STAGE, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
+import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
 
 /**
@@ -33,10 +34,15 @@ import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
  */
 object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   override protected def isEmpty(plan: LogicalPlan): Boolean =
-    super.isEmpty(plan) || getEstimatedRowCount(plan).contains(0)
+    super.isEmpty(plan) || (!isRootRepartition(plan) && getEstimatedRowCount(plan).contains(0))
 
   override protected def nonEmpty(plan: LogicalPlan): Boolean =
     super.nonEmpty(plan) || getEstimatedRowCount(plan).exists(_ > 0)
+
+  private def isRootRepartition(plan: LogicalPlan): Boolean = plan match {
+    case l: LogicalQueryStage if l.getTagValue(ROOT_REPARTITION).isDefined => true
+    case _ => false
+  }
 
   // The returned value follows:
   //   - 0 means the plan must produce 0 row
@@ -67,6 +73,13 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   private def eliminateSingleColumnNullAwareAntiJoin: PartialFunction[LogicalPlan, LogicalPlan] = {
     case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) if isRelationWithAllNullKeys(j.right) =>
       empty(j)
+  }
+
+  override protected def userSpecifiedRepartition(p: LogicalPlan): Boolean = p match {
+    case LogicalQueryStage(_, ShuffleQueryStageExec(_, shuffle: ShuffleExchangeLike, _))
+      if shuffle.shuffleOrigin == REPARTITION_BY_COL ||
+        shuffle.shuffleOrigin == REPARTITION_BY_NUM => true
+    case _ => false
   }
 
   override protected def applyInternal(p: LogicalPlan): LogicalPlan = p.transformUpWithPruning(

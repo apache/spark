@@ -171,14 +171,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "expression" : "\"c1\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 48,
-    "stopIndex" : 74,
-    "fragment" : "GROUP BY GROUPING SETS (())"
-  } ]
+  }
 }
 
 

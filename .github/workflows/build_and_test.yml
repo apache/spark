@@ -56,14 +56,10 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
-      # For branch3.2, branch3.3, still use previous image tag.
-      # If infra image has changes, use dynamic infra image URL.
-      # If infra image hasn't changed, use pre-build image directly.
       image_url: >-
         ${{
-          (inputs.branch == 'branch-3.2' || inputs.branch == 'branch-3.3') && 'dongjoon/apache-spark-github-action-image:20220207'
-          || (fromJson(steps.set-outputs.outputs.required).infra-image == 'true' && steps.infra-image-outputs.outputs.image_url)
-          || format('ghcr.io/apache/spark/apache-spark-github-action-image-cache:{0}-static', inputs.branch)
+          (inputs.branch == 'master' && steps.infra-image-outputs.outputs.image_url)
+          || 'dongjoon/apache-spark-github-action-image:20220207'
         }}
     steps:
     - name: Checkout Spark repository
@@ -91,7 +87,6 @@ jobs:
             sparkr=`./dev/is-changed.py -m sparkr`
             tpcds=`./dev/is-changed.py -m sql`
             docker=`./dev/is-changed.py -m docker-integration-tests`
-            infra_image=`./dev/is-changed.py -m infra-image`
           fi
           # 'build', 'scala-213', and 'java-11-17' are always true for now.
           # It does not save significant time and most of PRs trigger the build.
@@ -102,7 +97,6 @@ jobs:
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
-              \"infra-image\": \"$infra_image\",
               \"scala-213\": \"true\",
               \"java-11-17\": \"true\",
               \"lint\" : \"true\",
@@ -122,7 +116,6 @@ jobs:
         fi
     - name: Generate infra image URL
       id: infra-image-outputs
-      if: fromJson(steps.set-outputs.outputs.required).infra-image == 'true'
       run: |
         # Convert to lowercase to meet Docker repo name requirement
         REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
@@ -277,7 +270,6 @@ jobs:
     needs: precondition
     # Currently, only enable docker build from cache for `master` branch jobs
     if: >-
-      fromJson(needs.precondition.outputs.required).infra-image == 'true' &&
       (fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
       fromJson(needs.precondition.outputs.required).lint == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true') &&

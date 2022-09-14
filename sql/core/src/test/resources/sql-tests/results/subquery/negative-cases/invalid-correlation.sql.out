@@ -145,8 +145,8 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 87,
-    "fragment" : "SELECT t1.t1a\nFROM   t1\nJOIN   t1_copy\nON     EXISTS (SELECT 1 FROM t2 WHERE t2a > t1a)"
+    "startIndex" : 84,
+    "stopIndex" : 86,
+    "fragment" : "t1a"
   } ]
 }

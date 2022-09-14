@@ -135,7 +135,9 @@ class HiveParquetSuite extends QueryTest
           "proposal" -> ("`__auto_generated_subquery_name`.`c1`, " +
             "`__auto_generated_subquery_name`.`c2`")),
         context = ExpectedContext(
-          fragment = query.trim, start = 1, stop = 118)
+          fragment = "c3",
+          start = 61,
+          stop = 62)
        )
     }
   }
