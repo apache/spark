@@ -85,7 +85,7 @@ private[spark] object Utils {
     val keyIter = keys.iterator
     val valueIter = values.iterator
     while (keyIter.hasNext && valueIter.hasNext) {
-      map.put(keyIter.next() valueIter.next())
+      map.put(keyIter.next(), valueIter.next())
     }
     map
   }
