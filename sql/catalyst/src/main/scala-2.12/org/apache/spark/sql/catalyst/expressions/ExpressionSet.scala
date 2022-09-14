@@ -66,7 +66,7 @@ object ExpressionSet {
 class ExpressionSet protected(
 
     protected val baseSet: mutable.Set[Expression] = new mutable.HashSet,
-    protected var originals: mutable.Buffer[Expression] = new ArrayBuffer)
+    protected val originals: mutable.Buffer[Expression] = new ArrayBuffer)
   extends Iterable[Expression]  {
 
   //  Note: this class supports Scala 2.12. A parallel source tree has a 2.13 implementation.
