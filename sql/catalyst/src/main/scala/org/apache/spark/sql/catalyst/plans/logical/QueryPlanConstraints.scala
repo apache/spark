@@ -20,8 +20,6 @@ package org.apache.spark.sql.catalyst.plans.logical
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.internal.SQLConf
-
 
 trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
 
