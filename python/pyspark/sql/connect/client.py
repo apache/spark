@@ -30,6 +30,7 @@ import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 from pyspark import cloudpickle
 from pyspark.sql.connect.data_frame import DataFrame
+from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.plan import Read, Sql
 
 
@@ -108,9 +109,8 @@ class RemoteSparkSession(object):
         self._channel = grpc.insecure_channel(f"{self._host}:{self._port}")
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
 
-    def readTable(self, tableName: str) -> "DataFrame":
-        df = DataFrame.withPlan(Read(tableName), self)
-        return df
+        # Create the reader
+        self.read = DataFrameReader(self)
 
     def register_udf(self, function, return_type) -> str:
         """Create a temporary UDF in the session catalog on the other side. We generate a

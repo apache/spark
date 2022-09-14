@@ -25,6 +25,10 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.sparkconnect.planner.{InvalidPlanInput, SparkConnectPlanner}
 
+/**
+ * Testing trait for SparkConnect tests with some helper methods to make it easier to create
+ * new test cases.
+ */
 trait SparkConnectPlanTest {
   def transform(rel: proto.Relation): LogicalPlan = {
     new SparkConnectPlanner(rel, None.orNull).transform()
@@ -46,6 +50,11 @@ trait SparkConnectSessionTest {
 
 }
 
+/**
+ * This is a rudimentary test class for SparkConnect. The main goal of these basic tests is to
+ * ensure that the transformation from Proto to LogicalPlan works and that the right nodes are
+ * generated.
+ */
 class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   protected var spark: SparkSession = null
@@ -171,6 +180,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val res = transform(simpleJoin)
     assert(res.nodeName == "Join")
     assert(res != null)
+
   }
 
   test("Simple Projection") {

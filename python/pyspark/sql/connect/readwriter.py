@@ -15,8 +15,14 @@
 # limitations under the License.
 #
 
-"""Currently Spark Connect is very experimental and the APIs to interact with
-Spark through this API are can be changed at any time without warning."""
+from pyspark.sql.connect.data_frame import DataFrame
+from pyspark.sql.connect.plan import Read
 
 
-from pyspark.sql.connect.data_frame import DataFrame  # noqa: F401
+class DataFrameReader:
+    def __init__(self, client):
+        self._client = client
+
+    def table(self, tableName: str) -> "DataFrame":
+        df = DataFrame.withPlan(Read(tableName), self._client)
+        return df

@@ -64,8 +64,6 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       None
     }
 
-
-
     rel.getRelTypeCase match {
       case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead, common)
       case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject, common)
@@ -145,7 +143,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
    *
    * TODO: Missing support for Instant, BigDecimal, LocalDate, LocalTimestamp, Duration, Period.
    * @param lit
-   * @return Expression
+   * @return
+   *   Expression
    */
   private def transformLiteral(lit: proto.Expression.Literal): Expression = {
     lit.getLiteralTypeCase match {
@@ -193,7 +192,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
         expressions.EqualTo(
           transformExpression(fun.getArguments(0)),
           transformExpression(fun.getArguments(1)))
-      case _ => lookupFunction(funName, fun.getArgumentsList.asScala.map(transformExpression).toSeq)
+      case _ =>
+        lookupFunction(funName, fun.getArgumentsList.asScala.map(transformExpression).toSeq)
     }
   }
 
@@ -258,8 +258,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     logical.Aggregate(
       child = transformRelation(rel.getInput),
       groupingExpressions = ge.toSeq,
-      aggregateExpressions = (
-        rel.getMeasuresList.asScala.map(transformAggregateExpression) ++ ge).toSeq)
+      aggregateExpressions =
+        (rel.getMeasuresList.asScala.map(transformAggregateExpression) ++ ge).toSeq)
   }
 
   private def transformAggregateExpression(

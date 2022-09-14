@@ -48,7 +48,8 @@ import org.apache.spark.sql.sparkconnect.planner.SparkConnectPlanner
  *
  * This class implements the service stub from the generated code of GRPC.
  *
- * @param debug delegates debug behavior to the handlers.
+ * @param debug
+ *   delegates debug behavior to the handlers.
  */
 @Experimental
 class SparkConnectService(debug: Boolean)
@@ -98,8 +99,8 @@ case class SessionHolder(userId: String, session: SparkSession) {}
 /**
  * Satic instance of the SparkConnectService.
  *
- * Used to start the overall SparkConnect service and provides global state to manage the different
- * SparkSession from different users connecting to the cluster.
+ * Used to start the overall SparkConnect service and provides global state to manage the
+ * different SparkSession from different users connecting to the cluster.
  */
 @Experimental
 object SparkConnectService {
@@ -129,9 +130,11 @@ object SparkConnectService {
    * Based on the `key` find or create a new SparkSession.
    */
   def getOrCreateIsolatedSession(key: SessionCacheKey): SessionHolder = {
-    userSessionMapping.get(key, () => {
-      SessionHolder(key, newIsolatedSession())
-    })
+    userSessionMapping.get(
+      key,
+      () => {
+        SessionHolder(key, newIsolatedSession())
+      })
   }
 
   private def newIsolatedSession(): SparkSession = {
@@ -174,9 +177,9 @@ object SparkConnectService {
 /**
  * This is the main entry point for Spark Connect.
  *
- * To decouple the build of Spark Connect and it's dependencies from the core of Spark, we implement
- * it as a Driver Plugin. To enable Spark Connect, simply make sure that the appropriate JAR is
- * available in the CLASSPATH and the driver plugin is configured to load this class.
+ * To decouple the build of Spark Connect and it's dependencies from the core of Spark, we
+ * implement it as a Driver Plugin. To enable Spark Connect, simply make sure that the appropriate
+ * JAR is available in the CLASSPATH and the driver plugin is configured to load this class.
  */
 @Experimental
 class SparkConnectPlugin extends SparkPlugin {
@@ -184,7 +187,8 @@ class SparkConnectPlugin extends SparkPlugin {
   /**
    * Return the plugin's driver-side component.
    *
-   * @return The driver-side component, or null if one is not needed.
+   * @return
+   *   The driver-side component, or null if one is not needed.
    */
   override def driverPlugin(): DriverPlugin = new DriverPlugin {
 

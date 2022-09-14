@@ -137,13 +137,12 @@ object MetricGenerator extends AdaptiveSparkPlanHelper {
   }
 
   def transformPlan(p: SparkPlan, parentId: Int): Seq[Response.Metrics.MetricObject] = {
-    val mv = p.metrics.map(
-      m =>
-        m._1 -> Response.Metrics.MetricValue.newBuilder
-          .setName(m._2.name.getOrElse(""))
-          .setValue(m._2.value)
-          .setMetricType(m._2.metricType)
-          .build())
+    val mv = p.metrics.map(m =>
+      m._1 -> Response.Metrics.MetricValue.newBuilder
+        .setName(m._2.name.getOrElse(""))
+        .setValue(m._2.value)
+        .setMetricType(m._2.metricType)
+        .build())
     val mo = Response.Metrics.MetricObject
       .newBuilder()
       .setName(p.nodeName)
