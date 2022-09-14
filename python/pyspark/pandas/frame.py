@@ -749,7 +749,7 @@ class DataFrame(Frame, Generic[T]):
         if axis == 0:
             min_count = kwargs.get("min_count", 0)
 
-            exprs = [SF.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
+            exprs = [F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
             new_column_labels = []
             for label in self._internal.column_labels:
                 psser = self._psser_for(label)
@@ -899,7 +899,7 @@ class DataFrame(Frame, Generic[T]):
                         applied.append(getattr(self._psser_for(label), op)(other._psser_for(label)))
                     else:
                         applied.append(
-                            SF.lit(None)
+                            F.lit(None)
                             .cast(self._internal.spark_type_for(label))
                             .alias(name_like_string(label))
                         )
@@ -907,7 +907,7 @@ class DataFrame(Frame, Generic[T]):
                 for label in other._internal.column_labels:
                     if label not in column_labels:
                         applied.append(
-                            SF.lit(None)
+                            F.lit(None)
                             .cast(other._internal.spark_type_for(label))
                             .alias(name_like_string(label))
                         )
@@ -1791,12 +1791,12 @@ class DataFrame(Frame, Generic[T]):
         if not drop:
             for numeric_column_label in diff_numeric_column_labels:
                 corr_scols.append(
-                    SF.lit(None).cast("double").alias(name_like_string(numeric_column_label))
+                    F.lit(None).cast("double").alias(name_like_string(numeric_column_label))
                 )
                 corr_labels.append(numeric_column_label)
 
         sdf = combined._internal.spark_frame.select(
-            *[SF.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)], *corr_scols
+            *[F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)], *corr_scols
         ).limit(
             1
         )  # limit(1) to avoid returning more than 1 row when intersection is empty
@@ -2704,7 +2704,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 *[
                     F.struct(
                         *[
-                            SF.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i))
+                            F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i))
                             for i, col in enumerate(label)
                         ],
                         *[self._internal.spark_column_for(label).alias("value")],
@@ -3773,7 +3773,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     (
                         cond._internal.spark_column_for(label)
                         if label in cond._internal.column_labels
-                        else SF.lit(False)
+                        else F.lit(False)
                     ).alias(name)
                     for label, name in zip(self._internal.column_labels, tmp_cond_col_names)
                 ]
@@ -3797,7 +3797,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     (
                         other._internal.spark_column_for(label)
                         if label in other._internal.column_labels
-                        else SF.lit(np.nan)
+                        else F.lit(np.nan)
                     ).alias(name)
                     for label, name in zip(self._internal.column_labels, tmp_other_col_names)
                 ]
@@ -4710,7 +4710,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if axis != 0:
             raise NotImplementedError('axis should be either 0 or "index" currently.')
         sdf = self._internal.spark_frame.select(
-            [SF.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
+            [F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
             + [
                 self._psser_for(label)._nunique(dropna, approx, rsd)
                 for label in self._internal.column_labels
@@ -5437,7 +5437,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 if isinstance(v, IndexOpsMixin) and not isinstance(v, MultiIndex)
                 else (v, None)
                 if isinstance(v, Column)
-                else (SF.lit(v), None)
+                else (F.lit(v), None)
             )
             for k, v in kwargs.items()
         }
@@ -5788,14 +5788,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     F.when(self._psser_for(label).notna().spark.column, 1).otherwise(0)
                     for label in labels
                 ],
-                SF.lit(0),
+                F.lit(0),
             )
             if thresh is not None:
-                pred = cnt >= SF.lit(int(thresh))
+                pred = cnt >= F.lit(int(thresh))
             elif how == "any":
-                pred = cnt == SF.lit(len(labels))
+                pred = cnt == F.lit(len(labels))
             elif how == "all":
-                pred = cnt > SF.lit(0)
+                pred = cnt > F.lit(0)
 
             internal = self._internal.with_filter(pred)
             if inplace:
@@ -5820,7 +5820,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         reduce(
                             lambda x, y: x & y,
                             [
-                                scol == SF.lit(part)
+                                scol == F.lit(part)
                                 for part, scol in zip(lbl, internal.index_spark_columns)
                             ],
                         )
@@ -6265,7 +6265,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if n < 0:
             n = len(self) + n
         if n <= 0:
-            return DataFrame(self._internal.with_filter(SF.lit(False)))
+            return DataFrame(self._internal.with_filter(F.lit(False)))
         else:
             sdf = self._internal.resolved_copy.spark_frame
             if get_option("compute.ordered_head"):
@@ -6653,7 +6653,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             index_map: Dict[str, Optional[Label]] = {}
             for i, index_value in enumerate(index_values):
                 colname = SPARK_INDEX_NAME_FORMAT(i)
-                sdf = sdf.withColumn(colname, SF.lit(index_value))
+                sdf = sdf.withColumn(colname, F.lit(index_value))
                 index_map[colname] = None
             internal = InternalFrame(
                 spark_frame=sdf,
@@ -7314,7 +7314,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         if len(index) <= ps.get_option("compute.isin_limit"):
                             self_index_type = self.index.spark.data_type
                             cond = ~internal.index_spark_columns[0].isin(
-                                [SF.lit(label).cast(self_index_type) for label in index]
+                                [F.lit(label).cast(self_index_type) for label in index]
                             )
                             internal = internal.with_filter(cond)
                         else:
@@ -8159,11 +8159,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     item = item.tolist() if isinstance(item, np.ndarray) else list(item)
 
                     scol = self._internal.spark_column_for(self._internal.column_labels[i]).isin(
-                        [SF.lit(v) for v in item]
+                        [F.lit(v) for v in item]
                     )
                     scol = F.coalesce(scol, F.lit(False))
                 else:
-                    scol = SF.lit(False)
+                    scol = F.lit(False)
                 data_spark_columns.append(scol.alias(self._internal.data_spark_column_names[i]))
         elif is_list_like(values):
             values = (
@@ -8173,7 +8173,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
 
             for label in self._internal.column_labels:
-                scol = self._internal.spark_column_for(label).isin([SF.lit(v) for v in values])
+                scol = self._internal.spark_column_for(label).isin([F.lit(v) for v in values])
                 scol = F.coalesce(scol, F.lit(False))
                 data_spark_columns.append(scol.alias(self._internal.spark_column_name_for(label)))
         else:
@@ -10048,7 +10048,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             frame = frame.select(index_scols + scols)
 
             temp_fill_value = verify_temp_column_name(frame, "__fill_value__")
-            labels = labels.withColumn(temp_fill_value, SF.lit(fill_value))
+            labels = labels.withColumn(temp_fill_value, F.lit(fill_value))
 
             frame_index_scols = [scol_for(frame, col) for col in frame_index_columns]
             labels_index_scols = [scol_for(labels, col) for col in index_columns]
@@ -10125,7 +10125,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if label in self._internal.column_labels:
                 scols_or_pssers.append(self._psser_for(label))
             else:
-                scols_or_pssers.append(SF.lit(fill_value).alias(name_like_string(label)))
+                scols_or_pssers.append(F.lit(fill_value).alias(name_like_string(label)))
             labels.append(label)
 
         if isinstance(columns, pd.Index):
@@ -10402,7 +10402,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             F.array(
                 *[
                     F.struct(
-                        *[SF.lit(c).alias(name) for c, name in zip(label, var_name)],
+                        *[F.lit(c).alias(name) for c, name in zip(label, var_name)],
                         *[self._internal.spark_column_for(label).alias(value_name)],
                     )
                     for label in column_labels
@@ -10545,7 +10545,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return DataFrame(
                 self._internal.copy(
                     column_label_names=self._internal.column_label_names[:-1]
-                ).with_filter(SF.lit(False))
+                ).with_filter(F.lit(False))
             )
 
         column_labels: Dict[Label, Dict[Any, Column]] = defaultdict(dict)
@@ -10575,12 +10575,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         structs = [
             F.struct(
-                *[SF.lit(value).alias(index_column)],
+                *[F.lit(value).alias(index_column)],
                 *[
                     (
                         column_labels[label][value]
                         if value in column_labels[label]
-                        else SF.lit(None)
+                        else F.lit(None)
                     ).alias(name)
                     for label, name in zip(column_labels, data_columns)
                 ],
@@ -10734,7 +10734,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             F.array(
                 *[
                     F.struct(
-                        *[SF.lit(c).alias(name) for c, name in zip(idx, new_index_columns)],
+                        *[F.lit(c).alias(name) for c, name in zip(idx, new_index_columns)],
                         *[self._internal.spark_column_for(idx).alias(ser_name)],
                     )
                     for idx in column_labels
@@ -10860,12 +10860,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             if isinstance(self._internal.spark_type_for(label), NumericType) or skipna:
                 # np.nan takes no effect to the result; None takes no effect if `skipna`
-                all_col = F.min(F.coalesce(scol.cast("boolean"), SF.lit(True)))
+                all_col = F.min(F.coalesce(scol.cast("boolean"), F.lit(True)))
             else:
                 # Take None as False when not `skipna`
-                all_col = F.min(
-                    F.when(scol.isNull(), SF.lit(False)).otherwise(scol.cast("boolean"))
-                )
+                all_col = F.min(F.when(scol.isNull(), F.lit(False)).otherwise(scol.cast("boolean")))
             applied.append(F.when(all_col.isNull(), True).otherwise(all_col))
 
         return self._result_aggregated(column_labels, applied)
@@ -10942,7 +10940,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         applied = []
         for label in column_labels:
             scol = self._internal.spark_column_for(label)
-            any_col = F.max(F.coalesce(scol.cast("boolean"), SF.lit(False)))
+            any_col = F.max(F.coalesce(scol.cast("boolean"), F.lit(False)))
             applied.append(F.when(any_col.isNull(), False).otherwise(any_col))
 
         return self._result_aggregated(column_labels, applied)
@@ -10973,7 +10971,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label, applied_col in zip(column_labels, scols):
             cols.append(
                 F.struct(
-                    *[SF.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
+                    *[F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
                     *[applied_col.alias(result_scol_name)],
                 )
             )
@@ -11227,7 +11225,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if axis == 0:
                 if len(index_scols) == 1:
                     if len(items) <= ps.get_option("compute.isin_limit"):
-                        col = index_scols[0].isin([SF.lit(item) for item in items])
+                        col = index_scols[0].isin([F.lit(item) for item in items])
                         return DataFrame(self._internal.with_filter(col))
                     else:
                         item_sdf_col = verify_temp_column_name(
@@ -11255,9 +11253,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         midx_col = None
                         for i, element in enumerate(item):
                             if midx_col is None:
-                                midx_col = index_scols[i] == SF.lit(element)
+                                midx_col = index_scols[i] == F.lit(element)
                             else:
-                                midx_col = midx_col & (index_scols[i] == SF.lit(element))
+                                midx_col = midx_col & (index_scols[i] == F.lit(element))
                         if col is None:
                             col = midx_col
                         else:
@@ -12206,7 +12204,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             internal_index_column = SPARK_DEFAULT_INDEX_NAME
             cols = []
             for i, col in enumerate(zip(*cols_dict.values())):
-                cols.append(F.struct(SF.lit(qq[i]).alias(internal_index_column), *col))
+                cols.append(F.struct(F.lit(qq[i]).alias(internal_index_column), *col))
             sdf = sdf.select(F.array(*cols).alias("arrays"))
 
             # And then, explode it and manually set the index.
@@ -12678,7 +12676,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             ]
 
             sdf = self._internal.spark_frame.select(
-                *[SF.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)], *new_columns
+                *[F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)], *new_columns
             )
 
             # The data is expected to be small so it's fine to transpose/use default index.
@@ -12913,7 +12911,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if n < 0:
             n = len(self) + n
         if n <= 0:
-            return ps.DataFrame(self._internal.with_filter(SF.lit(False)))
+            return ps.DataFrame(self._internal.with_filter(F.lit(False)))
         # Should use `resolved_copy` here for the case like `(psdf + 1).tail()`
         sdf = self._internal.resolved_copy.spark_frame
         rows = sdf.tail(n)
@@ -13088,11 +13086,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             for label in column_labels:
                 if label not in left._internal.column_labels:
-                    left[label] = SF.lit(None).cast(DoubleType())
+                    left[label] = F.lit(None).cast(DoubleType())
             left = left[column_labels]
             for label in column_labels:
                 if label not in right._internal.column_labels:
-                    right[label] = SF.lit(None).cast(DoubleType())
+                    right[label] = F.lit(None).cast(DoubleType())
             right = right[column_labels]
 
         return (left.copy(), right.copy()) if copy else (left, right)

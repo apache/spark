@@ -1113,12 +1113,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         def sfun(scol: Column, scol_type: DataType) -> Column:
             if isinstance(scol_type, NumericType) or skipna:
                 # np.nan takes no effect to the result; None takes no effect if `skipna`
-                all_col = F.min(F.coalesce(scol.cast("boolean"), SF.lit(True)))
+                all_col = F.min(F.coalesce(scol.cast("boolean"), F.lit(True)))
             else:
                 # Take None as False when not `skipna`
-                all_col = F.min(
-                    F.when(scol.isNull(), SF.lit(False)).otherwise(scol.cast("boolean"))
-                )
+                all_col = F.min(F.when(scol.isNull(), F.lit(False)).otherwise(scol.cast("boolean")))
             return all_col
 
         if len(psdf._internal.column_labels) > 0:
@@ -1182,7 +1180,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         5  False
         """
         return self._reduce_for_stat_function(
-            lambda col: F.max(F.coalesce(col.cast("boolean"), SF.lit(False)))
+            lambda col: F.max(F.coalesce(col.cast("boolean"), F.lit(False)))
         )
 
     # TODO: groupby multiply columns should be implemented.
@@ -1372,7 +1370,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         ret = (
             self._groupkeys[0]
             .rename()
-            .spark.transform(lambda _: SF.lit(0))
+            .spark.transform(lambda _: F.lit(0))
             ._cum(F.count, True, part_cols=self._groupkeys_scols, ascending=ascending)
             - 1
         )
@@ -3179,7 +3177,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 )
         if not is_list_like(name):
             name = [name]
-        cond = SF.lit(True)
+        cond = F.lit(True)
         for groupkey, item in zip(groupkeys, name):
             scol = groupkey.spark.column
             cond = cond & (scol == item)
