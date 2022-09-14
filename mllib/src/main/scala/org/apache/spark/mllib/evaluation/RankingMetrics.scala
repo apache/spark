@@ -26,6 +26,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.collection.Utils
 
 /**
  * Evaluator for ranking algorithms.
@@ -153,7 +154,6 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
   def ndcgAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
     rdd.map { case (pred, lab, rel) =>
-      import org.apache.spark.util.collection.Utils
       val useBinary = rel.isEmpty
       val labSet = lab.toSet
       val relMap = Utils.toMap(lab, rel)
