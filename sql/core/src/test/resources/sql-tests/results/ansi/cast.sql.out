@@ -619,8 +619,6 @@ org.apache.spark.sql.AnalysisException
     "configVal" : "'false'",
     "sqlExpr" : "\"CAST(CAST(123 AS TINYINT) AS BINARY)\"",
     "srcType" : "\"TINYINT\"",
-    "srcType" : "\"TINYINT\"",
-    "targetType" : "\"BINARY\"",
     "targetType" : "\"BINARY\""
   },
   "queryContext" : [ {
@@ -647,8 +645,6 @@ org.apache.spark.sql.AnalysisException
     "configVal" : "'false'",
     "sqlExpr" : "\"CAST(CAST(-123 AS TINYINT) AS BINARY)\"",
     "srcType" : "\"TINYINT\"",
-    "srcType" : "\"TINYINT\"",
-    "targetType" : "\"BINARY\"",
     "targetType" : "\"BINARY\""
   },
   "queryContext" : [ {
@@ -675,8 +671,6 @@ org.apache.spark.sql.AnalysisException
     "configVal" : "'false'",
     "sqlExpr" : "\"CAST(123 AS BINARY)\"",
     "srcType" : "\"SMALLINT\"",
-    "srcType" : "\"SMALLINT\"",
-    "targetType" : "\"BINARY\"",
     "targetType" : "\"BINARY\""
   },
   "queryContext" : [ {
@@ -703,8 +697,6 @@ org.apache.spark.sql.AnalysisException
     "configVal" : "'false'",
     "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
     "srcType" : "\"SMALLINT\"",
-    "srcType" : "\"SMALLINT\"",
-    "targetType" : "\"BINARY\"",
     "targetType" : "\"BINARY\""
   },
   "queryContext" : [ {
@@ -731,8 +723,6 @@ org.apache.spark.sql.AnalysisException
     "configVal" : "'false'",
     "sqlExpr" : "\"CAST(123 AS BINARY)\"",
     "srcType" : "\"INT\"",
-    "srcType" : "\"INT\"",
-    "targetType" : "\"BINARY\"",
     "targetType" : "\"BINARY\""
   },
   "queryContext" : [ {
@@ -759,8 +749,6 @@ org.apache.spark.sql.AnalysisException
     "configVal" : "'false'",
     "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
     "srcType" : "\"INT\"",
-    "srcType" : "\"INT\"",
-    "targetType" : "\"BINARY\"",
     "targetType" : "\"BINARY\""
   },
   "queryContext" : [ {
@@ -787,8 +775,6 @@ org.apache.spark.sql.AnalysisException
     "configVal" : "'false'",
     "sqlExpr" : "\"CAST(123 AS BINARY)\"",
     "srcType" : "\"BIGINT\"",
-    "srcType" : "\"BIGINT\"",
-    "targetType" : "\"BINARY\"",
     "targetType" : "\"BINARY\""
   },
   "queryContext" : [ {
@@ -815,8 +801,6 @@ org.apache.spark.sql.AnalysisException
     "configVal" : "'false'",
     "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
     "srcType" : "\"BIGINT\"",
-    "srcType" : "\"BIGINT\"",
-    "targetType" : "\"BINARY\"",
     "targetType" : "\"BINARY\""
   },
   "queryContext" : [ {

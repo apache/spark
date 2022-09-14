@@ -203,9 +203,10 @@ private[spark] object SparkThrowableHelper {
           val parameterNames = e.getParameterNames
           if (!parameterNames.isEmpty) {
             g.writeObjectFieldStart("messageParameters")
-            (parameterNames zip e.getMessageParameters).sortBy(_._1).foreach { case (name, value) =>
-              g.writeStringField(name, value)
-            }
+            (parameterNames zip e.getMessageParameters)
+              .toMap // To remove duplicates
+              .toSeq.sortBy(_._1)
+              .foreach { case (name, value) => g.writeStringField(name, value) }
             g.writeEndObject()
           }
           val queryContext = e.getQueryContext
