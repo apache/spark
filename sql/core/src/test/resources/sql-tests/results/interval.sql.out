@@ -194,9 +194,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 30,
-    "fragment" : "select '2' / interval 2 second"
+    "fragment" : "'2' / interval 2 second"
   } ]
 }
 
@@ -218,9 +218,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 28,
-    "fragment" : "select '2' / interval 2 year"
+    "fragment" : "'2' / interval 2 year"
   } ]
 }
 
@@ -328,9 +328,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 28,
-    "fragment" : "select 2 / interval '2' year"
+    "fragment" : "2 / interval '2' year"
   } ]
 }
 
@@ -352,9 +352,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 28,
-    "fragment" : "select 2 / interval '2' hour"
+    "fragment" : "2 / interval '2' hour"
   } ]
 }
 
@@ -376,9 +376,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 31,
-    "fragment" : "select null / interval '2' year"
+    "fragment" : "null / interval '2' year"
   } ]
 }
 
@@ -400,9 +400,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 31,
-    "fragment" : "select null / interval '2' hour"
+    "fragment" : "null / interval '2' hour"
   } ]
 }
 
@@ -1561,9 +1561,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 388,
-    "fragment" : "select\n  interval '2' year + '3-3 year to month',\n  interval '2' year - '3 month',\n  '3-2 year to month' + interval '2-2' year to month,\n  '3 year' - interval '2-2' year to month,\n  interval '99 11:22:33.123456789' day to second + '12:12 hour to second',\n  interval '99 11:22:33.123456789' day to second - '12 hour',\n  '4 day' + interval '10' day,\n  '4 22 day to hour' - interval '10' day"
+    "startIndex" : 10,
+    "stopIndex" : 48,
+    "fragment" : "interval '2' year + '3-3 year to month'"
   } ]
 }
 
@@ -1601,9 +1601,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 32,
-    "fragment" : "select interval '2' year + '3-3'"
+    "fragment" : "interval '2' year + '3-3'"
   } ]
 }
 
@@ -1625,9 +1625,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 30,
-    "fragment" : "select interval '2' year - '4'"
+    "fragment" : "interval '2' year - '4'"
   } ]
 }
 
@@ -1673,9 +1673,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 49,
-    "fragment" : "select interval '2' year + str from interval_view"
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "interval '2' year + str"
   } ]
 }
 
@@ -1697,9 +1697,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 49,
-    "fragment" : "select interval '2' year - str from interval_view"
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "interval '2' year - str"
   } ]
 }
 
@@ -1764,9 +1764,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 54,
-    "fragment" : "select interval '3' day - interval '2-2' year to month"
+    "fragment" : "interval '3' day - interval '2-2' year to month"
   } ]
 }
 
@@ -1797,9 +1797,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 29,
-    "fragment" : "select 1 + interval '2' month"
+    "fragment" : "1 + interval '2' month"
   } ]
 }
 
@@ -1830,9 +1830,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 29,
-    "fragment" : "select interval '2' month - 1"
+    "fragment" : "interval '2' month - 1"
   } ]
 }
 
@@ -2701,9 +2701,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 42,
-    "fragment" : "SELECT INTERVAL 1 MONTH > INTERVAL 20 DAYS"
+    "fragment" : "INTERVAL 1 MONTH > INTERVAL 20 DAYS"
   } ]
 }
 
@@ -2725,9 +2725,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 29,
-    "fragment" : "SELECT INTERVAL '1' DAY < '1'"
+    "fragment" : "INTERVAL '1' DAY < '1'"
   } ]
 }
 
@@ -2749,9 +2749,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 29,
-    "fragment" : "SELECT INTERVAL '1' DAY = '1'"
+    "fragment" : "INTERVAL '1' DAY = '1'"
   } ]
 }
 
@@ -2773,9 +2773,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 29,
-    "fragment" : "SELECT INTERVAL '1' DAY > '1'"
+    "fragment" : "INTERVAL '1' DAY > '1'"
   } ]
 }
 
@@ -2797,9 +2797,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 29,
-    "fragment" : "SELECT '1' < INTERVAL '1' DAY"
+    "fragment" : "'1' < INTERVAL '1' DAY"
   } ]
 }
 
@@ -2821,9 +2821,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 29,
-    "fragment" : "SELECT '1' = INTERVAL '1' DAY"
+    "fragment" : "'1' = INTERVAL '1' DAY"
   } ]
 }
 
@@ -2845,9 +2845,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 29,
-    "fragment" : "SELECT '1' > INTERVAL '1' DAY"
+    "fragment" : "'1' > INTERVAL '1' DAY"
   } ]
 }
 
@@ -2869,9 +2869,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 30,
-    "fragment" : "SELECT INTERVAL '1' YEAR < '1'"
+    "fragment" : "INTERVAL '1' YEAR < '1'"
   } ]
 }
 
@@ -2893,9 +2893,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 30,
-    "fragment" : "SELECT INTERVAL '1' YEAR = '1'"
+    "fragment" : "INTERVAL '1' YEAR = '1'"
   } ]
 }
 
@@ -2917,9 +2917,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 30,
-    "fragment" : "SELECT INTERVAL '1' YEAR > '1'"
+    "fragment" : "INTERVAL '1' YEAR > '1'"
   } ]
 }
 
@@ -2941,9 +2941,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 30,
-    "fragment" : "SELECT '1' < INTERVAL '1' YEAR"
+    "fragment" : "'1' < INTERVAL '1' YEAR"
   } ]
 }
 
@@ -2965,9 +2965,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 30,
-    "fragment" : "SELECT '1' = INTERVAL '1' YEAR"
+    "fragment" : "'1' = INTERVAL '1' YEAR"
   } ]
 }
 
@@ -2989,9 +2989,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 30,
-    "fragment" : "SELECT '1' > INTERVAL '1' YEAR"
+    "fragment" : "'1' > INTERVAL '1' YEAR"
   } ]
 }
 
@@ -3111,9 +3111,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 49,
-    "fragment" : "SELECT div(INTERVAL '1' MONTH, INTERVAL '-1' DAY)"
+    "fragment" : "div(INTERVAL '1' MONTH, INTERVAL '-1' DAY)"
   } ]
 }
 

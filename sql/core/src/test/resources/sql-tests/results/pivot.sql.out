@@ -240,9 +240,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 62,
     "stopIndex" : 113,
-    "fragment" : "SELECT * FROM (\n  SELECT course, earnings FROM courseSales\n)\nPIVOT (\n  sum(earnings)\n  FOR year IN (2012, 2013)\n)"
+    "fragment" : "PIVOT (\n  sum(earnings)\n  FOR year IN (2012, 2013)\n)"
   } ]
 }
 
@@ -357,9 +357,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 75,
-    "fragment" : "SELECT * FROM courseSales\nPIVOT (\n  sum(earnings)\n  FOR year IN (s, 2013)\n)"
+    "startIndex" : 66,
+    "stopIndex" : 66,
+    "fragment" : "s"
   } ]
 }
 

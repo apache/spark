@@ -899,7 +899,9 @@ class SubquerySuite extends QueryTest
           "objectName" -> "`a`",
           "proposal" -> "`t`.`i`, `t`.`j`"),
         context = ExpectedContext(
-          fragment = query, start = 0, stop = 42))
+          fragment = "a",
+          start = 37,
+          stop = 37))
     }
   }
 

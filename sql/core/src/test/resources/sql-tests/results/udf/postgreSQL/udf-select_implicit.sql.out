@@ -133,9 +133,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 63,
-    "stopIndex" : 77,
-    "fragment" : "ORDER BY udf(b)"
+    "startIndex" : 76,
+    "stopIndex" : 76,
+    "fragment" : "b"
   } ]
 }
 
@@ -367,9 +367,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 68,
-    "stopIndex" : 82,
-    "fragment" : "ORDER BY udf(b)"
+    "startIndex" : 81,
+    "stopIndex" : 81,
+    "fragment" : "b"
   } ]
 }
 

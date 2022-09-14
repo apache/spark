@@ -288,9 +288,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 86,
-    "fragment" : "SELECT * FROM t1 JOIN LATERAL (SELECT t1.c1 AS a, t2.c1 AS b) s JOIN t2 ON s.b = t2.c1"
+    "startIndex" : 51,
+    "stopIndex" : 55,
+    "fragment" : "t2.c1"
   } ]
 }
 
@@ -420,9 +420,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 76,
-    "fragment" : "SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.c1 + t2.c1))"
+    "startIndex" : 62,
+    "stopIndex" : 66,
+    "fragment" : "t1.c1"
   } ]
 }
 
@@ -443,9 +443,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 74,
-    "fragment" : "SELECT * FROM t1, LATERAL (SELECT * FROM (SELECT c1), LATERAL (SELECT c2))"
+    "startIndex" : 71,
+    "stopIndex" : 72,
+    "fragment" : "c2"
   } ]
 }
 
@@ -485,9 +485,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 80,
-    "fragment" : "SELECT * FROM t1, LATERAL (SELECT c1, (SELECT SUM(c2) FROM t2 WHERE c1 = t1.c1))"
+    "startIndex" : 74,
+    "stopIndex" : 78,
+    "fragment" : "t1.c1"
   } ]
 }
 

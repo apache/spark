@@ -1504,9 +1504,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 43,
-    "fragment" : "select timestamp'2011-11-11 11:11:11' + '1'"
+    "fragment" : "timestamp'2011-11-11 11:11:11' + '1'"
   } ]
 }
 
@@ -1528,9 +1528,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 43,
-    "fragment" : "select '1' + timestamp'2011-11-11 11:11:11'"
+    "fragment" : "'1' + timestamp'2011-11-11 11:11:11'"
   } ]
 }
 
@@ -1552,9 +1552,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 44,
-    "fragment" : "select timestamp'2011-11-11 11:11:11' + null"
+    "fragment" : "timestamp'2011-11-11 11:11:11' + null"
   } ]
 }
 
@@ -1576,9 +1576,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 8,
     "stopIndex" : 44,
-    "fragment" : "select null + timestamp'2011-11-11 11:11:11'"
+    "fragment" : "null + timestamp'2011-11-11 11:11:11'"
   } ]
 }
 

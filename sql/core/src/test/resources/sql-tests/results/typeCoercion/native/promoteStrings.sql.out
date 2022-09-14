@@ -88,9 +88,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' + cast('1' as binary)                        FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "'1' + cast('1' as binary)"
   } ]
 }
 
@@ -112,9 +112,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' + cast(1 as boolean)                         FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "'1' + cast(1 as boolean)"
   } ]
 }
 
@@ -136,9 +136,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' + cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "'1' + cast('2017-12-11 09:30:00.0' as timestamp)"
   } ]
 }
 
@@ -233,9 +233,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' - cast('1' as binary)                        FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "'1' - cast('1' as binary)"
   } ]
 }
 
@@ -257,9 +257,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' - cast(1 as boolean)                         FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "'1' - cast(1 as boolean)"
   } ]
 }
 
@@ -362,9 +362,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' * cast('1' as binary)                        FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "'1' * cast('1' as binary)"
   } ]
 }
 
@@ -386,9 +386,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' * cast(1 as boolean)                         FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "'1' * cast(1 as boolean)"
   } ]
 }
 
@@ -410,9 +410,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' * cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "'1' * cast('2017-12-11 09:30:00.0' as timestamp)"
   } ]
 }
 
@@ -434,9 +434,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' * cast('2017-12-11 09:30:00' as date)        FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 48,
+    "fragment" : "'1' * cast('2017-12-11 09:30:00' as date)"
   } ]
 }
 
@@ -522,9 +522,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' / cast('1' as binary)                        FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "'1' / cast('1' as binary)"
   } ]
 }
 
@@ -546,9 +546,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' / cast(1 as boolean)                         FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "'1' / cast(1 as boolean)"
   } ]
 }
 
@@ -570,9 +570,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' / cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "'1' / cast('2017-12-11 09:30:00.0' as timestamp)"
   } ]
 }
 
@@ -594,9 +594,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' / cast('2017-12-11 09:30:00' as date)        FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 48,
+    "fragment" : "'1' / cast('2017-12-11 09:30:00' as date)"
   } ]
 }
 
@@ -682,9 +682,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' % cast('1' as binary)                        FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "'1' % cast('1' as binary)"
   } ]
 }
 
@@ -706,9 +706,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' % cast(1 as boolean)                         FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "'1' % cast(1 as boolean)"
   } ]
 }
 
@@ -730,9 +730,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' % cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "'1' % cast('2017-12-11 09:30:00.0' as timestamp)"
   } ]
 }
 
@@ -754,9 +754,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' % cast('2017-12-11 09:30:00' as date)        FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 48,
+    "fragment" : "'1' % cast('2017-12-11 09:30:00' as date)"
   } ]
 }
 
@@ -842,9 +842,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "SELECT pmod('1', cast('1' as binary))                        FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "pmod('1', cast('1' as binary))"
   } ]
 }
 
@@ -866,9 +866,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "SELECT pmod('1', cast(1 as boolean))                         FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "pmod('1', cast(1 as boolean))"
   } ]
 }
 
@@ -890,9 +890,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "SELECT pmod('1', cast('2017-12-11 09:30:00.0' as timestamp)) FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 60,
+    "fragment" : "pmod('1', cast('2017-12-11 09:30:00.0' as timestamp))"
   } ]
 }
 
@@ -914,9 +914,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "SELECT pmod('1', cast('2017-12-11 09:30:00' as date))        FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "pmod('1', cast('2017-12-11 09:30:00' as date))"
   } ]
 }
 
@@ -994,9 +994,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('1' as binary)                        + '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('1' as binary)                        + '1'"
   } ]
 }
 
@@ -1018,9 +1018,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast(1 as boolean)                         + '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast(1 as boolean)                         + '1'"
   } ]
 }
 
@@ -1042,9 +1042,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('2017-12-11 09:30:00.0' as timestamp) + '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00.0' as timestamp) + '1'"
   } ]
 }
 
@@ -1131,9 +1131,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('1' as binary)                        - '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('1' as binary)                        - '1'"
   } ]
 }
 
@@ -1155,9 +1155,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast(1 as boolean)                         - '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast(1 as boolean)                         - '1'"
   } ]
 }
 
@@ -1253,9 +1253,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('1' as binary)                        * '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('1' as binary)                        * '1'"
   } ]
 }
 
@@ -1277,9 +1277,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast(1 as boolean)                         * '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast(1 as boolean)                         * '1'"
   } ]
 }
 
@@ -1301,9 +1301,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('2017-12-11 09:30:00.0' as timestamp) * '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00.0' as timestamp) * '1'"
   } ]
 }
 
@@ -1325,9 +1325,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('2017-12-11 09:30:00' as date)        * '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00' as date)        * '1'"
   } ]
 }
 
@@ -1405,9 +1405,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('1' as binary)                        / '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('1' as binary)                        / '1'"
   } ]
 }
 
@@ -1429,9 +1429,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast(1 as boolean)                         / '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast(1 as boolean)                         / '1'"
   } ]
 }
 
@@ -1453,9 +1453,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('2017-12-11 09:30:00.0' as timestamp) / '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00.0' as timestamp) / '1'"
   } ]
 }
 
@@ -1477,9 +1477,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('2017-12-11 09:30:00' as date)        / '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00' as date)        / '1'"
   } ]
 }
 
@@ -1557,9 +1557,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('1' as binary)                        % '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('1' as binary)                        % '1'"
   } ]
 }
 
@@ -1581,9 +1581,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast(1 as boolean)                         % '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast(1 as boolean)                         % '1'"
   } ]
 }
 
@@ -1605,9 +1605,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('2017-12-11 09:30:00.0' as timestamp) % '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00.0' as timestamp) % '1'"
   } ]
 }
 
@@ -1629,9 +1629,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('2017-12-11 09:30:00' as date)        % '1' FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00' as date)        % '1'"
   } ]
 }
 
@@ -1709,9 +1709,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "SELECT pmod(cast('1' as binary), '1')                        FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "pmod(cast('1' as binary), '1')"
   } ]
 }
 
@@ -1733,9 +1733,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "SELECT pmod(cast(1 as boolean), '1')                         FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "pmod(cast(1 as boolean), '1')"
   } ]
 }
 
@@ -1757,9 +1757,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "SELECT pmod(cast('2017-12-11 09:30:00.0' as timestamp), '1') FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 60,
+    "fragment" : "pmod(cast('2017-12-11 09:30:00.0' as timestamp), '1')"
   } ]
 }
 
@@ -1781,9 +1781,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "SELECT pmod(cast('2017-12-11 09:30:00' as date), '1')        FROM t"
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "pmod(cast('2017-12-11 09:30:00' as date), '1')"
   } ]
 }
 

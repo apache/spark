@@ -46,9 +46,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 44,
     "stopIndex" : 55,
-    "fragment" : "SELECT count(k) FROM hav GROUP BY v HAVING v = array(1)"
+    "fragment" : "v = array(1)"
   } ]
 }
 
