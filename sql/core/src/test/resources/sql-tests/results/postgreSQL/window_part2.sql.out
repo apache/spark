@@ -226,9 +226,9 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "long overflow",
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "long overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -249,9 +249,9 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "long overflow",
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "long overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -489,10 +489,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'NaN'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",

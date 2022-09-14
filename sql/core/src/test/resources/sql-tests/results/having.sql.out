@@ -39,9 +39,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(v = array(1))\"",
     "left" : "\"INT\"",
-    "right" : "\"ARRAY<INT>\""
+    "right" : "\"ARRAY<INT>\"",
+    "sqlExpr" : "\"(v = array(1))\""
   },
   "queryContext" : [ {
     "objectType" : "",

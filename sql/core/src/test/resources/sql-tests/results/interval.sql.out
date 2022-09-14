@@ -187,9 +187,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(2 / INTERVAL '02' SECOND)\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"INTERVAL SECOND\""
+    "right" : "\"INTERVAL SECOND\"",
+    "sqlExpr" : "\"(2 / INTERVAL '02' SECOND)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -211,9 +211,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(2 / INTERVAL '2' YEAR)\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"INTERVAL YEAR\""
+    "right" : "\"INTERVAL YEAR\"",
+    "sqlExpr" : "\"(2 / INTERVAL '2' YEAR)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -321,9 +321,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(2 / INTERVAL '2' YEAR)\"",
     "left" : "\"INT\"",
-    "right" : "\"INTERVAL YEAR\""
+    "right" : "\"INTERVAL YEAR\"",
+    "sqlExpr" : "\"(2 / INTERVAL '2' YEAR)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -345,9 +345,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(2 / INTERVAL '02' HOUR)\"",
     "left" : "\"INT\"",
-    "right" : "\"INTERVAL HOUR\""
+    "right" : "\"INTERVAL HOUR\"",
+    "sqlExpr" : "\"(2 / INTERVAL '02' HOUR)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -369,9 +369,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(NULL / INTERVAL '2' YEAR)\"",
     "left" : "\"VOID\"",
-    "right" : "\"INTERVAL YEAR\""
+    "right" : "\"INTERVAL YEAR\"",
+    "sqlExpr" : "\"(NULL / INTERVAL '2' YEAR)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -393,9 +393,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(NULL / INTERVAL '02' HOUR)\"",
     "left" : "\"VOID\"",
-    "right" : "\"INTERVAL HOUR\""
+    "right" : "\"INTERVAL HOUR\"",
+    "sqlExpr" : "\"(NULL / INTERVAL '02' HOUR)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1554,9 +1554,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(INTERVAL '2' YEAR + 3-3 year to month)\"",
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"DOUBLE\""
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(INTERVAL '2' YEAR + 3-3 year to month)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1594,9 +1594,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(INTERVAL '2' YEAR + 3-3)\"",
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"DOUBLE\""
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(INTERVAL '2' YEAR + 3-3)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1618,9 +1618,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(INTERVAL '2' YEAR - 4)\"",
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"DOUBLE\""
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(INTERVAL '2' YEAR - 4)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1666,9 +1666,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(INTERVAL '2' YEAR + str)\"",
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"DOUBLE\""
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(INTERVAL '2' YEAR + str)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1690,9 +1690,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(INTERVAL '2' YEAR - str)\"",
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"DOUBLE\""
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(INTERVAL '2' YEAR - str)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1757,9 +1757,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(INTERVAL '3' DAY - INTERVAL '2-2' YEAR TO MONTH)\"",
     "left" : "\"INTERVAL DAY\"",
-    "right" : "\"INTERVAL YEAR TO MONTH\""
+    "right" : "\"INTERVAL YEAR TO MONTH\"",
+    "sqlExpr" : "\"(INTERVAL '3' DAY - INTERVAL '2-2' YEAR TO MONTH)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1790,9 +1790,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 + INTERVAL '2' MONTH)\"",
     "left" : "\"INT\"",
-    "right" : "\"INTERVAL MONTH\""
+    "right" : "\"INTERVAL MONTH\"",
+    "sqlExpr" : "\"(1 + INTERVAL '2' MONTH)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1823,9 +1823,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(INTERVAL '2' MONTH - 1)\"",
     "left" : "\"INTERVAL MONTH\"",
-    "right" : "\"INT\""
+    "right" : "\"INT\"",
+    "sqlExpr" : "\"(INTERVAL '2' MONTH - 1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1974,8 +1974,8 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "integer overflow",
-    "alternative" : ""
+    "alternative" : "",
+    "message" : "integer overflow"
   }
 }
 
@@ -1990,8 +1990,8 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "integer overflow",
-    "alternative" : " Use 'try_subtract' to tolerate overflow and return NULL instead."
+    "alternative" : " Use 'try_subtract' to tolerate overflow and return NULL instead.",
+    "message" : "integer overflow"
   }
 }
 
@@ -2006,8 +2006,8 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "integer overflow",
-    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead."
+    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
+    "message" : "integer overflow"
   }
 }
 
@@ -2242,8 +2242,8 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "Interval value overflows after being divided by -1",
-    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead."
+    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
+    "message" : "Interval value overflows after being divided by -1"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2265,8 +2265,8 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "Interval value overflows after being divided by -1",
-    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead."
+    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
+    "message" : "Interval value overflows after being divided by -1"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2322,8 +2322,8 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "Interval value overflows after being divided by -1",
-    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead."
+    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
+    "message" : "Interval value overflows after being divided by -1"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2345,8 +2345,8 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "Interval value overflows after being divided by -1",
-    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead."
+    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
+    "message" : "Interval value overflows after being divided by -1"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2694,9 +2694,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(INTERVAL '1' MONTH > INTERVAL '20' DAY)\"",
     "left" : "\"INTERVAL MONTH\"",
-    "right" : "\"INTERVAL DAY\""
+    "right" : "\"INTERVAL DAY\"",
+    "sqlExpr" : "\"(INTERVAL '1' MONTH > INTERVAL '20' DAY)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2718,9 +2718,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(INTERVAL '1' DAY < 1)\"",
     "left" : "\"INTERVAL DAY\"",
-    "right" : "\"STRING\""
+    "right" : "\"STRING\"",
+    "sqlExpr" : "\"(INTERVAL '1' DAY < 1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2742,9 +2742,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(INTERVAL '1' DAY = 1)\"",
     "left" : "\"INTERVAL DAY\"",
-    "right" : "\"STRING\""
+    "right" : "\"STRING\"",
+    "sqlExpr" : "\"(INTERVAL '1' DAY = 1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2766,9 +2766,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(INTERVAL '1' DAY > 1)\"",
     "left" : "\"INTERVAL DAY\"",
-    "right" : "\"STRING\""
+    "right" : "\"STRING\"",
+    "sqlExpr" : "\"(INTERVAL '1' DAY > 1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2790,9 +2790,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 < INTERVAL '1' DAY)\"",
     "left" : "\"STRING\"",
-    "right" : "\"INTERVAL DAY\""
+    "right" : "\"INTERVAL DAY\"",
+    "sqlExpr" : "\"(1 < INTERVAL '1' DAY)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2814,9 +2814,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 = INTERVAL '1' DAY)\"",
     "left" : "\"STRING\"",
-    "right" : "\"INTERVAL DAY\""
+    "right" : "\"INTERVAL DAY\"",
+    "sqlExpr" : "\"(1 = INTERVAL '1' DAY)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2838,9 +2838,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 > INTERVAL '1' DAY)\"",
     "left" : "\"STRING\"",
-    "right" : "\"INTERVAL DAY\""
+    "right" : "\"INTERVAL DAY\"",
+    "sqlExpr" : "\"(1 > INTERVAL '1' DAY)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2862,9 +2862,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(INTERVAL '1' YEAR < 1)\"",
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"STRING\""
+    "right" : "\"STRING\"",
+    "sqlExpr" : "\"(INTERVAL '1' YEAR < 1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2886,9 +2886,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(INTERVAL '1' YEAR = 1)\"",
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"STRING\""
+    "right" : "\"STRING\"",
+    "sqlExpr" : "\"(INTERVAL '1' YEAR = 1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2910,9 +2910,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(INTERVAL '1' YEAR > 1)\"",
     "left" : "\"INTERVAL YEAR\"",
-    "right" : "\"STRING\""
+    "right" : "\"STRING\"",
+    "sqlExpr" : "\"(INTERVAL '1' YEAR > 1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2934,9 +2934,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 < INTERVAL '1' YEAR)\"",
     "left" : "\"STRING\"",
-    "right" : "\"INTERVAL YEAR\""
+    "right" : "\"INTERVAL YEAR\"",
+    "sqlExpr" : "\"(1 < INTERVAL '1' YEAR)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2958,9 +2958,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 = INTERVAL '1' YEAR)\"",
     "left" : "\"STRING\"",
-    "right" : "\"INTERVAL YEAR\""
+    "right" : "\"INTERVAL YEAR\"",
+    "sqlExpr" : "\"(1 = INTERVAL '1' YEAR)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2982,9 +2982,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 > INTERVAL '1' YEAR)\"",
     "left" : "\"STRING\"",
-    "right" : "\"INTERVAL YEAR\""
+    "right" : "\"INTERVAL YEAR\"",
+    "sqlExpr" : "\"(1 > INTERVAL '1' YEAR)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3104,9 +3104,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(INTERVAL '1' MONTH div INTERVAL '-1' DAY)\"",
     "left" : "\"INTERVAL MONTH\"",
-    "right" : "\"INTERVAL DAY\""
+    "right" : "\"INTERVAL DAY\"",
+    "sqlExpr" : "\"(INTERVAL '1' MONTH div INTERVAL '-1' DAY)\""
   },
   "queryContext" : [ {
     "objectType" : "",

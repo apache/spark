@@ -329,9 +329,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "PIVOT_VALUE_DATA_TYPE_MISMATCH",
   "sqlState" : "42000",
   "messageParameters" : {
+    "pivotType" : "struct<course:string,year:int>",
     "value" : "dotNET",
-    "valueType" : "string",
-    "pivotType" : "struct<course:string,year:int>"
+    "valueType" : "string"
   }
 }
 
