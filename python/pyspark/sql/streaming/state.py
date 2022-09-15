@@ -33,22 +33,22 @@ class GroupStateImpl:
     NO_TIMESTAMP: int = -1
 
     def __init__(
-            self,
-            # JVM Constructor
-            optionalValue: Row,
-            batchProcessingTimeMs: int,
-            eventTimeWatermarkMs: int,
-            timeoutConf: str,
-            hasTimedOut: bool,
-            watermarkPresent: bool,
-            # JVM internal state.
-            defined: bool,
-            updated: bool,
-            removed: bool,
-            timeoutTimestamp: int,
-            # Python internal state.
-            keyAsUnsafe: bytes,
-            valueSchema: StructType,
+        self,
+        # JVM Constructor
+        optionalValue: Row,
+        batchProcessingTimeMs: int,
+        eventTimeWatermarkMs: int,
+        timeoutConf: str,
+        hasTimedOut: bool,
+        watermarkPresent: bool,
+        # JVM internal state.
+        defined: bool,
+        updated: bool,
+        removed: bool,
+        timeoutTimestamp: int,
+        # Python internal state.
+        keyAsUnsafe: bytes,
+        valueSchema: StructType,
     ) -> None:
         self._keyAsUnsafe = keyAsUnsafe
         self._value = optionalValue
@@ -146,8 +146,8 @@ class GroupStateImpl:
             raise ValueError("Timeout timestamp must be positive")
 
         if (
-                self._event_time_watermark_ms != GroupStateImpl.NO_TIMESTAMP
-                and timestampMs < self._event_time_watermark_ms
+            self._event_time_watermark_ms != GroupStateImpl.NO_TIMESTAMP
+            and timestampMs < self._event_time_watermark_ms
         ):
             raise ValueError(
                 "Timeout timestamp (%s) cannot be earlier than the "
@@ -169,7 +169,7 @@ class GroupStateImpl:
 
     def __str__(self) -> str:
         if self.exists:
-            return "GroupState(%s)" % (self.get, )
+            return "GroupState(%s)" % (self.get,)
         else:
             return "GroupState(<undefined>)"
 
