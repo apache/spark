@@ -38,9 +38,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   /**
    * @param dataType The data type being projected
    * @param nullable Whether or not it is nullable
-   * @param descPath The "path" to this projection, with all descriptors along the way. For example
-   *                 with a schema like `f1: STRUCT<f2: ARRAY<STRUCT<f3: INT>>>`, when projecting
-   *                 `f3` this path would be like `Seq("<pos 0>", "<array element>", "`f3`")`
+   * @param descPath The "path" to this projection, with all descriptors along the way. For
+   *                 example with a schema like `f1: STRUCT<f2: ARRAY<STRUCT<f3: INT>>>`, when
+   *                 projecting `f3` this path would be like
+   *                 {{{ Seq("<POS_0>", "`f2`", "<ARRAY_ELEMENT>", "`f3`") }}}
    *                 (names aren't available at the top level so a position is used instead).
    */
   case class Schema(dataType: DataType, nullable: Boolean, descPath: Seq[String])
