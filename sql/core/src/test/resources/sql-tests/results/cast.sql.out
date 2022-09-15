@@ -635,10 +635,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "INTERVAL '23:59:59' HOUR TO SECOND",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INTERVAL HOUR TO SECOND\"",
     "targetType" : "\"SMALLINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "INTERVAL '23:59:59' HOUR TO SECOND"
   }
 }
 
@@ -669,10 +669,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "INTERVAL '-1000' MONTH",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INTERVAL MONTH\"",
     "targetType" : "\"TINYINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "INTERVAL '-1000' MONTH"
   }
 }
 
@@ -687,10 +687,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "INTERVAL '1000000' SECOND",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INTERVAL SECOND\"",
     "targetType" : "\"SMALLINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "INTERVAL '1000000' SECOND"
   }
 }
 
@@ -777,10 +777,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "2147483647",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INT\"",
     "targetType" : "\"INTERVAL YEAR\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "2147483647"
   }
 }
 
@@ -795,10 +795,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "-9223372036854775808L",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"BIGINT\"",
     "targetType" : "\"INTERVAL DAY\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "-9223372036854775808L"
   }
 }
 
@@ -869,10 +869,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "10.123000",
+    "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "1",
     "scale" : "0",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "value" : "10.123000"
   }
 }
 

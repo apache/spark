@@ -1497,9 +1497,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' + 1)\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DOUBLE\""
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' + 1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1521,9 +1521,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 + TIMESTAMP '2011-11-11 11:11:11')\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(1 + TIMESTAMP '2011-11-11 11:11:11')\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1545,9 +1545,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' + NULL)\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"VOID\""
+    "right" : "\"VOID\"",
+    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' + NULL)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1569,9 +1569,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(NULL + TIMESTAMP '2011-11-11 11:11:11')\"",
     "left" : "\"VOID\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(NULL + TIMESTAMP '2011-11-11 11:11:11')\""
   },
   "queryContext" : [ {
     "objectType" : "",

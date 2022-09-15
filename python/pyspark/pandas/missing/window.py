@@ -82,7 +82,6 @@ class MissingPandasLikeExpanding:
     corr = _unsupported_function_expanding("corr")
     cov = _unsupported_function_expanding("cov")
     median = _unsupported_function_expanding("median")
-    quantile = _unsupported_function_expanding("quantile")
     validate = _unsupported_function_expanding("validate")
 
     exclusions = _unsupported_property_expanding("exclusions")
@@ -101,7 +100,6 @@ class MissingPandasLikeRolling:
     corr = _unsupported_function_rolling("corr")
     cov = _unsupported_function_rolling("cov")
     median = _unsupported_function_rolling("median")
-    quantile = _unsupported_function_rolling("quantile")
     validate = _unsupported_function_rolling("validate")
 
     exclusions = _unsupported_property_rolling("exclusions")
@@ -120,7 +118,6 @@ class MissingPandasLikeExpandingGroupby:
     corr = _unsupported_function_expanding("corr")
     cov = _unsupported_function_expanding("cov")
     median = _unsupported_function_expanding("median")
-    quantile = _unsupported_function_expanding("quantile")
     validate = _unsupported_function_expanding("validate")
 
     exclusions = _unsupported_property_expanding("exclusions")
@@ -139,7 +136,6 @@ class MissingPandasLikeRollingGroupby:
     corr = _unsupported_function_rolling("corr")
     cov = _unsupported_function_rolling("cov")
     median = _unsupported_function_rolling("median")
-    quantile = _unsupported_function_rolling("quantile")
     validate = _unsupported_function_rolling("validate")
 
     exclusions = _unsupported_property_rolling("exclusions")

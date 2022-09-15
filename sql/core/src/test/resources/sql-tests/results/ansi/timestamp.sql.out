@@ -347,8 +347,8 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Text '2019-10-06 10:11:12.' could not be parsed at index 20",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '2019-10-06 10:11:12.' could not be parsed at index 20"
   }
 }
 
@@ -419,8 +419,8 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Text '2019-10-06 10:11:12.1234567PST' could not be parsed, unparsed text found at index 26",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '2019-10-06 10:11:12.1234567PST' could not be parsed, unparsed text found at index 26"
   }
 }
 
@@ -443,8 +443,8 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Text '223456 2019-10-06 10:11:12.123456PST' could not be parsed at index 27",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '223456 2019-10-06 10:11:12.123456PST' could not be parsed at index 27"
   }
 }
 
@@ -515,8 +515,8 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Text '12.1232019-10-06S10:11' could not be parsed at index 7",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '12.1232019-10-06S10:11' could not be parsed at index 7"
   }
 }
 
@@ -531,8 +531,8 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Text '12.1232019-10-06S10:11' could not be parsed at index 9",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '12.1232019-10-06S10:11' could not be parsed at index 9"
   }
 }
 
@@ -611,8 +611,8 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Invalid date 'February 29' as '1970' is not a leap year",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid date 'February 29' as '1970' is not a leap year"
   }
 }
 
@@ -723,9 +723,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_WRONG_TYPE",
   "messageParameters" : {
-    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' + 1)\"",
+    "actualDataType" : "\"TIMESTAMP\"",
     "inputType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
-    "actualDataType" : "\"TIMESTAMP\""
+    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' + 1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -747,9 +747,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_WRONG_TYPE",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 + TIMESTAMP '2011-11-11 11:11:11')\"",
+    "actualDataType" : "\"TIMESTAMP\"",
     "inputType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
-    "actualDataType" : "\"TIMESTAMP\""
+    "sqlExpr" : "\"(1 + TIMESTAMP '2011-11-11 11:11:11')\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -771,9 +771,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' + NULL)\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"VOID\""
+    "right" : "\"VOID\"",
+    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' + NULL)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -795,9 +795,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(NULL + TIMESTAMP '2011-11-11 11:11:11')\"",
     "left" : "\"VOID\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(NULL + TIMESTAMP '2011-11-11 11:11:11')\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -842,8 +842,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
   "messageParameters" : {
-    "pattern" : "'yyyy-MM-dd GGGGG'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'yyyy-MM-dd GGGGG'"
   }
 }
 
@@ -858,8 +858,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
   "messageParameters" : {
-    "pattern" : "'dd MM yyyy EEEEEE'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'dd MM yyyy EEEEEE'"
   }
 }
 
@@ -874,8 +874,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
   "messageParameters" : {
-    "pattern" : "'dd MM yyyy EEEEE'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'dd MM yyyy EEEEE'"
   }
 }
 
@@ -890,8 +890,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
   "messageParameters" : {
-    "pattern" : "'dd MM yyyy EEEEE'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'dd MM yyyy EEEEE'"
   }
 }
 
@@ -906,8 +906,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
   "messageParameters" : {
-    "pattern" : "'dd/MMMMM/yyyy'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'dd/MMMMM/yyyy'"
   }
 }
 
@@ -922,8 +922,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
   "messageParameters" : {
-    "pattern" : "'dd/MMMMM/yyyy'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'dd/MMMMM/yyyy'"
   }
 }
 

@@ -241,9 +241,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) + CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) + CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -265,9 +265,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) + CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) + CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -289,9 +289,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) + CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) + CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -313,9 +313,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) + CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) + CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -337,9 +337,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -361,9 +361,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -385,9 +385,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -409,9 +409,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -725,9 +725,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) + CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) + CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -749,9 +749,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) + CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) + CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -773,9 +773,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) + CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) + CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -797,9 +797,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) + CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) + CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -821,9 +821,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) + CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) + CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -845,9 +845,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) + CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) + CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -869,9 +869,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) + CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) + CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -893,9 +893,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) + CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) + CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -917,9 +917,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) + CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) + CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -941,9 +941,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) + CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) + CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -965,9 +965,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) + CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) + CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -989,9 +989,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) + CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) + CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1273,9 +1273,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) - CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) - CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1297,9 +1297,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) - CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) - CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1321,9 +1321,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) - CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) - CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1345,9 +1345,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) - CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) - CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1697,9 +1697,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) - CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) - CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1721,9 +1721,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) - CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) - CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1745,9 +1745,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) - CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) - CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1769,9 +1769,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) - CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) - CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1793,9 +1793,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) - CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) - CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1817,9 +1817,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) - CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) - CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1841,9 +1841,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) - CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) - CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1865,9 +1865,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) - CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) - CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2185,9 +2185,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) * CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) * CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2209,9 +2209,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) * CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) * CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2233,9 +2233,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) * CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) * CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2257,9 +2257,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) * CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) * CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2281,9 +2281,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017*12*11 09:30:00.0 AS TIMESTAMP) * CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017*12*11 09:30:00.0 AS TIMESTAMP) * CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2305,9 +2305,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017*12*11 09:30:00.0 AS TIMESTAMP) * CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017*12*11 09:30:00.0 AS TIMESTAMP) * CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2329,9 +2329,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017*12*11 09:30:00.0 AS TIMESTAMP) * CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017*12*11 09:30:00.0 AS TIMESTAMP) * CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2353,9 +2353,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017*12*11 09:30:00.0 AS TIMESTAMP) * CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017*12*11 09:30:00.0 AS TIMESTAMP) * CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2377,9 +2377,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017*12*11 09:30:00 AS DATE) * CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017*12*11 09:30:00 AS DATE) * CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2401,9 +2401,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017*12*11 09:30:00 AS DATE) * CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017*12*11 09:30:00 AS DATE) * CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2425,9 +2425,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017*12*11 09:30:00 AS DATE) * CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017*12*11 09:30:00 AS DATE) * CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2449,9 +2449,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017*12*11 09:30:00 AS DATE) * CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017*12*11 09:30:00 AS DATE) * CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2729,9 +2729,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) * CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) * CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2753,9 +2753,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) * CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) * CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2777,9 +2777,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) * CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) * CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2801,9 +2801,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) * CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) * CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2825,9 +2825,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) * CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) * CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2849,9 +2849,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) * CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) * CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2873,9 +2873,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) * CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) * CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2897,9 +2897,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) * CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) * CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2921,9 +2921,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) * CAST(2017*12*11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) * CAST(2017*12*11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2945,9 +2945,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) * CAST(2017*12*11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) * CAST(2017*12*11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2969,9 +2969,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) * CAST(2017*12*11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) * CAST(2017*12*11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2993,9 +2993,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) * CAST(2017*12*11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) * CAST(2017*12*11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3017,9 +3017,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) * CAST(2017*12*11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) * CAST(2017*12*11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3041,9 +3041,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) * CAST(2017*12*11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) * CAST(2017*12*11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3065,9 +3065,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) * CAST(2017*12*11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) * CAST(2017*12*11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3089,9 +3089,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) * CAST(2017*12*11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) * CAST(2017*12*11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3337,9 +3337,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) / CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) / CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3361,9 +3361,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) / CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) / CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3385,9 +3385,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) / CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) / CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3409,9 +3409,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) / CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) / CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3433,9 +3433,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017/12/11 09:30:00.0 AS TIMESTAMP) / CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017/12/11 09:30:00.0 AS TIMESTAMP) / CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3457,9 +3457,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017/12/11 09:30:00.0 AS TIMESTAMP) / CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017/12/11 09:30:00.0 AS TIMESTAMP) / CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3481,9 +3481,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017/12/11 09:30:00.0 AS TIMESTAMP) / CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017/12/11 09:30:00.0 AS TIMESTAMP) / CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3505,9 +3505,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017/12/11 09:30:00.0 AS TIMESTAMP) / CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017/12/11 09:30:00.0 AS TIMESTAMP) / CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3529,9 +3529,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017/12/11 09:30:00 AS DATE) / CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017/12/11 09:30:00 AS DATE) / CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3553,9 +3553,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017/12/11 09:30:00 AS DATE) / CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017/12/11 09:30:00 AS DATE) / CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3577,9 +3577,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017/12/11 09:30:00 AS DATE) / CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017/12/11 09:30:00 AS DATE) / CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3601,9 +3601,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017/12/11 09:30:00 AS DATE) / CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017/12/11 09:30:00 AS DATE) / CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3881,9 +3881,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) / CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) / CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3905,9 +3905,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) / CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) / CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3929,9 +3929,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3953,9 +3953,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) / CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) / CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3977,9 +3977,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) / CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) / CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4001,9 +4001,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) / CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) / CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4025,9 +4025,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4049,9 +4049,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) / CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) / CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4073,9 +4073,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) / CAST(2017/12/11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) / CAST(2017/12/11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4097,9 +4097,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) / CAST(2017/12/11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) / CAST(2017/12/11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4121,9 +4121,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) / CAST(2017/12/11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) / CAST(2017/12/11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4145,9 +4145,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) / CAST(2017/12/11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) / CAST(2017/12/11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4169,9 +4169,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) / CAST(2017/12/11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) / CAST(2017/12/11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4193,9 +4193,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) / CAST(2017/12/11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) / CAST(2017/12/11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4217,9 +4217,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) / CAST(2017/12/11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) / CAST(2017/12/11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4241,9 +4241,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) / CAST(2017/12/11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) / CAST(2017/12/11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4489,9 +4489,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) % CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) % CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4513,9 +4513,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) % CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) % CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4537,9 +4537,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) % CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) % CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4561,9 +4561,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) % CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) % CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4585,9 +4585,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) % CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) % CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4609,9 +4609,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) % CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) % CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4633,9 +4633,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) % CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) % CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4657,9 +4657,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) % CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) % CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4681,9 +4681,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) % CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) % CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4705,9 +4705,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) % CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) % CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4729,9 +4729,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) % CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) % CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4753,9 +4753,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) % CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) % CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5033,9 +5033,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) % CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) % CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5057,9 +5057,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) % CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) % CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5081,9 +5081,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) % CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) % CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5105,9 +5105,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) % CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) % CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5129,9 +5129,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) % CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) % CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5153,9 +5153,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) % CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) % CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5177,9 +5177,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) % CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) % CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5201,9 +5201,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) % CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) % CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5225,9 +5225,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) % CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) % CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5249,9 +5249,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) % CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) % CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5273,9 +5273,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) % CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) % CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5297,9 +5297,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) % CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) % CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5321,9 +5321,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) % CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) % CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5345,9 +5345,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) % CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) % CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5369,9 +5369,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) % CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) % CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5393,9 +5393,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) % CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) % CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5641,9 +5641,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS BINARY), CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS BINARY), CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5665,9 +5665,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS BINARY), CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS BINARY), CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5689,9 +5689,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS BINARY), CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS BINARY), CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5713,9 +5713,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS BINARY), CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS BINARY), CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5737,9 +5737,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP), CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP), CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5761,9 +5761,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP), CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP), CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5785,9 +5785,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP), CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP), CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5809,9 +5809,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP), CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP), CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5833,9 +5833,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00 AS DATE), CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00 AS DATE), CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5857,9 +5857,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00 AS DATE), CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00 AS DATE), CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5881,9 +5881,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00 AS DATE), CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00 AS DATE), CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -5905,9 +5905,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00 AS DATE), CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00 AS DATE), CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6185,9 +6185,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(3,0)), CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(3,0)), CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6209,9 +6209,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(5,0)), CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(5,0)), CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6233,9 +6233,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(10,0)), CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(10,0)), CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6257,9 +6257,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(20,0)), CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(20,0)), CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6281,9 +6281,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(3,0)), CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(3,0)), CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6305,9 +6305,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(5,0)), CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(5,0)), CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6329,9 +6329,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(10,0)), CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(10,0)), CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6353,9 +6353,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(20,0)), CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(20,0)), CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6377,9 +6377,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(3,0)), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(3,0)), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6401,9 +6401,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(5,0)), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(5,0)), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6425,9 +6425,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(10,0)), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(10,0)), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6449,9 +6449,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(20,0)), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(20,0)), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6473,9 +6473,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(3,0)), CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(3,0)), CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6497,9 +6497,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(5,0)), CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(5,0)), CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6521,9 +6521,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(10,0)), CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(10,0)), CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6545,9 +6545,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(20,0)), CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS DECIMAL(20,0)), CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6793,9 +6793,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) = CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) = CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6817,9 +6817,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) = CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) = CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6841,9 +6841,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) = CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) = CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6865,9 +6865,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) = CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) = CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6889,9 +6889,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6913,9 +6913,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6937,9 +6937,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6961,9 +6961,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -6985,9 +6985,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7009,9 +7009,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7033,9 +7033,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7057,9 +7057,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7337,9 +7337,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) = CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) = CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7361,9 +7361,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) = CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) = CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7385,9 +7385,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) = CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) = CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7409,9 +7409,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) = CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) = CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7465,9 +7465,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7489,9 +7489,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7513,9 +7513,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7537,9 +7537,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7561,9 +7561,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) = CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) = CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7585,9 +7585,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) = CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) = CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7609,9 +7609,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) = CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) = CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7633,9 +7633,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) = CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) = CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7881,9 +7881,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) <=> CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) <=> CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7905,9 +7905,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) <=> CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) <=> CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7929,9 +7929,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) <=> CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) <=> CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7953,9 +7953,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) <=> CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) <=> CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -7977,9 +7977,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <=> CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <=> CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8001,9 +8001,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <=> CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <=> CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8025,9 +8025,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <=> CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <=> CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8049,9 +8049,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <=> CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <=> CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8073,9 +8073,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <=> CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <=> CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8097,9 +8097,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <=> CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <=> CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8121,9 +8121,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <=> CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <=> CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8145,9 +8145,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <=> CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <=> CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8425,9 +8425,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) <=> CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) <=> CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8449,9 +8449,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) <=> CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) <=> CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8473,9 +8473,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) <=> CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) <=> CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8497,9 +8497,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) <=> CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) <=> CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8553,9 +8553,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) <=> CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) <=> CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8577,9 +8577,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) <=> CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) <=> CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8601,9 +8601,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) <=> CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) <=> CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8625,9 +8625,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) <=> CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) <=> CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8649,9 +8649,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) <=> CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) <=> CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8673,9 +8673,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) <=> CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) <=> CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8697,9 +8697,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) <=> CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) <=> CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8721,9 +8721,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) <=> CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) <=> CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8969,9 +8969,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) < CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) < CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -8993,9 +8993,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) < CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) < CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9017,9 +9017,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) < CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) < CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9041,9 +9041,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) < CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) < CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9065,9 +9065,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) < CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) < CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9089,9 +9089,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) < CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) < CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9113,9 +9113,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) < CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) < CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9137,9 +9137,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) < CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) < CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9161,9 +9161,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) < CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) < CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9185,9 +9185,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) < CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) < CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9209,9 +9209,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) < CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) < CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9233,9 +9233,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) < CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) < CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9513,9 +9513,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) < CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) < CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9537,9 +9537,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) < CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) < CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9561,9 +9561,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) < CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) < CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9585,9 +9585,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) < CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) < CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9609,9 +9609,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) < CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) < CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9633,9 +9633,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) < CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) < CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9657,9 +9657,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) < CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) < CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9681,9 +9681,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) < CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) < CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9705,9 +9705,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) < CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) < CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9729,9 +9729,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) < CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) < CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9753,9 +9753,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) < CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) < CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9777,9 +9777,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) < CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) < CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9801,9 +9801,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) < CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) < CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9825,9 +9825,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) < CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) < CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9849,9 +9849,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) < CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) < CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -9873,9 +9873,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) < CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) < CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10121,9 +10121,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) <= CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) <= CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10145,9 +10145,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) <= CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) <= CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10169,9 +10169,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) <= CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) <= CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10193,9 +10193,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) <= CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) <= CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10217,9 +10217,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <= CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <= CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10241,9 +10241,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <= CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <= CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10265,9 +10265,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <= CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <= CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10289,9 +10289,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <= CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <= CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10313,9 +10313,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <= CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <= CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10337,9 +10337,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <= CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <= CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10361,9 +10361,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <= CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <= CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10385,9 +10385,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <= CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <= CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10665,9 +10665,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) <= CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) <= CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10689,9 +10689,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) <= CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) <= CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10713,9 +10713,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) <= CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) <= CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10737,9 +10737,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) <= CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) <= CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10761,9 +10761,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) <= CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) <= CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10785,9 +10785,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) <= CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) <= CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10809,9 +10809,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) <= CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) <= CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10833,9 +10833,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) <= CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) <= CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10857,9 +10857,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) <= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) <= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10881,9 +10881,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) <= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) <= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10905,9 +10905,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) <= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) <= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10929,9 +10929,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) <= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) <= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10953,9 +10953,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) <= CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) <= CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -10977,9 +10977,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) <= CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) <= CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11001,9 +11001,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) <= CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) <= CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11025,9 +11025,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) <= CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) <= CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11273,9 +11273,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) > CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) > CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11297,9 +11297,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) > CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) > CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11321,9 +11321,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) > CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) > CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11345,9 +11345,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) > CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) > CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11369,9 +11369,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) > CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) > CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11393,9 +11393,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) > CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) > CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11417,9 +11417,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) > CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) > CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11441,9 +11441,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) > CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) > CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11465,9 +11465,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) > CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) > CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11489,9 +11489,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) > CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) > CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11513,9 +11513,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) > CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) > CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11537,9 +11537,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) > CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) > CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11817,9 +11817,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) > CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) > CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11841,9 +11841,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) > CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) > CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11865,9 +11865,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) > CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) > CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11889,9 +11889,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) > CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) > CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11913,9 +11913,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) > CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) > CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11937,9 +11937,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) > CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) > CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11961,9 +11961,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) > CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) > CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -11985,9 +11985,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) > CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) > CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12009,9 +12009,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) > CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) > CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12033,9 +12033,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) > CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) > CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12057,9 +12057,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) > CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) > CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12081,9 +12081,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) > CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) > CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12105,9 +12105,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) > CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) > CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12129,9 +12129,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) > CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) > CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12153,9 +12153,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) > CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) > CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12177,9 +12177,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) > CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) > CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12425,9 +12425,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) >= CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) >= CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12449,9 +12449,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) >= CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) >= CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12473,9 +12473,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) >= CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) >= CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12497,9 +12497,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) >= CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) >= CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12521,9 +12521,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) >= CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) >= CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12545,9 +12545,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) >= CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) >= CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12569,9 +12569,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) >= CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) >= CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12593,9 +12593,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) >= CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) >= CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12617,9 +12617,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) >= CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) >= CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12641,9 +12641,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) >= CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) >= CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12665,9 +12665,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) >= CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) >= CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12689,9 +12689,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) >= CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) >= CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12969,9 +12969,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) >= CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) >= CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -12993,9 +12993,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) >= CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) >= CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13017,9 +13017,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) >= CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) >= CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13041,9 +13041,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) >= CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) >= CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13065,9 +13065,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) >= CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) >= CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13089,9 +13089,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) >= CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) >= CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13113,9 +13113,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) >= CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) >= CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13137,9 +13137,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) >= CAST(1 AS BOOLEAN))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BOOLEAN\""
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) >= CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13161,9 +13161,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) >= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) >= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13185,9 +13185,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) >= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) >= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13209,9 +13209,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) >= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) >= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13233,9 +13233,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) >= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) >= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13257,9 +13257,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) >= CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) >= CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13281,9 +13281,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) >= CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) >= CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13305,9 +13305,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) >= CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) >= CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13329,9 +13329,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) >= CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) >= CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13577,9 +13577,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) = CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) = CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13601,9 +13601,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) = CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) = CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13625,9 +13625,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) = CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) = CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13649,9 +13649,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) = CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) = CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13673,9 +13673,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13697,9 +13697,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13721,9 +13721,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13745,9 +13745,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13769,9 +13769,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = CAST(1 AS DECIMAL(3,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(3,0)\""
+    "right" : "\"DECIMAL(3,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = CAST(1 AS DECIMAL(3,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13793,9 +13793,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = CAST(1 AS DECIMAL(5,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(5,0)\""
+    "right" : "\"DECIMAL(5,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = CAST(1 AS DECIMAL(5,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13817,9 +13817,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = CAST(1 AS DECIMAL(10,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(10,0)\""
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = CAST(1 AS DECIMAL(10,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -13841,9 +13841,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = CAST(1 AS DECIMAL(20,0)))\"",
     "left" : "\"DATE\"",
-    "right" : "\"DECIMAL(20,0)\""
+    "right" : "\"DECIMAL(20,0)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = CAST(1 AS DECIMAL(20,0)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -14121,9 +14121,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) = CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) = CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -14145,9 +14145,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) = CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) = CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -14169,9 +14169,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) = CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) = CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -14193,9 +14193,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) = CAST(1 AS BINARY))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"BINARY\""
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) = CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -14249,9 +14249,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -14273,9 +14273,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -14297,9 +14297,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -14321,9 +14321,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"TIMESTAMP\""
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -14345,9 +14345,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) = CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(3,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(3,0)) = CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -14369,9 +14369,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) = CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(5,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(5,0)) = CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -14393,9 +14393,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) = CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(10,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) = CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -14417,9 +14417,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) = CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DECIMAL(20,0)\"",
-    "right" : "\"DATE\""
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(20,0)) = CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
     "objectType" : "",

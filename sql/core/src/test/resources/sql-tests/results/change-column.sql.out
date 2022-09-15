@@ -52,8 +52,8 @@ org.apache.spark.sql.AnalysisException
   "errorSubClass" : "TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "tableName" : "`spark_catalog`.`default`.`test_change`",
-    "operation" : "RENAME COLUMN"
+    "operation" : "RENAME COLUMN",
+    "tableName" : "`spark_catalog`.`default`.`test_change`"
   }
 }
 
@@ -98,8 +98,8 @@ org.apache.spark.sql.AnalysisException
   "errorSubClass" : "TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "tableName" : "`spark_catalog`.`default`.`test_change`",
-    "operation" : "ALTER COLUMN ... FIRST | ALTER"
+    "operation" : "ALTER COLUMN ... FIRST | ALTER",
+    "tableName" : "`spark_catalog`.`default`.`test_change`"
   }
 }
 
@@ -115,8 +115,8 @@ org.apache.spark.sql.AnalysisException
   "errorSubClass" : "TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "tableName" : "`spark_catalog`.`default`.`test_change`",
-    "operation" : "ALTER COLUMN ... FIRST | ALTER"
+    "operation" : "ALTER COLUMN ... FIRST | ALTER",
+    "tableName" : "`spark_catalog`.`default`.`test_change`"
   }
 }
 
