@@ -14,19 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.integrationtest
 
-@YuniKornTag
-class YuniKornSuite extends KubernetesSuite {
+package org.apache.spark.sql.catalyst.expressions.codegen
 
-  override protected def setUpTest(): Unit = {
-    super.setUpTest()
-    val namespace = sparkAppConf.get("spark.kubernetes.namespace")
-    sparkAppConf
-      .set("spark.kubernetes.scheduler.name", "yunikorn")
-      .set("spark.kubernetes.driver.label.queue", "root." + namespace)
-      .set("spark.kubernetes.executor.label.queue", "root." + namespace)
-      .set("spark.kubernetes.driver.annotation.yunikorn.apache.org/app-id", "{{APP_ID}}")
-      .set("spark.kubernetes.executor.annotation.yunikorn.apache.org/app-id", "{{APP_ID}}")
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
+
+class UnsafeArrayWriterSuite extends SparkFunSuite {
+  test("SPARK-40403: don't print negative number when array is too big") {
+    val rowWriter = new UnsafeRowWriter(1)
+    rowWriter.resetRowWriter()
+    val arrayWriter = new UnsafeArrayWriter(rowWriter, 8)
+    assert(intercept[SparkIllegalArgumentException] {
+      arrayWriter.initialize(268271216)
+    }.getMessage.contains("Cannot initialize array with 268271216 elements of size 8"))
   }
 }

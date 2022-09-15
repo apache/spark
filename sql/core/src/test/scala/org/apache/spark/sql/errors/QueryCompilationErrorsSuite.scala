@@ -413,11 +413,14 @@ class QueryCompilationErrorsSuite
       errorClass = "UNRESOLVED_MAP_KEY",
       errorSubClass = "WITH_SUGGESTION",
       sqlState = None,
-      parameters = Map("columnName" -> "`a`",
+      parameters = Map("objectName" -> "`a`",
         "proposal" ->
           "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`aa`"),
       context = ExpectedContext(
-        fragment = query, start = 0, stop = 55))
+        fragment = "a",
+        start = 9,
+        stop = 9)
+    )
   }
 
   test("UNRESOLVED_COLUMN: SELECT distinct does not work correctly " +
@@ -451,7 +454,9 @@ class QueryCompilationErrorsSuite
         "proposal" -> "`a`, `b`"
       ),
       context = ExpectedContext(
-        fragment = "order by struct.a, struct.b", start = 171, stop = 197)
+        fragment = "struct.a",
+        start = 180,
+        stop = 187)
     )
   }
 
@@ -470,7 +475,9 @@ class QueryCompilationErrorsSuite
           "objectName" -> "`v`.`i`",
           "proposal" -> "`__auto_generated_subquery_name`.`i`"),
         context = ExpectedContext(
-          fragment = query, start = 0, stop = 32))
+          fragment = "v.i",
+          start = 7,
+          stop = 9))
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }
@@ -574,7 +581,8 @@ class QueryCompilationErrorsSuite
       exception = e1,
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
-      parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT>\"",
+      parameters = Map(
+        "schema" -> "\"STRUCT<a: STRING, b: INT>\"",
         "ordinal" -> "3"))
 
     val e2 = intercept[AnalysisException] {

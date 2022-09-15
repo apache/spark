@@ -592,9 +592,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 56,
-    "stopIndex" : 74,
-    "fragment" : "ORDER BY q2 LIMIT 1"
+    "startIndex" : 65,
+    "stopIndex" : 66,
+    "fragment" : "q2"
   } ]
 }
 

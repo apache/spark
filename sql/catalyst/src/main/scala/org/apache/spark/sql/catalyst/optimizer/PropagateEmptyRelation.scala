@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, TRUE_OR_FALSE_LITERAL}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, REPARTITION_OPERATION, TRUE_OR_FALSE_LITERAL}
 
 /**
  * The base class of two rules in the normal and AQE Optimizer. It simplifies query plans with
@@ -185,13 +185,20 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
    * Add a [[ROOT_REPARTITION]] tag for the root user-specified repartition so this rule can
    * skip optimize it.
    */
-  private def addTagForRootRepartition(plan: LogicalPlan): LogicalPlan = plan match {
-    case p: Project => p.mapChildren(addTagForRootRepartition)
-    case f: Filter => f.mapChildren(addTagForRootRepartition)
-    case r if userSpecifiedRepartition(r) =>
-      r.setTagValue(ROOT_REPARTITION, ())
-      r
-    case _ => plan
+  private def addTagForRootRepartition(plan: LogicalPlan): LogicalPlan = {
+    if (!plan.containsPattern(REPARTITION_OPERATION)) {
+      return plan
+    }
+
+    plan match {
+      case p: Project => p.mapChildren(addTagForRootRepartition)
+      case f: Filter => f.mapChildren(addTagForRootRepartition)
+      case d: DeserializeToObject => d.mapChildren(addTagForRootRepartition)
+      case r if userSpecifiedRepartition(r) =>
+        r.setTagValue(ROOT_REPARTITION, ())
+        r
+      case _ => plan
+    }
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {

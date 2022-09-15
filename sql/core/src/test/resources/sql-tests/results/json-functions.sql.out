@@ -340,8 +340,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
   "messageParameters" : {
-    "datetime" : "'02-29'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'02-29'"
   }
 }
 
@@ -359,8 +359,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
   "messageParameters" : {
-    "datetime" : "'02-29'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'02-29'"
   }
 }
 
