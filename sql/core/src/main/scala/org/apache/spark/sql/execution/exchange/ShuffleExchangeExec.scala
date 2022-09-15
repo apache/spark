@@ -38,6 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.MutablePair
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordComparator}
+import org.apache.spark.util.random.XORShiftRandom
 
 /**
  * Common trait for all shuffle exchange implementations to facilitate pattern matching.
@@ -297,7 +298,8 @@ object ShuffleExchangeExec {
     }
     def getPartitionKeyExtractor(): InternalRow => Any = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) =>
-        var position = TaskContext.get().partitionId()
+        // Distributes elements evenly across output partitions, starting from a random partition.
+        var position = new XORShiftRandom(TaskContext.get().partitionId()).nextInt(numPartitions)
         (row: InternalRow) => {
           // The HashPartitioner will handle the `mod` by the number of partitions
           position += 1
