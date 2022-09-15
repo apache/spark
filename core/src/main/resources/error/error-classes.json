@@ -86,6 +86,11 @@
       "Cannot resolve <sqlExpr> due to data type mismatch:"
     ],
     "subClass" : {
+      "SCHEMA_OF_CSV_INVALID_INPUT" : {
+        "message" : [
+          "The input csv should be a foldable string expression and not null; however, got <inputExpr>."
+        ]
+      },
       "BINARY_OP_DIFF_TYPES" : {
         "message" : [
           "the left and right operands of the binary operator have incompatible types (<left> and <right>)."
