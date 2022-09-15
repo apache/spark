@@ -15,18 +15,20 @@
 # limitations under the License.
 #
 import sys
-from typing import List, Union, TYPE_CHECKING
+from typing import List, Union, TYPE_CHECKING, cast
 import warnings
 
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.types import StructType
+from pyspark.sql.streaming.state import GroupStateTimeout
+from pyspark.sql.types import StructType, _parse_datatype_string
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import (
         GroupedMapPandasUserDefinedFunction,
         PandasGroupedMapFunction,
+        PandasGroupedMapFunctionWithState,
         PandasCogroupedMapFunction,
     )
     from pyspark.sql.group import GroupedData
@@ -214,6 +216,105 @@ class PandasGroupedOpsMixin:
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
+        return DataFrame(jdf, self.session)
+
+    def applyInPandasWithState(
+        self,
+        func: "PandasGroupedMapFunctionWithState",
+        outputStructType: Union[StructType, str],
+        stateStructType: Union[StructType, str],
+        outputMode: str,
+        timeoutConf: str,
+    ) -> DataFrame:
+        """
+        Applies the given function to each group of data, while maintaining a user-defined
+        per-group state. The result Dataset will represent the flattened record returned by the
+        function.
+
+        For a streaming Dataset, the function will be invoked for each group repeatedly in every
+        trigger, and updates to each group's state will be saved across invocations. The function
+        will also be invoked for each timed-out state repeatedly. The sequence of the invocation
+        will be input data -> state timeout. When the function is invoked for state timeout, there
+        will be no data being presented.
+
+        The function should takes parameters (key, Iterator[`pandas.DataFrame`], state) and
+        returns another Iterator[`pandas.DataFrame`]. The grouping key(s) will be passed as a tuple
+        of numpy data types, e.g., `numpy.int32` and `numpy.float64`. The state will be passed as
+        :class:`pyspark.sql.streaming.state.GroupStateImpl`.
+
+        For each group, all columns are passed together as `pandas.DataFrame` to the user-function,
+        and the returned `pandas.DataFrame` across all invocations are combined as a
+        :class:`DataFrame`. Note that the user function should loop through and process all
+        elements in the iterator. The user function should not make a guess of the number of
+        elements in the iterator.
+
+        The `outputStructType` should be a :class:`StructType` describing the schema of all
+        elements in returned value, `pandas.DataFrame`. The column labels of all elements in
+        returned value, `pandas.DataFrame` must either match the field names in the defined
+        schema if specified as strings, or match the field data types by position if not strings,
+        e.g. integer indices.
+
+        The `stateStructType` should be :class:`StructType` describing the schema of user-defined
+        state. The value of state will be presented as a tuple, as well as the update should be
+        performed with the tuple. User defined types e.g. native Python class types are not
+        supported. Alternatively, you can pickle the data and produce the data as BinaryType, but
+        it is tied to the backward and forward compatibility of pickle in Python, and Spark itself
+        does not guarantee the compatibility.
+
+        The length of each element in both input and returned value, `pandas.DataFrame`, can be
+        arbitrary. The length of iterator in both input and returned value can be also arbitrary.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        func : function
+            a Python native function to be called on every group. It should takes parameters
+            (key, Iterator[`pandas.DataFrame`], state) and returns Iterator[`pandas.DataFrame`].
+            Note that the type of key is tuple, and the type of state is
+            :class:`pyspark.sql.streaming.state.GroupStateImpl`.
+        outputStructType : :class:`pyspark.sql.types.DataType` or str
+            the type of the output records. The value can be either a
+            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        stateStructType : :class:`pyspark.sql.types.DataType` or str
+            the type of the user-defined state. The value can be either a
+            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        outputMode : str
+            the output mode of the function.
+        timeoutConf : str
+            timeout configuration for groups that do not receive data for a while. valid values
+            are defined in :class:`pyspark.sql.streaming.state.GroupStateTimeout`.
+        """
+
+        from pyspark.sql import GroupedData
+        from pyspark.sql.functions import pandas_udf
+
+        assert isinstance(self, GroupedData)
+        assert timeoutConf in [
+            GroupStateTimeout.NoTimeout,
+            GroupStateTimeout.ProcessingTimeTimeout,
+            GroupStateTimeout.EventTimeTimeout,
+        ]
+
+        if isinstance(outputStructType, str):
+            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
+        if isinstance(stateStructType, str):
+            stateStructType = cast(StructType, _parse_datatype_string(stateStructType))
+
+        udf = pandas_udf(
+            func,  # type: ignore[call-overload]
+            returnType=outputStructType,
+            functionType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+        )
+        df = self._df
+        udf_column = udf(*[df[col] for col in df.columns])
+        jdf = self._jgd.applyInPandasWithState(
+            udf_column._jc.expr(),
+            self.session._jsparkSession.parseDataType(outputStructType.json()),
+            self.session._jsparkSession.parseDataType(stateStructType.json()),
+            outputMode,
+            timeoutConf,
+        )
         return DataFrame(jdf, self.session)
 
     def cogroup(self, other: "GroupedData") -> "PandasCogroupedOps":

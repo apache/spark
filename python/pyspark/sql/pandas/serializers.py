@@ -19,7 +19,11 @@
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
 
-from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer
+import time
+
+from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
+from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.types import StringType, StructType, BinaryType, StructField, LongType
 
 
 class SpecialLengths:
@@ -371,3 +375,249 @@ class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
                 raise ValueError(
                     "Invalid number of pandas.DataFrames in group {0}".format(dataframes_in_group)
                 )
+
+
+class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
+
+    def __init__(self, timezone, safecheck, assign_cols_by_name, state_object_schema,
+                 soft_limit_bytes_per_batch, min_data_count_for_sample,
+                 soft_timeout_millis_purge_batch):
+        super(ApplyInPandasWithStateSerializer, self).__init__(
+            timezone, safecheck, assign_cols_by_name)
+        self.pickleSer = CPickleSerializer()
+        self.utf8_deserializer = UTF8Deserializer()
+        self.state_object_schema = state_object_schema
+
+        self.result_state_df_type = StructType([
+            StructField('properties', StringType()),
+            StructField('keyRowAsUnsafe', BinaryType()),
+            StructField('object', BinaryType()),
+            StructField('oldTimeoutTimestamp', LongType()),
+        ])
+
+        self.result_state_pdf_arrow_type = to_arrow_type(self.result_state_df_type)
+        self.soft_limit_bytes_per_batch = soft_limit_bytes_per_batch
+        self.min_data_count_for_sample = min_data_count_for_sample
+        self.soft_timeout_millis_purge_batch = soft_timeout_millis_purge_batch
+
+    def load_stream(self, stream):
+        import pyarrow as pa
+        import json
+        from itertools import groupby
+        from pyspark.sql.streaming.state import GroupStateImpl
+
+        def gen_data_and_state(batches):
+            state_for_current_group = None
+
+            for batch in batches:
+                batch_schema = batch.schema
+                data_schema = pa.schema([batch_schema[i] for i in range(0, len(batch_schema) - 1)])
+                state_schema = pa.schema([batch_schema[-1], ])
+
+                batch_columns = batch.columns
+                data_columns = batch_columns[0:-1]
+                state_column = batch_columns[-1]
+
+                data_batch = pa.RecordBatch.from_arrays(data_columns, schema=data_schema)
+                state_batch = pa.RecordBatch.from_arrays([state_column, ], schema=state_schema)
+
+                state_arrow = pa.Table.from_batches([state_batch]).itercolumns()
+                state_pandas = [self.arrow_to_pandas(c) for c in state_arrow][0]
+
+                for state_idx in range(0, len(state_pandas)):
+                    state_info_col = state_pandas.iloc[state_idx]
+
+                    if not state_info_col:
+                        # no more data with grouping key + state
+                        break
+
+                    state_info_col_properties = state_info_col['properties']
+                    state_info_col_key_row = state_info_col['keyRowAsUnsafe']
+                    state_info_col_object = state_info_col['object']
+
+                    data_start_offset = state_info_col['startOffset']
+                    num_data_rows = state_info_col['numRows']
+                    is_last_chunk = state_info_col['isLastChunk']
+
+                    state_properties = json.loads(state_info_col_properties)
+                    if state_info_col_object:
+                        state_object = self.pickleSer.loads(state_info_col_object)
+                    else:
+                        state_object = None
+                    state_properties["optionalValue"] = state_object
+
+                    if state_for_current_group:
+                        # use the state, we already have state for same group and there should be
+                        # some data in same group being processed earlier
+                        state = state_for_current_group
+                    else:
+                        # there is no state being stored for same group, construct one
+                        state = GroupStateImpl(keyAsUnsafe=state_info_col_key_row,
+                                               valueSchema=self.state_object_schema,
+                                               **state_properties)
+
+                    if is_last_chunk:
+                        # discard the state being cached for same group
+                        state_for_current_group = None
+                    elif not state_for_current_group:
+                        # there's no cached state but expected to have additional data in same group
+                        # cache the current state
+                        state_for_current_group = state
+
+                    data_batch_for_group = data_batch.slice(data_start_offset, num_data_rows)
+                    data_arrow = pa.Table.from_batches([data_batch_for_group]).itercolumns()
+
+                    data_pandas = [self.arrow_to_pandas(c) for c in data_arrow]
+
+                    # state info
+                    yield (data_pandas, state, )
+
+        batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
+
+        data_state_generator = gen_data_and_state(batches)
+
+        # state will be same object for same grouping key
+        for state, data in groupby(data_state_generator, key=lambda x: x[1]):
+            yield (data, state, )
+
+    def dump_stream(self, iterator, stream):
+        """
+        Override because Pandas UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
+        This should be sent after creating the first record batch so in case of an error, it can
+        be sent back to the JVM before the Arrow stream starts.
+        """
+
+        def construct_record_batch(pdfs, pdf_data_cnt, pdf_schema, state_pdfs, state_data_cnt):
+            """
+            Arrow RecordBatch requires all columns to have all same number of rows.
+            Insert empty data for state/data with less elements to compensate.
+            """
+
+            import pandas as pd
+            import pyarrow as pa
+
+            max_data_cnt = max(pdf_data_cnt, state_data_cnt)
+
+            empty_row_cnt_in_data = max_data_cnt - pdf_data_cnt
+            empty_row_cnt_in_state = max_data_cnt - state_data_cnt
+
+            empty_rows_pdf = pd.DataFrame(
+                dict.fromkeys(pa.schema(pdf_schema).names),
+                index=[x for x in range(0, empty_row_cnt_in_data)])
+            empty_rows_state = pd.DataFrame(
+                columns=['properties', 'keyRowAsUnsafe', 'object', 'oldTimeoutTimestamp'],
+                index=[x for x in range(0, empty_row_cnt_in_state)])
+
+            pdfs.append(empty_rows_pdf)
+            state_pdfs.append(empty_rows_state)
+
+            merged_pdf = pd.concat(pdfs, ignore_index=True)
+            merged_state_pdf = pd.concat(state_pdfs, ignore_index=True)
+
+            return self._create_batch([
+                (merged_pdf, pdf_schema),
+                (merged_state_pdf, self.result_state_pdf_arrow_type)])
+
+        def init_stream_yield_batches():
+            import pandas as pd
+
+            should_write_start_length = True
+
+            pdfs = []
+            state_pdfs = []
+            return_schema = None
+
+            pdf_data_cnt = 0
+            state_data_cnt = 0
+
+            sampled_data_size_per_row = 0
+
+            last_purged_time_ns = time.time_ns()
+
+            for data in iterator:
+                packaged_result = data[0]
+
+                pdf_iter = packaged_result[0][0]
+                state = packaged_result[0][1]
+                # this won't change across batches
+                return_schema = packaged_result[1]
+
+                for pdf in pdf_iter:
+                    if len(pdf) > 0:
+                        pdf_data_cnt += len(pdf)
+                        pdfs.append(pdf)
+
+                        if sampled_data_size_per_row == 0 and \
+                                pdf_data_cnt > self.min_data_count_for_sample:
+                            memory_usages = [p.memory_usage(deep=True).sum() for p in pdfs]
+                            sampled_data_size_per_row = sum(memory_usages) / pdf_data_cnt
+
+                        # This effectively works after the sampling has completed, size we multiply
+                        # by 0 if the sampling is still in progress.
+                        batch_over_limit_on_size = (sampled_data_size_per_row * pdf_data_cnt) >= \
+                            self.soft_limit_bytes_per_batch
+
+                        if batch_over_limit_on_size:
+                            batch = construct_record_batch(pdfs, pdf_data_cnt, return_schema,
+                                                           state_pdfs, state_data_cnt)
+
+                            pdfs = []
+                            state_pdfs = []
+                            pdf_data_cnt = 0
+                            state_data_cnt = 0
+                            last_purged_time_ns = time.time_ns()
+
+                            if should_write_start_length:
+                                write_int(SpecialLengths.START_ARROW_STREAM, stream)
+                                should_write_start_length = False
+
+                            yield batch
+
+                # pick up state for only last chunk as state should have been updated so far
+                state_properties = state.json().encode("utf-8")
+                state_key_row_as_binary = state._keyAsUnsafe
+                state_object = self.pickleSer.dumps(state._value_schema.toInternal(state._value))
+                state_old_timeout_timestamp = state.oldTimeoutTimestamp
+
+                state_dict = {
+                    'properties': [state_properties, ],
+                    'keyRowAsUnsafe': [state_key_row_as_binary, ],
+                    'object': [state_object, ],
+                    'oldTimeoutTimestamp': [state_old_timeout_timestamp, ],
+                }
+
+                state_pdf = pd.DataFrame.from_dict(state_dict)
+
+                state_pdfs.append(state_pdf)
+                state_data_cnt += 1
+
+                cur_time_ns = time.time_ns()
+                is_timed_out_on_purge = ((cur_time_ns - last_purged_time_ns) // 1000000) >= \
+                    self.soft_timeout_millis_purge_batch
+                if is_timed_out_on_purge:
+                    batch = construct_record_batch(pdfs, pdf_data_cnt, return_schema,
+                                                   state_pdfs, state_data_cnt)
+
+                    pdfs = []
+                    state_pdfs = []
+                    pdf_data_cnt = 0
+                    state_data_cnt = 0
+                    last_purged_time_ns = cur_time_ns
+
+                    if should_write_start_length:
+                        write_int(SpecialLengths.START_ARROW_STREAM, stream)
+                        should_write_start_length = False
+
+                    yield batch
+
+            # end of loop, we may have remaining data
+            if pdf_data_cnt > 0 or state_data_cnt > 0:
+                batch = construct_record_batch(pdfs, pdf_data_cnt, return_schema,
+                                               state_pdfs, state_data_cnt)
+
+                if should_write_start_length:
+                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
+
+                yield batch
+
+        return ArrowStreamSerializer.dump_stream(self, init_stream_yield_batches(), stream)
