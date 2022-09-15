@@ -54,12 +54,6 @@ class AWSRenewableCredentialsProvider
 
     // validity duration in milliseconds
     val duration: Long = STSSessionCredentialsProvider.DEFAULT_DURATION_SECONDS * 1000
-
-    override def toString: String =
-      s"""{
-         |accessKeyId: ${credentials.getAWSAccessKeyId},
-         |secretAccessKey: ${credentials.getAWSSecretKey},
-         |sessionToken: ${credentials.getSessionToken}
-         |}""".stripMargin
   }
+
 }
