@@ -52,9 +52,9 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_LIMIT_CLAUSE",
-  "errorSubClass" : "NON_INTEGER_TYPE",
+  "errorSubClass" : "NEGATIVE_LIMIT",
   "messageParameters" : {
-    "type" : "-1"
+    "value" : "-1"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -74,9 +74,9 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_LIMIT_CLAUSE",
-  "errorSubClass" : "NON_INTEGER_TYPE",
+  "errorSubClass" : "NEGATIVE_LIMIT",
   "messageParameters" : {
-    "type" : "-1"
+    "value" : "-1"
   },
   "queryContext" : [ {
     "objectType" : "",
