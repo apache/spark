@@ -216,4 +216,20 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       .withColumn("right_all", struct($"right.*"))
     checkAnswer(dfQuery, Row(1, "a", "b", Row(1, "a"), Row(1, "b")))
   }
+
+  test("SPARK-40429: Only set KeyGroupedPartitioning when the referenced column is in the output") {
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id bigint, data string) PARTITIONED BY (id)")
+      sql(s"INSERT INTO $tbl VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      checkAnswer(
+        spark.table(tbl).select("index", "_partition"),
+        Seq(Row(0, "3"), Row(0, "2"), Row(0, "1"))
+      )
+
+      checkAnswer(
+        spark.table(tbl).select("id", "index", "_partition"),
+        Seq(Row(3, 0, "3"), Row(2, 0, "2"), Row(1, 0, "1"))
+      )
+    }
+  }
 }
