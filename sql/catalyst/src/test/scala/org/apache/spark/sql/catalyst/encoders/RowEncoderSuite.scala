@@ -203,7 +203,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
           assert(e.getMessage.contains("cannot be represented as Decimal"))
         case e: RuntimeException =>
           assert(e.getCause.isInstanceOf[ArithmeticException])
-          if (SQLConf.get.getConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION) == "JDKBigDecimal") {
+          if (SQLConf.get.isDefaultDecimalImplementation) {
             assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
           } else {
             assert(e.getCause.getMessage.contains("BigInteger out of Int128 range"))
@@ -213,7 +213,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       val encoder = RowEncoder(schema).resolveAndBind()
-      if (SQLConf.get.getConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION) == "JDKBigDecimal") {
+      if (SQLConf.get.isDefaultDecimalImplementation) {
         assert(roundTrip(encoder, row).get(0) == null)
       } else {
         intercept[Exception] {
