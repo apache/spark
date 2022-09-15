@@ -97,14 +97,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "expression" : "\"a\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 32,
-    "stopIndex" : 41,
-    "fragment" : "group by 3"
-  } ]
+  }
 }
 
 
@@ -119,14 +112,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "expression" : "\"a\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 36,
-    "stopIndex" : 45,
-    "fragment" : "group by 3"
-  } ]
+  }
 }
 
 
@@ -367,14 +353,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "expression" : "\"b\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 32,
-    "stopIndex" : 44,
-    "fragment" : "group by a, 3"
-  } ]
+  }
 }
 
 
