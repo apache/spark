@@ -260,7 +260,7 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
       // We cannot store Long.MAX_VALUE as a Double without losing precision.
       // Here we simply convert the decimal to `BigInteger` and use the method
       // `longValueExact` to make sure the range check is accurate.
-      getAsJavaBigDecimal().toBigInteger.longValueExact()
+      getAsJavaBigInteger().longValueExact()
     } catch {
       case _: ArithmeticException =>
         throw QueryExecutionErrors.castingCauseOverflowError(
