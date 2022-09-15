@@ -1424,9 +1424,10 @@ class DataFrame(Frame, Generic[T]):
 
         Parameters
         ----------
-        method : {'pearson', 'spearman'}
+        method : {'pearson', 'spearman', 'kendall'}
             * pearson : standard correlation coefficient
             * spearman : Spearman rank correlation
+            * kendall : Kendall Tau correlation coefficient
         min_periods : int, optional
             Minimum number of observations required per pair of columns
             to have a valid result.
@@ -1435,11 +1436,20 @@ class DataFrame(Frame, Generic[T]):
 
         Returns
         -------
-        y : DataFrame
+        DataFrame
 
         See Also
         --------
+        DataFrame.corrwith
         Series.corr
+
+        Notes
+        -----
+        1. Pearson, Kendall and Spearman correlation are currently computed using pairwise
+           complete observations.
+
+        2. The complexity of Spearman correlation is O(#row * #row), if the dataset is too
+           large, sampling ahead of correlation computation is recommended.
 
         Examples
         --------
@@ -1455,16 +1465,13 @@ class DataFrame(Frame, Generic[T]):
         dogs  1.000000 -0.948683
         cats -0.948683  1.000000
 
-        Notes
-        -----
-        There are behavior differences between pandas-on-Spark and pandas.
-
-        * the `method` argument only accepts 'pearson', 'spearman'
+        >>> df.corr('kendall')
+                  dogs      cats
+        dogs  1.000000 -0.912871
+        cats -0.912871  1.000000
         """
         if method not in ["pearson", "spearman", "kendall"]:
             raise ValueError(f"Invalid method {method}")
-        if method == "kendall":
-            raise NotImplementedError("method doesn't support kendall for now")
         if min_periods is not None and not isinstance(min_periods, int):
             raise TypeError(f"Invalid min_periods type {type(min_periods).__name__}")
 
@@ -1537,86 +1544,195 @@ class DataFrame(Frame, Generic[T]):
             .otherwise(F.col(f"{tmp_tuple_col_name}.{tmp_value_2_col_name}"))
             .alias(tmp_value_2_col_name),
         )
+        not_null_cond = (
+            F.col(tmp_value_1_col_name).isNotNull() & F.col(tmp_value_2_col_name).isNotNull()
+        )
 
-        # convert values to avg ranks for spearman correlation
-        if method == "spearman":
-            tmp_row_number_col_name = verify_temp_column_name(sdf, "__tmp_row_number_col__")
-            tmp_dense_rank_col_name = verify_temp_column_name(sdf, "__tmp_dense_rank_col__")
-            window = Window.partitionBy(tmp_index_1_col_name, tmp_index_2_col_name)
+        tmp_count_col_name = verify_temp_column_name(sdf, "__tmp_count_col__")
+        tmp_corr_col_name = verify_temp_column_name(sdf, "__tmp_corr_col__")
+        if method in ["pearson", "spearman"]:
+            # convert values to avg ranks for spearman correlation
+            if method == "spearman":
+                tmp_row_number_col_name = verify_temp_column_name(sdf, "__tmp_row_number_col__")
+                tmp_dense_rank_col_name = verify_temp_column_name(sdf, "__tmp_dense_rank_col__")
+                window = Window.partitionBy(tmp_index_1_col_name, tmp_index_2_col_name)
 
-            # tmp_value_1_col_name: value -> avg rank
-            # for example:
-            # values:       3, 4, 5, 7, 7, 7, 9, 9, 10
-            # avg ranks:    1.0, 2.0, 3.0, 5.0, 5.0, 5.0, 7.5, 7.5, 9.0
-            sdf = (
-                sdf.withColumn(
-                    tmp_row_number_col_name,
-                    F.row_number().over(window.orderBy(F.asc_nulls_last(tmp_value_1_col_name))),
+                # tmp_value_1_col_name: value -> avg rank
+                # for example:
+                # values:       3, 4, 5, 7, 7, 7, 9, 9, 10
+                # avg ranks:    1.0, 2.0, 3.0, 5.0, 5.0, 5.0, 7.5, 7.5, 9.0
+                sdf = (
+                    sdf.withColumn(
+                        tmp_row_number_col_name,
+                        F.row_number().over(window.orderBy(F.asc_nulls_last(tmp_value_1_col_name))),
+                    )
+                    .withColumn(
+                        tmp_dense_rank_col_name,
+                        F.dense_rank().over(window.orderBy(F.asc_nulls_last(tmp_value_1_col_name))),
+                    )
+                    .withColumn(
+                        tmp_value_1_col_name,
+                        F.when(F.isnull(F.col(tmp_value_1_col_name)), F.lit(None)).otherwise(
+                            F.avg(tmp_row_number_col_name).over(
+                                window.orderBy(F.asc(tmp_dense_rank_col_name)).rangeBetween(0, 0)
+                            )
+                        ),
+                    )
                 )
-                .withColumn(
-                    tmp_dense_rank_col_name,
-                    F.dense_rank().over(window.orderBy(F.asc_nulls_last(tmp_value_1_col_name))),
+
+                # tmp_value_2_col_name: value -> avg rank
+                sdf = (
+                    sdf.withColumn(
+                        tmp_row_number_col_name,
+                        F.row_number().over(window.orderBy(F.asc_nulls_last(tmp_value_2_col_name))),
+                    )
+                    .withColumn(
+                        tmp_dense_rank_col_name,
+                        F.dense_rank().over(window.orderBy(F.asc_nulls_last(tmp_value_2_col_name))),
+                    )
+                    .withColumn(
+                        tmp_value_2_col_name,
+                        F.when(F.isnull(F.col(tmp_value_2_col_name)), F.lit(None)).otherwise(
+                            F.avg(tmp_row_number_col_name).over(
+                                window.orderBy(F.asc(tmp_dense_rank_col_name)).rangeBetween(0, 0)
+                            )
+                        ),
+                    )
                 )
-                .withColumn(
+
+                sdf = sdf.select(
+                    tmp_index_1_col_name,
+                    tmp_index_2_col_name,
                     tmp_value_1_col_name,
-                    F.when(F.isnull(F.col(tmp_value_1_col_name)), F.lit(None)).otherwise(
-                        F.avg(tmp_row_number_col_name).over(
-                            window.orderBy(F.asc(tmp_dense_rank_col_name)).rangeBetween(0, 0)
-                        )
-                    ),
+                    tmp_value_2_col_name,
                 )
+
+            # +-------------------+-------------------+----------------+-----------------+
+            # |__tmp_index_1_col__|__tmp_index_2_col__|__tmp_corr_col__|__tmp_count_col__|
+            # +-------------------+-------------------+----------------+-----------------+
+            # |                  2|                  2|            null|                1|
+            # |                  1|                  2|            null|                1|
+            # |                  1|                  1|             1.0|                2|
+            # |                  0|                  0|             1.0|                2|
+            # |                  0|                  1|            -1.0|                2|
+            # |                  0|                  2|            null|                1|
+            # +-------------------+-------------------+----------------+-----------------+
+            sdf = sdf.groupby(tmp_index_1_col_name, tmp_index_2_col_name).agg(
+                F.corr(tmp_value_1_col_name, tmp_value_2_col_name).alias(tmp_corr_col_name),
+                F.count(
+                    F.when(
+                        not_null_cond,
+                        1,
+                    )
+                ).alias(tmp_count_col_name),
             )
 
-            # tmp_value_2_col_name: value -> avg rank
+        else:
+            # kendall correlation
+            tmp_row_number_12_col_name = verify_temp_column_name(sdf, "__tmp_row_number_12_col__")
+            sdf = sdf.withColumn(
+                tmp_row_number_12_col_name,
+                F.row_number().over(
+                    Window.partitionBy(tmp_index_1_col_name, tmp_index_2_col_name).orderBy(
+                        F.asc_nulls_last(tmp_value_1_col_name),
+                        F.asc_nulls_last(tmp_value_2_col_name),
+                    )
+                ),
+            )
+
+            # drop nulls but make sure each partition contains at least one row
+            sdf = sdf.where(not_null_cond | (F.col(tmp_row_number_12_col_name) == 1))
+
+            tmp_value_x_col_name = verify_temp_column_name(sdf, "__tmp_value_x_col__")
+            tmp_value_y_col_name = verify_temp_column_name(sdf, "__tmp_value_y_col__")
+            tmp_row_number_xy_col_name = verify_temp_column_name(sdf, "__tmp_row_number_xy_col__")
+            sdf2 = sdf.select(
+                F.col(tmp_index_1_col_name),
+                F.col(tmp_index_2_col_name),
+                F.col(tmp_value_1_col_name).alias(tmp_value_x_col_name),
+                F.col(tmp_value_2_col_name).alias(tmp_value_y_col_name),
+                F.col(tmp_row_number_12_col_name).alias(tmp_row_number_xy_col_name),
+            )
+
+            sdf = sdf.join(sdf2, [tmp_index_1_col_name, tmp_index_2_col_name], "inner").where(
+                F.col(tmp_row_number_12_col_name) <= F.col(tmp_row_number_xy_col_name)
+            )
+
+            # compute P, Q, T, U in tau_b = (P - Q) / sqrt((P + Q + T) * (P + Q + U))
+            # see https://github.com/scipy/scipy/blob/v1.9.1/scipy/stats/_stats_py.py#L5015-L5222
+            tmp_tau_b_p_col_name = verify_temp_column_name(sdf, "__tmp_tau_b_p_col__")
+            tmp_tau_b_q_col_name = verify_temp_column_name(sdf, "__tmp_tau_b_q_col__")
+            tmp_tau_b_t_col_name = verify_temp_column_name(sdf, "__tmp_tau_b_t_col__")
+            tmp_tau_b_u_col_name = verify_temp_column_name(sdf, "__tmp_tau_b_u_col__")
+
+            pair_cond = not_null_cond & (
+                F.col(tmp_row_number_12_col_name) < F.col(tmp_row_number_xy_col_name)
+            )
+
+            p_cond = (
+                (F.col(tmp_value_1_col_name) < F.col(tmp_value_x_col_name))
+                & (F.col(tmp_value_2_col_name) < F.col(tmp_value_y_col_name))
+            ) | (
+                (F.col(tmp_value_1_col_name) > F.col(tmp_value_x_col_name))
+                & (F.col(tmp_value_2_col_name) > F.col(tmp_value_y_col_name))
+            )
+            q_cond = (
+                (F.col(tmp_value_1_col_name) < F.col(tmp_value_x_col_name))
+                & (F.col(tmp_value_2_col_name) > F.col(tmp_value_y_col_name))
+            ) | (
+                (F.col(tmp_value_1_col_name) > F.col(tmp_value_x_col_name))
+                & (F.col(tmp_value_2_col_name) < F.col(tmp_value_y_col_name))
+            )
+            t_cond = (F.col(tmp_value_1_col_name) == F.col(tmp_value_x_col_name)) & (
+                F.col(tmp_value_2_col_name) != F.col(tmp_value_y_col_name)
+            )
+            u_cond = (F.col(tmp_value_1_col_name) != F.col(tmp_value_x_col_name)) & (
+                F.col(tmp_value_2_col_name) == F.col(tmp_value_y_col_name)
+            )
+
             sdf = (
-                sdf.withColumn(
-                    tmp_row_number_col_name,
-                    F.row_number().over(window.orderBy(F.asc_nulls_last(tmp_value_2_col_name))),
+                sdf.groupby(tmp_index_1_col_name, tmp_index_2_col_name)
+                .agg(
+                    F.count(F.when(pair_cond & p_cond, 1)).alias(tmp_tau_b_p_col_name),
+                    F.count(F.when(pair_cond & q_cond, 1)).alias(tmp_tau_b_q_col_name),
+                    F.count(F.when(pair_cond & t_cond, 1)).alias(tmp_tau_b_t_col_name),
+                    F.count(F.when(pair_cond & u_cond, 1)).alias(tmp_tau_b_u_col_name),
+                    F.max(
+                        F.when(not_null_cond, F.col(tmp_row_number_xy_col_name)).otherwise(F.lit(0))
+                    ).alias(tmp_count_col_name),
                 )
                 .withColumn(
-                    tmp_dense_rank_col_name,
-                    F.dense_rank().over(window.orderBy(F.asc_nulls_last(tmp_value_2_col_name))),
-                )
-                .withColumn(
-                    tmp_value_2_col_name,
-                    F.when(F.isnull(F.col(tmp_value_2_col_name)), F.lit(None)).otherwise(
-                        F.avg(tmp_row_number_col_name).over(
-                            window.orderBy(F.asc(tmp_dense_rank_col_name)).rangeBetween(0, 0)
+                    tmp_corr_col_name,
+                    F.when(
+                        F.col(tmp_index_1_col_name) == F.col(tmp_index_2_col_name), F.lit(1.0)
+                    ).otherwise(
+                        (F.col(tmp_tau_b_p_col_name) - F.col(tmp_tau_b_q_col_name))
+                        / F.sqrt(
+                            (
+                                (
+                                    F.col(tmp_tau_b_p_col_name)
+                                    + F.col(tmp_tau_b_q_col_name)
+                                    + (F.col(tmp_tau_b_t_col_name))
+                                )
+                            )
+                            * (
+                                (
+                                    F.col(tmp_tau_b_p_col_name)
+                                    + F.col(tmp_tau_b_q_col_name)
+                                    + (F.col(tmp_tau_b_u_col_name))
+                                )
+                            )
                         )
                     ),
                 )
             )
 
             sdf = sdf.select(
-                tmp_index_1_col_name,
-                tmp_index_2_col_name,
-                tmp_value_1_col_name,
-                tmp_value_2_col_name,
+                F.col(tmp_index_1_col_name),
+                F.col(tmp_index_2_col_name),
+                F.col(tmp_corr_col_name),
+                F.col(tmp_count_col_name),
             )
-
-        # +-------------------+-------------------+----------------+-----------------+
-        # |__tmp_index_1_col__|__tmp_index_2_col__|__tmp_corr_col__|__tmp_count_col__|
-        # +-------------------+-------------------+----------------+-----------------+
-        # |                  2|                  2|            null|                1|
-        # |                  1|                  2|            null|                1|
-        # |                  1|                  1|             1.0|                2|
-        # |                  0|                  0|             1.0|                2|
-        # |                  0|                  1|            -1.0|                2|
-        # |                  0|                  2|            null|                1|
-        # +-------------------+-------------------+----------------+-----------------+
-        tmp_corr_col_name = verify_temp_column_name(sdf, "__tmp_corr_col__")
-        tmp_count_col_name = verify_temp_column_name(sdf, "__tmp_count_col__")
-
-        sdf = sdf.groupby(tmp_index_1_col_name, tmp_index_2_col_name).agg(
-            F.corr(tmp_value_1_col_name, tmp_value_2_col_name).alias(tmp_corr_col_name),
-            F.count(
-                F.when(
-                    F.col(tmp_value_1_col_name).isNotNull()
-                    & F.col(tmp_value_2_col_name).isNotNull(),
-                    1,
-                )
-            ).alias(tmp_count_col_name),
-        )
 
         # +-------------------+-------------------+----------------+
         # |__tmp_index_1_col__|__tmp_index_2_col__|__tmp_corr_col__|
