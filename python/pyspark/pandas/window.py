@@ -224,10 +224,15 @@ class Rolling(RollingLike[FrameLike]):
 
         Returns
         -------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.count : Count of the full Series.
-        DataFrame.count : Count of the full DataFrame.
+        Series or DataFrame
+            Return type is the same as the original object with `np.float64` dtype.
+
+        See Also
+        --------
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.count : Count of the full Series.
+        pyspark.pandas.DataFrame.count : Count of the full DataFrame.
 
         Examples
         --------
@@ -279,10 +284,10 @@ class Rolling(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.sum : Reducing sum for Series.
-        DataFrame.sum : Reducing sum for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.sum : Reducing sum for Series.
+        pyspark.pandas.DataFrame.sum : Reducing sum for DataFrame.
 
         Examples
         --------
@@ -357,10 +362,10 @@ class Rolling(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with a Series.
-        DataFrame.rolling : Calling object with a DataFrame.
-        Series.min : Similar method for Series.
-        DataFrame.min : Similar method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with a Series.
+        pyspark.pandas.DataFrame.rolling : Calling object with a DataFrame.
+        pyspark.pandas.Series.min : Similar method for Series.
+        pyspark.pandas.DataFrame.min : Similar method for DataFrame.
 
         Examples
         --------
@@ -434,10 +439,10 @@ class Rolling(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Series rolling.
-        DataFrame.rolling : DataFrame rolling.
-        Series.max : Similar method for Series.
-        DataFrame.max : Similar method for DataFrame.
+        pyspark.pandas.Series.rolling : Series rolling.
+        pyspark.pandas.DataFrame.rolling : DataFrame rolling.
+        pyspark.pandas.Series.max : Similar method for Series.
+        pyspark.pandas.DataFrame.max : Similar method for DataFrame.
 
         Examples
         --------
@@ -512,10 +517,10 @@ class Rolling(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.mean : Equivalent method for Series.
-        DataFrame.mean : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.mean : Equivalent method for Series.
+        pyspark.pandas.DataFrame.mean : Equivalent method for DataFrame.
 
         Examples
         --------
@@ -684,10 +689,10 @@ class Rolling(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.std : Equivalent method for Series.
-        DataFrame.std : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.std : Equivalent method for Series.
+        pyspark.pandas.DataFrame.std : Equivalent method for DataFrame.
         numpy.std : Equivalent method for Numpy array.
 
         Examples
@@ -784,10 +789,10 @@ class Rolling(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.std : Equivalent method for Series.
-        DataFrame.std : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.std : Equivalent method for Series.
+        pyspark.pandas.DataFrame.std : Equivalent method for DataFrame.
         numpy.std : Equivalent method for Numpy array.
 
         Examples
@@ -836,10 +841,10 @@ class Rolling(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.var : Equivalent method for Series.
-        DataFrame.var : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.var : Equivalent method for Series.
+        pyspark.pandas.DataFrame.var : Equivalent method for DataFrame.
         numpy.var : Equivalent method for Numpy array.
 
         Examples
@@ -985,10 +990,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.count : Count of the full Series.
-        DataFrame.count : Count of the full DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.count : Count of the full Series.
+        pyspark.pandas.DataFrame.count : Count of the full DataFrame.
 
         Examples
         --------
@@ -1039,10 +1044,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.sum : Sum of the full Series.
-        DataFrame.sum : Sum of the full DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.sum : Sum of the full Series.
+        pyspark.pandas.DataFrame.sum : Sum of the full DataFrame.
 
         Examples
         --------
@@ -1093,10 +1098,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.min : Min of the full Series.
-        DataFrame.min : Min of the full DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.min : Min of the full Series.
+        pyspark.pandas.DataFrame.min : Min of the full DataFrame.
 
         Examples
         --------
@@ -1147,10 +1152,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.max : Max of the full Series.
-        DataFrame.max : Max of the full DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.max : Max of the full Series.
+        pyspark.pandas.DataFrame.max : Max of the full DataFrame.
 
         Examples
         --------
@@ -1201,10 +1206,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.mean : Mean of the full Series.
-        DataFrame.mean : Mean of the full DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.mean : Mean of the full Series.
+        pyspark.pandas.DataFrame.mean : Mean of the full DataFrame.
 
         Examples
         --------
@@ -1325,10 +1330,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.std : Equivalent method for Series.
-        DataFrame.std : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.std : Equivalent method for Series.
+        pyspark.pandas.DataFrame.std : Equivalent method for DataFrame.
         numpy.std : Equivalent method for Numpy array.
         """
         return super().std()
@@ -1344,10 +1349,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.var : Equivalent method for Series.
-        DataFrame.var : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.var : Equivalent method for Series.
+        pyspark.pandas.DataFrame.var : Equivalent method for DataFrame.
         numpy.var : Equivalent method for Numpy array.
         """
         return super().var()
@@ -1363,10 +1368,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.std : Equivalent method for Series.
-        DataFrame.std : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.std : Equivalent method for Series.
+        pyspark.pandas.DataFrame.std : Equivalent method for DataFrame.
         numpy.std : Equivalent method for Numpy array.
         """
         return super().skew()
@@ -1382,10 +1387,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.var : Equivalent method for Series.
-        DataFrame.var : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.var : Equivalent method for Series.
+        pyspark.pandas.DataFrame.var : Equivalent method for DataFrame.
         numpy.var : Equivalent method for Numpy array.
         """
         return super().kurt()
@@ -1458,10 +1463,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.count : Count of the full Series.
-        DataFrame.count : Count of the full DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.count : Count of the full Series.
+        pyspark.pandas.DataFrame.count : Count of the full DataFrame.
 
         Examples
         --------
@@ -1499,10 +1504,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.sum : Reducing sum for Series.
-        DataFrame.sum : Reducing sum for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.sum : Reducing sum for Series.
+        pyspark.pandas.DataFrame.sum : Reducing sum for DataFrame.
 
         Examples
         --------
@@ -1561,10 +1566,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with a Series.
-        DataFrame.expanding : Calling object with a DataFrame.
-        Series.min : Similar method for Series.
-        DataFrame.min : Similar method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with a Series.
+        pyspark.pandas.DataFrame.expanding : Calling object with a DataFrame.
+        pyspark.pandas.Series.min : Similar method for Series.
+        pyspark.pandas.DataFrame.min : Similar method for DataFrame.
 
         Examples
         --------
@@ -1597,10 +1602,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.max : Similar method for Series.
-        DataFrame.max : Similar method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.max : Similar method for Series.
+        pyspark.pandas.DataFrame.max : Similar method for DataFrame.
 
         Examples
         --------
@@ -1634,10 +1639,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.mean : Equivalent method for Series.
-        DataFrame.mean : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.mean : Equivalent method for Series.
+        pyspark.pandas.DataFrame.mean : Equivalent method for DataFrame.
 
         Examples
         --------
@@ -1737,10 +1742,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.std : Equivalent method for Series.
-        DataFrame.std : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.std : Equivalent method for Series.
+        pyspark.pandas.DataFrame.std : Equivalent method for DataFrame.
         numpy.std : Equivalent method for Numpy array.
 
         Examples
@@ -1787,10 +1792,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.var : Equivalent method for Series.
-        DataFrame.var : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.var : Equivalent method for Series.
+        pyspark.pandas.DataFrame.var : Equivalent method for DataFrame.
         numpy.var : Equivalent method for Numpy array.
 
         Examples
@@ -1837,10 +1842,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.std : Equivalent method for Series.
-        DataFrame.std : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.std : Equivalent method for Series.
+        pyspark.pandas.DataFrame.std : Equivalent method for DataFrame.
         numpy.std : Equivalent method for Numpy array.
 
         Examples
@@ -1889,10 +1894,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.var : Equivalent method for Series.
-        DataFrame.var : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.var : Equivalent method for Series.
+        pyspark.pandas.DataFrame.var : Equivalent method for DataFrame.
         numpy.var : Equivalent method for Numpy array.
 
         Examples
@@ -1959,10 +1964,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.count : Count of the full Series.
-        DataFrame.count : Count of the full DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.count : Count of the full Series.
+        pyspark.pandas.DataFrame.count : Count of the full DataFrame.
 
         Examples
         --------
@@ -2013,10 +2018,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.sum : Reducing sum for Series.
-        DataFrame.sum : Reducing sum for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.sum : Reducing sum for Series.
+        pyspark.pandas.DataFrame.sum : Reducing sum for DataFrame.
 
         Examples
         --------
@@ -2067,10 +2072,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with a Series.
-        DataFrame.expanding : Calling object with a DataFrame.
-        Series.min : Similar method for Series.
-        DataFrame.min : Similar method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with a Series.
+        pyspark.pandas.DataFrame.expanding : Calling object with a DataFrame.
+        pyspark.pandas.Series.min : Similar method for Series.
+        pyspark.pandas.DataFrame.min : Similar method for DataFrame.
 
         Examples
         --------
@@ -2120,10 +2125,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.max : Similar method for Series.
-        DataFrame.max : Similar method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.max : Similar method for Series.
+        pyspark.pandas.DataFrame.max : Similar method for DataFrame.
 
         Examples
         --------
@@ -2174,10 +2179,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.mean : Equivalent method for Series.
-        DataFrame.mean : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.mean : Equivalent method for Series.
+        pyspark.pandas.DataFrame.mean : Equivalent method for DataFrame.
 
         Examples
         --------
@@ -2299,10 +2304,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding: Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.std : Equivalent method for Series.
-        DataFrame.std : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding: Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.std : Equivalent method for Series.
+        pyspark.pandas.DataFrame.std : Equivalent method for DataFrame.
         numpy.std : Equivalent method for Numpy array.
         """
         return super().std()
@@ -2318,10 +2323,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.var : Equivalent method for Series.
-        DataFrame.var : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.var : Equivalent method for Series.
+        pyspark.pandas.DataFrame.var : Equivalent method for DataFrame.
         numpy.var : Equivalent method for Numpy array.
         """
         return super().var()
@@ -2338,10 +2343,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding: Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.std : Equivalent method for Series.
-        DataFrame.std : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding: Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.std : Equivalent method for Series.
+        pyspark.pandas.DataFrame.std : Equivalent method for DataFrame.
         numpy.std : Equivalent method for Numpy array.
         """
         return super().skew()
@@ -2357,10 +2362,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.var : Equivalent method for Series.
-        DataFrame.var : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.var : Equivalent method for Series.
+        pyspark.pandas.DataFrame.var : Equivalent method for DataFrame.
         numpy.var : Equivalent method for Numpy array.
         """
         return super().kurt()
@@ -2512,10 +2517,10 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.mean : Equivalent method for Series.
-        DataFrame.mean : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.mean : Equivalent method for Series.
+        pyspark.pandas.DataFrame.mean : Equivalent method for DataFrame.
 
         Examples
         --------
@@ -2613,10 +2618,10 @@ class ExponentialMovingGroupby(ExponentialMovingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.mean : Equivalent method for Series.
-        DataFrame.mean : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.mean : Equivalent method for Series.
+        pyspark.pandas.DataFrame.mean : Equivalent method for DataFrame.
 
         Examples
         --------
