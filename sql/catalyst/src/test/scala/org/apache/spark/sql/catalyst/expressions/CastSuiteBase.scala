@@ -27,7 +27,7 @@ import scala.collection.parallel.immutable.ParVector
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -66,21 +66,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(Literal.create(null, from), to, UTC_OPT), null)
   }
 
-  protected def verifyCastFailure(c: Cast, optionalExpectedMsg: Option[String] = None): Unit = {
+  protected def verifyCastFailure(c: Cast, expected: DataTypeMismatch): Unit = {
     val typeCheckResult = c.checkInputDataTypes()
     assert(typeCheckResult.isFailure)
-    assert(typeCheckResult.isInstanceOf[TypeCheckFailure])
-    val message = typeCheckResult.asInstanceOf[TypeCheckFailure].message
-
-    if (optionalExpectedMsg.isDefined) {
-      assert(message.contains(optionalExpectedMsg.get))
-    } else {
-      assert("cannot cast [a-zA-Z]+ to [a-zA-Z]+".r.findFirstIn(message).isDefined)
-      if (evalMode == EvalMode.ANSI) {
-        assert(message.contains("with ANSI mode on"))
-        assert(message.contains(s"set ${SQLConf.ANSI_ENABLED.key} as false"))
-      }
-    }
+    assert(typeCheckResult.isInstanceOf[DataTypeMismatch])
+    val mismatch = typeCheckResult.asInstanceOf[DataTypeMismatch]
+    assert(mismatch === expected)
   }
 
   test("null cast") {
@@ -936,13 +927,19 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   test("disallow type conversions between Numeric types and Timestamp without time zone type") {
     import DataTypeTestUtils.numericTypes
     checkInvalidCastFromNumericType(TimestampNTZType)
-    var errorMsg = "cannot cast bigint to timestamp_ntz"
-    verifyCastFailure(cast(Literal(0L), TimestampNTZType), Some(errorMsg))
+    verifyCastFailure(
+      cast(Literal(0L), TimestampNTZType),
+      DataTypeMismatch(
+        "CAST_WITHOUT_SUGGESTION",
+        Map("srcType" -> "\"BIGINT\"", "targetType" -> "\"TIMESTAMP_NTZ\"")))
 
     val timestampNTZLiteral = Literal.create(LocalDateTime.now(), TimestampNTZType)
-    errorMsg = "cannot cast timestamp_ntz to"
     numericTypes.foreach { numericType =>
-      verifyCastFailure(cast(timestampNTZLiteral, numericType), Some(errorMsg))
+      verifyCastFailure(
+        cast(timestampNTZLiteral, numericType),
+        DataTypeMismatch(
+          "CAST_WITHOUT_SUGGESTION",
+          Map("srcType" -> "\"TIMESTAMP_NTZ\"", "targetType" -> s""""${numericType.sql}"""")))
     }
   }
 
