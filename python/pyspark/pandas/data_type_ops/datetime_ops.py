@@ -24,7 +24,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark import SparkContext
-from pyspark.sql import Column
+from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
     BooleanType,
     LongType,
