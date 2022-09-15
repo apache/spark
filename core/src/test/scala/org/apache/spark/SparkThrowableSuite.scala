@@ -161,7 +161,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       getMessage("UNRESOLVED_COLUMN", "WITHOUT_SUGGESTION", Map.empty[String, String])
     }
     assert(e.getErrorClass === "INTERNAL_ERROR")
-    assert(e.getMessageParameters.head.contains("Undefined an error message parameter"))
+    assert(e.getMessageParameters().get("message").contains("Undefined an error message parameter"))
 
     // Does not fail with too many args (expects 0 args)
     assert(getMessage("DIVIDE_BY_ZERO", null, Map("config" -> "foo", "a" -> "bar")) ==

@@ -607,7 +607,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         -------
         `quantile` in pandas-on-Spark are using distributed percentile approximation
         algorithm unlike pandas, the result might different with pandas, also
-        `interpolation` parameters are not supported yet.
+        `interpolation` parameter is not supported yet.
 
         See Also
         --------
