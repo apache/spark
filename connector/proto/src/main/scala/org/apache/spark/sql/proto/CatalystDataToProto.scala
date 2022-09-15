@@ -23,9 +23,9 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
 private[proto] case class CatalystDataToProto(
-                                             child: Expression,
-                                             descFilePath: String,
-                                             messageName: String) extends UnaryExpression {
+                                               child: Expression,
+                                               descFilePath: String,
+                                               messageName: String) extends UnaryExpression {
 
   override def dataType: DataType = BinaryType
 

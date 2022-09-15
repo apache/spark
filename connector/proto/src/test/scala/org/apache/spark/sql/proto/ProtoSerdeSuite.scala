@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.proto
 
-import com.google.protobuf.DynamicMessage
 import com.google.protobuf.Descriptors.Descriptor
+import com.google.protobuf.DynamicMessage
+
 import org.apache.spark.sql.catalyst.NoopFilters
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.CORRECTED
@@ -31,8 +32,10 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
  * with a more specific focus on those classes.
  */
 class ProtoSerdeSuite extends SharedSparkSession {
-  import ProtoSerdeSuite._
+
   import ProtoSerdeSuite.MatchType._
+  import ProtoSerdeSuite._
+
   val testFileDesc = testFile("protobuf/proto_serde_suite.desc").replace("file:/", "/")
 
   test("Test basic conversion") {
@@ -41,10 +44,12 @@ class ProtoSerdeSuite extends SharedSparkSession {
         case BY_NAME => ("foo", "bar")
         case BY_POSITION => ("NOTfoo", "NOTbar")
       }
-      val  protoFile = ProtoUtils.buildDescriptor(testFileDesc, "CleanMessage")
+      val protoFile = ProtoUtils.buildDescriptor(testFileDesc, "CleanMessage")
 
-      val dynamicMessageFoo = DynamicMessage.newBuilder(protoFile.getFile.findMessageTypeByName("Foo")).setField(
-          protoFile.getFile.findMessageTypeByName("Foo").findFieldByName("bar"), 10902).build()
+      val dynamicMessageFoo = DynamicMessage.newBuilder(
+        protoFile.getFile.findMessageTypeByName("Foo")).setField(
+        protoFile.getFile.findMessageTypeByName("Foo").findFieldByName("bar"),
+        10902).build()
 
       val dynamicMessage = DynamicMessage.newBuilder(protoFile)
         .setField(protoFile.findFieldByName("foo"), dynamicMessageFoo).build()
@@ -62,7 +67,9 @@ class ProtoSerdeSuite extends SharedSparkSession {
     withFieldMatchType { fieldMatch =>
       assertFailedConversionMessage(protoFile, Deserializer, fieldMatch,
         "Cannot convert Proto field 'foo' to SQL field 'foo' because schema is incompatible " +
-          s"""(protoType = org.apache.spark.sql.proto.MissMatchTypeInRoot.foo LABEL_OPTIONAL LONG INT64, sqlType = ${CATALYST_STRUCT.head.dataType.sql})""")
+          s"""(protoType = org.apache.spark.sql.proto.MissMatchTypeInRoot.foo
+             | LABEL_OPTIONAL LONG INT64, sqlType = ${CATALYST_STRUCT.head.dataType.sql})"""
+            .stripMargin)
 
       assertFailedConversionMessage(protoFile, Serializer, fieldMatch,
         s"Cannot convert SQL field 'foo' to Proto field 'foo' because schema is incompatible " +
@@ -85,7 +92,8 @@ class ProtoSerdeSuite extends SharedSparkSession {
       "Cannot find field 'foo.bar' in Proto schema",
       nonnullCatalyst)
     assertFailedConversionMessage(protoFile, Deserializer, BY_POSITION,
-      "Cannot find field at position 1 of field 'foo' from Proto schema (using positional matching)",
+      "Cannot find field at position 1 of field 'foo' from Proto schema (using positional" +
+        " matching)",
       extraNonnullCatalyst)
 
     // serialize fails whether or not 'bar' is nullable
@@ -93,7 +101,8 @@ class ProtoSerdeSuite extends SharedSparkSession {
     assertFailedConversionMessage(protoFile, Serializer, BY_NAME, byNameMsg)
     assertFailedConversionMessage(protoFile, Serializer, BY_NAME, byNameMsg, nonnullCatalyst)
     assertFailedConversionMessage(protoFile, Serializer, BY_POSITION,
-      "Cannot find field at position 1 of field 'foo' from Proto schema (using positional matching)",
+      "Cannot find field at position 1 of field 'foo' from Proto schema (using positional" +
+        " matching)",
       extraNonnullCatalyst)
   }
 
@@ -104,7 +113,8 @@ class ProtoSerdeSuite extends SharedSparkSession {
     withFieldMatchType { fieldMatch =>
       assertFailedConversionMessage(protoFile, Deserializer, fieldMatch,
         "Cannot convert Proto field 'top.foo.bar' to SQL field 'top.foo.bar' because schema " +
-          """is incompatible (protoType = org.apache.spark.sql.proto.TypeMiss.bar LABEL_OPTIONAL LONG INT64, sqlType = INT)""",
+          """is incompatible (protoType = org.apache.spark.sql.proto.TypeMiss.bar
+            | LABEL_OPTIONAL LONG INT64, sqlType = INT)""".stripMargin,
         catalyst)
 
       assertFailedConversionMessage(protoFile, Serializer, fieldMatch,
@@ -124,7 +134,8 @@ class ProtoSerdeSuite extends SharedSparkSession {
       "Found field 'boo' at position 1 of top-level record from Proto schema but there is no " +
         "match in the SQL schema at top-level record (using positional matching)")
 
-    // deserializing should work regardless of whether the extra field is missing in SQL Schema or not
+    /* deserializing should work regardless of whether the extra field is missing
+     in SQL Schema or not */
     withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoFile, _))
     withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoFile, _))
 
@@ -138,7 +149,8 @@ class ProtoSerdeSuite extends SharedSparkSession {
       s"Found field 'baz' at position 1 of field 'foo' from Proto schema but there is no match " +
         s"in the SQL schema at field 'foo' (using positional matching)")
 
-    // deserializing should work regardless of whether the extra field is missing in SQL Schema or not
+    /* deserializing should work regardless of whether the extra field is missing
+      in SQL Schema or not */
     withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoNestedFile, _))
     withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoNestedFile, _))
   }
@@ -194,6 +206,7 @@ object ProtoSerdeSuite {
   }
 
   import MatchType._
+
   /**
    * Specifier for type of serde to be used for easy creation of tests that do both
    * serialization and deserialization.
@@ -201,17 +214,15 @@ object ProtoSerdeSuite {
   private sealed trait SerdeFactory[T] {
     def create(sqlSchema: StructType, descriptor: Descriptor, fieldMatchType: MatchType): T
   }
+
   private object Serializer extends SerdeFactory[ProtoSerializer] {
-    override def create(sql: StructType, descriptor: Descriptor, matchType: MatchType): ProtoSerializer =
-      new ProtoSerializer(sql, descriptor, false, isPositional(matchType))
+    override def create(sql: StructType, descriptor: Descriptor, matchType: MatchType):
+    ProtoSerializer = new ProtoSerializer(sql, descriptor, false, isPositional(matchType))
   }
+
   private object Deserializer extends SerdeFactory[ProtoDeserializer] {
-    override def create(sql: StructType, descriptor: Descriptor, matchType: MatchType): ProtoDeserializer =
-      new ProtoDeserializer(
-        descriptor,
-        sql,
-        isPositional(matchType),
-        RebaseSpec(CORRECTED),
-        new NoopFilters)
+    override def create(sql: StructType, descriptor: Descriptor, matchType: MatchType):
+    ProtoDeserializer = new ProtoDeserializer( descriptor, sql, isPositional(matchType),
+        RebaseSpec(CORRECTED), new NoopFilters)
   }
 }

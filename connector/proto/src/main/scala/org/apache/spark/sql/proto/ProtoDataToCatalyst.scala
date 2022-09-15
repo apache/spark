@@ -75,7 +75,7 @@ private[proto] case class ProtoDataToCatalyst(child: Expression, descFilePath: S
   @transient private lazy val nullResultRow: Any = dataType match {
     case st: StructType =>
       val resultRow = new SpecificInternalRow(st.map(_.dataType))
-      for(i <- 0 until st.length) {
+      for (i <- 0 until st.length) {
         resultRow.setNullAt(i)
       }
       resultRow
@@ -96,6 +96,7 @@ private[proto] case class ProtoDataToCatalyst(child: Expression, descFilePath: S
         throw new AnalysisException(unacceptableModeMessage(parseMode.name))
     }
   }
+
   override def nullSafeEval(input: Any): Any = {
     val binary = input.asInstanceOf[Array[Byte]]
     try {

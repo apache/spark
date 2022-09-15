@@ -54,7 +54,8 @@ private[sql] class ProtoSerializer(
       }
     } catch {
       case ise: IncompatibleSchemaException => throw new IncompatibleSchemaException(
-        s"Cannot convert SQL type ${rootCatalystType.sql} to Proto type ${rootProtoType.getName}.", ise)
+        s"Cannot convert SQL type ${rootCatalystType.sql} to Proto type " +
+          s"${rootProtoType.getName}.", ise)
     }
     if (nullable) {
       (data: Any) =>

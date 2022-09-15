@@ -21,7 +21,9 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.Column
 
+// scalastyle:off: object.name
 object functions {
+// scalastyle:on: object.name
 
   /**
    * Converts a binary column of Proto format into its corresponding catalyst value.
@@ -30,13 +32,14 @@ object functions {
    * To deserialize the data with a compatible and evolved schema, the expected Proto schema can be
    * set via the option protoSchema.
    *
-   * @param data               the binary column.
-   * @param descriptorFilePath the proto schema in Message GeneratedMessageV3 format.
-   * @param messageName        the proto MessageName to look for in descriptorFile.
+   * @param data         the binary column.
+   * @param descFilePath the proto schema in Message GeneratedMessageV3 format.
+   * @param messageName  the proto MessageName to look for in descriptorFile.
    * @since 3.4.0
    */
   @Experimental
-  def from_proto(data: Column, descFilePath: String, messageName: String, options: java.util.Map[String, String]): Column = {
+  def from_proto(data: Column, descFilePath: String, messageName: String,
+                 options: java.util.Map[String, String]): Column = {
     new Column(ProtoDataToCatalyst(data.expr, descFilePath, messageName, options.asScala.toMap))
   }
 
@@ -47,9 +50,9 @@ object functions {
    * To deserialize the data with a compatible and evolved schema, the expected Proto schema can be
    * set via the option protoSchema.
    *
-   * @param data            the binary column.
-   * @param descriptorFilePath the proto schema in Message GeneratedMessageV3 format.
-   * @param messageName   the proto MessageName to look for in descriptorFile.
+   * @param data         the binary column.
+   * @param descFilePath the proto schema in Message GeneratedMessageV3 format.
+   * @param messageName  the proto MessageName to look for in descriptorFile.
    * @since 3.4.0
    */
   @Experimental
@@ -60,7 +63,9 @@ object functions {
   /**
    * Converts a column into binary of proto format.
    *
-   * @param data the data column.
+   * @param data        the data column.
+   * @param descFilePath the proto schema in Message GeneratedMessageV3 format.
+   * @param messageName the proto MessageName to look for in descriptorFile.
    * @since 3.4.0
    */
   @Experimental

@@ -29,15 +29,17 @@ import org.apache.spark.sql.types._
 @DeveloperApi
 object SchemaConverters {
   /**
-    * Internal wrapper for SQL data type and nullability.
-    * @since 3.4.0
-    */
+   * Internal wrapper for SQL data type and nullability.
+   *
+   * @since 3.4.0
+   */
   case class SchemaType(dataType: DataType, nullable: Boolean)
 
   /**
-    * Converts an Proto schema to a corresponding Spark SQL schema.
-    * @since 3.4.0
-    */
+   * Converts an Proto schema to a corresponding Spark SQL schema.
+   *
+   * @since 3.4.0
+   */
   def toSqlType(protoSchema: Descriptor): SchemaType = {
     toSqlTypeHelper(protoSchema)
   }
@@ -65,7 +67,7 @@ object SchemaConverters {
           .map(StructType.apply)
 
     }
-    dataType.map( dt => StructField(
+    dataType.map(dt => StructField(
       fd.getName,
       if (fd.isRepeated) ArrayType(dt, containsNull = false) else dt,
       nullable = !fd.isRequired && !fd.isRepeated
@@ -73,9 +75,10 @@ object SchemaConverters {
   }
 
   private[proto] class IncompatibleSchemaException(
-                                                   msg: String,
-                                                   ex: Throwable = null) extends Exception(msg, ex)
+                                                    msg: String,
+                                                    ex: Throwable = null) extends Exception(msg, ex)
 
   private[proto] class UnsupportedProtoTypeException(msg: String) extends Exception(msg)
+
   private[proto] class UnsupportedProtoValueException(msg: String) extends Exception(msg)
 }
