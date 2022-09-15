@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.collection.Utils
 
 object PushDownUtils {
   /**
@@ -203,7 +204,6 @@ object PushDownUtils {
   def toOutputAttrs(
       schema: StructType,
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
-    import org.apache.spark.util.collection.Utils
     val nameToAttr = Utils.toMap(relation.output.map(_.name), relation.output)
     val cleaned = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     cleaned.toAttributes.map {
