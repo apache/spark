@@ -131,7 +131,7 @@ class GroupStateImpl:
             raise ValueError("Timeout duration must be positive")
         self._timeout_timestamp = durationMs + self._batch_processing_time_ms
 
-    # TODO(SPARK-40437): Implement additionalDuration parameter.
+    # TODO(SPARK-40438): Implement additionalDuration parameter.
     def setTimeoutTimestamp(self, timestampMs: int) -> None:
         if self._timeout_conf != GroupStateTimeout.EventTimeTimeout:
             raise RuntimeError(
