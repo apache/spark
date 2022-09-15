@@ -145,13 +145,16 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
         if (temp.isMatch) {
           temp
         } else {
-          new MatchResult(matched, simplifiedMatch, explainedMatch, expectedSimplified, expectedExplain)
+          new MatchResult(matched, simplifiedMatch, explainedMatch, expectedSimplified,
+            expectedExplain)
         }
       } else {
-        new MatchResult(matched, simplifiedMatch, explainedMatch, expectedSimplified, expectedExplain)
+        new MatchResult(matched, simplifiedMatch, explainedMatch, expectedSimplified,
+          expectedExplain)
       }
     } else {
-      new MatchResult(matched, simplifiedMatch, explainedMatch, expectedSimplified, expectedExplain)
+      new MatchResult(matched, simplifiedMatch, explainedMatch, expectedSimplified,
+        expectedExplain)
     }
   }
 
