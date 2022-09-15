@@ -20,9 +20,8 @@ package org.apache.spark.sql.proto
 import com.google.protobuf.{ByteString, DynamicMessage, Message}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.RandomDataGenerator
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters,
-  OrderedFilters, StructFilters}
+import org.apache.spark.sql.{RandomDataGenerator, Row}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters, OrderedFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
@@ -45,6 +44,30 @@ class ProtoCatalystDataConversionSuite extends SparkFunSuite
       prepareExpectedResult(expected))
   }
 
+  protected def checkUnsupportedRead(data: Literal, descFilePath: String,
+                                     actualSchema: String, badSchema: String): Unit = {
+
+    val binary = CatalystDataToProto(data, descFilePath, actualSchema)
+
+    intercept[Exception] {
+      ProtoDataToCatalyst(binary, descFilePath, badSchema,
+        Map("mode" -> "FAILFAST")).eval()
+    }
+
+    val expected = {
+      val protoOptions = ProtoOptions(Map("mode" -> "PERMISSIVE"))
+      val descriptor = ProtoUtils.buildDescriptor(descFilePath, badSchema)
+      val expectedSchema = protoOptions.schema.getOrElse(descriptor)
+      SchemaConverters.toSqlType(expectedSchema).dataType match {
+        case st: StructType => Row.fromSeq((0 until st.length).map(_ => null))
+        case _ => null
+      }
+    }
+
+    checkEvaluation(ProtoDataToCatalyst(binary, descFilePath, badSchema,
+      Map("mode" -> "PERMISSIVE")), expected)
+  }
+
   protected def prepareExpectedResult(expected: Any): Any = expected match {
     // Spark byte and short both map to avro int
     case b: Byte => b.toInt
@@ -61,14 +84,14 @@ class ProtoCatalystDataConversionSuite extends SparkFunSuite
   }
 
   private val testingTypes = Seq(
-    StructType(StructField("bool_type", BooleanType, false) :: Nil),
-    StructType(StructField("int32_type", IntegerType, false) :: Nil),
-    StructType(StructField("double_type", DoubleType, false) :: Nil),
-    StructType(StructField("float_type", FloatType, false) :: Nil),
-    StructType(StructField("bytes_type", BinaryType, false) :: Nil),
-    StructType(StructField("string_type", StringType, false) :: Nil),
-    StructType(StructField("int32_type", ByteType, false) :: Nil),
-    StructType(StructField("int32_type", ShortType, false) :: Nil),
+    StructType(StructField("bool_type", BooleanType, nullable = false) :: Nil),
+    StructType(StructField("int32_type", IntegerType, nullable = false) :: Nil),
+    StructType(StructField("double_type", DoubleType, nullable = false) :: Nil),
+    StructType(StructField("float_type", FloatType, nullable = false) :: Nil),
+    StructType(StructField("bytes_type", BinaryType, nullable = false) :: Nil),
+    StructType(StructField("string_type", StringType, nullable = false) :: Nil),
+    StructType(StructField("int32_type", ByteType, nullable = false) :: Nil),
+    StructType(StructField("int32_type", ShortType, nullable = false) :: Nil),
   )
 
   private val catalystTypesToProtoMessages: Map[DataType, String] = Map(
@@ -115,9 +138,27 @@ class ProtoCatalystDataConversionSuite extends SparkFunSuite
     val dynMsg = DynamicMessage.parseFrom(descriptor, data.toByteArray)
     val deserialized = deserializer.deserialize(dynMsg)
     expected match {
-      case None => assert(deserialized == None)
+      case None => assert(deserialized.isEmpty)
       case Some(d) =>
         assert(checkResult(d, deserialized.get, dataType, exprNullable = false))
+    }
+  }
+
+  test("Handle unsupported input of record type") {
+    val testFileDesc = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
+    val actualSchema = StructType(Seq(
+      StructField("col_0", StringType, nullable = false),
+      StructField("col_1", IntegerType, nullable = false),
+      StructField("col_2", FloatType, nullable = false),
+      StructField("col_3", BooleanType, nullable = false),
+      StructField("col_4", DoubleType, nullable = false)))
+
+    val seed = scala.util.Random.nextLong()
+    withClue(s"create random record with seed $seed") {
+      val data = RandomDataGenerator.randomRow(new scala.util.Random(seed), actualSchema)
+      val converter = CatalystTypeConverters.createToCatalystConverter(actualSchema)
+      val input = Literal.create(converter(data), actualSchema)
+      checkUnsupportedRead(input, testFileDesc, "Actual", "Bad")
     }
   }
 

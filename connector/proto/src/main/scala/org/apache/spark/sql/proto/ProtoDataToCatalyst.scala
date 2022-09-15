@@ -17,15 +17,16 @@
 package org.apache.spark.sql.proto
 
 import java.io.ByteArrayInputStream
+
 import com.google.protobuf.DynamicMessage
+import scala.util.control.NonFatal
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, SpecificInternalRow, UnaryExpression}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenerator, CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, StructType}
-
-import scala.util.control.NonFatal
 
 private[proto] case class ProtoDataToCatalyst(child: Expression, descFilePath: String,
                                               messageName: String,
@@ -83,11 +84,26 @@ private[proto] case class ProtoDataToCatalyst(child: Expression, descFilePath: S
       null
   }
 
-
+  private def handleException(e: Throwable): Any = {
+    parseMode match {
+      case PermissiveMode =>
+        nullResultRow
+      case FailFastMode =>
+        throw new SparkException("Malformed records are detected in record parsing. " +
+          s"Current parse Mode: ${FailFastMode.name}. To process malformed records as null " +
+          "result, try setting the option 'mode' as 'PERMISSIVE'.", e)
+      case _ =>
+        throw new AnalysisException(unacceptableModeMessage(parseMode.name))
+    }
+  }
   override def nullSafeEval(input: Any): Any = {
     val binary = input.asInstanceOf[Array[Byte]]
     try {
       result = DynamicMessage.parseFrom(descriptor, new ByteArrayInputStream(binary))
+      val unknownFields = result.asInstanceOf[DynamicMessage].getUnknownFields
+      if (!unknownFields.asMap().isEmpty) {
+        return handleException(new Throwable("UnknownFields encountered"))
+      }
       val deserialized = deserializer.deserialize(result)
       assert(deserialized.isDefined,
         "Proto deserializer cannot return an empty result because filters are not pushed down")
@@ -96,15 +112,8 @@ private[proto] case class ProtoDataToCatalyst(child: Expression, descFilePath: S
       // There could be multiple possible exceptions here, e.g. java.io.IOException,
       // ProtoRuntimeException, ArrayIndexOutOfBoundsException, etc.
       // To make it simple, catch all the exceptions here.
-      case NonFatal(e) => parseMode match {
-        case PermissiveMode => nullResultRow
-        case FailFastMode =>
-          throw new SparkException("Malformed records are detected in record parsing. " +
-            s"Current parse Mode: ${FailFastMode.name}. To process malformed records as null " +
-            "result, try setting the option 'mode' as 'PERMISSIVE'.", e)
-        case _ =>
-          throw new AnalysisException(unacceptableModeMessage(parseMode.name))
-      }
+      case NonFatal(e) =>
+        handleException(e)
     }
   }
 

@@ -21,10 +21,11 @@ import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.types._
 
-/**
-  * This object contains method that are used to convert sparkSQL schemas to proto schemas and vice
-  * versa.
-  */
+/*
+ * This object contains method that are used to convert sparkSQL
+ * schemas to proto schemas and vice versa.
+ */
+
 @DeveloperApi
 object SchemaConverters {
   /**
@@ -72,7 +73,8 @@ object SchemaConverters {
   }
 
   private[proto] class IncompatibleSchemaException(
-                                                   msg: String, ex: Throwable = null) extends Exception(msg, ex)
+                                                   msg: String,
+                                                   ex: Throwable = null) extends Exception(msg, ex)
 
   private[proto] class UnsupportedProtoTypeException(msg: String) extends Exception(msg)
   private[proto] class UnsupportedProtoValueException(msg: String) extends Exception(msg)

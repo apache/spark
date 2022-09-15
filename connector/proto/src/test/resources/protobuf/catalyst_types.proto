@@ -29,3 +29,19 @@ message Person {
   string name = 1;
   int32 age = 2;
 }
+
+message Bad {
+  bytes col_0 = 1;
+  double col_1 = 2;
+  string col_2 = 3;
+  float col_3 = 4;
+  int64 col_4 = 5;
+}
+
+message Actual {
+  string col_0 = 1;
+  int32 col_1 = 2;
+  float col_2 = 3;
+  bool col_3 = 4;
+  double col_4 = 5;
+}

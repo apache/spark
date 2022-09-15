@@ -1,5 +1,5 @@
 
-±
+”
 @connector/proto/src/test/resources/protobuf/catalyst_types.protoorg.apache.spark.sql.proto")
 
 BooleanMsg
@@ -22,4 +22,16 @@ bytes_type (R	bytesType",
 stringType".
 Person
 name (	Rname
-age (RageBBCatalystTypesbproto3
+age (Rage"n
+Bad
+col_0 (Rcol0
+col_1 (Rcol1
+col_2 (	Rcol2
+col_3 (Rcol3
+col_4 (Rcol4"q
+Actual
+col_0 (	Rcol0
+col_1 (Rcol1
+col_2 (Rcol2
+col_3 (Rcol3
+col_4 (Rcol4BBCatalystTypesbproto3

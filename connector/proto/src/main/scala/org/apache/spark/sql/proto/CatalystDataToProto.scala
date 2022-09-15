@@ -24,13 +24,15 @@ import org.apache.spark.sql.types.{BinaryType, DataType}
 
 private[proto] case class CatalystDataToProto(
                                              child: Expression,
-                                             descFilePath: String, messageName: String) extends UnaryExpression {
+                                             descFilePath: String,
+                                             messageName: String) extends UnaryExpression {
 
   override def dataType: DataType = BinaryType
 
   @transient private lazy val protoType = ProtoUtils.buildDescriptor(descFilePath, messageName)
 
-  @transient private lazy val serializer = new ProtoSerializer(child.dataType, protoType, child.nullable)
+  @transient private lazy val serializer = new ProtoSerializer(child.dataType, protoType,
+    child.nullable)
 
   override def nullSafeEval(input: Any): Any = {
     val dynamicMessage = serializer.serialize(input).asInstanceOf[DynamicMessage]
