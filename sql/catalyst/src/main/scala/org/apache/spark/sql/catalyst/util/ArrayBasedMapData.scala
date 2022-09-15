@@ -143,4 +143,7 @@ object ArrayBasedMapData {
     Utils.toMap(keys, values)
   }
 
+  def toJavaMap(keys: Array[Any], values: Array[Any]): java.util.Map[Any, Any] = {
+    Utils.toJavaMap(keys, values)
+  }
 }

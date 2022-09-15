@@ -32,9 +32,9 @@ import org.apache.spark.sql.catalyst.SerializerBuildHelper._
 import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.Utils
 
 /**
  * Type-inference utilities for POJOs and Java collections.
@@ -336,7 +336,7 @@ object JavaTypeInference {
             ObjectType(classOf[Array[Any]]))
 
         StaticInvoke(
-          ArrayBasedMapData.getClass,
+          Utils.getClass,
           ObjectType(classOf[JMap[_, _]]),
           "toJavaMap",
           keyData :: valueData :: Nil,
