@@ -39,8 +39,18 @@ object V2ScanPartitioning extends Rule[LogicalPlan] with SQLConfHelper {
       }
 
       val catalystPartitioning = scan.outputPartitioning() match {
-        case kgp: KeyGroupedPartitioning => sequenceToOption(kgp.keys().map(
-          V2ExpressionUtils.toCatalystOpt(_, relation, funCatalogOpt)))
+        case kgp: KeyGroupedPartitioning =>
+          val partitioning = sequenceToOption(kgp.keys().map(
+            V2ExpressionUtils.toCatalystOpt(_, relation, funCatalogOpt)))
+          if (partitioning.isEmpty) {
+            None
+          } else {
+            if (partitioning.get.forall(p => p.references.subsetOf(d.outputSet))) {
+              partitioning
+            } else {
+              None
+            }
+          }
         case _: UnknownPartitioning => None
         case p => throw new IllegalArgumentException("Unsupported data source V2 partitioning " +
             "type: " + p.getClass.getSimpleName)
