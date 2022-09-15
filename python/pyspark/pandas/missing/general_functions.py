@@ -23,7 +23,7 @@ def _unsupported_function(method_name, deprecated=False, reason=""):
     )
 
 
-class _MissingPandasLikeGeneralFunctions:
+class MissingPandasLikeGeneralFunctions:
     # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
     # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
