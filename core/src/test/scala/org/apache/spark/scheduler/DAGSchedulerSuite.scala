@@ -2975,25 +2975,25 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-25341: retry all the succeeding stages when the map stage is indeterminate") {
-    val (shuffleId1, shuffleId2) = constructIndeterminateStageFetchFailed()
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, indeterminate = true)
 
-    // Check status for all failedStages
-    val failedStages = scheduler.failedStages.toSeq
-    assert(failedStages.map(_.id) == Seq(1, 2))
-    // Shuffle blocks of "hostC" is lost, so first task of the `shuffleMapRdd2` needs to retry.
-    assert(failedStages.collect {
-      case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
-    }.head.findMissingPartitions() == Seq(0))
-    // The result stage is still waiting for its 2 tasks to complete
-    assert(failedStages.collect {
-      case stage: ResultStage => stage
-    }.head.findMissingPartitions() == Seq(0, 1))
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
+    val shuffleId1 = shuffleDep1.shuffleId
+    val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
 
-    scheduler.resubmitFailedStages()
+    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(2))
+    val shuffleId2 = shuffleDep2.shuffleId
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
 
-    // The first task of the `shuffleMapRdd2` failed with fetch failure
+    submit(finalRdd, Array(0, 1))
+
+    // Finish the first shuffle map stage.
+    completeShuffleMapStageSuccessfully(0, 0, 2)
+    assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+
+    // fail the second shuffle map stage.
     runEvent(makeCompletionEvent(
-      taskSets(3).tasks(0),
+      taskSets(1).tasks(0),
       FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
       null))
 
@@ -3003,23 +3003,30 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     scheduler.resubmitFailedStages()
 
     // First shuffle map stage resubmitted and reran all tasks.
-    assert(taskSets(4).stageId == 0)
-    assert(taskSets(4).stageAttemptId == 1)
-    assert(taskSets(4).tasks.length == 2)
+    assert(taskSets(2).stageId == 0)
+    assert(taskSets(2).stageAttemptId == 1)
+    assert(taskSets(2).tasks.length == 2)
 
     // Finish all stage.
     completeShuffleMapStageSuccessfully(0, 1, 2)
     assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
 
-    completeShuffleMapStageSuccessfully(1, 2, 2, Seq("hostC", "hostD"))
+    completeShuffleMapStageSuccessfully(1, 1, 2, Seq("hostC", "hostD"))
     assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
 
-    complete(taskSets(6), Seq((Success, 11), (Success, 12)))
+    complete(taskSets(4), Seq((Success, 11), (Success, 12)))
 
     // Job successful ended.
     assert(results === Map(0 -> 11, 1 -> 12))
     results.clear()
     assertDataStructuresEmpty()
+  }
+
+  test("abort the result stage when it failed caused by FetchFailed" +
+    "and its parent map stage is indeterminate") {
+    constructIndeterminateStageFetchFailed()
+    assert(scheduler.activeJobs.isEmpty && scheduler.failedStages.isEmpty
+      && scheduler.runningStages.isEmpty && scheduler.waitingStages.isEmpty)
   }
 
   test("SPARK-25341: continuous indeterminate stage roll back") {

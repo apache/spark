@@ -1989,8 +1989,7 @@ private[spark] class DAGScheduler(
                     }
 
                   case resultStage: ResultStage if resultStage.activeJob.isDefined =>
-                    val numMissingPartitions = resultStage.findMissingPartitions().length
-                    if (numMissingPartitions < resultStage.numTasks) {
+                    if (failedStage.isInstanceOf[ResultStage]) {
                       // TODO: support to rollback result tasks.
                       abortStage(resultStage, generateErrorMessage(resultStage), None)
                     }
