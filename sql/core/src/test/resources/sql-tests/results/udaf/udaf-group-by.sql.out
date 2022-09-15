@@ -48,14 +48,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "expression" : "\"a\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 33,
-    "stopIndex" : 42,
-    "fragment" : "GROUP BY b"
-  } ]
+  }
 }
 
 
@@ -117,14 +110,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "expression" : "\"a\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 37,
-    "stopIndex" : 50,
-    "fragment" : "GROUP BY a + 1"
-  } ]
+  }
 }
 
 
@@ -200,9 +186,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 49,
-    "stopIndex" : 58,
-    "fragment" : "GROUP BY k"
+    "startIndex" : 21,
+    "stopIndex" : 32,
+    "fragment" : "non_existing"
   } ]
 }
 
@@ -227,14 +213,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "expression" : "\"k\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 58,
-    "stopIndex" : 67,
-    "fragment" : "GROUP BY a"
-  } ]
+  }
 }
 
 
@@ -263,9 +242,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 38,
+    "startIndex" : 47,
     "stopIndex" : 47,
-    "fragment" : "GROUP BY k"
+    "fragment" : "k"
   } ]
 }
 
@@ -325,9 +304,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 43,
-    "fragment" : "SELECT 1 FROM range(10) HAVING udaf(id) > 0"
+    "startIndex" : 37,
+    "stopIndex" : 38,
+    "fragment" : "id"
   } ]
 }
 
