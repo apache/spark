@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{AttributeSet, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.{SupportsReportOrdering, SupportsReportPartitioning}
@@ -47,8 +47,7 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with SQLConfHelpe
           if (partitioning.isEmpty) {
             None
           } else {
-            val ref = AttributeSet.fromAttributeSets(partitioning.get.map(_.references))
-            if (ref.subsetOf(AttributeSet(d.output))) {
+            if (partitioning.get.forall(p => p.references.subsetOf(d.outputSet))) {
               partitioning
             } else {
               None
