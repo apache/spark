@@ -83,7 +83,6 @@ private[spark] object Utils {
    * Same function as `keys.zip(values).toMap.asJava`, but has perf gain.
    */
   def toJavaMap[K, V](keys: Iterable[K], values: Iterable[V]): java.util.Map[K, V] = {
-    keys.zip(values).toMap.asJava
     val map = new java.util.HashMap[K, V]()
     val keyIter = keys.iterator
     val valueIter = values.iterator
