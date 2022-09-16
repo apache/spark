@@ -52,8 +52,10 @@ class ApplyInPandasWithStateWriter(
   // We always produce at least one data row per grouping key whereas we only produce one
   // state metadata row per grouping key, so we only need to fill up the empty rows in
   // state metadata side.
-  private val arrowWriterForData = createArrowWriter(root.getFieldVectors.asScala.dropRight(1))
-  private val arrowWriterForState = createArrowWriter(root.getFieldVectors.asScala.takeRight(1))
+  private val arrowWriterForData = createArrowWriter(
+    root.getFieldVectors.asScala.toSeq.dropRight(1))
+  private val arrowWriterForState = createArrowWriter(
+    root.getFieldVectors.asScala.toSeq.takeRight(1))
 
   // We apply bin-packing the data from multiple groups into one Arrow RecordBatch to
   // gain the performance. In many cases, the amount of data per grouping key is quite
