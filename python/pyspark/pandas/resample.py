@@ -408,26 +408,26 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         return downsampled
 
     @abstractmethod
-    def _cleanup_and_return(self, psdf: DataFrame) -> FrameLike:
+    def _handle_output(self, psdf: DataFrame) -> FrameLike:
         pass
 
     def min(self) -> FrameLike:
-        return self._cleanup_and_return(self._downsample("min"))
+        return self._handle_output(self._downsample("min"))
 
     def max(self) -> FrameLike:
-        return self._cleanup_and_return(self._downsample("max"))
+        return self._handle_output(self._downsample("max"))
 
     def sum(self) -> FrameLike:
-        return self._cleanup_and_return(self._downsample("sum").fillna(0.0))
+        return self._handle_output(self._downsample("sum").fillna(0.0))
 
     def mean(self) -> FrameLike:
-        return self._cleanup_and_return(self._downsample("mean"))
+        return self._handle_output(self._downsample("mean"))
 
     def std(self) -> FrameLike:
-        return self._cleanup_and_return(self._downsample("std"))
+        return self._handle_output(self._downsample("std"))
 
     def var(self) -> FrameLike:
-        return self._cleanup_and_return(self._downsample("var"))
+        return self._handle_output(self._downsample("var"))
 
 
 class DataFrameResampler(Resampler[DataFrame]):
@@ -457,7 +457,7 @@ class DataFrameResampler(Resampler[DataFrame]):
             else:
                 return partial(property_or_func, self)
 
-    def _cleanup_and_return(self, psdf: DataFrame) -> DataFrame:
+    def _handle_output(self, psdf: DataFrame) -> DataFrame:
         return psdf
 
 
@@ -489,5 +489,5 @@ class SeriesResampler(Resampler[Series]):
             else:
                 return partial(property_or_func, self)
 
-    def _cleanup_and_return(self, psdf: DataFrame) -> Series:
+    def _handle_output(self, psdf: DataFrame) -> Series:
         return first_series(psdf).rename(self._psser.name)
