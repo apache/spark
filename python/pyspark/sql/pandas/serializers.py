@@ -378,22 +378,31 @@ class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
 
 
 class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
-
-    def __init__(self, timezone, safecheck, assign_cols_by_name, state_object_schema,
-                 soft_limit_bytes_per_batch, min_data_count_for_sample,
-                 soft_timeout_millis_purge_batch):
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        state_object_schema,
+        soft_limit_bytes_per_batch,
+        min_data_count_for_sample,
+        soft_timeout_millis_purge_batch,
+    ):
         super(ApplyInPandasWithStateSerializer, self).__init__(
-            timezone, safecheck, assign_cols_by_name)
+            timezone, safecheck, assign_cols_by_name
+        )
         self.pickleSer = CPickleSerializer()
         self.utf8_deserializer = UTF8Deserializer()
         self.state_object_schema = state_object_schema
 
-        self.result_state_df_type = StructType([
-            StructField('properties', StringType()),
-            StructField('keyRowAsUnsafe', BinaryType()),
-            StructField('object', BinaryType()),
-            StructField('oldTimeoutTimestamp', LongType()),
-        ])
+        self.result_state_df_type = StructType(
+            [
+                StructField("properties", StringType()),
+                StructField("keyRowAsUnsafe", BinaryType()),
+                StructField("object", BinaryType()),
+                StructField("oldTimeoutTimestamp", LongType()),
+            ]
+        )
 
         self.result_state_pdf_arrow_type = to_arrow_type(self.result_state_df_type)
         self.soft_limit_bytes_per_batch = soft_limit_bytes_per_batch
@@ -412,14 +421,23 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             for batch in batches:
                 batch_schema = batch.schema
                 data_schema = pa.schema([batch_schema[i] for i in range(0, len(batch_schema) - 1)])
-                state_schema = pa.schema([batch_schema[-1], ])
+                state_schema = pa.schema(
+                    [
+                        batch_schema[-1],
+                    ]
+                )
 
                 batch_columns = batch.columns
                 data_columns = batch_columns[0:-1]
                 state_column = batch_columns[-1]
 
                 data_batch = pa.RecordBatch.from_arrays(data_columns, schema=data_schema)
-                state_batch = pa.RecordBatch.from_arrays([state_column, ], schema=state_schema)
+                state_batch = pa.RecordBatch.from_arrays(
+                    [
+                        state_column,
+                    ],
+                    schema=state_schema,
+                )
 
                 state_arrow = pa.Table.from_batches([state_batch]).itercolumns()
                 state_pandas = [self.arrow_to_pandas(c) for c in state_arrow][0]
@@ -431,13 +449,13 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                         # no more data with grouping key + state
                         break
 
-                    state_info_col_properties = state_info_col['properties']
-                    state_info_col_key_row = state_info_col['keyRowAsUnsafe']
-                    state_info_col_object = state_info_col['object']
+                    state_info_col_properties = state_info_col["properties"]
+                    state_info_col_key_row = state_info_col["keyRowAsUnsafe"]
+                    state_info_col_object = state_info_col["object"]
 
-                    data_start_offset = state_info_col['startOffset']
-                    num_data_rows = state_info_col['numRows']
-                    is_last_chunk = state_info_col['isLastChunk']
+                    data_start_offset = state_info_col["startOffset"]
+                    num_data_rows = state_info_col["numRows"]
+                    is_last_chunk = state_info_col["isLastChunk"]
 
                     state_properties = json.loads(state_info_col_properties)
                     if state_info_col_object:
@@ -452,9 +470,11 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                         state = state_for_current_group
                     else:
                         # there is no state being stored for same group, construct one
-                        state = GroupStateImpl(keyAsUnsafe=state_info_col_key_row,
-                                               valueSchema=self.state_object_schema,
-                                               **state_properties)
+                        state = GroupStateImpl(
+                            keyAsUnsafe=state_info_col_key_row,
+                            valueSchema=self.state_object_schema,
+                            **state_properties,
+                        )
 
                     if is_last_chunk:
                         # discard the state being cached for same group
@@ -470,7 +490,10 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                     data_pandas = [self.arrow_to_pandas(c) for c in data_arrow]
 
                     # state info
-                    yield (data_pandas, state, )
+                    yield (
+                        data_pandas,
+                        state,
+                    )
 
         batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
 
@@ -478,7 +501,10 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
         # state will be same object for same grouping key
         for state, data in groupby(data_state_generator, key=lambda x: x[1]):
-            yield (data, state, )
+            yield (
+                data,
+                state,
+            )
 
     def dump_stream(self, iterator, stream):
         """
@@ -503,10 +529,12 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
             empty_rows_pdf = pd.DataFrame(
                 dict.fromkeys(pa.schema(pdf_schema).names),
-                index=[x for x in range(0, empty_row_cnt_in_data)])
+                index=[x for x in range(0, empty_row_cnt_in_data)],
+            )
             empty_rows_state = pd.DataFrame(
-                columns=['properties', 'keyRowAsUnsafe', 'object', 'oldTimeoutTimestamp'],
-                index=[x for x in range(0, empty_row_cnt_in_state)])
+                columns=["properties", "keyRowAsUnsafe", "object", "oldTimeoutTimestamp"],
+                index=[x for x in range(0, empty_row_cnt_in_state)],
+            )
 
             pdfs.append(empty_rows_pdf)
             state_pdfs.append(empty_rows_state)
@@ -514,9 +542,9 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             merged_pdf = pd.concat(pdfs, ignore_index=True)
             merged_state_pdf = pd.concat(state_pdfs, ignore_index=True)
 
-            return self._create_batch([
-                (merged_pdf, pdf_schema),
-                (merged_state_pdf, self.result_state_pdf_arrow_type)])
+            return self._create_batch(
+                [(merged_pdf, pdf_schema), (merged_state_pdf, self.result_state_pdf_arrow_type)]
+            )
 
         def init_stream_yield_batches():
             import pandas as pd
@@ -547,19 +575,23 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                         pdf_data_cnt += len(pdf)
                         pdfs.append(pdf)
 
-                        if sampled_data_size_per_row == 0 and \
-                                pdf_data_cnt > self.min_data_count_for_sample:
+                        if (
+                            sampled_data_size_per_row == 0
+                            and pdf_data_cnt > self.min_data_count_for_sample
+                        ):
                             memory_usages = [p.memory_usage(deep=True).sum() for p in pdfs]
                             sampled_data_size_per_row = sum(memory_usages) / pdf_data_cnt
 
                         # This effectively works after the sampling has completed, size we multiply
                         # by 0 if the sampling is still in progress.
-                        batch_over_limit_on_size = (sampled_data_size_per_row * pdf_data_cnt) >= \
-                            self.soft_limit_bytes_per_batch
+                        batch_over_limit_on_size = (
+                            sampled_data_size_per_row * pdf_data_cnt
+                        ) >= self.soft_limit_bytes_per_batch
 
                         if batch_over_limit_on_size:
-                            batch = construct_record_batch(pdfs, pdf_data_cnt, return_schema,
-                                                           state_pdfs, state_data_cnt)
+                            batch = construct_record_batch(
+                                pdfs, pdf_data_cnt, return_schema, state_pdfs, state_data_cnt
+                            )
 
                             pdfs = []
                             state_pdfs = []
@@ -580,10 +612,18 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 state_old_timeout_timestamp = state.oldTimeoutTimestamp
 
                 state_dict = {
-                    'properties': [state_properties, ],
-                    'keyRowAsUnsafe': [state_key_row_as_binary, ],
-                    'object': [state_object, ],
-                    'oldTimeoutTimestamp': [state_old_timeout_timestamp, ],
+                    "properties": [
+                        state_properties,
+                    ],
+                    "keyRowAsUnsafe": [
+                        state_key_row_as_binary,
+                    ],
+                    "object": [
+                        state_object,
+                    ],
+                    "oldTimeoutTimestamp": [
+                        state_old_timeout_timestamp,
+                    ],
                 }
 
                 state_pdf = pd.DataFrame.from_dict(state_dict)
@@ -592,11 +632,13 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 state_data_cnt += 1
 
                 cur_time_ns = time.time_ns()
-                is_timed_out_on_purge = ((cur_time_ns - last_purged_time_ns) // 1000000) >= \
-                    self.soft_timeout_millis_purge_batch
+                is_timed_out_on_purge = (
+                    (cur_time_ns - last_purged_time_ns) // 1000000
+                ) >= self.soft_timeout_millis_purge_batch
                 if is_timed_out_on_purge:
-                    batch = construct_record_batch(pdfs, pdf_data_cnt, return_schema,
-                                                   state_pdfs, state_data_cnt)
+                    batch = construct_record_batch(
+                        pdfs, pdf_data_cnt, return_schema, state_pdfs, state_data_cnt
+                    )
 
                     pdfs = []
                     state_pdfs = []
@@ -612,8 +654,9 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
             # end of loop, we may have remaining data
             if pdf_data_cnt > 0 or state_data_cnt > 0:
-                batch = construct_record_batch(pdfs, pdf_data_cnt, return_schema,
-                                               state_pdfs, state_data_cnt)
+                batch = construct_record_batch(
+                    pdfs, pdf_data_cnt, return_schema, state_pdfs, state_data_cnt
+                )
 
                 if should_write_start_length:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)

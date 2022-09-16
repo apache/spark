@@ -217,7 +217,9 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
 
         if state.hasTimedOut:
             # Timeout processing pass empty iterator. Here we return an empty DataFrame instead.
-            values = [pd.DataFrame(columns=pd.concat(next(value_series_gen), axis=1).columns), ]
+            values = [
+                pd.DataFrame(columns=pd.concat(next(value_series_gen), axis=1).columns),
+            ]
         else:
             values = (pd.concat(x, axis=1) for x in value_series_gen)
 
@@ -232,8 +234,7 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
             # the number of columns of result have to match the return type
             # but it is fine for result to have no columns at all if it is empty
             if not (
-                    len(result.columns) == len(return_type) or
-                    len(result.columns) == 0 and result.empty
+                len(result.columns) == len(return_type) or len(result.columns) == 0 and result.empty
             ):
                 raise RuntimeError(
                     "Number of columns of the element (pandas.DataFrame) in return iterator "
@@ -259,7 +260,10 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
 
         result_iter_with_validation = (verify_element(x) for x in result_iter)
 
-        return (result_iter_with_validation, state, )
+        return (
+            result_iter_with_validation,
+            state,
+        )
 
     return lambda k, v, s: [(wrapped(k, v, s), to_arrow_type(return_type))]
 
@@ -428,7 +432,7 @@ def read_udfs(pickleSer, infile, eval_type):
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
             soft_limit_bytes_per_batch = runner_conf.get(
                 "spark.sql.execution.applyInPandasWithState.softLimitSizePerBatch",
-                (64 * 1024 * 1024)
+                (64 * 1024 * 1024),
             )
             soft_limit_bytes_per_batch = int(soft_limit_bytes_per_batch)
 
@@ -443,11 +447,14 @@ def read_udfs(pickleSer, infile, eval_type):
             soft_timeout_millis_purge_batch = int(soft_timeout_millis_purge_batch)
 
             ser = ApplyInPandasWithStateSerializer(
-                timezone, safecheck, assign_cols_by_name,
+                timezone,
+                safecheck,
+                assign_cols_by_name,
                 state_object_schema,
                 soft_limit_bytes_per_batch,
                 min_data_count_for_sample,
-                soft_timeout_millis_purge_batch)
+                soft_timeout_millis_purge_batch,
+            )
         elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
             ser = ArrowStreamUDFSerializer()
         else:
