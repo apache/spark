@@ -286,15 +286,20 @@ private[spark] object TestUtils {
   val minimumPythonSupportedVersion: String = "3.7.0"
 
   def isPythonVersionAvailable: Boolean = {
-    val version = minimumPythonSupportedVersion.split('.').map(_.toInt)
-    assert(version.length == 3)
-    isPythonVersionAtLeast(version(0), version(1), version(2))
+    isPythonVersionAvailable("python3")
   }
 
-  private def isPythonVersionAtLeast(major: Int, minor: Int, reversion: Int): Boolean = {
+  def isPythonVersionAvailable(pythonExec: String): Boolean = {
+    val version = minimumPythonSupportedVersion.split('.').map(_.toInt)
+    assert(version.length == 3)
+    isPythonVersionAtLeast(pythonExec, version(0), version(1), version(2))
+  }
+
+  private def isPythonVersionAtLeast(
+      pythonExec: String, major: Int, minor: Int, reversion: Int): Boolean = {
     val cmdSeq = if (Utils.isWindows) Seq("cmd.exe", "/C") else Seq("sh", "-c")
     val pythonSnippet = s"import sys; sys.exit(sys.version_info < ($major, $minor, $reversion))"
-    Try(Process(cmdSeq :+ s"python3 -c '$pythonSnippet'").! == 0).getOrElse(false)
+    Try(Process(cmdSeq :+ s"$pythonExec -c '$pythonSnippet'").! == 0).getOrElse(false)
   }
 
   /**
