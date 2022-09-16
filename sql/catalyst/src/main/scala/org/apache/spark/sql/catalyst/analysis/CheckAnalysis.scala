@@ -435,12 +435,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           // all values must have same length as there are value column names
           case up: Unpivot
             if up.childrenResolved && up.ids.exists(_.forall(_.resolved)) && up.values.exists(
-              values => values.exists(_._1.length != up.valueColumnNames.length)) =>
+              values => values.exists(_.exprs.length != up.valueColumnNames.length)) =>
             throw QueryCompilationErrors.unpivotValueSizeMismatchError(
-              up.valueColumnNames.length, up.values.get.map(_._1.length))
+              up.valueColumnNames.length, up.values.get.map(_.exprs.length))
           // see TypeCoercionBase.UnpivotCoercion
           case up: Unpivot if up.canBeCoercioned && !up.valuesTypeCoercioned =>
-            throw QueryCompilationErrors.unpivotValueDataTypeMismatchError(up.values.get.map(_._1))
+            throw QueryCompilationErrors.unpivotValueDataTypeMismatchError(
+              up.values.get.map(_.exprs))
 
           case Sort(orders, _, _) =>
             orders.foreach { order =>

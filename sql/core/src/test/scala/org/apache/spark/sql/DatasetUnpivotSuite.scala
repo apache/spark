@@ -63,12 +63,21 @@ class DatasetUnpivotSuite extends QueryTest
       $"str2".as("two")
     ).as("str")
   )
-  val longStructDataRows: Seq[Row] = longDataRows.map(row =>
+  val longStructFieldDataRows: Seq[Row] = longDataRows.map(row =>
     Row(
       row.getInt(0),
       row.getString(1) match {
         case "str1" => "one"
         case "str2" => "two"
+      },
+      row.getString(2))
+  )
+  val longStructPathDataRows: Seq[Row] = longDataRows.map(row =>
+    Row(
+      row.getInt(0),
+      row.getString(1) match {
+        case "str1" => "str.one"
+        case "str2" => "str.two"
       },
       row.getString(2))
   )
@@ -531,7 +540,14 @@ class DatasetUnpivotSuite extends QueryTest
         Array($"str.one", $"str.two"),
         "var",
         "val"),
-      longStructDataRows)
+      longStructPathDataRows)
+    checkAnswer(
+      wideStructDataDs.unpivot(
+        Array($"an.id"),
+        Array($"str.one".as("one"), $"str.two".as("two")),
+        "var",
+        "val"),
+      longStructFieldDataRows)
   }
 
   test("unpivot with struct ids star") {
@@ -541,7 +557,7 @@ class DatasetUnpivotSuite extends QueryTest
         Array($"str.one", $"str.two"),
         "var",
         "val"),
-      longStructDataRows)
+      longStructPathDataRows)
   }
 
   test("unpivot with struct values star") {
@@ -551,7 +567,7 @@ class DatasetUnpivotSuite extends QueryTest
         Array($"str.*"),
         "var",
         "val"),
-      longStructDataRows)
+      longStructFieldDataRows)
   }
 
   test("unpivot with struct expressions") {

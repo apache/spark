@@ -1135,7 +1135,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
       Unpivot(
         None,
-        Some(unpivotColumns.map(c => (Seq(c), None))),
+        Some(unpivotColumns.map(c => UnpivotExpr(Seq(c), None))),
         variableColumnName,
         valueColumnNames,
         query
@@ -1184,12 +1184,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create an Unpivot struct column with or without an alias.
    * Each struct field is renamed to the respective value column name.
    */
-  override def visitUnpivotColumnSet(ctx: UnpivotColumnSetContext):
-      (Seq[NamedExpression], Option[String]) =
+  override def visitUnpivotColumnSet(ctx: UnpivotColumnSetContext): UnpivotExpr =
     withOrigin(ctx) {
       val exprs = ctx.unpivotColumns.asScala.map(visitUnpivotColumn).toSeq
       val alias = Option(ctx.identifier).map(_.getText)
-      (exprs, alias)
+      UnpivotExpr(exprs, alias)
     }
 
   /**

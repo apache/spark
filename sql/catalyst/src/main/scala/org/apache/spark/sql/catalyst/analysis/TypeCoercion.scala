@@ -205,25 +205,24 @@ abstract class TypeCoercionBase {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case up: Unpivot if up.canBeCoercioned && !up.valuesTypeCoercioned =>
         // get wider data type of inner values at same idx
-        val valueDataTypes = up.values.get.head._1.zipWithIndex.map {
+        val valueDataTypes = up.values.get.head.exprs.zipWithIndex.map {
           case (_, idx) => findWiderTypeWithoutStringPromotion(
-            up.values.get.map(_._1(idx).dataType))
+            up.values.get.map(_.exprs(idx).dataType))
         }
 
         // cast inner values to type according to their idx
-        val values = up.values.get.map { values =>
-          val vals = values._1.zipWithIndex.map {
+        val values = up.values.map(_.map { values =>
+          val exprs = values.exprs.zipWithIndex.map {
             case (value: NamedExpression, idx) => (value, valueDataTypes(idx))
           } map {
             case (value: NamedExpression, Some(valueType: DataType))
-              if value.dataType != valueType =>
-              Alias(Cast(value, valueType), value.name)()
+              if value.dataType != valueType => Alias(Cast(value, valueType), value.name)()
             case (value, _) => value
           }
-          (vals, values._2)
-        }
+          values.copy(exprs = exprs)
+        })
 
-        up.copy(values = Some(values))
+        up.copy(values = values)
     }
   }
 
