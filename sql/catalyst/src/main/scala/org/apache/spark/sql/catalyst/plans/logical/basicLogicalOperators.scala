@@ -1477,7 +1477,7 @@ case class Unpivot(
     valueColumnNames: Seq[String],
     child: LogicalPlan) extends UnaryNode {
   // There should be no code path that creates `Unpivot` with both set None
-  assert(ids.nonEmpty || values.nonEmpty, "at least one of `ids` and `values` must not be `None`")
+  assert(ids.isDefined || values.isDefined, "at least one of `ids` and `values` must be defined")
 
   override lazy val resolved = false  // Unpivot will be replaced after being resolved.
   override def output: Seq[Attribute] = Nil
