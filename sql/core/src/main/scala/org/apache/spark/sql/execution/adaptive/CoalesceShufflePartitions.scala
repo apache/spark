@@ -30,7 +30,8 @@ import org.apache.spark.util.Utils
  * A rule to coalesce the shuffle partitions based on the map output statistics, which can
  * avoid many small reduce tasks that hurt performance.
  */
-case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleReadRule {
+case class CoalesceShufflePartitions(session: SparkSession, isDataWritingStage: Boolean = false)
+  extends AQEShuffleReadRule {
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(ENSURE_REQUIREMENTS, REPARTITION_BY_COL, REBALANCE_PARTITIONS_BY_NONE,
@@ -64,7 +65,11 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
         1
       }
     }
-    val advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+    val advisoryTargetSize = if (isDataWritingStage) {
+      conf.getConf(SQLConf.DATAWRITE_PARTITION_SIZE_IN_BYTES)
+    } else {
+      conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+    }
     val minPartitionSize = if (Utils.isTesting) {
       // In the tests, we usually set the target size to a very small value that is even smaller
       // than the default value of the min partition size. Here we also adjust the min partition
