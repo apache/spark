@@ -976,7 +976,7 @@ class RollingGroupby(RollingLike[FrameLike]):
             data_fields=[c._internal.data_fields[0] for c in applied],
         )
 
-        return groupby._cleanup_and_return(DataFrame(internal))
+        return groupby._handle_output(DataFrame(internal))
 
     def count(self) -> FrameLike:
         """

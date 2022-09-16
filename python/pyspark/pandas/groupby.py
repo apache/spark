@@ -150,7 +150,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def _cleanup_and_return(self, psdf: DataFrame) -> FrameLike:
+    def _handle_output(self, psdf: DataFrame) -> FrameLike:
         pass
 
     # TODO: Series support is not implemented yet.
@@ -2210,7 +2210,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 for psser in self._agg_columns
             ],
         )
-        return self._cleanup_and_return(DataFrame(internal))
+        return self._handle_output(DataFrame(internal))
 
     # TODO: add axis parameter
     def idxmin(self, skipna: bool = True) -> FrameLike:
@@ -2293,7 +2293,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 for psser in self._agg_columns
             ],
         )
-        return self._cleanup_and_return(DataFrame(internal))
+        return self._handle_output(DataFrame(internal))
 
     def fillna(
         self,
@@ -2552,7 +2552,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             )
 
         internal = psdf._internal.with_new_sdf(sdf)
-        return self._cleanup_and_return(DataFrame(internal).drop(groupkey_labels, axis=1))
+        return self._handle_output(DataFrame(internal).drop(groupkey_labels, axis=1))
 
     def head(self, n: int = 5) -> FrameLike:
         """
@@ -2895,7 +2895,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 )
             )
             if len(pdf) <= limit:
-                return self._cleanup_and_return(psdf_from_pandas)
+                return self._handle_output(psdf_from_pandas)
 
             sdf = GroupBy._spark_group_map_apply(
                 psdf,
@@ -2945,7 +2945,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 spark_frame=sdf, index_spark_columns=None, data_fields=data_fields
             )
 
-        return self._cleanup_and_return(DataFrame(internal))
+        return self._handle_output(DataFrame(internal))
 
     def nunique(self, dropna: bool = True) -> FrameLike:
         """
@@ -3204,7 +3204,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if internal.spark_frame.head() is None:
             raise KeyError(name)
 
-        return self._cleanup_and_return(DataFrame(internal))
+        return self._handle_output(DataFrame(internal))
 
     def median(self, numeric_only: Optional[bool] = True, accuracy: int = 10000) -> FrameLike:
         """
@@ -3367,7 +3367,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 psdf = psdf.reset_index(level=should_drop_index, drop=True)
             if len(should_drop_index) < len(self._groupkeys):
                 psdf = psdf.reset_index()
-        return self._cleanup_and_return(psdf)
+        return self._handle_output(psdf)
 
     def _prepare_reduce(
         self,
@@ -3607,7 +3607,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
             internal = internal.resolved_copy
         return DataFrame(internal)
 
-    def _cleanup_and_return(self, psdf: DataFrame) -> DataFrame:
+    def _handle_output(self, psdf: DataFrame) -> DataFrame:
         return psdf
 
     # TODO: Implement 'percentiles', 'include', and 'exclude' arguments.
@@ -3759,8 +3759,8 @@ class SeriesGroupBy(GroupBy[Series]):
         else:
             return psser.copy()
 
-    def _cleanup_and_return(self, psdf: DataFrame) -> Series:
-        return first_series(psdf).rename().rename(self._psser.name)
+    def _handle_output(self, psdf: DataFrame) -> Series:
+        return first_series(psdf).rename(self._psser.name)
 
     def agg(self, *args: Any, **kwargs: Any) -> None:
         return MissingPandasLikeSeriesGroupBy.agg(self, *args, **kwargs)
