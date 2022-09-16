@@ -109,7 +109,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.percentile_approx(scol.cast(DoubleType()), q, accuracy).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(quantile)
 
