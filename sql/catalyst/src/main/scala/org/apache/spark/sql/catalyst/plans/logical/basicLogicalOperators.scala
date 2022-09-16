@@ -1387,7 +1387,9 @@ case class UnpivotExpr(exprs: Seq[NamedExpression], alias: Option[String]) exten
   override val children: Seq[NamedExpression] = exprs
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
-  // override lazy val resolved = false
+
+  // this expression is never resolved, it gets replaced together with its parent Unpivot plan
+  override lazy val resolved = false
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
@@ -1474,6 +1476,9 @@ case class Unpivot(
     variableColumnName: String,
     valueColumnNames: Seq[String],
     child: LogicalPlan) extends UnaryNode {
+  // There should be no code path that creates `Unpivot` with both set None
+  assert(ids.nonEmpty || values.nonEmpty, "at least one of `ids` and `values` must not be `None`")
+
   override lazy val resolved = false  // Unpivot will be replaced after being resolved.
   override def output: Seq[Attribute] = Nil
   override def metadataOutput: Seq[Attribute] = Nil
