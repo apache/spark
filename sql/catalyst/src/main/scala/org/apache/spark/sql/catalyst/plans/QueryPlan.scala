@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst.plans
 
 import scala.collection.mutable
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.UnpivotExpr
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
@@ -208,6 +208,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     }
 
     def recursiveTransform(arg: Any): AnyRef = arg match {
+      case ue: UnpivotExpr => ue.withNewChildren(ue.exprs.map(transformExpression))
       case e: Expression => transformExpression(e)
       case Some(value) => Some(recursiveTransform(value))
       case m: Map[_, _] => m

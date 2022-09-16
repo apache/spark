@@ -34,8 +34,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.Utils
 import org.apache.spark.util.random.RandomSampler
 
-import scala.reflect.ClassTag
-
 /**
  * When planning take() or collect() operations, this special node is inserted at the top of
  * the logical plan before invoking the query planner.
@@ -1492,18 +1490,6 @@ case class Unpivot(
     values.get.head.exprs.zipWithIndex.forall { case (expr, idx) =>
       values.get.tail.forall(vals => vals.exprs(idx).dataType.sameType(expr.dataType))
     }
-
-  /**
-   * Replace `values` with its inner `Seq[NamedExpression]` so that those expressions
-   * become top level expressions. There is nothing to analyse for `UnpivotExpr` and
-   * `UnpivotExpr.alias`, anyway.
-   */
-  override protected def mapProductIterator[B: ClassTag](f: Any => B): Array[B] = {
-    super.mapProductIterator {
-      case Some(exprs: Seq[UnpivotExpr]) => exprs.map(_.exprs)
-      case elem: Any => elem
-    }.map(f)
-  }
 
 }
 
