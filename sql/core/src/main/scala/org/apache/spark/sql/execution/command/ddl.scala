@@ -203,7 +203,8 @@ case class DescribeDatabaseCommand(
 }
 
 /**
- * Drops a table/view from the metastore and removes it if it is cached.
+ * Drops a table/view from the metastore and removes it if it is cached. This command does not drop
+ * temp views, which should be handled by [[DropTempViewCommand]].
  *
  * The syntax of this command is:
  * {{{
@@ -219,9 +220,8 @@ case class DropTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val isTempView = catalog.isTempView(tableName)
 
-    if (!isTempView && catalog.tableExists(tableName)) {
+    if (catalog.tableExists(tableName)) {
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
       // issue an exception.
       catalog.getTableMetadata(tableName).tableType match {
@@ -231,14 +231,10 @@ case class DropTableCommand(
           throw QueryCompilationErrors.cannotDropViewWithDropTableError()
         case _ =>
       }
-    }
 
-    if (isTempView || catalog.tableExists(tableName)) {
       try {
-        val hasViewText = isTempView &&
-          catalog.getTempViewOrPermanentTableMetadata(tableName).viewText.isDefined
         sparkSession.sharedState.cacheManager.uncacheQuery(
-          sparkSession.table(tableName), cascade = !isTempView || hasViewText)
+          sparkSession.table(tableName), cascade = true)
       } catch {
         case NonFatal(e) => log.warn(e.toString, e)
       }
