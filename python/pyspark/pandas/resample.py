@@ -490,4 +490,4 @@ class SeriesResampler(Resampler[Series]):
                 return partial(property_or_func, self)
 
     def _cleanup_and_return(self, psdf: DataFrame) -> Series:
-        return first_series(psdf).rename().rename(self._psser.name)
+        return first_series(psdf).rename(self._psser.name)
