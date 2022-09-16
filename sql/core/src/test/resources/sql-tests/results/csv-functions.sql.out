@@ -38,7 +38,7 @@ a InvalidType
 --^^^
 
 Failed fallback parsing: 
-DataType invalidtype is not supported.(line 1, pos 2)
+[_LEGACY_ERROR_TEMP_030] DataType invalidtype is not supported.(line 1, pos 2)
 
 == SQL ==
 a InvalidType
