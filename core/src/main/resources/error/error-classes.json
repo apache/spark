@@ -113,9 +113,9 @@
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
         ]
       },
-      "SCHEMA_OF_CSV_INVALID_INPUT" : {
+      "NON_FOLDABLE_INPUT" : {
         "message" : [
-          "The input csv should be a foldable string expression and not null; however, got <inputExpr>."
+          "The input should be a foldable string expression and not null; however, got <inputExpr>."
         ]
       }
     }

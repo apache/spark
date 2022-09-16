@@ -187,7 +187,7 @@ case class SchemaOfCsv(
       super.checkInputDataTypes()
     } else {
       DataTypeMismatch(
-        errorSubClass = "SCHEMA_OF_CSV_INVALID_INPUT",
+        errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map("inputExpr" -> toSQLExpr(child)))
     }
   }
