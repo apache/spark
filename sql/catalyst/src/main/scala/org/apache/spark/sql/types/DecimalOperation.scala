@@ -196,16 +196,18 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
 
   protected def getAsJavaBigDecimal(): java.math.BigDecimal
 
+  private def actualLongVal: Long = longVal / POW_10(_scale)
+
   def toScalaBigInt: BigInt = if (isNotNull()) {
     getAsBigDecimal().toBigInt
   } else {
-    BigInt(toLong)
+    BigInt(actualLongVal)
   }
 
   def toJavaBigInteger: java.math.BigInteger = if (isNotNull()) {
     getAsJavaBigInteger()
   } else {
-    java.math.BigInteger.valueOf(toLong)
+    java.math.BigInteger.valueOf(actualLongVal)
   }
 
   protected def getAsJavaBigInteger(): java.math.BigInteger
@@ -223,7 +225,7 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
   }
 
   def toLong: Long = if (isNull()) {
-    longVal / POW_10(_scale)
+    actualLongVal
   } else {
     getAsBigDecimal().longValue
   }
@@ -234,7 +236,6 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
       maxValue: Int,
       minValue: Int) (f1: Long => T) (f2: Double => T): T = {
     if (isNull()) {
-      val actualLongVal = longVal / POW_10(_scale)
       val numericVal = f1(actualLongVal)
       if (actualLongVal == numericVal) {
         numericVal
@@ -254,7 +255,7 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
   }
 
   def roundToLong(decimal: Decimal): Long = if (isNull()) {
-    longVal / POW_10(_scale)
+    actualLongVal
   } else {
     try {
       // We cannot store Long.MAX_VALUE as a Double without losing precision.

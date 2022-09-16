@@ -66,18 +66,18 @@ class JDKDecimalOperation extends DecimalOperation[JDKDecimalOperation] {
 
   def doCompare(other: JDKDecimalOperation): Int = toBigDecimal.compare(other.toBigDecimal)
 
-  def isEqualsZero(): Boolean = this.decimalVal == BIG_DEC_ZERO
+  def isEqualsZero(): Boolean = this.decimalVal.signum == 0
 
   def doAdd(that: JDKDecimalOperation): JDKDecimalOperation = {
     val jDKDecimalOperation = new JDKDecimalOperation()
-    val newBigDecimal = toBigDecimal.bigDecimal.add(that.toBigDecimal.bigDecimal)
+    val newBigDecimal = toJavaBigDecimal.add(that.toJavaBigDecimal)
     jDKDecimalOperation.set(newBigDecimal)
     jDKDecimalOperation
   }
 
   def doSubtract(that: JDKDecimalOperation): JDKDecimalOperation = {
     val jDKDecimalOperation = new JDKDecimalOperation()
-    val newBigDecimal = toBigDecimal.bigDecimal.subtract(that.toBigDecimal.bigDecimal)
+    val newBigDecimal = toJavaBigDecimal.subtract(that.toJavaBigDecimal)
     jDKDecimalOperation.set(newBigDecimal)
     jDKDecimalOperation
   }
@@ -111,7 +111,6 @@ class JDKDecimalOperation extends DecimalOperation[JDKDecimalOperation] {
 
 @Unstable
 object JDKDecimalOperation {
-  private val BIG_DEC_ZERO = BigDecimal(0)
 
   val MATH_CONTEXT = new MathContext(DecimalType.MAX_PRECISION, RoundingMode.HALF_UP)
 
