@@ -486,7 +486,7 @@ class SparkSubmitSuite
     conf.get("spark.kubernetes.driver.container.image") should be ("bar")
   }
 
-  test("SPARK-33782 : handles k8s files download to current directory") {
+  test("SPARK-33782: handles k8s files download to current directory") {
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--proxy-user", "test.user",

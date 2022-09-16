@@ -382,6 +382,7 @@ private[spark] class SparkSubmit extends Logging {
       localPyFiles = Option(args.pyFiles).map {
         downloadFileList(_, targetDir, sparkConf, hadoopConf)
       }.orNull
+
       if (isKubernetesClusterModeDriver) {
         // SPARK-33748: this mimics the behaviour of Yarn cluster mode. If the driver is running
         // in cluster mode, the archives should be available in the driver's current working
@@ -405,7 +406,11 @@ private[spark] class SparkSubmit extends Logging {
                 s"Files  $resolvedUri " +
                   s"from ${source.getAbsolutePath} to ${dest.getAbsolutePath}")
               Utils.deleteRecursively(dest)
-              if (isArchive) Utils.unpack(source, dest) else Files.copy(source.toPath, dest.toPath)
+              if (isArchive) {
+                Utils.unpack(source, dest)
+              } else {
+                Files.copy(source.toPath, dest.toPath)
+              }
               // Keep the URIs of local files with the given fragments.
               UriBuilder.fromUri(
                 localResources).fragment(resolvedUri.getFragment).build().toString
