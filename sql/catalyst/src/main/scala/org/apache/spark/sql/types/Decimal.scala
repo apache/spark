@@ -291,7 +291,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     decimal
   }
 
-  def abs: Decimal = if (this.compare(Decimal.ZERO) < 0) this.unary_- else this
+  def abs: Decimal = if (this < Decimal.ZERO) this.unary_- else this
 
   def floor: Decimal = if (scale == 0) this else {
     val newPrecision = DecimalType.bounded(precision - scale + 1, 0).precision
