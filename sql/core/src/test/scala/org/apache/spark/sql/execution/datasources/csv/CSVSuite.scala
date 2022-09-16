@@ -1664,7 +1664,7 @@ abstract class CSVSuite
         .repartition(1)
         .write.text(path.getAbsolutePath)
 
-      // Default name of the corrupt record should return null instead of "1,a"
+      // Corrupt record column with the default name should return null instead of "1,a"
       val corruptRecordCol = spark.sessionState.conf.columnNameOfCorruptRecord
       var df = spark.read
         .schema(s"c1 int, c2 string, x string, ${corruptRecordCol} string")
@@ -1673,7 +1673,7 @@ abstract class CSVSuite
 
       checkAnswer(df, Seq(Row(1, "a", "A", null)))
 
-      // User-provided corrupt record should also return null instead of "1,a"
+      // Corrupt record column with the user-provided name should return null instead of "1,a"
       df = spark.read
         .schema(s"c1 int, c2 string, x string, _invalid string")
         .option("columnNameCorruptRecord", "_invalid")
