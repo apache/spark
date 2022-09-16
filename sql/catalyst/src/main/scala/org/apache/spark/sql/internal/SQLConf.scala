@@ -2730,6 +2730,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECIMAL_UNDERLYING_IMPLEMENTATION = buildConf("spark.sql.decimal.implementation")
+    .internal()
+    .doc("When JDKBigDecimal, using the java.math.BigDecimal as the underlying implementation. " +
+      "Otherwise, using Int128.")
+    .version("3.4.0")
+    .stringConf
+    .checkValues(Set("JDKBigDecimal"))
+    .createWithDefault("JDKBigDecimal")
+
   val LITERAL_PICK_MINIMUM_PRECISION =
     buildConf("spark.sql.legacy.literal.pickMinimumPrecision")
       .internal()
