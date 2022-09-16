@@ -3103,8 +3103,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             or a list or tuple for multiple columns.
         values : str, Column, tuple, list, optional
             Column(s) to unpivot. Can be a single column or column name, or a list or tuple
-            for multiple columns. Must not be empty. If None, uses all columns that
-            are not set as `ids`.
+            for multiple columns. If specified, must not be empty. If not specified, uses all
+            columns that are not set as `ids`.
         variableColumnName : str
             Name of the variable column.
         valueColumnName : str
