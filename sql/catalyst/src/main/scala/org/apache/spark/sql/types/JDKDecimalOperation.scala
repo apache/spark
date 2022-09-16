@@ -64,7 +64,7 @@ class JDKDecimalOperation extends DecimalOperation[JDKDecimalOperation] {
 
   def longValue: Long = decimalVal.longValue
 
-  def rescale(scale: Int, roundMode: BigDecimal.RoundingMode.Value): Boolean = {
+  def rescale(precision: Int, scale: Int, roundMode: BigDecimal.RoundingMode.Value): Boolean = {
     val newDecimalVal = this.decimalVal.setScale(scale, roundMode)
     if (newDecimalVal.precision > precision) {
       return false
@@ -75,18 +75,21 @@ class JDKDecimalOperation extends DecimalOperation[JDKDecimalOperation] {
 
   def doCompare(other: DecimalOperation[_]): Int = toBigDecimal.compare(other.toBigDecimal)
 
-  def isEqualsZero(): Boolean = this.decimalVal == BIG_DEC_ZERO
+  def isEqualsZero(): Boolean = {
+    assert(isNotNull)
+    this.decimalVal.signum == 0
+  }
 
   def doAdd(that: DecimalOperation[_]): JDKDecimalOperation = {
     val jDKDecimalOperation = new JDKDecimalOperation()
-    val newBigDecimal = toBigDecimal.bigDecimal.add(that.toBigDecimal.bigDecimal)
+    val newBigDecimal = toJavaBigDecimal.add(that.toJavaBigDecimal)
     jDKDecimalOperation.set(newBigDecimal)
     jDKDecimalOperation
   }
 
   def doSubtract(that: DecimalOperation[_]): JDKDecimalOperation = {
     val jDKDecimalOperation = new JDKDecimalOperation()
-    val newBigDecimal = toBigDecimal.bigDecimal.subtract(that.toBigDecimal.bigDecimal)
+    val newBigDecimal = toJavaBigDecimal.subtract(that.toJavaBigDecimal)
     jDKDecimalOperation.set(newBigDecimal)
     jDKDecimalOperation
   }
@@ -120,7 +123,6 @@ class JDKDecimalOperation extends DecimalOperation[JDKDecimalOperation] {
 
 @Unstable
 object JDKDecimalOperation {
-  private val BIG_DEC_ZERO = BigDecimal(0)
 
   val MATH_CONTEXT = new MathContext(DecimalType.MAX_PRECISION, RoundingMode.HALF_UP)
 
