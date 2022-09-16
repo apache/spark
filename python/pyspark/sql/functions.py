@@ -5490,7 +5490,7 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a column of `boolean` type.
+        a column of Boolean type.
 
     Examples
     --------
@@ -5515,7 +5515,7 @@ def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a column of `boolean` type.
+        a column of Boolean type.
 
     Examples
     --------
@@ -5530,7 +5530,7 @@ def slice(
     x: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
 ) -> Column:
     """
-    Collection function: returns an array containing  all the elements in `x` from index `start`
+    Collection function: returns an array containing all the elements in `x` from index `start`
     (array indices start at 1, or from the end if `start` is negative) with the specified `length`.
 
     .. versionadded:: 2.4.0
@@ -5575,14 +5575,14 @@ def array_join(
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
     delimiter : str
-        delimiter to use concatanate elements
+        delimiter used to concatenate elements
     null_replacement : str, optional
         if set then null values will be replaced by this value
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a column of string type. Concatanated values.
+        a column of string type. Concatenated values.
 
     Examples
     --------
@@ -5604,7 +5604,6 @@ def concat(*cols: "ColumnOrName") -> Column:
     """
     Concatenates multiple input columns together into a single column.
     The function works with strings, numeric, binary and compatible array columns.
-    Or any type that can be converted to string is good candidate as input value.
 
     .. versionadded:: 1.5.0
 
@@ -5616,11 +5615,11 @@ def concat(*cols: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        concatatened values. Type of the `Column` depends on input columns' type.
+        concatenated values. Type of the `Column` depends on input columns' type.
 
     See Also
     --------
-    :meth:`pyspark.sql.functions.array_join` : to concatanate string columns with delimiter
+    :meth:`pyspark.sql.functions.array_join` : to concatenate string columns with delimiter
 
     Examples
     --------
@@ -5710,6 +5709,9 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     [Row(element_at(data, 1)='a')]
     >>> df.select(element_at(df.data, -1)).collect()
     [Row(element_at(data, -1)='c')]
+
+    Returns `None` if there is no value corresponding to the given `extraction`.
+
     >>> df.select(element_at(df.data, -4)).collect()
     [Row(element_at(data, -4)=None)]
 
@@ -5918,7 +5920,7 @@ def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an array of values from first array that is not in the second.
+        an array of values from first array that are not in the second.
 
     Examples
     --------
@@ -6300,7 +6302,7 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a string representatio of a :class:`StructType` parsed from given JSON.
+        a string representation of a :class:`StructType` parsed from given JSON.
 
     Examples
     --------
@@ -6341,7 +6343,7 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a string representatio of a :class:`StructType` parsed from given CSV.
+        a string representation of a :class:`StructType` parsed from given CSV.
 
     Examples
     --------
