@@ -554,7 +554,7 @@ class MicroBatchExecution(
     logDebug(s"Running batch $currentBatchId")
 
     // Request unprocessed data from all sources.
-    val mutableNewData = mutable.Map() ++ reportTimeTaken("getBatch") {
+    val mutableNewData = mutable.Map.empty ++ reportTimeTaken("getBatch") {
       availableOffsets.flatMap {
         case (source: Source, available: Offset)
           if committedOffsets.get(source).map(_ != available).getOrElse(true) =>

@@ -525,7 +525,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
         .select("*", "_metadata")
         .writeStream.format("json")
         .option("checkpointLocation", dir.getCanonicalPath + "/target/checkpoint")
-        .trigger(Trigger.Once())
+        .trigger(Trigger.AvailableNow())
         .start(dir.getCanonicalPath + "/target/new-streaming-data")
 
       stream.awaitTermination()
