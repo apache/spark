@@ -9,10 +9,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1.23'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -34,10 +34,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1.23'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BIGINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -59,10 +59,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'-4.56'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -84,10 +84,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'-4.56'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BIGINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -109,10 +109,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'abc'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -134,10 +134,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'abc'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BIGINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -159,10 +159,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'abc'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"FLOAT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"FLOAT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -184,10 +184,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'abc'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"DOUBLE\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"DOUBLE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -209,10 +209,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1234567890123'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -234,10 +234,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'12345678901234567890123'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BIGINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -259,10 +259,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "''",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -284,10 +284,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "''",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BIGINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -309,10 +309,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "''",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"FLOAT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"FLOAT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -334,10 +334,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "''",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"DOUBLE\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"DOUBLE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -375,10 +375,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'123.a'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -400,10 +400,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'123.a'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BIGINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -425,10 +425,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'123.a'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"FLOAT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"FLOAT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -450,10 +450,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'123.a'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"DOUBLE\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"DOUBLE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -483,10 +483,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'-2147483649'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -516,10 +516,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'2147483648'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -549,10 +549,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'-9223372036854775809'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BIGINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -582,10 +582,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'9223372036854775808'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BIGINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -611,10 +611,24 @@ SELECT HEX(CAST(CAST(123 AS byte) AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(CAST(123 AS TINYINT) AS BINARY)' due to data type mismatch: 
- cannot cast tinyint to binary with ANSI mode on.
- If you have to cast tinyint to binary, you can set spark.sql.ansi.enabled as false.
-; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(CAST(123 AS TINYINT) AS BINARY)\"",
+    "srcType" : "\"TINYINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 44,
+    "fragment" : "CAST(CAST(123 AS byte) AS binary)"
+  } ]
+}
 
 
 -- !query
@@ -623,10 +637,24 @@ SELECT HEX(CAST(CAST(-123 AS byte) AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(CAST(-123 AS TINYINT) AS BINARY)' due to data type mismatch: 
- cannot cast tinyint to binary with ANSI mode on.
- If you have to cast tinyint to binary, you can set spark.sql.ansi.enabled as false.
-; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(CAST(-123 AS TINYINT) AS BINARY)\"",
+    "srcType" : "\"TINYINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 45,
+    "fragment" : "CAST(CAST(-123 AS byte) AS binary)"
+  } ]
+}
 
 
 -- !query
@@ -635,10 +663,24 @@ SELECT HEX(CAST(123S AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(123S AS BINARY)' due to data type mismatch: 
- cannot cast smallint to binary with ANSI mode on.
- If you have to cast smallint to binary, you can set spark.sql.ansi.enabled as false.
-; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(123 AS BINARY)\"",
+    "srcType" : "\"SMALLINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 31,
+    "fragment" : "CAST(123S AS binary)"
+  } ]
+}
 
 
 -- !query
@@ -647,10 +689,24 @@ SELECT HEX(CAST(-123S AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(-123S AS BINARY)' due to data type mismatch: 
- cannot cast smallint to binary with ANSI mode on.
- If you have to cast smallint to binary, you can set spark.sql.ansi.enabled as false.
-; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
+    "srcType" : "\"SMALLINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 32,
+    "fragment" : "CAST(-123S AS binary)"
+  } ]
+}
 
 
 -- !query
@@ -659,10 +715,24 @@ SELECT HEX(CAST(123 AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(123 AS BINARY)' due to data type mismatch: 
- cannot cast int to binary with ANSI mode on.
- If you have to cast int to binary, you can set spark.sql.ansi.enabled as false.
-; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(123 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 30,
+    "fragment" : "CAST(123 AS binary)"
+  } ]
+}
 
 
 -- !query
@@ -671,10 +741,24 @@ SELECT HEX(CAST(-123 AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(-123 AS BINARY)' due to data type mismatch: 
- cannot cast int to binary with ANSI mode on.
- If you have to cast int to binary, you can set spark.sql.ansi.enabled as false.
-; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 31,
+    "fragment" : "CAST(-123 AS binary)"
+  } ]
+}
 
 
 -- !query
@@ -683,10 +767,24 @@ SELECT HEX(CAST(123L AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(123L AS BINARY)' due to data type mismatch: 
- cannot cast bigint to binary with ANSI mode on.
- If you have to cast bigint to binary, you can set spark.sql.ansi.enabled as false.
-; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(123 AS BINARY)\"",
+    "srcType" : "\"BIGINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 31,
+    "fragment" : "CAST(123L AS binary)"
+  } ]
+}
 
 
 -- !query
@@ -695,10 +793,24 @@ SELECT HEX(CAST(-123L AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(-123L AS BINARY)' due to data type mismatch: 
- cannot cast bigint to binary with ANSI mode on.
- If you have to cast bigint to binary, you can set spark.sql.ansi.enabled as false.
-; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
+    "srcType" : "\"BIGINT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 32,
+    "fragment" : "CAST(-123L AS binary)"
+  } ]
+}
 
 
 -- !query
@@ -854,10 +966,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1中文'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"TINYINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"TINYINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -879,10 +991,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1中文'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"SMALLINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"SMALLINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -904,10 +1016,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1中文'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -929,10 +1041,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'中文1'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BIGINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -954,10 +1066,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1中文'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BIGINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -997,10 +1109,10 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'\t\n xyz \t\r'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BOOLEAN\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1030,10 +1142,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "123.45",
+    "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "4",
     "scale" : "2",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "value" : "123.45"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1055,10 +1167,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'xyz'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"DECIMAL(4,2)\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"DECIMAL(4,2)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1088,10 +1200,10 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"DATE\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1121,10 +1233,10 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"TIMESTAMP\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"TIMESTAMP\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1154,10 +1266,10 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"TIMESTAMP_NTZ\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"TIMESTAMP_NTZ\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1179,10 +1291,10 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "Infinity",
     "sourceType" : "\"DOUBLE\"",
-    "targetType" : "\"TIMESTAMP\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"TIMESTAMP\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1204,10 +1316,10 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "Infinity",
     "sourceType" : "\"DOUBLE\"",
-    "targetType" : "\"TIMESTAMP\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"TIMESTAMP\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1261,10 +1373,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "INTERVAL '23:59:59' HOUR TO SECOND",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INTERVAL HOUR TO SECOND\"",
     "targetType" : "\"SMALLINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "INTERVAL '23:59:59' HOUR TO SECOND"
   }
 }
 
@@ -1295,10 +1407,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "INTERVAL '-1000' MONTH",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INTERVAL MONTH\"",
     "targetType" : "\"TINYINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "INTERVAL '-1000' MONTH"
   }
 }
 
@@ -1313,10 +1425,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "INTERVAL '1000000' SECOND",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INTERVAL SECOND\"",
     "targetType" : "\"SMALLINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "INTERVAL '1000000' SECOND"
   }
 }
 
@@ -1403,10 +1515,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "2147483647",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INT\"",
     "targetType" : "\"INTERVAL YEAR\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "2147483647"
   }
 }
 
@@ -1421,10 +1533,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "-9223372036854775808L",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"BIGINT\"",
     "targetType" : "\"INTERVAL DAY\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "-9223372036854775808L"
   }
 }
 
@@ -1495,10 +1607,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "10.123000",
+    "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "1",
     "scale" : "0",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "value" : "10.123000"
   },
   "queryContext" : [ {
     "objectType" : "",

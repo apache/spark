@@ -156,7 +156,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`a`",
     "proposal" : "`one`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 45,
+    "fragment" : "a"
+  } ]
 }
 
 

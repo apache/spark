@@ -257,6 +257,82 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.skew(), pdf.skew(), almost=True)
         self.assert_eq(psdf.kurt(), pdf.kurt(), almost=True)
 
+    def test_dataframe_corr(self):
+        # existing 'test_corr' is mixed by df.corr and ser.corr, will delete 'test_corr'
+        # when we have separate tests for df.corr and ser.corr
+        pdf = makeMissingDataframe(0.3, 42)
+        psdf = ps.from_pandas(pdf)
+
+        with self.assertRaisesRegex(ValueError, "Invalid method"):
+            psdf.corr("std")
+        with self.assertRaisesRegex(NotImplementedError, "kendall for now"):
+            psdf.corr("kendall")
+        with self.assertRaisesRegex(TypeError, "Invalid min_periods type"):
+            psdf.corr(min_periods="3")
+
+        for method in ["pearson", "spearman"]:
+            self.assert_eq(psdf.corr(method=method), pdf.corr(method=method), check_exact=False)
+            self.assert_eq(
+                psdf.corr(method=method, min_periods=1),
+                pdf.corr(method=method, min_periods=1),
+                check_exact=False,
+            )
+            self.assert_eq(
+                psdf.corr(method=method, min_periods=3),
+                pdf.corr(method=method, min_periods=3),
+                check_exact=False,
+            )
+            self.assert_eq(
+                (psdf + 1).corr(method=method, min_periods=2),
+                (pdf + 1).corr(method=method, min_periods=2),
+                check_exact=False,
+            )
+
+        # multi-index columns
+        columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B"), ("Y", "C"), ("Z", "D")])
+        pdf.columns = columns
+        psdf.columns = columns
+
+        for method in ["pearson", "spearman"]:
+            self.assert_eq(psdf.corr(method=method), pdf.corr(method=method), check_exact=False)
+            self.assert_eq(
+                psdf.corr(method=method, min_periods=1),
+                pdf.corr(method=method, min_periods=1),
+                check_exact=False,
+            )
+            self.assert_eq(
+                psdf.corr(method=method, min_periods=3),
+                pdf.corr(method=method, min_periods=3),
+                check_exact=False,
+            )
+            self.assert_eq(
+                (psdf + 1).corr(method=method, min_periods=2),
+                (pdf + 1).corr(method=method, min_periods=2),
+                check_exact=False,
+            )
+
+        # test spearman with identical values
+        pdf = pd.DataFrame(
+            {
+                "a": [0, 1, 1, 1, 0],
+                "b": [2, 2, -1, 1, np.nan],
+                "c": [3, 3, 3, 3, 3],
+                "d": [np.nan, np.nan, np.nan, np.nan, np.nan],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.corr(method="spearman"), pdf.corr(method="spearman"), check_exact=False)
+        self.assert_eq(
+            psdf.corr(method="spearman", min_periods=1),
+            pdf.corr(method="spearman", min_periods=1),
+            check_exact=False,
+        )
+        self.assert_eq(
+            psdf.corr(method="spearman", min_periods=3),
+            pdf.corr(method="spearman", min_periods=3),
+            check_exact=False,
+        )
+
     def test_corr(self):
         # Disable arrow execution since corr() is using UDT internally which is not supported.
         with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):

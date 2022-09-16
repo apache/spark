@@ -34,7 +34,6 @@ from pyspark.pandas.data_type_ops.base import (
     _is_valid_for_logical_operator,
     _is_boolean_type,
 )
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import as_spark_type, extension_dtypes, pandas_on_spark_type
 from pyspark.sql import functions as F
 from pyspark.sql.column import Column
@@ -242,9 +241,9 @@ class BooleanOps(DataTypeOps):
             def and_func(left: Column, right: Any) -> Column:
                 if not isinstance(right, Column):
                     if pd.isna(right):
-                        right = SF.lit(None)
+                        right = F.lit(None)
                     else:
-                        right = SF.lit(right)
+                        right = F.lit(right)
                 scol = left & right
                 return F.when(scol.isNull(), False).otherwise(scol)
 
@@ -259,9 +258,9 @@ class BooleanOps(DataTypeOps):
             def xor_func(left: Column, right: Any) -> Column:
                 if not isinstance(right, Column):
                     if pd.isna(right):
-                        right = SF.lit(None)
+                        right = F.lit(None)
                     else:
-                        right = SF.lit(right)
+                        right = F.lit(right)
                 scol = left.cast("integer").bitwiseXOR(right.cast("integer")).cast("boolean")
                 return F.when(scol.isNull(), False).otherwise(scol)
 
@@ -277,9 +276,9 @@ class BooleanOps(DataTypeOps):
 
             def or_func(left: Column, right: Any) -> Column:
                 if not isinstance(right, Column) and pd.isna(right):
-                    return SF.lit(False)
+                    return F.lit(False)
                 else:
-                    scol = left | SF.lit(right)
+                    scol = left | F.lit(right)
                     return F.when(left.isNull() | scol.isNull(), False).otherwise(scol)
 
             return column_op(or_func)(left, right)
@@ -354,9 +353,9 @@ class BooleanExtensionOps(BooleanOps):
         def and_func(left: Column, right: Any) -> Column:
             if not isinstance(right, Column):
                 if pd.isna(right):
-                    right = SF.lit(None)
+                    right = F.lit(None)
                 else:
-                    right = SF.lit(right)
+                    right = F.lit(right)
             return left & right
 
         return column_op(and_func)(left, right)
@@ -367,9 +366,9 @@ class BooleanExtensionOps(BooleanOps):
         def or_func(left: Column, right: Any) -> Column:
             if not isinstance(right, Column):
                 if pd.isna(right):
-                    right = SF.lit(None)
+                    right = F.lit(None)
                 else:
-                    right = SF.lit(right)
+                    right = F.lit(right)
             return left | right
 
         return column_op(or_func)(left, right)
@@ -382,9 +381,9 @@ class BooleanExtensionOps(BooleanOps):
             def xor_func(left: Column, right: Any) -> Column:
                 if not isinstance(right, Column):
                     if pd.isna(right):
-                        right = SF.lit(None)
+                        right = F.lit(None)
                     else:
-                        right = SF.lit(right)
+                        right = F.lit(right)
                 return left.cast("integer").bitwiseXOR(right.cast("integer")).cast("boolean")
 
             return column_op(xor_func)(left, right)

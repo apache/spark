@@ -17,22 +17,13 @@
 """
 Additional Spark functions used in pandas-on-Spark.
 """
-from typing import Any, Union, no_type_check
-
-import numpy as np
+from typing import Union, no_type_check
 
 from pyspark import SparkContext
-from pyspark.sql import functions as F
 from pyspark.sql.column import (
     Column,
     _to_java_column,
     _create_column_from_literal,
-)
-from pyspark.sql.types import (
-    ByteType,
-    FloatType,
-    IntegerType,
-    LongType,
 )
 
 
@@ -49,6 +40,11 @@ def kurt(col: Column) -> Column:
 def mode(col: Column, dropna: bool) -> Column:
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.PythonSQLUtils.pandasMode(col._jc, dropna))
+
+
+def covar(col1: Column, col2: Column, ddof: int) -> Column:
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.PythonSQLUtils.pandasCovar(col1._jc, col2._jc, ddof))
 
 
 def repeat(col: Column, n: Union[int, Column]) -> Column:
@@ -69,26 +65,6 @@ def date_part(field: Union[str, Column], source: Column) -> Column:
         _to_java_column(field) if isinstance(field, Column) else _create_column_from_literal(field)
     )
     return _call_udf(sc, "date_part", field, _to_java_column(source))
-
-
-def lit(literal: Any) -> Column:
-    """
-    Creates a Column of literal value.
-    """
-    if isinstance(literal, np.generic):
-        scol = F.lit(literal.item())
-        if isinstance(literal, np.int64):
-            return scol.astype(LongType())
-        elif isinstance(literal, np.int32):
-            return scol.astype(IntegerType())
-        elif isinstance(literal, np.int8) or isinstance(literal, np.byte):
-            return scol.astype(ByteType())
-        elif isinstance(literal, np.float32):
-            return scol.astype(FloatType())
-        else:  # TODO: Complete mappings between numpy literals and Spark data types
-            return scol
-    else:
-        return F.lit(literal)
 
 
 @no_type_check
