@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans
 
 import scala.collection.mutable
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
