@@ -4575,7 +4575,7 @@ class SQLConf extends Serializable with Logging {
 
   def softTimeoutMillisPurgeBatchInApplyInPandasWithState: Long =
     getConf(SQLConf.MAP_PANDAS_UDF_WITH_STATE_SOFT_TIMEOUT_PURGE_BATCH)
-  
+
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
