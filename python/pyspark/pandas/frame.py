@@ -120,7 +120,7 @@ from pyspark.pandas.internal import (
     SPARK_DEFAULT_SERIES_NAME,
     SPARK_INDEX_NAME_PATTERN,
 )
-from pyspark.pandas.missing.frame import _MissingPandasLikeDataFrame
+from pyspark.pandas.missing.frame import MissingPandasLikeDataFrame
 from pyspark.pandas.typedef.typehints import (
     as_spark_type,
     infer_return_type,
@@ -13489,8 +13489,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def __getattr__(self, key: str) -> Any:
         if key.startswith("__"):
             raise AttributeError(key)
-        if hasattr(_MissingPandasLikeDataFrame, key):
-            property_or_func = getattr(_MissingPandasLikeDataFrame, key)
+        if hasattr(MissingPandasLikeDataFrame, key):
+            property_or_func = getattr(MissingPandasLikeDataFrame, key)
             if isinstance(property_or_func, property):
                 return property_or_func.fget(self)
             else:
