@@ -265,12 +265,10 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
 
         with self.assertRaisesRegex(ValueError, "Invalid method"):
             psdf.corr("std")
-        with self.assertRaisesRegex(NotImplementedError, "kendall for now"):
-            psdf.corr("kendall")
         with self.assertRaisesRegex(TypeError, "Invalid min_periods type"):
             psdf.corr(min_periods="3")
 
-        for method in ["pearson", "spearman"]:
+        for method in ["pearson", "spearman", "kendall"]:
             self.assert_eq(psdf.corr(method=method), pdf.corr(method=method), check_exact=False)
             self.assert_eq(
                 psdf.corr(method=method, min_periods=1),
@@ -293,7 +291,7 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf.columns = columns
         psdf.columns = columns
 
-        for method in ["pearson", "spearman"]:
+        for method in ["pearson", "spearman", "kendall"]:
             self.assert_eq(psdf.corr(method=method), pdf.corr(method=method), check_exact=False)
             self.assert_eq(
                 psdf.corr(method=method, min_periods=1),
@@ -311,7 +309,7 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
                 check_exact=False,
             )
 
-        # test spearman with identical values
+        # test with identical values
         pdf = pd.DataFrame(
             {
                 "a": [0, 1, 1, 1, 0],
@@ -321,17 +319,19 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
             }
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(psdf.corr(method="spearman"), pdf.corr(method="spearman"), check_exact=False)
-        self.assert_eq(
-            psdf.corr(method="spearman", min_periods=1),
-            pdf.corr(method="spearman", min_periods=1),
-            check_exact=False,
-        )
-        self.assert_eq(
-            psdf.corr(method="spearman", min_periods=3),
-            pdf.corr(method="spearman", min_periods=3),
-            check_exact=False,
-        )
+
+        for method in ["pearson", "spearman", "kendall"]:
+            self.assert_eq(psdf.corr(method=method), pdf.corr(method=method), check_exact=False)
+            self.assert_eq(
+                psdf.corr(method=method, min_periods=1),
+                pdf.corr(method=method, min_periods=1),
+                check_exact=False,
+            )
+            self.assert_eq(
+                psdf.corr(method=method, min_periods=3),
+                pdf.corr(method=method, min_periods=3),
+                check_exact=False,
+            )
 
     def test_corr(self):
         # Disable arrow execution since corr() is using UDT internally which is not supported.
