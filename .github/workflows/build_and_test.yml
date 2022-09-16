@@ -357,7 +357,7 @@ jobs:
         #   See also https://issues.apache.org/jira/browse/SPARK-35375.
         # Pin the MarkupSafe to 2.0.1 to resolve the CI error.
         #   See also https://issues.apache.org/jira/browse/SPARK-38279.
-        python3.6 -m pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc 'jinja2<3.0.0' 'markupsafe==2.0.1'
+        python3.6 -m pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc 'jinja2<3.0.0' 'markupsafe==2.0.1' 'pyzmq<24.0.0'
         apt-get update -y
         apt-get install -y ruby ruby-dev
         gem install jekyll jekyll-redirect-from rouge
