@@ -18,15 +18,14 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkException
-import org.apache.spark.api.java.Optional
 import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoder, KeyValueGroupedDataset}
+import org.apache.spark.sql.{DataFrame, Encoder}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsWithState
