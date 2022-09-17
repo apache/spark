@@ -38,7 +38,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_023",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
   "messageParameters" : {
     "maxValue" : "127",
     "minValue" : "-128",
@@ -78,7 +78,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_023",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
   "messageParameters" : {
     "maxValue" : "32767",
     "minValue" : "-32768",
@@ -118,7 +118,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_023",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
   "messageParameters" : {
     "maxValue" : "9223372036854775807",
     "minValue" : "-9223372036854775808",
@@ -214,7 +214,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_023",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
   "messageParameters" : {
     "maxValue" : "3.4028234663852886E+38",
     "minValue" : "-3.4028234663852886E+38",
@@ -270,7 +270,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_023",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
   "messageParameters" : {
     "maxValue" : "1.7976931348623157E+308",
     "minValue" : "-1.7976931348623157E+308",
@@ -347,10 +347,12 @@ pattern%	no-pattern\%	pattern\%	pattern\\%
 select '\'', '"', '\n', '\r', '\t', 'Z'
 -- !query schema
 struct<':string,":string,
-:string,:string,	:string,Z:string>
+:string,
+:string,	:string,Z:string>
 -- !query output
 '	"	
-				Z
+	
+			Z
 
 
 -- !query
@@ -384,7 +386,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_019",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
   "messageParameters" : {
     "value" : "mar 11 2016",
     "valueType" : "DATE"
@@ -414,7 +416,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_019",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
   "messageParameters" : {
     "value" : "2016-33-11 20:54:00.000",
     "valueType" : "TIMESTAMP"
@@ -436,7 +438,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_021",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0021",
   "messageParameters" : {
     "valueType" : "GEO"
   },
@@ -465,7 +467,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_061",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0061",
   "messageParameters" : {
     "msg" : "decimal can only support precision up to 38"
   },
@@ -494,7 +496,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_022",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0022",
   "messageParameters" : {
     "msg" : "contains illegal character for hexBinary: 0XuZ"
   },

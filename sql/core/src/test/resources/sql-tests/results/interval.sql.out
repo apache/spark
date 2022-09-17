@@ -14,7 +14,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_029",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
   "messageParameters" : {
     "literal" : "interval 4 month 2 weeks 3 microseconds"
   },
@@ -421,7 +421,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_029",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
   "messageParameters" : {
     "literal" : "interval '-1 month 1 day -1 second'"
   },
@@ -458,7 +458,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_029",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
   "messageParameters" : {
     "literal" : "interval -1 month 1 day -1 second"
   },
@@ -495,7 +495,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_029",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
   "messageParameters" : {
     "literal" : "interval '-1 month 1 day -1 second'"
   },
@@ -532,7 +532,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_029",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
   "messageParameters" : {
     "literal" : "interval -1 month 1 day -1 second"
   },
@@ -956,7 +956,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_029",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
   "messageParameters" : {
     "literal" : "interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond"
   },
@@ -1001,7 +1001,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_029",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
   "messageParameters" : {
     "literal" : "interval '30' year '25' month '-100' day '40' hour '80' minute '299.889987299' second"
   },
@@ -1142,7 +1142,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_063",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
   "messageParameters" : {
     "msg" : "Interval string does not match day-time format of `[+|-]d h`, `INTERVAL [+|-]'[+|-]d h' DAY TO HOUR` when cast to interval day to hour: 20 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0."
   },
@@ -1163,7 +1163,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_063",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
   "messageParameters" : {
     "msg" : "Interval string does not match day-time format of `[+|-]d h:m`, `INTERVAL [+|-]'[+|-]d h:m' DAY TO MINUTE` when cast to interval day to minute: 20 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0."
   },
@@ -1184,7 +1184,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_063",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
   "messageParameters" : {
     "msg" : "Interval string does not match day-time format of `[+|-]h:m`, `INTERVAL [+|-]'[+|-]h:m' HOUR TO MINUTE` when cast to interval hour to minute: 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0."
   },
@@ -1205,7 +1205,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_063",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
   "messageParameters" : {
     "msg" : "Interval string does not match day-time format of `[+|-]h:m:s.n`, `INTERVAL [+|-]'[+|-]h:m:s.n' HOUR TO SECOND` when cast to interval hour to second: 15:40.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0."
   },
@@ -1226,7 +1226,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_063",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
   "messageParameters" : {
     "msg" : "Interval string does not match day-time format of `[+|-]h:m:s.n`, `INTERVAL [+|-]'[+|-]h:m:s.n' HOUR TO SECOND` when cast to interval hour to second: 15:40, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0."
   },
@@ -1247,7 +1247,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_063",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
   "messageParameters" : {
     "msg" : "Interval string does not match day-time format of `[+|-]m:s.n`, `INTERVAL [+|-]'[+|-]m:s.n' MINUTE TO SECOND` when cast to interval minute to second: 20 40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0."
   },
@@ -1268,7 +1268,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_062",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0062",
   "messageParameters" : {
     "msg" : "Error parsing ' 10 nanoseconds' to interval, invalid unit 'nanoseconds'"
   },
@@ -1369,7 +1369,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_025",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0025",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1387,7 +1387,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_062",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0062",
   "messageParameters" : {
     "msg" : "Error parsing ' 1 fake_unit' to interval, invalid unit 'fake_unit'"
   },
@@ -1408,7 +1408,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_027",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0027",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1426,7 +1426,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_028",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0028",
   "messageParameters" : {
     "from" : "year",
     "to" : "second"
@@ -1448,7 +1448,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_024",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1466,7 +1466,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_024",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1484,7 +1484,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_024",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1502,7 +1502,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_024",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1520,7 +1520,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_024",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1538,7 +1538,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_024",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1556,7 +1556,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_024",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0024",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1650,7 +1650,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_063",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
   "messageParameters" : {
     "msg" : "Error parsing interval year-month string: integer overflow"
   },
@@ -2048,7 +2048,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_063",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
   "messageParameters" : {
     "msg" : "Interval string does not match year-month format of `[+|-]d h`, `INTERVAL [+|-]'[+|-]d h' DAY TO HOUR` when cast to interval year to month: -\t2-2\t"
   },
@@ -2077,7 +2077,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_063",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
   "messageParameters" : {
     "msg" : "Interval string does not match day-time format of `[+|-]d h:m:s.n`, `INTERVAL [+|-]'[+|-]d h:m:s.n' DAY TO SECOND` when cast to interval day to second: \n-\t10\t 12:34:46.789\t, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0."
   },
@@ -2098,7 +2098,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_020",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
   "messageParameters" : {
     "value" : "中文 interval 1 day"
   },
@@ -2119,7 +2119,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_020",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
   "messageParameters" : {
     "value" : "interval中文 1 day"
   },
@@ -2140,7 +2140,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_020",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
   "messageParameters" : {
     "value" : "interval 1中文day"
   },
@@ -2279,7 +2279,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_020",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
   "messageParameters" : {
     "value" : "+"
   },
@@ -2300,7 +2300,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_020",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
   "messageParameters" : {
     "value" : "+."
   },
@@ -2321,7 +2321,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_020",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
   "messageParameters" : {
     "value" : "1"
   },
@@ -2342,7 +2342,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_020",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
   "messageParameters" : {
     "value" : "1.2"
   },
@@ -2363,7 +2363,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_020",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
   "messageParameters" : {
     "value" : "- 2"
   },
@@ -2384,7 +2384,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_020",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
   "messageParameters" : {
     "value" : "1 day -"
   },
@@ -2405,7 +2405,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_020",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
   "messageParameters" : {
     "value" : "1 day 1"
   },
@@ -2426,7 +2426,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_026",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0026",
   "messageParameters" : {
     "value" : "1 day 2"
   },
@@ -2447,7 +2447,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_026",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0026",
   "messageParameters" : {
     "value" : "interval 1"
   },
@@ -2732,7 +2732,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_063",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
   "messageParameters" : {
     "msg" : "requirement failed: day 106751992 outside range [0, 106751991]"
   },
@@ -2753,7 +2753,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_063",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
   "messageParameters" : {
     "msg" : "requirement failed: day 106751992 outside range [0, 106751991]"
   },
@@ -2774,7 +2774,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_063",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
   "messageParameters" : {
     "msg" : "requirement failed: hour 2562047789 outside range [0, 2562047788]"
   },
@@ -2795,7 +2795,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_063",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
   "messageParameters" : {
     "msg" : "requirement failed: hour 2562047789 outside range [0, 2562047788]"
   },
@@ -2816,7 +2816,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_063",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
   "messageParameters" : {
     "msg" : "requirement failed: minute 153722867281 outside range [0, 153722867280]"
   },
@@ -2837,7 +2837,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_063",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
   "messageParameters" : {
     "msg" : "requirement failed: minute 153722867281 outside range [0, 153722867280]"
   },

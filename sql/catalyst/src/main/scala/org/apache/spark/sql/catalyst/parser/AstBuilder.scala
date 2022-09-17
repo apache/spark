@@ -2361,7 +2361,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     } catch {
       case e: NumberFormatException =>
         throw new ParseException(
-          errorClass = "_LEGACY_ERROR_TEMP_060",
+          errorClass = "_LEGACY_ERROR_TEMP_0060",
           messageParameters = Map("msg" -> e.getMessage),
           ctx)
     }
@@ -2422,7 +2422,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     } catch {
       case e: AnalysisException =>
         throw new ParseException(
-          errorClass = "_LEGACY_ERROR_TEMP_061",
+          errorClass = "_LEGACY_ERROR_TEMP_0061",
           messageParameters = Map("msg" -> e.getMessage),
           ctx)
     }
@@ -2623,7 +2623,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       } catch {
         case i: IllegalArgumentException =>
           val e = new ParseException(
-            errorClass = "_LEGACY_ERROR_TEMP_062",
+            errorClass = "_LEGACY_ERROR_TEMP_0062",
             messageParameters = Map("msg" -> i.getMessage),
             ctx)
           e.setStackTrace(i.getStackTrace)
@@ -2665,7 +2665,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         // Handle Exceptions thrown by CalendarInterval
         case e: IllegalArgumentException =>
           val pe = new ParseException(
-            errorClass = "_LEGACY_ERROR_TEMP_063",
+            errorClass = "_LEGACY_ERROR_TEMP_0063",
             messageParameters = Map("msg" -> e.getMessage),
             ctx)
           pe.setStackTrace(e.getStackTrace)

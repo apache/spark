@@ -136,7 +136,7 @@ object ParserUtils {
   def validate(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
     if (!f) {
       throw new ParseException(
-        errorClass = "_LEGACY_ERROR_TEMP_064",
+        errorClass = "_LEGACY_ERROR_TEMP_0064",
         messageParameters = Map("msg" -> message),
         ctx)
     }

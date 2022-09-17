@@ -351,7 +351,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_029",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
   "messageParameters" : {
     "literal" : "interval 3 month 1 hour"
   },
@@ -489,7 +489,8 @@ NULL
 select cast('\t\t true \n\r ' as boolean)
 -- !query schema
 struct<CAST(		 true 
-  AS BOOLEAN):boolean>
+
+  AS BOOLEAN):boolean>
 -- !query output
 true
 
@@ -498,7 +499,8 @@ true
 select cast('\t\n false \t\r' as boolean)
 -- !query schema
 struct<CAST(	
- false 	 AS BOOLEAN):boolean>
+ false 	
+ AS BOOLEAN):boolean>
 -- !query output
 false
 
@@ -507,7 +509,8 @@ false
 select cast('\t\n xyz \t\r' as boolean)
 -- !query schema
 struct<CAST(	
- xyz 	 AS BOOLEAN):boolean>
+ xyz 	
+ AS BOOLEAN):boolean>
 -- !query output
 NULL
 

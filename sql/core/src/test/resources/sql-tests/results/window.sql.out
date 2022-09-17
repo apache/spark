@@ -402,7 +402,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_064",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
   "messageParameters" : {
     "msg" : "Frame bound value must be a literal."
   },

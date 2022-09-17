@@ -149,7 +149,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_038",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0038",
   "messageParameters" : {
     "duplicateNames" : "'t'"
   },

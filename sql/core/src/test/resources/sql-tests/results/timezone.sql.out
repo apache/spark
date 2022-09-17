@@ -46,7 +46,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_045",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0045",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -73,7 +73,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_044",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0044",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -91,7 +91,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_044",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0044",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -109,7 +109,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_044",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0044",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -127,7 +127,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_045",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0045",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -145,7 +145,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_044",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0044",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

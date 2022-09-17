@@ -401,7 +401,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_064",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
   "messageParameters" : {
     "msg" : "LINES TERMINATED BY only supports newline '\\n' right now: @"
   },

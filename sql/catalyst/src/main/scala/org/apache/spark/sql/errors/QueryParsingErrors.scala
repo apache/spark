@@ -31,52 +31,52 @@ import org.apache.spark.sql.types.StringType
 private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def invalidInsertIntoError(ctx: InsertIntoContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_001", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0001", ctx)
   }
 
   def insertOverwriteDirectoryUnsupportedError(ctx: InsertIntoContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_002", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0002", ctx)
   }
 
   def columnAliasInOperationNotAllowedError(op: String, ctx: TableAliasContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_003",
+      errorClass = "_LEGACY_ERROR_TEMP_0003",
       messageParameters = Map("op" -> op),
       ctx.identifierList())
   }
 
   def emptySourceForMergeError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_004", ctx.source)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0004", ctx.source)
   }
 
   def unrecognizedMatchedActionError(ctx: MatchedClauseContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_005",
+      errorClass = "_LEGACY_ERROR_TEMP_0005",
       messageParameters = Map("matchedAction" -> ctx.matchedAction().getText),
       ctx.matchedAction())
   }
 
   def insertedValueNumberNotMatchFieldNumberError(ctx: NotMatchedClauseContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_006", ctx.notMatchedAction())
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0006", ctx.notMatchedAction())
   }
 
   def unrecognizedNotMatchedActionError(ctx: NotMatchedClauseContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_007",
+      errorClass = "_LEGACY_ERROR_TEMP_0007",
       messageParameters = Map("matchedAction" -> ctx.notMatchedAction().getText),
       ctx.notMatchedAction())
   }
 
   def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_008", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0008", ctx)
   }
 
   def nonLastMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_009", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0009", ctx)
   }
 
   def nonLastNotMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_010", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0010", ctx)
   }
 
   def emptyPartitionKeyError(key: String, ctx: PartitionSpecContext): Throwable = {
@@ -88,11 +88,11 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def combinationQueryResultClausesUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_011", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0011", ctx)
   }
 
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_012", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0012", ctx)
   }
 
   def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
@@ -112,7 +112,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def lateralWithPivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_013", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0013", ctx)
   }
 
   def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
@@ -180,30 +180,30 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def emptyInputForTableSampleError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_014", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0014", ctx)
   }
 
   def tableSampleByBytesUnsupportedError(msg: String, ctx: SampleMethodContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_015",
+      errorClass = "_LEGACY_ERROR_TEMP_0015",
       messageParameters = Map("msg" -> msg),
       ctx)
   }
 
   def invalidByteLengthLiteralError(bytesStr: String, ctx: SampleByBytesContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_016",
+      errorClass = "_LEGACY_ERROR_TEMP_0016",
       messageParameters = Map("bytesStr" -> bytesStr),
       ctx)
   }
 
   def invalidEscapeStringError(ctx: PredicateContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_017", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0017", ctx)
   }
 
   def trimOptionUnsupportedError(trimOption: Int, ctx: TrimContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_018",
+      errorClass = "_LEGACY_ERROR_TEMP_0018",
       messageParameters = Map("trimOption" -> trimOption.toString),
       ctx)
   }
@@ -219,14 +219,14 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def cannotParseValueTypeError(
       valueType: String, value: String, ctx: TypeConstructorContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_019",
+      errorClass = "_LEGACY_ERROR_TEMP_0019",
       messageParameters = Map("valueType" -> valueType, "value" -> value),
       ctx)
   }
 
   def cannotParseIntervalValueError(value: String, ctx: TypeConstructorContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_020",
+      errorClass = "_LEGACY_ERROR_TEMP_0020",
       messageParameters = Map("value" -> value),
       ctx)
   }
@@ -234,7 +234,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def literalValueTypeUnsupportedError(
       valueType: String, ctx: TypeConstructorContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_021",
+      errorClass = "_LEGACY_ERROR_TEMP_0021",
       messageParameters = Map("valueType" -> valueType),
       ctx)
   }
@@ -243,7 +243,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       e: IllegalArgumentException, valueType: String, ctx: TypeConstructorContext): Throwable = {
     val message = Option(e.getMessage).getOrElse(s"Exception parsing $valueType")
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_022",
+      errorClass = "_LEGACY_ERROR_TEMP_0022",
       messageParameters = Map("msg" -> message),
       ctx)
   }
@@ -251,7 +251,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def invalidNumericLiteralRangeError(rawStrippedQualifier: String, minValue: BigDecimal,
       maxValue: BigDecimal, typeName: String, ctx: NumberContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_023",
+      errorClass = "_LEGACY_ERROR_TEMP_0023",
       messageParameters = Map(
         "rawStrippedQualifier" -> rawStrippedQualifier,
         "minValue" -> minValue.toString(),
@@ -261,42 +261,42 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def moreThanOneFromToUnitInIntervalLiteralError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_024", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0024", ctx)
   }
 
   def invalidIntervalLiteralError(ctx: IntervalContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_025", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0025", ctx)
   }
 
   def invalidIntervalFormError(value: String, ctx: MultiUnitsIntervalContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_026",
+      errorClass = "_LEGACY_ERROR_TEMP_0026",
       messageParameters = Map("value" -> value),
       ctx)
   }
 
   def invalidFromToUnitValueError(ctx: IntervalValueContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_027", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0027", ctx)
   }
 
   def fromToIntervalUnsupportedError(
       from: String, to: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_028",
+      errorClass = "_LEGACY_ERROR_TEMP_0028",
       messageParameters = Map("from" -> from, "to" -> to),
       ctx)
   }
 
   def mixedIntervalUnitsError(literal: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_029",
+      errorClass = "_LEGACY_ERROR_TEMP_0029",
       messageParameters = Map("literal" -> literal),
       ctx)
   }
 
   def dataTypeUnsupportedError(dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_030",
+      errorClass = "_LEGACY_ERROR_TEMP_0030",
       messageParameters = Map("dataType" -> dataType),
       ctx)
   }
@@ -328,7 +328,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def invalidBucketsNumberError(describe: String, ctx: ApplyTransformContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_031",
+      errorClass = "_LEGACY_ERROR_TEMP_0031",
       messageParameters = Map("describe" -> describe),
       ctx)
   }
@@ -363,7 +363,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def duplicatedTablePathsFoundError(
       pathOne: String, pathTwo: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_032",
+      errorClass = "_LEGACY_ERROR_TEMP_0032",
       messageParameters = Map(
         "pathOne" -> pathOne,
         "pathTwo" -> pathTwo),
@@ -371,13 +371,13 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def storedAsAndStoredByBothSpecifiedError(ctx: CreateFileFormatContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_033", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0033", ctx)
   }
 
   def operationInHiveStyleCommandUnsupportedError(operation: String,
       command: String, ctx: StatementContext, msgOpt: Option[String] = None): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_034",
+      errorClass = "_LEGACY_ERROR_TEMP_0034",
       messageParameters = Map(
         "operation" -> operation,
         "command" -> command,
@@ -388,7 +388,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def operationNotAllowedError(message: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_035",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       messageParameters = Map("message" -> message),
       ctx)
   }
@@ -412,7 +412,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def computeStatisticsNotExpectedError(ctx: IdentifierContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_036",
+      errorClass = "_LEGACY_ERROR_TEMP_0036",
       messageParameters = Map("ctx" -> ctx.getText),
       ctx)
   }
@@ -420,7 +420,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def addCatalogInCacheTableAsSelectNotAllowedError(
       quoted: String, ctx: CacheTableContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_037",
+      errorClass = "_LEGACY_ERROR_TEMP_0037",
       messageParameters = Map("quoted" -> quoted),
       ctx)
   }
@@ -446,26 +446,26 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def duplicateCteDefinitionNamesError(duplicateNames: String, ctx: CtesContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_038",
+      errorClass = "_LEGACY_ERROR_TEMP_0038",
       messageParameters = Map("duplicateNames" -> duplicateNames),
       ctx)
   }
 
   def sqlStatementUnsupportedError(sqlText: String, position: Origin): Throwable = {
     new ParseException(Option(sqlText), "Unsupported SQL statement", position, position,
-      Some("_LEGACY_ERROR_TEMP_039"))
+      Some("_LEGACY_ERROR_TEMP_0039"))
   }
 
   def unquotedIdentifierError(ident: String, ctx: ErrorIdentContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_040",
+      errorClass = "_LEGACY_ERROR_TEMP_0040",
       messageParameters = Map("ident" -> ident),
       ctx)
   }
 
   def duplicateClausesError(clauseName: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_041",
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
       messageParameters = Map("clauseName" -> clauseName),
       ctx)
   }
@@ -479,7 +479,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def unexpectedFormatForSetConfigurationError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_042", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0042", ctx)
   }
 
   def invalidPropertyKeyForSetQuotedConfigurationError(
@@ -503,57 +503,57 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def unexpectedFormatForResetConfigurationError(ctx: ResetConfigurationContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_043", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0043", ctx)
   }
 
   def intervalValueOutOfRangeError(ctx: IntervalContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_044", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0044", ctx)
   }
 
   def invalidTimeZoneDisplacementValueError(ctx: SetTimeZoneContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_045", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0045", ctx)
   }
 
   def createTempTableNotSpecifyProviderError(ctx: CreateTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_046", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0046", ctx)
   }
 
   def rowFormatNotUsedWithStoredAsError(ctx: CreateTableLikeContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_047", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0047", ctx)
   }
 
   def useDefinedRecordReaderOrWriterClassesError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_048", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0048", ctx)
   }
 
   def directoryPathAndOptionsPathBothSpecifiedError(ctx: InsertOverwriteDirContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_049", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0049", ctx)
   }
 
   def unsupportedLocalFileSchemeError(ctx: InsertOverwriteDirContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_050", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0050", ctx)
   }
 
   def invalidGroupingSetError(element: String, ctx: GroupingAnalyticsContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_051",
+      errorClass = "_LEGACY_ERROR_TEMP_0051",
       messageParameters = Map("element" -> element),
       ctx)
   }
 
   def createViewWithBothIfNotExistsAndReplaceError(ctx: CreateViewContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_052", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0052", ctx)
   }
 
   def defineTempViewWithIfNotExistsError(ctx: CreateViewContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_053", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0053", ctx)
   }
 
   def notAllowedToAddDBPrefixForTempViewError(
       database: String,
       ctx: CreateViewContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_054",
+      errorClass = "_LEGACY_ERROR_TEMP_0054",
       messageParameters = Map("database" -> database),
       ctx)
   }
@@ -611,12 +611,12 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def unclosedBracketedCommentError(command: String, position: Origin): Throwable = {
     new ParseException(Some(command), "Unclosed bracketed comment", position, position,
-      Some("_LEGACY_ERROR_TEMP_055"))
+      Some("_LEGACY_ERROR_TEMP_0055"))
   }
 
   def invalidTimeTravelSpec(reason: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_056",
+      errorClass = "_LEGACY_ERROR_TEMP_0056",
       messageParameters = Map("reason" -> reason),
       ctx)
   }
@@ -632,14 +632,14 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def defaultColumnNotImplementedYetError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_057", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0057", ctx)
   }
 
   def defaultColumnNotEnabledError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_058", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0058", ctx)
   }
 
   def defaultColumnReferencesNotAllowedInPartitionSpec(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_059", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0059", ctx)
   }
 }
