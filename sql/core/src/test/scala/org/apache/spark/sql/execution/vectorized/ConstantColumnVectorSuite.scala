@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.vectorized
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarMap}
+import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarBatchRow, ColumnarMap}
 import org.apache.spark.unsafe.types.UTF8String
 
 class ConstantColumnVectorSuite extends SparkFunSuite {
@@ -203,5 +203,11 @@ class ConstantColumnVectorSuite extends SparkFunSuite {
       assert(vector.getChild(1).getInt(i) == 25)
       assert(vector.getChild(2).getLong(i) == 12345L)
     }
+  }
+
+  testVector("SPARK-40477: Support NullType", 1, NullType) { vector =>
+    vector.setNull()
+    val bachRow = new ColumnarBatchRow(Array(vector))
+    assert(bachRow.get(0, NullType) === null)
   }
 }
