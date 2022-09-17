@@ -18,7 +18,7 @@
 """
 A wrapper for ResampledData to behave similar to pandas Resampler.
 """
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
 from distutils.version import LooseVersion
 from functools import partial
 from typing import (
@@ -407,6 +407,28 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
         return downsampled
 
+    @abstractmethod
+    def _handle_output(self, psdf: DataFrame) -> FrameLike:
+        pass
+
+    def min(self) -> FrameLike:
+        return self._handle_output(self._downsample("min"))
+
+    def max(self) -> FrameLike:
+        return self._handle_output(self._downsample("max"))
+
+    def sum(self) -> FrameLike:
+        return self._handle_output(self._downsample("sum").fillna(0.0))
+
+    def mean(self) -> FrameLike:
+        return self._handle_output(self._downsample("mean"))
+
+    def std(self) -> FrameLike:
+        return self._handle_output(self._downsample("std"))
+
+    def var(self) -> FrameLike:
+        return self._handle_output(self._downsample("var"))
+
 
 class DataFrameResampler(Resampler[DataFrame]):
     def __init__(
@@ -435,29 +457,14 @@ class DataFrameResampler(Resampler[DataFrame]):
             else:
                 return partial(property_or_func, self)
 
-    def min(self) -> DataFrame:
-        return self._downsample("min")
-
-    def max(self) -> DataFrame:
-        return self._downsample("max")
-
-    def sum(self) -> DataFrame:
-        return self._downsample("sum").fillna(0.0)
-
-    def mean(self) -> DataFrame:
-        return self._downsample("mean")
-
-    def std(self) -> DataFrame:
-        return self._downsample("std")
-
-    def var(self) -> DataFrame:
-        return self._downsample("var")
+    def _handle_output(self, psdf: DataFrame) -> DataFrame:
+        return psdf
 
 
 class SeriesResampler(Resampler[Series]):
     def __init__(
         self,
-        psdf: DataFrame,
+        psser: Series,
         resamplekey: Optional[Series],
         rule: str,
         closed: Optional[str] = None,
@@ -465,13 +472,14 @@ class SeriesResampler(Resampler[Series]):
         agg_columns: List[Series] = [],
     ):
         super().__init__(
-            psdf=psdf,
+            psdf=psser._psdf,
             resamplekey=resamplekey,
             rule=rule,
             closed=closed,
             label=label,
             agg_columns=agg_columns,
         )
+        self._psser = psser
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeSeriesResampler, item):
@@ -481,20 +489,5 @@ class SeriesResampler(Resampler[Series]):
             else:
                 return partial(property_or_func, self)
 
-    def min(self) -> Series:
-        return first_series(self._downsample("min"))
-
-    def max(self) -> Series:
-        return first_series(self._downsample("max"))
-
-    def sum(self) -> Series:
-        return first_series(self._downsample("sum").fillna(0.0))
-
-    def mean(self) -> Series:
-        return first_series(self._downsample("mean"))
-
-    def std(self) -> Series:
-        return first_series(self._downsample("std"))
-
-    def var(self) -> Series:
-        return first_series(self._downsample("var"))
+    def _handle_output(self, psdf: DataFrame) -> Series:
+        return first_series(psdf).rename(self._psser.name)

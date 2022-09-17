@@ -1658,6 +1658,32 @@ abstract class CSVSuite
       Row(1, Date.valueOf("1983-08-04"), null) :: Nil)
   }
 
+  test("SPARK-40468: column pruning with the corrupt record column") {
+    withTempPath { path =>
+      Seq("1,a").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      // Corrupt record column with the default name should return null instead of "1,a"
+      val corruptRecordCol = spark.sessionState.conf.columnNameOfCorruptRecord
+      var df = spark.read
+        .schema(s"c1 int, c2 string, x string, ${corruptRecordCol} string")
+        .csv(path.getAbsolutePath)
+        .selectExpr("c1", "c2", "'A' as x", corruptRecordCol)
+
+      checkAnswer(df, Seq(Row(1, "a", "A", null)))
+
+      // Corrupt record column with the user-provided name should return null instead of "1,a"
+      df = spark.read
+        .schema(s"c1 int, c2 string, x string, _invalid string")
+        .option("columnNameCorruptRecord", "_invalid")
+        .csv(path.getAbsolutePath)
+        .selectExpr("c1", "c2", "'A' as x", "_invalid")
+
+      checkAnswer(df, Seq(Row(1, "a", "A", null)))
+    }
+  }
+
   test("SPARK-23846: schema inferring touches less data if samplingRatio < 1.0") {
     // Set default values for the DataSource parameters to make sure
     // that whole test file is mapped to only one partition. This will guarantee

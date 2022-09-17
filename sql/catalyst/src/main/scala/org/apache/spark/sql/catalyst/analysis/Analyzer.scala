@@ -58,6 +58,7 @@ import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.{Utils => CUtils}
 
 /**
  * A trivial [[Analyzer]] with a dummy [[SessionCatalog]], [[EmptyFunctionRegistry]] and
@@ -3457,7 +3458,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw QueryCompilationErrors.writeTableWithMismatchedColumnsError(
           cols.size, query.output.size, query)
       }
-      val nameToQueryExpr = cols.zip(query.output).toMap
+      val nameToQueryExpr = CUtils.toMap(cols, query.output)
       // Static partition columns in the table output should not appear in the column list
       // they will be handled in another rule ResolveInsertInto
       val reordered = tableOutput.flatMap { nameToQueryExpr.get(_).orElse(None) }

@@ -34,7 +34,7 @@ from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.frame import CachedDataFrame
-from pyspark.pandas.missing.frame import _MissingPandasLikeDataFrame
+from pyspark.pandas.missing.frame import MissingPandasLikeDataFrame
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes,
     extension_dtypes_available,
@@ -2352,7 +2352,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
     def test_missing(self):
         psdf = self.psdf
 
-        missing_functions = inspect.getmembers(_MissingPandasLikeDataFrame, inspect.isfunction)
+        missing_functions = inspect.getmembers(MissingPandasLikeDataFrame, inspect.isfunction)
         unsupported_functions = [
             name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"
         ]
@@ -2373,7 +2373,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
                 getattr(psdf, name)()
 
         missing_properties = inspect.getmembers(
-            _MissingPandasLikeDataFrame, lambda o: isinstance(o, property)
+            MissingPandasLikeDataFrame, lambda o: isinstance(o, property)
         )
         unsupported_properties = [
             name

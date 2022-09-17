@@ -38,7 +38,6 @@ from pyspark.pandas.internal import (
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_DEFAULT_INDEX_NAME,
 )
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
 from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.utils import (
@@ -724,7 +723,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             .agg(
                 F.min(F.col("__origin")).alias("__partition_min"),
                 F.max(F.col("__origin")).alias("__partition_max"),
-                F.min(F.coalesce(F.col("__comparison_within_partition"), SF.lit(True))).alias(
+                F.min(F.coalesce(F.col("__comparison_within_partition"), F.lit(True))).alias(
                     "__comparison_within_partition"
                 ),
             )
@@ -749,8 +748,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         )
 
         ret = sdf.select(
-            F.min(F.coalesce(F.col("__comparison_between_partitions"), SF.lit(True)))
-            & F.min(F.coalesce(F.col("__comparison_within_partition"), SF.lit(True)))
+            F.min(F.coalesce(F.col("__comparison_between_partitions"), F.lit(True)))
+            & F.min(F.coalesce(F.col("__comparison_within_partition"), F.lit(True)))
         ).collect()[0][0]
         if ret is None:
             return True
@@ -880,7 +879,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             cast(np.ndarray, values).tolist() if isinstance(values, np.ndarray) else list(values)
         )
 
-        other = [SF.lit(v) for v in values]
+        other = [F.lit(v) for v in values]
         scol = self.spark.column.isin(other)
         field = self._internal.data_fields[0].copy(
             dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False
@@ -1042,11 +1041,11 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         # We use min as its alternative as below.
         if isinstance(self.spark.data_type, NumericType) or skipna:
             # np.nan takes no effect to the result; None takes no effect if `skipna`
-            ret = sdf.select(F.min(F.coalesce(col.cast("boolean"), SF.lit(True)))).collect()[0][0]
+            ret = sdf.select(F.min(F.coalesce(col.cast("boolean"), F.lit(True)))).collect()[0][0]
         else:
             # Take None as False when not `skipna`
             ret = sdf.select(
-                F.min(F.when(col.isNull(), SF.lit(False)).otherwise(col.cast("boolean")))
+                F.min(F.when(col.isNull(), F.lit(False)).otherwise(col.cast("boolean")))
             ).collect()[0][0]
 
         if ret is None:
@@ -1111,7 +1110,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         # any and every was added as of Spark 3.0
         # ret = sdf.select(F.expr("any(CAST(`%s` AS BOOLEAN))" % sdf.columns[0])).collect()[0][0]
         # Here we use max as its alternative:
-        ret = sdf.select(F.max(F.coalesce(col.cast("boolean"), SF.lit(False)))).collect()[0][0]
+        ret = sdf.select(F.max(F.coalesce(col.cast("boolean"), F.lit(False)))).collect()[0][0]
         if ret is None:
             return False
         else:
@@ -1368,7 +1367,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         if normalize:
             drop_sum = sdf_dropna.count()
-            sdf = sdf.withColumn("count", F.col("count") / SF.lit(drop_sum))
+            sdf = sdf.withColumn("count", F.col("count") / F.lit(drop_sum))
 
         internal = InternalFrame(
             spark_frame=sdf,
@@ -1606,12 +1605,12 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         if isinstance(self.dtype, CategoricalDtype):
             categories = self.dtype.categories
             if len(categories) == 0:
-                scol = SF.lit(None)
+                scol = F.lit(None)
             else:
                 kvs = list(
                     chain(
                         *[
-                            (SF.lit(code), SF.lit(category))
+                            (F.lit(code), F.lit(category))
                             for code, category in enumerate(categories)
                         ]
                     )
@@ -1659,14 +1658,14 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             code += 1
 
         kvs = list(
-            chain(*([(SF.lit(unique), SF.lit(code)) for unique, code in unique_to_code.items()]))
+            chain(*([(F.lit(unique), F.lit(code)) for unique, code in unique_to_code.items()]))
         )
 
         if len(kvs) == 0:  # uniques are all missing values
-            new_scol = SF.lit(na_sentinel_code)
+            new_scol = F.lit(na_sentinel_code)
         else:
             map_scol = F.create_map(*kvs)
-            null_scol = F.when(self.isnull().spark.column, SF.lit(na_sentinel_code))
+            null_scol = F.when(self.isnull().spark.column, F.lit(na_sentinel_code))
             new_scol = null_scol.otherwise(map_scol[self.spark.column])
 
         codes = self._with_new_scol(new_scol.alias(self._internal.data_spark_column_names[0]))
