@@ -101,20 +101,6 @@ private[spark] object SparkThrowableHelper {
     parameterNames
   }
 
-  def getMessageParameters(
-      errorClass: String,
-      errorSubCLass: String,
-      params: Map[String, String]): Array[String] = {
-    getParameterNames(errorClass, errorSubCLass).map(params.getOrElse(_, "?"))
-  }
-
-  def getMessageParameters(
-      errorClass: String,
-      errorSubCLass: String,
-      params: java.util.Map[String, String]): Array[String] = {
-    getParameterNames(errorClass, errorSubCLass).map(params.getOrDefault(_, "?"))
-  }
-
   def getMessage(
       errorClass: String,
       errorSubClass: String,
@@ -185,8 +171,6 @@ private[spark] object SparkThrowableHelper {
         }
       case MINIMAL | STANDARD =>
         val errorClass = e.getErrorClass
-        assert(e.getParameterNames.size == e.getMessageParameters.size,
-          "Number of message parameter names and values must be the same")
         toJsonString { generator =>
           val g = generator.useDefaultPrettyPrinter()
           g.writeStartObject()
@@ -200,12 +184,13 @@ private[spark] object SparkThrowableHelper {
           }
           val sqlState = e.getSqlState
           if (sqlState != null) g.writeStringField("sqlState", sqlState)
-          val parameterNames = e.getParameterNames
-          if (!parameterNames.isEmpty) {
+          val messageParameters = e.getMessageParameters
+          if (!messageParameters.isEmpty) {
             g.writeObjectFieldStart("messageParameters")
-            (parameterNames zip e.getMessageParameters).sortBy(_._1).foreach { case (name, value) =>
-              g.writeStringField(name, value)
-            }
+            messageParameters.asScala
+              .toMap // To remove duplicates
+              .toSeq.sortBy(_._1)
+              .foreach { case (name, value) => g.writeStringField(name, value) }
             g.writeEndObject()
           }
           val queryContext = e.getQueryContext

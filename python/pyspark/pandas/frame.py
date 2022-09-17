@@ -120,8 +120,7 @@ from pyspark.pandas.internal import (
     SPARK_DEFAULT_SERIES_NAME,
     SPARK_INDEX_NAME_PATTERN,
 )
-from pyspark.pandas.missing.frame import _MissingPandasLikeDataFrame
-from pyspark.pandas.ml import corr
+from pyspark.pandas.missing.frame import MissingPandasLikeDataFrame
 from pyspark.pandas.typedef.typehints import (
     as_spark_type,
     infer_return_type,
@@ -749,7 +748,7 @@ class DataFrame(Frame, Generic[T]):
         if axis == 0:
             min_count = kwargs.get("min_count", 0)
 
-            exprs = [SF.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
+            exprs = [F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
             new_column_labels = []
             for label in self._internal.column_labels:
                 psser = self._psser_for(label)
@@ -899,7 +898,7 @@ class DataFrame(Frame, Generic[T]):
                         applied.append(getattr(self._psser_for(label), op)(other._psser_for(label)))
                     else:
                         applied.append(
-                            SF.lit(None)
+                            F.lit(None)
                             .cast(self._internal.spark_type_for(label))
                             .alias(name_like_string(label))
                         )
@@ -907,7 +906,7 @@ class DataFrame(Frame, Generic[T]):
                 for label in other._internal.column_labels:
                     if label not in column_labels:
                         applied.append(
-                            SF.lit(None)
+                            F.lit(None)
                             .cast(other._internal.spark_type_for(label))
                             .alias(name_like_string(label))
                         )
@@ -1425,23 +1424,32 @@ class DataFrame(Frame, Generic[T]):
 
         Parameters
         ----------
-        method : {'pearson', 'spearman'}
+        method : {'pearson', 'spearman', 'kendall'}
             * pearson : standard correlation coefficient
             * spearman : Spearman rank correlation
+            * kendall : Kendall Tau correlation coefficient
         min_periods : int, optional
             Minimum number of observations required per pair of columns
-            to have a valid result. Currently only available for Pearson
-            correlation.
+            to have a valid result.
 
             .. versionadded:: 3.4.0
 
         Returns
         -------
-        y : DataFrame
+        DataFrame
 
         See Also
         --------
+        DataFrame.corrwith
         Series.corr
+
+        Notes
+        -----
+        1. Pearson, Kendall and Spearman correlation are currently computed using pairwise
+           complete observations.
+
+        2. The complexity of Spearman correlation is O(#row * #row), if the dataset is too
+           large, sampling ahead of correlation computation is recommended.
 
         Examples
         --------
@@ -1457,208 +1465,369 @@ class DataFrame(Frame, Generic[T]):
         dogs  1.000000 -0.948683
         cats -0.948683  1.000000
 
-        Notes
-        -----
-        There are behavior differences between pandas-on-Spark and pandas.
-
-        * the `method` argument only accepts 'pearson', 'spearman'
-        * if the `method` is `spearman`, the data should not contain NaNs.
-        * if the `method` is `spearman`, `min_periods` argument is not supported.
+        >>> df.corr('kendall')
+                  dogs      cats
+        dogs  1.000000 -0.912871
+        cats -0.912871  1.000000
         """
         if method not in ["pearson", "spearman", "kendall"]:
             raise ValueError(f"Invalid method {method}")
-        if method == "kendall":
-            raise NotImplementedError("method doesn't support kendall for now")
         if min_periods is not None and not isinstance(min_periods, int):
             raise TypeError(f"Invalid min_periods type {type(min_periods).__name__}")
-        if min_periods is not None and method == "spearman":
-            raise NotImplementedError("min_periods doesn't support spearman for now")
 
-        if method == "pearson":
-            min_periods = 1 if min_periods is None else min_periods
-            internal = self._internal.resolved_copy
-            numeric_labels = [
-                label
-                for label in internal.column_labels
-                if isinstance(internal.spark_type_for(label), (NumericType, BooleanType))
-            ]
-            numeric_scols: List[Column] = [
-                internal.spark_column_for(label).cast("double") for label in numeric_labels
-            ]
-            numeric_col_names: List[str] = [name_like_string(label) for label in numeric_labels]
-            num_scols = len(numeric_scols)
+        min_periods = 1 if min_periods is None else min_periods
+        internal = self._internal.resolved_copy
+        numeric_labels = [
+            label
+            for label in internal.column_labels
+            if isinstance(internal.spark_type_for(label), (NumericType, BooleanType))
+        ]
+        numeric_scols: List[Column] = [
+            internal.spark_column_for(label).cast("double") for label in numeric_labels
+        ]
+        numeric_col_names: List[str] = [name_like_string(label) for label in numeric_labels]
+        num_scols = len(numeric_scols)
 
-            sdf = internal.spark_frame
-            tmp_index_1_col_name = verify_temp_column_name(sdf, "__tmp_index_1_col__")
-            tmp_index_2_col_name = verify_temp_column_name(sdf, "__tmp_index_2_col__")
-            tmp_value_1_col_name = verify_temp_column_name(sdf, "__tmp_value_1_col__")
-            tmp_value_2_col_name = verify_temp_column_name(sdf, "__tmp_value_2_col__")
+        sdf = internal.spark_frame
+        tmp_index_1_col_name = verify_temp_column_name(sdf, "__tmp_index_1_col__")
+        tmp_index_2_col_name = verify_temp_column_name(sdf, "__tmp_index_2_col__")
+        tmp_value_1_col_name = verify_temp_column_name(sdf, "__tmp_value_1_col__")
+        tmp_value_2_col_name = verify_temp_column_name(sdf, "__tmp_value_2_col__")
 
-            # simple dataset
-            # +---+---+----+
-            # |  A|  B|   C|
-            # +---+---+----+
-            # |  1|  2| 3.0|
-            # |  4|  1|null|
-            # +---+---+----+
+        # simple dataset
+        # +---+---+----+
+        # |  A|  B|   C|
+        # +---+---+----+
+        # |  1|  2| 3.0|
+        # |  4|  1|null|
+        # +---+---+----+
 
-            pair_scols: List[Column] = []
-            for i in range(0, num_scols):
-                for j in range(i, num_scols):
-                    pair_scols.append(
-                        F.struct(
-                            F.lit(i).alias(tmp_index_1_col_name),
-                            F.lit(j).alias(tmp_index_2_col_name),
-                            numeric_scols[i].alias(tmp_value_1_col_name),
-                            numeric_scols[j].alias(tmp_value_2_col_name),
-                        )
+        pair_scols: List[Column] = []
+        for i in range(0, num_scols):
+            for j in range(i, num_scols):
+                pair_scols.append(
+                    F.struct(
+                        F.lit(i).alias(tmp_index_1_col_name),
+                        F.lit(j).alias(tmp_index_2_col_name),
+                        numeric_scols[i].alias(tmp_value_1_col_name),
+                        numeric_scols[j].alias(tmp_value_2_col_name),
                     )
+                )
 
-            # +-------------------+-------------------+-------------------+-------------------+
-            # |__tmp_index_1_col__|__tmp_index_2_col__|__tmp_value_1_col__|__tmp_value_2_col__|
-            # +-------------------+-------------------+-------------------+-------------------+
-            # |                  0|                  0|                1.0|                1.0|
-            # |                  0|                  1|                1.0|                2.0|
-            # |                  0|                  2|                1.0|                3.0|
-            # |                  1|                  1|                2.0|                2.0|
-            # |                  1|                  2|                2.0|                3.0|
-            # |                  2|                  2|                3.0|                3.0|
-            # |                  0|                  0|                4.0|                4.0|
-            # |                  0|                  1|                4.0|                1.0|
-            # |                  0|                  2|                4.0|               null|
-            # |                  1|                  1|                1.0|                1.0|
-            # |                  1|                  2|                1.0|               null|
-            # |                  2|                  2|               null|               null|
-            # +-------------------+-------------------+-------------------+-------------------+
-            tmp_tuple_col_name = verify_temp_column_name(sdf, "__tmp_tuple_col__")
-            sdf = sdf.select(F.explode(F.array(*pair_scols)).alias(tmp_tuple_col_name)).select(
-                F.col(f"{tmp_tuple_col_name}.{tmp_index_1_col_name}").alias(tmp_index_1_col_name),
-                F.col(f"{tmp_tuple_col_name}.{tmp_index_2_col_name}").alias(tmp_index_2_col_name),
-                F.col(f"{tmp_tuple_col_name}.{tmp_value_1_col_name}").alias(tmp_value_1_col_name),
-                F.col(f"{tmp_tuple_col_name}.{tmp_value_2_col_name}").alias(tmp_value_2_col_name),
-            )
+        # +-------------------+-------------------+-------------------+-------------------+
+        # |__tmp_index_1_col__|__tmp_index_2_col__|__tmp_value_1_col__|__tmp_value_2_col__|
+        # +-------------------+-------------------+-------------------+-------------------+
+        # |                  0|                  0|                1.0|                1.0|
+        # |                  0|                  1|                1.0|                2.0|
+        # |                  0|                  2|                1.0|                3.0|
+        # |                  1|                  1|                2.0|                2.0|
+        # |                  1|                  2|                2.0|                3.0|
+        # |                  2|                  2|                3.0|                3.0|
+        # |                  0|                  0|                4.0|                4.0|
+        # |                  0|                  1|                4.0|                1.0|
+        # |                  0|                  2|               null|               null|
+        # |                  1|                  1|                1.0|                1.0|
+        # |                  1|                  2|               null|               null|
+        # |                  2|                  2|               null|               null|
+        # +-------------------+-------------------+-------------------+-------------------+
+        tmp_tuple_col_name = verify_temp_column_name(sdf, "__tmp_tuple_col__")
+        null_cond = F.isnull(F.col(f"{tmp_tuple_col_name}.{tmp_value_1_col_name}")) | F.isnull(
+            F.col(f"{tmp_tuple_col_name}.{tmp_value_2_col_name}")
+        )
+        sdf = sdf.select(F.explode(F.array(*pair_scols)).alias(tmp_tuple_col_name)).select(
+            F.col(f"{tmp_tuple_col_name}.{tmp_index_1_col_name}").alias(tmp_index_1_col_name),
+            F.col(f"{tmp_tuple_col_name}.{tmp_index_2_col_name}").alias(tmp_index_2_col_name),
+            F.when(null_cond, F.lit(None))
+            .otherwise(F.col(f"{tmp_tuple_col_name}.{tmp_value_1_col_name}"))
+            .alias(tmp_value_1_col_name),
+            F.when(null_cond, F.lit(None))
+            .otherwise(F.col(f"{tmp_tuple_col_name}.{tmp_value_2_col_name}"))
+            .alias(tmp_value_2_col_name),
+        )
+        not_null_cond = (
+            F.col(tmp_value_1_col_name).isNotNull() & F.col(tmp_value_2_col_name).isNotNull()
+        )
 
-            # +-------------------+-------------------+------------------------+-----------------+
-            # |__tmp_index_1_col__|__tmp_index_2_col__|__tmp_pearson_corr_col__|__tmp_count_col__|
-            # +-------------------+-------------------+------------------------+-----------------+
-            # |                  2|                  2|                    null|                1|
-            # |                  1|                  2|                    null|                1|
-            # |                  1|                  1|                     1.0|                2|
-            # |                  0|                  0|                     1.0|                2|
-            # |                  0|                  1|                    -1.0|                2|
-            # |                  0|                  2|                    null|                1|
-            # +-------------------+-------------------+------------------------+-----------------+
-            tmp_corr_col_name = verify_temp_column_name(sdf, "__tmp_pearson_corr_col__")
-            tmp_count_col_name = verify_temp_column_name(sdf, "__tmp_count_col__")
+        tmp_count_col_name = verify_temp_column_name(sdf, "__tmp_count_col__")
+        tmp_corr_col_name = verify_temp_column_name(sdf, "__tmp_corr_col__")
+        if method in ["pearson", "spearman"]:
+            # convert values to avg ranks for spearman correlation
+            if method == "spearman":
+                tmp_row_number_col_name = verify_temp_column_name(sdf, "__tmp_row_number_col__")
+                tmp_dense_rank_col_name = verify_temp_column_name(sdf, "__tmp_dense_rank_col__")
+                window = Window.partitionBy(tmp_index_1_col_name, tmp_index_2_col_name)
+
+                # tmp_value_1_col_name: value -> avg rank
+                # for example:
+                # values:       3, 4, 5, 7, 7, 7, 9, 9, 10
+                # avg ranks:    1.0, 2.0, 3.0, 5.0, 5.0, 5.0, 7.5, 7.5, 9.0
+                sdf = (
+                    sdf.withColumn(
+                        tmp_row_number_col_name,
+                        F.row_number().over(window.orderBy(F.asc_nulls_last(tmp_value_1_col_name))),
+                    )
+                    .withColumn(
+                        tmp_dense_rank_col_name,
+                        F.dense_rank().over(window.orderBy(F.asc_nulls_last(tmp_value_1_col_name))),
+                    )
+                    .withColumn(
+                        tmp_value_1_col_name,
+                        F.when(F.isnull(F.col(tmp_value_1_col_name)), F.lit(None)).otherwise(
+                            F.avg(tmp_row_number_col_name).over(
+                                window.orderBy(F.asc(tmp_dense_rank_col_name)).rangeBetween(0, 0)
+                            )
+                        ),
+                    )
+                )
+
+                # tmp_value_2_col_name: value -> avg rank
+                sdf = (
+                    sdf.withColumn(
+                        tmp_row_number_col_name,
+                        F.row_number().over(window.orderBy(F.asc_nulls_last(tmp_value_2_col_name))),
+                    )
+                    .withColumn(
+                        tmp_dense_rank_col_name,
+                        F.dense_rank().over(window.orderBy(F.asc_nulls_last(tmp_value_2_col_name))),
+                    )
+                    .withColumn(
+                        tmp_value_2_col_name,
+                        F.when(F.isnull(F.col(tmp_value_2_col_name)), F.lit(None)).otherwise(
+                            F.avg(tmp_row_number_col_name).over(
+                                window.orderBy(F.asc(tmp_dense_rank_col_name)).rangeBetween(0, 0)
+                            )
+                        ),
+                    )
+                )
+
+                sdf = sdf.select(
+                    tmp_index_1_col_name,
+                    tmp_index_2_col_name,
+                    tmp_value_1_col_name,
+                    tmp_value_2_col_name,
+                )
+
+            # +-------------------+-------------------+----------------+-----------------+
+            # |__tmp_index_1_col__|__tmp_index_2_col__|__tmp_corr_col__|__tmp_count_col__|
+            # +-------------------+-------------------+----------------+-----------------+
+            # |                  2|                  2|            null|                1|
+            # |                  1|                  2|            null|                1|
+            # |                  1|                  1|             1.0|                2|
+            # |                  0|                  0|             1.0|                2|
+            # |                  0|                  1|            -1.0|                2|
+            # |                  0|                  2|            null|                1|
+            # +-------------------+-------------------+----------------+-----------------+
             sdf = sdf.groupby(tmp_index_1_col_name, tmp_index_2_col_name).agg(
                 F.corr(tmp_value_1_col_name, tmp_value_2_col_name).alias(tmp_corr_col_name),
                 F.count(
                     F.when(
-                        F.col(tmp_value_1_col_name).isNotNull()
-                        & F.col(tmp_value_2_col_name).isNotNull(),
+                        not_null_cond,
                         1,
                     )
                 ).alias(tmp_count_col_name),
             )
 
-            # +-------------------+-------------------+------------------------+
-            # |__tmp_index_1_col__|__tmp_index_2_col__|__tmp_pearson_corr_col__|
-            # +-------------------+-------------------+------------------------+
-            # |                  2|                  2|                    null|
-            # |                  1|                  2|                    null|
-            # |                  2|                  1|                    null|
-            # |                  1|                  1|                     1.0|
-            # |                  0|                  0|                     1.0|
-            # |                  0|                  1|                    -1.0|
-            # |                  1|                  0|                    -1.0|
-            # |                  0|                  2|                    null|
-            # |                  2|                  0|                    null|
-            # +-------------------+-------------------+------------------------+
+        else:
+            # kendall correlation
+            tmp_row_number_12_col_name = verify_temp_column_name(sdf, "__tmp_row_number_12_col__")
+            sdf = sdf.withColumn(
+                tmp_row_number_12_col_name,
+                F.row_number().over(
+                    Window.partitionBy(tmp_index_1_col_name, tmp_index_2_col_name).orderBy(
+                        F.asc_nulls_last(tmp_value_1_col_name),
+                        F.asc_nulls_last(tmp_value_2_col_name),
+                    )
+                ),
+            )
+
+            # drop nulls but make sure each partition contains at least one row
+            sdf = sdf.where(not_null_cond | (F.col(tmp_row_number_12_col_name) == 1))
+
+            tmp_value_x_col_name = verify_temp_column_name(sdf, "__tmp_value_x_col__")
+            tmp_value_y_col_name = verify_temp_column_name(sdf, "__tmp_value_y_col__")
+            tmp_row_number_xy_col_name = verify_temp_column_name(sdf, "__tmp_row_number_xy_col__")
+            sdf2 = sdf.select(
+                F.col(tmp_index_1_col_name),
+                F.col(tmp_index_2_col_name),
+                F.col(tmp_value_1_col_name).alias(tmp_value_x_col_name),
+                F.col(tmp_value_2_col_name).alias(tmp_value_y_col_name),
+                F.col(tmp_row_number_12_col_name).alias(tmp_row_number_xy_col_name),
+            )
+
+            sdf = sdf.join(sdf2, [tmp_index_1_col_name, tmp_index_2_col_name], "inner").where(
+                F.col(tmp_row_number_12_col_name) <= F.col(tmp_row_number_xy_col_name)
+            )
+
+            # compute P, Q, T, U in tau_b = (P - Q) / sqrt((P + Q + T) * (P + Q + U))
+            # see https://github.com/scipy/scipy/blob/v1.9.1/scipy/stats/_stats_py.py#L5015-L5222
+            tmp_tau_b_p_col_name = verify_temp_column_name(sdf, "__tmp_tau_b_p_col__")
+            tmp_tau_b_q_col_name = verify_temp_column_name(sdf, "__tmp_tau_b_q_col__")
+            tmp_tau_b_t_col_name = verify_temp_column_name(sdf, "__tmp_tau_b_t_col__")
+            tmp_tau_b_u_col_name = verify_temp_column_name(sdf, "__tmp_tau_b_u_col__")
+
+            pair_cond = not_null_cond & (
+                F.col(tmp_row_number_12_col_name) < F.col(tmp_row_number_xy_col_name)
+            )
+
+            p_cond = (
+                (F.col(tmp_value_1_col_name) < F.col(tmp_value_x_col_name))
+                & (F.col(tmp_value_2_col_name) < F.col(tmp_value_y_col_name))
+            ) | (
+                (F.col(tmp_value_1_col_name) > F.col(tmp_value_x_col_name))
+                & (F.col(tmp_value_2_col_name) > F.col(tmp_value_y_col_name))
+            )
+            q_cond = (
+                (F.col(tmp_value_1_col_name) < F.col(tmp_value_x_col_name))
+                & (F.col(tmp_value_2_col_name) > F.col(tmp_value_y_col_name))
+            ) | (
+                (F.col(tmp_value_1_col_name) > F.col(tmp_value_x_col_name))
+                & (F.col(tmp_value_2_col_name) < F.col(tmp_value_y_col_name))
+            )
+            t_cond = (F.col(tmp_value_1_col_name) == F.col(tmp_value_x_col_name)) & (
+                F.col(tmp_value_2_col_name) != F.col(tmp_value_y_col_name)
+            )
+            u_cond = (F.col(tmp_value_1_col_name) != F.col(tmp_value_x_col_name)) & (
+                F.col(tmp_value_2_col_name) == F.col(tmp_value_y_col_name)
+            )
+
             sdf = (
-                sdf.withColumn(
-                    tmp_corr_col_name,
-                    F.when(
-                        F.col(tmp_count_col_name) >= min_periods, F.col(tmp_corr_col_name)
-                    ).otherwise(F.lit(None)),
+                sdf.groupby(tmp_index_1_col_name, tmp_index_2_col_name)
+                .agg(
+                    F.count(F.when(pair_cond & p_cond, 1)).alias(tmp_tau_b_p_col_name),
+                    F.count(F.when(pair_cond & q_cond, 1)).alias(tmp_tau_b_q_col_name),
+                    F.count(F.when(pair_cond & t_cond, 1)).alias(tmp_tau_b_t_col_name),
+                    F.count(F.when(pair_cond & u_cond, 1)).alias(tmp_tau_b_u_col_name),
+                    F.max(
+                        F.when(not_null_cond, F.col(tmp_row_number_xy_col_name)).otherwise(F.lit(0))
+                    ).alias(tmp_count_col_name),
                 )
                 .withColumn(
-                    tmp_tuple_col_name,
-                    F.explode(
-                        F.when(
-                            F.col(tmp_index_1_col_name) == F.col(tmp_index_2_col_name),
-                            F.lit([0]),
-                        ).otherwise(F.lit([0, 1]))
+                    tmp_corr_col_name,
+                    F.when(
+                        F.col(tmp_index_1_col_name) == F.col(tmp_index_2_col_name), F.lit(1.0)
+                    ).otherwise(
+                        (F.col(tmp_tau_b_p_col_name) - F.col(tmp_tau_b_q_col_name))
+                        / F.sqrt(
+                            (
+                                (
+                                    F.col(tmp_tau_b_p_col_name)
+                                    + F.col(tmp_tau_b_q_col_name)
+                                    + (F.col(tmp_tau_b_t_col_name))
+                                )
+                            )
+                            * (
+                                (
+                                    F.col(tmp_tau_b_p_col_name)
+                                    + F.col(tmp_tau_b_q_col_name)
+                                    + (F.col(tmp_tau_b_u_col_name))
+                                )
+                            )
+                        )
                     ),
                 )
-                .select(
-                    F.when(F.col(tmp_tuple_col_name) == 0, F.col(tmp_index_1_col_name))
-                    .otherwise(F.col(tmp_index_2_col_name))
-                    .alias(tmp_index_1_col_name),
-                    F.when(F.col(tmp_tuple_col_name) == 0, F.col(tmp_index_2_col_name))
-                    .otherwise(F.col(tmp_index_1_col_name))
-                    .alias(tmp_index_2_col_name),
-                    F.col(tmp_corr_col_name),
-                )
             )
 
-            # +-------------------+--------------------+
-            # |__tmp_index_1_col__|   __tmp_array_col__|
-            # +-------------------+--------------------+
-            # |                  0|[{0, 1.0}, {1, -1...|
-            # |                  1|[{0, -1.0}, {1, 1...|
-            # |                  2|[{0, null}, {1, n...|
-            # +-------------------+--------------------+
-            tmp_array_col_name = verify_temp_column_name(sdf, "__tmp_array_col__")
-            sdf = (
-                sdf.groupby(tmp_index_1_col_name)
-                .agg(
-                    F.array_sort(
-                        F.collect_list(
-                            F.struct(F.col(tmp_index_2_col_name), F.col(tmp_corr_col_name))
-                        )
-                    ).alias(tmp_array_col_name)
-                )
-                .orderBy(tmp_index_1_col_name)
+            sdf = sdf.select(
+                F.col(tmp_index_1_col_name),
+                F.col(tmp_index_2_col_name),
+                F.col(tmp_corr_col_name),
+                F.col(tmp_count_col_name),
             )
 
-            for i in range(0, num_scols):
+        # +-------------------+-------------------+----------------+
+        # |__tmp_index_1_col__|__tmp_index_2_col__|__tmp_corr_col__|
+        # +-------------------+-------------------+----------------+
+        # |                  2|                  2|            null|
+        # |                  1|                  2|            null|
+        # |                  2|                  1|            null|
+        # |                  1|                  1|             1.0|
+        # |                  0|                  0|             1.0|
+        # |                  0|                  1|            -1.0|
+        # |                  1|                  0|            -1.0|
+        # |                  0|                  2|            null|
+        # |                  2|                  0|            null|
+        # +-------------------+-------------------+----------------+
+        sdf = (
+            sdf.withColumn(
+                tmp_corr_col_name,
+                F.when(
+                    F.col(tmp_count_col_name) >= min_periods, F.col(tmp_corr_col_name)
+                ).otherwise(F.lit(None)),
+            )
+            .withColumn(
+                tmp_tuple_col_name,
+                F.explode(
+                    F.when(
+                        F.col(tmp_index_1_col_name) == F.col(tmp_index_2_col_name),
+                        F.lit([0]),
+                    ).otherwise(F.lit([0, 1]))
+                ),
+            )
+            .select(
+                F.when(F.col(tmp_tuple_col_name) == 0, F.col(tmp_index_1_col_name))
+                .otherwise(F.col(tmp_index_2_col_name))
+                .alias(tmp_index_1_col_name),
+                F.when(F.col(tmp_tuple_col_name) == 0, F.col(tmp_index_2_col_name))
+                .otherwise(F.col(tmp_index_1_col_name))
+                .alias(tmp_index_2_col_name),
+                F.col(tmp_corr_col_name),
+            )
+        )
+
+        # +-------------------+--------------------+
+        # |__tmp_index_1_col__|   __tmp_array_col__|
+        # +-------------------+--------------------+
+        # |                  0|[{0, 1.0}, {1, -1...|
+        # |                  1|[{0, -1.0}, {1, 1...|
+        # |                  2|[{0, null}, {1, n...|
+        # +-------------------+--------------------+
+        tmp_array_col_name = verify_temp_column_name(sdf, "__tmp_array_col__")
+        sdf = (
+            sdf.groupby(tmp_index_1_col_name)
+            .agg(
+                F.array_sort(
+                    F.collect_list(F.struct(F.col(tmp_index_2_col_name), F.col(tmp_corr_col_name)))
+                ).alias(tmp_array_col_name)
+            )
+            .orderBy(tmp_index_1_col_name)
+        )
+
+        for i in range(0, num_scols):
+            sdf = sdf.withColumn(
+                tmp_tuple_col_name, F.get(F.col(tmp_array_col_name), i)
+            ).withColumn(
+                numeric_col_names[i],
+                F.col(f"{tmp_tuple_col_name}.{tmp_corr_col_name}"),
+            )
+
+        index_col_names: List[str] = []
+        if internal.column_labels_level > 1:
+            for level in range(0, internal.column_labels_level):
+                index_col_name = SPARK_INDEX_NAME_FORMAT(level)
+                indices = [label[level] for label in numeric_labels]
                 sdf = sdf.withColumn(
-                    tmp_tuple_col_name, F.get(F.col(tmp_array_col_name), i)
-                ).withColumn(
-                    numeric_col_names[i],
-                    F.col(f"{tmp_tuple_col_name}.{tmp_corr_col_name}"),
+                    index_col_name, F.get(F.lit(indices), F.col(tmp_index_1_col_name))
                 )
-
-            index_col_names: List[str] = []
-            if internal.column_labels_level > 1:
-                for level in range(0, internal.column_labels_level):
-                    index_col_name = SPARK_INDEX_NAME_FORMAT(level)
-                    indices = [label[level] for label in numeric_labels]
-                    sdf = sdf.withColumn(
-                        index_col_name, F.get(F.lit(indices), F.col(tmp_index_1_col_name))
-                    )
-                    index_col_names.append(index_col_name)
-            else:
-                sdf = sdf.withColumn(
-                    SPARK_DEFAULT_INDEX_NAME,
-                    F.get(F.lit(numeric_col_names), F.col(tmp_index_1_col_name)),
-                )
-                index_col_names = [SPARK_DEFAULT_INDEX_NAME]
-
-            sdf = sdf.select(*index_col_names, *numeric_col_names)
-
-            return DataFrame(
-                InternalFrame(
-                    spark_frame=sdf,
-                    index_spark_columns=[
-                        scol_for(sdf, index_col_name) for index_col_name in index_col_names
-                    ],
-                    column_labels=numeric_labels,
-                    column_label_names=internal.column_label_names,
-                )
+                index_col_names.append(index_col_name)
+        else:
+            sdf = sdf.withColumn(
+                SPARK_DEFAULT_INDEX_NAME,
+                F.get(F.lit(numeric_col_names), F.col(tmp_index_1_col_name)),
             )
+            index_col_names = [SPARK_DEFAULT_INDEX_NAME]
 
-        return cast(DataFrame, ps.from_pandas(corr(self, method)))
+        sdf = sdf.select(*index_col_names, *numeric_col_names)
+
+        return DataFrame(
+            InternalFrame(
+                spark_frame=sdf,
+                index_spark_columns=[
+                    scol_for(sdf, index_col_name) for index_col_name in index_col_names
+                ],
+                column_labels=numeric_labels,
+                column_label_names=internal.column_label_names,
+            )
+        )
 
     # TODO: add axis parameter and support more methods
     def corrwith(
@@ -1791,12 +1960,12 @@ class DataFrame(Frame, Generic[T]):
         if not drop:
             for numeric_column_label in diff_numeric_column_labels:
                 corr_scols.append(
-                    SF.lit(None).cast("double").alias(name_like_string(numeric_column_label))
+                    F.lit(None).cast("double").alias(name_like_string(numeric_column_label))
                 )
                 corr_labels.append(numeric_column_label)
 
         sdf = combined._internal.spark_frame.select(
-            *[SF.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)], *corr_scols
+            *[F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)], *corr_scols
         ).limit(
             1
         )  # limit(1) to avoid returning more than 1 row when intersection is empty
@@ -2704,7 +2873,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 *[
                     F.struct(
                         *[
-                            SF.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i))
+                            F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i))
                             for i, col in enumerate(label)
                         ],
                         *[self._internal.spark_column_for(label).alias("value")],
@@ -3773,7 +3942,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     (
                         cond._internal.spark_column_for(label)
                         if label in cond._internal.column_labels
-                        else SF.lit(False)
+                        else F.lit(False)
                     ).alias(name)
                     for label, name in zip(self._internal.column_labels, tmp_cond_col_names)
                 ]
@@ -3797,7 +3966,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     (
                         other._internal.spark_column_for(label)
                         if label in other._internal.column_labels
-                        else SF.lit(np.nan)
+                        else F.lit(np.nan)
                     ).alias(name)
                     for label, name in zip(self._internal.column_labels, tmp_other_col_names)
                 ]
@@ -4710,7 +4879,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if axis != 0:
             raise NotImplementedError('axis should be either 0 or "index" currently.')
         sdf = self._internal.spark_frame.select(
-            [SF.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
+            [F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
             + [
                 self._psser_for(label)._nunique(dropna, approx, rsd)
                 for label in self._internal.column_labels
@@ -5437,7 +5606,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 if isinstance(v, IndexOpsMixin) and not isinstance(v, MultiIndex)
                 else (v, None)
                 if isinstance(v, Column)
-                else (SF.lit(v), None)
+                else (F.lit(v), None)
             )
             for k, v in kwargs.items()
         }
@@ -5788,14 +5957,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     F.when(self._psser_for(label).notna().spark.column, 1).otherwise(0)
                     for label in labels
                 ],
-                SF.lit(0),
+                F.lit(0),
             )
             if thresh is not None:
-                pred = cnt >= SF.lit(int(thresh))
+                pred = cnt >= F.lit(int(thresh))
             elif how == "any":
-                pred = cnt == SF.lit(len(labels))
+                pred = cnt == F.lit(len(labels))
             elif how == "all":
-                pred = cnt > SF.lit(0)
+                pred = cnt > F.lit(0)
 
             internal = self._internal.with_filter(pred)
             if inplace:
@@ -5820,7 +5989,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         reduce(
                             lambda x, y: x & y,
                             [
-                                scol == SF.lit(part)
+                                scol == F.lit(part)
                                 for part, scol in zip(lbl, internal.index_spark_columns)
                             ],
                         )
@@ -6265,7 +6434,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if n < 0:
             n = len(self) + n
         if n <= 0:
-            return DataFrame(self._internal.with_filter(SF.lit(False)))
+            return DataFrame(self._internal.with_filter(F.lit(False)))
         else:
             sdf = self._internal.resolved_copy.spark_frame
             if get_option("compute.ordered_head"):
@@ -6653,7 +6822,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             index_map: Dict[str, Optional[Label]] = {}
             for i, index_value in enumerate(index_values):
                 colname = SPARK_INDEX_NAME_FORMAT(i)
-                sdf = sdf.withColumn(colname, SF.lit(index_value))
+                sdf = sdf.withColumn(colname, F.lit(index_value))
                 index_map[colname] = None
             internal = InternalFrame(
                 spark_frame=sdf,
@@ -7314,7 +7483,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         if len(index) <= ps.get_option("compute.isin_limit"):
                             self_index_type = self.index.spark.data_type
                             cond = ~internal.index_spark_columns[0].isin(
-                                [SF.lit(label).cast(self_index_type) for label in index]
+                                [F.lit(label).cast(self_index_type) for label in index]
                             )
                             internal = internal.with_filter(cond)
                         else:
@@ -8159,11 +8328,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     item = item.tolist() if isinstance(item, np.ndarray) else list(item)
 
                     scol = self._internal.spark_column_for(self._internal.column_labels[i]).isin(
-                        [SF.lit(v) for v in item]
+                        [F.lit(v) for v in item]
                     )
                     scol = F.coalesce(scol, F.lit(False))
                 else:
-                    scol = SF.lit(False)
+                    scol = F.lit(False)
                 data_spark_columns.append(scol.alias(self._internal.data_spark_column_names[i]))
         elif is_list_like(values):
             values = (
@@ -8173,7 +8342,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
 
             for label in self._internal.column_labels:
-                scol = self._internal.spark_column_for(label).isin([SF.lit(v) for v in values])
+                scol = self._internal.spark_column_for(label).isin([F.lit(v) for v in values])
                 scol = F.coalesce(scol, F.lit(False))
                 data_spark_columns.append(scol.alias(self._internal.spark_column_name_for(label)))
         else:
@@ -10048,7 +10217,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             frame = frame.select(index_scols + scols)
 
             temp_fill_value = verify_temp_column_name(frame, "__fill_value__")
-            labels = labels.withColumn(temp_fill_value, SF.lit(fill_value))
+            labels = labels.withColumn(temp_fill_value, F.lit(fill_value))
 
             frame_index_scols = [scol_for(frame, col) for col in frame_index_columns]
             labels_index_scols = [scol_for(labels, col) for col in index_columns]
@@ -10125,7 +10294,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if label in self._internal.column_labels:
                 scols_or_pssers.append(self._psser_for(label))
             else:
-                scols_or_pssers.append(SF.lit(fill_value).alias(name_like_string(label)))
+                scols_or_pssers.append(F.lit(fill_value).alias(name_like_string(label)))
             labels.append(label)
 
         if isinstance(columns, pd.Index):
@@ -10402,7 +10571,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             F.array(
                 *[
                     F.struct(
-                        *[SF.lit(c).alias(name) for c, name in zip(label, var_name)],
+                        *[F.lit(c).alias(name) for c, name in zip(label, var_name)],
                         *[self._internal.spark_column_for(label).alias(value_name)],
                     )
                     for label in column_labels
@@ -10545,7 +10714,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return DataFrame(
                 self._internal.copy(
                     column_label_names=self._internal.column_label_names[:-1]
-                ).with_filter(SF.lit(False))
+                ).with_filter(F.lit(False))
             )
 
         column_labels: Dict[Label, Dict[Any, Column]] = defaultdict(dict)
@@ -10575,12 +10744,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         structs = [
             F.struct(
-                *[SF.lit(value).alias(index_column)],
+                *[F.lit(value).alias(index_column)],
                 *[
                     (
                         column_labels[label][value]
                         if value in column_labels[label]
-                        else SF.lit(None)
+                        else F.lit(None)
                     ).alias(name)
                     for label, name in zip(column_labels, data_columns)
                 ],
@@ -10734,7 +10903,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             F.array(
                 *[
                     F.struct(
-                        *[SF.lit(c).alias(name) for c, name in zip(idx, new_index_columns)],
+                        *[F.lit(c).alias(name) for c, name in zip(idx, new_index_columns)],
                         *[self._internal.spark_column_for(idx).alias(ser_name)],
                     )
                     for idx in column_labels
@@ -10860,12 +11029,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             if isinstance(self._internal.spark_type_for(label), NumericType) or skipna:
                 # np.nan takes no effect to the result; None takes no effect if `skipna`
-                all_col = F.min(F.coalesce(scol.cast("boolean"), SF.lit(True)))
+                all_col = F.min(F.coalesce(scol.cast("boolean"), F.lit(True)))
             else:
                 # Take None as False when not `skipna`
-                all_col = F.min(
-                    F.when(scol.isNull(), SF.lit(False)).otherwise(scol.cast("boolean"))
-                )
+                all_col = F.min(F.when(scol.isNull(), F.lit(False)).otherwise(scol.cast("boolean")))
             applied.append(F.when(all_col.isNull(), True).otherwise(all_col))
 
         return self._result_aggregated(column_labels, applied)
@@ -10942,7 +11109,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         applied = []
         for label in column_labels:
             scol = self._internal.spark_column_for(label)
-            any_col = F.max(F.coalesce(scol.cast("boolean"), SF.lit(False)))
+            any_col = F.max(F.coalesce(scol.cast("boolean"), F.lit(False)))
             applied.append(F.when(any_col.isNull(), False).otherwise(any_col))
 
         return self._result_aggregated(column_labels, applied)
@@ -10973,7 +11140,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label, applied_col in zip(column_labels, scols):
             cols.append(
                 F.struct(
-                    *[SF.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
+                    *[F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
                     *[applied_col.alias(result_scol_name)],
                 )
             )
@@ -11227,7 +11394,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if axis == 0:
                 if len(index_scols) == 1:
                     if len(items) <= ps.get_option("compute.isin_limit"):
-                        col = index_scols[0].isin([SF.lit(item) for item in items])
+                        col = index_scols[0].isin([F.lit(item) for item in items])
                         return DataFrame(self._internal.with_filter(col))
                     else:
                         item_sdf_col = verify_temp_column_name(
@@ -11255,9 +11422,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         midx_col = None
                         for i, element in enumerate(item):
                             if midx_col is None:
-                                midx_col = index_scols[i] == SF.lit(element)
+                                midx_col = index_scols[i] == F.lit(element)
                             else:
-                                midx_col = midx_col & (index_scols[i] == SF.lit(element))
+                                midx_col = midx_col & (index_scols[i] == F.lit(element))
                         if col is None:
                             col = midx_col
                         else:
@@ -12206,7 +12373,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             internal_index_column = SPARK_DEFAULT_INDEX_NAME
             cols = []
             for i, col in enumerate(zip(*cols_dict.values())):
-                cols.append(F.struct(SF.lit(qq[i]).alias(internal_index_column), *col))
+                cols.append(F.struct(F.lit(qq[i]).alias(internal_index_column), *col))
             sdf = sdf.select(F.array(*cols).alias("arrays"))
 
             # And then, explode it and manually set the index.
@@ -12678,7 +12845,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             ]
 
             sdf = self._internal.spark_frame.select(
-                *[SF.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)], *new_columns
+                *[F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)], *new_columns
             )
 
             # The data is expected to be small so it's fine to transpose/use default index.
@@ -12913,7 +13080,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if n < 0:
             n = len(self) + n
         if n <= 0:
-            return ps.DataFrame(self._internal.with_filter(SF.lit(False)))
+            return ps.DataFrame(self._internal.with_filter(F.lit(False)))
         # Should use `resolved_copy` here for the case like `(psdf + 1).tail()`
         sdf = self._internal.resolved_copy.spark_frame
         rows = sdf.tail(n)
@@ -13088,11 +13255,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             for label in column_labels:
                 if label not in left._internal.column_labels:
-                    left[label] = SF.lit(None).cast(DoubleType())
+                    left[label] = F.lit(None).cast(DoubleType())
             left = left[column_labels]
             for label in column_labels:
                 if label not in right._internal.column_labels:
-                    right[label] = SF.lit(None).cast(DoubleType())
+                    right[label] = F.lit(None).cast(DoubleType())
             right = right[column_labels]
 
         return (left.copy(), right.copy()) if copy else (left, right)
@@ -13436,8 +13603,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def __getattr__(self, key: str) -> Any:
         if key.startswith("__"):
             raise AttributeError(key)
-        if hasattr(_MissingPandasLikeDataFrame, key):
-            property_or_func = getattr(_MissingPandasLikeDataFrame, key)
+        if hasattr(MissingPandasLikeDataFrame, key):
+            property_or_func = getattr(MissingPandasLikeDataFrame, key)
             if isinstance(property_or_func, property):
                 return property_or_func.fget(self)
             else:

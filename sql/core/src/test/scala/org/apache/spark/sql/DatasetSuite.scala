@@ -900,10 +900,16 @@ class DatasetSuite extends QueryTest
   test("Kryo encoder: check the schema mismatch when converting DataFrame to Dataset") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val df = Seq((1.0)).toDF("a")
-    val e = intercept[AnalysisException] {
-      df.as[KryoData]
-    }.message
-    assert(e.contains("cannot cast double to binary"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.as[KryoData]
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("CAST_WITHOUT_SUGGESTION"),
+      parameters = Map(
+        "sqlExpr" -> "\"a\"",
+        "srcType" -> "\"DOUBLE\"",
+        "targetType" -> "\"BINARY\""))
   }
 
   test("Java encoder") {

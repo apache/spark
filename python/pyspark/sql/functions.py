@@ -41,14 +41,17 @@ from pyspark import SparkContext
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.types import ArrayType, DataType, StringType, StructType
+from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from_numpy_type
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_udf  # noqa: F401
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
-from pyspark.sql.utils import to_str
+from pyspark.sql.utils import to_str, has_numpy
+
+if has_numpy:
+    import numpy as np
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import (
@@ -169,6 +172,10 @@ def lit(col: Any) -> Column:
             raise ValueError("lit does not allow a column in a list")
         return array(*[lit(item) for item in col])
     else:
+        if has_numpy and isinstance(col, np.generic):
+            dt = _from_numpy_type(col.dtype)
+            if dt is not None:
+                return _invoke_function("lit", col).astype(dt)
         return _invoke_function("lit", col)
 
 

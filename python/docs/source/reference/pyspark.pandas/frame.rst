@@ -151,6 +151,7 @@ Computations / Descriptive Stats
    DataFrame.count
    DataFrame.cov
    DataFrame.describe
+   DataFrame.ewm
    DataFrame.kurt
    DataFrame.kurtosis
    DataFrame.mad

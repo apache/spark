@@ -1824,8 +1824,7 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-kubectl create namespace yunikorn
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.1.0
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.1.0 --create-namespace --set embedAdmissionController=false
 ```
 
 The above steps will install YuniKorn v1.1.0 on an existing Kubernetes cluster.
@@ -1836,6 +1835,8 @@ Submit Spark jobs with the following extra options:
 
 ```bash
 --conf spark.kubernetes.scheduler.name=yunikorn
+--conf spark.kubernetes.driver.label.queue=root.default
+--conf spark.kubernetes.executor.label.queue=root.default
 --conf spark.kubernetes.driver.annotation.yunikorn.apache.org/app-id={{APP_ID}}
 --conf spark.kubernetes.executor.annotation.yunikorn.apache.org/app-id={{APP_ID}}
 ```

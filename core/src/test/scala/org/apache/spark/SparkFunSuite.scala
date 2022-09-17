@@ -23,6 +23,7 @@ import java.nio.file.{Files, Path}
 import java.util.{Locale, TimeZone}
 
 import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.io.FileUtils
@@ -305,7 +306,7 @@ abstract class SparkFunSuite
       assert(exception.getErrorSubClass === errorSubClass.get)
     }
     sqlState.foreach(state => assert(exception.getSqlState === state))
-    val expectedParameters = (exception.getParameterNames zip exception.getMessageParameters).toMap
+    val expectedParameters = exception.getMessageParameters.asScala
     if (matchPVals == true) {
       assert(expectedParameters.size === parameters.size)
       expectedParameters.foreach(

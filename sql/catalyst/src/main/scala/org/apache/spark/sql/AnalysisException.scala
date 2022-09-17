@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.{QueryContext, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -165,11 +167,7 @@ class AnalysisException protected[sql] (
     message
   }
 
-  override def getMessageParameters: Array[String] = {
-    errorClass.map { ec =>
-      SparkThrowableHelper.getMessageParameters(ec, errorSubClass.orNull, messageParameters)
-    }.getOrElse(Array.empty)
-  }
+  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass.orNull
   override def getErrorSubClass: String = errorSubClass.orNull

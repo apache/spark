@@ -41,8 +41,18 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with SQLConfHelpe
   private def partitioning(plan: LogicalPlan) = plan.transformDown {
     case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportPartitioning, _, None, _) =>
       val catalystPartitioning = scan.outputPartitioning() match {
-        case kgp: KeyGroupedPartitioning => sequenceToOption(kgp.keys().map(
-          V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog)))
+        case kgp: KeyGroupedPartitioning =>
+          val partitioning = sequenceToOption(
+            kgp.keys().map(V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog)))
+          if (partitioning.isEmpty) {
+            None
+          } else {
+            if (partitioning.get.forall(p => p.references.subsetOf(d.outputSet))) {
+              partitioning
+            } else {
+              None
+            }
+          }
         case _: UnknownPartitioning => None
         case p => throw new IllegalArgumentException("Unsupported data source V2 partitioning " +
             "type: " + p.getClass.getSimpleName)

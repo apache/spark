@@ -159,7 +159,7 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.12.16</scala.version>
+    <scala.version>2.12.17</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalatest-maven-plugin.version>2.1.0</scalatest-maven-plugin.version>
     <!--
@@ -195,7 +195,8 @@
     <!-- Please don't upgrade the version to 4.10+, it depends on JDK 11 -->
     <antlr4.version>4.9.3</antlr4.version>
     <jpam.version>1.1</jpam.version>
-    <selenium.version>3.141.59</selenium.version>
+    <selenium.version>4.2.2</selenium.version>
+    <htmlunit-driver.version>3.62.0</htmlunit-driver.version>
     <htmlunit.version>2.62.0</htmlunit.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
@@ -408,7 +409,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>selenium-3-141_${scala.binary.version}</artifactId>
+      <artifactId>selenium-4-2_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -694,8 +695,12 @@
             <artifactId>guava</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>com.google.auto.service</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
+            <artifactId>*</artifactId>
           </exclusion>
           <exclusion>
             <groupId>net.bytebuddy</groupId>
@@ -706,7 +711,7 @@
       <dependency>
         <groupId>org.seleniumhq.selenium</groupId>
         <artifactId>htmlunit-driver</artifactId>
-        <version>${htmlunit.version}</version>
+        <version>${htmlunit-driver.version}</version>
         <scope>test</scope>
       </dependency>
       <!-- Update htmlunit dependency that selenium uses for better JS support -->
@@ -820,7 +825,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.9.31</version>
+        <version>0.9.32</version>
       </dependency>
 
       <!-- Netty Begin -->
@@ -1160,11 +1165,10 @@
         <version>3.2.13.0</version>
         <scope>test</scope>
       </dependency>
-      <!-- TODO(SPARK-40397): Migrate selenium-java from 3.1 to 4.2 and upgrade this to 3.2.13.0 -->
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>selenium-3-141_${scala.binary.version}</artifactId>
-        <version>3.2.10.0</version>
+        <artifactId>selenium-4-2_${scala.binary.version}</artifactId>
+        <version>3.2.13.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2918,7 +2922,7 @@
               <compilerPlugin>
                 <groupId>com.github.ghik</groupId>
                 <artifactId>silencer-plugin_${scala.version}</artifactId>
-                <version>1.7.9</version>
+                <version>1.7.10</version>
               </compilerPlugin>
             </compilerPlugins>
           </configuration>
@@ -3584,7 +3588,7 @@
          SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
          property correctly.
         -->
-        <scala.version>2.12.16</scala.version>
+        <scala.version>2.12.17</scala.version>
       </properties>
       <build>
         <pluginManagement>
