@@ -102,7 +102,7 @@ class AnalyzeResult:
 class RemoteSparkSession(object):
     """Conceptually the remote spark session that communicates with the server"""
 
-    def __init__(self, host: str = None, port: int = 15001, user_id: str = "Martin"):
+    def __init__(self, user_id: str, host: str = None, port: int = 15002):
         self._host = "localhost" if host is None else host
         self._port = port
         self._user_id = user_id
