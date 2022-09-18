@@ -18,7 +18,6 @@
 """
 A wrapper for GroupedData to behave similar to pandas GroupBy.
 """
-import math
 from abc import ABCMeta, abstractmethod
 import inspect
 from collections import defaultdict, namedtuple
