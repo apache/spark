@@ -112,6 +112,11 @@
           "cannot cast <srcType> to <targetType>.",
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
         ]
+      },
+      "UNEXPECTED_INPUT_TYPE" : {
+        "message" : [
+          "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
+        ]
       }
     }
   },
