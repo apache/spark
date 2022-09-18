@@ -18,7 +18,7 @@
 """
 A wrapper for GroupedData to behave similar to pandas GroupBy.
 """
-
+import math
 from abc import ABCMeta, abstractmethod
 import inspect
 from collections import defaultdict, namedtuple
@@ -44,6 +44,7 @@ from typing import (
 )
 import warnings
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like  # type: ignore[attr-defined]
 
@@ -61,7 +62,7 @@ from pyspark.sql.types import (
     NumericType,
     StructField,
     StructType,
-    StringType,
+    StringType, IntegralType,
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
@@ -981,6 +982,98 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                     .where(F.col(tmp_row_number_col) == F.col(tmp_group_size_col) + 1 + n)
                     .drop(tmp_group_size_col, tmp_row_number_col)
                 )
+        else:
+            sdf = sdf.select(*groupkey_names).distinct()
+
+        internal = internal.copy(
+            spark_frame=sdf,
+            index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
+            data_spark_columns=[scol_for(sdf, col) for col in internal.data_spark_column_names],
+            data_fields=None,
+        )
+
+        return self._prepare_return(DataFrame(internal))
+
+    def prod(self, numeric_only: Optional[bool] = True, min_count: int = 0):
+        """
+        Compute prod of groups.
+
+        Parameters
+        ----------
+        numeric_only : bool, default False
+        Include only float, int, boolean columns. If None, will attempt to use
+        everything, then use only numeric data.
+
+        min_count: int, default 0
+        The required number of valid values to perform the operation.
+        If fewer than min_count non-NA values are present the result will be NA.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        pyspark.pandas.Series or pyspark.pandas.DataFrame
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> df = ps.DataFrame({'A': [1, 1, 2, 1, 2],
+        ...                    'B': [np.nan, 2, 3, 4, 5],
+        ...                    'C': [1, 2, 1, 1, 2],
+        ...                    'D': [True, False, True, False, True]})
+
+        Groupby one column and return the mean of the remaining columns in
+        each group.
+
+        >>> df.groupby('A').prod().sort_index()
+             B  C  D
+        A
+        1  8.0  2  0
+        2  15.0 2  11
+
+        >>> df.groupby('A').prod(min_count=3).sort_index()
+             B  C   D
+        A
+        1  NaN  2  0
+        2  NaN NaN  NaN
+        """
+
+        self._validate_agg_columns(numeric_only=numeric_only, function_name="prod")
+
+        groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
+        internal, agg_columns, sdf = self._prepare_reduce(
+            groupkey_names=groupkey_names,
+            accepted_spark_types=(NumericType, BooleanType),
+            bool_to_numeric=True,
+        )
+
+        psdf: DataFrame = DataFrame(internal)
+        if len(psdf._internal.column_labels) > 0:
+
+            stat_exprs = []
+            for label in psdf._internal.column_labels:
+                psser = psdf._psser_for(label)
+                column = psser._dtype_op.nan_to_null(psser).spark.column
+                data_type = psser.spark.data_type
+
+                if isinstance(data_type, IntegralType):
+                    stat_exprs.append(F.product(column).cast(data_type).alias(f"{label[0]}"))
+                else:
+                    stat_exprs.append(F.product(column).alias(f"{label[0]}"))
+
+                stat_exprs.append(F.count(column).alias(f"{label[0]}_count"))
+
+            sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
+
+            if min_count > 0:
+                for label in psdf._internal.column_labels:
+                    sdf = sdf.withColumn(f"{label[0]}", F.when(F.col(f"{label[0]}_count").__ge__(min_count),
+                                                               F.col(f"{label[0]}")).otherwise(None))
+
         else:
             sdf = sdf.select(*groupkey_names).distinct()
 
@@ -3237,10 +3330,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             if not numeric_only:
                 if has_non_numeric:
                     warnings.warn(
-                        "Dropping invalid columns in DataFrameGroupBy.mean is deprecated. "
+                        "Dropping invalid columns in DataFrameGroupBy.%s is deprecated. "
                         "In a future version, a TypeError will be raised. "
                         "Before calling .%s, select only columns which should be "
-                        "valid for the function." % function_name,
+                        "valid for the function." % (function_name, function_name),
                         FutureWarning,
                     )
 

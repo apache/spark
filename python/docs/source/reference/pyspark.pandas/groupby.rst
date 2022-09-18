@@ -74,6 +74,7 @@ Computations / Descriptive Stats
    GroupBy.median
    GroupBy.min
    GroupBy.nth
+   GroupBy.prod
    GroupBy.rank
    GroupBy.sem
    GroupBy.std
