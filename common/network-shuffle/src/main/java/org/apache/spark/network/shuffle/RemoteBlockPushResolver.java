@@ -396,6 +396,20 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
   }
 
+  @Override
+  public void removeShuffleMerge(String appId, int shuffleId) {
+    AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(appId);
+    AppShuffleMergePartitionsInfo partitionsInfo = appShuffleInfo.shuffles.remove(shuffleId);
+    if (partitionsInfo != null) {
+      AppAttemptShuffleMergeId appAttemptShuffleMergeId =
+          new AppAttemptShuffleMergeId(
+              appId, appShuffleInfo.attemptId, shuffleId, partitionsInfo.shuffleMergeId);
+      submitCleanupTask(() ->
+          closeAndDeleteOutdatedPartitions(
+              appAttemptShuffleMergeId, partitionsInfo.shuffleMergePartitions));
+    }
+  }
+
   /**
    * Clean up the AppShufflePartitionInfo for a specific AppShuffleInfo.
    * If cleanupLocalDirs is true, the merged shuffle files will also be deleted.

@@ -366,8 +366,16 @@ class BlockManagerMasterEndpoint(
         }
       }.getOrElse(Seq.empty)
 
+    val removeShuffleMergeFromShuffleServicesFutures =
+      externalBlockStoreClient.map { shuffleClient =>
+        mapOutputTracker.getShufflePushMergerLocations(shuffleId).map { bmId =>
+          Future[Boolean] { shuffleClient.removeShuffleMerge(bmId.host, bmId.port, shuffleId) }
+        }
+      }.getOrElse(Seq.empty)
+
     Future.sequence(removeShuffleFromExecutorsFutures ++
-      removeShuffleFromShuffleServicesFutures)
+      removeShuffleFromShuffleServicesFutures ++
+      removeShuffleMergeFromShuffleServicesFutures)
   }
 
   /**

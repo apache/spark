@@ -257,6 +257,20 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
   }
 
   @Override
+  public boolean removeShuffleMerge(String host, int port, int shuffleId) {
+    checkInit();
+    try {
+      TransportClient client = clientFactory.createClient(host, port);
+      client.send(new RemoveShuffleMerge(appId, shuffleId).toByteBuffer());
+    } catch (Exception e) {
+      logger.error("Exception while sending RemoveShuffleMerge request to {}:{}",
+          host, port, e);
+      return false;
+    }
+    return true;
+  }
+
+  @Override
   public MetricSet shuffleMetrics() {
     checkInit();
     return clientFactory.getAllMetrics();

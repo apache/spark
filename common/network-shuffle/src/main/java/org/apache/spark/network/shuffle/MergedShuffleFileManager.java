@@ -122,6 +122,13 @@ public interface MergedShuffleFileManager {
   String[] getMergedBlockDirs(String appId);
 
   /**
+   * Remove shuffle merge data files.
+   *
+   * @param appId application ID
+   */
+  void removeShuffleMerge(String appId, int shuffleId);
+
+  /**
    * Optionally close any resources associated the MergedShuffleFileManager, such as the
    * leveldb for state persistence.
    */
