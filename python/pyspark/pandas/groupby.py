@@ -1026,7 +1026,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         ...                    'C': [1, 2, 1, 1, 2],
         ...                    'D': [True, False, True, False, True]})
 
-        Groupby one column and return the mean of the remaining columns in
+        Groupby one column and return the prod of the remaining columns in
         each group.
 
         >>> df.groupby('A').prod().sort_index()
