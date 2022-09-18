@@ -435,7 +435,24 @@ select +date '1999-01-01'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ DATE '1999-01-01')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'DATE '1999-01-01'' is of date type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"DATE '1999-01-01'\"",
+    "inputType" : "\"DATE\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(+ DATE '1999-01-01')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "+date '1999-01-01'"
+  } ]
+}
 
 
 -- !query
@@ -444,7 +461,24 @@ select +timestamp '1999-01-01'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ TIMESTAMP '1999-01-01 00:00:00')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'TIMESTAMP '1999-01-01 00:00:00'' is of timestamp type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP '1999-01-01 00:00:00'\"",
+    "inputType" : "\"TIMESTAMP\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(+ TIMESTAMP '1999-01-01 00:00:00')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "+timestamp '1999-01-01'"
+  } ]
+}
 
 
 -- !query
@@ -461,7 +495,24 @@ select +map(1, 2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ map(1, 2))' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'map(1, 2)' is of map<int,int> type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"map(1, 2)\"",
+    "inputType" : "\"MAP<INT, INT>\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(+ map(1, 2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "+map(1, 2)"
+  } ]
+}
 
 
 -- !query
@@ -470,7 +521,24 @@ select +array(1,2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ array(1, 2))' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'array(1, 2)' is of array<int> type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"array(1, 2)\"",
+    "inputType" : "\"ARRAY<INT>\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(+ array(1, 2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "+array(1,2)"
+  } ]
+}
 
 
 -- !query
@@ -479,7 +547,24 @@ select +named_struct('a', 1, 'b', 'spark')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ named_struct('a', 1, 'b', 'spark'))' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'named_struct('a', 1, 'b', 'spark')' is of struct<a:int,b:string> type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"named_struct(a, 1, b, spark)\"",
+    "inputType" : "\"STRUCT<a: INT, b: STRING>\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(+ named_struct(a, 1, b, spark))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "+named_struct('a', 1, 'b', 'spark')"
+  } ]
+}
 
 
 -- !query
@@ -488,7 +573,24 @@ select +X'1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ X'01')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'X'01'' is of binary type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"X'01'\"",
+    "inputType" : "\"BINARY\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(+ X'01')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "+X'1'"
+  } ]
+}
 
 
 -- !query
@@ -497,7 +599,24 @@ select -date '1999-01-01'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(- DATE '1999-01-01')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'DATE '1999-01-01'' is of date type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"DATE '1999-01-01'\"",
+    "inputType" : "\"DATE\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(- DATE '1999-01-01')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "-date '1999-01-01'"
+  } ]
+}
 
 
 -- !query
@@ -506,7 +625,24 @@ select -timestamp '1999-01-01'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(- TIMESTAMP '1999-01-01 00:00:00')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'TIMESTAMP '1999-01-01 00:00:00'' is of timestamp type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP '1999-01-01 00:00:00'\"",
+    "inputType" : "\"TIMESTAMP\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(- TIMESTAMP '1999-01-01 00:00:00')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "-timestamp '1999-01-01'"
+  } ]
+}
 
 
 -- !query
@@ -515,4 +651,21 @@ select -x'2379ACFe'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(- X'2379ACFE')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'X'2379ACFE'' is of binary type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"X'2379ACFE'\"",
+    "inputType" : "\"BINARY\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(- X'2379ACFE')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "-x'2379ACFe'"
+  } ]
+}
