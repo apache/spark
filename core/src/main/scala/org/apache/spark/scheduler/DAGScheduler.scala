@@ -230,6 +230,9 @@ private[spark] class DAGScheduler(
     sc.getConf.getInt("spark.stage.maxConsecutiveAttempts",
       DAGScheduler.DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS)
 
+  private[scheduler] val ignoreDecommissionFetchFailure =
+    sc.getConf.get(config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE)
+
   /**
    * Number of max concurrent tasks check failures for each barrier job.
    */
@@ -1853,6 +1856,14 @@ private[spark] class DAGScheduler(
       case FetchFailed(bmAddress, shuffleId, _, mapIndex, reduceId, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
+        val isExecutorDecommissioned =
+          if (bmAddress != null) {
+            taskScheduler
+              .getExecutorDecommissionState(bmAddress.executorId)
+              .nonEmpty
+          } else {
+            false
+          }
 
         if (failedStage.latestInfo.attemptNumber != task.stageAttemptId) {
           logInfo(s"Ignoring fetch failure from $task as it's from $failedStage attempt" +
@@ -1860,8 +1871,16 @@ private[spark] class DAGScheduler(
             s"(attempt ${failedStage.latestInfo.attemptNumber}) running")
         } else {
           failedStage.failedAttemptIds.add(task.stageAttemptId)
+          val ignoreStageFailure = ignoreDecommissionFetchFailure && isExecutorDecommissioned
+          if (ignoreStageFailure) {
+            logInfo("Ignoring fetch failure from $task of $failedStage attempt" +
+              s"${task.stageAttemptId} as executor ${bmAddress.executorId} is decommissioned and " +
+              s" ${config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key}=true")
+          }
+
           val shouldAbortStage =
-            failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts ||
+            (!ignoreStageFailure &&
+              failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts)||
             disallowStageRetryForTest
 
           // It is likely that we receive multiple FetchFailed for a single stage (because we have
