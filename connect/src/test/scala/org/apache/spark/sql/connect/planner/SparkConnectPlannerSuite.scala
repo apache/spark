@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.sparkconnect.planner.{InvalidPlanInput, SparkConnectPlanner}
 
 /**
- * Testing trait for SparkConnect tests with some helper methods to make it easier to create
- * new test cases.
+ * Testing trait for SparkConnect tests with some helper methods to make it easier to create new
+ * test cases.
  */
 trait SparkConnectPlanTest {
   def transform(rel: proto.Relation): LogicalPlan = {

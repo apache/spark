@@ -19,13 +19,16 @@ package org.apache.spark.sql.sparkconnect.service
 
 import java.util
 import java.util.concurrent.TimeUnit
+
 import scala.collection.JavaConverters._
+
 import com.google.common.base.Ticker
 import com.google.common.cache.CacheBuilder
 import io.grpc.{Server, Status}
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
+
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
