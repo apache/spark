@@ -793,7 +793,10 @@ class Column(val expr: Expression) extends Logging {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def isin(list: Any*): Column = withExpr { In(expr, list.map(lit(_).expr)) }
+  def isin(list: Any*): Column = {
+    val inExpr = In(expr, list.map(lit(_).expr))
+    withExpr(If(IsNotNull(inExpr), inExpr, lit(false).expr))
+  }
 
   /**
    * A boolean expression that is evaluated to true if the value of this expression is contained

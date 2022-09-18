@@ -460,6 +460,21 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       }
   }
 
+  test("withColumn isin") {
+    val df = Seq(("a"), ("b"), ("c"), (""), (null)).toDF("a")
+    val dfWithCol = df.withColumn("name_isin_list1",
+      col("a").isin("a", "d", ""))
+    assert(dfWithCol.filter($"name_isin_list1" === true).count == 2)
+    assert(dfWithCol.filter($"name_isin_list1" === false).count == 3)
+    assert(dfWithCol.filter($"name_isin_list1".isNull).count == 0)
+
+    val dfWithCol1 = df.withColumn("name_isin_list2",
+      col("a").isin("a", "d", "", null))
+    assert(dfWithCol1.filter($"name_isin_list2" === true).count == 2)
+    assert(dfWithCol1.filter($"name_isin_list2" === false).count == 3)
+    assert(dfWithCol1.filter($"name_isin_list2".isNull).count == 0)
+  }
+
   test("IN/INSET with bytes, shorts, ints, dates") {
     def check(): Unit = {
       val values = Seq(
