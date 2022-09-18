@@ -1392,14 +1392,6 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             self.psdf.groupby("B").nth("x")
 
     def test_prod(self):
-
-        print(pd.DataFrame(
-            {'A': [1, 1, 2, 1, 2],
-             'B': [np.nan, 2, 3, 4, 5],
-             'C': [1, 2, 1, 1, 2],
-             'D': [True, False, True, False, True]}
-        ).groupby("A").prod(min_count=3))
-
         for n in [0, 1, 2, 128, -1, -2, -128]:
             self._test_stat_func(lambda groupby_obj: groupby_obj.prod(min_count=n))
             self._test_stat_func(lambda groupby_obj: groupby_obj.prod(numeric_only=None, min_count=n))
