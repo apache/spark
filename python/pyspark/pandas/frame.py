@@ -1448,7 +1448,7 @@ class DataFrame(Frame, Generic[T]):
         1. Pearson, Kendall and Spearman correlation are currently computed using pairwise
            complete observations.
 
-        2. The complexity of Spearman correlation is O(#row * #row), if the dataset is too
+        2. The complexity of Kendall correlation is O(#row * #row), if the dataset is too
            large, sampling ahead of correlation computation is recommended.
 
         Examples
