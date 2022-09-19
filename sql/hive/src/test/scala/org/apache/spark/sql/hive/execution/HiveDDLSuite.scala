@@ -1047,7 +1047,7 @@ class HiveDDLSuite
       sql("CREATE TABLE tab1(c1 int)")
       assertAnalysisError(
         "DROP VIEW tab1",
-        "tab1 is a table. 'DROP VIEW' expects a view. Please use DROP TABLE instead.")
+        "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
     }
   }
 
