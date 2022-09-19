@@ -2697,8 +2697,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "DATATYPE_MISMATCH",
       errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      matchPVals = true,
       parameters = Map(
-        "sqlExpr" -> "\"map_filter(i, lambdafunction((x_46 > y_47), x_46, y_47))\"",
+        "sqlExpr" -> """"map_filter\(i, lambdafunction\(\(x_\d+ > y_\d+\), x_\d+, y_\d+\)\)"""",
         "paramIndex" -> "1",
         "inputSql" -> "\"i\"",
         "inputType" -> "\"INT\"",
