@@ -51,7 +51,6 @@ import org.apache.spark.network.shuffledb.DBIterator;
 import org.apache.spark.network.shuffledb.StoreVersion;
 import org.apache.spark.network.util.DBProvider;
 
-import org.apache.spark.network.util.JavaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,6 +60,7 @@ import org.apache.spark.network.sasl.ShuffleSecretManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.ExternalBlockHandler;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.yarn.util.HadoopConfigProvider;
 
