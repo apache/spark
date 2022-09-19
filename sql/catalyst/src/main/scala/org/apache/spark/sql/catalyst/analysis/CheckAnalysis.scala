@@ -730,13 +730,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }
   }
 
-  private def planToString(expr: LogicalPlan): String =
-    if (Utils.isTesting) {
-      expr.toString.replaceAll("#\\d+", "#x")
-        .replaceAll("operator id = \\d+", "operator id = #x")
-    } else {
-      expr.toString
-    }
+  private def scrubOutIds(string: String): String =
+    string.replaceAll("#\\d+", "#x")
+      .replaceAll("operator id = \\d+", "operator id = #x")
+
+  private def planToString(plan: LogicalPlan): String = {
+    if (Utils.isTesting) scrubOutIds(plan.toString) else plan.toString
+  }
+
+  private def exprsToString(exprs: Seq[Expression]): String = {
+    val result = exprs.map(_.toString).mkString("\n")
+    if (Utils.isTesting) scrubOutIds(result) else result
+  }
 
   /**
    * Validates subquery expressions in the plan. Upon failure, returns an user facing error.
@@ -1046,7 +1051,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
           errorSubClass = "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
           messageParameters =
-            Map("treeNode" -> s"${predicates.map(_.sql).mkString}:\n${planToString(p)}"))
+            Map("treeNode" -> s"${exprsToString(predicates)}\n${planToString(p)}"))
       }
     }
 
