@@ -74,7 +74,6 @@ class AdaptiveQueryExecSuite
     spark.sparkContext.addSparkListener(listener)
 
     val dfAdaptive = sql(query)
-    dfAdaptive.explain(true)
     val planBefore = dfAdaptive.queryExecution.executedPlan
     assert(planBefore.toString.startsWith("AdaptiveSparkPlan isFinalPlan=false"))
     val result = dfAdaptive.collect()
