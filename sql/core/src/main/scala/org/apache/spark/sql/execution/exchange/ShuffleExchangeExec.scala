@@ -302,7 +302,6 @@ object ShuffleExchangeExec {
         // Distributes elements evenly across output partitions, starting from a random partition.
         val partitionId = TaskContext.get().partitionId()
         var position = new Random(hashing.byteswap32(partitionId)).nextInt(numPartitions)
-
         (row: InternalRow) => {
           // The HashPartitioner will handle the `mod` by the number of partitions
           position += 1
