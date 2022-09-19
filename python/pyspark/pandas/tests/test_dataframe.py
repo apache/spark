@@ -6062,13 +6062,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self._test_corrwith((df1 + 1), (df2.C + 2))
         self._test_corrwith((df1 + 1), (df3.B + 2))
 
-        with self.assertRaisesRegex(
-            NotImplementedError, "corrwith currently works only for method='pearson'"
-        ):
-            df1.corrwith(df2, method="kendall")
-
         with self.assertRaisesRegex(TypeError, "unsupported type"):
             df1.corrwith(123)
+        with self.assertRaisesRegex(NotImplementedError, "only works for axis=0"):
+            df1.corrwith(df1.A, axis=1)
+        with self.assertRaisesRegex(ValueError, "Invalid method"):
+            df1.corrwith(df1.A, method="cov")
 
         df_bool = ps.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
         self._test_corrwith(df_bool, df_bool.A)
@@ -6077,10 +6076,11 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
     def _test_corrwith(self, psdf, psobj):
         pdf = psdf.to_pandas()
         pobj = psobj.to_pandas()
-        for drop in [True, False]:
-            p_corr = pdf.corrwith(pobj, drop=drop)
-            ps_corr = psdf.corrwith(psobj, drop=drop)
-            self.assert_eq(p_corr.sort_index(), ps_corr.sort_index(), almost=True)
+        for method in ["pearson", "spearman", "kendall"]:
+            for drop in [True, False]:
+                p_corr = pdf.corrwith(pobj, drop=drop, method=method)
+                ps_corr = psdf.corrwith(psobj, drop=drop, method=method)
+                self.assert_eq(p_corr.sort_index(), ps_corr.sort_index(), almost=True)
 
     def test_iteritems(self):
         pdf = pd.DataFrame(
