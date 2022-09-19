@@ -23,7 +23,7 @@ from pyspark import SparkContext
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.column import Column, _to_java_column
 from pyspark.sql.types import ArrayType, DataType, StructType
-from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING
+from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
@@ -116,21 +116,32 @@ def array_to_vector(col: Column) -> Column:
     return Column(sc._jvm.org.apache.spark.ml.functions.array_to_vector(_to_java_column(col)))
 
 
-def _batched(df: pd.DataFrame, batch_size: int) -> Iterator[pd.DataFrame]:
+def _batched(
+    data: pd.Series | pd.DataFrame | Tuple[pd.Series], batch_size: int
+) -> Iterator[pd.DataFrame]:
     """Generator that splits a pandas dataframe/series into batches."""
-    for _, batch in df.groupby(np.arange(len(df)) // batch_size):
-        yield batch
+    if isinstance(data, (pd.Series, pd.DataFrame)):
+        for _, batch in data.groupby(np.arange(len(data)) // batch_size):
+            yield batch
+    else:  # isinstance(data, Tuple):
+        # convert tuple of pd.Series into pd.DataFrame
+        df = pd.concat(data, axis=1)
+        for _, batch in df.groupby(np.arange(len(df)) // batch_size):
+            yield batch
 
 
-def _has_tensor_cols(df: pd.DataFrame) -> bool:
+def _has_tensor_cols(data: pd.Series | pd.DataFrame | Tuple[pd.Series]) -> bool:
     """Check if input DataFrame contains any tensor-valued columns"""
-    if any(df.dtypes == np.object_):
-        # pd.DataFrame object types can contain different types, e.g. string, dates, etc.
-        # so inspect a row and check for array/list type
-        sample = df.iloc[0]
-        return any([isinstance(x, np.ndarray) or isinstance(x, list) for x in sample])
-    else:
-        return False
+    if isinstance(data, pd.Series):
+        return data.dtype == np.object_ and isinstance(data.iloc[0], (np.ndarray, list))
+    elif isinstance(data, pd.DataFrame):
+        return any(data.dtypes == np.object_) and any(
+            [isinstance(d, (np.ndarray, list)) for d in data.iloc[0]]
+        )
+    else:  # isinstance(data, Tuple):
+        return any([d.dtype == np.object_ for d in data]) and any(
+            [isinstance(d.iloc[0], (np.ndarray, list)) for d in data]
+        )
 
 
 def predict_batch_udf(
@@ -157,8 +168,6 @@ def predict_batch_udf(
 
     This assumes that the `predict_batch_fn` encapsulates all of the necessary dependencies for
     running the model or the Spark executor environment already satisfies all runtime requirements.
-
-    When selecting columns in pyspark SQL, users are required to always use `struct` for simplicity.
 
     For the conversion of Spark DataFrame to numpy, the following table describes the behavior,
     where tensor columns in the Spark DataFrame must be represented as a flattened 1-D array/list.
@@ -233,7 +242,7 @@ def predict_batch_udf(
     # generate a new uuid each time this is invoked on the driver to invalidate executor-side cache.
     model_uuid = uuid.uuid4()
 
-    def predict(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
+    def predict(data: Iterator[Union[pd.Series, pd.DataFrame]]) -> Iterator[pd.DataFrame]:
         from pyspark.ml.model_cache import ModelCache
 
         predict_fn = ModelCache.get(model_uuid)
@@ -278,14 +287,16 @@ def predict_batch_udf(
                     # no input names provided, expect a single numpy array
                     if input_tensor_shapes:
                         if len(input_tensor_shapes) == 1:
-                            if len(batch.columns) == 1:
-                                # if one tensor input and one column, vstack and reshape the batch
-                                input_shape = input_tensor_shapes[0]
-                                input_shape[0] = -1  # replace None with -1 in batch dimension
-                                inputs = np.vstack(batch.iloc[:, 0]).reshape(input_shape)  # struct
-                            else:
-                                # otherwise, try to convert entire dataframe to a single np array
-                                inputs = batch.to_numpy()
+                            input_shape = [x if x else -1 for x in input_tensor_shapes[0]]
+                            if isinstance(batch, pd.Series):
+                                inputs = np.vstack(batch).reshape(input_shape)
+                            elif isinstance(batch, pd.DataFrame):
+                                if len(batch.columns) == 1:
+                                    # if one tensor input and one column, vstack/reshape the batch
+                                    inputs = np.vstack(batch.iloc[:, 0]).reshape(input_shape)
+                                else:
+                                    # otherwise, convert entire dataframe to a single np array
+                                    inputs = batch.to_numpy()
                         else:
                             msg = "Multiple input_tensor_shapes require associated input_names: {}"
                             raise ValueError(msg.format(input_tensor_shapes))

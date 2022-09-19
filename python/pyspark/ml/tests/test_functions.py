@@ -19,14 +19,14 @@ import pandas as pd
 import unittest
 
 from pyspark.ml.functions import predict_batch_udf
-from pyspark.sql.functions import struct
+from pyspark.sql.functions import struct, col
 from pyspark.sql.types import DoubleType, IntegerType, StructType, StructField
 from pyspark.testing.mlutils import SparkSessionTestCase
 
 
-class BatchInferUDFTests(SparkSessionTestCase):
+class PredictBatchUDFTests(SparkSessionTestCase):
     def setUp(self):
-        super(BatchInferUDFTests, self).setUp()
+        super(PredictBatchUDFTests, self).setUp()
         self.data = np.arange(0, 1000, dtype=np.float64).reshape(-1, 4)
 
         # 4 scalar columns
@@ -49,12 +49,20 @@ class BatchInferUDFTests(SparkSessionTestCase):
 
             return predict
 
-        # single column input => single column output
         identity = predict_batch_udf(predict_batch_fn, return_type=DoubleType(), batch_size=5)
+
+        # single column input => single column output (struct)
         preds = self.df.withColumn("preds", identity(struct("a"))).toPandas()
         self.assertTrue(preds["a"].equals(preds["preds"]))
 
-        # multiple column input => multiple column output
+        # single column input => single column output (col)
+        preds = self.df.withColumn("preds", identity(col("a"))).toPandas()
+        self.assertTrue(preds["a"].equals(preds["preds"]))
+
+        # single column input => single column output (str)
+        preds = self.df.withColumn("preds", identity("a")).toPandas()
+        self.assertTrue(preds["a"].equals(preds["preds"]))
+
         identity = predict_batch_udf(
             predict_batch_fn,
             return_type=StructType(
@@ -62,8 +70,28 @@ class BatchInferUDFTests(SparkSessionTestCase):
             ),
             batch_size=5,
         )
+
+        # multiple column input => multiple column output (struct)
         preds = (
             self.df.withColumn("preds", identity(struct("a", "b")))
+            .select("a", "b", "preds.*")
+            .toPandas()
+        )
+        self.assertTrue(preds["a"].equals(preds["a1"]))
+        self.assertTrue(preds["b"].equals(preds["b1"]))
+
+        # multiple column input => multiple column output (col)
+        preds = (
+            self.df.withColumn("preds", identity(col("a"), col("b")))
+            .select("a", "b", "preds.*")
+            .toPandas()
+        )
+        self.assertTrue(preds["a"].equals(preds["a1"]))
+        self.assertTrue(preds["b"].equals(preds["b1"]))
+
+        # multiple column input => multiple column output (str)
+        preds = (
+            self.df.withColumn("preds", identity("a", "b"))
             .select("a", "b", "preds.*")
             .toPandas()
         )
@@ -85,8 +113,19 @@ class BatchInferUDFTests(SparkSessionTestCase):
         identity = predict_batch_udf(
             predict_batch_fn, return_type=IntegerType(), batch_size=batch_size
         )
-        preds = self.df.withColumn("preds", identity(struct("a"))).toPandas()
 
+        # struct
+        preds = self.df.withColumn("preds", identity(struct("a"))).toPandas()
+        batch_sizes = preds["preds"].to_numpy()
+        self.assertTrue(all(batch_sizes <= batch_size))
+
+        # col
+        preds = self.df.withColumn("preds", identity(col("a"))).toPandas()
+        batch_sizes = preds["preds"].to_numpy()
+        self.assertTrue(all(batch_sizes <= batch_size))
+
+        # struct
+        preds = self.df.withColumn("preds", identity("a")).toPandas()
         batch_sizes = preds["preds"].to_numpy()
         self.assertTrue(all(batch_sizes <= batch_size))
 
@@ -248,6 +287,45 @@ class BatchInferUDFTests(SparkSessionTestCase):
                 preds["preds"].to_numpy(),
             )
         )
+
+    def test_return_multiple(self):
+        # columnar form: dictionary of numpy arrays
+        def multiples_column_fn():
+            def predict(inputs):
+                return {"x2": inputs * 2, "x3": inputs * 3}
+
+            return predict
+
+        multiples_col = predict_batch_udf(
+            multiples_column_fn,
+            return_type=StructType(
+                [StructField("x2", DoubleType(), True), StructField("x3", DoubleType(), True)]
+            ),
+            batch_size=5,
+        )
+        preds = self.df.withColumn("preds", multiples_col("a")).select("a", "preds.*").toPandas()
+
+        self.assertTrue(np.array_equal(self.data[:, 0] * 2, preds["x2"].to_numpy()))
+        self.assertTrue(np.array_equal(self.data[:, 0] * 3, preds["x3"].to_numpy()))
+
+        # row form: list of dictionaries
+        def multiples_row_fn():
+            def predict(inputs):
+                return [{"x2": x * 2, "x3": x * 3} for x in inputs]
+
+            return predict
+
+        multiples_row = predict_batch_udf(
+            multiples_row_fn,
+            return_type=StructType(
+                [StructField("x2", DoubleType(), True), StructField("x3", DoubleType(), True)]
+            ),
+            batch_size=5,
+        )
+        preds = self.df.withColumn("preds", multiples_row("a")).select("a", "preds.*").toPandas()
+
+        self.assertTrue(np.array_equal(self.data[:, 0] * 2, preds["x2"].to_numpy()))
+        self.assertTrue(np.array_equal(self.data[:, 0] * 3, preds["x3"].to_numpy()))
 
 
 if __name__ == "__main__":
