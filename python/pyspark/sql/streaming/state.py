@@ -20,7 +20,7 @@ from typing import Tuple, Optional
 
 from pyspark.sql.types import DateType, Row, StructType
 
-__all__ = ["GroupStateImpl", "GroupStateTimeout"]
+__all__ = ["GroupState", "GroupStateTimeout"]
 
 
 class GroupStateTimeout:
@@ -29,7 +29,7 @@ class GroupStateTimeout:
     EventTimeTimeout: str = "EventTimeTimeout"
 
 
-class GroupStateImpl:
+class GroupState:
     NO_TIMESTAMP: int = -1
 
     def __init__(
@@ -146,7 +146,7 @@ class GroupStateImpl:
             raise ValueError("Timeout timestamp must be positive")
 
         if (
-            self._event_time_watermark_ms != GroupStateImpl.NO_TIMESTAMP
+            self._event_time_watermark_ms != GroupState.NO_TIMESTAMP
             and timestampMs < self._event_time_watermark_ms
         ):
             raise ValueError(

@@ -30,7 +30,7 @@ from typing_extensions import Protocol, Literal
 from types import FunctionType
 
 from pyspark.sql._typing import LiteralType
-from pyspark.sql.streaming.state import GroupStateImpl
+from pyspark.sql.streaming.state import GroupState
 from pandas.core.frame import DataFrame as PandasDataFrame
 from pandas.core.series import Series as PandasSeries
 from numpy import ndarray as NDArray
@@ -259,7 +259,7 @@ PandasGroupedMapFunction = Union[
 ]
 
 PandasGroupedMapFunctionWithState = Callable[
-    [Any, Iterable[DataFrameLike], GroupStateImpl], Iterable[DataFrameLike]
+    [Any, Iterable[DataFrameLike], GroupState], Iterable[DataFrameLike]
 ]
 
 class PandasVariadicGroupedAggFunction(Protocol):

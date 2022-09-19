@@ -447,7 +447,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         import pyarrow as pa
         import json
         from itertools import groupby
-        from pyspark.sql.streaming.state import GroupStateImpl
+        from pyspark.sql.streaming.state import GroupState
 
         def gen_data_and_state(batches):
             """
@@ -530,7 +530,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                         state = state_for_current_group
                     else:
                         # there is no state being stored for same group, construct one
-                        state = GroupStateImpl(
+                        state = GroupState(
                             keyAsUnsafe=state_info_col_key_row,
                             valueSchema=self.state_object_schema,
                             **state_properties,
