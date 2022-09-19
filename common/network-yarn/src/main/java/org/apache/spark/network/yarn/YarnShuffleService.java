@@ -51,6 +51,7 @@ import org.apache.spark.network.shuffledb.DBIterator;
 import org.apache.spark.network.shuffledb.StoreVersion;
 import org.apache.spark.network.util.DBProvider;
 
+import org.apache.spark.network.util.JavaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -236,6 +237,10 @@ public class YarnShuffleService extends AuxiliaryService {
     super.serviceInit(_conf);
 
     boolean stopOnFailure = _conf.getBoolean(STOP_ON_FAILURE_KEY, DEFAULT_STOP_ON_FAILURE);
+
+    if (_recoveryPath == null && _conf.getBoolean("spark.yarn.integrationTesting", false)) {
+      _recoveryPath = new Path(JavaUtils.createTempDir().toURI());
+    }
 
     if (_recoveryPath != null) {
       String dbBackendName = _conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND,
