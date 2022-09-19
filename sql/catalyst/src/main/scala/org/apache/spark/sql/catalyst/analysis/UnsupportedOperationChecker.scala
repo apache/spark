@@ -148,7 +148,7 @@ object UnsupportedOperationChecker extends Logging {
     }
 
     // Disallow multiple `applyInPandasWithState`s.
-    if (applyInPandasWithStates.size >= 2) {
+    if (applyInPandasWithStates.size > 1) {
       throwError(
         "Multiple applyInPandasWithStates are not supported on a streaming " +
           "DataFrames/Datasets")(plan)
