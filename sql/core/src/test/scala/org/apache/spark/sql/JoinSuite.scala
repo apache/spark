@@ -1440,4 +1440,25 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       }
     }
   }
+
+  test("SPARK-40487: Make defaultJoin in BroadcastNestedLoopJoinExec running in parallel") {
+    withTable("t1", "t2") {
+      spark.range(5, 15).toDF("k").write.saveAsTable("t1")
+      spark.range(4, 8).toDF("k").write.saveAsTable("t2")
+
+      val queryBuildLeft =
+        s"""
+           |SELECT /*+ BROADCAST(t1) */ *  FROM t1 LEFT JOIN t2 on t1.k < t2.k
+       """.stripMargin
+      val result1 = sql(queryBuildLeft)
+
+      val queryBuildRight =
+        s"""
+           |SELECT /*+ BROADCAST(t2) */ *  FROM t1 LEFT JOIN t2 on t1.k < t2.k
+       """.stripMargin
+      val result2 = sql(queryBuildRight)
+
+      checkAnswer(result1, result2)
+    }
+  }
 }
