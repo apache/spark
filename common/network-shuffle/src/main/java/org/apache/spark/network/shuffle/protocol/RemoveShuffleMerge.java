@@ -60,8 +60,7 @@ public class RemoveShuffleMerge extends BlockTransferMessage {
   public boolean equals(Object other) {
     if (other != null && other instanceof RemoveShuffleMerge) {
       RemoveShuffleMerge o = (RemoveShuffleMerge) other;
-      return Objects.equal(appId, o.appId)
-        && shuffleId == o.shuffleId;
+      return shuffleId == o.shuffleId && Objects.equal(appId, o.appId);
     }
     return false;
   }
