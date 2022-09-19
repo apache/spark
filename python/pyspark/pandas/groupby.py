@@ -1074,7 +1074,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             if min_count > 0:
                 for label in psdf._internal.column_labels:
                     sdf = sdf.withColumn(label[0], F.when(F.col(tmp_count_column % label[0]).__ge__(min_count),
-                                                               F.col(label[0])).otherwise(None))
+                                                          F.col(label[0])).otherwise(None)) \
+                        .drop(tmp_count_column % label[0])
 
         else:
             sdf = sdf.select(*groupkey_names).distinct()
