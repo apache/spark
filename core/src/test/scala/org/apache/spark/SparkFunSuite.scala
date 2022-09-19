@@ -308,7 +308,7 @@ abstract class SparkFunSuite
     sqlState.foreach(state => assert(exception.getSqlState === state))
     val expectedParameters = exception.getMessageParameters.asScala
     if (matchPVals == true) {
-      assert(expectedParameters.size === parameters.size)
+      assert(parameters.size === expectedParameters.size)
       expectedParameters.foreach(
         exp => {
           val parm = parameters.getOrElse(exp._1,
@@ -320,7 +320,7 @@ abstract class SparkFunSuite
         }
       )
     } else {
-      assert(expectedParameters === parameters)
+      assert(parameters === expectedParameters)
     }
     val actualQueryContext = exception.getQueryContext()
     assert(actualQueryContext.length === queryContext.length, "Invalid length of the query context")
