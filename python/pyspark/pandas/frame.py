@@ -1717,11 +1717,10 @@ class DataFrame(Frame, Generic[T]):
         dtype: float64
 
         >>> with ps.option_context("compute.ops_on_diff_frames", True):
-        ...     df1.corrwith(df2, method="spearman").sort_index()
-        A   -0.041703
-        B         NaN
-        C    0.395437
-        X         NaN
+        ...     df1.corrwith(df2.B, method="spearman").sort_index()
+        A   -0.4
+        C    0.8
+        X   -0.2
         dtype: float64
 
         >>> with ps.option_context("compute.ops_on_diff_frames", True):
