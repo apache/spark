@@ -68,18 +68,12 @@ class JDKDecimalOperation extends DecimalOperation[JDKDecimalOperation] {
 
   def isEqualsZero(): Boolean = this.decimalVal.signum == 0
 
-  def doAdd(that: JDKDecimalOperation): JDKDecimalOperation = {
-    val jDKDecimalOperation = new JDKDecimalOperation()
-    val newBigDecimal = toJavaBigDecimal.add(that.toJavaBigDecimal)
-    jDKDecimalOperation.set(newBigDecimal)
-    jDKDecimalOperation
+  def doAdd(that: JDKDecimalOperation): JDKDecimalOperation = withNewInstance(this, that) {
+    (left, right) => left.add(right)
   }
 
-  def doSubtract(that: JDKDecimalOperation): JDKDecimalOperation = {
-    val jDKDecimalOperation = new JDKDecimalOperation()
-    val newBigDecimal = toJavaBigDecimal.subtract(that.toJavaBigDecimal)
-    jDKDecimalOperation.set(newBigDecimal)
-    jDKDecimalOperation
+  def doSubtract(that: JDKDecimalOperation): JDKDecimalOperation = withNewInstance(this, that) {
+    (left, right) => left.subtract(right)
   }
 
   def multiply(that: JDKDecimalOperation): JDKDecimalOperation = withNewInstance(this, that) {
