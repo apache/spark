@@ -283,7 +283,7 @@ class SessionCatalog(
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
     val dbName = format(db)
-    if (dbName == defaultDatabase) {
+    if (dbName == "default") {
       throw QueryCompilationErrors.cannotDropDefaultDatabaseError
     }
     if (!ignoreIfNotExists) {
