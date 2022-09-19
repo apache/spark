@@ -61,7 +61,8 @@ from pyspark.sql.types import (
     NumericType,
     StructField,
     StructType,
-    StringType, IntegralType,
+    StringType,
+    IntegralType,
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
@@ -997,17 +998,17 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         Compute prod of groups.
 
+        .. versionadded:: 3.4.0
+
         Parameters
         ----------
         numeric_only : bool, default False
-        Include only float, int, boolean columns. If None, will attempt to use
-        everything, then use only numeric data.
+            Include only float, int, boolean columns. If None, will attempt to use
+            everything, then use only numeric data.
 
         min_count: int, default 0
-        The required number of valid values to perform the operation.
-        If fewer than min_count non-NA values are present the result will be NA.
-
-        .. versionadded:: 3.4.0
+            The required number of valid values to perform the operation.
+            If fewer than min_count non-NA values are present the result will be NA.
 
         Returns
         -------
@@ -1032,12 +1033,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
              B  C  D
         A
         1  8.0  2  0
-        2  15.0 2  11
+        2  15.0 2  1
 
         >>> df.groupby('A').prod(min_count=3).sort_index()
              B  C   D
         A
-        1  NaN  2  0
+        1  NaN  2.0  0.0
         2  NaN NaN  NaN
         """
 
@@ -1052,6 +1053,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         psdf: DataFrame = DataFrame(internal)
         if len(psdf._internal.column_labels) > 0:
+            tmp_count_column = "__tmp_%s_count_col__"
 
             stat_exprs = []
             for label in psdf._internal.column_labels:
@@ -1060,18 +1062,19 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 data_type = psser.spark.data_type
 
                 if isinstance(data_type, IntegralType):
-                    stat_exprs.append(F.product(column).cast(data_type).alias(f"{label[0]}"))
+                    stat_exprs.append(F.product(column).cast(data_type).alias(label[0]))
                 else:
-                    stat_exprs.append(F.product(column).alias(f"{label[0]}"))
+                    stat_exprs.append(F.product(column).alias(label[0]))
 
-                stat_exprs.append(F.count(column).alias(f"{label[0]}_count"))
+                if min_count > 0:
+                    stat_exprs.append(F.count(column).alias(tmp_count_column % label[0]))
 
             sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
 
             if min_count > 0:
                 for label in psdf._internal.column_labels:
-                    sdf = sdf.withColumn(f"{label[0]}", F.when(F.col(f"{label[0]}_count").__ge__(min_count),
-                                                               F.col(f"{label[0]}")).otherwise(None))
+                    sdf = sdf.withColumn(label[0], F.when(F.col(tmp_count_column % label[0]).__ge__(min_count),
+                                                               F.col(label[0])).otherwise(None))
 
         else:
             sdf = sdf.select(*groupkey_names).distinct()
