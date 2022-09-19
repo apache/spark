@@ -113,10 +113,10 @@ import org.apache.spark.util.Utils
  *  - Scala UDF test case with a Scalar UDF registered as the name 'udf'.
  *
  *  - Python UDF test case with a Python UDF registered as the name 'udf'
- *    if Python executable and pyspark are available.
+ *    iff Python executable and pyspark are available.
  *
  *  - Scalar Pandas UDF test case with a Scalar Pandas UDF registered as the name 'udf'
- *    if Python executable, pyspark, pandas and pyarrow are available.
+ *    iff Python executable, pyspark, pandas and pyarrow are available.
  *
  * Therefore, UDF test cases should have single input and output files but executed by three
  * different types of UDFs. See 'udf/udf-inner-join.sql' as an example.
