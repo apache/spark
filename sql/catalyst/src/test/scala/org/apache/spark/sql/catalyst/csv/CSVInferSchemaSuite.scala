@@ -111,10 +111,10 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
         Array(LongType)).sameElements(Array(DoubleType)))
     assert(
       inferSchema.mergeRowTypes(Array(DateType),
-        Array(TimestampNTZType)).sameElements(Array(TimestampNTZType)))
+        Array(TimestampNTZType)).sameElements(Array(StringType)))
     assert(
       inferSchema.mergeRowTypes(Array(DateType),
-        Array(TimestampType)).sameElements(Array(TimestampType)))
+        Array(TimestampType)).sameElements(Array(StringType)))
   }
 
   test("Null fields are handled properly when a nullValue is specified") {
@@ -221,25 +221,24 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     assert(inferSchema.inferField(NullType, "2018-12-03") == DateType)
   }
 
-  test("SPARK-39469: inferring date and timestamp types in a mixed column with prefersDate=true") {
+  test("SPARK-39469: inferring the schema of columns with mixing dates and timestamps properly") {
     var options = new CSVOptions(
       Map("dateFormat" -> "yyyy_MM_dd", "timestampFormat" -> "yyyy|MM|dd",
         "timestampNTZFormat" -> "yyyy/MM/dd", "prefersDate" -> "true"),
       columnPruning = false,
       defaultTimeZoneId = "UTC")
     var inferSchema = new CSVInferSchema(options)
+
     assert(inferSchema.inferField(DateType, "2012_12_12") == DateType)
-    assert(inferSchema.inferField(DateType, "2003|01|01") == TimestampType)
+
+    // inferField should infer a column as string type if it contains mixing dates and timestamps
+    assert(inferSchema.inferField(DateType, "2003|01|01") == StringType)
     // SQL configuration must be set to default to TimestampNTZ
     withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
-      assert(inferSchema.inferField(DateType, "2003/02/05") == TimestampNTZType)
+      assert(inferSchema.inferField(DateType, "2003/02/05") == StringType)
     }
-
-    // inferField should infer a field as string type if it contains mixing dates and timestamps
     assert(inferSchema.inferField(TimestampNTZType, "2012_12_12") == StringType)
     assert(inferSchema.inferField(TimestampType, "2018_12_03") == StringType)
-    assert(inferSchema.inferField(DateType, "2012|12|12") == StringType)
-    assert(inferSchema.inferField(DateType, "2018/12/03") == StringType)
 
     // No errors when Date and Timestamp have the same format. Inference defaults to date
     options = new CSVOptions(

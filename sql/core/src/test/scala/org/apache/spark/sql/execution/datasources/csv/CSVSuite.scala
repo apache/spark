@@ -2891,9 +2891,9 @@ abstract class CSVSuite
         checkAnswer(
           output,
           Seq(
-            Row("2020-02-01 12:34:56"),
-            Row("2020-02-02"),
-            Row("invalid")
+            Row(Timestamp.valueOf("2020-02-01 12:34:56")),
+            Row(Timestamp.valueOf("2020-02-02 00:00:00")),
+            Row(null)
           )
         )
       }
