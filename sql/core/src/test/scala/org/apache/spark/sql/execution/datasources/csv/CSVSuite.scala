@@ -2848,18 +2848,15 @@ abstract class CSVSuite
           .load(testFile(dateInferSchemaFile))
 
         val expectedSchema = StructType(List(StructField("date", DateType),
-          StructField("timestamp-date", TimestampType),
-          StructField("date-timestamp", TimestampType)))
+          StructField("timestamp-date", StringType),
+          StructField("date-timestamp", StringType)))
         assert(results.schema == expectedSchema)
 
         val expected =
           Seq(
-            Seq(Date.valueOf("2001-9-8"), Timestamp.valueOf("2014-10-27 18:30:0.0"),
-              Timestamp.valueOf("1765-03-28 00:00:0.0")),
-            Seq(Date.valueOf("1941-1-2"), Timestamp.valueOf("2000-09-14 01:01:0.0"),
-              Timestamp.valueOf("1423-11-12 23:41:0.0")),
-            Seq(Date.valueOf("0293-11-7"), Timestamp.valueOf("1995-06-25 00:00:00.0"),
-              Timestamp.valueOf("2016-01-28 20:00:00.0"))
+            Seq(Date.valueOf("2001-9-8"), "2014-10-27T18:30:00", "1765-03-28"),
+            Seq(Date.valueOf("1941-1-2"), "2000-09-14T01:01:00", "1423-11-12T23:41:00"),
+            Seq(Date.valueOf("0293-11-7"), "1995-06-25", "2016-01-28T20:00:00")
           )
         assert(results.collect().toSeq.map(_.toSeq) == expected)
       }
@@ -2894,9 +2891,9 @@ abstract class CSVSuite
         checkAnswer(
           output,
           Seq(
-            Row(Timestamp.valueOf("2020-02-01 12:34:56")),
-            Row(Timestamp.valueOf("2020-02-02 00:00:00")),
-            Row(null)
+            Row("2020-02-01 12:34:56"),
+            Row("2020-02-02"),
+            Row("invalid")
           )
         )
       }

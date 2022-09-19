@@ -123,10 +123,8 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case LongType => tryParseLong(field)
         case _: DecimalType => tryParseDecimal(field)
         case DoubleType => tryParseDouble(field)
-        case DateType => tryParseDateTime(field)
-        case TimestampNTZType if options.prefersDate => tryParseDateTime(field)
+        case DateType => tryParseDate(field)
         case TimestampNTZType => tryParseTimestampNTZ(field)
-        case TimestampType if options.prefersDate => tryParseDateTime(field)
         case TimestampType => tryParseTimestamp(field)
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType
@@ -179,13 +177,13 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field)) {
       DoubleType
     } else if (options.prefersDate) {
-      tryParseDateTime(field)
+      tryParseDate(field)
     } else {
       tryParseTimestampNTZ(field)
     }
   }
 
-  private def tryParseDateTime(field: String): DataType = {
+  private def tryParseDate(field: String): DataType = {
     if ((allCatch opt dateFormatter.parse(field)).isDefined) {
       DateType
     } else {
@@ -233,7 +231,12 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
    * is compatible with both input data types.
    */
   private def compatibleType(t1: DataType, t2: DataType): Option[DataType] = {
-    TypeCoercion.findTightestCommonType(t1, t2).orElse(findCompatibleTypeForCSV(t1, t2))
+    (t1, t2) match {
+      // For fields with mixing dates and timestamps, relax it as string type
+      case (DateType, TimestampType) | (TimestampType, DateType) |
+           (DateType, TimestampNTZType) | (TimestampNTZType, DateType) => Some(StringType)
+      case _ => TypeCoercion.findTightestCommonType(t1, t2).orElse(findCompatibleTypeForCSV(t1, t2))
+    }
   }
 
   /**

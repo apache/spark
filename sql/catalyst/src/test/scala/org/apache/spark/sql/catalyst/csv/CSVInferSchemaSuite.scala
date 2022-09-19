@@ -235,9 +235,11 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
       assert(inferSchema.inferField(DateType, "2003/02/05") == TimestampNTZType)
     }
 
-    // inferField should upgrade a date field to timestamp if the typeSoFar is a timestamp
-    assert(inferSchema.inferField(TimestampNTZType, "2012_12_12") == TimestampNTZType)
-    assert(inferSchema.inferField(TimestampType, "2018_12_03") == TimestampType)
+    // inferField should infer a field as string type if it contains mixing dates and timestamps
+    assert(inferSchema.inferField(TimestampNTZType, "2012_12_12") == StringType)
+    assert(inferSchema.inferField(TimestampType, "2018_12_03") == StringType)
+    assert(inferSchema.inferField(DateType, "2012|12|12") == StringType)
+    assert(inferSchema.inferField(DateType, "2018/12/03") == StringType)
 
     // No errors when Date and Timestamp have the same format. Inference defaults to date
     options = new CSVOptions(

@@ -149,13 +149,10 @@ class CSVOptions(
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
 
   /**
-   * Infer columns with all valid date entries as date type (otherwise inferred as timestamp type)
-   * if schema inference is enabled. When being used with user-provided schema, tries to parse
-   * timestamp values as dates if the values do not conform to the timestamp formatter before
-   * falling back to the backward compatible parsing - the parsed values will be cast to timestamp
-   * afterwards.
+   * Infer columns with all valid date entries as date type (otherwise inferred as string type)
+   * if schema inference is enabled.
    *
-   * Disabled by default for backwards compatibility and performance.
+   * Disabled by default for backwards compatibility.
    *
    * Not compatible with legacyTimeParserPolicy == LEGACY since legacy date parser will accept
    * extra trailing characters.
