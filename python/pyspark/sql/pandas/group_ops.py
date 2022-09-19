@@ -231,13 +231,11 @@ class PandasGroupedOpsMixin:
         per-group state. The result Dataset will represent the flattened record returned by the
         function.
 
-        For a streaming Dataset, the function will be invoked for each group repeatedly in every
-        trigger, and updates to each group's state will be saved across invocations. The function
-        will also be invoked for each timed-out state repeatedly. The sequence of the invocation
-        will be input data -> state timeout. When the function is invoked for state timeout, there
-        will be no data being presented.
+        For a streaming Dataset, the function will be invoked first for all input groups and then
+        for all timed out states where the input data is set to be empty. Updates to each group's
+        state will be saved across invocations.
 
-        The function should takes parameters (key, Iterator[`pandas.DataFrame`], state) and
+        The function should take parameters (key, Iterator[`pandas.DataFrame`], state) and
         returns another Iterator[`pandas.DataFrame`]. The grouping key(s) will be passed as a tuple
         of numpy data types, e.g., `numpy.int32` and `numpy.float64`. The state will be passed as
         :class:`pyspark.sql.streaming.state.GroupStateImpl`.
@@ -249,29 +247,27 @@ class PandasGroupedOpsMixin:
         elements in the iterator.
 
         The `outputStructType` should be a :class:`StructType` describing the schema of all
-        elements in returned value, `pandas.DataFrame`. The column labels of all elements in
-        returned value, `pandas.DataFrame` must either match the field names in the defined
-        schema if specified as strings, or match the field data types by position if not strings,
+        elements in the returned value, `pandas.DataFrame`. The column labels of all elements in
+        returned `pandas.DataFrame` must either match the field names in the defined schema if
+        specified as strings, or match the field data types by position if not strings,
         e.g. integer indices.
 
-        The `stateStructType` should be :class:`StructType` describing the schema of user-defined
-        state. The value of state will be presented as a tuple, as well as the update should be
-        performed with the tuple. User defined types e.g. native Python class types are not
-        supported. Alternatively, you can pickle the data and produce the data as BinaryType, but
-        it is tied to the backward and forward compatibility of pickle in Python, and Spark itself
-        does not guarantee the compatibility.
+        The `stateStructType` should be :class:`StructType` describing the schema of the
+        user-defined state. The value of the state will be presented as a tuple, as well as the
+        update should be performed with the tuple. User defined types e.g. native Python class
+        types are not supported.
 
-        The length of each element in both input and returned value, `pandas.DataFrame`, can be
-        arbitrary. The length of iterator in both input and returned value can be also arbitrary.
+        The size of each DataFrame in both the input and output can be arbitrary. The number of
+        DataFrames in both the input and output can also be arbitrary.
 
         .. versionadded:: 3.4.0
 
         Parameters
         ----------
         func : function
-            a Python native function to be called on every group. It should takes parameters
-            (key, Iterator[`pandas.DataFrame`], state) and returns Iterator[`pandas.DataFrame`].
-            Note that the type of key is tuple, and the type of state is
+            a Python native function to be called on every group. It should take parameters
+            (key, Iterator[`pandas.DataFrame`], state) and return Iterator[`pandas.DataFrame`].
+            Note that the type of the key is tuple and the type of the state is
             :class:`pyspark.sql.streaming.state.GroupStateImpl`.
         outputStructType : :class:`pyspark.sql.types.DataType` or str
             the type of the output records. The value can be either a
