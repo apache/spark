@@ -668,10 +668,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new UnsupportedOperationException(s"buildReader is not supported for $format")
   }
 
-  def jobAbortedError(cause: Throwable): Throwable = {
-    new SparkException("Job aborted.", cause)
-  }
-
   def taskFailedWhileWritingRowsError(cause: Throwable): Throwable = {
     new SparkException("Task failed while writing rows.", cause)
   }
