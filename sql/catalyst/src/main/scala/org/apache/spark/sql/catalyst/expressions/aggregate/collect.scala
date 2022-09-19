@@ -198,35 +198,40 @@ case class CollectSet(
 /**
  * Collect the top-k elements. This expression is dedicated only for MLLIB.
  */
-case class CollectTopK(
+case class CollectOrdered(
     child: Expression,
     num: Int,
+    reverse: Boolean = false,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends Collect[BoundedPriorityQueue[Any]] {
   require(num > 0)
 
-  def this(child: Expression, num: Int) = this(child, num, 0, 0)
+  def this(child: Expression, num: Int) = this(child, num, false, 0, 0)
+  def this(child: Expression, num: Int, reverse: Boolean) = this(child, num, reverse, 0, 0)
 
   override protected lazy val bufferElementType: DataType = child.dataType
   override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
 
-  @transient private lazy val ordering: Ordering[Any] =
+  private def ordering: Ordering[Any] = if (reverse) {
+    TypeUtils.getInterpretedOrdering(child.dataType).reverse
+  } else {
     TypeUtils.getInterpretedOrdering(child.dataType)
+  }
 
   override def createAggregationBuffer(): BoundedPriorityQueue[Any] =
-    new BoundedPriorityQueue[Any](num)(ordering)
+    new BoundedPriorityQueue[Any](num)(ordering.reverse)
 
   override def eval(buffer: BoundedPriorityQueue[Any]): Any =
-    new GenericArrayData(buffer.toArray.sorted(ordering.reverse))
+    new GenericArrayData(buffer.toArray.sorted(ordering))
 
-  override def prettyName: String = "collect_top_k"
+  override def prettyName: String = "collect_ordered"
 
-  override protected def withNewChildInternal(newChild: Expression): CollectTopK =
+  override protected def withNewChildInternal(newChild: Expression): CollectOrdered =
     copy(child = newChild)
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): CollectTopK =
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): CollectOrdered =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): CollectTopK =
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): CollectOrdered =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 }

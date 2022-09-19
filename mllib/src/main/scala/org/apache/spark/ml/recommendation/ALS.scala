@@ -45,7 +45,7 @@ import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.aggregate.CollectTopK
+import org.apache.spark.sql.catalyst.expressions.aggregate.CollectOrdered
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -501,7 +501,7 @@ class ALSModel private[ml] (
         }
       }.toDF(srcOutputColumn, dstOutputColumn, ratingColumn)
 
-    val aggFunc = CollectTopK(struct(ratingColumn, dstOutputColumn).expr, num)
+    val aggFunc = CollectOrdered(struct(ratingColumn, dstOutputColumn).expr, num, true)
       .toAggregateExpression(false)
 
     val arrayType = ArrayType(
