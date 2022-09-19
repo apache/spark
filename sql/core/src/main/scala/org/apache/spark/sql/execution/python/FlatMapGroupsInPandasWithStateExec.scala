@@ -65,10 +65,10 @@ case class FlatMapGroupsInPandasWithStateExec(
     child: SparkPlan) extends UnaryExecNode with FlatMapGroupsWithStateExecBase {
 
   // TODO(SPARK-40444): Add the support of initial state.
-  override protected val initialStateDeserializer: Expression = _
-  override protected val initialStateGroupAttrs: Seq[Attribute] = _
-  override protected val initialStateDataAttrs: Seq[Attribute] = _
-  override protected val initialState: SparkPlan = _
+  override protected val initialStateDeserializer: Expression = null
+  override protected val initialStateGroupAttrs: Seq[Attribute] = null
+  override protected val initialStateDataAttrs: Seq[Attribute] = null
+  override protected val initialState: SparkPlan = null
   override protected val hasInitialState: Boolean = false
 
   override protected val stateEncoder: ExpressionEncoder[Any] =
