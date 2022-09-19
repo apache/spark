@@ -580,7 +580,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       val df1 = spark.read.format("json")
         .load(dir.getCanonicalPath + "/target/new-streaming-data-union")
       // Verify self-union results
-      assert(streamQuery0.lastProgress.numInputRows == 2L)
+      assert(streamQuery1.lastProgress.numInputRows == 4L)
       assert(df1.count() == 4L)
       assert(df1.select("*").columns.toSet == Set("name", "age", "info", "_metadata"))
 
