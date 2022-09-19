@@ -79,7 +79,7 @@ case class NoSuchFunctionException(override val message: String)
 
   def this(db: String, func: String) = {
     this(s"Undefined function: '$func'. " +
-        s"This function is neither a registered temporary function nor " +
+        "This function is neither a registered temporary function nor " +
         s"a permanent function registered in the database '$db'.")
   }
 
