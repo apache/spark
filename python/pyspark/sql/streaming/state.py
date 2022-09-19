@@ -24,12 +24,19 @@ __all__ = ["GroupState", "GroupStateTimeout"]
 
 
 class GroupStateTimeout:
+    """
+    Represents the type of timeouts possible for the Dataset operations applyInPandasWithState.
+    """
     NoTimeout: str = "NoTimeout"
     ProcessingTimeTimeout: str = "ProcessingTimeTimeout"
     EventTimeTimeout: str = "EventTimeTimeout"
 
 
 class GroupState:
+    """
+    Wrapper class for interacting with per-group state data in `applyInPandasWithState`.
+    """
+
     NO_TIMESTAMP: int = -1
 
     def __init__(
@@ -76,10 +83,16 @@ class GroupState:
 
     @property
     def exists(self) -> bool:
+        """
+        Whether state exists or not.
+        """
         return self._defined
 
     @property
     def get(self) -> Tuple:
+        """
+        Get the state value if it exists, or throw ValueError.
+        """
         if self.exists:
             return tuple(self._value)
         else:
@@ -87,6 +100,9 @@ class GroupState:
 
     @property
     def getOption(self) -> Optional[Tuple]:
+        """
+        Get the state value if it exists, or return None.
+        """
         if self.exists:
             return tuple(self._value)
         else:
@@ -94,6 +110,10 @@ class GroupState:
 
     @property
     def hasTimedOut(self) -> bool:
+        """
+        Whether the function has been called because the key has timed out.
+        This can return true only when timeouts are enabled.
+        """
         return self._has_timed_out
 
     # NOTE: this function is only available to PySpark implementation due to underlying
@@ -103,6 +123,9 @@ class GroupState:
         return self._old_timeout_timestamp
 
     def update(self, newValue: Tuple) -> None:
+        """
+        Update the value of the state. The value of the state cannot be null.
+        """
         if newValue is None:
             raise ValueError("'None' is not a valid state value")
 
@@ -112,11 +135,18 @@ class GroupState:
         self._removed = False
 
     def remove(self) -> None:
+        """
+        Remove this state.
+        """
         self._defined = False
         self._updated = False
         self._removed = True
 
     def setTimeoutDuration(self, durationMs: int) -> None:
+        """
+        Set the timeout duration in ms for this key.
+        Processing time timeout must be enabled.
+        """
         if isinstance(durationMs, str):
             # TODO(SPARK-40437): Support string representation of durationMs.
             raise ValueError("durationMs should be int but get :%s" % type(durationMs))
@@ -133,6 +163,11 @@ class GroupState:
 
     # TODO(SPARK-40438): Implement additionalDuration parameter.
     def setTimeoutTimestamp(self, timestampMs: int) -> None:
+        """
+        Set the timeout timestamp for this key as milliseconds in epoch time.
+        This timestamp cannot be older than the current watermark.
+        Event time timeout must be enabled.
+        """
         if self._timeout_conf != GroupStateTimeout.EventTimeTimeout:
             raise RuntimeError(
                 "Cannot set timeout duration without enabling processing time timeout in "
@@ -157,6 +192,10 @@ class GroupState:
         self._timeout_timestamp = timestampMs
 
     def getCurrentWatermarkMs(self) -> int:
+        """
+        Get the current event time watermark as milliseconds in epoch time.
+        In a streaming query, this can be called only when watermark is set.
+        """
         if not self._watermark_present:
             raise RuntimeError(
                 "Cannot get event time watermark timestamp without setting watermark before "
@@ -165,6 +204,11 @@ class GroupState:
         return self._event_time_watermark_ms
 
     def getCurrentProcessingTimeMs(self) -> int:
+        """
+        Get the current processing time as milliseconds in epoch time.
+        In a streaming query, this will return a constant value throughout the duration of a
+        trigger, even if the trigger is re-executed.
+        """
         return self._batch_processing_time_ms
 
     def __str__(self) -> str:
@@ -174,6 +218,10 @@ class GroupState:
             return "GroupState(<undefined>)"
 
     def json(self) -> str:
+        """
+        Convert the internal values of instance into JSON. This is used to send out the update
+        from Python worker to executor.
+        """
         return json.dumps(
             {
                 # Constructor
