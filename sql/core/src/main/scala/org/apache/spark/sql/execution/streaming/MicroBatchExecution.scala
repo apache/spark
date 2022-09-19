@@ -577,13 +577,8 @@ class MicroBatchExecution(
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val newBatchesPlan = logicalPlan transform {
       // For v1 sources.
-<<<<<<< HEAD
       case StreamingExecutionRelation(source, output) =>
-        newData.get(source).map { dataPlan =>
-=======
-      case StreamingExecutionRelation(source, output, catalogTable) =>
         mutableNewData.get(source).map { dataPlan =>
->>>>>>> 946a96022a ([SPARK-40460][SS] Fix streaming metrics when selecting `_metadata`)
           val hasFileMetadata = output.exists {
             case FileSourceMetadataAttribute(_) => true
             case _ => false
