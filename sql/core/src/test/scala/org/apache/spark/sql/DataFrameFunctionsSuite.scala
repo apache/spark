@@ -2875,7 +2875,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "DATATYPE_MISMATCH",
       errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
-      parameters = Map.empty[String, String])
+      matchPVals = true,
+      parameters = Map(
+        "sqlExpr" -> """"filter\(i, lambdafunction\(x_\d+, x_\d+\)\)"""",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"i\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"ARRAY\""))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -2883,7 +2889,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "DATATYPE_MISMATCH",
       errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
-      parameters = Map.empty[String, String])
+      parameters = Map(
+        "sqlExpr" -> "\"filter(s, lambdafunction(namedlambdavariable(), namedlambdavariable()))\"",
+        "paramIndex" -> "2",
+        "inputSql" -> "\"lambdafunction(namedlambdavariable(), namedlambdavariable())\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"BOOLEAN\""))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -2891,7 +2902,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "DATATYPE_MISMATCH",
       errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
-      parameters = Map.empty[String, String])
+      parameters = Map(
+        "sqlExpr" -> "\"filter(s, lambdafunction(namedlambdavariable(), namedlambdavariable()))\"",
+        "paramIndex" -> "2",
+        "inputSql" -> "\"lambdafunction(namedlambdavariable(), namedlambdavariable())\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"BOOLEAN\""))
 
     checkError(
       exception =
@@ -3017,8 +3033,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         df.selectExpr("exists(i, x -> x)")
       },
       errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
-      parameters = Map.empty[String, String])
+      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"exists(i, lambdafunction(x, x))\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"i\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"ARRAY\""),
+      context = ExpectedContext(
+        fragment = "exists(i, x -> x)",
+        start = 0,
+        stop = 16))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -3026,7 +3052,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "DATATYPE_MISMATCH",
       errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
-      parameters = Map.empty[String, String])
+      matchPVals = true,
+      parameters = Map(
+        "sqlExpr" -> """"exists\(i, lambdafunction\(x_\d+, x_\d+\)\)"""",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"i\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"ARRAY\""))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -3034,7 +3066,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "DATATYPE_MISMATCH",
       errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
-      parameters = Map.empty[String, String])
+      parameters = Map(
+        "sqlExpr" -> "\"exists(s, lambdafunction(namedlambdavariable(), namedlambdavariable()))\"",
+        "paramIndex" -> "2",
+        "inputSql" -> "\"lambdafunction(namedlambdavariable(), namedlambdavariable())\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"BOOLEAN\""))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -3042,7 +3079,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "DATATYPE_MISMATCH",
       errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
-      parameters = Map.empty[String, String])
+      parameters = Map(
+        "sqlExpr" -> "\"exists(s, lambdafunction(namedlambdavariable(), namedlambdavariable()))\"",
+        "paramIndex" -> "2",
+        "inputSql" -> "\"lambdafunction(namedlambdavariable(), namedlambdavariable())\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"BOOLEAN\""))
 
     checkError(
       exception =
