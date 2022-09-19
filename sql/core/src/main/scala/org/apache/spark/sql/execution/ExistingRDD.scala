@@ -160,7 +160,7 @@ case class LogicalRDD(
   }
 
   override lazy val constraints: ExpressionSet = originConstraints.getOrElse(
-    if (conf.constraintPropagationEnabled && conf.useOptimizedConstraintPropagation) {
+    if (conf.constraintPropagationEnabled) {
       new ConstraintSet()
     } else {
       ExpressionSet()

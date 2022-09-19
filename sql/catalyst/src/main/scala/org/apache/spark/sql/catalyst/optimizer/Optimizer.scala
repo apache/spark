@@ -1383,32 +1383,18 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
         // For inner join, we can infer additional filters for both sides. LeftSemi is kind of an
         // inner join, it just dr   ops the right side in the final output.
         case _: InnerLike | LeftSemi =>
-          val (newLeft, newRight) = if (SQLConf.get.useOptimizedConstraintPropagation) {
+          val (newLeft, newRight) =
             inferAdditionalNewFilter(left, right.constraints, conditionOpt) ->
             inferAdditionalNewFilter(right, left.constraints, conditionOpt)
-          } else {
-            val allConstraints = getAllConstraints(left, right, conditionOpt)
-            inferNewFilter(left, allConstraints) -> inferNewFilter(right, allConstraints)
-          }
           join.copy(left = newLeft, right = newRight)
 
         // For right outer join, we can only infer additional filters for left side.
         case RightOuter =>
-          val newLeft = if (SQLConf.get.useOptimizedConstraintPropagation) {
-            inferAdditionalNewFilter(left, right.constraints, conditionOpt)
-          } else {
-            val allConstraints = getAllConstraints(left, right, conditionOpt)
-            inferNewFilter(left, allConstraints)
-          }
+          val newLeft = inferAdditionalNewFilter(left, right.constraints, conditionOpt)
           join.copy(left = newLeft)
         // For left join, we can only infer additional filters for right side.
         case LeftOuter | LeftAnti =>
-          val newRight = if (SQLConf.get.useOptimizedConstraintPropagation) {
-            inferAdditionalNewFilter(right, left.constraints, conditionOpt)
-          } else {
-            val allConstraints = getAllConstraints(left, right, conditionOpt)
-            inferNewFilter(right, allConstraints)
-          }
+          val newRight = inferAdditionalNewFilter(right, left.constraints, conditionOpt)
           join.copy(right = newRight)
         case _ => join
       }

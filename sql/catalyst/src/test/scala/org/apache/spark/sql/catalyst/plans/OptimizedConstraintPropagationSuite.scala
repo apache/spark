@@ -18,17 +18,13 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.junit.Assert._
-
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateSubqueryAliases,
-  EmptyFunctionRegistry, FakeV2SessionCatalog}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateSubqueryAliases, EmptyFunctionRegistry, FakeV2SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{IsNotNull, _}
 import org.apache.spark.sql.catalyst.expressions.ConstraintSet.TemplateAttributeGenerator
-import org.apache.spark.sql.catalyst.optimizer.{CombineFilters, CombineUnions,
-  InferFiltersFromConstraints, Optimizer, PruneFilters, PushDownPredicates,
-  PushPredicateThroughJoin, PushProjectionThroughUnion}
+import org.apache.spark.sql.catalyst.optimizer.{CombineFilters, CombineUnions, InferFiltersFromConstraints, Optimizer, PruneFilters, PushDownPredicates, PushPredicateThroughJoin, PushProjectionThroughUnion}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
@@ -58,7 +54,6 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
    */
 
   test("checking number of base constraints in project node") {
-    assume(SQLConf.get.useOptimizedConstraintPropagation)
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
     val y = tr.where('c.attr > 10).select('a.as('x), 'b.as('y), 'c, 'c.as('c1)).analyze
     assert(y.resolved)
@@ -72,7 +67,6 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
 
   test("checking number of base constraints with " +
     "filter dependent on multiple attributes") {
-    assume(SQLConf.get.useOptimizedConstraintPropagation)
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
     val y = tr.where('c.attr + 'a.attr > 10).select('a, 'a.as('x), 'b.as('y), 'c,
       'c.as('c1)).analyze
@@ -89,7 +83,6 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
   }
 
   test("checking filter pruning") {
-    assume(SQLConf.get.useOptimizedConstraintPropagation)
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
     val y = tr.where('c.attr + 'a.attr > 10).select('a, 'a.as('x), 'b.as('y), 'c,
       'c.as('c1)).where('x.attr + 'c1.attr > 10).analyze
@@ -235,7 +228,6 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
   }
 
   test("new filter pushed down on Join Node with multiple join conditions") {
-    assume(SQLConf.get.useOptimizedConstraintPropagation)
     def getTestPlan: LogicalPlan = {
       val tr1 = LocalRelation('a.int, 'b.string, 'c.int)
       val tr2 = LocalRelation('x.int, 'y.string, 'z.int)
@@ -244,8 +236,7 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
         'c.as('c1)).join(tr2, Inner, Some("a2".attr === "x".attr && 'c1.attr === 'z.attr))
         .where('a1.attr + 'c1.attr > 10)
     }
-    val (optimized, _) = withSQLConf[(LogicalPlan, ExpressionSet)](
-       SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "true") {
+    val (optimized, _) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
       executePlan(getTestPlan, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
     }
     trivialConstraintAbsenceChecker(optimized.constraints)
@@ -283,13 +274,6 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
       Inner, Some("a2".attr === "x".attr && 'c1.attr === 'z.attr)).analyze
 
     comparePlans(optimized, correctAnswer)
-    // get plan for stock spark
-    val (optimized1, _) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "false") {
-      executePlan(getTestPlan, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
-    }
-    // The plans don't match as stock spark does not push down a filter of form x + z > 10
-    // comparePlans(optimized1, correctAnswer)
   }
 
   test("filter pruning when original attributes are lost") {
@@ -452,7 +436,6 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
   }
 
   test("check redundant constraints are not added") {
-    assume(SQLConf.get.useOptimizedConstraintPropagation)
     val tr = LocalRelation('a.int, 'b.int, 'c.int, 'd.int)
     val trAnalyzed = tr.analyze
     val aliasedAnalyzed = trAnalyzed.where('c.attr + 'a.attr + 'b.attr > 10 && 'd.attr > 8).
@@ -540,7 +523,6 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
   }
 
   test("compound filter push down for left outer join") {
-    assume(SQLConf.get.useOptimizedConstraintPropagation)
     val tr1 = LocalRelation('a.int, 'b.int, 'c.int).subquery('tr1)
     val tr2 = LocalRelation('x.int, 'y.int, 'z.int).subquery('tr2)
     val y = tr1.where('a.attr + 'b.attr > 10)
@@ -558,7 +540,6 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
   }
 
   test("compound filter push down for left Anti join") {
-    assume(SQLConf.get.useOptimizedConstraintPropagation)
     val tr1 = LocalRelation('a.int, 'b.int, 'c.int).subquery('tr1)
     val tr2 = LocalRelation('x.int, 'y.int, 'z.int).subquery('tr2)
     val y = tr1.where('a.attr + 'b.attr > 10)
@@ -576,7 +557,6 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
   }
 
   test("compound filter push down for left Semi join") {
-    assume(SQLConf.get.useOptimizedConstraintPropagation)
     val tr1 = LocalRelation('a.int, 'b.int, 'c.int).subquery('tr1)
     val tr2 = LocalRelation('x.int, 'y.int, 'z.int).subquery('tr2)
     val y = tr1.where('a.attr + 'b.attr > 10)
@@ -595,8 +575,7 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
   }
 
   test("compound filter push down for right outer join") {
-    assume(SQLConf.get.useOptimizedConstraintPropagation)
-    val tr1 = LocalRelation('a.int, 'b.int, 'c.int).subquery('tr1)
+   val tr1 = LocalRelation('a.int, 'b.int, 'c.int).subquery('tr1)
     val tr2 = LocalRelation('x.int, 'y.int, 'z.int).subquery('tr2)
     val y = tr1.join(tr2.where('x.attr > 100 && 'x.attr + 'y.attr > 10), RightOuter,
       Some("tr1.a".attr === "tr2.x".attr && "tr1.b".attr === "tr2.y".attr)).analyze
@@ -612,39 +591,31 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
   }
 
   test("filter pruning due to new filter pushed down on Join Node ") {
-    def getTestPlan: LogicalPlan = {
-      val tr1 = LocalRelation('a.int, 'b.string, 'c.int)
-      val tr1_ = tr1.where('c.attr + 'a.attr > 10 && 'a.attr > -11)
-      val tr2 = LocalRelation('x.int, 'y.string, 'z.int)
-      val tr2_ = tr2.where('x.attr > -12)
-      tr1_.select('a, 'a.as('a1), 'a.as('a2),
-        'b.as('b1), 'c,
-        'c.as('c1)).join(tr2_.select('x.as('x1)), Inner,
-        Some('a2.attr === 'x1.attr)).where('x1.attr + 'c1.attr > 10)
-    }
-    // The unanalyzed plan needs to be generated within the function
-    // so that sqlconf remains same within optimizer & outside
-    val (plan1, constraints1) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "false") {
-      executePlan(getTestPlan, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
+    val tr1 = LocalRelation('a.int, 'b.string, 'c.int)
+    val tr1_ = tr1.where('c.attr + 'a.attr > 10 && 'a.attr > -11)
+    val tr2 = LocalRelation('x.int, 'y.string, 'z.int)
+    val tr2_ = tr2.where('x.attr > -12)
+    val query = tr1_.select('a, 'a.as('a1), 'a.as('a2),
+      'b.as('b1), 'c,
+      'c.as('c1)).join(tr2_.select('x.as('x1)), Inner,
+      Some('a2.attr === 'x1.attr)).where('x1.attr + 'c1.attr > 10)
+
+    val expectedOptimizedQueryPlan = tr1_.select('a, 'a.as('a1), 'a.as('a2),
+      'b.as('b1), 'c, 'c.as('c1)).join(tr2_.select('x.as('x1)), Inner,
+      Some('a2.attr === 'x1.attr))
+
+    val (expected, _) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
+      executePlan(expectedOptimizedQueryPlan, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
     }
 
-    val (plan2, constraints2) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "true") {
-      executePlan(getTestPlan, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
-    }
-    trivialConstraintAbsenceChecker(constraints2)
-    assert(constraints1 match {
-      case _: ConstraintSet => false
-      case _: ExpressionSet => true
-    })
 
-    assert(constraints2 match {
-      case _: ConstraintSet => true
-      case _: ExpressionSet => false
-    })
-    assert(constraints2.size <= constraints1.size)
-    comparePlans(plan1, plan2)
+
+    val (actual, constraints) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
+      executePlan(query, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
+    }
+    trivialConstraintAbsenceChecker(constraints)
+
+    comparePlans(expected, actual)
   }
 
   test("top filter should not be pruned for union with lower filter only on one table") {
@@ -1406,37 +1377,28 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
   }
 
   test("filter push down on join with aggregate") {
-    def getTestPlan: LogicalPlan = {
-      val tr1 = LocalRelation('a.int, 'b.string, 'c.int)
-      val tr2 = LocalRelation('x.int, 'y.string, 'z.int)
-      tr1.where('c.attr + 'a.attr > 10 && 'a.attr > -15).select('a, 'a.as('a1), 'a.as('a2),
-        'b.as('b1), 'c, 'c.as('c1)).
-        groupBy('b1.attr, 'c1.attr)('b1, 'c1.as("c2"), count('a).as("a3")).
+    val tr1 = LocalRelation('a.int, 'b.string, 'c.int)
+    val tr2 = LocalRelation('x.int, 'y.string, 'z.int)
+    val query = tr1.where('c.attr + 'a.attr > 10 && 'a.attr > -15).select('a,
+      'a.as('a1), 'a.as('a2), 'b.as('b1), 'c, 'c.as('c1)).
+      groupBy('b1.attr, 'c1.attr)('b1, 'c1.as("c2"), count('a).as("a3")).
+      select('c2, 'a3).join(tr2.where('x.attr > 9), Inner, Some("c2".attr === "x".attr))
+
+    val (expected, _) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
+      val expectedQuery = tr1.where('c.attr + 'a.attr > 10 && 'a.attr > -15).select('a,
+        'a.as('a1), 'a.as('a2), 'b.as('b1), 'c, 'c.as('c1)).
+        groupBy('b1.attr, 'c1.attr)('b1, 'c1.as("c2"),
+          count('a).as("a3")).
         select('c2, 'a3).join(tr2.where('x.attr > 9), Inner, Some("c2".attr === "x".attr))
-    }
-
-    val (plan1, constraints1) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "false") {
       executePlan(getTestPlan, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
     }
 
-    val (plan2, constraints2) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "true") {
-      executePlan(getTestPlan, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
+    val (actual, constraints) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
+      executePlan(query, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
     }
-    trivialConstraintAbsenceChecker(constraints2)
-    assert(constraints1 match {
-      case _: ConstraintSet => false
-      case _: ExpressionSet => true
-    })
+    trivialConstraintAbsenceChecker(constraints)
 
-    assert(constraints2 match {
-      case _: ConstraintSet => true
-      case _: ExpressionSet => false
-    })
-    assert(constraints2.size <= constraints1.size)
     comparePlans(plan1, plan2)
-
 
     val conditionFinder: PartialFunction[LogicalPlan, Seq[Expression]] = {
       case f: Filter => f.expressions.find(x => x.find {
@@ -1445,11 +1407,8 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
         case _ => false
       }.isDefined).map(Seq(_)).getOrElse(Seq.empty[Expression])
     }
-    val result1 = plan1.collect {
-      conditionFinder
-    }.flatten
-    assert(result1.nonEmpty)
-    val result2 = plan2.collect {
+
+    val result2 = actual.collect {
       conditionFinder
     }.flatten
     assert(result2.nonEmpty)

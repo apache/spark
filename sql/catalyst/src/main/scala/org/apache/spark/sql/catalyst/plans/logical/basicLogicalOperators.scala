@@ -505,7 +505,7 @@ case class Union(
   }
 
   override lazy val validConstraints: ExpressionSet = {
-    if (conf.constraintPropagationEnabled && conf.useOptimizedConstraintPropagation) {
+    if (conf.constraintPropagationEnabled) {
          val head = children.head
         val headOutput = head.output
         val remaining = children.slice(1, children.length)
@@ -604,7 +604,7 @@ case class Join(
       case RightOuter =>
         right.constraints
 
-      case _ => if (conf.constraintPropagationEnabled && conf.useOptimizedConstraintPropagation) {
+      case _ => if (conf.constraintPropagationEnabled) {
         new ConstraintSet()
       } else ExpressionSet()
     }
@@ -1324,7 +1324,7 @@ case class Expand(
   // This operator can reuse attributes (for example making them null when doing a roll up) so
   // the constraints of the child may no longer be valid.
   override lazy val validConstraints: ExpressionSet =
-      if (conf.constraintPropagationEnabled && conf.useOptimizedConstraintPropagation) {
+      if (conf.constraintPropagationEnabled) {
         new ConstraintSet()
       } else ExpressionSet(Set.empty)
 

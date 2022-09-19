@@ -35,9 +35,7 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
           validConstraints.getConstraintsWithDecanonicalizedNullIntolerant, output))
       // Removed the criteria  c.references.nonEmpty as it was causing a constraint of the
       // of the form literal true or false being eliminated, causing idempotency check failure
-      newConstraints.filter(c => c.references.subsetOf(outputSet) && c.deterministic
-      && (c.references.nonEmpty || conf.useOptimizedConstraintPropagation))
-
+      newConstraints.filter(c => c.references.subsetOf(outputSet) && c.deterministic)
     } else {
       ExpressionSet(Set.empty)
     }
@@ -52,7 +50,7 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
    * See [[Canonicalize]] for more details.
    */
   protected lazy val validConstraints: ExpressionSet =
-       if (conf.constraintPropagationEnabled && conf.useOptimizedConstraintPropagation) {
+       if (conf.constraintPropagationEnabled) {
          new ConstraintSet()
        }
        else ExpressionSet(Set.empty[Expression])

@@ -145,22 +145,10 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
 
     val aliasedRelation = tr.where($"a".attr > 10).select($"a".as('x), $"b",
       $"b".as("y"), $"a".as("z"))
-    if(SQLConf.get.useOptimizedConstraintPropagation) {
-      verifyConstraints(ExpressionSet(aliasedRelation.analyze.constraints),
+
+    verifyConstraints(ExpressionSet(aliasedRelation.analyze.constraints),
         ExpressionSet(Seq(resolveColumn(aliasedRelation.analyze, "x") > 10,
           IsNotNull(resolveColumn(aliasedRelation.analyze, "x")))))
-    } else {
-      verifyConstraints(ExpressionSet(aliasedRelation.analyze.constraints),
-        ExpressionSet(Seq(resolveColumn(aliasedRelation.analyze, "x") > 10,
-          IsNotNull(resolveColumn(aliasedRelation.analyze, "x")),
-          resolveColumn(aliasedRelation.analyze, "b") <=>
-            resolveColumn(aliasedRelation.analyze, "y"),
-          resolveColumn(aliasedRelation.analyze, "z") <=>
-            resolveColumn(aliasedRelation.analyze, "x"),
-          resolveColumn(aliasedRelation.analyze, "z") > 10,
-          IsNotNull(resolveColumn(aliasedRelation.analyze, "z")))))
-    }
-
 
     val multiAlias = tr.where($"a" === $"c" + 10).select($"a".as("x"), $"c".as("y"))
     verifyConstraints(multiAlias.analyze.constraints,

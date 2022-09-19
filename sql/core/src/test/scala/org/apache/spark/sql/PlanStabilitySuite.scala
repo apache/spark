@@ -101,30 +101,13 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   class MatchResult(val isMatch: Boolean, val simplifiedMatch: Boolean, val explainedMatch: Boolean,
     val expectedSimplified: String, val expectedExplain: String)
 
-  private def isApproved(dir: File, actualSimplifiedPlan: String,
-                         actualExplain: String, ignoreSpark33152: Boolean = false):
+  private def isApproved(dir: File, actualSimplifiedPlan: String, actualExplain: String):
   MatchResult =
   {
-    val baseFileName = "simplified.txt"
-    val prefix = if (conf.constraintPropagationEnabled &&
-      conf.useOptimizedConstraintPropagation && !ignoreSpark33152) {
-      "SPARK-33152_"
-    } else ""
-    val goldenFileName = if (conf.constraintPropagationEnabled &&
-      conf.useOptimizedConstraintPropagation && !ignoreSpark33152) {
-       if (new File(dir, prefix + baseFileName).exists()) {
-         prefix + baseFileName
-       } else baseFileName
-    } else baseFileName
+    val goldenFileName = "simplified.txt"
     val file = new File(dir, goldenFileName)
     val expectedSimplified = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
-    val baseExplainFileName = "explain.txt"
-    val goldenExplainFileName = if (conf.constraintPropagationEnabled &&
-      conf.useOptimizedConstraintPropagation && !ignoreSpark33152) {
-      if (new File(dir, prefix + baseExplainFileName).exists()) {
-        prefix + baseExplainFileName
-      } else baseExplainFileName
-    } else baseExplainFileName
+    val goldenExplainFileName = "explain.txt"
     val explainFile = new File(dir, goldenExplainFileName)
     val expectedExplain = FileUtils.readFileToString(explainFile, StandardCharsets.UTF_8)
     val explainedMatch = expectedExplain == actualExplain
@@ -139,23 +122,10 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
         logError("actual explain found=" + actualExplain)
         logError("expected explain found=" + expectedExplain)
       }
-      // check if the problem is due to normalization hash code ordering of test plans
-      if (!ignoreSpark33152) {
-        val temp = isApproved(dir, actualSimplifiedPlan, actualExplain, ignoreSpark33152 = true)
-        if (temp.isMatch) {
-          temp
-        } else {
-          new MatchResult(matched, simplifiedMatch, explainedMatch, expectedSimplified,
-            expectedExplain)
-        }
-      } else {
-        new MatchResult(matched, simplifiedMatch, explainedMatch, expectedSimplified,
-          expectedExplain)
-      }
-    } else {
-      new MatchResult(matched, simplifiedMatch, explainedMatch, expectedSimplified,
-        expectedExplain)
     }
+    new MatchResult(matched, simplifiedMatch, explainedMatch, expectedSimplified,
+        expectedExplain)
+
   }
 
   /**

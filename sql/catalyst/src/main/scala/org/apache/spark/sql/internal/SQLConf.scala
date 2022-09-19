@@ -275,13 +275,6 @@ object SQLConf {
         "for using switch statements in InSet must be non-negative and less than or equal to 600")
       .createWithDefault(400)
 
-  val OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED =
-    buildConf("spark.sql.optimizer.optimizedConstraintPropagation.enabled")
-    .internal()
-    .doc("use optimized algorithm for constraint propagation")
-    .booleanConf
-    .createWithDefault(true)
-
   val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
