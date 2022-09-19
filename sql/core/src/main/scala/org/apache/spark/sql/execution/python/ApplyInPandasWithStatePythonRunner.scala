@@ -41,7 +41,8 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 
 /**
- * [[ArrowPythonRunner]] with [[org.apache.spark.sql.streaming.GroupState]].
+ * A variant implementation of [[ArrowPythonRunner]] to serve the operation
+ * applyInPandasWithState.
  */
 class ApplyInPandasWithStatePythonRunner(
     funcs: Seq[ChainedPythonFunctions],
@@ -71,6 +72,9 @@ class ApplyInPandasWithStatePythonRunner(
     "Pandas execution requires more than 4 bytes. Please set higher buffer. " +
       s"Please change '${SQLConf.PANDAS_UDF_BUFFER_SIZE.key}'.")
 
+  // applyInPandasWithState has its own mechanism to construct the Arrow RecordBatch instance.
+  // Configurations are both applied to executor and Python worker, set them to the worker conf
+  // to let Python worker read the config properly.
   override protected val workerConf: Map[String, String] = initialWorkerConf +
     (SQLConf.MAP_PANDAS_UDF_WITH_STATE_SOFT_LIMIT_SIZE_PER_BATCH.key ->
       softLimitBytesPerBatch.toString) +

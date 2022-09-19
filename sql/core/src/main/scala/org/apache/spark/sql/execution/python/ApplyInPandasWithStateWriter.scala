@@ -32,7 +32,20 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl
 import org.apache.spark.sql.types.{BinaryType, BooleanType, IntegerType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
-
+/**
+ * This class abstracts the complexity on constructing Arrow RecordBatches for data and state with
+ * bin-packing and chunking. The caller only need to call the proper public methods of this class
+ * `startNewGroup`, `writeRow`, `finalizeGroup`, `finalizeData` and this class will write the data
+ * and state into Arrow RecordBatches with performing bin-pack and chunk internally.
+ *
+ * This class requires that the parameter `root` has initialized with the Arrow schema like below:
+ * - data fields
+ * - state field
+ *   - nested schema (Refer ApplyInPandasWithStateWriter.STATE_METADATA_SCHEMA)
+ *
+ * Please refer the code comment in the implementation to see how the writes of data and state
+ * against Arrow RecordBatch work with consideration of bin-packing and chunking.
+ */
 class ApplyInPandasWithStateWriter(
     root: VectorSchemaRoot,
     writer: ArrowStreamWriter,
@@ -42,12 +55,12 @@ class ApplyInPandasWithStateWriter(
 
   import ApplyInPandasWithStateWriter._
 
-  // We logically group the columns by family and initialize writer separately, since it's
-  // lot more easier and probably performant to write the row directly rather than
+  // We logically group the columns by family (data vs state) and initialize writer separately,
+  // since it's lot more easier and probably performant to write the row directly rather than
   // projecting the row to match up with the overall schema.
   //
-  // The number of data rows and state metadata rows can be different which seems to matter
-  // for Arrow RecordBatch, so we append empty rows to cover it.
+  // The number of data rows and state metadata rows can be different which could be problematic
+  // for Arrow RecordBatch, so we append empty rows to ensure both have the same number of rows.
   //
   // We always produce at least one data row per grouping key whereas we only produce one
   // state metadata row per grouping key, so we only need to fill up the empty rows in
@@ -57,6 +70,8 @@ class ApplyInPandasWithStateWriter(
   private val arrowWriterForState = createArrowWriter(
     root.getFieldVectors.asScala.toSeq.takeRight(1))
 
+  // Bin-packing
+  //
   // We apply bin-packing the data from multiple groups into one Arrow RecordBatch to
   // gain the performance. In many cases, the amount of data per grouping key is quite
   // small, which does not seem to maximize the benefits of using Arrow.
@@ -66,9 +81,18 @@ class ApplyInPandasWithStateWriter(
   // the range of data and give a view, say, "zero-copy". To help splitting the range for
   // data, we provide the "start offset" and the "number of data" in the state metadata.
   //
-  // Pretty sure we don't bin-pack all groups into a single record batch. We have a soft
-  // limit on the size - it's not a hard limit since we allow current group to write all
-  // data even it's going to exceed the limit.
+  // We don't bin-pack all groups into a single record batch - we have a soft limit on the size
+  // of Arrow RecordBatch to stop adding next group.
+  //
+  // Chunking
+  //
+  // We also chunk the data from single group into multiple Arrow RecordBatch to ensure
+  // scalability. Note that we don't know the volume (number of rows, overall size) of data for
+  // specific group key before we read the entire data. The easiest approach to address both
+  // bin-pack and chunk is to check the size of the current Arrow RecordBatch per each write of
+  // row.
+  //
+  // How to measure the size of data?
   //
   // We perform some basic sampling for data to guess the size of the data very roughly,
   // and simply multiply by the number of data to estimate the size. We extract the size of
@@ -76,12 +100,14 @@ class ApplyInPandasWithStateWriter(
   // UnsafeRow once we write to the record batch. If there is a memory bound here, it
   // should come from record batch.
   //
+  // Why we also perform timeout on batching Arrow RecordBatch?
+  //
   // In the meanwhile, we don't also want to let the current record batch collect the data
   // indefinitely, since we are pipelining the process between executor and python worker.
   // Python worker won't process any data if executor is not yet finalized a record
   // batch, which defeats the purpose of pipelining. To address this, we also introduce
-  // timeout for constructing a record batch. This is a soft limit indeed as same as limit
-  // on the size - we allow current group to write all data even it's timed-out.
+  // timeout for constructing a record batch. This is a soft limit - we allow current group
+  // to write all data even it's timed-out.
 
   private var numRowsForCurGroup = 0
   private var startOffsetForCurGroup = 0

@@ -378,6 +378,28 @@ class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
 
 
 class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
+    """
+    Serializer used by Python worker to evaluate UDF for applyInPandasWithState.
+
+    Parameters
+    ----------
+    timezone : str
+        A timezone to respect when handling timestamp values
+    safecheck : bool
+        If True, conversion from Arrow to Pandas checks for overflow/truncation
+    assign_cols_by_name : bool
+        If True, then Pandas DataFrames will get columns by name
+    state_object_schema : StructType
+        The type of state object represented as Spark SQL type
+    soft_limit_bytes_per_batch : int
+        Soft limit of the accumulated size of records that can be written to a single
+        ArrowRecordBatch in memory.
+    min_data_count_for_sample : int
+        The minimum number of records to sample the size of record.
+    soft_timeout_millis_purge_batch : int
+        The soft timeout to force purging the ArrowRecordBatch regardless of the size.
+    """
+
     def __init__(
         self,
         timezone,
@@ -410,12 +432,50 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         self.soft_timeout_millis_purge_batch = soft_timeout_millis_purge_batch
 
     def load_stream(self, stream):
+        """
+        Read ArrowRecordBatches from stream, deserialize them to populate a list of pair
+        (data chunk, state), and convert the data into a list of pandas.Series.
+
+        Please refer the doc of inner function `gen_data_and_state` for more details how
+        this function works in overall.
+
+        In addition, this function further groups the return of `gen_data_and_state` by the state
+        instance (same semantic as grouping by grouping key) and produces an iterator of data
+        chunks for each group, so that the caller can lazily materialize the data chunk.
+        """
+
         import pyarrow as pa
         import json
         from itertools import groupby
         from pyspark.sql.streaming.state import GroupStateImpl
 
         def gen_data_and_state(batches):
+            """
+            Deserialize ArrowRecordBatches and return a generator of
+            `(a list of pandas.Series, state)`.
+
+            The logic on deserialization is following:
+
+            1. Read the entire data part from Arrow RecordBatch.
+            2. Read the entire state information part from Arrow RecordBatch.
+            3. Loop through each state information:
+               3.A. Extract the data out from entire data via the information of data range.
+               3.B. Construct a new state instance if the state information is the first occurrence
+                    for the current grouping key.
+               3.C. Leverage existing new state instance if the state instance is already available
+                    for the current grouping key. (Meaning it's not the first occurrence.)
+               3.D. Remove the cache of state instance if the state information denotes the data is
+                    the last chunk for current grouping key.
+
+            This deserialization logic assumes that Arrow RecordBatches contain the data with the
+            ordering that data chunks for same grouping key will appear sequentially.
+
+            This function must avoid materializing multiple Arrow RecordBatches into memory at the
+            same time. And data chunks from the same grouping key should appear sequentially, to
+            further group them based on state instance (same state instance will be produced for
+            same grouping key).
+            """
+
             state_for_current_group = None
 
             for batch in batches:
@@ -508,6 +568,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
     def dump_stream(self, iterator, stream):
         """
+        # TODO: document
         Override because Pandas UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
         This should be sent after creating the first record batch so in case of an error, it can
         be sent back to the JVM before the Arrow stream starts.
@@ -515,6 +576,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
         def construct_record_batch(pdfs, pdf_data_cnt, pdf_schema, state_pdfs, state_data_cnt):
             """
+            # TODO: document
             Arrow RecordBatch requires all columns to have all same number of rows.
             Insert empty data for state/data with less elements to compensate.
             """
@@ -547,6 +609,10 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             )
 
         def init_stream_yield_batches():
+            """
+            # TODO: document
+            :return:
+            """
             import pandas as pd
 
             should_write_start_length = True
