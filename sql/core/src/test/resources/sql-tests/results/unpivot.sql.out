@@ -63,14 +63,14 @@ UNPIVOT (
   earningsYear FOR year IN (`2012` as `twenty-twelve`, `2013` as `twenty-thirteen`, `2014` as `twenty-fourteen`)
 )
 -- !query schema
-struct<course:string,year:string,earningsYear:int>
+struct<course:string,2012:int,2013:int,2014:int,year:string,earningsYear:int>
 -- !query output
-Java	twenty-fourteen	NULL
-Java	twenty-thirteen	30000
-Java	twenty-twelve	20000
-dotNET	twenty-fourteen	22500
-dotNET	twenty-thirteen	48000
-dotNET	twenty-twelve	15000
+Java	20000	30000	NULL	twenty-fourteen	NULL
+Java	20000	30000	NULL	twenty-thirteen	30000
+Java	20000	30000	NULL	twenty-twelve	20000
+dotNET	15000	48000	22500	twenty-fourteen	22500
+dotNET	15000	48000	22500	twenty-thirteen	48000
+dotNET	15000	48000	22500	twenty-twelve	15000
 
 
 -- !query
@@ -136,14 +136,14 @@ UNPIVOT (
   values FOR year IN ((earnings2012 as earnings, sales2012 as sales) as `2012`, (earnings2013 as earnings, sales2013 as sales) as `2013`, (earnings2014 as earnings, sales2014 as sales) as `2014`)
 )
 -- !query schema
-struct<course:string,year:string,values:struct<earnings:int,sales:int>>
+struct<course:string,earnings2012:int,sales2012:int,earnings2013:int,sales2013:int,earnings2014:int,sales2014:int,year:string,values:struct<earnings:int,sales:int>>
 -- !query output
-Java	2012	{"earnings":20000,"sales":1}
-Java	2013	{"earnings":30000,"sales":2}
-Java	2014	{"earnings":0,"sales":0}
-dotNET	2012	{"earnings":15000,"sales":2}
-dotNET	2013	{"earnings":48000,"sales":1}
-dotNET	2014	{"earnings":22500,"sales":1}
+Java	20000	1	30000	2	NULL	NULL	2012	{"earnings":20000,"sales":1}
+Java	20000	1	30000	2	NULL	NULL	2013	{"earnings":30000,"sales":2}
+Java	20000	1	30000	2	NULL	NULL	2014	{"earnings":0,"sales":0}
+dotNET	15000	2	48000	1	22500	1	2012	{"earnings":15000,"sales":2}
+dotNET	15000	2	48000	1	22500	1	2013	{"earnings":48000,"sales":1}
+dotNET	15000	2	48000	1	22500	1	2014	{"earnings":22500,"sales":1}
 
 
 -- !query

@@ -879,7 +879,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         up.ids.exists(_.forall(_.resolved)) && up.values.isEmpty =>
         up.copy(values =
           Some(
-            up.child.output.diff(up.ids.get.flatMap(_.references))
+            up.child.output.diff(up.ids.get)
               .map(v => UnpivotExpr(Seq(v), None))
           )
         )
@@ -887,7 +887,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         up.values.exists(_.forall(_.exprs.forall(_.resolved))) && up.ids.isEmpty =>
         up.copy(ids =
           Some(
-            up.child.output.diff(up.values.get.flatMap(_.exprs.flatMap(_.references)))
+            up.child.output.diff(up.values.get.flatMap(_.exprs))
           )
         )
 

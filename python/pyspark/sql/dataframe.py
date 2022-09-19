@@ -3085,10 +3085,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         The `values` columns must not be empty so at least one value must be given to be unpivoted.
         When `values` is `None`, all non-id columns will be unpivoted.
 
-        Note: A column that is referenced by an id column expression is considered an id column
-        itself. For instance `col("id") * 2` references column `id`, so `id` is considered an
-        id column and not a value column.
-
         All "value" columns must share a least common data type. Unless they are the same data type,
         all "value" columns are cast to the nearest common data type. For instance, types
         `IntegerType` and `LongType` are cast to `LongType`, while `IntegerType` and `StringType`

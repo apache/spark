@@ -179,7 +179,6 @@ class DatasetUnpivotSuite extends QueryTest
     checkAnswer(
       unpivoted3,
       unpivotedRows
-        .filter(row => row.getString(1) != "id")
         .map(row => Row(row.getInt(0) * 2, row.get(1), row.get(2)))
     )
 
@@ -193,7 +192,7 @@ class DatasetUnpivotSuite extends QueryTest
       StructField("var", StringType, nullable = false),
       StructField("val", LongType, nullable = true)
     )))
-    checkAnswer(unpivoted4, unpivotedRows.filter(row => row.getString(1) != "id"))
+    checkAnswer(unpivoted4, unpivotedRows)
   }
 
   test("unpivot without ids or values") {
