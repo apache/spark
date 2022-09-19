@@ -230,6 +230,10 @@ private[spark] class DAGScheduler(
     sc.getConf.getInt("spark.stage.maxConsecutiveAttempts",
       DAGScheduler.DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS)
 
+  /**
+   * Whether ignore stage fetch failure caused by executor decommission when
+   * count spark.stage.maxConsecutiveAttempts
+   */
   private[scheduler] val ignoreDecommissionFetchFailure =
     sc.getConf.get(config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE)
 
@@ -1864,16 +1868,17 @@ private[spark] class DAGScheduler(
         } else {
           failedStage.failedAttemptIds.add(task.stageAttemptId)
           val ignoreStageFailure = ignoreDecommissionFetchFailure &&
-            isExecutorDecommissioned(bmAddress)
+            isExecutorDecommissioned(taskScheduler, bmAddress)
           if (ignoreStageFailure) {
-            logInfo("Ignoring fetch failure from $task of $failedStage attempt" +
-              s"${task.stageAttemptId} as executor ${bmAddress.executorId} is decommissioned and " +
+            logInfo("Ignoring fetch failure from $task of $failedStage attempt " +
+              s"${task.stageAttemptId} when count spark.stage.maxConsecutiveAttempts " +
+              "as executor ${bmAddress.executorId} is decommissioned and " +
               s" ${config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key}=true")
           }
 
           val shouldAbortStage =
             (!ignoreStageFailure &&
-              failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts)||
+              failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts) ||
             disallowStageRetryForTest
 
           // It is likely that we receive multiple FetchFailed for a single stage (because we have
@@ -2171,7 +2176,7 @@ private[spark] class DAGScheduler(
     }
   }
 
-  private def isExecutorDecommissioned(bmAddress: BlockManagerId) = {
+  private def isExecutorDecommissioned(taskScheduler: TaskScheduler, bmAddress: BlockManagerId) = {
     if (bmAddress != null) {
       taskScheduler
         .getExecutorDecommissionState(bmAddress.executorId)

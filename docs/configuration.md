@@ -2609,7 +2609,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.stage.attempt.ignoreOnDecommissionFetchFailure</code></td>
   <td>false</td>
   <td>
-    Whether ignore stage fetch failure caused by executor decommission when 
+    Whether ignore stage fetch failure caused by executor decommission when
     count <code>spark.stage.maxConsecutiveAttempts</code>
   </td>
   <td>3.4.0</td>
