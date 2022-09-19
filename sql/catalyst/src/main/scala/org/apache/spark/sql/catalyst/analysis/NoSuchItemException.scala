@@ -74,19 +74,17 @@ case class NoSuchPartitionException(
 case class NoSuchPermanentFunctionException(db: String, func: String)
   extends AnalysisException(s"Function '$func' not found in database '$db'")
 
-case class NoSuchFunctionException(
-    override val message: String,
-    override val cause: Option[Throwable])
-  extends AnalysisException(message, cause = cause) {
+case class NoSuchFunctionException(override val message: String)
+  extends AnalysisException(message) {
 
-  def this(db: String, func: String, cause: Option[Throwable] = None) = {
+  def this(db: String, func: String) = {
     this(s"Undefined function: '$func'. " +
-        s"This function is neither a registered temporary function nor " +
-        s"a permanent function registered in the database '$db'.", cause = cause)
+        "This function is neither a registered temporary function nor " +
+        s"a permanent function registered in the database '$db'.")
   }
 
   def this(identifier: Identifier) = {
-    this(s"Undefined function: ${identifier.quoted}", cause = None)
+    this(s"Undefined function: ${identifier.quoted}")
   }
 }
 
