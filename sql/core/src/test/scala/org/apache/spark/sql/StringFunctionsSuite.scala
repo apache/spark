@@ -635,9 +635,22 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-36148: check input data types of regexp_replace") {
-    val m = intercept[AnalysisException] {
-      sql("select regexp_replace(collect_list(1), '1', '2')")
-    }.getMessage
-    assert(m.contains("data type mismatch: argument 1 requires string type"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select regexp_replace(collect_list(1), '1', '2')")
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"regexp_replace(collect_list(1), 1, 2, 1)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"collect_list(1)\"",
+        "inputType" -> "\"ARRAY<INT>\"",
+        "requiredType" -> "\"STRING\""),
+      context = ExpectedContext(
+        fragment = "regexp_replace(collect_list(1), '1', '2')",
+        start = 7,
+        stop = 47))
   }
 }
