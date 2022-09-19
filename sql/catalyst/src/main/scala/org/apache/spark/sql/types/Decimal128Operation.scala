@@ -80,8 +80,7 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
     } else {
       try {
         val rescale = scale - _scale
-        val (newLeftHigh, newLeftLow) =
-          Int128Math.rescale(this.int128.high, this.int128.low, rescale)
+        val (newLeftHigh, newLeftLow) = Int128Math.rescale(this.high, this.low, rescale)
         this.int128 = Int128(newLeftHigh, newLeftLow)
       } catch {
         case _: IllegalArgumentException =>
