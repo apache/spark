@@ -2151,7 +2151,7 @@ class DatasetSuite extends QueryTest
   test("SPARK-40407: repartition should not result in severe data skew") {
     val df = spark.range(0, 100, 1, 50).repartition(4)
     val result = df.mapPartitions(iter => Iterator.single(iter.length)).collect()
-    assert(result.mkString(",") === "25,23,25,27")
+    assert(result.mkString(",") === "25,31,25,19")
   }
 }
 
