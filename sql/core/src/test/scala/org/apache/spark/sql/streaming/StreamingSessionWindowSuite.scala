@@ -39,7 +39,7 @@ class StreamingSessionWindowSuite extends StreamTest
   }
 
   def testWithAllOptions(name: String, confPairs: (String, String)*)
-                        (func: => Any): Unit = {
+    (func: => Any): Unit = {
     val mergingSessionOptions = Seq(true, false).map { value =>
       (SQLConf.STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION.key, value)
     }
