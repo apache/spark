@@ -130,6 +130,9 @@ public class YarnShuffleService extends AuxiliaryService {
   // Whether failure during service initialization should stop the NM.
   @VisibleForTesting
   static final String STOP_ON_FAILURE_KEY = "spark.yarn.shuffle.stopOnFailure";
+
+  @VisibleForTesting
+  static final String INTEGRATION_TESTING = "spark.yarn.shuffle.integrationTesting";
   private static final boolean DEFAULT_STOP_ON_FAILURE = false;
 
   // just for testing when you want to find an open port
@@ -238,7 +241,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
     boolean stopOnFailure = _conf.getBoolean(STOP_ON_FAILURE_KEY, DEFAULT_STOP_ON_FAILURE);
 
-    if (_recoveryPath == null && _conf.getBoolean("spark.yarn.integrationTesting", false)) {
+    if (_recoveryPath == null && _conf.getBoolean(INTEGRATION_TESTING, false)) {
       _recoveryPath = new Path(JavaUtils.createTempDir().toURI());
     }
 
