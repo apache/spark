@@ -1146,8 +1146,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("SPARK-40481: Multiple consecutive stage fetch failures should not fail job " +
-    "when ignoreOnDecommissionFetchFailure is enabled.") {
+  test("SPARK-40481: Multiple consecutive stage fetch failures from decommissioned executor" +
+    "should not fail job when ignoreOnDecommissionFetchFailure is enabled.") {
     conf.set(config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key, "true")
 
     setupStageAbortTest(sc)
@@ -1176,8 +1176,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     sc.listenerBus.waitUntilEmpty()
     assert(scheduler.runningStages.nonEmpty)
     assert(!ended)
-
   }
+
   /**
    * In this test we simulate a job failure where the first stage completes successfully and
    * the second stage fails due to a fetch failure. Multiple successive fetch failures of a stage

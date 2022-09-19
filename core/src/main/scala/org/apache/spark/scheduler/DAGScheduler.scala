@@ -1856,14 +1856,6 @@ private[spark] class DAGScheduler(
       case FetchFailed(bmAddress, shuffleId, _, mapIndex, reduceId, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
-        val isExecutorDecommissioned =
-          if (bmAddress != null) {
-            taskScheduler
-              .getExecutorDecommissionState(bmAddress.executorId)
-              .nonEmpty
-          } else {
-            false
-          }
 
         if (failedStage.latestInfo.attemptNumber != task.stageAttemptId) {
           logInfo(s"Ignoring fetch failure from $task as it's from $failedStage attempt" +
@@ -1871,7 +1863,8 @@ private[spark] class DAGScheduler(
             s"(attempt ${failedStage.latestInfo.attemptNumber}) running")
         } else {
           failedStage.failedAttemptIds.add(task.stageAttemptId)
-          val ignoreStageFailure = ignoreDecommissionFetchFailure && isExecutorDecommissioned
+          val ignoreStageFailure = ignoreDecommissionFetchFailure &&
+            isExecutorDecommissioned(bmAddress)
           if (ignoreStageFailure) {
             logInfo("Ignoring fetch failure from $task of $failedStage attempt" +
               s"${task.stageAttemptId} as executor ${bmAddress.executorId} is decommissioned and " +
@@ -2175,6 +2168,16 @@ private[spark] class DAGScheduler(
       case _: ExecutorLostFailure | UnknownReason =>
         // Unrecognized failure - also do nothing. If the task fails repeatedly, the TaskScheduler
         // will abort the job.
+    }
+  }
+
+  private def isExecutorDecommissioned(bmAddress: BlockManagerId) = {
+    if (bmAddress != null) {
+      taskScheduler
+        .getExecutorDecommissionState(bmAddress.executorId)
+        .nonEmpty
+    } else {
+      false
     }
   }
 
