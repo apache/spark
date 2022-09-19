@@ -36,25 +36,25 @@ class JDKDecimalOperation extends DecimalOperation[JDKDecimalOperation] {
 
   def newInstance(): JDKDecimalOperation = new JDKDecimalOperation()
 
-  def setLong(longVal: Long): Unit = {
+  def setUnderlyingValue(longVal: Long): Unit = {
     this.decimalVal = BigDecimal(longVal)
   }
 
-  def setLong(unscaled: Long, scale: Int): Unit = {
+  def setUnderlyingValue(unscaled: Long, scale: Int): Unit = {
     this.decimalVal = BigDecimal(unscaled, scale)
   }
 
-  def setBigDecimal(decimalVal: BigDecimal): Unit = {
+  def setUnderlyingValue(decimalVal: BigDecimal): Unit = {
     this.decimalVal = decimalVal
   }
 
-  def setNull: Unit = {
+  def setNullUnderlying(): Unit = {
     this.decimalVal = null
   }
 
-  def isNull: Boolean = decimalVal.eq(null)
+  def underlyingIsNull: Boolean = decimalVal.eq(null)
 
-  def isNotNull: Boolean = decimalVal.ne(null)
+  def underlyingIsNotNull: Boolean = decimalVal.ne(null)
 
   def getAsBigDecimal(): BigDecimal = this.decimalVal
 
@@ -62,7 +62,7 @@ class JDKDecimalOperation extends DecimalOperation[JDKDecimalOperation] {
 
   def getAsJavaBigInteger(): java.math.BigInteger = this.decimalVal.underlying().toBigInteger
 
-  def longValue: Long = decimalVal.longValue
+  def getAsLongValue: Long = decimalVal.longValue
 
   def rescale(precision: Int, scale: Int, roundMode: BigDecimal.RoundingMode.Value): Boolean = {
     val newDecimalVal = this.decimalVal.setScale(scale, roundMode)
@@ -76,22 +76,16 @@ class JDKDecimalOperation extends DecimalOperation[JDKDecimalOperation] {
   def doCompare(other: DecimalOperation[_]): Int = toBigDecimal.compare(other.toBigDecimal)
 
   def isEqualsZero(): Boolean = {
-    assert(isNotNull)
+    assert(underlyingIsNotNull)
     this.decimalVal.signum == 0
   }
 
-  def doAdd(that: DecimalOperation[_]): JDKDecimalOperation = {
-    val jDKDecimalOperation = new JDKDecimalOperation()
-    val newBigDecimal = toJavaBigDecimal.add(that.toJavaBigDecimal)
-    jDKDecimalOperation.set(newBigDecimal)
-    jDKDecimalOperation
+  def doAdd(that: DecimalOperation[_]): JDKDecimalOperation = withNewInstance(this, that) {
+    (left, right) => left.add(right)
   }
 
-  def doSubtract(that: DecimalOperation[_]): JDKDecimalOperation = {
-    val jDKDecimalOperation = new JDKDecimalOperation()
-    val newBigDecimal = toJavaBigDecimal.subtract(that.toJavaBigDecimal)
-    jDKDecimalOperation.set(newBigDecimal)
-    jDKDecimalOperation
+  def doSubtract(that: DecimalOperation[_]): JDKDecimalOperation = withNewInstance(this, that) {
+    (left, right) => left.subtract(right)
   }
 
   def multiply(that: DecimalOperation[_]): JDKDecimalOperation = withNewInstance(this, that) {
