@@ -13,7 +13,7 @@ and message parameters rather than an arbitrary error message.
 3. Add a new class to `error-class.json`; keep in mind the invariants below.
 4. Check if the exception type already extends `SparkThrowable`.
    If true, skip to step 6.
-5. Mix `SparkThrowable` into the exception.
+5. Mix `SparkThrowable` into the exception, and place it to Query.*Errors at least when it is invoked more than once.
 6. Throw the exception with the error class and message parameters.
 
 ### Before
@@ -65,6 +65,8 @@ To access error fields, catch exceptions that extend `org.apache.spark.SparkThro
 ### Error class
 
 Error classes are a succinct, human-readable representation of the error category.
+
+An uncategorized errors can be assigned to a legacy error class with the prefix _LEGACY_ERROR_TEMP_ and an unused sequential number, for instance _LEGACY_ERROR_TEMP_053.
 
 #### Invariants
 
