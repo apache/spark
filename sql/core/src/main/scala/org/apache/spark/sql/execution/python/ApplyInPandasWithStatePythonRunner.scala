@@ -61,7 +61,7 @@ class ApplyInPandasWithStatePythonRunner(
   with PythonArrowInput[InType]
   with PythonArrowOutput[OutType] {
 
-  override protected val schema: StructType = inputSchema.add("!__state__!", STATE_METADATA_SCHEMA)
+  override protected val schema: StructType = inputSchema.add("__state", STATE_METADATA_SCHEMA)
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
