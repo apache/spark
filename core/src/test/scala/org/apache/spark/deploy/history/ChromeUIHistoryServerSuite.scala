@@ -57,6 +57,6 @@ class LevelDBBackendChromeUIHistoryServerSuite extends ChromeUIHistoryServerSuit
 }
 
 @ChromeUITest
-class RocksBackendChromeUIHistoryServerSuite extends ChromeUIHistoryServerSuite {
+class RocksDBBackendChromeUIHistoryServerSuite extends ChromeUIHistoryServerSuite {
   override protected def diskBackend: HybridStoreDiskBackend.Value = HybridStoreDiskBackend.ROCKSDB
 }
