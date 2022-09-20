@@ -357,7 +357,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  test("maintenance for short query") {
+  test("maintenance before unload") {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
