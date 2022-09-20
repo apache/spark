@@ -59,8 +59,8 @@ class ApplyInPandasWithStateWriter(
   //
   // ArrowStreamWriter supports only single VectorSchemaRoot, which means all Arrow RecordBatches
   // being sent out from ArrowStreamWriter should have same schema. That said, we have to construct
-  // "an" Arrow schema to contain both types of data, and also construct Arrow RecordBatches to
-  // contain both data.
+  // "an" Arrow schema to contain both data and state, and also construct ArrowBatches to contain
+  // both data and state.
   //
   // To achieve this, we extend the schema for input data to have a column for state at the end.
   // But also, we logically group the columns by family (data vs state) and initialize writer
@@ -98,6 +98,13 @@ class ApplyInPandasWithStateWriter(
   // specific group key before we read the entire data. The easiest approach to address both
   // bin-pack and chunk is to check the number of rows in the current Arrow RecordBatch for each
   // write of row.
+  //
+  // - Data and State
+  //
+  // Since we apply bin-packing and chunking, there should be the way to distinguish each chunk
+  // from the entire data part of Arrow RecordBatch. We leverage the state metadata to also
+  // contain the "metadata" of data part to distinguish the chunk from the entire data.
+  // As a result, state metadata has a 1-1 relationship with "chunk", instead of "grouping key".
   //
   // - Consideration
   //
@@ -223,13 +230,31 @@ class ApplyInPandasWithStateWriter(
 }
 
 object ApplyInPandasWithStateWriter {
+  // This schema contains both state metadata and the metadata of the chunk. Refer the code comment
+  // of "Data and State" for more details.
   val STATE_METADATA_SCHEMA: StructType = StructType(
     Array(
+      /*
+       Metadata of the state
+       */
+
+      // properties of state instance (excluding state value) in json format
       StructField("properties", StringType),
+      // key row as UnsafeRow, Python worker won't touch this value but send the value back to
+      // executor when sending an update of state
       StructField("keyRowAsUnsafe", BinaryType),
+      // state value
       StructField("object", BinaryType),
+
+      /*
+       Metadata of the chunk
+       */
+
+      // start offset of the data chunk from entire data
       StructField("startOffset", IntegerType),
+      // the number of rows for the data chunk
       StructField("numRows", IntegerType),
+      // whether the current data chunk is the last one for current grouping key or not
       StructField("isLastChunk", BooleanType)
     )
   )
