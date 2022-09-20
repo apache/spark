@@ -42,6 +42,7 @@ import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, DecimalType, LongType, MetadataBuilder, StructType}
 import org.apache.spark.util.Utils
 
@@ -49,7 +50,7 @@ class QueryExecutionErrorsSuite
   extends QueryTest
   with ParquetTest
   with OrcTest
-  with QueryErrorsSuiteBase {
+  with SharedSparkSession {
 
   import testImplicits._
 
@@ -649,7 +650,7 @@ class QueryExecutionErrorsSuite
       parameters = Map(
         "message" -> "integer overflow",
         "alternative" -> "",
-        "config" -> SQLConf.ANSI_ENABLED.key))
+        "config" -> s""""${SQLConf.ANSI_ENABLED.key}""""))
   }
 
   test("CAST_OVERFLOW: from long to ANSI intervals") {

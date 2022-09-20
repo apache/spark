@@ -49,7 +49,7 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
   "messageParameters" : {
-    "pattern" : "'dd MM yyyy EEEEEE'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'dd MM yyyy EEEEEE'"
   }
 }

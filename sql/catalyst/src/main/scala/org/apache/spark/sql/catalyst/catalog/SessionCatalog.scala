@@ -31,7 +31,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -1588,10 +1587,9 @@ class SessionCatalog(
       TableFunctionRegistry.builtin.functionExists(name)
   }
 
-  protected[sql] def failFunctionLookup(
-      name: FunctionIdentifier, cause: Option[Throwable] = None): Nothing = {
+  protected[sql] def failFunctionLookup(name: FunctionIdentifier): Nothing = {
     throw new NoSuchFunctionException(
-      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName, cause)
+      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName)
   }
 
   /**
@@ -1732,11 +1730,7 @@ class SessionCatalog(
       // The function has not been loaded to the function registry, which means
       // that the function is a persistent function (if it actually has been registered
       // in the metastore). We need to first put the function in the function registry.
-      val catalogFunction = try {
-        externalCatalog.getFunction(db, funcName)
-      } catch {
-        case _: AnalysisException => failFunctionLookup(qualifiedIdent)
-      }
+      val catalogFunction = externalCatalog.getFunction(db, funcName)
       loadFunctionResources(catalogFunction.resources)
       // Please note that qualifiedName is provided by the user. However,
       // catalogFunction.identifier.unquotedString is returned by the underlying

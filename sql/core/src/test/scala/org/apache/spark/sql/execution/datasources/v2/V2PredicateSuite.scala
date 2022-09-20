@@ -263,7 +263,7 @@ class V2PredicateSuite extends SparkFunSuite {
       new Predicate("=", Array[Expression](ref("a"), LiteralValue(1, IntegerType))),
       new Predicate("=", Array[Expression](ref("b"), LiteralValue(1, IntegerType))))
     assert(predicate1.equals(predicate2))
-    assert(predicate1.references.map(_.describe()).toSeq == Seq("a", "b"))
+    assert(predicate1.references.map(_.describe()).toSeq.sorted == Seq("a", "b"))
     assert(predicate1.describe.equals("(a = 1) AND (b = 1)"))
 
     val v1Filter = V1And(EqualTo("a", 1), EqualTo("b", 1))
@@ -287,7 +287,7 @@ class V2PredicateSuite extends SparkFunSuite {
       new Predicate("=", Array[Expression](ref("a"), LiteralValue(1, IntegerType))),
       new Predicate("=", Array[Expression](ref("b"), LiteralValue(1, IntegerType))))
     assert(predicate1.equals(predicate2))
-    assert(predicate1.references.map(_.describe()).toSeq == Seq("a", "b"))
+    assert(predicate1.references.map(_.describe()).toSeq.sorted == Seq("a", "b"))
     assert(predicate1.describe.equals("(a = 1) OR (b = 1)"))
 
     val v1Filter = V1Or(EqualTo("a", 1), EqualTo("b", 1))

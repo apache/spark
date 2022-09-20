@@ -1128,22 +1128,22 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if isinstance(arg, (dict, pd.Series)):
             is_start = True
             # In case dictionary is empty.
-            current = F.when(SF.lit(False), SF.lit(None).cast(self.spark.data_type))
+            current = F.when(F.lit(False), F.lit(None).cast(self.spark.data_type))
 
             for to_replace, value in arg.items():
                 if is_start:
-                    current = F.when(self.spark.column == SF.lit(to_replace), value)
+                    current = F.when(self.spark.column == F.lit(to_replace), value)
                     is_start = False
                 else:
-                    current = current.when(self.spark.column == SF.lit(to_replace), value)
+                    current = current.when(self.spark.column == F.lit(to_replace), value)
 
             if hasattr(arg, "__missing__"):
                 tmp_val = arg[np._NoValue]  # type: ignore[attr-defined]
                 # Remove in case it's set in defaultdict.
                 del arg[np._NoValue]  # type: ignore[attr-defined]
-                current = current.otherwise(SF.lit(tmp_val))
+                current = current.otherwise(F.lit(tmp_val))
             else:
-                current = current.otherwise(SF.lit(None).cast(self.spark.data_type))
+                current = current.otherwise(F.lit(None).cast(self.spark.data_type))
             return self._with_new_scol(current)
         else:
             return self.pandas_on_spark.transform_batch(lambda pser: pser.map(arg, na_action))
@@ -2236,10 +2236,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         fill_cond = ~F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
 
-        pad_head = SF.lit(None)
-        pad_head_cond = SF.lit(False)
-        pad_tail = SF.lit(None)
-        pad_tail_cond = SF.lit(False)
+        pad_head = F.lit(None)
+        pad_head_cond = F.lit(False)
+        pad_tail = F.lit(None)
+        pad_tail_cond = F.lit(False)
 
         # inputs  -> NaN, NaN, 1.0, NaN, NaN, NaN, 5.0, NaN, NaN
         if limit_direction is None or limit_direction == "forward":
@@ -2275,10 +2275,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 pad_tail_cond = pad_tail_cond & (null_index_forward <= F.lit(limit))
 
         if limit_area == "inside":
-            pad_head_cond = SF.lit(False)
-            pad_tail_cond = SF.lit(False)
+            pad_head_cond = F.lit(False)
+            pad_tail_cond = F.lit(False)
         elif limit_area == "outside":
-            fill_cond = SF.lit(False)
+            fill_cond = F.lit(False)
 
         cond = self.isnull().spark.column
         scol = (
@@ -3172,7 +3172,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         internal = self._internal.resolved_copy
         sdf = internal.spark_frame.select(
             [
-                F.concat(SF.lit(prefix), index_spark_column).alias(index_spark_column_name)
+                F.concat(F.lit(prefix), index_spark_column).alias(index_spark_column_name)
                 for index_spark_column, index_spark_column_name in zip(
                     internal.index_spark_columns, internal.index_spark_column_names
                 )
@@ -3227,7 +3227,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         internal = self._internal.resolved_copy
         sdf = internal.spark_frame.select(
             [
-                F.concat(index_spark_column, SF.lit(suffix)).alias(index_spark_column_name)
+                F.concat(index_spark_column, F.lit(suffix)).alias(index_spark_column_name)
                 for index_spark_column, index_spark_column_name in zip(
                     internal.index_spark_columns, internal.index_spark_column_names
                 )
@@ -4610,7 +4610,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     return val
 
             item_string = name_like_string(item)
-            sdf = sdf.withColumn(SPARK_DEFAULT_INDEX_NAME, SF.lit(str(item_string)))
+            sdf = sdf.withColumn(SPARK_DEFAULT_INDEX_NAME, F.lit(str(item_string)))
             internal = InternalFrame(
                 spark_frame=sdf,
                 index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
@@ -5009,7 +5009,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     cond = (
                         (F.isnan(self.spark.column) | self.spark.column.isNull())
                         if pd.isna(to_replace_)
-                        else (self.spark.column == SF.lit(to_replace_))
+                        else (self.spark.column == F.lit(to_replace_))
                     )
                     if is_start:
                         current = F.when(cond, value)
@@ -5691,7 +5691,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             psdf = self._psdf[[self.name]]
             if repeats == 0:
-                return first_series(DataFrame(psdf._internal.with_filter(SF.lit(False))))
+                return first_series(DataFrame(psdf._internal.with_filter(F.lit(False))))
             else:
                 return first_series(cast("ps.DataFrame", ps.concat([psdf] * repeats)))
 
@@ -5785,7 +5785,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             F.max_by(
                 spark_column,
                 F.when(
-                    (index_scol <= SF.lit(index).cast(index_type)) & spark_column.isNotNull()
+                    (index_scol <= F.lit(index).cast(index_type)) & spark_column.isNotNull()
                     if pd.notna(index)
                     # If index is nan and the value of the col is not null
                     # then return monotonically_increasing_id .This will let max by
@@ -6250,7 +6250,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         return cast(
             Series,
-            ps.concat([psser, self.loc[self.isnull()].spark.transform(lambda _: SF.lit(-1))]),
+            ps.concat([psser, self.loc[self.isnull()].spark.transform(lambda _: F.lit(-1))]),
         )
 
     def argmax(self, axis: Axis = None, skipna: bool = True) -> int:
@@ -6779,7 +6779,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             scol = F.when(
                 # Manually sets nulls given the column defined above.
                 self.spark.column.isNull(),
-                SF.lit(None),
+                F.lit(None),
             ).otherwise(func(self.spark.column).over(window))
         else:
             # Here, we use two Windows.
@@ -6815,7 +6815,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 # By going through with max, it sets True after the first time it meets null.
                 F.max(self.spark.column.isNull()).over(window),
                 # Manually sets nulls given the column defined above.
-                SF.lit(None),
+                F.lit(None),
             ).otherwise(func(self.spark.column).over(window))
 
         return self._with_new_scol(scol)
@@ -6836,7 +6836,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def _cumprod(self, skipna: bool, part_cols: Sequence["ColumnOrName"] = ()) -> "Series":
         if isinstance(self.spark.data_type, BooleanType):
             scol = self._cum(
-                lambda scol: F.min(F.coalesce(scol, SF.lit(True))), skipna, part_cols
+                lambda scol: F.min(F.coalesce(scol, F.lit(True))), skipna, part_cols
             ).spark.column.cast(LongType())
         elif isinstance(self.spark.data_type, NumericType):
             num_zeros = self._cum(
@@ -7071,7 +7071,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise ValueError("No available aggregation columns!")
 
         return SeriesResampler(
-            psdf=self._psdf,
+            psser=self,
             resamplekey=on,
             rule=rule,
             closed=closed,

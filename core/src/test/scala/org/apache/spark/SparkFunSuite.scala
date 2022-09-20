@@ -23,6 +23,7 @@ import java.nio.file.{Files, Path}
 import java.util.{Locale, TimeZone}
 
 import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.io.FileUtils
@@ -299,13 +300,18 @@ abstract class SparkFunSuite
       parameters: Map[String, String] = Map.empty,
       matchPVals: Boolean = false,
       queryContext: Array[QueryContext] = Array.empty): Unit = {
-    assert(exception.getErrorClass === errorClass)
+    val mainErrorClass :: tail = errorClass.split("\\.").toList
+    assert(tail.isEmpty || tail.length == 1)
+    // TODO: remove the `errorSubClass` parameter.
+    assert(tail.isEmpty || errorSubClass.isEmpty)
+    assert(exception.getErrorClass === mainErrorClass)
     if (exception.getErrorSubClass != null) {
-      assert(errorSubClass.isDefined)
-      assert(exception.getErrorSubClass === errorSubClass.get)
+      val subClass = errorSubClass.orElse(tail.headOption)
+      assert(subClass.isDefined)
+      assert(exception.getErrorSubClass === subClass.get)
     }
     sqlState.foreach(state => assert(exception.getSqlState === state))
-    val expectedParameters = (exception.getParameterNames zip exception.getMessageParameters).toMap
+    val expectedParameters = exception.getMessageParameters.asScala
     if (matchPVals == true) {
       assert(expectedParameters.size === parameters.size)
       expectedParameters.foreach(
@@ -374,10 +380,33 @@ abstract class SparkFunSuite
       exception: SparkThrowable,
       errorClass: String,
       errorSubClass: String,
+      sqlState: Option[String],
+      parameters: Map[String, String],
+      context: QueryContext): Unit =
+    checkError(exception, errorClass, Some(errorSubClass), sqlState, parameters,
+      false, Array(context))
+
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      errorSubClass: String,
       sqlState: String,
       parameters: Map[String, String],
       context: QueryContext): Unit =
     checkError(exception, errorClass, Some(errorSubClass), None, parameters, false, Array(context))
+
+  case class ExpectedContext(
+      objectType: String,
+      objectName: String,
+      startIndex: Int,
+      stopIndex: Int,
+      fragment: String) extends QueryContext
+
+  object ExpectedContext {
+    def apply(fragment: String, start: Int, stop: Int): ExpectedContext = {
+      ExpectedContext("", "", start, stop, fragment)
+    }
+  }
 
   class LogAppender(msg: String = "", maxEvents: Int = 1000)
       extends AbstractAppender("logAppender", null, null, true, Property.EMPTY_ARRAY) {

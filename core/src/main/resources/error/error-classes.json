@@ -95,6 +95,23 @@
         "message" : [
           "the binary operator requires the input type <inputType>, not <actualDataType>."
         ]
+      },
+      "CAST_WITHOUT_SUGGESTION" : {
+        "message" : [
+          "cannot cast <srcType> to <targetType>."
+        ]
+      },
+      "CAST_WITH_CONF_SUGGESTION" : {
+        "message" : [
+          "cannot cast <srcType> to <targetType> with ANSI mode on.",
+          "If you have to cast <srcType> to <targetType>, you can set <config> as <configVal>."
+        ]
+      },
+      "CAST_WITH_FUN_SUGGESTION" : {
+        "message" : [
+          "cannot cast <srcType> to <targetType>.",
+          "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
+        ]
       }
     }
   },
@@ -238,12 +255,6 @@
         ]
       }
     }
-  },
-  "INDEX_OUT_OF_BOUNDS" : {
-    "message" : [
-      "Index <indexValue> must be between 0 and the length of the ArrayData."
-    ],
-    "sqlState" : "22023"
   },
   "INTERNAL_ERROR" : {
     "message" : [
@@ -429,6 +440,11 @@
     ],
     "sqlState" : "22023"
   },
+  "TOO_MANY_ARRAY_ELEMENTS" : {
+    "message" : [
+      "Cannot initialize array with <numElements> elements of size <size>"
+    ]
+  },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"
@@ -490,7 +506,7 @@
   },
   "UNRESOLVED_MAP_KEY" : {
     "message" : [
-      "Cannot resolve column <columnName> as a map key. If the key is a string literal, please add single quotes around it."
+      "Cannot resolve column <objectName> as a map key. If the key is a string literal, please add single quotes around it."
     ],
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
@@ -537,6 +553,11 @@
       "AES_MODE" : {
         "message" : [
           "AES-<mode> with the padding <padding> by the <functionName> function."
+        ]
+      },
+      "CATALOG_OPERATION" : {
+        "message" : [
+          "Catalog <catalogName> does not support <operation>."
         ]
       },
       "DESC_TABLE_COLUMN_PARTITION" : {

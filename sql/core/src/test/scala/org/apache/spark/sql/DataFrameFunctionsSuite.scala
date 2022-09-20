@@ -763,6 +763,70 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-40292: arrays_zip should retain field names in nested structs") {
+    val df = spark.sql("""
+      select
+        named_struct(
+          'arr_1', array(named_struct('a', 1, 'b', 2)),
+          'arr_2', array(named_struct('p', 1, 'q', 2)),
+          'field', named_struct(
+            'arr_3', array(named_struct('x', 1, 'y', 2))
+          )
+        ) as obj
+      """)
+
+    val res = df.selectExpr("arrays_zip(obj.arr_1, obj.arr_2, obj.field.arr_3) as arr")
+
+    val fieldNames = res.schema.head.dataType.asInstanceOf[ArrayType]
+      .elementType.asInstanceOf[StructType].fieldNames
+    assert(fieldNames.toSeq === Seq("arr_1", "arr_2", "arr_3"))
+  }
+
+  test("SPARK-40470: array_zip should return field names in GetArrayStructFields") {
+    val df = spark.read.json(Seq(
+      """
+      {
+        "arr": [
+          {
+            "obj": {
+              "nested": {
+                "field1": [1],
+                "field2": [2]
+              }
+            }
+          }
+        ]
+      }
+      """).toDS())
+
+    val res = df
+      .selectExpr("arrays_zip(arr.obj.nested.field1, arr.obj.nested.field2) as arr")
+      .select(col("arr.field1"), col("arr.field2"))
+
+    val fieldNames = res.schema.fieldNames
+    assert(fieldNames.toSeq === Seq("field1", "field2"))
+
+    checkAnswer(res, Row(Seq(Seq(1)), Seq(Seq(2))) :: Nil)
+  }
+
+  test("SPARK-40470: arrays_zip should return field names in GetMapValue") {
+    val df = spark.sql("""
+      select
+        map(
+          'arr_1', array(1, 2),
+          'arr_2', array(3, 4)
+        ) as map_obj
+      """)
+
+    val res = df.selectExpr("arrays_zip(map_obj.arr_1, map_obj.arr_2) as arr")
+
+    val fieldNames = res.schema.head.dataType.asInstanceOf[ArrayType]
+      .elementType.asInstanceOf[StructType].fieldNames
+    assert(fieldNames.toSeq === Seq("arr_1", "arr_2"))
+
+    checkAnswer(res, Row(Seq(Row(1, 3), Row(2, 4))))
+  }
+
   def testSizeOfMap(sizeOfNull: Any): Unit = {
     val df = Seq(
       (Map[Int, Int](1 -> 1, 2 -> 2), "x"),
@@ -2518,8 +2582,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception =
         intercept[AnalysisException](df.selectExpr("transform(a, x -> x)")),
       errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
-      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 10,
+        stop = 10))
   }
 
   test("map_filter") {
@@ -2591,8 +2660,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception =
         intercept[AnalysisException](df.selectExpr("map_filter(a, (k, v) -> k > v)")),
       errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
-      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 11,
+        stop = 11)
+    )
   }
 
   test("filter function - array for primitive type not containing null") {
@@ -2752,8 +2827,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception =
         intercept[AnalysisException](df.selectExpr("filter(a, x -> x)")),
       errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
-      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 7,
+        stop = 7))
   }
 
   test("exists function - array for primitive type not containing null") {
@@ -2886,8 +2966,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception =
         intercept[AnalysisException](df.selectExpr("exists(a, x -> x)")),
       errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
-      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 7,
+        stop = 7))
   }
 
   test("forall function - array for primitive type not containing null") {
@@ -3034,8 +3119,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception =
         intercept[AnalysisException](df.selectExpr("forall(a, x -> x)")),
       errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
-      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 7,
+        stop = 7))
 
     checkError(
       exception =
@@ -3220,8 +3310,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception =
         intercept[AnalysisException](df.selectExpr("aggregate(a, 0, (acc, x) -> x)")),
       errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
-      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 10,
+        stop = 10))
   }
 
   test("map_zip_with function - map of primitive types") {
@@ -3776,8 +3871,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception =
         intercept[AnalysisException](df.selectExpr("zip_with(a1, a, (acc, x) -> x)")),
       errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
-      parameters = Map("objectName" -> "`a`", "proposal" -> "`a1`, `a2`, `i`"))
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`a1`, `a2`, `i`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 13,
+        stop = 13)
+    )
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {

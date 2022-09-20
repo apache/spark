@@ -50,7 +50,7 @@ package object analysis {
       throw new AnalysisException(msg, t.origin.line, t.origin.startPosition, cause = Some(cause))
     }
 
-    def failAnalysis(errorClass: String, messageParameters: Array[String]): Nothing = {
+    def failAnalysis(errorClass: String, messageParameters: Map[String, String]): Nothing = {
       throw new AnalysisException(
         errorClass = errorClass,
         messageParameters = messageParameters,
@@ -61,7 +61,7 @@ package object analysis {
       throw new AnalysisException(
         errorClass = "DATATYPE_MISMATCH",
         errorSubClass = mismatch.errorSubClass,
-        messageParameters = toSQLExpr(expr) +: mismatch.messageParameters,
+        messageParameters = mismatch.messageParameters + ("sqlExpr" -> toSQLExpr(expr)),
         origin = t.origin)
     }
   }
@@ -70,7 +70,7 @@ package object analysis {
   def withPosition[A](t: TreeNode[_])(f: => A): A = {
     try f catch {
       case a: AnalysisException =>
-        throw a.withPosition(t.origin.line, t.origin.startPosition)
+        throw a.withPosition(t.origin)
     }
   }
 }

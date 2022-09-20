@@ -36,7 +36,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException, TestUtils}
+import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkUpgradeException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
@@ -1658,6 +1658,32 @@ abstract class CSVSuite
       Row(1, Date.valueOf("1983-08-04"), null) :: Nil)
   }
 
+  test("SPARK-40468: column pruning with the corrupt record column") {
+    withTempPath { path =>
+      Seq("1,a").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      // Corrupt record column with the default name should return null instead of "1,a"
+      val corruptRecordCol = spark.sessionState.conf.columnNameOfCorruptRecord
+      var df = spark.read
+        .schema(s"c1 int, c2 string, x string, ${corruptRecordCol} string")
+        .csv(path.getAbsolutePath)
+        .selectExpr("c1", "c2", "'A' as x", corruptRecordCol)
+
+      checkAnswer(df, Seq(Row(1, "a", "A", null)))
+
+      // Corrupt record column with the user-provided name should return null instead of "1,a"
+      df = spark.read
+        .schema(s"c1 int, c2 string, x string, _invalid string")
+        .option("columnNameCorruptRecord", "_invalid")
+        .csv(path.getAbsolutePath)
+        .selectExpr("c1", "c2", "'A' as x", "_invalid")
+
+      checkAnswer(df, Seq(Row(1, "a", "A", null)))
+    }
+  }
+
   test("SPARK-23846: schema inferring touches less data if samplingRatio < 1.0") {
     // Set default values for the DataSource parameters to make sure
     // that whole test file is mapped to only one partition. This will guarantee
@@ -2653,11 +2679,13 @@ abstract class CSVSuite
               .option("header", true)
               .csv(path.getCanonicalPath)
             checkAnswer(readback, Seq(Row(2, 3), Row(0, 1)))
-            val ex = intercept[AnalysisException] {
-              readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
-            }
-            assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
-            assert(ex.messageParameters.head == "`AAA`")
+            checkError(
+              exception = intercept[AnalysisException] {
+                readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
+              },
+              errorClass = "UNRESOLVED_COLUMN",
+              errorSubClass = Some("WITH_SUGGESTION"),
+              parameters = Map("objectName" -> "`AAA`", "proposal" -> "`BBB`, `aaa`"))
           }
         }
       }
@@ -2805,13 +2833,11 @@ abstract class CSVSuite
 
     // Error should be thrown when attempting to prefersDate with Legacy parser
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-      val msg = intercept[IllegalArgumentException] {
-        spark.read
-          .format("csv")
-          .options(options1)
-          .load(testFile(dateInferSchemaFile))
-      }.getMessage
-      assert(msg.contains("CANNOT_INFER_DATE"))
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          spark.read.format("csv").options(options1).load(testFile(dateInferSchemaFile))
+        },
+        errorClass = "CANNOT_INFER_DATE")
     } else {
       // 1. Specify date format and timestamp format
       // 2. Date inference should work with default date format when dateFormat is not provided
@@ -2859,10 +2885,11 @@ abstract class CSVSuite
         .csv(path.getAbsolutePath)
 
       if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-        val msg = intercept[IllegalArgumentException] {
-          output.collect()
-        }.getMessage
-        assert(msg.contains("CANNOT_INFER_DATE"))
+        checkError(
+          exception = intercept[SparkIllegalArgumentException] {
+            output.collect()
+          },
+          errorClass = "CANNOT_INFER_DATE")
       } else {
         checkAnswer(
           output,

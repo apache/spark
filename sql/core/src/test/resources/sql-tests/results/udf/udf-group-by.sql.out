@@ -224,7 +224,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`k`",
     "proposal" : "`testdata`.`a`, `testdata`.`b`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 58,
+    "stopIndex" : 58,
+    "fragment" : "k"
+  } ]
 }
 
 

@@ -47,6 +47,9 @@ trait V1WriteCommand extends DataWritingCommand {
  * A rule that adds logical sorts to V1 data writing commands.
  */
 object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
+
+  import V1WritesUtils._
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.plannedWriteEnabled) {
       plan.transformDown {
@@ -65,10 +68,11 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
   }
 
   private def prepareQuery(write: V1WriteCommand, query: LogicalPlan): LogicalPlan = {
-    val empty2NullPlan = if (hasEmptyToNull(query)) {
+    val hasEmpty2Null = query.exists(p => hasEmptyToNull(p.expressions))
+    val empty2NullPlan = if (hasEmpty2Null) {
       query
     } else {
-      val projectList = V1WritesUtils.convertEmptyToNull(query.output, write.partitionColumns)
+      val projectList = convertEmptyToNull(query.output, write.partitionColumns)
       if (projectList.isEmpty) query else Project(projectList, query)
     }
     assert(empty2NullPlan.output.length == query.output.length)
@@ -80,25 +84,12 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
     }.asInstanceOf[SortOrder])
     val outputOrdering = query.outputOrdering
     // Check if the ordering is already matched to ensure the idempotency of the rule.
-    val orderingMatched = if (requiredOrdering.length > outputOrdering.length) {
-      false
-    } else {
-      requiredOrdering.zip(outputOrdering).forall {
-        case (requiredOrder, outputOrder) => requiredOrder.semanticEquals(outputOrder)
-      }
-    }
+    val orderingMatched = isOrderingMatched(requiredOrdering, outputOrdering)
     if (orderingMatched) {
       empty2NullPlan
     } else {
       Sort(requiredOrdering, global = false, empty2NullPlan)
     }
-  }
-
-  private def hasEmptyToNull(plan: LogicalPlan): Boolean = {
-    plan.find {
-      case p: Project => V1WritesUtils.hasEmptyToNull(p.projectList)
-      case _ => false
-    }.isDefined
   }
 }
 
@@ -208,5 +199,17 @@ object V1WritesUtils {
 
   def hasEmptyToNull(expressions: Seq[Expression]): Boolean = {
     expressions.exists(_.exists(_.isInstanceOf[Empty2Null]))
+  }
+
+  def isOrderingMatched(
+      requiredOrdering: Seq[Expression],
+      outputOrdering: Seq[Expression]): Boolean = {
+    if (requiredOrdering.length > outputOrdering.length) {
+      false
+    } else {
+      requiredOrdering.zip(outputOrdering).forall {
+        case (requiredOrder, outputOrder) => requiredOrder.semanticEquals(outputOrder)
+      }
+    }
   }
 }

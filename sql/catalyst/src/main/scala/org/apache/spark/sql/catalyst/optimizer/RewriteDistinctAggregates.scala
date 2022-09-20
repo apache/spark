@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPl
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.util.collection.Utils
 
 /**
  * This rule rewrites an aggregate query with distinct aggregations into an expanded double
@@ -265,7 +266,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
       // Setup expand & aggregate operators for distinct aggregate expressions.
       val distinctAggChildAttrLookup = distinctAggChildAttrMap.toMap
-      val distinctAggFilterAttrLookup = distinctAggFilters.zip(maxConds.map(_.toAttribute)).toMap
+      val distinctAggFilterAttrLookup = Utils.toMap(distinctAggFilters, maxConds.map(_.toAttribute))
       val distinctAggOperatorMap = distinctAggGroups.toSeq.zipWithIndex.map {
         case ((group, expressions), i) =>
           val id = Literal(i + 1)

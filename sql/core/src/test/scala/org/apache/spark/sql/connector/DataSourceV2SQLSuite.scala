@@ -122,7 +122,9 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         s"DESCRIBE $t invalid_col",
         "UNRESOLVED_COLUMN",
         "WITH_SUGGESTION",
-        Array("`invalid_col`", "`testcat`.`tbl`.`id`, `testcat`.`tbl`.`data`"))
+        Map(
+          "objectName" -> "`invalid_col`",
+          "proposal" -> "`testcat`.`tbl`.`id`, `testcat`.`tbl`.`data`"))
     }
   }
 
@@ -997,8 +999,9 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         s"SELECT ns1.ns2.ns3.tbl.id from $t",
         "UNRESOLVED_COLUMN",
         "WITH_SUGGESTION",
-        Array("`ns1`.`ns2`.`ns3`.`tbl`.`id`",
-          "`testcat`.`ns1`.`ns2`.`tbl`.`id`, `testcat`.`ns1`.`ns2`.`tbl`.`point`"))
+        Map(
+          "objectName" -> "`ns1`.`ns2`.`ns3`.`tbl`.`id`",
+          "proposal" -> "`testcat`.`ns1`.`ns2`.`tbl`.`id`, `testcat`.`ns1`.`ns2`.`tbl`.`point`"))
     }
   }
 
@@ -1577,19 +1580,19 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         s"UPDATE $t SET dummy='abc'",
         "UNRESOLVED_COLUMN",
         "WITH_SUGGESTION",
-        Array(
-          "`dummy`",
-          "`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
-            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`"))
+        Map(
+          "objectName" -> "`dummy`",
+          "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
+            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")))
       assertAnalysisErrorClass(
         s"UPDATE $t SET name='abc' WHERE dummy=1",
         "UNRESOLVED_COLUMN",
         "WITH_SUGGESTION",
-        Array(
-          "`dummy`",
-          "`testcat`.`ns1`.`ns2`.`tbl`.`p`, " +
+        Map(
+          "objectName" -> "`dummy`",
+          "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, " +
             "`testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
-            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`"))
+            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")))
 
       // UPDATE is not implemented yet.
       val e = intercept[UnsupportedOperationException] {
@@ -2086,33 +2089,18 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
   }
 
   test("View commands are not supported in v2 catalogs") {
-    def validateViewCommand(
-        sql: String,
-        catalogName: String,
-        viewName: String,
-        cmdName: String): Unit = {
-      assertAnalysisError(
-        sql,
-        s"Cannot specify catalog `$catalogName` for view $viewName because view support " +
-          s"in v2 catalog has not been implemented yet. $cmdName expects a view.")
+    def validateViewCommand(sqlStatement: String): Unit = {
+      val e = intercept[AnalysisException](sql(sqlStatement))
+      checkError(
+        e,
+        errorClass = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
+        parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
     }
 
-    validateViewCommand("DROP VIEW testcat.v", "testcat", "v", "DROP VIEW")
-    validateViewCommand(
-      "ALTER VIEW testcat.v SET TBLPROPERTIES ('key' = 'val')",
-      "testcat",
-      "v",
-      "ALTER VIEW ... SET TBLPROPERTIES")
-    validateViewCommand(
-      "ALTER VIEW testcat.v UNSET TBLPROPERTIES ('key')",
-      "testcat",
-      "v",
-      "ALTER VIEW ... UNSET TBLPROPERTIES")
-    validateViewCommand(
-      "ALTER VIEW testcat.v AS SELECT 1",
-      "testcat",
-      "v",
-      "ALTER VIEW ... AS")
+    validateViewCommand("DROP VIEW testcat.v")
+    validateViewCommand("ALTER VIEW testcat.v SET TBLPROPERTIES ('key' = 'val')")
+    validateViewCommand("ALTER VIEW testcat.v UNSET TBLPROPERTIES ('key')")
+    validateViewCommand("ALTER VIEW testcat.v AS SELECT 1")
   }
 
   test("SPARK-33924: INSERT INTO .. PARTITION preserves the partition location") {
@@ -2428,7 +2416,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       sqlStatement: String,
       expectedErrorClass: String,
       expectedErrorSubClass: String,
-      expectedErrorMessageParameters: Array[String]): Unit = {
+      expectedErrorMessageParameters: Map[String, String]): Unit = {
     val ex = intercept[AnalysisException] {
       sql(sqlStatement)
     }
