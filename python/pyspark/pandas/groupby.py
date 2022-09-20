@@ -1052,10 +1052,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         psdf: DataFrame = DataFrame(internal)
         if len(psdf._internal.column_labels) > 0:
-            tmp_count_column = verify_temp_column_name(psdf, "__tmp_%s_count_col__")
 
             stat_exprs = []
             for label in psdf._internal.column_labels:
+                tmp_count_column = verify_temp_column_name(sdf, "__tmp_%s_count_col__" % label[0])
                 psser = psdf._psser_for(label)
                 column = psser._dtype_op.nan_to_null(psser).spark.column
                 data_type = psser.spark.data_type
@@ -1066,18 +1066,19 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                     stat_exprs.append(F.product(column).alias(label[0]))
 
                 if min_count > 0:
-                    stat_exprs.append(F.count(column).alias(tmp_count_column % label[0]))
+                    stat_exprs.append(F.count(column).alias(tmp_count_column))
 
             sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
 
             if min_count > 0:
                 for label in psdf._internal.column_labels:
+                    tmp_count_column = "__tmp_%s_count_col__"
                     sdf = sdf.withColumn(
                         label[0],
                         F.when(
                             F.col(tmp_count_column % label[0]).__ge__(min_count), F.col(label[0])
                         ).otherwise(None),
-                    ).drop(tmp_count_column % label[0])
+                    ).drop(tmp_count_column)
 
         else:
             sdf = sdf.select(*groupkey_names).distinct()
