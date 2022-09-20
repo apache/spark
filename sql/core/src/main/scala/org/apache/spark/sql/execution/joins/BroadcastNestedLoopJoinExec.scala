@@ -287,11 +287,11 @@ case class BroadcastNestedLoopJoinExec(
   private def defaultJoin(relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
     val streamRdd = streamed.execute()
     def notMatchedBroadcastRows: RDD[InternalRow] = {
-      getMatchedBroadcastRowsBitSetRDD(streamRdd, relation).
-        repartition(1).
-        mapPartitions(iter => {
+      getMatchedBroadcastRowsBitSetRDD(streamRdd, relation)
+        .repartition(1)
+        .mapPartitions { iter =>
           Seq(iter.fold(new BitSet(relation.value.length))(_ | _)).toIterator
-        }).flatMap(matchedBroadcastRows => {
+        }.flatMap(matchedBroadcastRows => {
         val nulls = new GenericInternalRow(streamed.output.size)
         val buf: CompactBuffer[InternalRow] = new CompactBuffer()
         val joinedRow = new JoinedRow
