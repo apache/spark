@@ -91,9 +91,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
 
         # multiple column input => multiple column output (str)
         preds = (
-            self.df.withColumn("preds", identity("a", "b"))
-            .select("a", "b", "preds.*")
-            .toPandas()
+            self.df.withColumn("preds", identity("a", "b")).select("a", "b", "preds.*").toPandas()
         )
         self.assertTrue(preds["a"].equals(preds["a1"]))
         self.assertTrue(preds["b"].equals(preds["b1"]))

@@ -23,7 +23,7 @@ from pyspark import SparkContext
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.column import Column, _to_java_column
 from pyspark.sql.types import ArrayType, DataType, StructType
-from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union
+from typing import Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
@@ -146,18 +146,17 @@ def _has_tensor_cols(data: pd.Series | pd.DataFrame | Tuple[pd.Series]) -> bool:
 
 def predict_batch_udf(
     predict_batch_fn: Callable[
-        ...,
+        [],
         Callable[
             [np.ndarray | Mapping[str, np.ndarray]],
             np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, np.dtype]],
         ],
     ],
+    *,
     return_type: DataType,
     batch_size: int,
-    *,
     input_names: list[str] | None = None,
     input_tensor_shapes: list[list[int]] | None = None,
-    **kwargs: Any,
 ) -> UserDefinedFunctionLike:
     """Given a function which loads a model, returns a pandas_udf for inferencing over that model.
 
@@ -182,8 +181,8 @@ def predict_batch_udf(
     Notes:
     1. pass thru dataframe column => model input as single numpy array.
     2. reshape flattened tensors into expected tensor shapes.
-    3. convert entire dataframe into single numpy array via df.to_numpy(), or user can use
-       `pyspark.sql.functions.array()` to transform the input into a single-col tensor first.
+    3. user must use `pyspark.sql.functions.struct()` or `pyspark.sql.functions.array()` to
+       transform multiple input columns into the equivalent of a single-col tensor.
     4. pass thru dataframe column => model input as an (ordered) dictionary of numpy arrays.
 
     Example:
@@ -247,7 +246,7 @@ def predict_batch_udf(
 
         predict_fn = ModelCache.get(model_uuid)
         if not predict_fn:
-            predict_fn = predict_batch_fn(**kwargs)
+            predict_fn = predict_batch_fn()
             ModelCache.add(model_uuid, predict_fn)
 
         for partition in data:
