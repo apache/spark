@@ -899,7 +899,7 @@ object ApplicationMaster extends Logging {
       sys.props(k) = v
     }
 
-    val yarnConf = new YarnConfiguration(SparkHadoopUtil.newConfiguration(sparkConf))
+    val yarnConf = new YarnConfiguration(SparkHadoopUtil.get.newConfiguration(sparkConf))
     master = new ApplicationMaster(amArgs, sparkConf, yarnConf)
 
     val ugi = sparkConf.get(PRINCIPAL) match {
