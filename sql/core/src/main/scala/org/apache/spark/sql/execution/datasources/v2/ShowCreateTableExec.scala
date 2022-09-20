@@ -66,7 +66,7 @@ case class ShowCreateTableExec(
   private def showTableUsing(table: Table, builder: StringBuilder): Unit = {
     Option(table.properties.get(TableCatalog.PROP_PROVIDER))
       .map("USING " + escapeSingleQuotedString(_) + "\n")
-      .foreach(s => builder.append(s))
+      .foreach(builder.append(_))
   }
 
   private def showTableOptions(
@@ -119,7 +119,7 @@ case class ShowCreateTableExec(
     if (isManagedOption.forall(_.equalsIgnoreCase("false"))) {
       Option(table.properties.get(TableCatalog.PROP_LOCATION))
         .map("LOCATION '" + escapeSingleQuotedString(_) + "'\n")
-        .foreach(s => builder.append(s))
+        .foreach(builder.append(_))
     }
   }
 
@@ -146,7 +146,7 @@ case class ShowCreateTableExec(
   private def showTableComment(table: Table, builder: StringBuilder): Unit = {
     Option(table.properties.get(TableCatalog.PROP_COMMENT))
       .map("COMMENT '" + escapeSingleQuotedString(_) + "'\n")
-      .foreach(s => builder.append(s))
+      .foreach(builder.append(_))
   }
 
   private def concatByMultiLines(iter: Iterable[String]): String = {
