@@ -21,12 +21,16 @@ under the License.
 ==========
 Resampling
 ==========
+.. currentmodule:: pyspark.pandas
+
+Resampler objects are returned by ``.resample`` calls: :func:`DataFrame.resample`, :func:`Series.resample`, etc.
+
 .. currentmodule:: pyspark.pandas.resample
 
-Resampler objects are returned by resample calls: :func:`pandas_on_spark.DataFrame.resample`, :func:`pandas_on_spark.Series.resample`.
 
 Computations / descriptive stats
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 .. autosummary::
    :toctree: api/
 
