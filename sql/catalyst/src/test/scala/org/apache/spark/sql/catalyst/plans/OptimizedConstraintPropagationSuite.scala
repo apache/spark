@@ -18,13 +18,16 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.junit.Assert._
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateSubqueryAliases, EmptyFunctionRegistry, FakeV2SessionCatalog}
+
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateSubqueryAliases, EmptyFunctionRegistry,
+  FakeV2SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{IsNotNull, _}
 import org.apache.spark.sql.catalyst.expressions.ConstraintSet.TemplateAttributeGenerator
-import org.apache.spark.sql.catalyst.optimizer.{CombineFilters, CombineUnions, InferFiltersFromConstraints, Optimizer, PruneFilters, PushDownPredicates, PushPredicateThroughJoin, PushProjectionThroughUnion}
+import org.apache.spark.sql.catalyst.optimizer.{CombineFilters, CombineUnions, InferFiltersFromConstraints, Optimizer,
+  PruneFilters, PushDownPredicates, PushPredicateThroughJoin, PushProjectionThroughUnion}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
