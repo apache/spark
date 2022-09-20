@@ -73,7 +73,18 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("check types for unary arithmetic") {
-    assertError(BitwiseNot($"stringField"), "requires integral type")
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(BitwiseNot($"stringField"))
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      parameters = Map(
+        "sqlExpr" -> "\"~stringField\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"stringField\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"INTEGRAL\""))
   }
 
   test("check types for binary arithmetic") {
@@ -349,18 +360,84 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
 
     assertError(Round($"intField", $"intField"),
       "Only foldable Expression is allowed")
-    assertError(Round($"intField", $"booleanField"), "requires int type")
-    assertError(Round($"intField", $"mapField"), "requires int type")
-    assertError(Round($"booleanField", $"intField"), "requires numeric type")
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(Round($"intField", $"booleanField"))
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      parameters = Map(
+        "sqlExpr" -> "\"round(intField, booleanField)\"",
+        "paramIndex" -> "2",
+        "inputSql" -> "\"booleanField\"",
+        "inputType" -> "\"BOOLEAN\"",
+        "requiredType" -> "\"INT\""))
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(Round($"intField", $"mapField"))
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      parameters = Map(
+        "sqlExpr" -> "\"round(intField, mapField)\"",
+        "paramIndex" -> "2",
+        "inputSql" -> "\"mapField\"",
+        "inputType" -> "\"MAP<STRING, BIGINT>\"",
+        "requiredType" -> "\"INT\""))
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(Round($"booleanField", $"intField"))
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      parameters = Map(
+        "sqlExpr" -> "\"round(booleanField, intField)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"booleanField\"",
+        "inputType" -> "\"BOOLEAN\"",
+        "requiredType" -> "\"NUMERIC\""))
 
     assertSuccess(BRound(Literal(null), Literal(null)))
     assertSuccess(BRound($"intField", Literal(1)))
 
     assertError(BRound($"intField", $"intField"),
       "Only foldable Expression is allowed")
-    assertError(BRound($"intField", $"booleanField"), "requires int type")
-    assertError(BRound($"intField", $"mapField"), "requires int type")
-    assertError(BRound($"booleanField", $"intField"), "requires numeric type")
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(BRound($"intField", $"booleanField"))
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      parameters = Map(
+        "sqlExpr" -> "\"bround(intField, booleanField)\"",
+        "paramIndex" -> "2",
+        "inputSql" -> "\"booleanField\"",
+        "inputType" -> "\"BOOLEAN\"",
+        "requiredType" -> "\"INT\""))
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(BRound($"intField", $"mapField"))
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      parameters = Map(
+        "sqlExpr" -> "\"bround(intField, mapField)\"",
+        "paramIndex" -> "2",
+        "inputSql" -> "\"mapField\"",
+        "inputType" -> "\"MAP<STRING, BIGINT>\"",
+        "requiredType" -> "\"INT\""))
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(BRound($"booleanField", $"intField"))
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      parameters = Map(
+        "sqlExpr" -> "\"bround(booleanField, intField)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"booleanField\"",
+        "inputType" -> "\"BOOLEAN\"",
+        "requiredType" -> "\"NUMERIC\""))
   }
 
   test("check types for Greatest/Least") {

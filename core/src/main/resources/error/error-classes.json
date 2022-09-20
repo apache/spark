@@ -112,6 +112,11 @@
           "cannot cast <srcType> to <targetType>.",
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
         ]
+      },
+      "UNEXPECTED_INPUT_TYPE" : {
+        "message" : [
+          "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
+        ]
       }
     }
   },
@@ -337,6 +342,18 @@
       "Invalid SQL syntax: <inputString>"
     ],
     "sqlState" : "42000"
+  },
+  "INVALID_SUBQUERY_EXPRESSION" : {
+    "message" : [
+      "Invalid subquery:"
+    ],
+    "subClass" : {
+      "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN" : {
+        "message" : [
+          "Scalar subquery must return only one column, but got <number>"
+        ]
+      }
+    }
   },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [
@@ -718,6 +735,73 @@
       "NON_EXISTENT_PATH" : {
         "message" : [
           "a non-existent path."
+        ]
+      }
+    }
+  },
+  "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
+    "message" : [
+      "Unsupported subquery expression:"
+    ],
+    "subClass" : {
+      "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED" : {
+        "message" : [
+          "Accessing outer query column is not allowed in this location<treeNode>"
+        ]
+      },
+      "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES" : {
+        "message" : [
+          "Found an aggregate function in a correlated predicate that has both outer and local references, which is not supported: <function>"
+        ]
+      },
+      "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE" : {
+        "message" : [
+          "Correlated column is not allowed in predicate: <treeNode>"
+        ]
+      },
+      "CORRELATED_COLUMN_NOT_FOUND" : {
+        "message" : [
+          "A correlated outer name reference within a subquery expression body was not found in the enclosing query: <value>"
+        ]
+      },
+      "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC" : {
+        "message" : [
+          "Lateral join condition cannot be non-deterministic: <condition>"
+        ]
+      },
+      "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY" : {
+        "message" : [
+          "Correlated scalar subqueries in the GROUP BY clause must also be in the aggregate expressions<treeNode>"
+        ]
+      },
+      "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT" : {
+        "message" : [
+          "The output of a correlated scalar subquery must be aggregated"
+        ]
+      },
+      "NON_CORRELATED_COLUMNS_IN_GROUP_BY" : {
+        "message" : [
+          "A GROUP BY clause in a scalar correlated subquery cannot contain non-correlated columns: <value>"
+        ]
+      },
+      "NON_DETERMINISTIC_LATERAL_SUBQUERIES" : {
+        "message" : [
+          "Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row<treeNode>"
+        ]
+      },
+      "UNSUPPORTED_CORRELATED_REFERENCE" : {
+        "message" : [
+          "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses<treeNode>"
+        ]
+      },
+      "UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY" : {
+        "message" : [
+          "Correlated scalar subqueries can only be used in filters, aggregations, projections, and UPDATE/MERGE/DELETE commands<treeNode>"
+        ]
+      },
+      "UNSUPPORTED_IN_EXISTS_SUBQUERY" : {
+        "message" : [
+          "IN/EXISTS predicate subqueries can only be used in filters, joins, aggregations, window functions, projections, and UPDATE/MERGE/DELETE commands<treeNode>"
         ]
       }
     }

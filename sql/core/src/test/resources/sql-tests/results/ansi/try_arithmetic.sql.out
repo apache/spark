@@ -211,7 +211,24 @@ SELECT try_add(interval 2 year, interval 2 second)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'INTERVAL '2' YEAR + INTERVAL '02' SECOND' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'INTERVAL '2' YEAR' is of interval year type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"INTERVAL '2' YEAR\"",
+    "inputType" : "\"INTERVAL YEAR\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"INTERVAL '2' YEAR + INTERVAL '02' SECOND\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 50,
+    "fragment" : "try_add(interval 2 year, interval 2 second)"
+  } ]
+}
 
 
 -- !query
