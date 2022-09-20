@@ -91,12 +91,23 @@ class ApplyInPandasWithStatePythonRunner(
 
   private val stateRowDeserializer = stateEncoder.createDeserializer()
 
+  /**
+   * This method sends out the additional metadata before sending out actual data.
+   *
+   * Specifically, this class overrides this method to also write the schema for state value.
+   */
   override protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
     super.handleMetadataBeforeExec(stream)
     // Also write the schema for state value
     PythonRDD.writeUTF(stateValueSchema.json, stream)
   }
 
+  /**
+   * Read the (key, state, values) from input iterator and construct Arrow RecordBatches, and
+   * write constructed RecordBatches to the writer.
+   *
+   * See [[ApplyInPandasWithStateWriter]] for more details.
+   */
   protected def writeIteratorToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
@@ -120,6 +131,10 @@ class ApplyInPandasWithStatePythonRunner(
     w.finalizeData()
   }
 
+  /**
+   * Deserialize ColumnarBatch received from the Python worker to produce the output. Schema info
+   * for given ColumnarBatch is also provided as well.
+   */
   protected def deserializeColumnarBatch(batch: ColumnarBatch, schema: StructType): OutType = {
     // This should at least have one row for state. Also, we ensure that all columns across
     // data and state metadata have same number of rows, which is required by Arrow record
