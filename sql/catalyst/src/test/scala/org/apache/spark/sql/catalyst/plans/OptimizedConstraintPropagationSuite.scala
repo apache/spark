@@ -1743,66 +1743,68 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
       execute(SimpleAnalyzer.execute(plan))
     (optimizedPlan, optimizedPlan.constraints)
   }
+
+  private object OptimizerTypes extends Enumeration {
+    val WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING,
+    NO_PUSH_DOWN_ONLY_PRUNING, WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_UNIONS_PRUNING = Value
+  }
+
+  private object GetOptimizer {
+    def apply(optimizerType: OptimizerTypes.Value, useConf: Option[SQLConf] = None): Optimizer =
+      optimizerType match {
+        case OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING =>
+          new Optimizer(new CatalogManager(
+            FakeV2SessionCatalog,
+            new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry,
+              useConf.getOrElse(SQLConf.get)))) {
+            override def defaultBatches: Seq[Batch] =
+              Batch("Subqueries", Once,
+                EliminateSubqueryAliases) ::
+                Batch("Filter Pushdown and Pruning", FixedPoint(100),
+                  PushPredicateThroughJoin,
+                  PushDownPredicates,
+                  InferFiltersFromConstraints,
+                  CombineFilters,
+                  PruneFilters) :: Nil
+
+            override def nonExcludableRules: Seq[String] = Seq.empty[String]
+          }
+
+        case OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING =>
+          new Optimizer(new CatalogManager(
+            FakeV2SessionCatalog,
+            new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry,
+              useConf.getOrElse(SQLConf.get)))) {
+            override def defaultBatches: Seq[Batch] =
+              Batch("Subqueries", Once,
+                EliminateSubqueryAliases) ::
+                Batch("Filter Pruning", Once,
+                  InferFiltersFromConstraints,
+                  PruneFilters) :: Nil
+
+            override def nonExcludableRules: Seq[String] = Seq.empty[String]
+          }
+
+        case OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_UNIONS_PRUNING =>
+          new Optimizer(new CatalogManager(
+            FakeV2SessionCatalog,
+            new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry,
+              useConf.getOrElse(SQLConf.get)))) {
+            override def defaultBatches: Seq[Batch] =
+              Batch("Subqueries", Once,
+                EliminateSubqueryAliases) ::
+                Batch("Union Pushdown", FixedPoint(100),
+                  CombineUnions,
+                  PushProjectionThroughUnion,
+                  PushDownPredicates,
+                  InferFiltersFromConstraints,
+                  CombineFilters,
+                  PruneFilters) :: Nil
+
+            override def nonExcludableRules: Seq[String] = Seq.empty[String]
+          }
+      }
+  }
 }
 
-object OptimizerTypes extends Enumeration {
-  val WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING,
-  NO_PUSH_DOWN_ONLY_PRUNING, WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_UNIONS_PRUNING = Value
-}
 
-object GetOptimizer {
-  def apply(optimizerType: OptimizerTypes.Value, useConf: Option[SQLConf] = None): Optimizer =
-    optimizerType match {
-      case OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING =>
-        new Optimizer( new CatalogManager(
-          FakeV2SessionCatalog,
-          new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry,
-            useConf.getOrElse(SQLConf.get)))) {
-          override def defaultBatches: Seq[Batch] =
-            Batch("Subqueries", Once,
-              EliminateSubqueryAliases) ::
-              Batch("Filter Pushdown and Pruning", FixedPoint(100),
-                PushPredicateThroughJoin,
-                PushDownPredicates,
-                InferFiltersFromConstraints,
-                CombineFilters,
-                PruneFilters) :: Nil
-
-          override def nonExcludableRules: Seq[String] = Seq.empty[String]
-        }
-
-      case OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING =>
-        new Optimizer( new CatalogManager(
-          FakeV2SessionCatalog,
-          new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry,
-            useConf.getOrElse(SQLConf.get)))) {
-          override def defaultBatches: Seq[Batch] =
-            Batch("Subqueries", Once,
-              EliminateSubqueryAliases) ::
-              Batch("Filter Pruning", Once,
-                InferFiltersFromConstraints,
-                PruneFilters) :: Nil
-
-          override def nonExcludableRules: Seq[String] = Seq.empty[String]
-        }
-
-      case OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_UNIONS_PRUNING =>
-        new Optimizer( new CatalogManager(
-          FakeV2SessionCatalog,
-          new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry,
-            useConf.getOrElse(SQLConf.get)))) {
-          override def defaultBatches: Seq[Batch] =
-            Batch("Subqueries", Once,
-              EliminateSubqueryAliases) ::
-              Batch("Union Pushdown", FixedPoint(100),
-                CombineUnions,
-                PushProjectionThroughUnion,
-                PushDownPredicates,
-                InferFiltersFromConstraints,
-                CombineFilters,
-                PruneFilters) :: Nil
-
-          override def nonExcludableRules: Seq[String] = Seq.empty[String]
-        }
-    }
-}
