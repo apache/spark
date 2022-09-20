@@ -210,7 +210,13 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec):
 
 
 def wrap_grouped_map_pandas_udf_with_state(f, return_type):
+    """
+    # FIXME: document
+    """
     def wrapped(key_series, value_series_gen, state):
+        """
+        # FIXME: document
+        """
         import pandas as pd
 
         key = tuple(s[0] for s in key_series)
@@ -579,6 +585,9 @@ def read_udfs(pickleSer, infile, eval_type):
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
         def mapper(a):
+            """
+            # FIXME: document
+            """
             from itertools import tee
 
             state = a[1]

@@ -44,9 +44,9 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
  * A variant implementation of [[ArrowPythonRunner]] to serve the operation
  * applyInPandasWithState.
  *
- * Unlike normal ArrowPythonRunner which both input (executor to python worker) and output (python
- * worker are InternalRow, applyInPandasWithState has side data (state information) in both input
- * and output, which requires different struct on Arrow RecordBatch.
+ * Unlike normal ArrowPythonRunner which both input and output (executor <-> python worker)
+ * are InternalRow, applyInPandasWithState has side data (state information) in both input
+ * and output along with data, which requires different struct on Arrow RecordBatch.
  */
 class ApplyInPandasWithStatePythonRunner(
     funcs: Seq[ChainedPythonFunctions],
@@ -166,7 +166,8 @@ class ApplyInPandasWithStatePythonRunner(
           // The entire row in record batch seems to be for data.
           None
         } else {
-          // NOTE: See StateReaderIterator.STATE_METADATA_SCHEMA for the schema.
+          // NOTE: See ApplyInPandasWithStatePythonRunner.STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER
+          // for the schema.
           val propertiesAsJson = parse(row.getUTF8String(0).toString)
           val keyRowAsUnsafeAsBinary = row.getBinary(1)
           val keyRowAsUnsafe = new UnsafeRow(keySchema.fields.length)

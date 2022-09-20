@@ -69,9 +69,9 @@ class ApplyInPandasWithStateWriter(
   //
   // Although Arrow RecordBatch enables to write the data as columnar, we figure out it gives
   // strange outputs if we don't ensure that all columns have the same number of values. Since
-  // there are one or more data for a grouping key (applies to case of handling timed out state
-  // as well) whereas there is only one state for a grouping key, we have to fill up the empty rows
-  // in state side to ensure both have the same number of rows.
+  // there are at least one data for a grouping key (we ensure this for the case of handling timed
+  // out state as well) whereas there is only one state for a grouping key, we have to fill up the
+  // empty rows in state side to ensure both have the same number of rows.
   private val arrowWriterForData = createArrowWriter(
     root.getFieldVectors.asScala.toSeq.dropRight(1))
   private val arrowWriterForState = createArrowWriter(
