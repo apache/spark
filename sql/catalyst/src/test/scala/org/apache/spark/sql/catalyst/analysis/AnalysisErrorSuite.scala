@@ -746,7 +746,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       Seq(SortOrder(InSubquery(Seq(a), ListQuery(LocalRelation(b))), Ascending)),
       global = true,
       LocalRelation(a))
-    assertAnalysisError(plan, "Predicate sub-queries can only be used in " :: Nil)
+    assertAnalysisError(plan, "Predicate subqueries can only be used in " :: Nil)
   }
 
   test("PredicateSubQuery correlated predicate is nested in an illegal plan") {
@@ -892,12 +892,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     val t1 = LocalRelation(a, b, d)
     val t2 = LocalRelation(c)
     val conditions = Seq(
-      (abs($"a") === $"c", "abs(a) = outer(c)"),
-      (abs($"a") <=> $"c", "abs(a) <=> outer(c)"),
-      ($"a" + 1 === $"c", "(a + 1) = outer(c)"),
-      ($"a" + $"b" === $"c", "(a + b) = outer(c)"),
-      ($"a" + $"c" === $"b", "(a + outer(c)) = b"),
-      (And($"a" === $"c", Cast($"d", IntegerType) === $"c"), "CAST(d AS INT) = outer(c)"))
+      (abs($"a") === $"c", "abs(a#x) = outer(c#x)"),
+      (abs($"a") <=> $"c", "abs(a#x) <=> outer(c#x)"),
+      ($"a" + 1 === $"c", "(a#x + 1) = outer(c#x)"),
+      ($"a" + $"b" === $"c", "(a#x + b#x) = outer(c#x)"),
+      ($"a" + $"c" === $"b", "(a#x + outer(c#x)) = b#x"),
+      (And($"a" === $"c", Cast($"d", IntegerType) === $"c"), "CAST(d#x AS INT) = outer(c#x)"))
     conditions.foreach { case (cond, msg) =>
       val plan = Project(
         ScalarSubquery(
@@ -905,7 +905,7 @@ class AnalysisErrorSuite extends AnalysisTest {
             Filter(cond, t1))
         ).as("sub") :: Nil,
         t2)
-      assertAnalysisError(plan, s"Correlated column is not allowed in predicate ($msg)" :: Nil)
+      assertAnalysisError(plan, s"Correlated column is not allowed in predicate: ($msg)" :: Nil)
     }
   }
 

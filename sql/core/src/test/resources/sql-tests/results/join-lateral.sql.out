@@ -317,11 +317,20 @@ SELECT * FROM t1, LATERAL (SELECT c1 + c2 + rand(0) AS c3)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row
-SubqueryAlias __auto_generated_subquery_name
-+- Project [(cast((outer(c1#x) + outer(c2#x)) as double) + rand(0)) AS c3#x]
-   +- OneRowRelation
-; line 1 pos 9
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+  "errorSubClass" : "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+  "messageParameters" : {
+    "treeNode" : "LateralJoin lateral-subquery#x [c1#x && c2#x], Inner\n:  +- SubqueryAlias __auto_generated_subquery_name\n:     +- Project [(cast((outer(c1#x) + outer(c2#x)) as double) + rand(0)) AS c3#x]\n:        +- OneRowRelation\n+- SubqueryAlias spark_catalog.default.t1\n   +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 58,
+    "fragment" : "FROM t1, LATERAL (SELECT c1 + c2 + rand(0) AS c3)"
+  } ]
+}
 
 
 -- !query
@@ -330,14 +339,20 @@ SELECT * FROM t1, LATERAL (SELECT rand(0) FROM t2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row
-SubqueryAlias __auto_generated_subquery_name
-+- Project [rand(0) AS rand(0)#x]
-   +- SubqueryAlias spark_catalog.default.t2
-      +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])
-         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
-            +- LocalRelation [col1#x, col2#x]
-; line 1 pos 9
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+  "errorSubClass" : "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+  "messageParameters" : {
+    "treeNode" : "LateralJoin lateral-subquery#x [], Inner\n:  +- SubqueryAlias __auto_generated_subquery_name\n:     +- Project [rand(0) AS rand(0)#x]\n:        +- SubqueryAlias spark_catalog.default.t2\n:           +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])\n:              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n:                 +- LocalRelation [col1#x, col2#x]\n+- SubqueryAlias spark_catalog.default.t1\n   +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 50,
+    "fragment" : "FROM t1, LATERAL (SELECT rand(0) FROM t2)"
+  } ]
+}
 
 
 -- !query
@@ -346,7 +361,20 @@ SELECT * FROM t1 JOIN LATERAL (SELECT * FROM t2) s ON t1.c1 + rand(0) = s.c1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Lateral join condition cannot be non-deterministic: ((CAST(spark_catalog.default.t1.c1 AS DOUBLE) + rand(0)) = CAST(s.c1 AS DOUBLE)); line 1 pos 17
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+  "errorSubClass" : "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC",
+  "messageParameters" : {
+    "condition" : "((CAST(spark_catalog.default.t1.c1 AS DOUBLE) + rand(0)) = CAST(s.c1 AS DOUBLE))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 55,
+    "stopIndex" : 76,
+    "fragment" : "t1.c1 + rand(0) = s.c1"
+  } ]
+}
 
 
 -- !query
