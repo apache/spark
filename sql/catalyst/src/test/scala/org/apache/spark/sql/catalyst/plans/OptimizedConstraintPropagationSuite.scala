@@ -55,7 +55,8 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
 
   test("checking number of base constraints in project node") {
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
-    val y = tr.where('c.attr > 10).select('a.as('x), 'b.as('y), 'c, 'c.as('c1)).analyze
+    val y = tr.where('c.attr > 10).select('a.as('x), 'b.as('y), 'c,
+      'c.as('c1)).analyze
     assert(y.resolved)
     val constraints = y.constraints
     trivialConstraintAbsenceChecker(constraints)
@@ -68,8 +69,8 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
   test("checking number of base constraints with " +
     "filter dependent on multiple attributes") {
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
-    val y = tr.where('c.attr + 'a.attr > 10).select('a, 'a.as('x), 'b.as('y), 'c,
-      'c.as('c1)).analyze
+    val y = tr.where('c.attr + 'a.attr > 10).select('a, 'a.as('x), 'b.as('y),
+      'c, 'c.as('c1)).analyze
     assert(y.resolved)
     val constraints = y.constraints
     trivialConstraintAbsenceChecker(constraints)
@@ -84,8 +85,8 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
 
   test("checking filter pruning") {
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
-    val y = tr.where('c.attr + 'a.attr > 10).select('a, 'a.as('x), 'b.as('y), 'c,
-      'c.as('c1)).where('x.attr + 'c1.attr > 10).analyze
+    val y = tr.where('c.attr + 'a.attr > 10).select('a, 'a.as('x), 'b.as('y),
+      'c, 'c.as('c1)).where('x.attr + 'c1.attr > 10).analyze
     assert(y.resolved)
     val optimized = GetOptimizer(OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING).execute(y)
     val constraints = optimized.constraints
@@ -193,7 +194,8 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
     val correctAnswer = tr1.where('c.attr + 'a.attr > 10 && IsNotNull('a) && IsNotNull('c)).
       select('a, 'a.as('a1), 'a.as('a2),
         'b.as('b1), 'c,
-        'c.as('c1)).join(tr2.where(IsNotNull('x)), Inner, Some("a2".attr === "x".attr)).analyze
+        'c.as('c1)).join(tr2.where(IsNotNull('x)), Inner,
+      Some("a2".attr === "x".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -201,10 +203,9 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
   test("new filter pushed down on Join Node") {
     val tr1 = LocalRelation('a.int, 'b.string, 'c.int)
     val tr2 = LocalRelation('x.int, 'y.string, 'z.int)
-    val y = tr1.where('c.attr + 'a.attr > 10 && 'a.attr > -15).select('a, 'a.as('a1), 'a.as('a2),
-      'b.as('b1), 'c,
-      'c.as('c1)).join(tr2, Inner, Some("a2".attr === "x".attr))
-      .where('a1.attr + 'c1.attr > 10).analyze
+    val y = tr1.where('c.attr + 'a.attr > 10 && 'a.attr > -15).select('a, 'a.as('a1),
+      'a.as('a2), 'b.as('b1), 'c, 'c.as('c1)).join(tr2, Inner,
+      Some("a2".attr === "x".attr)).where('a1.attr + 'c1.attr > 10).analyze
     assert(y.resolved)
     val optimized = GetOptimizer(OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING).
       execute(y)
@@ -231,10 +232,9 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
     def getTestPlan: LogicalPlan = {
       val tr1 = LocalRelation('a.int, 'b.string, 'c.int)
       val tr2 = LocalRelation('x.int, 'y.string, 'z.int)
-      tr1.where('c.attr + 'a.attr > 10 && 'a.attr > -15).select('a, 'a.as('a1), 'a.as('a2),
-        'b.as('b1), 'c,
-        'c.as('c1)).join(tr2, Inner, Some("a2".attr === "x".attr && 'c1.attr === 'z.attr))
-        .where('a1.attr + 'c1.attr > 10)
+      tr1.where('c.attr + 'a.attr > 10 && 'a.attr > -15).select('a, 'a.as('a1),
+        'a.as('a2), 'b.as('b1), 'c, 'c.as('c1)).join(tr2, Inner,
+         Some("a2".attr === "x".attr && 'c1.attr === 'z.attr)).where('a1.attr + 'c1.attr > 10)
     }
     val (optimized, _) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
       executePlan(getTestPlan, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
@@ -278,8 +278,8 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
 
   test("filter pruning when original attributes are lost") {
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
-    val y = tr.where('c.attr + 'a.attr > 10).select('a, 'a.as('x), 'b.as('y), 'c,
-      'c.as('c1)).select('x.as('x1), 'y.as('y1),
+    val y = tr.where('c.attr + 'a.attr > 10).select('a, 'a.as('x), 'b.as('y),
+       'c, 'c.as('c1)).select('x.as('x1), 'y.as('y1),
       'c1.as('c2)).where('x1.attr + 'c2.attr > 10).analyze
     assert(y.resolved)
     val optimized = GetOptimizer(OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING).execute(y)
@@ -303,8 +303,8 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
 
   test("filter pruning when partial attributes are lost") {
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
-    val y = tr.where('c.attr + 'a.attr > 10).select('a, 'a.as('x), 'b.as('y), 'c,
-      'c.as('c1)).select('c, 'x.as('x1), 'y.as('y1),
+    val y = tr.where('c.attr + 'a.attr > 10).select('a, 'a.as('x), 'b.as('y),
+       'c, 'c.as('c1)).select('c, 'x.as('x1), 'y.as('y1),
       'c1.as('c2)).where('x1.attr + 'c.attr > 10).analyze
     assert(y.resolved)
     val optimized = GetOptimizer(OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING).execute(y)
@@ -380,8 +380,8 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
 
   test("filter pruning using expression equivalence list - #1") {
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
-    val y = tr.where('c.attr + 'a.attr + 'b.attr > 10).select('a, 'c, ('a.attr + 'c.attr).as('x),
-      'b, 'b.as('y)).where('x.attr + 'b.attr > 10).analyze
+    val y = tr.where('c.attr + 'a.attr + 'b.attr > 10).select('a, 'c,
+      ('a.attr + 'c.attr).as('x), 'b, 'b.as('y)).where('x.attr + 'b.attr > 10).analyze
     assert(y.resolved)
     val optimized = GetOptimizer(OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING).execute(y)
     trivialConstraintAbsenceChecker(optimized.constraints)
@@ -403,8 +403,9 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
 
   test("filter pruning using expression equivalence list - #2") {
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
-    val y = tr.where('c.attr + 'a.attr + 'b.attr > 10).select('c, ('a.attr + 'c.attr).as('x),
-      ('a.attr + 'c.attr).as('z), 'b, 'b.as('y)).where('x.attr + 'b.attr > 10).
+    val y = tr.where('c.attr + 'a.attr + 'b.attr > 10).select('c,
+      ('a.attr + 'c.attr).as('x), ('a.attr + 'c.attr).as('z), 'b,
+      'b.as('y)).where('x.attr + 'b.attr > 10).
       select('z, 'y).where('z.attr + 'y.attr > 10).analyze
     assert(y.resolved)
     val optimized = GetOptimizer(OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING).execute(y)
@@ -422,9 +423,12 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
       ('a.attr + 'c.attr).as('z), 'b, 'b.as('y)).select('z, 'y).analyze
 
     comparePlans(optimized, correctAnswer)
-    val z = tr.where('c.attr + 'a.attr + 'b.attr > 10).select('c, ('a.attr + 'c.attr).as('x),
-      ('a.attr + 'c.attr).as('z), 'b, 'b.as('y)).where('x.attr + 'b.attr > 10).
-      select('z, 'y).where('z.attr + 'y.attr > 10).select(('z.attr + 'y.attr).as('k)).
+    val z = tr.where('c.attr + 'a.attr + 'b.attr > 10).
+      select('c, ('a.attr + 'c.attr).as('x),
+      ('a.attr + 'c.attr).as('z), 'b, 'b.as('y)).
+      where('x.attr + 'b.attr > 10).
+      select('z, 'y).
+      where('z.attr + 'y.attr > 10).select(('z.attr + 'y.attr).as('k)).
       where('k.attr > 10).analyze
 
     val correctAnswer1 = tr.where('c.attr + 'a.attr + 'b.attr > 10 && IsNotNull('a) && IsNotNull('c)
@@ -600,7 +604,7 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
       'c.as('c1)).join(tr2_.select('x.as('x1)), Inner,
       Some('a2.attr === 'x1.attr)).where('x1.attr + 'c1.attr > 10)
 
-    val expected =  tr1.where('c.attr + 'a.attr > 10 && 'a.attr > -11 && 'a > -12
+    val expected = tr1.where('c.attr + 'a.attr > 10 && 'a.attr > -11 && 'a > -12
       && IsNotNull('a) && IsNotNull('c)).
       select('a, 'a.as('a1), 'a.as('a2),
       'b.as('b1), 'c, 'c.as('c1)).join(tr2.where(IsNotNull('x) &&
@@ -960,8 +964,8 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
     val u1_f1 = u1.where('a > 10 && 'b > 11)
 
     val u2 = tr2.select('a, 'a.as("a1"),
-      'a.as("a2"), 'a.as("a3"), 'a.as("X"), 'a.as("a5"), 'a.as("a6"),
-      'a.as("a7"))
+      'a.as("a2"), 'a.as("a3"), 'a.as("X"), 'a.as("a5"),
+      'a.as("a6"), 'a.as("a7"))
     val u2_f2 = u2.where('a > 10 )
     // This should result in following constraints
     // a > 10  && (b > 11 ||b > 10)
@@ -1015,7 +1019,8 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
 
     val u2 = tr2.select('a, 'a.as("a1"),
       'a.as("a2"), 'b.as("a3"), 'b.as("a4"), 'b.as("a5"),
-      'e.as("b"), 'e.as("b1"), 'e.as("b2"), 'e.as("b3"), 'e.as("b4") )
+      'e.as("b"), 'e.as("b1"), 'e.as("b2"), 'e.as("b3"),
+      'e.as("b4"))
     val u2_f2 = u2.where('a + 'b > 7 && 'a3 + 'b > 10 )
     // This should result in following constraints
     // a1 + b > 7  && a4 + b3 > 10
@@ -1307,7 +1312,8 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
     assertFalse(templatized1.keySet.head == templatized2.keySet.head)
   }
 
-  test("top filter should be pruned for Intersection with lower filter on one or more tables") {
+  test("top filter should be pruned for Intersection with lower filter on one" +
+    " or more tables") {
     val tr1 = LocalRelation('a.int, 'b.int, 'c.int)
     val tr2 = LocalRelation('d.int, 'e.int, 'f.int)
     val tr3 = LocalRelation('g.int, 'h.int, 'i.int)
@@ -1315,7 +1321,8 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
     val y = tr1.where('a.attr > 10).intersect(tr2.where('e.attr > 5), isAll = true).
       intersect(tr3.where('i.attr > -5), isAll = true)
 
-    val y1 = y.select('a.attr.as("a1"), 'b.attr.as("b1"), 'c.attr.as("c1")).analyze
+    val y1 = y.select('a.attr.as("a1"), 'b.attr.as("b1"), 'c.attr.as("c1")).
+      analyze
     assert(y1.resolved)
 
     val y2 = y1.where('a1.attr > 10 && 'b1.attr > 5 && 'c1.attr > -5).analyze
@@ -1343,15 +1350,17 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
     val tr = LocalRelation('a.int, 'b.string, 'c.int, 'd.int)
     assert(tr.analyze.constraints.isEmpty)
     val aliasedRelation = tr.where('c.attr > 10 && 'a.attr < 5)
-      .groupBy('a, 'c, 'b)('a, 'c.as("c1"), count('a).as("a3")).
+      .groupBy('a, 'c, 'b)('a, 'c.as("c1"),
+        count('a).as("a3")).
       select('c1, 'a, 'a3).analyze
     val withTopFilter = aliasedRelation.where('a.attr < 5 && 'c1.attr > 10 && 'a3.attr > 20).analyze
     val optimized = GetOptimizer(OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING).
       execute(withTopFilter)
     trivialConstraintAbsenceChecker(optimized.constraints)
     val correctAnswer = tr.where('c.attr > 10 && 'a.attr < 5 && IsNotNull('a) && IsNotNull('c)
-    ).groupBy('a, 'c, 'b)('a, 'c.as("c1"), count('a).as("a3")).
-      where('a3 > Literal(20).cast(LongType)).select('c1, 'a, 'a3).analyze
+    ).groupBy('a, 'c, 'b)('a, 'c.as("c1"),
+      count('a).as("a3")).where('a3 > Literal(20).cast(LongType)).
+      select('c1, 'a, 'a3).analyze
     comparePlans(correctAnswer, optimized)
   }
 
@@ -1806,5 +1815,3 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
       }
   }
 }
-
-
