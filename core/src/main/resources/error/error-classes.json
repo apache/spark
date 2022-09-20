@@ -113,6 +113,11 @@
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
         ]
       },
+      "INVALID_JSON_SCHEMA" : {
+        "message" : [
+          "Input schema <schema> must be a struct, an array or a map."
+        ]
+      },
       "NON_FOLDABLE_INPUT" : {
         "message" : [
           "the input should be a foldable string expression and not null; however, got <inputExpr>."

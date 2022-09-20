@@ -540,8 +540,12 @@ case class JsonToStructs(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes
-    with NullIntolerant {
+  extends UnaryExpression
+  with TimeZoneAwareExpression
+  with CodegenFallback
+  with ExpectsInputTypes
+  with NullIntolerant
+  with QueryErrorsBase {
 
   // The JSON input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
@@ -576,8 +580,10 @@ case class JsonToStructs(
       } getOrElse {
         super.checkInputDataTypes()
       }
-    case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input schema ${nullableSchema.catalogString} must be a struct, an array or a map.")
+    case _ =>
+      DataTypeMismatch(
+        errorSubClass = "INVALID_JSON_SCHEMA",
+        messageParameters = Map("schema" -> toSQLType(nullableSchema)))
   }
 
   // This converts parsed rows to the desired output by the given schema.
@@ -668,8 +674,13 @@ case class StructsToJson(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback
-    with ExpectsInputTypes with NullIntolerant {
+  extends UnaryExpression
+  with TimeZoneAwareExpression
+  with CodegenFallback
+  with ExpectsInputTypes
+  with NullIntolerant
+  with QueryErrorsBase {
+
   override def nullable: Boolean = true
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)
@@ -745,9 +756,10 @@ case class StructsToJson(
         case e: UnsupportedOperationException =>
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
-    case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input type ${child.dataType.catalogString} must be a struct, array of structs or " +
-          "a map or array of map.")
+    case _ =>
+      DataTypeMismatch(
+        errorSubClass = "INVALID_JSON_SCHEMA",
+        messageParameters = Map("schema" -> toSQLType(child.dataType)))
   }
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
