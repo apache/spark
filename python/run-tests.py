@@ -116,7 +116,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         # Adding Spark Connect JAR and Config
         additional_config += [
             "--conf",
-            "spark.plugins=org.apache.spark.sql.sparkconnect.service.SparkConnectPlugin"
+            "spark.plugins=org.apache.spark.sql.connect.service.SparkConnectPlugin"
         ]
 
     # Also override the JVM's temp directory by setting driver and executor options.
