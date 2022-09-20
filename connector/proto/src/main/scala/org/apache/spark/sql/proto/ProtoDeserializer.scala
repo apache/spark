@@ -19,17 +19,20 @@ package org.apache.spark.sql.proto
 import com.google.protobuf.{ByteString, DynamicMessage}
 import com.google.protobuf.Descriptors._
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
+
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.proto.utils.ProtoUtils
 import org.apache.spark.sql.proto.utils.ProtoUtils.ProtoMatchedField
 import org.apache.spark.sql.proto.utils.ProtoUtils.toFieldStr
 import org.apache.spark.sql.proto.utils.SchemaConverters.IncompatibleSchemaException
-import org.apache.spark.sql.proto.utils.ProtoUtils
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, DataType, DateType, DayTimeIntervalType, Decimal, DoubleType, FloatType, IntegerType, LongType, NullType, ShortType, StringType, StructType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, DataType,
+  DateType, DayTimeIntervalType, Decimal, DoubleType, FloatType, IntegerType, LongType, NullType,
+  ShortType, StringType, StructType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] class ProtoDeserializer(

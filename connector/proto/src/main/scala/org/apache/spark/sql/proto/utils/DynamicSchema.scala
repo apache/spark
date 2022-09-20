@@ -87,7 +87,8 @@ class DynamicSchema {
     }
 
     // build FileDescriptors, resolve dependencies (imports) if any
-    val resolvedFileDescMap: util.Map[String, FileDescriptor] = new util.HashMap[String, FileDescriptor]();
+    val resolvedFileDescMap: util.Map[String, FileDescriptor] =
+      new util.HashMap[String, FileDescriptor]()
     while (resolvedFileDescMap.size() < fileDescSet.getFileCount()) {
       for (fdProto : FileDescriptorProto <- fileDescSet.getFileList().asScala) {
         breakable {

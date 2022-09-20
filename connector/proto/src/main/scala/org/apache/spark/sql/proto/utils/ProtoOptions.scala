@@ -21,7 +21,6 @@ import java.net.URI
 
 import com.google.protobuf.DescriptorProtos
 import com.google.protobuf.Descriptors.Descriptor
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 

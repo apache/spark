@@ -16,18 +16,19 @@
  */
 package org.apache.spark.sql.proto
 
+import scala.collection.JavaConverters._
+
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
 import com.google.protobuf.DynamicMessage
 
-import scala.collection.JavaConverters._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.proto.utils.ProtoUtils.{ProtoMatchedField, toFieldStr}
-import org.apache.spark.sql.proto.utils.SchemaConverters.{IncompatibleSchemaException, UnsupportedProtoValueException}
 import org.apache.spark.sql.proto.utils.ProtoUtils
+import org.apache.spark.sql.proto.utils.ProtoUtils.{toFieldStr, ProtoMatchedField}
+import org.apache.spark.sql.proto.utils.SchemaConverters.{IncompatibleSchemaException, UnsupportedProtoValueException}
 import org.apache.spark.sql.types._
 
 /**

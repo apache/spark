@@ -17,6 +17,7 @@
 package org.apache.spark.sql.proto
 
 import com.google.protobuf.DynamicMessage
+
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.proto.utils.{ProtoUtils, SchemaConverters}

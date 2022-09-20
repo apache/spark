@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 
 import com.google.protobuf.{DescriptorProtos, Descriptors, InvalidProtocolBufferException}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
-
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.SparkException
