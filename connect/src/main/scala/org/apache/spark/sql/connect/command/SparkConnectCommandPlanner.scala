@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sparkconnect.command
+package org.apache.spark.sql.connect.command
 
 import com.google.common.collect.{Lists, Maps}
 import scala.collection.JavaConverters._

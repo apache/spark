@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sparkconnect.planner
+package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
 

@@ -23,7 +23,7 @@ import org.apache.spark.{SparkFunSuite, TestUtils}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.sparkconnect.planner.{InvalidPlanInput, SparkConnectPlanner}
+import org.apache.spark.sql.connect.planner.{InvalidPlanInput, SparkConnectPlanner}
 
 /**
  * Testing trait for SparkConnect tests with some helper methods to make it easier to create new

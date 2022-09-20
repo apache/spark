@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sparkconnect.service
+package org.apache.spark.sql.connect.service
 
 import java.util
 import java.util.concurrent.TimeUnit
@@ -41,7 +41,7 @@ import org.apache.spark.connect.proto.{
 }
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.execution.ExtendedMode
-import org.apache.spark.sql.sparkconnect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 
 /**
  * The SparkConnectService Implementation.

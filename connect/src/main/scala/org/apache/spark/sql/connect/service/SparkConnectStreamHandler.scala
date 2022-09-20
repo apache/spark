@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sparkconnect.service
+package org.apache.spark.sql.connect.service
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
@@ -33,8 +33,8 @@ import org.apache.spark.sql.execution.adaptive.{
   QueryStageExec
 }
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sparkconnect.command.SparkConnectCommandPlanner
-import org.apache.spark.sql.sparkconnect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.command.SparkConnectCommandPlanner
+import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.util.ArrowUtils
 
 @Experimental
