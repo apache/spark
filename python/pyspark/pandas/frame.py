@@ -1665,14 +1665,14 @@ class DataFrame(Frame, Generic[T]):
         ----------
         other : DataFrame, Series
             Object with which to compute correlations.
-
+        axis : int, default 0 or 'index'
+            Can only be set to 0 at the moment.
         drop : bool, default False
             Drop missing indices from result.
-
-        method : str, default 'pearson'
-            Method of correlation, one of:
-
+        method : {'pearson', 'spearman', 'kendall'}
             * pearson : standard correlation coefficient
+            * spearman : Spearman rank correlation
+            * kendall : Kendall Tau correlation coefficient
 
         Returns
         -------
@@ -1824,9 +1824,15 @@ class DataFrame(Frame, Generic[T]):
             ).limit(0)
 
         if not drop and len(diff_numeric_column_labels) > 0:
-            sdf2 = sdf.sparkSession.createDataFrame(
-                [name_like_string(label) for label in diff_numeric_column_labels], StringType()
-            ).select(F.col("value").alias(index_col_name))
+            sdf2 = (
+                self._internal.spark_frame.select(
+                    F.lit([name_like_string(label) for label in diff_numeric_column_labels]).alias(
+                        index_col_name
+                    )
+                )
+                .limit(1)
+                .select(F.explode(index_col_name).alias(index_col_name))
+            )
             sdf = sdf.unionByName(sdf2, allowMissingColumns=True)
 
         sdf = sdf.withColumn(
