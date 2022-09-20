@@ -1044,7 +1044,7 @@ trait ShowCreateTableCommandBase extends SQLConfHelper {
     metadata
       .comment
       .map("COMMENT '" + escapeSingleQuotedString(_) + "'\n")
-      .foreach(builder.append)
+      .foreach(s => builder.append(s))
   }
 
   protected def showTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
