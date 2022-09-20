@@ -38,7 +38,8 @@ import org.apache.spark.unsafe.types.UTF8String
  * `startNewGroup`, `writeRow`, `finalizeGroup`, `finalizeData` and this class will write the data
  * and state into Arrow RecordBatches with performing bin-pack and chunk internally.
  *
- * This class requires that the parameter `root` has initialized with the Arrow schema like below:
+ * This class requires that the parameter `root` has been initialized with the Arrow schema like
+ * below:
  * - data fields
  * - state field
  *   - nested schema (Refer ApplyInPandasWithStateWriter.STATE_METADATA_SCHEMA)
@@ -53,16 +54,24 @@ class ApplyInPandasWithStateWriter(
 
   import ApplyInPandasWithStateWriter._
 
-  // We logically group the columns by family (data vs state) and initialize writer separately,
-  // since it's lot more easier and probably performant to write the row directly rather than
-  // projecting the row to match up with the overall schema.
+  // Unlike applyInPandas (and other PySpark operators), applyInPandasWithState requires to produce
+  // the additional data `state`, along with the input data.
   //
-  // The number of data rows and state metadata rows can be different which could be problematic
-  // for Arrow RecordBatch, so we append empty rows to ensure both have the same number of rows.
+  // ArrowStreamWriter supports only single VectorSchemaRoot, which means all Arrow RecordBatches
+  // being sent out from ArrowStreamWriter should have same schema. That said, we have to construct
+  // "an" Arrow schema to contain both types of data, and also construct Arrow RecordBatches to
+  // contain both data.
   //
-  // We always produce at least one data row per grouping key whereas we only produce one
-  // state metadata row per grouping key, so we only need to fill up the empty rows in
-  // state metadata side.
+  // To achieve this, we extend the schema for input data to have a column for state at the end.
+  // But also, we logically group the columns by family (data vs state) and initialize writer
+  // separately, since it's lot more easier and probably performant to write the row directly
+  // rather than projecting the row to match up with the overall schema.
+  //
+  // Although Arrow RecordBatch enables to write the data as columnar, we figure out it gives
+  // strange outputs if we don't ensure that all columns have the same number of values. Since
+  // there are one or more data for a grouping key (applies to case of handling timed out state
+  // as well) whereas there is only one state for a grouping key, we have to fill up the empty rows
+  // in state side to ensure both have the same number of rows.
   private val arrowWriterForData = createArrowWriter(
     root.getFieldVectors.asScala.toSeq.dropRight(1))
   private val arrowWriterForState = createArrowWriter(
@@ -104,11 +113,22 @@ class ApplyInPandasWithStateWriter(
   private var currentGroupKeyRow: UnsafeRow = _
   private var currentGroupState: GroupStateImpl[Row] = _
 
+  /**
+   * Indicates writer to start with new grouping key.
+   *
+   * @param keyRow The grouping key row for current group.
+   * @param groupState The instance of GroupStateImpl for current group.
+   */
   def startNewGroup(keyRow: UnsafeRow, groupState: GroupStateImpl[Row]): Unit = {
     currentGroupKeyRow = keyRow
     currentGroupState = groupState
   }
 
+  /**
+   * Indicates writer to write a row in the current group.
+   *
+   * @param dataRow The row to write in the current group.
+   */
   def writeRow(dataRow: InternalRow): Unit = {
     // If it exceeds the condition of batch (number of records) and there is more data for the
     // same group, finalize and construct a new batch.
@@ -128,6 +148,10 @@ class ApplyInPandasWithStateWriter(
     totalNumRowsForBatch += 1
   }
 
+  /**
+   * Indicates writer that current group has finalized and there will be no further row bound to
+   * the current group.
+   */
   def finalizeGroup(): Unit = {
     // Provide state metadata row
     val stateInfoRow = buildStateInfoRow(currentGroupKeyRow, currentGroupState,
@@ -140,6 +164,9 @@ class ApplyInPandasWithStateWriter(
     startOffsetForCurGroup = totalNumRowsForBatch
   }
 
+  /**
+   * Indicates writer that all groups have been processed.
+   */
   def finalizeData(): Unit = {
     if (numRowsForCurGroup > 0) {
       // We still have some rows in the current record batch. Need to finalize them as well.
