@@ -2315,7 +2315,7 @@ package object config {
     ConfigBuilder("spark.shuffle.push.sendFinalizeRPCThreads")
       .internal()
       .doc("Number of threads used by the driver to send finalize shuffle RPC to mergers" +
-        " location and then get MergeStatus. The thread won't stop" +
+        " location and then get MergeStatus. The thread will run for up to " +
         " PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT. The merger ESS may open too many files" +
         " if the finalize rpc is not received.")
       .version("3.4.0")
