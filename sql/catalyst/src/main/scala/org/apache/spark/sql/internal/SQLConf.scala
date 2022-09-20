@@ -3911,15 +3911,6 @@ object SQLConf {
     .checkValues(ErrorMessageFormat.values.map(_.toString))
     .createWithDefault(ErrorMessageFormat.PRETTY.toString)
 
-  val INCLUDE_PLANS_IN_ERRORS = buildConf("spark.sql.error.includePlans")
-    .doc("If true, include the string representation of query plans or expressions in error " +
-      "messages when the origins of these entities are also available. Otherwise, elide these " +
-      "strings from the error messages since these origins convey the source locations of the " +
-      "erroneous behavior.")
-    .version("3.4.0")
-    .booleanConf
-    .createWithDefault(true)
-
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4713,8 +4704,6 @@ class SQLConf extends Serializable with Logging {
 
   def errorMessageFormat: ErrorMessageFormat.Value =
     ErrorMessageFormat.withName(getConf(SQLConf.ERROR_MESSAGE_FORMAT))
-
-  def includePlansInErrors: Boolean = getConf(SQLConf.INCLUDE_PLANS_IN_ERRORS)
 
   /** ********************** SQLConf functionality methods ************ */
 
