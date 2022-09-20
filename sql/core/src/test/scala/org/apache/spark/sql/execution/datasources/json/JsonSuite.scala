@@ -3356,6 +3356,23 @@ abstract class JsonSuite
       }
     }
   }
+
+  test("SPARK-40496: disable parsing fallback when the date/timestamp format is provided") {
+    withTempPath { path =>
+      Seq("""{"date": "2020-01-01"}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      var df = spark.read.schema("dt date").option("dateFormat", "yyyy/MM/dd")
+        .json(path.getAbsolutePath)
+      checkAnswer(df, Seq(Row(null)))
+
+      df = spark.read.schema("ts timestamp").option("timestampFormat", "yyyy/MM/dd HH:mm:ss")
+        .json(path.getAbsolutePath)
+
+      checkAnswer(df, Seq(Row(null)))
+    }
+  }
 }
 
 class JsonV1Suite extends JsonSuite {

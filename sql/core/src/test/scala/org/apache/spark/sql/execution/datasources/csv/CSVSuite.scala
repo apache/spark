@@ -3008,6 +3008,23 @@ abstract class CSVSuite
       }
     }
   }
+
+  test("SPARK-40496: disable parsing fallback when the date/timestamp format is provided") {
+    withTempPath { path =>
+      Seq("2020-01-01").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      var df = spark.read.schema("dt date").option("dateFormat", "yyyy/MM/dd")
+        .csv(path.getAbsolutePath)
+      checkAnswer(df, Seq(Row(null)))
+
+      df = spark.read.schema("ts timestamp").option("timestampFormat", "yyyy/MM/dd HH:mm:ss")
+        .csv(path.getAbsolutePath)
+
+      checkAnswer(df, Seq(Row(null)))
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
