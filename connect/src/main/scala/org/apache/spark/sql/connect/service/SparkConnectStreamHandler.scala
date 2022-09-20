@@ -17,15 +17,18 @@
 
 package org.apache.spark.sql.connect.service
 
-import com.google.protobuf.ByteString
-import io.grpc.stub.StreamObserver
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import com.google.protobuf.ByteString
+import io.grpc.stub.StreamObserver
+
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{Request, Response}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.connect.command.SparkConnectCommandPlanner
+import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.{
   AdaptiveSparkPlanExec,
@@ -33,11 +36,10 @@ import org.apache.spark.sql.execution.adaptive.{
   QueryStageExec
 }
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.connect.command.SparkConnectCommandPlanner
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.util.ArrowUtils
 
 @Experimental
+@Since("3.3.1")
 class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) extends Logging {
 
   def handle(v: Request): Unit = {

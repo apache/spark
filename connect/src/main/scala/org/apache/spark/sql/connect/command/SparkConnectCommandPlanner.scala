@@ -17,17 +17,19 @@
 
 package org.apache.spark.sql.connect.command
 
-import com.google.common.collect.{Lists, Maps}
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import com.google.common.collect.{Lists, Maps}
+
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
-import org.apache.spark.connect.{proto => proto}
+import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.types.StringType
 
 @Experimental
+@Since("3.3.1")
 class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) {
 
   lazy val pythonVersion =

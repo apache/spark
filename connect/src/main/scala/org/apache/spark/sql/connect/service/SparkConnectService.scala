@@ -30,7 +30,7 @@ import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{SparkContext, SparkEnv}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{
@@ -40,8 +40,8 @@ import org.apache.spark.connect.proto.{
   SparkConnectServiceGrpc
 }
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.execution.ExtendedMode
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.execution.ExtendedMode
 
 /**
  * The SparkConnectService Implementation.
@@ -52,6 +52,7 @@ import org.apache.spark.sql.connect.planner.SparkConnectPlanner
  *   delegates debug behavior to the handlers.
  */
 @Experimental
+@Since("3.3.1")
 class SparkConnectService(debug: Boolean)
     extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {
 

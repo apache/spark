@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, plans}
@@ -50,6 +50,7 @@ final case class InvalidPlanInput(
     extends Exception(message, cause)
 
 @Experimental
+@Since("3.3.1")
 class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   def transform(): LogicalPlan = {
