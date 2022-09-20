@@ -84,7 +84,7 @@ public class JavaJdbcRDDSuite implements Serializable {
 
   @Test
   public void testJavaJdbcRDD() throws Exception {
-    JavaRDD<Integer> rdd1 = JdbcRDD.create(
+    JavaRDD<Integer> rdd = JdbcRDD.create(
       sc,
       () -> DriverManager.getConnection("jdbc:derby:target/" + dbName),
       "SELECT DATA FROM FOO WHERE ? <= ID AND ID <= ?",
@@ -92,18 +92,7 @@ public class JavaJdbcRDDSuite implements Serializable {
       r -> r.getInt(1)
     ).cache();
 
-    Assert.assertEquals(100, rdd1.count());
-    Assert.assertEquals(Integer.valueOf(10100), rdd1.reduce((i1, i2) -> i1 + i2));
-
-    JavaRDD<Integer> rdd2 = sc.jdbcRDD(
-      "jdbc:derby:target/" + dbName,
-      "SELECT DATA FROM FOO WHERE ? <= ID AND ID <= ?",
-      1,
-      100,
-      1,
-      r -> r.getInt(1)).cache();
-
-    Assert.assertEquals(100, rdd2.count());
-    Assert.assertEquals(Integer.valueOf(10100), rdd2.reduce((i1, i2) -> i1 + i2));
+    Assert.assertEquals(100, rdd.count());
+    Assert.assertEquals(Integer.valueOf(10100), rdd.reduce((i1, i2) -> i1 + i2));
   }
 }

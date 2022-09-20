@@ -18,7 +18,6 @@
 package org.apache.spark.api.java
 
 import java.io.Closeable
-import java.sql.ResultSet
 import java.util
 import java.util.{Map => JMap}
 
@@ -33,7 +32,6 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD}
@@ -183,27 +181,6 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    */
   def textFile(path: String, minPartitions: Int): JavaRDD[String] =
     sc.textFile(path, minPartitions)
-
-  /**
-   * Read the results executes a SQL query on a JDBC connection, and return it as a RDD.
-   */
-  def jdbcRDD[T](
-      url: String,
-      sql: String,
-      lowerBound: Long,
-      upperBound: Long,
-      numPartitions: Int,
-      mapRow: JFunction[ResultSet, T]): JavaRDD[T] = {
-    val jdbcRDD = sc.jdbcRDD(
-      url,
-      sql,
-      lowerBound,
-      upperBound,
-      numPartitions,
-      (resultSet: ResultSet) => mapRow.call(resultSet))(fakeClassTag)
-
-    new JavaRDD[T](jdbcRDD)(fakeClassTag)
-  }
 
   /**
    * Read a directory of text files from HDFS, a local file system (available on all nodes), or any

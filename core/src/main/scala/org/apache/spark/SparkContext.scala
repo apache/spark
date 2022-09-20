@@ -19,7 +19,6 @@ package org.apache.spark
 
 import java.io._
 import java.net.URI
-import java.sql.{DriverManager, ResultSet}
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
@@ -933,35 +932,6 @@ class SparkContext(config: SparkConf) extends Logging {
     assertNotStopped()
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
       minPartitions).map(pair => pair._2.toString).setName(path)
-  }
-
-  /**
-   * Read the results executes a SQL query on a JDBC connection, and return it as a RDD.
-   *
-   * @param url JDBC url
-   * @param sql the text of the SQL query
-   * @param lowerBound the minimum value of the first placeholder, the lower bound is inclusive.
-   * @param upperBound the maximum value of the second placeholder, the upper bound is inclusive.
-   * @param numPartitions the number of partitions.
-   * @param mapRow a function from a ResultSet to a single row of the desired result type(s).
-   * @return RDD of results of the SQL query
-   */
-  def jdbcRDD[T: ClassTag](
-      url: String,
-      sql: String,
-      lowerBound: Long,
-      upperBound: Long,
-      numPartitions: Int,
-      mapRow: ResultSet => T): RDD[T] = withScope {
-    assertNotStopped()
-    new JdbcRDD[T](
-      this,
-      () => DriverManager.getConnection(url),
-      sql,
-      lowerBound,
-      upperBound,
-      numPartitions,
-      mapRow)
   }
 
   /**
