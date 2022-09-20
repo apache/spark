@@ -85,6 +85,20 @@ class JdbcRDDSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkCont
     assert(rdd.reduce(_ + _) === 10100)
   }
 
+  test("jdbc API of SparkContext") {
+    sc = new SparkContext("local", "test")
+    val rdd = sc.jdbcRDD(
+      "jdbc:derby:target/JdbcRDDSuiteDb",
+      "SELECT DATA FROM FOO WHERE ? <= ID AND ID <= ?",
+      1,
+      100,
+      3,
+      (r: ResultSet) => { r.getInt(1) })
+
+    assert(rdd.count === 100)
+    assert(rdd.reduce(_ + _) === 10100)
+  }
+
   test("large id overflow") {
     sc = new SparkContext("local", "test")
     val rdd = new JdbcRDD(
