@@ -27,6 +27,7 @@ class GroupStateTimeout:
     """
     Represents the type of timeouts possible for the Dataset operations applyInPandasWithState.
     """
+
     NoTimeout: str = "NoTimeout"
     ProcessingTimeTimeout: str = "ProcessingTimeTimeout"
     EventTimeTimeout: str = "EventTimeTimeout"
