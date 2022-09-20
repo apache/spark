@@ -179,6 +179,10 @@ class CSVOptions(
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
       Some(parameters.getOrElse("timestampFormat",
         s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"))
+    } else if (prefersDate) {
+      // If prefersDate, use Iso8601TimestampFormatter (with strict timestamp parsing) to
+      // avoid parsing dates in timestamp columns as timestamp type
+      Some(parameters.getOrElse("timestampFormat", TimestampFormatter.defaultPattern()))
     } else {
       parameters.get("timestampFormat")
     }
@@ -189,7 +193,13 @@ class CSVOptions(
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
     })
 
-  val timestampNTZFormatInRead: Option[String] = parameters.get("timestampNTZFormat")
+  val timestampNTZFormatInRead: Option[String] = if (prefersDate) {
+    // If prefersDate, use Iso8601TimestampFormatter (with strict timestamp parsing) to
+    // avoid parsing dates in timestamp columns as timestamp type
+    Some(parameters.getOrElse("timestampFormat", TimestampFormatter.defaultPattern()))
+  } else {
+    parameters.get("timestampNTZFormat")
+  }
   val timestampNTZFormatInWrite: String = parameters.getOrElse("timestampNTZFormat",
     s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 

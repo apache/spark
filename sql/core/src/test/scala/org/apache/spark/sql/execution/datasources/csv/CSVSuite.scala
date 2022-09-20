@@ -2829,7 +2829,6 @@ abstract class CSVSuite
     val options2 = Map(
       "header" -> "true",
       "inferSchema" -> "true",
-      "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
       "prefersDate" -> "true")
 
     // Error should be thrown when attempting to prefersDate with Legacy parser
