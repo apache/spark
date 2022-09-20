@@ -572,9 +572,9 @@ object StateStore extends Logging {
       maintenanceTask = null
     }
     loadedProviders.toSeq.foreach { case (id, provider) => {
-        provider.doMaintenance()
-        unload(id)
-      }
+      provider.doMaintenance()
+      unload(id)
+    }
     }
     loadedProviders.clear()
     _coordRef = null
