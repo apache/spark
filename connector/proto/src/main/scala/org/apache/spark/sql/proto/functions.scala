@@ -64,12 +64,23 @@ object functions {
    * Converts a column into binary of proto format.
    *
    * @param data        the data column.
+   * @since 3.4.0
+   */
+  @Experimental
+  def to_proto(data: Column): Column = {
+    new Column(CatalystDataToProto(data.expr, None, None))
+  }
+
+  /**
+   * Converts a column into binary of proto format.
+   *
+   * @param data         the data column.
    * @param descFilePath the proto schema in Message GeneratedMessageV3 format.
-   * @param messageName the proto MessageName to look for in descriptorFile.
+   * @param messageName  the proto MessageName to look for in descriptorFile.
    * @since 3.4.0
    */
   @Experimental
   def to_proto(data: Column, descFilePath: String, messageName: String): Column = {
-    new Column(CatalystDataToProto(data.expr, descFilePath, messageName))
+    new Column(CatalystDataToProto(data.expr, Some(descFilePath), Some(messageName)))
   }
 }

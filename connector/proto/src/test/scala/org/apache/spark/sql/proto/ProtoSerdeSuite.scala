@@ -19,11 +19,11 @@ package org.apache.spark.sql.proto
 
 import com.google.protobuf.Descriptors.Descriptor
 import com.google.protobuf.DynamicMessage
-
 import org.apache.spark.sql.catalyst.NoopFilters
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.CORRECTED
-import org.apache.spark.sql.proto.SchemaConverters.IncompatibleSchemaException
+import org.apache.spark.sql.proto.utils.SchemaConverters.IncompatibleSchemaException
+import org.apache.spark.sql.proto.utils.ProtoUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
@@ -67,8 +67,8 @@ class ProtoSerdeSuite extends SharedSparkSession {
     withFieldMatchType { fieldMatch =>
       assertFailedConversionMessage(protoFile, Deserializer, fieldMatch,
         "Cannot convert Proto field 'foo' to SQL field 'foo' because schema is incompatible " +
-          s"""(protoType = org.apache.spark.sql.proto.MissMatchTypeInRoot.foo
-             | LABEL_OPTIONAL LONG INT64, sqlType = ${CATALYST_STRUCT.head.dataType.sql})"""
+          s"(protoType = org.apache.spark.sql.proto.MissMatchTypeInRoot.foo " +
+          s"LABEL_OPTIONAL LONG INT64, sqlType = ${CATALYST_STRUCT.head.dataType.sql})"
             .stripMargin)
 
       assertFailedConversionMessage(protoFile, Serializer, fieldMatch,
@@ -112,9 +112,9 @@ class ProtoSerdeSuite extends SharedSparkSession {
 
     withFieldMatchType { fieldMatch =>
       assertFailedConversionMessage(protoFile, Deserializer, fieldMatch,
-        "Cannot convert Proto field 'top.foo.bar' to SQL field 'top.foo.bar' because schema " +
-          """is incompatible (protoType = org.apache.spark.sql.proto.TypeMiss.bar
-            | LABEL_OPTIONAL LONG INT64, sqlType = INT)""".stripMargin,
+        s"Cannot convert Proto field 'top.foo.bar' to SQL field 'top.foo.bar' because schema " +
+          s"is incompatible (protoType = org.apache.spark.sql.proto.TypeMiss.bar " +
+          s"LABEL_OPTIONAL LONG INT64, sqlType = INT)".stripMargin,
         catalyst)
 
       assertFailedConversionMessage(protoFile, Serializer, fieldMatch,

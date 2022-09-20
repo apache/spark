@@ -17,19 +17,23 @@
 package org.apache.spark.sql.proto
 
 import com.google.protobuf.DynamicMessage
-
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.proto.utils.{ProtoUtils, SchemaConverters}
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
 private[proto] case class CatalystDataToProto(
                                                child: Expression,
-                                               descFilePath: String,
-                                               messageName: String) extends UnaryExpression {
+                                               descFilePath: Option[String],
+                                               messageName: Option[String])
+  extends UnaryExpression {
 
   override def dataType: DataType = BinaryType
 
-  @transient private lazy val protoType = ProtoUtils.buildDescriptor(descFilePath, messageName)
+  @transient private lazy val protoType = (descFilePath, messageName) match {
+      case (Some(a), Some(b)) => ProtoUtils.buildDescriptor(a, b)
+      case _ => SchemaConverters.toProtoType(child.dataType, child.nullable)
+  }
 
   @transient private lazy val serializer = new ProtoSerializer(child.dataType, protoType,
     child.nullable)

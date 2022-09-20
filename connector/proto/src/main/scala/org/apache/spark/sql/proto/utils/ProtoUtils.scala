@@ -14,14 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.proto
+
+package org.apache.spark.sql.proto.utils
+
+import java.io.{BufferedInputStream, FileInputStream, FileNotFoundException, IOException}
+import java.util.Locale
+
+import scala.collection.JavaConverters._
 
 import com.google.protobuf.{DescriptorProtos, Descriptors, InvalidProtocolBufferException}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
-import java.io.{BufferedInputStream, FileInputStream, FileNotFoundException, IOException}
-import java.util.Locale
+
 import org.apache.hadoop.fs.FileStatus
-import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
@@ -29,9 +33,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.proto.ProtoOptions.ignoreExtensionKey
-import org.apache.spark.sql.proto.SchemaConverters.IncompatibleSchemaException
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, NullType, StructField, StructType, UserDefinedType}
+import org.apache.spark.sql.proto.utils.ProtoOptions.ignoreExtensionKey
+import org.apache.spark.sql.proto.utils.SchemaConverters.IncompatibleSchemaException
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 private[sql] object ProtoUtils extends Logging {

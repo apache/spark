@@ -18,14 +18,17 @@ package org.apache.spark.sql.proto
 
 import java.io.ByteArrayInputStream
 
-import com.google.protobuf.DynamicMessage
 import scala.util.control.NonFatal
+
+import com.google.protobuf.DynamicMessage
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, SpecificInternalRow, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression,
+  SpecificInternalRow, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.proto.utils.{ProtoOptions, ProtoUtils, SchemaConverters}
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, StructType}
 
 private[proto] case class ProtoDataToCatalyst(child: Expression, descFilePath: String,

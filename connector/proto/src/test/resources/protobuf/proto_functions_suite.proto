@@ -7,6 +7,17 @@ syntax = "proto3";
 package org.apache.spark.sql.proto;
 option java_outer_classname = "SimpleMessageProtos";
 
+message SimpleMessageJavaTypes {
+  int64 id = 1;
+  string string_value = 2;
+  int32 int32_value = 3;
+  int64 int64_value = 4;
+  double double_value = 5;
+  float float_value = 6;
+  bool bool_value = 7;
+  bytes bytes_value = 8;
+}
+
 message SimpleMessage {
   int64 id = 1;
   string string_value = 2;

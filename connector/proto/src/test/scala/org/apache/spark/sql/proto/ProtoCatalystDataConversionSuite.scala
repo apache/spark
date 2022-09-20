@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericI
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.proto.utils.{ProtoOptions, ProtoUtils, SchemaConverters}
 import org.apache.spark.sql.sources.{EqualTo, Not}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -39,15 +40,15 @@ class ProtoCatalystDataConversionSuite extends SparkFunSuite
                           messageName: String, expected: Any): Unit = {
 
     checkEvaluation(
-      ProtoDataToCatalyst(CatalystDataToProto(data, descFilePath,
-        messageName), descFilePath, messageName, Map.empty),
+      ProtoDataToCatalyst(CatalystDataToProto(data, Some(descFilePath),
+        Some(messageName)), descFilePath, messageName, Map.empty),
       prepareExpectedResult(expected))
   }
 
   protected def checkUnsupportedRead(data: Literal, descFilePath: String,
                                      actualSchema: String, badSchema: String): Unit = {
 
-    val binary = CatalystDataToProto(data, descFilePath, actualSchema)
+    val binary = CatalystDataToProto(data, Some(descFilePath), Some(actualSchema))
 
     intercept[Exception] {
       ProtoDataToCatalyst(binary, descFilePath, badSchema,
@@ -69,7 +70,7 @@ class ProtoCatalystDataConversionSuite extends SparkFunSuite
   }
 
   protected def prepareExpectedResult(expected: Any): Any = expected match {
-    // Spark byte and short both map to avro int
+    // Spark byte and short both map to proto int
     case b: Byte => b.toInt
     case s: Short => s.toInt
     case row: GenericInternalRow => InternalRow.fromSeq(row.values.map(prepareExpectedResult))
