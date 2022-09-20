@@ -2338,10 +2338,24 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       )
       assert(e4.message.contains("is not a valid timestamp expression for time travel"))
 
-      val e5 = intercept[AnalysisException](
+    checkError(
+      exception = intercept[AnalysisException] {
         sql("SELECT * FROM t TIMESTAMP AS OF abs(true)").collect()
-      )
-      assert(e5.message.contains("cannot resolve 'abs(true)' due to data type mismatch"))
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"abs(true)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"true\"",
+        "inputType" -> "\"BOOLEAN\"",
+        "requiredType" ->
+          "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")"),
+      context = ExpectedContext(
+        fragment = "abs(true)",
+        start = 32,
+        stop = 40))
 
       val e6 = intercept[AnalysisException](
         sql("SELECT * FROM parquet.`/the/path` VERSION AS OF 1")
