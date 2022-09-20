@@ -3673,6 +3673,22 @@ object SQLConf {
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
+  val PROTO_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.proto.datetimeRebaseModeInRead")
+      .internal()
+      .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
+        "Gregorian) calendar to Proleptic Gregorian calendar when reading Proto Events. " +
+        "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
+        "only effective if the writer info (like Spark, Hive) of the Proto events is unknown.")
+      .version("3.4.0")
+      .withAlternative("spark.sql.legacy.proto.datetimeRebaseModeInRead")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+
   val SCRIPT_TRANSFORMATION_EXIT_TIMEOUT =
     buildConf("spark.sql.scriptTransformation.exitTimeoutInSeconds")
       .internal()

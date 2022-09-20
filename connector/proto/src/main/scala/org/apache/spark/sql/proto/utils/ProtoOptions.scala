@@ -79,7 +79,7 @@ private[sql] class ProtoOptions(
    */
   val datetimeRebaseModeInRead: String = parameters
     .get(ProtoOptions.DATETIME_REBASE_MODE)
-    .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ))
+    .getOrElse(SQLConf.get.getConf(SQLConf.PROTO_REBASE_MODE_IN_READ))
 }
 
 private[sql] object ProtoOptions {
