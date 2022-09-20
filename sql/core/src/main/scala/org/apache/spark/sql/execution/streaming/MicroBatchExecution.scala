@@ -106,7 +106,8 @@ class MicroBatchExecution(
             StreamingDataSourceV2Relation(output, scan, stream, catalog, identifier)
           })
         } else if (v1.isEmpty) {
-          throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(srcName)
+          throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
+            srcName, sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders, table)
         } else {
           v2ToExecutionRelationMap.getOrElseUpdate(s, {
             // Materialize source to avoid creating it in every batch
