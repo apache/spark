@@ -517,12 +517,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         Pivot(Some(assignAliases(groupByOpt.get)), pivotColumn, pivotValues, aggregates, child)
 
       case up: Unpivot if up.child.resolved &&
-        (up.ids.exists(hasUnresolvedAlias) ||
-          up.values.exists(_.exists(v => hasUnresolvedAlias(v.exprs)))) =>
-        up.copy(
-          ids = up.ids.map(assignAliases),
-          values = up.values.map(_.map(v => v.copy(exprs = assignAliases(v.exprs))))
-        )
+        (up.ids.exists(hasUnresolvedAlias) || up.values.exists(_.exists(hasUnresolvedAlias))) =>
+        up.copy(ids = up.ids.map(assignAliases), values = up.values.map(_.map(assignAliases)))
 
       case Project(projectList, child) if child.resolved && hasUnresolvedAlias(projectList) =>
         Project(assignAliases(projectList), child)
@@ -877,39 +873,30 @@ class Analyzer(override val catalogManager: CatalogManager)
       // if only either is given
       case up: Unpivot if up.childrenResolved &&
         up.ids.exists(_.forall(_.resolved)) && up.values.isEmpty =>
-        up.copy(values =
-          Some(
-            up.child.output.diff(up.ids.get)
-              .map(v => UnpivotExpr(Seq(v), None))
-          )
-        )
+        up.copy(values = Some(up.child.output.diff(up.ids.get).map(Seq(_))))
       case up: Unpivot if up.childrenResolved &&
-        up.values.exists(_.forall(_.exprs.forall(_.resolved))) && up.ids.isEmpty =>
-        up.copy(ids =
-          Some(
-            up.child.output.diff(up.values.get.flatMap(_.exprs))
-          )
-        )
+        up.values.exists(_.forall(_.forall(_.resolved))) && up.ids.isEmpty =>
+        up.copy(ids = Some(up.child.output.diff(up.values.get)))
 
       case up: Unpivot if !up.childrenResolved || !up.ids.exists(_.forall(_.resolved)) ||
-        !up.values.exists(_.nonEmpty) || !up.values.exists(_.forall(_.exprs.forall(_.resolved))) ||
-        !up.values.get.forall(_.exprs.length == up.valueColumnNames.length) ||
+        !up.values.exists(_.nonEmpty) || !up.values.exists(_.forall(_.forall(_.resolved))) ||
+        !up.values.get.forall(_.length == up.valueColumnNames.length) ||
         !up.valuesTypeCoercioned => up
 
       // TypeCoercionBase.UnpivotCoercion determines valueType
       // and casts values once values are set and resolved
-      case Unpivot(Some(ids), Some(values), variableColumnName, valueColumnNames, child) =>
+      case Unpivot(Some(ids), Some(values), aliases, variableColumnName, valueColumnNames, child) =>
 
         def toString(values: Seq[NamedExpression]): String =
           "(" + values.map(v => quoteIdentifier(v.name)).mkString(",") + ")"
 
         // construct unpivot expressions for Expand
         val exprs: Seq[Seq[Expression]] =
-          values.map {
-            case UnpivotExpr(vals, Some(alias)) => (ids :+ Literal(alias)) ++ vals
-            case UnpivotExpr(Seq(value), None) => (ids :+ Literal(value.name)) :+ value
+          values.zip(aliases.getOrElse(values.map(_ => None))).map {
+            case (vals, Some(alias)) => (ids :+ Literal(alias)) ++ vals
+            case (Seq(value), None) => (ids :+ Literal(value.name)) :+ value
             // there are more than one value in vals
-            case UnpivotExpr(vals, None) => (ids :+ Literal(toString(vals))) ++ vals
+            case (vals, None) => (ids :+ Literal(toString(vals))) ++ vals
           }
 
         // construct output attributes
@@ -918,8 +905,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           case (valueColumnName, idx) =>
             AttributeReference(
               valueColumnName,
-              values.head.exprs(idx).dataType,
-              values.map(_.exprs(idx)).exists(_.nullable))()
+              values.head(idx).dataType,
+              values.map(_(idx)).exists(_.nullable))()
         }
         val output = (ids.map(_.toAttribute) :+ variableAttr) ++ valueAttrs
 
@@ -1431,20 +1418,13 @@ class Analyzer(override val catalogManager: CatalogManager)
       // If the Unpivot ids or values contain Stars, expand them.
       case up: Unpivot if up.ids.exists(containsStar) ||
         // Only expand Stars in one-dimensional values
-        // All up.values.get.exprs have the same length (see CheckAnalysis)
-        up.values.exists(values =>
-          values.exists(_.exprs.length == 1) && values.exists(v => containsStar(v.exprs))) =>
+        up.values.exists(values => values.exists(_.length == 1) && values.exists(containsStar)) =>
         up.copy(
           ids = up.ids.map(buildExpandedProjectList(_, up.child)),
-          // The inner exprs in Option[Seq[UnpivotExpr(exprs, alias]] is one-dimensional, e.g.
-          // Optional[[UnpivotExpr(["*"], alias)]].
+          // The inner exprs in Option[[exprs] is one-dimensional, e.g. Optional[[["*"]]].
           // The single NamedExpression turns into multiple, which we here have to turn into
-          // Optional[[UnpivotExpr(["col1"], alias), UnpivotExpr(["col2"], alias)]]
-          values = up.values.map(vs =>
-            vs.flatMap(v =>
-              buildExpandedProjectList(v.exprs, up.child).map(c => v.copy(exprs = Seq(c)))
-            )
-          )
+          // Optional[[["col1"], ["col2"]]]
+          values = up.values.map(_.flatMap(buildExpandedProjectList(_, up.child)).map(Seq(_)))
         )
 
       case u @ Union(children, _, _)
@@ -3943,14 +3923,13 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       val cleanedMetrics = metrics.map(trimNonTopLevelAliases)
       CollectMetrics(name, cleanedMetrics, child)
 
-    case Unpivot(Some(ids), Some(values), variableColumnName, valueColumnNames, child) =>
+    case Unpivot(Some(ids), Some(values), aliases, variableColumnName, valueColumnNames, child) =>
       val cleanedIds = ids.map(trimNonTopLevelAliases)
-      // val cleanedValues = values.map(v => v.copy(exprs = v.exprs.map(trimNonTopLevelAliases)))
-      val cleanedValues = values.map { case UnpivotExpr(v, a) =>
-        UnpivotExpr(v.map(trimNonTopLevelAliases), a) }
+      val cleanedValues = values.map(_.map(trimNonTopLevelAliases))
       Unpivot(
         Some(cleanedIds),
         Some(cleanedValues),
+        aliases,
         variableColumnName,
         valueColumnNames,
         child)

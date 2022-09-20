@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedAlias, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -1375,31 +1375,6 @@ case class Pivot(
   override protected def withNewChildInternal(newChild: LogicalPlan): Pivot = copy(child = newChild)
 }
 
-/**
- * Expression for [[Unpivot]] for one unpivot value column (one or more expressions)
- * and an optional alias. This node itself is not evaluable and resolvable.
- * Only its children are to be resolved.
- *
- * @param exprs expressions to unpivot
- * @param alias optional alias
- */
-case class UnpivotExpr(exprs: Seq[NamedExpression], alias: Option[String]) extends Unevaluable {
-  override val children: Seq[NamedExpression] = exprs
-  override def dataType: DataType = throw new UnresolvedException("dataType")
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
-
-  // this expression is never resolved, it gets replaced together with its parent Unpivot plan
-  override lazy val resolved = false
-
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): Expression = {
-    // turn expressions into named expressions
-    copy(exprs = newChildren.map {
-      case ne: NamedExpression => ne
-      case e: Expression => UnresolvedAlias(e)
-    })
-  }
-}
 
 /**
  * A constructor for creating an Unpivot, which will later be converted to an [[Expand]]
@@ -1423,9 +1398,10 @@ case class UnpivotExpr(exprs: Seq[NamedExpression], alias: Option[String]) exten
  *   Unpivot(
  *     Some(Seq("id")),
  *     Some(Seq(
- *       (Seq("val1"), None),
- *       (Seq("val2"), None)
+ *       Seq("val1"),
+ *       Seq("val2")
  *     )),
+ *     None,
  *     "var",
  *     Seq("val")
  *   )
@@ -1434,9 +1410,10 @@ case class UnpivotExpr(exprs: Seq[NamedExpression], alias: Option[String]) exten
  *   Unpivot(
  *     Some(Seq("id")),
  *     Some(Seq(
- *       (Seq("val1.1", "val1.2"), None),
- *       (Seq("val2.1", "val2.2"), None)
+ *       Seq("val1.1", "val1.2"),
+ *       Seq("val2.1", "val2.2")
  *     )),
+ *     None,
  *     "var",
  *     Seq("val1", "val2")
  *   )
@@ -1449,8 +1426,12 @@ case class UnpivotExpr(exprs: Seq[NamedExpression], alias: Option[String]) exten
  *   Unpivot(
  *     Some(Seq("id")),
  *     Some(Seq(
- *       (Seq("val1.1", "val1.2"), Some("val1")),
- *       (Seq("val2.1", "val2.2"), Some("val2"))
+ *       Seq("val1.1", "val1.2"),
+ *       Seq("val2.1", "val2.2")
+ *     )),
+ *     Some(Seq(
+ *       Some("val1"),
+ *       Some("val2")
  *     )),
  *     "var",
  *     Seq("val1", "val2")
@@ -1465,14 +1446,16 @@ case class UnpivotExpr(exprs: Seq[NamedExpression], alias: Option[String]) exten
  * @see `org.apache.spark.sql.catalyst.analysis.TypeCoercionBase.UnpivotCoercion`
  *
  * @param ids                Id columns
- * @param values             Value column sets to unpivot with optional aliases
+ * @param values             Value columns to unpivot
+ * @param aliases            Optional aliases for values
  * @param variableColumnName Name of the variable column
  * @param valueColumnNames   Names of the value columns
  * @param child              Child operator
  */
 case class Unpivot(
     ids: Option[Seq[NamedExpression]],
-    values: Option[Seq[UnpivotExpr]],
+    values: Option[Seq[Seq[NamedExpression]]],
+    aliases: Option[Seq[Option[String]]],
     variableColumnName: String,
     valueColumnNames: Seq[String],
     child: LogicalPlan) extends UnaryNode {
@@ -1488,12 +1471,12 @@ case class Unpivot(
     copy(child = newChild)
 
   def canBeCoercioned: Boolean = values.exists(_.nonEmpty) &&
-    values.exists(_.forall(_.exprs.forall(_.resolved)))
+    values.exists(_.forall(_.forall(_.resolved)))
 
   def valuesTypeCoercioned: Boolean = canBeCoercioned &&
     // all inner values at position idx must have the same data type
-    values.get.head.exprs.zipWithIndex.forall { case (expr, idx) =>
-      values.get.tail.forall(vals => vals.exprs(idx).dataType.sameType(expr.dataType))
+    values.get.head.zipWithIndex.forall { case (v, idx) =>
+      values.get.tail.forall(vals => vals(idx).dataType.sameType(v.dataType))
     }
 
 }
