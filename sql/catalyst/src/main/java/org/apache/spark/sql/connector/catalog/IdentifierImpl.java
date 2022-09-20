@@ -64,20 +64,16 @@ class IdentifierImpl implements Identifier {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) {
-      return true;
-    }
-
-    if (o == null || getClass() != o.getClass()) {
-      return false;
-    }
-
+    if (this == o) return true;
+    if (!(o instanceof IdentifierImpl)) return false;
     IdentifierImpl that = (IdentifierImpl) o;
     return Arrays.equals(namespace, that.namespace) && name.equals(that.name);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(Arrays.hashCode(namespace), name);
+    int result = Objects.hash(name);
+    result = 31 * result + Arrays.hashCode(namespace);
+    return result;
   }
 }
