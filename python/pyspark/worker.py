@@ -211,11 +211,29 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec):
 
 def wrap_grouped_map_pandas_udf_with_state(f, return_type):
     """
-    # FIXME: document
+    Provides a new lambda instance wrapping user function of applyInPandasWithState.
+
+    The lambda instance receives (key series, iterator of value series, state) and performs
+    some conversion to be adapted with the signature of user function.
+
+    See the function doc of inner function `wrapped` for more details on what adapter does.
+    See the function doc of `mapper` function for
+    `eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE` for more details on
+    the input parameters of lambda function.
+
+    Along with the returned iterator, the lambda instance will also produce the return_type as
+    converted to the arrow schema.
     """
+
     def wrapped(key_series, value_series_gen, state):
         """
-        # FIXME: document
+        Provide an adapter of the user function performing below:
+
+        - Extract the first value of all columns in key series and produce as a tuple.
+        - If the state has timed out, call the user function with empty pandas DataFrame.
+        - If not, construct a new generator which converts each element of value series to
+          pandas DataFrame (lazy evaluation), and call the user function with the generator
+        - Verify each element of returned iterator to check the schema of pandas DataFrame.
         """
         import pandas as pd
 
@@ -586,7 +604,12 @@ def read_udfs(pickleSer, infile, eval_type):
 
         def mapper(a):
             """
-            # FIXME: document
+            The function receives (iterator of data, state) and performs extraction of key and
+            value from the data, with retaining lazy evaluation.
+
+            See `load_stream` in `ApplyInPandasWithStateSerializer` for more details on the input
+            and see `wrap_grouped_map_pandas_udf_with_state` for more details on how output will
+            be used.
             """
             from itertools import tee
 
