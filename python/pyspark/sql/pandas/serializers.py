@@ -438,6 +438,28 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         from itertools import groupby
         from pyspark.sql.streaming.state import GroupState
 
+        def construct_state(state_info_col):
+            """
+            Construct state instance from the value of state information column.
+            """
+
+            state_info_col_properties = state_info_col["properties"]
+            state_info_col_key_row = state_info_col["keyRowAsUnsafe"]
+            state_info_col_object = state_info_col["object"]
+
+            state_properties = json.loads(state_info_col_properties)
+            if state_info_col_object:
+                state_object = self.pickleSer.loads(state_info_col_object)
+            else:
+                state_object = None
+            state_properties["optionalValue"] = state_object
+
+            return GroupState(
+                keyAsUnsafe=state_info_col_key_row,
+                valueSchema=self.state_object_schema,
+                **state_properties,
+            )
+
         def gen_data_and_state(batches):
             """
             Deserialize ArrowRecordBatches and return a generator of
@@ -498,20 +520,9 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                         # no more data with grouping key + state
                         break
 
-                    state_info_col_properties = state_info_col["properties"]
-                    state_info_col_key_row = state_info_col["keyRowAsUnsafe"]
-                    state_info_col_object = state_info_col["object"]
-
                     data_start_offset = state_info_col["startOffset"]
                     num_data_rows = state_info_col["numRows"]
                     is_last_chunk = state_info_col["isLastChunk"]
-
-                    state_properties = json.loads(state_info_col_properties)
-                    if state_info_col_object:
-                        state_object = self.pickleSer.loads(state_info_col_object)
-                    else:
-                        state_object = None
-                    state_properties["optionalValue"] = state_object
 
                     if state_for_current_group:
                         # use the state, we already have state for same group and there should be
@@ -519,11 +530,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                         state = state_for_current_group
                     else:
                         # there is no state being stored for same group, construct one
-                        state = GroupState(
-                            keyAsUnsafe=state_info_col_key_row,
-                            valueSchema=self.state_object_schema,
-                            **state_properties,
-                        )
+                        state = construct_state(state_info_col)
 
                     if is_last_chunk:
                         # discard the state being cached for same group
@@ -544,15 +551,15 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                         state,
                     )
 
-        batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
+        _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
 
-        data_state_generator = gen_data_and_state(batches)
+        data_state_generator = gen_data_and_state(_batches)
 
         # state will be same object for same grouping key
-        for state, data in groupby(data_state_generator, key=lambda x: x[1]):
+        for _state, _data in groupby(data_state_generator, key=lambda x: x[1]):
             yield (
-                data,
-                state,
+                _data,
+                _state,
             )
 
     def dump_stream(self, iterator, stream):
