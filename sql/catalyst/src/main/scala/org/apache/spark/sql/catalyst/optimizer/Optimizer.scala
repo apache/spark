@@ -81,6 +81,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       Seq(
         // Operator push down
         PushProjectionThroughUnion,
+        PushProjectionThroughLimit,
         ReorderJoin,
         EliminateOuterJoin,
         PushDownPredicates,
@@ -827,6 +828,21 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
     case Project(projectList, u: Union)
         if projectList.forall(_.deterministic) && u.children.nonEmpty =>
       u.copy(children = pushProjectionThroughUnion(projectList, u))
+  }
+}
+
+/**
+ * Pushes Project operator to Limit operator.
+ */
+object PushProjectionThroughLimit extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAllPatterns(PROJECT, LIMIT)) {
+
+    // Push down deterministic projection through Limit
+    case Project(projectList, limit @ Limit(l, child))
+        if projectList.forall(_.deterministic) =>
+      val newChild = Project(projectList, child)
+      limit.copy(child = LocalLimit(l, newChild))
   }
 }
 
