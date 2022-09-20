@@ -2178,7 +2178,7 @@ private[spark] class DAGScheduler(
 
   /**
    * Whether executor is decommissioned. Return true when executors are in below cases:
-   *  1. Waiting fro decommission start
+   *  1. Waiting for decommission start
    *  2. Under decommission process
    *  3. Stopped or terminated after finishing decommission
    *  4. Under decommission process, then removed by driver with other reasons
