@@ -78,24 +78,6 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
 
     // Send all the data
     responseObserver.onNext(response)
-
-    //    val batches = rows.collectToArrowBatches()
-    //    batches.iterator.asScala.foreach(x => {
-    //      responseObserver.onNext(
-    //        Response(
-    //          clientId = clientId,
-    //          batch = Some(
-    //            Response.ArrowBatch(
-    //              x.rowCount,
-    //              x.uncompressedBytes,
-    //              x.compressedBytes,
-    //              ByteString.copyFrom(x.batch),
-    //              schema
-    //            )
-    //          )
-    //        )
-    //      )
-    //    })
     responseObserver.onNext(sendMetricsToResponse(clientId, rows))
     responseObserver.onCompleted()
   }
