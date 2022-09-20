@@ -25,7 +25,7 @@ import org.apache.logging.log4j.core.appender.ConsoleAppender
 import org.apache.logging.log4j.core.config.DefaultConfiguration
 import org.apache.logging.log4j.core.filter.AbstractFilter
 import org.slf4j.{Logger, LoggerFactory}
-import org.slf4j.impl.StaticLoggerBinder
+import org.slf4j.spi.SLF4JServiceProvider
 
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
 import org.apache.spark.util.Utils
@@ -226,11 +226,18 @@ private[spark] object Logging {
   }
 
   private def isLog4j2(): Boolean = {
+    import java.util.ServiceLoader
     // This distinguishes the log4j 1.2 binding, currently
     // org.slf4j.impl.Log4jLoggerFactory, from the log4j 2.0 binding, currently
     // org.apache.logging.slf4j.Log4jLoggerFactory
-    val binderClass = StaticLoggerBinder.getSingleton.getLoggerFactoryClassStr
-    "org.apache.logging.slf4j.Log4jLoggerFactory".equals(binderClass)
+    val loader = Utils.getContextOrSparkClassLoader
+    val serviceLoader = ServiceLoader.load(classOf[SLF4JServiceProvider], loader)
+      .asScala.filter(_.getLoggerFactory != null)
+    if (serviceLoader.size == 1) {
+      "org.apache.logging.slf4j.SLF4JServiceProvider".equals(serviceLoader.getClass.getName)
+    } else {
+      false
+    }
   }
 
   // Return true if the logger has custom configuration. It depends on:
