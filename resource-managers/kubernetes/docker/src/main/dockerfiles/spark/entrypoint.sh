@@ -86,7 +86,6 @@ case "$1" in
     CMD=(
       ${JAVA_HOME}/bin/java
       "${SPARK_EXECUTOR_JAVA_OPTS[@]}"
-      -Xms$SPARK_EXECUTOR_MEMORY
       -Xmx$SPARK_EXECUTOR_MEMORY
       -cp "$SPARK_CLASSPATH:$SPARK_DIST_CLASSPATH"
       org.apache.spark.scheduler.cluster.k8s.KubernetesExecutorBackend
