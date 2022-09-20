@@ -367,8 +367,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val sqlConf = getDefaultSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get)
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
-    // Make maintenance thread do snapshots and cleanups very fast
-    sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 10000L)
     val storeConf = StateStoreConf(sqlConf)
     val hadoopConf = new Configuration()
 
@@ -407,18 +405,17 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
               assert(snapshotVersions.nonEmpty, "no snapshot file found")
             }
           }
-          // Generate more versions such that there is another snapshot and
-          // the earliest delta file will be cleaned up
+          // Generate more versions such that there is another snapshot.
           generateStoreVersions()
 
           // If driver decides to deactivate all stores related to a query run,
-          // then this instance should be unloaded
+          // then this instance should be unloaded.
           coordinatorRef.deactivateInstances(storeProviderId1.queryRunId)
           eventually(timeout(timeoutDuration)) {
             assert(!StateStore.isLoaded(storeProviderId1))
           }
 
-          // Earliest delta file should ne scheduled a cleanup during unload
+          // Earliest delta file should be scheduled a cleanup during unload.
           tryWithProviderResource(newStoreProvider(storeProviderId1.storeId)) { provider =>
             eventually(timeout(timeoutDuration)) {
               assert(!fileExists(provider, 1, isSnapshot = false), "earliest file not deleted")
