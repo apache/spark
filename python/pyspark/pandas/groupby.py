@@ -43,7 +43,6 @@ from typing import (
 )
 import warnings
 
-import numpy as np
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like  # type: ignore[attr-defined]
 
@@ -994,7 +993,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         return self._prepare_return(DataFrame(internal))
 
-    def prod(self, numeric_only: Optional[bool] = True, min_count: int = 0):
+    def prod(self, numeric_only: Optional[bool] = True, min_count: int = 0) -> FrameLike:
         """
         Compute prod of groups.
 
@@ -1012,7 +1011,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         Returns
         -------
-        pyspark.pandas.Series or pyspark.pandas.DataFrame
+        Series or DataFrame
 
         See Also
         --------
@@ -1053,7 +1052,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         psdf: DataFrame = DataFrame(internal)
         if len(psdf._internal.column_labels) > 0:
-            tmp_count_column = "__tmp_%s_count_col__"
+            tmp_count_column = verify_temp_column_name(psdf, "__tmp_%s_count_col__")
 
             stat_exprs = []
             for label in psdf._internal.column_labels:
@@ -1073,9 +1072,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
             if min_count > 0:
                 for label in psdf._internal.column_labels:
-                    sdf = sdf.withColumn(label[0], F.when(F.col(tmp_count_column % label[0]).__ge__(min_count),
-                                                          F.col(label[0])).otherwise(None)) \
-                        .drop(tmp_count_column % label[0])
+                    sdf = sdf.withColumn(
+                        label[0],
+                        F.when(
+                            F.col(tmp_count_column % label[0]).__ge__(min_count), F.col(label[0])
+                        ).otherwise(None),
+                    ).drop(tmp_count_column % label[0])
 
         else:
             sdf = sdf.select(*groupkey_names).distinct()
