@@ -2848,7 +2848,7 @@ abstract class CSVSuite
           .load(testFile(dateInferSchemaFile))
 
         val expectedSchema = StructType(List(StructField("date", DateType),
-          StructField("timestamp-date", StringType),
+          StructField("timestamp-date", TimestampType),
           StructField("date-timestamp", StringType)))
         assert(results.schema == expectedSchema)
 
