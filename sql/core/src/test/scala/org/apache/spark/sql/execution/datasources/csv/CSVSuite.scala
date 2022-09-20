@@ -3010,6 +3010,8 @@ abstract class CSVSuite
   }
 
   test("SPARK-40496: disable parsing fallback when the date/timestamp format is provided") {
+    // The test verifies that the fallback can be disabled by providing dateFormat or
+    // timestampFormat without any additional configuration.
     withTempPath { path =>
       Seq("2020-01-01").toDF()
         .repartition(1)
