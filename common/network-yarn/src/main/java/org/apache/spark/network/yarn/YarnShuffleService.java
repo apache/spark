@@ -132,7 +132,8 @@ public class YarnShuffleService extends AuxiliaryService {
   static final String STOP_ON_FAILURE_KEY = "spark.yarn.shuffle.stopOnFailure";
 
   @VisibleForTesting
-  static final String INTEGRATION_TESTING = "spark.yarn.shuffle.integrationTesting";
+  static final String INTEGRATION_TESTING = "spark.yarn.shuffle.testing";
+
   private static final boolean DEFAULT_STOP_ON_FAILURE = false;
 
   // just for testing when you want to find an open port
