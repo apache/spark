@@ -227,11 +227,6 @@ class ParquetFileFormat
       SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key,
       sparkSession.sessionState.conf.parquetTimestampNTZEnabled)
 
-    // See PARQUET-2170.
-    // Disable column index optimisation when required schema does not have columns that appear in
-    // pushed filters to avoid getting incorrect results.
-    hadoopConf.setBooleanIfUnset(ParquetInputFormat.COLUMN_INDEX_FILTERING_ENABLED, false)
-
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 

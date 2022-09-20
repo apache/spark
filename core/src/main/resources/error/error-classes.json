@@ -555,6 +555,11 @@
           "AES-<mode> with the padding <padding> by the <functionName> function."
         ]
       },
+      "CATALOG_OPERATION" : {
+        "message" : [
+          "Catalog <catalogName> does not support <operation>."
+        ]
+      },
       "DESC_TABLE_COLUMN_PARTITION" : {
         "message" : [
           "DESC TABLE COLUMN for a specific partition."

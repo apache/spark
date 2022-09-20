@@ -7071,7 +7071,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise ValueError("No available aggregation columns!")
 
         return SeriesResampler(
-            psdf=self._psdf,
+            psser=self,
             resamplekey=on,
             rule=rule,
             closed=closed,
