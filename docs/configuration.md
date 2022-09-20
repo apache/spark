@@ -2606,7 +2606,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.2.0</td>
 </tr>
 <tr>
-  <td><code>spark.stage.ignoreOnDecommissionFetchFailure</code></td>
+  <td><code>spark.stage.ignoreDecommissionFetchFailure</code></td>
   <td>false</td>
   <td>
     Whether ignore stage fetch failure caused by executor decommission when

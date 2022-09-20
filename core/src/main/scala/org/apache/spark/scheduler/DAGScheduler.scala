@@ -2176,7 +2176,15 @@ private[spark] class DAGScheduler(
     }
   }
 
-  private def isExecutorDecommissioned(taskScheduler: TaskScheduler, bmAddress: BlockManagerId) = {
+  /**
+   * Whether executor is decommissioned. Return true when executors are in below cases:
+   *  1. Waiting fro decommission start
+   *  2. Under decommission process
+   *  3. Stopped or terminated after finishing decommission
+   *  4. Under decommission process, then removed by driver with other reasons
+   */
+  private[scheduler] def isExecutorDecommissioned(
+      taskScheduler: TaskScheduler, bmAddress: BlockManagerId): Boolean = {
     if (bmAddress != null) {
       taskScheduler
         .getExecutorDecommissionState(bmAddress.executorId)

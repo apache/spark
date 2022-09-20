@@ -2222,7 +2222,7 @@ package object config {
       .createWithDefault(5)
 
   private[spark] val STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE =
-    ConfigBuilder("spark.stage.ignoreOnDecommissionFetchFailure")
+    ConfigBuilder("spark.stage.ignoreDecommissionFetchFailure")
       .doc("Whether ignore stage fetch failure caused by executor decommission when " +
         "count spark.stage.maxConsecutiveAttempts")
       .version("3.4.0")
