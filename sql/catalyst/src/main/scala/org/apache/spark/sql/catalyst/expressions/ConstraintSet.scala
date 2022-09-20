@@ -286,25 +286,25 @@ class ConstraintSet private(
    *                                     is used. Used in ExpressionSet
    * @return The new valid ConstraintSet
    */
-  override def updateConstraints(outputAttribs: Seq[Attribute],
-                                 inputAttribs: Seq[Attribute], projectList: Seq[NamedExpression],
-                                 oldAliasedConstraintsCreator: Option[Seq[NamedExpression] =>
-                                   ExpressionSet]):
-  ConstraintSet = {
+  override def updateConstraints(
+      outputAttribs: Seq[Attribute],
+      inputAttribs: Seq[Attribute],
+      projectList: Seq[NamedExpression],
+      oldAliasedConstraintsCreator: Option[Seq[NamedExpression] => ExpressionSet]):
+    ConstraintSet = {
     val (aliasBasedTemp, _) = projectList.partition {
       case _: Alias => true
       case _ => false
     }
+
     val groupHeadToGroupMap: ExpressionMap[mutable.Buffer[Expression]] =
       new ExpressionMap[mutable.Buffer[Expression]]()
 
-    this.attribRefBasedEquivalenceList.foreach(x =>
-                                                 groupHeadToGroupMap += (x.head -> x.map(_.asInstanceOf[Expression]).
-                                                   toMutableBuffer(mutable.Buffer))
+    this.attribRefBasedEquivalenceList.foreach(
+      x => groupHeadToGroupMap += (x.head -> x.map(_.asInstanceOf[Expression]).toMutableBuffer(
+        mutable.Buffer))
                                                )
-    this.expressionBasedEquivalenceList.foreach(x =>
-                                                  groupHeadToGroupMap += (x.head -> x.clone())
-                                                )
+    this.expressionBasedEquivalenceList.foreach(x => groupHeadToGroupMap += (x.head -> x.clone()))
 
     // the aliases containing expressions might have been written in terms
     // of existing aliases. so we need to normalize them
@@ -317,13 +317,10 @@ class ConstraintSet private(
 
     val aliasBased = aliasBasedTemp.map {
       case al: Alias => val refs = al.child.references
-        val replacementMap = AttributeMap(refs.flatMap(attrib =>
-                                                         this.expressionBasedEquivalenceList.find
-                                                         (buff =>
-                                                                                                    buff.exists(_.canonicalized == attrib.canonicalized)).
-                                                           map(buff => Seq(attrib -> buff.head))
-                                                           .getOrElse(Seq.empty)
-                                                       ).toSeq)
+        val replacementMap = AttributeMap(refs.flatMap(
+          attrib => this.expressionBasedEquivalenceList.find(
+            buff => buff.exists(_.canonicalized == attrib.canonicalized)).map(
+            buff => Seq(attrib -> buff.head)).getOrElse(Seq.empty)).toSeq)
         if (replacementMap.nonEmpty) {
           al.copy(child = al.child transformUp {
             case attr: Attribute if replacementMap.contains(attr) => replacementMap(attr)
@@ -332,7 +329,6 @@ class ConstraintSet private(
           al
         }
     }
-
 
     // clone the keys so that the set obtained is static & detached from
     // the groupHeadToGroupMap
@@ -344,13 +340,10 @@ class ConstraintSet private(
         // find the group to which this alias's child belongs to
         // if the child is an attribute
         val alChild = al.child
-        val key = this.attribRefBasedEquivalenceList
-          .find(_.exists(_.canonicalized fastEquals alChild.canonicalized)).map(_.head)
-          .getOrElse(this.expressionBasedEquivalenceList.find(buff =>
-                                                                buff.exists(_.canonicalized
-                                                                              fastEquals alChild
-                                                                  .canonicalized)).
-            map(_.head).getOrElse(alChild))
+        val key = this.attribRefBasedEquivalenceList.find(_.exists(
+          _.canonicalized fastEquals alChild.canonicalized)).map(_.head).getOrElse(
+          this.expressionBasedEquivalenceList.find(buff => buff.exists(
+            _.canonicalized fastEquals alChild.canonicalized)).map(_.head).getOrElse(alChild))
 
         groupHeadToGroupMap.get(key) match {
           case Some(seq) => seq += al.toAttribute
@@ -364,9 +357,8 @@ class ConstraintSet private(
             // in attribute reference list. So before creating a new entry in the map
             // check if the exprId of the alias is present in the attribute equivalence list.
             // If it is present already, skip its entry
-            if (!this.attribRefBasedEquivalenceList.exists(buff => buff.exists(_.canonicalized ==
-                                                                                 al.toAttribute
-                                                                                   .canonicalized))) {
+            if (!this.attribRefBasedEquivalenceList.exists(
+              buff => buff.exists(_.canonicalized == al.toAttribute.canonicalized))) {
               val temp: mutable.Buffer[Expression] = mutable.ArrayBuffer(al.child, al.toAttribute)
               groupHeadToGroupMap += al.child -> temp
             }
@@ -374,36 +366,33 @@ class ConstraintSet private(
       case _ => // not expected
     })
 
-
     // Find those incoming attributes which are not projecting out
-    val attribsRemoved = AttributeSet(inputAttribs.filterNot(attr =>
-                                                               outputAttribs.exists(_.canonicalized == attr.canonicalized)))
+    val attribsRemoved = AttributeSet(inputAttribs.filterNot(
+      attr => outputAttribs.exists(_.canonicalized == attr.canonicalized)))
     // for each of the attribute getting removed , find replacement if any
     val replaceableAttributeMap: ExpressionMap[Attribute] = new ExpressionMap[Attribute]()
-    fillReplacementOrClearGroupHeadForRemovedAttributes(attribsRemoved, replaceableAttributeMap,
-                                                        groupHeadToGroupMap)
+    fillReplacementOrClearGroupHeadForRemovedAttributes(
+      attribsRemoved, replaceableAttributeMap, groupHeadToGroupMap)
     val (attribBasedEquivalenceList, initialExprBasedEquivalenceList) = {
-      val (attribBased, expressionBased) = groupHeadToGroupMap.values.partition(buff =>
-                                                                                  buff.head match {
-                                                                                    case
-                                                                                      _: Attribute => true
-                                                                                    case _ => false
-                                                                                  }
-                                                                                )
+      val (attribBased, expressionBased) = groupHeadToGroupMap.values.partition(
+        buff => buff.head match {
+          case _: Attribute => true
+          case _ => false
+        })
       (attribBased.map(buff => buff.map(_.asInstanceOf[Attribute])).toMutableBuffer(mutable.Buffer),
         expressionBased.toMutableBuffer(mutable.Buffer))
     }
 
     // now work on expression (other than attribute based)
     val replaceableExpressionMap: ExpressionMap[Attribute] = new ExpressionMap[Attribute]()
-    val exprBasedEquivalenceList = getUpdatedExpressionEquivalenceListWithSideEffects(
-      attribsRemoved, replaceableAttributeMap, replaceableExpressionMap,
-      attribBasedEquivalenceList, initialExprBasedEquivalenceList)
+    val exprBasedEquivalenceList =
+      getUpdatedExpressionEquivalenceListWithSideEffects(attribsRemoved, replaceableAttributeMap,
+        replaceableExpressionMap, attribBasedEquivalenceList, initialExprBasedEquivalenceList)
 
     // Now update or remove the filters depending upon which
     // can survive based on replacement available
-    val updatedFilterExprs = getUpdatedConstraints(attribsRemoved, replaceableAttributeMap,
-                                                   replaceableExpressionMap)
+    val updatedFilterExprs = getUpdatedConstraints(
+      attribsRemoved, replaceableAttributeMap, replaceableExpressionMap)
 
     exprBasedEquivalenceList.foreach(buffer => {
       val expr = buffer.head
@@ -430,12 +419,12 @@ class ConstraintSet private(
     // so that we transfer them to attribute ref list.Even if we do not transfer
     // it would be fine. but better transfer so that bug  can be
     // bug tested easily
-    val (attribsOnly, newExprBasedEquivalenceList) = exprBasedEquivalenceList.filter(buff =>
-                                                                                       buff.head
-                                                                                         .references.nonEmpty && buff.size > 1).partition(_.head match {
-                                                                                                                                                   case _: Attribute => true
-                                                                                                                                                   case _ => false
-                                                                                                                                                 })
+    val (attribsOnly, newExprBasedEquivalenceList) = exprBasedEquivalenceList.filter(
+      buff => buff.head.references.nonEmpty && buff.size > 1).
+      partition(_.head match {
+                  case _: Attribute => true
+                  case _ => false
+                })
 
     // Now filter the attribBasedEquivalenceList which only has 1 element
     // This is because if there is only 1 element in the buffer, it cannot
@@ -477,13 +466,12 @@ class ConstraintSet private(
   }
 
   private def getUpdatedExpressionEquivalenceListWithSideEffects(
-                                                                    attribsRemoved: AttributeSet,
-                                                                    replaceableAttributeMap: ExpressionMap[Attribute],
-                                                                    replaceableExpressionMap: ExpressionMap[Attribute],
-                                                                    attribBasedEquivalenceList: mutable.Buffer[mutable.Buffer[Attribute]],
-                                                                    initialExprBasedEquivalenceList: mutable.Buffer[mutable.Buffer[Expression]]
-                                                                ): mutable.Buffer[mutable
-  .Buffer[Expression]] = {
+      attribsRemoved: AttributeSet,
+      replaceableAttributeMap: ExpressionMap[Attribute],
+      replaceableExpressionMap: ExpressionMap[Attribute],
+      attribBasedEquivalenceList: mutable.Buffer[mutable.Buffer[Attribute]],
+      initialExprBasedEquivalenceList: mutable.Buffer[mutable.Buffer[Expression]]):
+    mutable.Buffer[mutable.Buffer[Expression]] = {
     initialExprBasedEquivalenceList.map(buff => {
       val zerothElem = buff.head
       val refs = zerothElem.references
@@ -567,10 +555,9 @@ class ConstraintSet private(
   }
 
   private def getUpdatedConstraints(
-                                       attribsRemoved: AttributeSet,
-                                       replaceableAttributeMap: ExpressionMap[Attribute],
-                                       replaceableExpressionMap: ExpressionMap[Attribute])
-  : mutable.Buffer[Expression] = {
+      attribsRemoved: AttributeSet,
+      replaceableAttributeMap: ExpressionMap[Attribute],
+      replaceableExpressionMap: ExpressionMap[Attribute]): mutable.Buffer[Expression] = {
     this.originals.flatMap(filterExpr => {
       val attribRefs = filterExpr.references
       if (attribRefs.isEmpty) {
@@ -588,9 +575,8 @@ class ConstraintSet private(
                 replaceableAttributeMap.get(attr).get
             }
             if (numReplacementExists == attribsToHandle.size) {
-              Set(newConstraintExpr).filterNot(x =>
-                                                 this.originals.exists(_.canonicalized == x
-                                                   .canonicalized))
+              Set(newConstraintExpr).filterNot(
+                x => this.originals.exists(_.canonicalized == x.canonicalized))
             } else {
               // if filter still contains attribs which will be removed,
               // below code checks if filter can survive by replacement with a complex expression
@@ -607,9 +593,8 @@ class ConstraintSet private(
               if (attribsRemoved.intersect(AttributeSet(attributesSeen)).nonEmpty) {
                 Set.empty[Expression]
               } else {
-                Set(newerConstraintExpr).filterNot(x =>
-                                                     this.originals.exists(_.canonicalized == x
-                                                       .canonicalized))
+                Set(newerConstraintExpr).filterNot(
+                  x => this.originals.exists(_.canonicalized == x.canonicalized))
               }
             }
           } else {
@@ -632,9 +617,8 @@ class ConstraintSet private(
               if (attribsRemoved.intersect(AttributeSet(attributesSeen)).nonEmpty) {
                 Set.empty[Expression]
               } else {
-                Set(newConstraintExpr).filterNot(x =>
-                                                   this.originals.exists(_.canonicalized == x
-                                                     .canonicalized))
+                Set(newConstraintExpr).filterNot(
+                  x => this.originals.exists(_.canonicalized == x.canonicalized))
               }
             }
           }
@@ -646,9 +630,9 @@ class ConstraintSet private(
   }
 
   private def fillReplacementOrClearGroupHeadForRemovedAttributes(
-                                                                     attribsRemoved: AttributeSet,
-                                                                     replaceableAttributeMap: ExpressionMap[Attribute],
-                                                                     groupHeadToGroupMap: ExpressionMap[mutable.Buffer[Expression]]): Unit = {
+      attribsRemoved: AttributeSet,
+      replaceableAttributeMap: ExpressionMap[Attribute],
+      groupHeadToGroupMap: ExpressionMap[mutable.Buffer[Expression]]): Unit = {
     attribsRemoved.foreach(attrib => {
       groupHeadToGroupMap.get(attrib) match {
         case Some(buff) =>
@@ -662,9 +646,8 @@ class ConstraintSet private(
           }
 
           // remove any attributes which may be in non zero position in buffer
-          attribsRemoved.foreach(x =>
-                                   ConstraintSetHelper.removeCanonicalizedExpressionFromBuffer
-                                   (buff, x))
+          attribsRemoved.foreach(
+            x => ConstraintSetHelper.removeCanonicalizedExpressionFromBuffer(buff, x))
           // if there is no replacement and the attribute being removed
           // was the only one present, then the buffer is purged
           // else replaced by updated key
@@ -690,11 +673,11 @@ class ConstraintSet private(
               // The code below is just to handle unanticipated situation
               if (buffer.isEmpty || initialHead != buffer.head) {
                 errorKeys += key
-                this.logWarning(s"for non GroupHead key attribute" +
-                                  s" ${attrib.toString}, It still modified the 0th position of " +
-                                  s"buffer" +
-                                  s" with group head key $key. The initial head of buffer was" +
-                                  s" ${initialHead.toString}")
+                this.logWarning(
+                  s"for non GroupHead key attribute" +
+                    s" ${attrib.toString}, It still modified the 0th position of " +
+                    s"buffer with group head key $key. The initial head of buffer was" +
+                    s" ${initialHead.toString}")
               }
           }
           if (errorKeys.nonEmpty) {
@@ -720,13 +703,10 @@ class ConstraintSet private(
    * @param filters               - Merged constraints from the two legs
    * @param attribEquivalenceList - Merged attrib based equivalence list from two legs
    */
-  override def withNewConstraints(
-                                     filters: ExpressionSet,
-                                     attribEquivalenceList: Seq[mutable.Buffer[Attribute]])
-  : ConstraintSet = {
-    val newConstraintSet = new ConstraintSet(mutable.Buffer[Expression](),
-                                             attribEquivalenceList,
-                                             Seq.empty[mutable.Buffer[Expression]])
+  override def withNewConstraints(filters: ExpressionSet,
+    attribEquivalenceList: Seq[mutable.Buffer[Attribute]]): ConstraintSet = {
+    val newConstraintSet = new ConstraintSet(
+      mutable.Buffer[Expression](), attribEquivalenceList, Seq.empty[mutable.Buffer[Expression]])
     ConstraintSet.addFiltersToConstraintSet(filters, newConstraintSet)
     newConstraintSet
   }
@@ -737,18 +717,15 @@ class ConstraintSet private(
       case a: Attribute => mapping(a)
     }
     val newOriginals = this.originals.map(x => x.transformUp(transformer))
-    val newAttribBasedEquiList = this.attribRefBasedEquivalenceList.map(buff =>
-                                                                          buff.map(mapping))
-    val newExpBasedEquiList = this.expressionBasedEquivalenceList.map(buff =>
-                                                                        buff.map(x => x
-                                                                          .transformUp
-                                                                          (transformer)))
-    val newConstraintSet = new ConstraintSet(mutable.Buffer[Expression](),
-                                             newAttribBasedEquiList, newExpBasedEquiList)
+    val newAttribBasedEquiList = this.attribRefBasedEquivalenceList.map(
+      buff => buff.map(mapping))
+    val newExpBasedEquiList = this.expressionBasedEquivalenceList.map(
+      buff => buff.map(_.transformUp(transformer)))
+    val newConstraintSet = new ConstraintSet(
+      mutable.Buffer[Expression](), newAttribBasedEquiList, newExpBasedEquiList)
     ConstraintSet.addFiltersToConstraintSet(newOriginals, newConstraintSet)
     newConstraintSet
   }
-
 
   /**
    * This function is used during pruning and also when any new condition is being
@@ -780,24 +757,20 @@ class ConstraintSet private(
         buff => buff.head -> buff.slice(1, buff.length)) ++
         this.expressionBasedEquivalenceList.map(buff => buff.head -> buff.slice(1, buff.length))
       // collect all the list of canonicalized attributes for these base attribs
-      val substitutables = AttributeMap(baseAttribs
-                                          .map(x => {
-                                            val seqContainingAttrib = checkList.
-                                              filter { case (_, buff) => buff.exists(_.canonicalized == x.canonicalized) }
-                                            if (!(seqContainingAttrib.isEmpty ||
-                                              seqContainingAttrib.size == 1)) {
-                                              val errorMessage = s"Attribute ${x.toString} found " +
-                                                s"in" +
-                                                s" more than 1 buffers"
-                                              throwError(errorMessage)
-                                            }
-                                            if (seqContainingAttrib.nonEmpty) {
-                                              x -> seqContainingAttrib.head._1
-                                            } else {
-                                              x -> null
-                                            }
-                                          }).filter { case (_, replacement) => replacement ne
-        null }.toSeq)
+      val substitutables = AttributeMap(
+        baseAttribs.map(x => {
+          val seqContainingAttrib = checkList.filter {
+            case (_, buff) => buff.exists(_.canonicalized == x.canonicalized) }
+          if (!(seqContainingAttrib.isEmpty || seqContainingAttrib.size == 1)) {
+            val errorMessage = s"Attribute ${x.toString} found in more than 1 buffers"
+            throwError(errorMessage)
+          }
+          if (seqContainingAttrib.nonEmpty) {
+            x -> seqContainingAttrib.head._1
+          } else {
+            x -> null
+          }
+        }).filter { case (_, replacement) => replacement ne null }.toSeq)
       if (substitutables.nonEmpty) {
         val canonicalizedExp = elem.transformUp {
           case att: Attribute => substitutables.getOrElse(att, att)
@@ -819,18 +792,17 @@ class ConstraintSet private(
    * @return Sequence of constraint expressions of compound types.
    */
   override def getConstraintsSubsetOfAttributes(expressionsOfInterest: Iterable[Expression]):
-  Seq[Expression] = {
-    val canonicalAttribsMapping = ExpressionMap(expressionsOfInterest.map(expr =>
-                                                                            (this
-                                                                              .attribRefBasedEquivalenceList ++ this.expressionBasedEquivalenceList).
-                                                                              find(buff => buff
-                                                                                .exists(_.canonicalized fastEquals expr.canonicalized)).map(buff =>
-                                                                                                                                                             buff.head -> expr).getOrElse(expr -> expr)))
+    Seq[Expression] = {
+    val canonicalAttribsMapping =
+      ExpressionMap(expressionsOfInterest.map(
+        expr =>
+          (this.attribRefBasedEquivalenceList ++ this.expressionBasedEquivalenceList).
+            find(buff => buff.exists(_.canonicalized fastEquals expr.canonicalized)).map(
+            buff => buff.head -> expr).getOrElse(expr -> expr)))
     val refsOfInterest = canonicalAttribsMapping.keySet.map(_.references).reduce(_ ++ _)
     this.originals.collect {
       case expr => val refs = expr.references
-        if (refs.subsetOf(refsOfInterest) &&
-          refs.nonEmpty && expr.deterministic) {
+        if (refs.subsetOf(refsOfInterest) && refs.nonEmpty && expr.deterministic) {
           expr -> true
         } else expr -> false
     }.filter(_._2).toSeq.map(_._1.transformUp {
@@ -947,15 +919,16 @@ class ConstraintSet private(
                   ExpressionHider(hiddenChild)
                 }
               case x => // check if any of the child is still hidden
-                val hiddenChildIndexes = x.children.map(_ match {
-                                                          case _: ExpressionHider => true
-                                                          case _ => false
-                                                        })
+                val hiddenChildIndexes = x.children.map(
+                  _ match {
+                    case _: ExpressionHider => true
+                    case _ => false
+                  })
                 // if any of the child are hidden then only
                 // look for decanonicalization of current
                 if (hiddenChildIndexes.exists(b => b)) {
-                  val newChildren = x.children.zipWithIndex.map { case (child, i) =>
-                    if (hiddenChildIndexes(i)) {
+                  val newChildren = x.children.zipWithIndex.map {
+                    case (child, i) => if (hiddenChildIndexes(i)) {
                       child.asInstanceOf[ExpressionHider].hiddenChild
                     } else {
                       convertToCanonicalizedIfRequired(child)
@@ -980,14 +953,10 @@ class ConstraintSet private(
     this.attribRefBasedEquivalenceList
 
   private def getDecanonicalizedAttributeForExpression(canonicalizedExpr: Expression):
-  Expression = {
-    val bufferIndex = this.expressionBasedEquivalenceList.indexWhere(buff =>
-                                                                       buff.head.references
-                                                                         .equals
-                                                                         (canonicalizedExpr
-                                                                            .references) &&
-                                                                         buff.head.fastEquals
-                                                                         (canonicalizedExpr))
+    Expression = {
+    val bufferIndex = this.expressionBasedEquivalenceList.indexWhere(
+      buff => buff.head.references.equals(canonicalizedExpr.references) &&
+        buff.head.fastEquals(canonicalizedExpr))
     if (bufferIndex != -1) {
       val buff = this.expressionBasedEquivalenceList(bufferIndex)
       // buffer size will always be >= 2
@@ -1016,7 +985,7 @@ class ConstraintSet private(
 
 object ConstraintSet extends ConstraintHelper {
   private def addFiltersToConstraintSet(filters: GenTraversableOnce[Expression],
-                                        constraintSet: ConstraintSet): Unit = {
+    constraintSet: ConstraintSet): Unit = {
     filters.foreach(expr => {
       val conditionedElement = constraintSet.convertToCanonicalizedIfRequired(expr)
       constraintSet.add(conditionedElement)
@@ -1114,7 +1083,7 @@ object ConstraintSet extends ConstraintHelper {
    * @return ConstraintSet for the union
    */
   def unionWith(headConstraint: ConstraintSet, otherConstraintNode: LogicalPlan,
-                reference: Seq[Attribute]): ConstraintSet = {
+      reference: Seq[Attribute]): ConstraintSet = {
     val otherConstraint = otherConstraintNode.constraints.asInstanceOf[ConstraintSet]
     val nodeOutput = otherConstraintNode.output
     require(nodeOutput.size == reference.size)
@@ -1169,25 +1138,27 @@ object ConstraintSet extends ConstraintHelper {
     val templateAttributeGenerator = new TemplateAttributeGenerator()
 
     val templatizedConstraintsMapLeg1 = templatizedConstraints(templateAttributeGenerator,
-                                                               preparedConstraint1.originals.toSeq)
+      preparedConstraint1.originals.toSeq)
     val templatizedConstraintsMapLeg2 = templatizedConstraints(templateAttributeGenerator,
-                                                               preparedConstraint2.originals.toSeq)
+      preparedConstraint2.originals.toSeq)
 
-    val netCommonSols = generateCommonSolutions(templatizedConstraintsMapLeg1,
-                                                templatizedConstraintsMapLeg2,
-                                                commonAttribListMapping.map { case (attrs,
-                                                attribBuff) =>
-        attrs -> attribBuff.toSeq
+    val netCommonSols = generateCommonSolutions(
+      templatizedConstraintsMapLeg1,
+      templatizedConstraintsMapLeg2,
+      commonAttribListMapping.map {
+        case (attrs, attribBuff) => attrs -> attribBuff.toSeq
       })
     val commonAttribList = commonAttribListMapping.values
-    val decomposedAttribEquivListsOfLeg1 = calculateDecomposedAttribEquivLists(leg1RefsOfInterest,
-                                                                               preparedConstraint1.attribRefBasedEquivalenceList, commonAttribList)
-    val decomposedAttribEquivListsOfLeg2 = calculateDecomposedAttribEquivLists(leg2RefsOfInterest,
-                                                                               preparedConstraint2.attribRefBasedEquivalenceList, commonAttribList)
+
+    val decomposedAttribEquivListsOfLeg1 = calculateDecomposedAttribEquivLists(
+      leg1RefsOfInterest, preparedConstraint1.attribRefBasedEquivalenceList, commonAttribList)
+
+    val decomposedAttribEquivListsOfLeg2 = calculateDecomposedAttribEquivLists(
+      leg2RefsOfInterest, preparedConstraint2.attribRefBasedEquivalenceList, commonAttribList)
 
     // generator for single refs expression in terms of solution space
-    val singleRefExprGenerator: (ConstraintSet, AttributeMap[Set[Attribute]]) =>
-      ExpressionSet = (constraintSet, solutionSpace) => {
+    val singleRefExprGenerator: (ConstraintSet, AttributeMap[Set[Attribute]]) => ExpressionSet =
+      (constraintSet, solutionSpace) => {
       val singleRefs = constraintSet.originals.filter(_.references.size == 1)
       ExpressionSet(singleRefs.flatMap(expr => {
         val attr = expr.references.head
@@ -1197,20 +1168,20 @@ object ConstraintSet extends ConstraintHelper {
       }))
     }
 
-    val singleRefExprsLeg1 = singleRefExprGenerator(preparedConstraint1,
-                                                    decomposedAttribEquivListsOfLeg1)
+    val singleRefExprsLeg1 = singleRefExprGenerator(
+      preparedConstraint1, decomposedAttribEquivListsOfLeg1)
 
-    val singleRefExprsLeg2 = singleRefExprGenerator(preparedConstraint2,
-                                                    decomposedAttribEquivListsOfLeg2)
+    val singleRefExprsLeg2 = singleRefExprGenerator(
+      preparedConstraint2, decomposedAttribEquivListsOfLeg2)
     val other1 = singleRefExprsLeg1.diff(netCommonSols).groupBy(_.references.head)
     val other2 = singleRefExprsLeg2.diff(netCommonSols).groupBy(_.references.head)
     // loose the constraints by: A1 && B1 || A2 && B2  ->  (A1 || A2) && (B1 || B2)
-    val others = (other1.keySet intersect other2.keySet).map { attr =>
-      Or(other1(attr).reduceLeft(And), other2(attr).reduceLeft(And))
+    val others = (other1.keySet intersect other2.keySet).map {
+      attr => Or(other1(attr).reduceLeft(And), other2(attr).reduceLeft(And))
     }
 
-    headConstraint.withNewConstraints(netCommonSols ++ others,
-                                      commonAttribList.filterNot(_.size < 2).toSeq)
+    headConstraint.withNewConstraints(
+      netCommonSols ++ others, commonAttribList.filterNot(_.size < 2).toSeq)
   }
 
   /**
@@ -1226,10 +1197,8 @@ object ConstraintSet extends ConstraintHelper {
    * @param attributeRewriteOpt The re-write attributes mapping
    * @return ConstraintSet
    */
-  private def prepareConstraintForUnion(
-                                           constraintSet: ConstraintSet,
-                                           attributeRewriteOpt: Option[AttributeMap[Attribute]])
-  : ConstraintSet = {
+  private def prepareConstraintForUnion(constraintSet: ConstraintSet,
+    attributeRewriteOpt: Option[AttributeMap[Attribute]]): ConstraintSet = {
     val rewriter = (expr: Expression, attributeRewrites: AttributeMap[Attribute]) =>
       expr transformDown {
         case attr: Attribute => attributeRewrites(attr)
@@ -1283,8 +1252,7 @@ object ConstraintSet extends ConstraintHelper {
    *         and the attributes which are aliases to the attributes in the mapping
    */
   private def mergeEquivalenceList(leg1EquivList: Seq[Seq[Attribute]],
-                                   leg2EquivList: Seq[Seq[Attribute]]):
-  Map[(Attribute, Attribute), mutable.Buffer[Attribute]] = {
+    leg2EquivList: Seq[Seq[Attribute]]): Map[(Attribute, Attribute), mutable.Buffer[Attribute]] = {
     var newAttribRefBasedEquivalenceList =
       Seq.empty[((Attribute, Attribute), mutable.Buffer[Attribute])]
 
@@ -1292,10 +1260,9 @@ object ConstraintSet extends ConstraintHelper {
       leg2EquivList.foreach { otherEquivalenceList =>
         val _0thKeyLeg1 = equivalenceList.head.canonicalized.asInstanceOf[Attribute]
         val commonAttribs = equivalenceList.map(_.canonicalized).intersect(
-          otherEquivalenceList.map(_.canonicalized)).map(canonicalizedAttrib =>
-                                                           equivalenceList.find(_.exprId ==
-                                                                                  canonicalizedAttrib.asInstanceOf[Attribute].exprId).get).
-          toBuffer
+          otherEquivalenceList.map(_.canonicalized)).map(
+          canonicalizedAttrib => equivalenceList.find(
+            _.exprId == canonicalizedAttrib.asInstanceOf[Attribute].exprId).get).toBuffer
         if (commonAttribs.nonEmpty) {
           val _0thKeyLeg2 = otherEquivalenceList.head.canonicalized.asInstanceOf[Attribute]
           newAttribRefBasedEquivalenceList = ((_0thKeyLeg1, _0thKeyLeg2) -> commonAttribs) +:
@@ -1336,10 +1303,8 @@ object ConstraintSet extends ConstraintHelper {
    * @return an instance of ExpressionMap which stores key as the templatized constraint expression
    *         and value a 2D array of attributes representing attributes found in each constraint
    */
-  def templatizedConstraints(
-                                templateAttributeGenerator: TemplateAttributeGenerator,
-                                expressions: Seq[Expression]): Map[Expression,
-    Array[Array[Attribute]]] = {
+  def templatizedConstraints(templateAttributeGenerator: TemplateAttributeGenerator,
+    expressions: Seq[Expression]): Map[Expression, Array[Array[Attribute]]] = {
     val templatizedExprsToSolutionSpace = expressions.map(origExpr => {
       templateAttributeGenerator.reset()
       // contains the refs comprising each of the constraint as collected
@@ -1383,17 +1348,14 @@ object ConstraintSet extends ConstraintHelper {
    *         stand alone element
    */
   private def calculateDecomposedAttribEquivLists(
-                                                     refsOfInterest: AttributeSet,
-                                                     attribRefBasedEquivalenceList: Seq[mutable
-                                                     .Buffer[Attribute]],
-                                                     commonAttribList: Iterable[mutable
-                                                     .Buffer[Attribute]]):
-  AttributeMap[Set[Attribute]] = {
-    val totalRefsOfInterest = AttributeSet(refsOfInterest.toSeq ++
-                                             attribRefBasedEquivalenceList.map(_.head))
+    refsOfInterest: AttributeSet,
+    attribRefBasedEquivalenceList: Seq[mutable .Buffer[Attribute]],
+    commonAttribList: Iterable[mutable.Buffer[Attribute]]): AttributeMap[Set[Attribute]] = {
+    val totalRefsOfInterest = AttributeSet(
+      refsOfInterest.toSeq ++ attribRefBasedEquivalenceList.map(_.head))
     AttributeMap(totalRefsOfInterest.map(attr => {
-      val equivListOpt = attribRefBasedEquivalenceList.find(_.head.canonicalized ==
-                                                              attr.canonicalized)
+      val equivListOpt = attribRefBasedEquivalenceList.find(
+        _.head.canonicalized == attr.canonicalized)
       val sol = equivListOpt.map(completeList => {
         var currentList = completeList
         val subspaces = (for (common <- commonAttribList) yield {
@@ -1442,11 +1404,9 @@ object ConstraintSet extends ConstraintHelper {
    * @return ExpressionSet containing common filters for the union output
    */
   private def generateCommonSolutions(
-                                         templatizedConstraintsMapLeg1: Map[Expression,
-                                           Array[Array[Attribute]]],
-                                         templatizedConstraintsMapLeg2: Map[Expression, Array[Array[Attribute]]],
-                                         commonAttribListMapping: Map[(Attribute, Attribute), Seq[Attribute]]):
-  ExpressionSet = {
+      templatizedConstraintsMapLeg1: Map[Expression, Array[Array[Attribute]]],
+      templatizedConstraintsMapLeg2: Map[Expression, Array[Array[Attribute]]],
+      commonAttribListMapping: Map[(Attribute, Attribute), Seq[Attribute]]): ExpressionSet = {
     val results = (for ((templatizedExpr1, bindings1) <- templatizedConstraintsMapLeg1) yield {
       // For each templatized constraint on leg1 check if there exists an equivalent
       // templatized constraint on leg2. If there is , then we need to find common
@@ -1503,8 +1463,7 @@ object ConstraintSet extends ConstraintHelper {
    * the new ids are generated and added to the original mapping.
    */
   class TemplateAttributeGenerator {
-    private val mappingKeys: mutable.Map[DataType,
-      mutable.ListBuffer[Attribute]] = mutable.Map()
+    private val mappingKeys: mutable.Map[DataType, mutable.ListBuffer[Attribute]] = mutable.Map()
     private var cloneOnReset: Map[DataType, mutable.ListBuffer[Attribute]] = _
 
     def getNext(dataType: DataType): Attribute =
@@ -1531,10 +1490,8 @@ object ConstraintSet extends ConstraintHelper {
 }
 
 object ConstraintSetHelper {
-  def removeCanonicalizedExpressionFromBuffer(
-                                                 buff: mutable.Buffer[_ <: Expression],
-                                                 expr: Expression
-                                             ): Unit = {
+  def removeCanonicalizedExpressionFromBuffer(buff: mutable.Buffer[_ <: Expression],
+    expr: Expression): Unit = {
     var keepGoing = true
     while (keepGoing) {
       val indx = buff.indexWhere(_.canonicalized fastEquals expr.canonicalized)
@@ -1558,14 +1515,11 @@ object ConstraintSetHelper {
  */
 case class ExpressionHider(hiddenChild: Expression) extends LeafExpression {
   override def nullable: Boolean = false
-
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException(" not implemented")
 
-
-  override protected def doGenCode(
-                                      ctx: CodegenContext,
-                                      ev: ExprCode): ExprCode = throw new UnsupportedOperationException(" not implemented")
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw new UnsupportedOperationException(" not implemented")
 
   override def dataType: DataType = hiddenChild.dataType
 }
