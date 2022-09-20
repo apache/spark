@@ -437,7 +437,24 @@ select json_array_length(2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'json_array_length(2)' due to data type mismatch: argument 1 requires string type, however, '2' is of int type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"2\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"json_array_length(2)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 27,
+    "fragment" : "json_array_length(2)"
+  } ]
+}
 
 
 -- !query
@@ -536,7 +553,24 @@ select json_object_keys(200)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'json_object_keys(200)' due to data type mismatch: argument 1 requires string type, however, '200' is of int type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"200\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"json_object_keys(200)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "json_object_keys(200)"
+  } ]
+}
 
 
 -- !query

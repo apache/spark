@@ -183,6 +183,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case hof: HigherOrderFunction
               if hof.argumentsResolved && hof.checkArgumentDataTypes().isFailure =>
             hof.checkArgumentDataTypes() match {
+              case checkRes: TypeCheckResult.DataTypeMismatch =>
+                hof.dataTypeMismatch(hof, checkRes)
               case TypeCheckResult.TypeCheckFailure(message) =>
                 hof.failAnalysis(
                   s"cannot resolve '${hof.sql}' due to argument data type mismatch: $message")
