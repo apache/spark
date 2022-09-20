@@ -47,6 +47,9 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
 import org.apache.spark.util.Utils
 
+object SessionCatalog {
+  val DEFAULT_DATABASE = "default"
+}
 
 /**
  * An internal catalog that is used by a Spark Session. This internal catalog serves as a
@@ -67,6 +70,7 @@ class SessionCatalog(
     cacheSize: Int = SQLConf.get.tableRelationCacheSize,
     cacheTTL: Long = SQLConf.get.metadataCacheTTL,
     defaultDatabase: String = SQLConf.get.defaultDatabase) extends SQLConfHelper with Logging {
+  import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
   // For testing only.
@@ -283,7 +287,7 @@ class SessionCatalog(
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
     val dbName = format(db)
-    if (dbName == "default") {
+    if (dbName == DEFAULT_DATABASE) {
       throw QueryCompilationErrors.cannotDropDefaultDatabaseError
     }
     if (!ignoreIfNotExists) {
@@ -1838,8 +1842,8 @@ class SessionCatalog(
   // -----------------
 
   /**
-   * Drop all existing databases (except "default"), tables, partitions and functions,
-   * and set the current database to "default".
+   * Drop all existing databases (except defaultDatabase), tables, partitions and functions,
+   * and set the current database to defaultDatabase.
    *
    * This is mainly used for tests.
    */
