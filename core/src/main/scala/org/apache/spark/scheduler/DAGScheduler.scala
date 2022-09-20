@@ -1866,7 +1866,6 @@ private[spark] class DAGScheduler(
             s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
             s"(attempt ${failedStage.latestInfo.attemptNumber}) running")
         } else {
-          failedStage.failedAttemptIds.add(task.stageAttemptId)
           val ignoreStageFailure = ignoreDecommissionFetchFailure &&
             isExecutorDecommissioned(taskScheduler, bmAddress)
           if (ignoreStageFailure) {
@@ -1874,11 +1873,12 @@ private[spark] class DAGScheduler(
               s"${task.stageAttemptId} when count spark.stage.maxConsecutiveAttempts " +
               "as executor ${bmAddress.executorId} is decommissioned and " +
               s" ${config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key}=true")
+          } else {
+            failedStage.failedAttemptIds.add(task.stageAttemptId)
           }
 
           val shouldAbortStage =
-            (!ignoreStageFailure &&
-              failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts) ||
+            failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts ||
             disallowStageRetryForTest
 
           // It is likely that we receive multiple FetchFailed for a single stage (because we have

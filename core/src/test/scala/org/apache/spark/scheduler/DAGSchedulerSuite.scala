@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
 import org.mockito.Mockito._
@@ -1162,7 +1163,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       completeShuffleMapStageSuccessfully(0, attempt, numShufflePartitions = parts,
         Seq("hostA", "hostB"))
 
-      taskScheduler.executorDecommission("hostA-exec", ExecutorDecommissionInfo(""))
+      // Only make first attempt fail due to executor decommission
+      if (attempt == 0) {
+        taskScheduler.executorDecommission("hostA-exec", ExecutorDecommissionInfo(""))
+      } else {
+        taskScheduler.executorsPendingDecommission.clear()
+      }
       // Now we should have a new taskSet, for a new attempt of stage 1.
       // Fail all these tasks with FetchFailure
       completeNextStageWithFetchFailure(1, attempt, shuffleDep)
