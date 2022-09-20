@@ -238,7 +238,7 @@ class PandasGroupedOpsMixin:
         The function should take parameters (key, Iterator[`pandas.DataFrame`], state) and
         returns another Iterator[`pandas.DataFrame`]. The grouping key(s) will be passed as a tuple
         of numpy data types, e.g., `numpy.int32` and `numpy.float64`. The state will be passed as
-        :class:`pyspark.sql.streaming.state.GroupStateImpl`.
+        :class:`pyspark.sql.streaming.state.GroupState`.
 
         For each group, all columns are passed together as `pandas.DataFrame` to the user-function,
         and the returned `pandas.DataFrame` across all invocations are combined as a
@@ -268,7 +268,7 @@ class PandasGroupedOpsMixin:
             a Python native function to be called on every group. It should take parameters
             (key, Iterator[`pandas.DataFrame`], state) and return Iterator[`pandas.DataFrame`].
             Note that the type of the key is tuple and the type of the state is
-            :class:`pyspark.sql.streaming.state.GroupStateImpl`.
+            :class:`pyspark.sql.streaming.state.GroupState`.
         outputStructType : :class:`pyspark.sql.types.DataType` or str
             the type of the output records. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.

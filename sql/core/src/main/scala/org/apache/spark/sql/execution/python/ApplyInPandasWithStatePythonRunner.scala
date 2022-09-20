@@ -43,6 +43,10 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 /**
  * A variant implementation of [[ArrowPythonRunner]] to serve the operation
  * applyInPandasWithState.
+ *
+ * Unlike normal ArrowPythonRunner which both input (executor to python worker) and output (python
+ * worker are InternalRow, applyInPandasWithState has side data (state information) in both input
+ * and output, which requires different struct on Arrow RecordBatch.
  */
 class ApplyInPandasWithStatePythonRunner(
     funcs: Seq[ChainedPythonFunctions],
