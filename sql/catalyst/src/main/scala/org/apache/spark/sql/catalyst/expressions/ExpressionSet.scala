@@ -21,6 +21,7 @@ import scala.collection.{mutable, GenTraversableOnce}
 import scala.collection.mutable.ArrayBuffer
 
 object ExpressionSet {
+
   /** Constructs a new [[ExpressionSet]] by applying [[Canonicalize]] to `expressions`. */
   def apply(expressions: TraversableOnce[Expression]): ExpressionSet = {
     val set = new ExpressionSet()
@@ -61,29 +62,24 @@ object ExpressionSet {
  * invariant that:
  * 1. Every expr `e` in `baseSet` satisfies `e.deterministic && e.canonicalized == e`
  * 2. Every deterministic expr `e` in `originals` satisfies that `e.canonicalized` is already
- *    accessed.
+ * accessed.
  */
 class ExpressionSet protected(
-
-    protected val baseSet: mutable.Set[Expression] = new mutable.HashSet,
+    protected val baseSet: mutable.Set[Expression] = new mutable.HashSet(),
     protected val originals: mutable.Buffer[Expression] = new ArrayBuffer)
-  extends Iterable[Expression]  {
+  extends Iterable[Expression] {
 
-  protected def add(e: Expression): Unit = {
-    if (!e.deterministic) {
+  protected def add(e: Expression): Unit = if (!e.deterministic) {
       originals += e
     } else if (!this.contains(e)) {
       baseSet.add(e.canonicalized)
       originals += e
     }
-  }
 
-  protected def remove(e: Expression): Unit = {
-    if (e.deterministic) {
+  protected def remove(e: Expression): Unit = if (e.deterministic) {
       baseSet --= baseSet.filter(_ == e.canonicalized)
       originals --= originals.filter(_.canonicalized == e.canonicalized)
     }
-  }
 
   def contains(elem: Expression): Boolean = baseSet.contains(elem.canonicalized)
 
@@ -99,17 +95,16 @@ class ExpressionSet protected(
     this.constructNew(newBaseSet, newOriginals)
   }
 
-  def constructNew(newBaseSet: mutable.Set[Expression] = new mutable.HashSet,
-    newOriginals: mutable.Buffer[Expression] = new ArrayBuffer): ExpressionSet = {
+  def constructNew(
+      newBaseSet: mutable.Set[Expression] = new mutable.HashSet,
+      newOriginals: mutable.Buffer[Expression] = new ArrayBuffer): ExpressionSet =
     new ExpressionSet(newBaseSet, newOriginals)
-  }
 
   def +(elem: Expression): ExpressionSet = {
     val newSet = clone()
     newSet.add(this.convertToCanonicalizedIfRequired(elem))
     newSet
   }
-
 
   def ++(elems: GenTraversableOnce[Expression]): ExpressionSet = {
     val newSet = clone()
@@ -134,7 +129,6 @@ class ExpressionSet protected(
     this.iterator.foreach(elem => newSet.add(this.convertToCanonicalizedIfRequired(f(elem))))
     newSet
   }
-
 
   def flatMap(f: Expression => Iterable[Expression]): ExpressionSet = {
     val newSet = this.constructNew()
@@ -172,11 +166,12 @@ class ExpressionSet protected(
   def getConstraintsSubsetOfAttributes(expressionsOfInterest: Iterable[Expression]):
   Seq[Expression] = Seq.empty
 
-  def updateConstraints(outputAttribs: Seq[Attribute],
-    inputAttribs: Seq[Attribute], projectList: Seq[NamedExpression],
-    oldAliasedConstraintsCreator: Option[Seq[NamedExpression] => ExpressionSet]):
-  ExpressionSet = oldAliasedConstraintsCreator.map(aliasCreator =>
-      this.union(aliasCreator(projectList))).getOrElse(this)
+  def updateConstraints(
+      outputAttribs: Seq[Attribute],
+      inputAttribs: Seq[Attribute], projectList: Seq[NamedExpression],
+      oldAliasedConstraintsCreator: Option[Seq[NamedExpression] => ExpressionSet]): ExpressionSet =
+    oldAliasedConstraintsCreator.map(aliasCreator => this.union(aliasCreator(projectList)))
+      .getOrElse(this)
 
   def attributesRewrite(mapping: AttributeMap[Attribute]): ExpressionSet =
     ExpressionSet(this.map(_ transform {
@@ -185,8 +180,7 @@ class ExpressionSet protected(
 
   def withNewConstraints(
       filters: ExpressionSet,
-      attribEquiv: Seq[mutable.Buffer[Attribute]]): ExpressionSet =
-    ExpressionSet(filters)
+      attribEquiv: Seq[mutable.Buffer[Attribute]]): ExpressionSet = ExpressionSet(filters)
 
   def rewriteUsingAlias(expr: Expression): Expression = expr
 
@@ -196,6 +190,7 @@ class ExpressionSet protected(
     Seq.empty[mutable.Buffer[Attribute]]
 
   def getCanonicalizedFilters: Set[Expression] = this.baseSet.toSet
+
   /**
    * Returns a string containing both the post [[Canonicalize]] expressions and the original
    * expressions in this set.

@@ -14,11 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable
 
 object ExpressionMap {
+
   /** Constructs a new [[ExpressionMap]] by applying [[Canonicalize]] to `expressions`. */
   def apply[T](map: Iterable[(Expression, T)]): ExpressionMap[T] = {
     val newMap = new ExpressionMap[T]()
@@ -41,15 +43,11 @@ class ExpressionMap[T](val baseMap: mutable.Map[Expression, T] = new mutable.Has
   override def get(expr: Expression): Option[T] =
     baseMap.get(expr.canonicalized)
 
-
   protected def add(tup: (Expression, T)): Unit = {
-
     this.baseMap += (tup._1.canonicalized -> tup._2)
-
   }
 
-  override def contains(expr: Expression): Boolean =
-    baseMap.contains(expr.canonicalized)
+  override def contains(expr: Expression): Boolean = baseMap.contains(expr.canonicalized)
 
   override def +=(kv: (Expression, T)): this.type = {
     this.add(kv)

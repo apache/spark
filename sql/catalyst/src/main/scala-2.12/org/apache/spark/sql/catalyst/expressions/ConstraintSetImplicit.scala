@@ -21,6 +21,7 @@ import scala.collection.mutable
 import scala.language.implicitConversions
 
 object ConstraintSetImplicit {
+
   implicit def toImplicitWrapper[T](self: scala.collection.Iterable[T]): Wrapper[T] =
     new Wrapper(self)
 
@@ -30,7 +31,5 @@ object ConstraintSetImplicit {
 
     def toMutableBuffer(mutableBuffer: mutable.Buffer.type): mutable.Buffer[T] =
       coll.to[mutable.Buffer]
-
   }
 }
-
