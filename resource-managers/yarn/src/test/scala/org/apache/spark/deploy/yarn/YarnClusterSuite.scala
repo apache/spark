@@ -58,7 +58,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   private val (isPythonAvailable, pythonExecutablePath) = {
     // To make sure to use the same Python executable.
     if (TestUtils.isPythonVersionAvailable) {
-      (true, TestUtils.getAbsolutePathFromExecutable("python3"))
+      (true, TestUtils.getAbsolutePathFromExecutable("python3").get)
     } else {
       (false, "")
     }
