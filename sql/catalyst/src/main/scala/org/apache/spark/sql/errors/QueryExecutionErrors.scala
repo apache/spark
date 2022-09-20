@@ -771,13 +771,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkException("Writing job failed.", cause)
   }
 
-  def writingJobAbortedError(e: Throwable): Throwable = {
-    new SparkException(
-      errorClass = "WRITING_JOB_ABORTED",
-      messageParameters = Map.empty,
-      cause = e)
-  }
-
   def commitDeniedError(
       partId: Int, taskId: Long, attemptId: Int, stageId: Int, stageAttempt: Int): Throwable = {
     val message = s"Commit denied for partition $partId (task $taskId, attempt $attemptId, " +

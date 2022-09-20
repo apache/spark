@@ -209,22 +209,6 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
   }
 
-  test("Try catching SparkError with error class") {
-    try {
-      throw new SparkException(
-        errorClass = "WRITING_JOB_ABORTED",
-        messageParameters = Map.empty,
-        cause = null)
-    } catch {
-      case e: SparkThrowable =>
-        assert(e.getErrorClass == "WRITING_JOB_ABORTED")
-        assert(e.getSqlState == "40000")
-      case _: Throwable =>
-        // Should not end up here
-        assert(false)
-    }
-  }
-
   test("Try catching internal SparkError") {
     try {
       throw new SparkException(

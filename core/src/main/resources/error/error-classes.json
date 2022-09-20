@@ -729,11 +729,5 @@
       "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive",
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution"
     ]
-  },
-  "WRITING_JOB_ABORTED" : {
-    "message" : [
-      "Writing job aborted"
-    ],
-    "sqlState" : "40000"
   }
 }
