@@ -145,7 +145,7 @@ class ProtoCatalystDataConversionSuite extends SparkFunSuite
     }
   }
 
-  test("Handle unsupported input of record type") {
+  test("Handle unsupported input of message type") {
     val testFileDesc = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
     val actualSchema = StructType(Seq(
       StructField("col_0", StringType, nullable = false),
@@ -163,7 +163,7 @@ class ProtoCatalystDataConversionSuite extends SparkFunSuite
     }
   }
 
-  test("filter push-down to Proto deserializer") {
+  test("filter push-down to proto deserializer") {
 
     val testFileDesc = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
     val sqlSchema = new StructType()
