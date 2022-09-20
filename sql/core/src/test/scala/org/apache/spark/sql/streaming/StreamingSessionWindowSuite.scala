@@ -20,7 +20,6 @@ package org.apache.spark.sql.streaming
 import java.util.Locale
 
 import org.scalatest.BeforeAndAfter
-import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoder, Encoders}
@@ -31,7 +30,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
 class StreamingSessionWindowSuite extends StreamTest
-  with BeforeAndAfter with Matchers with Logging {
+  with BeforeAndAfter with Logging {
 
   import testImplicits._
 
