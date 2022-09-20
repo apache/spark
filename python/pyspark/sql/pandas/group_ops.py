@@ -254,8 +254,9 @@ class PandasGroupedOpsMixin:
 
         The `stateStructType` should be :class:`StructType` describing the schema of the
         user-defined state. The value of the state will be presented as a tuple, as well as the
-        update should be performed with the tuple. User defined types e.g. native Python class
-        types are not supported.
+        update should be performed with the tuple. The corresponding Python types for
+        :class:DataType are supported. Please refer to the page
+        https://spark.apache.org/docs/latest/sql-ref-datatypes.html (python tab).
 
         The size of each DataFrame in both the input and output can be arbitrary. The number of
         DataFrames in both the input and output can also be arbitrary.
