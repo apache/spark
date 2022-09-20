@@ -49,9 +49,7 @@ import org.apache.spark.unsafe.types.UTF8String
 class ApplyInPandasWithStateWriter(
     root: VectorSchemaRoot,
     writer: ArrowStreamWriter,
-    softLimitBytesPerBatch: Long,
-    minDataCountForSample: Int,
-    softTimeoutMillsPurgeBatch: Long) {
+    arrowMaxRecordsPerBatch: Int) {
 
   import ApplyInPandasWithStateWriter._
 
@@ -70,7 +68,7 @@ class ApplyInPandasWithStateWriter(
   private val arrowWriterForState = createArrowWriter(
     root.getFieldVectors.asScala.toSeq.takeRight(1))
 
-  // Bin-packing
+  // - Bin-packing
   //
   // We apply bin-packing the data from multiple groups into one Arrow RecordBatch to
   // gain the performance. In many cases, the amount of data per grouping key is quite
@@ -81,41 +79,27 @@ class ApplyInPandasWithStateWriter(
   // the range of data and give a view, say, "zero-copy". To help splitting the range for
   // data, we provide the "start offset" and the "number of data" in the state metadata.
   //
-  // We don't bin-pack all groups into a single record batch - we have a soft limit on the size
-  // of Arrow RecordBatch to stop adding next group.
+  // We don't bin-pack all groups into a single record batch - we have a limit on the number
+  // of rows in the current Arrow RecordBatch to stop adding next group.
   //
-  // Chunking
+  // - Chunking
   //
   // We also chunk the data from single group into multiple Arrow RecordBatch to ensure
   // scalability. Note that we don't know the volume (number of rows, overall size) of data for
   // specific group key before we read the entire data. The easiest approach to address both
-  // bin-pack and chunk is to check the size of the current Arrow RecordBatch per each write of
-  // row.
+  // bin-pack and chunk is to check the number of rows in the current Arrow RecordBatch for each
+  // write of row.
   //
-  // How to measure the size of data?
+  // - Consideration
   //
-  // We perform some basic sampling for data to guess the size of the data very roughly,
-  // and simply multiply by the number of data to estimate the size. We extract the size of
-  // data from the record batch rather than UnsafeRow, as we don't hold the memory for
-  // UnsafeRow once we write to the record batch. If there is a memory bound here, it
-  // should come from record batch.
-  //
-  // Why we also perform timeout on batching Arrow RecordBatch?
-  //
-  // In the meanwhile, we don't also want to let the current record batch collect the data
-  // indefinitely, since we are pipelining the process between executor and python worker.
-  // Python worker won't process any data if executor is not yet finalized a record
-  // batch, which defeats the purpose of pipelining. To address this, we also introduce
-  // timeout for constructing a record batch. This is a soft limit - we allow current group
-  // to write all data even it's timed-out.
+  // Since the number of rows in Arrow RecordBatch does not represent the actual size (bytes),
+  // the limit should be set very conservatively. Using a small number of limit does not introduce
+  // correctness issues.
 
   private var numRowsForCurGroup = 0
   private var startOffsetForCurGroup = 0
   private var totalNumRowsForBatch = 0
   private var totalNumStatesForBatch = 0
-
-  private var sampledDataSizePerRow = 0
-  private var lastBatchPurgedMillis = System.currentTimeMillis()
 
   private var currentGroupKeyRow: UnsafeRow = _
   private var currentGroupState: GroupStateImpl[Row] = _
@@ -126,21 +110,10 @@ class ApplyInPandasWithStateWriter(
   }
 
   def writeRow(dataRow: InternalRow): Unit = {
-    // Currently, this only works when the number of rows are greater than the minimum
-    // data count for sampling. And we technically have no way to pick some rows from
-    // record batch and measure the size of data, hence we leverage all data in current
-    // record batch. We only sample once as it could be costly.
-    if (sampledDataSizePerRow == 0 && totalNumRowsForBatch > minDataCountForSample) {
-      sampledDataSizePerRow = arrowWriterForData.sizeInBytes() / totalNumRowsForBatch
-    }
+    // If it exceeds the condition of batch (number of records) and there is more data for the
+    // same group, finalize and construct a new batch.
 
-    // If it exceeds the condition of batch (only size, not about timeout) and
-    // there is more data for the same group, flush and construct a new batch.
-
-    // The soft-limit on size effectively works after the sampling has completed, since we
-    // multiply the number of rows by 0 if the sampling is still in progress.
-
-    if (sampledDataSizePerRow * totalNumRowsForBatch >= softLimitBytesPerBatch) {
+    if (totalNumRowsForBatch >= arrowMaxRecordsPerBatch) {
       // Provide state metadata row as intermediate
       val stateInfoRow = buildStateInfoRow(currentGroupKeyRow, currentGroupState,
         startOffsetForCurGroup, numRowsForCurGroup, isLastChunk = false)
@@ -165,16 +138,11 @@ class ApplyInPandasWithStateWriter(
     // The start offset for next group would be same as the total number of rows for batch,
     // unless the next group starts with new batch.
     startOffsetForCurGroup = totalNumRowsForBatch
-
-    // The soft-limit on timeout applies on finalization of each group.
-    if (System.currentTimeMillis() - lastBatchPurgedMillis > softTimeoutMillsPurgeBatch) {
-      finalizeCurrentArrowBatch()
-    }
   }
 
   def finalizeData(): Unit = {
     if (numRowsForCurGroup > 0) {
-      // We still have some rows in the current record batch. Need to flush them as well.
+      // We still have some rows in the current record batch. Need to finalize them as well.
       finalizeCurrentArrowBatch()
     }
   }
@@ -224,7 +192,6 @@ class ApplyInPandasWithStateWriter(
     numRowsForCurGroup = 0
     totalNumRowsForBatch = 0
     totalNumStatesForBatch = 0
-    lastBatchPurgedMillis = System.currentTimeMillis()
   }
 }
 

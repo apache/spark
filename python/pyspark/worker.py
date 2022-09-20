@@ -430,30 +430,18 @@ def read_udfs(pickleSer, infile, eval_type):
         if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             ser = CogroupUDFSerializer(timezone, safecheck, assign_cols_by_name)
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
-            soft_limit_bytes_per_batch = runner_conf.get(
-                "spark.sql.execution.applyInPandasWithState.softLimitSizePerBatch",
-                (64 * 1024 * 1024),
+            arrow_max_records_per_batch = runner_conf.get(
+                "spark.sql.execution.arrow.maxRecordsPerBatch",
+                10000
             )
-            soft_limit_bytes_per_batch = int(soft_limit_bytes_per_batch)
-
-            min_data_count_for_sample = runner_conf.get(
-                "spark.sql.execution.applyInPandasWithState.minDataCountForSample", 100
-            )
-            min_data_count_for_sample = int(min_data_count_for_sample)
-
-            soft_timeout_millis_purge_batch = runner_conf.get(
-                "spark.sql.execution.applyInPandasWithState.softTimeoutPurgeBatch", 100
-            )
-            soft_timeout_millis_purge_batch = int(soft_timeout_millis_purge_batch)
+            arrow_max_records_per_batch = int(arrow_max_records_per_batch)
 
             ser = ApplyInPandasWithStateSerializer(
                 timezone,
                 safecheck,
                 assign_cols_by_name,
                 state_object_schema,
-                soft_limit_bytes_per_batch,
-                min_data_count_for_sample,
-                soft_timeout_millis_purge_batch,
+                arrow_max_records_per_batch,
             )
         elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
             ser = ArrowStreamUDFSerializer()

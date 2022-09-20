@@ -156,10 +156,7 @@ case class FlatMapGroupsInPandasWithStateExec(
         stateEncoder.asInstanceOf[ExpressionEncoder[Row]],
         groupingAttributes.toStructType,
         child.output.toStructType,
-        stateType,
-        conf.softLimitBytesPerBatchInApplyInPandasWithState,
-        conf.minDataCountForSampleInApplyInPandasWithState,
-        conf.softTimeoutMillisPurgeBatchInApplyInPandasWithState)
+        stateType)
 
       val context = TaskContext.get()
 

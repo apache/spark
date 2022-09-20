@@ -19,8 +19,6 @@
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
 
-import time
-
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StringType, StructType, BinaryType, StructField, LongType
@@ -391,13 +389,8 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         If True, then Pandas DataFrames will get columns by name
     state_object_schema : StructType
         The type of state object represented as Spark SQL type
-    soft_limit_bytes_per_batch : int
-        Soft limit of the accumulated size of records that can be written to a single
-        ArrowRecordBatch in memory.
-    min_data_count_for_sample : int
-        The minimum number of records to sample the size of record.
-    soft_timeout_millis_purge_batch : int
-        The soft timeout to force purging the ArrowRecordBatch regardless of the size.
+    arrow_max_records_per_batch : int
+        Limit of the number of records that can be written to a single ArrowRecordBatch in memory.
     """
 
     def __init__(
@@ -406,9 +399,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         safecheck,
         assign_cols_by_name,
         state_object_schema,
-        soft_limit_bytes_per_batch,
-        min_data_count_for_sample,
-        soft_timeout_millis_purge_batch,
+        arrow_max_records_per_batch,
     ):
         super(ApplyInPandasWithStateSerializer, self).__init__(
             timezone, safecheck, assign_cols_by_name
@@ -427,9 +418,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         )
 
         self.result_state_pdf_arrow_type = to_arrow_type(self.result_state_df_type)
-        self.soft_limit_bytes_per_batch = soft_limit_bytes_per_batch
-        self.min_data_count_for_sample = min_data_count_for_sample
-        self.soft_timeout_millis_purge_batch = soft_timeout_millis_purge_batch
+        self.arrow_max_records_per_batch = arrow_max_records_per_batch
 
     def load_stream(self, stream):
         """
@@ -624,10 +613,6 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             pdf_data_cnt = 0
             state_data_cnt = 0
 
-            sampled_data_size_per_row = 0
-
-            last_purged_time_ns = time.time_ns()
-
             for data in iterator:
                 packaged_result = data[0]
 
@@ -641,20 +626,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                         pdf_data_cnt += len(pdf)
                         pdfs.append(pdf)
 
-                        if (
-                            sampled_data_size_per_row == 0
-                            and pdf_data_cnt > self.min_data_count_for_sample
-                        ):
-                            memory_usages = [p.memory_usage(deep=True).sum() for p in pdfs]
-                            sampled_data_size_per_row = sum(memory_usages) / pdf_data_cnt
-
-                        # This effectively works after the sampling has completed, size we multiply
-                        # by 0 if the sampling is still in progress.
-                        batch_over_limit_on_size = (
-                            sampled_data_size_per_row * pdf_data_cnt
-                        ) >= self.soft_limit_bytes_per_batch
-
-                        if batch_over_limit_on_size:
+                        if pdf_data_cnt > self.arrow_max_records_per_batch:
                             batch = construct_record_batch(
                                 pdfs, pdf_data_cnt, return_schema, state_pdfs, state_data_cnt
                             )
@@ -663,7 +635,6 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                             state_pdfs = []
                             pdf_data_cnt = 0
                             state_data_cnt = 0
-                            last_purged_time_ns = time.time_ns()
 
                             if should_write_start_length:
                                 write_int(SpecialLengths.START_ARROW_STREAM, stream)
@@ -696,27 +667,6 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
                 state_pdfs.append(state_pdf)
                 state_data_cnt += 1
-
-                cur_time_ns = time.time_ns()
-                is_timed_out_on_purge = (
-                    (cur_time_ns - last_purged_time_ns) // 1000000
-                ) >= self.soft_timeout_millis_purge_batch
-                if is_timed_out_on_purge:
-                    batch = construct_record_batch(
-                        pdfs, pdf_data_cnt, return_schema, state_pdfs, state_data_cnt
-                    )
-
-                    pdfs = []
-                    state_pdfs = []
-                    pdf_data_cnt = 0
-                    state_data_cnt = 0
-                    last_purged_time_ns = cur_time_ns
-
-                    if should_write_start_length:
-                        write_int(SpecialLengths.START_ARROW_STREAM, stream)
-                        should_write_start_length = False
-
-                    yield batch
 
             # end of loop, we may have remaining data
             if pdf_data_cnt > 0 or state_data_cnt > 0:
