@@ -40,7 +40,7 @@ WholeStageCodegen (8)
                                 InputAdapter
                                   BroadcastExchange #5
                                     WholeStageCodegen (3)
-                                      Filter [ps_suppkey,ps_partkey]
+                                      Filter [ps_partkey,ps_suppkey]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet spark_catalog.default.partsupp [ps_partkey,ps_suppkey,ps_supplycost]

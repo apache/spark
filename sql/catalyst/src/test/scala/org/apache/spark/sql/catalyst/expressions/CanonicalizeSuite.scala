@@ -184,7 +184,6 @@ class CanonicalizeSuite extends SparkFunSuite {
     assert(cast.canonicalized.resolved)
   }
 
-
   test("SPARK-40362: Commutative operator under BinaryComparison") {
     Seq(EqualTo, EqualNullSafe, GreaterThan, LessThan, GreaterThanOrEqual, LessThanOrEqual)
       .foreach { bc =>

@@ -600,15 +600,12 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
       'c.as('c1)).join(tr2_.select('x.as('x1)), Inner,
       Some('a2.attr === 'x1.attr)).where('x1.attr + 'c1.attr > 10)
 
-    val expectedOptimizedQueryPlan = tr1_.select('a, 'a.as('a1), 'a.as('a2),
-      'b.as('b1), 'c, 'c.as('c1)).join(tr2_.select('x.as('x1)), Inner,
-      Some('a2.attr === 'x1.attr))
-
-    val (expected, _) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
-      executePlan(expectedOptimizedQueryPlan, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
-    }
-
-
+    val expected =  tr1.where('c.attr + 'a.attr > 10 && 'a.attr > -11 && 'a > -12
+      && IsNotNull('a) && IsNotNull('c)).
+      select('a, 'a.as('a1), 'a.as('a2),
+      'b.as('b1), 'c, 'c.as('c1)).join(tr2.where(IsNotNull('x) &&
+      'x.attr > -12 && 'x > -11).select('x.as('x1)), Inner,
+      Some('a2.attr === 'x1.attr && 'x1.attr + 'c1.attr > 10)).analyze
 
     val (actual, constraints) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
       executePlan(query, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
@@ -1384,21 +1381,21 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
       groupBy('b1.attr, 'c1.attr)('b1, 'c1.as("c2"), count('a).as("a3")).
       select('c2, 'a3).join(tr2.where('x.attr > 9), Inner, Some("c2".attr === "x".attr))
 
-    val (expected, _) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
-      val expectedQuery = tr1.where('c.attr + 'a.attr > 10 && 'a.attr > -15).select('a,
-        'a.as('a1), 'a.as('a2), 'b.as('b1), 'c, 'c.as('c1)).
-        groupBy('b1.attr, 'c1.attr)('b1, 'c1.as("c2"),
-          count('a).as("a3")).
-        select('c2, 'a3).join(tr2.where('x.attr > 9), Inner, Some("c2".attr === "x".attr))
-      executePlan(getTestPlan, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
-    }
-
     val (actual, constraints) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
       executePlan(query, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
     }
+
+    val expected = tr1.where(IsNotNull('c) && IsNotNull('a) && 'c + 'a > 10 && 'a > -15 && 'c > 9)
+      .select('a,
+        'a.as('a1), 'a.as('a2), 'b.as('b1), 'c, 'c.as('c1)).
+      groupBy('b1.attr, 'c1.attr)('b1, 'c1.as("c2"), count('a).as("a3")).
+      select('c2, 'a3).join(tr2.where('x.attr > 9 && IsNotNull('x)),
+      Inner, Some("c2".attr === "x".attr)).analyze
+
+
     trivialConstraintAbsenceChecker(constraints)
 
-    comparePlans(plan1, plan2)
+    comparePlans(expected, actual)
 
     val conditionFinder: PartialFunction[LogicalPlan, Seq[Expression]] = {
       case f: Filter => f.expressions.find(x => x.find {
@@ -1431,25 +1428,19 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
     }
 
 
-    val (plan2, constraints2) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "true") {
+    val (plan, constraints) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
       executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
     }
-    trivialConstraintAbsenceChecker(constraints2)
+    trivialConstraintAbsenceChecker(constraints)
 
-
-    assert(constraints2 match {
-      case _: ConstraintSet => true
-      case _: ExpressionSet => false
-    })
-    val filters = plan2.collect {
+    val filters = plan.collect {
       case f: Filter => f
     }
     assertEquals(1, filters.size)
     val filterExprs = splitConjunctivePredicates(filters.head.condition)
     assertEquals(4, filterExprs.size)
     val exprsSet = ExpressionSet(filterExprs)
-    val proj = plan2.collect {
+    val proj = plan.collect {
       case pr: Project => pr
     }.head
     val expectedFilters = Seq(IsNotNull(proj.output.find(_.name == "a").get),
@@ -1460,7 +1451,7 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
     expectedFilters.foreach(f => assertTrue(exprsSet.contains(f)))
   }
 
-  // Not comparing with stock spark plan as stock spark plan is unoptimal
+
   test("test pruning using constraints with filters after project - 2") {
     def getTestPlan: LogicalPlan = {
       val tr1 = LocalRelation('a.int, 'b.string, 'c.int)
@@ -1469,30 +1460,16 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
         where('c1.attr + 'a2.attr > 10 && 'a2.attr > -15)
     }
 
-    val (plan1, constraints1) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "false") {
+    val (plan, constraints) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
       executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
     }
+    trivialConstraintAbsenceChecker(constraints)
 
-    val (plan2, constraints2) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "true") {
-      executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
-    }
-    trivialConstraintAbsenceChecker(constraints2)
-    assert(constraints1 match {
-      case _: ConstraintSet => false
-      case _: ExpressionSet => true
-    })
-
-    assert(constraints2 match {
-      case _: ConstraintSet => true
-      case _: ExpressionSet => false
-    })
     val correctAnswer = LocalRelation('a.int, 'b.string, 'c.int).
       select('a, 'a.as('a1), 'a.as('a2),
         'b.as('b1), 'c, 'c.as('c1)).where('c.attr + 'a.attr > 10 && 'a.attr > -15
       && IsNotNull('a) && IsNotNull('c)).analyze
-    comparePlans(correctAnswer, plan2)
+    comparePlans(correctAnswer, plan)
   }
 
   // Not comparing with stock spark plan as stock spark plan is unoptimal
@@ -1504,30 +1481,16 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
         where('c.attr + 'a.attr > 10 && 'a .attr > -15)
     }
 
-    val (plan1, constraints1) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "false") {
+    val (plan, constraints) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
       executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
     }
+    trivialConstraintAbsenceChecker(constraints)
 
-    val (plan2, constraints2) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "true") {
-      executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
-    }
-    trivialConstraintAbsenceChecker(constraints2)
-    assert(constraints1 match {
-      case _: ConstraintSet => false
-      case _: ExpressionSet => true
-    })
-
-    assert(constraints2 match {
-      case _: ConstraintSet => true
-      case _: ExpressionSet => false
-    })
     val correctAnswer = LocalRelation('a.int, 'b.string, 'c.int).
       select('a, 'a.as('a1), 'a.as('a2),
         'b.as('b1), 'c, 'c.as('c1)).where('c1.attr + 'a1.attr > 10 && 'a2.attr > -15
       && IsNotNull('a) && IsNotNull('c)).analyze
-    comparePlans(correctAnswer, plan2)
+    comparePlans(correctAnswer, plan)
   }
 
   test("test new filter inference with decanonicalization for expression not" +
@@ -1544,25 +1507,11 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
           Option(Literal(null))) > 10 && 'a.attr > -15).where('z.attr > 10)
     }
 
-    val (plan1, constraints1) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "false") {
+    val (plan, constraints) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
       executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
     }
+    trivialConstraintAbsenceChecker(constraints)
 
-    val (plan2, constraints2) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "true") {
-      executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
-    }
-    trivialConstraintAbsenceChecker(constraints2)
-    assert(constraints1 match {
-      case _: ConstraintSet => false
-      case _: ExpressionSet => true
-    })
-
-    assert(constraints2 match {
-      case _: ConstraintSet => true
-      case _: ExpressionSet => false
-    })
     val correctAnswer = LocalRelation('a.int, 'b.int, 'c.int).
       select('a, 'a.as('a1), 'a.as('a2),
         'b.as('b1), 'c, 'c.as('c1), CaseWhen(Seq(
@@ -1571,7 +1520,7 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
           Option(Literal(null))).as("z"), 'b).where('z.attr > 10 && 'a2.attr > -15
       && IsNotNull('a) && IsNotNull('z)).select('a, 'a1, 'a2,
       'b1, 'c, 'c1, 'z).analyze
-    comparePlans(correctAnswer, plan2)
+    comparePlans(correctAnswer, plan)
   }
 
   test("test new filter inference with decanonicalization for expression not" +
@@ -1588,25 +1537,11 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
           Option(Literal(null))) > 10 && 'a.attr > -15).where('z.attr > 10)
     }
 
-    val (plan1, constraints1) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "false") {
+    val (plan, constraints) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
       executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
     }
+    trivialConstraintAbsenceChecker(constraints)
 
-    val (plan2, constraints2) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "true") {
-      executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
-    }
-    trivialConstraintAbsenceChecker(constraints2)
-    assert(constraints1 match {
-      case _: ConstraintSet => false
-      case _: ExpressionSet => true
-    })
-
-    assert(constraints2 match {
-      case _: ConstraintSet => true
-      case _: ExpressionSet => false
-    })
     val correctAnswer = LocalRelation('a.int, 'b.int, 'c.int).
       select('a, 'a.as('a1), 'a.as('a2),
         'b.as('b1), 'c, 'c.as('c1), ('a.attr + CaseWhen(Seq(
@@ -1615,7 +1550,7 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
           Option(Literal(null)))).as("z"), 'b).where('z.attr > 10 && 'a2.attr > -15
       && IsNotNull('a) && IsNotNull('z)).select('a, 'a1, 'a2,
       'b1, 'c, 'c1, 'z).analyze
-    comparePlans(correctAnswer, plan2)
+    comparePlans(correctAnswer, plan)
   }
 
   test("test new filter inference with decanonicalization for expression" +
@@ -1628,25 +1563,11 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
         where('a.attr + 'b1.attr + 'c.attr > 10 && 'a.attr > -15)
     }
 
-    val (plan1, constraints1) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "false") {
-      executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
-    }
-
-    val (plan2, constraints2) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "true") {
+    val (plan2, constraints2) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
       executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
     }
     trivialConstraintAbsenceChecker(constraints2)
-    assert(constraints1 match {
-      case _: ConstraintSet => false
-      case _: ExpressionSet => true
-    })
 
-    assert(constraints2 match {
-      case _: ConstraintSet => true
-      case _: ExpressionSet => false
-    })
     val correctAnswer = LocalRelation('a.int, 'b.int, 'c.int).
       select('a, 'a.as('a1), 'a.as('a2),
         'b.as('b1), 'c, 'c.as('c1),
@@ -1667,32 +1588,18 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
           'a.attr > -15)
     }
 
-    val (plan1, constraints1) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "false") {
+    val (plan, constraints) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
       executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
     }
+    trivialConstraintAbsenceChecker(constraints)
 
-    val (plan2, constraints2) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "true") {
-      executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
-    }
-    trivialConstraintAbsenceChecker(constraints2)
-    assert(constraints1 match {
-      case _: ConstraintSet => false
-      case _: ExpressionSet => true
-    })
-
-    assert(constraints2 match {
-      case _: ConstraintSet => true
-      case _: ExpressionSet => false
-    })
     val correctAnswer = LocalRelation('a.int, 'b.int, 'c.int).
       select('a, 'a.as('a1), 'a.as('a2), 'b,
         'b.as('b1), 'c, 'c.as('c1), ('a.attr + 'b.attr).as("z")).
       where('c1.attr + 'z.attr > 10 &&
         'a2.attr > -15 && IsNotNull('b)
         && IsNotNull('a) && IsNotNull('c)).analyze
-    comparePlans(correctAnswer, plan2)
+    comparePlans(correctAnswer, plan)
   }
 
   test("aliased expression contains embedded alias in projection") {
@@ -1730,31 +1637,18 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
         where('c.attr + 'a.attr + 'b.attr > 10 && 'a.attr > -15)
     }
 
-    val (plan1, constraints1) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "false") {
+
+    val (plan, constraints) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
       executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
     }
 
-    val (plan2, constraints2) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "true") {
-      executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
-    }
 
-    assert(constraints1 match {
-      case _: ConstraintSet => false
-      case _: ExpressionSet => true
-    })
-
-    assert(constraints2 match {
-      case _: ConstraintSet => true
-      case _: ExpressionSet => false
-    })
     val correctAnswer = LocalRelation('a.int, 'b.string, 'c.int).
       select('a, 'a.as('a1), 'a.as('a2), 'b,
         'b.as('b1), 'c, 'c.as('c1), ('a.attr + 'b.attr).as("z")).
       where('c1.attr + 'z.attr > 10 && 'a2.attr > -15
         && IsNotNull('a) && IsNotNull('c) && IsNotNull('b)).analyze
-    comparePlans(correctAnswer, plan2)
+    comparePlans(correctAnswer, plan)
   }
 
   test("Bug caused by swapping of operands due to" +
@@ -1787,43 +1681,42 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
 
   ignore("plan equivalence with case statements and performance comparison with benefit" +
     "of more than 10x conservatively") {
-    def getTestPlan: LogicalPlan = {
-      val tr = LocalRelation('a.int, 'b.int, 'c.int, 'd.int, 'e.int, 'f.int, 'g.int, 'h.int, 'i.int,
-        'j.int, 'k.int, 'l.int, 'm.int, 'n.int)
-      tr.select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i, 'j, 'k, 'l, 'm, 'n,
-        CaseWhen(Seq(('a.attr + 'b.attr + 'c.attr + 'd.attr + 'e.attr + 'f.attr + 'g.attr
-          + 'h.attr + 'i.attr + 'j.attr + 'k.attr + 'l.attr + 'm.attr + 'n.attr > Literal(1),
-          Literal(1)),
-          ('a.attr + 'b.attr + 'c.attr + 'd.attr + 'e.attr + 'f.attr + 'g.attr + 'h.attr +
-            'i.attr + 'j.attr + 'k.attr + 'l.attr + 'm.attr + 'n.attr > Literal(2), Literal(2))),
-          Option(Literal(0))).as("JoinKey1")
-      ).select('a.attr.as("a1"), 'b.attr.as("b1"), 'c.attr.as("c1"),
-        'd.attr.as("d1"), 'e.attr.as("e1"), 'f.attr.as("f1"),
-        'g.attr.as("g1"), 'h.attr.as("h1"), 'i.attr.as("i1"),
-        'j.attr.as("j1"), 'k.attr.as("k1"), 'l.attr.as("l1"),
-        'm.attr.as("m1"), 'n.attr.as("n1"), 'JoinKey1.attr.as("cf1"),
-        'JoinKey1.attr).select('a1, 'b1, 'c1, 'd1, 'e1, 'f1, 'g1, 'h1, 'i1, 'j1, 'k1,
-        'l1, 'm1, 'n1, 'cf1, 'JoinKey1).join(tr, condition = Option('a.attr <=> 'JoinKey1.attr))
-    }
-    val (plan1, constraints1) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "false") {
-      executePlan(getTestPlan, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
-    }
+    val tr = LocalRelation('a.int, 'b.int, 'c.int, 'd.int, 'e.int, 'f.int, 'g.int, 'h.int, 'i.int,
+      'j.int, 'k.int, 'l.int, 'm.int, 'n.int)
+    val query = tr.select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i, 'j, 'k, 'l, 'm, 'n,
+      CaseWhen(Seq(('a.attr + 'b.attr + 'c.attr + 'd.attr + 'e.attr + 'f.attr + 'g.attr
+        + 'h.attr + 'i.attr + 'j.attr + 'k.attr + 'l.attr + 'm.attr + 'n.attr > Literal(1),
+        Literal(1)),
+        ('a.attr + 'b.attr + 'c.attr + 'd.attr + 'e.attr + 'f.attr + 'g.attr + 'h.attr +
+          'i.attr + 'j.attr + 'k.attr + 'l.attr + 'm.attr + 'n.attr > Literal(2), Literal(2))),
+        Option(Literal(0))).as("JoinKey1")
+    ).select('a.attr.as("a1"), 'b.attr.as("b1"), 'c.attr.as("c1"),
+      'd.attr.as("d1"), 'e.attr.as("e1"), 'f.attr.as("f1"),
+      'g.attr.as("g1"), 'h.attr.as("h1"), 'i.attr.as("i1"),
+      'j.attr.as("j1"), 'k.attr.as("k1"), 'l.attr.as("l1"),
+      'm.attr.as("m1"), 'n.attr.as("n1"), 'JoinKey1.attr.as("cf1"),
+      'JoinKey1.attr).select('a1, 'b1, 'c1, 'd1, 'e1, 'f1, 'g1, 'h1, 'i1, 'j1, 'k1,
+      'l1, 'm1, 'n1, 'cf1, 'JoinKey1).join(tr, condition = Option('a.attr <=> 'JoinKey1.attr))
 
-    val (plan2, constraints2) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "true") {
-      executePlan(getTestPlan, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
-    }
-    trivialConstraintAbsenceChecker(constraints2)
-    assert(constraints1 match {
-      case _: ConstraintSet => false
-      case _: ExpressionSet => true
-    })
+    val expected = tr.select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i, 'j, 'k, 'l, 'm, 'n,
+      CaseWhen(Seq(('a.attr + 'b.attr + 'c.attr + 'd.attr + 'e.attr + 'f.attr + 'g.attr
+        + 'h.attr + 'i.attr + 'j.attr + 'k.attr + 'l.attr + 'm.attr + 'n.attr > Literal(1),
+        Literal(1)),
+        ('a.attr + 'b.attr + 'c.attr + 'd.attr + 'e.attr + 'f.attr + 'g.attr + 'h.attr +
+          'i.attr + 'j.attr + 'k.attr + 'l.attr + 'm.attr + 'n.attr > Literal(2), Literal(2))),
+        Option(Literal(0))).as("JoinKey1")
+    ).select('a.attr.as("a1"), 'b.attr.as("b1"), 'c.attr.as("c1"),
+      'd.attr.as("d1"), 'e.attr.as("e1"), 'f.attr.as("f1"),
+      'g.attr.as("g1"), 'h.attr.as("h1"), 'i.attr.as("i1"),
+      'j.attr.as("j1"), 'k.attr.as("k1"), 'l.attr.as("l1"),
+      'm.attr.as("m1"), 'n.attr.as("n1"), 'JoinKey1.attr.as("cf1"),
+      'JoinKey1.attr).select('a1, 'b1, 'c1, 'd1, 'e1, 'f1, 'g1, 'h1, 'i1, 'j1, 'k1,
+      'l1, 'm1, 'n1, 'cf1, 'JoinKey1).join(tr, condition = Option('a.attr <=> 'JoinKey1.attr))
 
-    assert(constraints2 match {
-      case _: ConstraintSet => true
-      case _: ExpressionSet => false
-    })
+    val (plan, constraints) = withSQLConf[(LogicalPlan, ExpressionSet)]() {
+      executePlan(query, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
+    }
+    trivialConstraintAbsenceChecker(constraints)
 
     // Due to proper tracking of aliases, it is possible that final number of constraints
     // may be a liitle more than the number of constraints returned by old code
@@ -1834,28 +1727,9 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
     // refer function ConstraintSet.convertToCanonicalizedIfRqeuired
     // where we are expanding using expression list also.
     // assert(constraints2.expand.size <= constraints1.expand.size)
-    comparePlans(plan1, plan2)
+    comparePlans(expected, plan)
 
-    val (plan3, constraints3) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "false") {
-      executePlan(getTestPlan, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
-    }
 
-    val (plan4, constraints4) = withSQLConf[(LogicalPlan, ExpressionSet)](
-      SQLConf.OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED.key -> "true") {
-      executePlan(getTestPlan, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
-    }
-    trivialConstraintAbsenceChecker(constraints4)
-    assert(constraints3 match {
-      case _: ConstraintSet => false
-      case _: ExpressionSet => true
-    })
-    assert(constraints4 match {
-      case _: ConstraintSet => true
-      case _: ExpressionSet => false
-    })
-    // assert(constraints4.expand.size <= constraints3.expand.size)
-    comparePlans(plan3, plan4)
   }
 
   def executePlan(plan: LogicalPlan, optimizerType: OptimizerTypes.Value):
