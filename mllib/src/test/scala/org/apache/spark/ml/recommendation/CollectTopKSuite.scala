@@ -18,11 +18,10 @@
 package org.apache.spark.ml.recommendation
 
 import org.apache.spark.ml.util.MLTest
-import org.apache.spark.sql.{Column, DataFrame}
-import org.apache.spark.sql.catalyst.expressions.aggregate.CollectOrdered
-import org.apache.spark.sql.functions.{col, struct}
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions.{col, collect_top_k, struct}
 
-class CollectOrderedSuite extends MLTest {
+class CollectTopKSuite extends MLTest {
 
   import testImplicits._
 
@@ -44,16 +43,10 @@ class CollectOrderedSuite extends MLTest {
     ).toDF("user", "item", "score")
   }
 
-  private def collect_ordered(e: Column, num: Int, reverse: Boolean): Column = {
-    new Column(CollectOrdered(e.expr, num, reverse)
-      .toAggregateExpression(false)
-    )
-  }
-
   test("k smallest with k < #items") {
     val k = 2
     val topK = dataFrame.groupBy("user")
-      .agg(collect_ordered(col("score"), k, false))
+      .agg(collect_top_k(col("score"), k, true))
       .as[(Int, Seq[Float])]
       .collect()
 
@@ -69,7 +62,7 @@ class CollectOrderedSuite extends MLTest {
   test("k smallest with k > #items") {
     val k = 5
     val topK = dataFrame.groupBy("user")
-      .agg(collect_ordered(col("score"), k, false))
+      .agg(collect_top_k(col("score"), k, true))
       .as[(Int, Seq[Float])]
       .collect()
 
@@ -85,7 +78,7 @@ class CollectOrderedSuite extends MLTest {
   test("k largest with k < #items") {
     val k = 2
     val topK = dataFrame.groupBy("user")
-      .agg(collect_ordered(struct("score", "item"), k, true))
+      .agg(collect_top_k(struct("score", "item"), k, false))
       .as[(Int, Seq[(Float, Int)])]
       .map(t => (t._1, t._2.map(p => (p._2, p._1))))
       .collect()
@@ -102,7 +95,7 @@ class CollectOrderedSuite extends MLTest {
   test("k largest with k > #items") {
     val k = 5
     val topK = dataFrame.groupBy("user")
-      .agg(collect_ordered(struct("score", "item"), k, true))
+      .agg(collect_top_k(struct("score", "item"), k, false))
       .as[(Int, Seq[(Float, Int)])]
       .map(t => (t._1, t._2.map(p => (p._2, p._1))))
       .collect()

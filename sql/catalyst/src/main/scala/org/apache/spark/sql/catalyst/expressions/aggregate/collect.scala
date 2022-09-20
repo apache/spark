@@ -196,15 +196,16 @@ case class CollectSet(
 }
 
 /**
- * Collect the top-k elements. This expression is dedicated only for MLLIB.
+ * Collect the top-k elements. This expression is dedicated only for Spark-ML.
+ * @param reverse when true, returns the smallest k elements.
  */
-case class CollectOrdered(
+case class CollectTopK(
     child: Expression,
     num: Int,
     reverse: Boolean = false,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends Collect[BoundedPriorityQueue[Any]] {
-  require(num > 0)
+  assert(num > 0)
 
   def this(child: Expression, num: Int) = this(child, num, false, 0, 0)
   def this(child: Expression, num: Int, reverse: Boolean) = this(child, num, reverse, 0, 0)
@@ -219,19 +220,19 @@ case class CollectOrdered(
   }
 
   override def createAggregationBuffer(): BoundedPriorityQueue[Any] =
-    new BoundedPriorityQueue[Any](num)(ordering.reverse)
+    new BoundedPriorityQueue[Any](num)(ordering)
 
   override def eval(buffer: BoundedPriorityQueue[Any]): Any =
-    new GenericArrayData(buffer.toArray.sorted(ordering))
+    new GenericArrayData(buffer.toArray.sorted(ordering.reverse))
 
-  override def prettyName: String = "collect_ordered"
+  override def prettyName: String = "collect_top_k"
 
-  override protected def withNewChildInternal(newChild: Expression): CollectOrdered =
+  override protected def withNewChildInternal(newChild: Expression): CollectTopK =
     copy(child = newChild)
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): CollectOrdered =
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): CollectTopK =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): CollectOrdered =
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): CollectTopK =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 }
