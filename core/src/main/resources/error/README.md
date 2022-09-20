@@ -13,8 +13,8 @@ and message parameters rather than an arbitrary error message.
 3. Add a new class to `error-class.json`; keep in mind the invariants below.
 4. Check if the exception type already extends `SparkThrowable`.
    If true, skip to step 6.
-5. Mix `SparkThrowable` into the exception, and place it to Query.*Errors at least when it is invoked more than once.
-6. Throw the exception with the error class and message parameters.
+5. Mix `SparkThrowable` into the exception.
+6. Throw the exception with the error class and message parameters. If the same exception is thrown in several places, create an util function in a central place such as `QueryCompilationErrors.scala` to instantiate the exception.
 
 ### Before
 
