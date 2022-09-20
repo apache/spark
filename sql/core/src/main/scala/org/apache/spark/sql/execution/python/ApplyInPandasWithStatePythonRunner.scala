@@ -69,11 +69,17 @@ class ApplyInPandasWithStatePythonRunner(
 
   override val simplifiedTraceback: Boolean = sqlConf.pysparkSimplifiedTraceback
 
-  override val bufferSize: Int = sqlConf.pandasUDFBufferSize
-  require(
-    bufferSize >= 4,
-    "Pandas execution requires more than 4 bytes. Please set higher buffer. " +
-      s"Please change '${SQLConf.PANDAS_UDF_BUFFER_SIZE.key}'.")
+  override val bufferSize: Int = {
+    val configuredSize = sqlConf.pandasUDFBufferSize
+    if (configuredSize < 4) {
+      logWarning("Pandas execution requires more than 4 bytes. Please configure bigger value " +
+        s"for the configuration '${SQLConf.PANDAS_UDF_BUFFER_SIZE.key}'. " +
+        "Force using the value '4'.")
+      4
+    } else {
+      configuredSize
+    }
+  }
 
   private val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
 
