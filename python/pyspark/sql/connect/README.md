@@ -22,7 +22,7 @@ of Spark. To enable it, you only need to activate the driver plugin for Spark Co
 ## Run Spark Shell
 
 ```commandline
-./bin/spark-shell --conf spark.plugins=org.apache.spark.sql.sparkconnect.service.SparkConnectPlugin
+./bin/spark-shell --conf spark.plugins=org.apache.spark.sql.connect.service.SparkConnectPlugin
 ```
 
 ## Run Tests

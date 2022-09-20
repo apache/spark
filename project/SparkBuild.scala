@@ -85,7 +85,7 @@ object BuildCommons {
   val javaVersion = settingKey[String]("source and target JVM version for javac and scalac")
 
   // Google Protobuf version used for generating the protobuf.
-  val protoVersion = "3.21.0"
+  val protoVersion = "3.21.1"
   // GRPC version used for Spark Connect.
   val gprcVersion = "1.47.0"
 }
@@ -368,8 +368,9 @@ object SparkBuild extends PomBuild {
     // Apparently we can remove this when we use JDK 11.
     Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat,
 
-    // BUG fuck me
-    PB.protocVersion := "3.21.1",
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
+    PB.protocVersion := protoVersion,
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
@@ -488,10 +489,8 @@ object SparkBuild extends PomBuild {
 
     sparkSql := {
       (Compile / runMain).toTask(" org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver").value
-    },
-
+    }
   ))(assembly)
-
 
   enable(Seq(sparkShell := (LocalProject("assembly") / sparkShell).value))(spark)
 
@@ -616,7 +615,8 @@ object SparkConnect {
   val shadeJar = taskKey[Unit]("Shade the Jars")
 
   lazy val settings = Seq(
-    // Setting version
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
     PB.protocVersion := BuildCommons.protoVersion,
 
     // Crap
@@ -803,6 +803,8 @@ object ExcludedDependencies {
  */
 object OldDeps {
 
+  import BuildCommons.protoVersion
+
   lazy val project = Project("oldDeps", file("dev"))
     .settings(oldDepsSettings)
     .disablePlugins(com.typesafe.sbt.pom.PomReaderPlugin)
@@ -815,7 +817,9 @@ object OldDeps {
   }
 
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
-    PB.protocVersion := "3.21.1",
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
+    PB.protocVersion := protoVersion,
     name := "old-deps",
     libraryDependencies := allPreviousArtifactKeys.value.flatten
   )
