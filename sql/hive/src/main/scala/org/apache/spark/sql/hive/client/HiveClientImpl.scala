@@ -56,7 +56,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils.stringToURI
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -598,7 +598,7 @@ private[hive] class HiveClientImpl(
       schemaProps: Map[String, String]): Unit = withHiveState {
     val oldTable = shim.getTable(client, dbName, tableName)
     verifyColumnDataType(newDataSchema)
-    val hiveCols = newDataSchema.map(toHiveColumn(_))
+    val hiveCols = newDataSchema.map(toHiveColumn)
     oldTable.setFields(hiveCols.asJava)
 
     // remove old schema table properties
@@ -1017,7 +1017,7 @@ private[hive] class HiveClientImpl(
 
 private[hive] object HiveClientImpl extends Logging {
   /** Converts the native StructField to Hive's FieldSchema. */
-  def toHiveColumn(c: StructField, lowerCase: Boolean = false): FieldSchema = {
+  def toHiveColumn(c: StructField): FieldSchema = {
     // For Hive Serde, we still need to to restore the raw type for char and varchar type.
     // When reading data in parquet, orc, or avro file format with string type for char,
     // the tailing spaces may lost if we are not going to pad it.
@@ -1026,14 +1026,7 @@ private[hive] object HiveClientImpl extends Logging {
     } else {
       CharVarcharUtils.getRawTypeString(c.metadata).getOrElse(c.dataType.catalogString)
     }
-    val name = if (lowerCase) {
-      // scalastyle:off caselocale
-      c.name.toLowerCase
-      // scalastyle:on caselocale
-    } else {
-      c.name
-    }
-    new FieldSchema(name, typeString, c.getComment().orNull)
+    new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
 
   /** Get the Spark SQL native DataType from Hive's FieldSchema. */
@@ -1090,11 +1083,11 @@ private[hive] object HiveClientImpl extends Logging {
       hiveTable.setProperty("EXTERNAL", "TRUE")
     }
     // Note: In Hive the schema and partition columns must be disjoint sets
-    val (partCols, schema) = table.schema.partition { f =>
-      table.partitionColumnNames.contains(f.name)
+    val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
+      table.partitionColumnNames.contains(c.getName)
     }
-    hiveTable.setFields(schema.map(toHiveColumn(_, true)).asJava)
-    hiveTable.setPartCols(partCols.map(toHiveColumn(_)).asJava)
+    hiveTable.setFields(schema.asJava)
+    hiveTable.setPartCols(partCols.asJava)
     Option(table.owner).filter(_.nonEmpty).orElse(userName).foreach(hiveTable.setOwner)
     hiveTable.setCreateTime(MILLISECONDS.toSeconds(table.createTime).toInt)
     hiveTable.setLastAccessTime(MILLISECONDS.toSeconds(table.lastAccessTime).toInt)
@@ -1120,16 +1113,14 @@ private[hive] object HiveClientImpl extends Logging {
         hiveTable.setNumBuckets(bucketSpec.numBuckets)
         // Hive metastore seems to be not case preserving with columns but case preserving with
         // bucket spec.
-        // scalastyle:off caselocale
-        hiveTable.setBucketCols(bucketSpec.bucketColumnNames.map(_.toLowerCase).toList.asJava)
-        // scalastyle:on caselocale
+        val columns = CaseInsensitiveMap(schema.map(f => (f.getName, f.getName)).toMap)
+        hiveTable.setBucketCols(
+          bucketSpec.bucketColumnNames.map(c => columns.getOrElse(c, c)).toList.asJava)
 
         if (bucketSpec.sortColumnNames.nonEmpty) {
           hiveTable.setSortCols(
             bucketSpec.sortColumnNames
-              // scalastyle:off caselocale
-              .map(col => new Order(col.toLowerCase, HIVE_COLUMN_ORDER_ASC))
-              // scalastyle:on caselocale
+              .map(col => new Order(col, HIVE_COLUMN_ORDER_ASC))
               .toList
               .asJava
           )
