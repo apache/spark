@@ -123,6 +123,11 @@
           "all arguments must be strings."
         ]
       },
+      "UNEXPECTED_INPUT_TYPE" : {
+        "message" : [
+          "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
+        ]
+      },
       "WRONG_NUM_PARAMS" : {
         "message" : [
           "wrong number of parameters: <actualNum>."
@@ -568,6 +573,11 @@
       "AES_MODE" : {
         "message" : [
           "AES-<mode> with the padding <padding> by the <functionName> function."
+        ]
+      },
+      "CATALOG_OPERATION" : {
+        "message" : [
+          "Catalog <catalogName> does not support <operation>."
         ]
       },
       "DESC_TABLE_COLUMN_PARTITION" : {

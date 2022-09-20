@@ -1599,9 +1599,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       s"$commitProtocol does not support adding files with an absolute path")
   }
 
-  def microBatchUnsupportedByDataSourceError(srcName: String): Throwable = {
-    new UnsupportedOperationException(
-      s"Data source $srcName does not support microbatch processing.")
+  def microBatchUnsupportedByDataSourceError(
+      srcName: String,
+      disabledSources: String,
+      table: Table): Throwable = {
+    new UnsupportedOperationException(s"""
+         |Data source $srcName does not support microbatch processing.
+         |
+         |Either the data source is disabled at
+         |SQLConf.get.DISABLED_V2_STREAMING_MICROBATCH_READERS.key (The disabled sources
+         |are [$disabledSources]) or the table $table does not have MICRO_BATCH_READ
+         |capability. Meanwhile, the fallback, data source v1, is not available."
+       """.stripMargin)
   }
 
   def cannotExecuteStreamingRelationExecError(): Throwable = {

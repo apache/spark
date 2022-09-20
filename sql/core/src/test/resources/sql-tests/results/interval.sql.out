@@ -1726,7 +1726,24 @@ select interval '2-2' year to month + interval '3' day
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'INTERVAL '2-2' YEAR TO MONTH' is of interval year to month type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
+    "inputType" : "\"INTERVAL YEAR TO MONTH\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "interval '2-2' year to month + interval '3' day"
+  } ]
+}
 
 
 -- !query
@@ -1735,7 +1752,24 @@ select interval '3' day + interval '2-2' year to month
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'INTERVAL '2-2' YEAR TO MONTH' is of interval year to month type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
+    "inputType" : "\"INTERVAL YEAR TO MONTH\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "interval '3' day + interval '2-2' year to month"
+  } ]
+}
 
 
 -- !query
@@ -1744,7 +1778,24 @@ select interval '2-2' year to month - interval '3' day
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'INTERVAL '2-2' YEAR TO MONTH + (- INTERVAL '3' DAY)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'INTERVAL '2-2' YEAR TO MONTH' is of interval year to month type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
+    "inputType" : "\"INTERVAL YEAR TO MONTH\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"INTERVAL '2-2' YEAR TO MONTH + (- INTERVAL '3' DAY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "interval '2-2' year to month - interval '3' day"
+  } ]
+}
 
 
 -- !query
@@ -1777,7 +1828,24 @@ select 1 - interval '2' second
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '1 + (- INTERVAL '02' SECOND)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, '1' is of int type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"1 + (- INTERVAL '02' SECOND)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "1 - interval '2' second"
+  } ]
+}
 
 
 -- !query
@@ -1810,7 +1878,24 @@ select interval '2' second + 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '1 + INTERVAL '02' SECOND' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, '1' is of int type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"1 + INTERVAL '02' SECOND\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "interval '2' second + 1"
+  } ]
+}
 
 
 -- !query
