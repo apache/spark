@@ -1160,27 +1160,63 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-38118: Func(wrong_type) in the HAVING clause should throw data mismatch error") {
-    Seq("mean", "abs").foreach { func =>
-      assertAnalysisError(parsePlan(
+    assertAnalysisError(parsePlan(
+      s"""
+         |WITH t as (SELECT true c)
+         |SELECT t.c
+         |FROM t
+         |GROUP BY t.c
+         |HAVING mean(t.c) > 0d""".stripMargin),
+      Seq(s"cannot resolve 'mean(t.c)' due to data type mismatch"),
+      false)
+
+    assertAnalysisError(parsePlan(
+      s"""
+         |WITH t as (SELECT true c, false d)
+         |SELECT (t.c AND t.d) c
+         |FROM t
+         |GROUP BY t.c, t.d
+         |HAVING mean(c) > 0d""".stripMargin),
+      Seq(s"cannot resolve 'mean(t.c)' due to data type mismatch"),
+      false)
+
+    assertAnalysisErrorClass(
+      inputPlan = parsePlan(
         s"""
            |WITH t as (SELECT true c)
            |SELECT t.c
            |FROM t
            |GROUP BY t.c
-           |HAVING ${func}(t.c) > 0d""".stripMargin),
-        Seq(s"cannot resolve '$func(t.c)' due to data type mismatch"),
-        false)
+           |HAVING abs(t.c) > 0d""".stripMargin),
+      expectedErrorClass = "DATATYPE_MISMATCH",
+      expectedErrorSubClass = "UNEXPECTED_INPUT_TYPE",
+      expectedMessageParameters = Map(
+        "sqlExpr" -> "\"abs(c)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"c\"",
+        "inputType" -> "\"BOOLEAN\"",
+        "requiredType" ->
+          "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")"),
+      caseSensitive = false)
 
-      assertAnalysisError(parsePlan(
+    assertAnalysisErrorClass(
+      inputPlan = parsePlan(
         s"""
-           |WITH t as (SELECT true c, false d)
-           |SELECT (t.c AND t.d) c
-           |FROM t
-           |GROUP BY t.c, t.d
-           |HAVING ${func}(c) > 0d""".stripMargin),
-        Seq(s"cannot resolve '$func(t.c)' due to data type mismatch"),
-        false)
-    }
+         |WITH t as (SELECT true c, false d)
+         |SELECT (t.c AND t.d) c
+         |FROM t
+         |GROUP BY t.c, t.d
+         |HAVING abs(c) > 0d""".stripMargin),
+      expectedErrorClass = "DATATYPE_MISMATCH",
+      expectedErrorSubClass = "UNEXPECTED_INPUT_TYPE",
+      expectedMessageParameters = Map(
+        "sqlExpr" -> "\"abs(c)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"c\"",
+        "inputType" -> "\"BOOLEAN\"",
+        "requiredType" ->
+          "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")"),
+      caseSensitive = false)
   }
 
   test("SPARK-39354: should be `Table or view not found`") {

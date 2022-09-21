@@ -216,6 +216,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       resultFile: String,
       udf: TestUDF) extends TestCase with UDFTest
 
+  /** A UDAF test case. */
+  protected case class UDAFTestCase(
+      name: String,
+      inputFile: String,
+      resultFile: String,
+      udf: TestUDF) extends TestCase with UDFTest
+
   /** A UDF PostgreSQL test case. */
   protected case class UDFPgSQLTestCase(
       name: String,
@@ -245,6 +252,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         }
       case udfTestCase: UDFTest
           if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && !shouldTestScalarPandasUDFs =>
+        ignore(s"${testCase.name} is skipped because pyspark," +
+          s"pandas and/or pyarrow were not available in [$pythonExec].") {
+          /* Do nothing */
+        }
+      case udfTestCase: UDFTest
+          if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
+            !shouldTestGroupedAggPandasUDFs =>
         ignore(s"${testCase.name} is skipped because pyspark," +
           s"pandas and/or pyarrow were not available in [$pythonExec].") {
           /* Do nothing */
@@ -436,6 +450,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && shouldTestScalarPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
+      case udfTestCase: UDFTest
+          if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
+            shouldTestGroupedAggPandasUDFs =>
+        s"${testCase.name}${System.lineSeparator()}" +
+          s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
       case _ =>
         s"${testCase.name}${System.lineSeparator()}"
     }
@@ -493,6 +512,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
         Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
           UDFTestCase(
+            s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
+        }
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udaf")) {
+        Seq(TestGroupedAggPandasUDF("udaf")).map { udf =>
+          UDAFTestCase(
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
