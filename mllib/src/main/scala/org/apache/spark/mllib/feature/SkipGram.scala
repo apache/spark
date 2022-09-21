@@ -19,7 +19,6 @@ package org.apache.spark.mllib.feature
 import java.util.Random
 
 import org.apache.hadoop.io.compress.GzipCodec
-
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.parallel.ForkJoinTaskSupport
 import org.apache.spark.{HashPartitioner, SparkContext}
@@ -31,6 +30,7 @@ import org.apache.spark.mllib.util.Saveable
 import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.OpenHashMap
+
 
 
 private object ParItr {
@@ -209,7 +209,6 @@ class SkipGram extends Serializable with Logging {
   private var sample: Double = 0
   private var pow: Double = 0
   private var intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
-  private var finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
 
   /**
    * Sets vector size (default: 100).
@@ -335,20 +334,6 @@ class SkipGram extends Serializable with Logging {
     require(storageLevel != StorageLevel.NONE,
       "SkipGram is not designed to run without persisting intermediate RDDs.")
     this.intermediateRDDStorageLevel = storageLevel
-    this
-  }
-
-  /**
-   * Sets storage level for final RDDs. The default
-   * value is `MEMORY_AND_DISK`. Users can change it to a serialized storage, e.g.
-   * `MEMORY_AND_DISK_SER` and set `spark.rdd.compress` to `true` to reduce the space requirement,
-   * at the cost of speed.
-   */
-  @Since("3.4.0")
-  def setFinalRDDStorageLevel(storageLevel: StorageLevel): this.type = {
-    require(finalRDDStorageLevel != StorageLevel.NONE,
-      "SkipGram is not designed to run without persisting intermediate RDDs.")
-    this.finalRDDStorageLevel = storageLevel
     this
   }
 
