@@ -159,7 +159,7 @@ def predict_batch_udf(
     *,
     return_type: DataType,
     batch_size: int,
-    input_tensor_shapes: list[list[int]] | None = None,
+    input_tensor_shapes: list[list[int] | None] | Mapping[int, list[int]] | None = None,
 ) -> UserDefinedFunctionLike:
     """Given a function which loads a model, returns a pandas_udf for inferencing over that model.
 
@@ -185,7 +185,7 @@ def predict_batch_udf(
     1. pass thru dataframe column => model input as single numpy array.
     2. reshape flattened tensors into expected tensor shapes.
     3. user must use `pyspark.sql.functions.struct()` or `pyspark.sql.functions.array()` to
-       transform multiple input columns into the equivalent of a single-col tensor.
+       combine multiple input columns into the equivalent of a single-col tensor.
     4. pass thru dataframe column => model input as an (ordered) dictionary of numpy arrays.
 
     Example:
@@ -199,7 +199,7 @@ def predict_batch_udf(
 
         # predict on batches of tasks/partitions, using cached model
         def predict(
-            inputs: np.ndarray | Mapping[str, np.ndarray]
+            inputs: np.ndarray | list[np.ndarray]
         ) -> np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, np.dtype]]:
             return model.predict(inputs)
 
@@ -227,11 +227,17 @@ def predict_batch_udf(
     batch_size : int
         Batch size to use for inference, note that this is typically a limitation of the model
         and/or the hardware resources and is usually smaller than the Spark partition size.
-    input_tensor_shapes: list[list[int]]
-        Optional list of input tensor shapes for models with tensor inputs.  Each tensor
-        input must be represented as a single DataFrame column containing a flattened 1-D array.
-        The order of the tensor shapes must match the order of the selected DataFrame columns.
-        Tabular datasets with scalar-valued columns should not supply this argument.
+    input_tensor_shapes: list[list[int] | None] | Mapping[int, list[int]] | None
+        Optional input tensor shapes for models with tensor inputs.  This can be a list of shapes,
+        where each shape is a list of integers or None (for scalar inputs).  Alternatively, this
+        can be represented by a "sparse" dictionary, where the keys are the integer indices of the
+        inputs, and the values are the shapes.  Each tensor input value in the Spark DataFrame must
+        be represented as a single column containing a flattened 1-D array.  The provided
+        input_tensor_shapes will be used to reshape the flattened array into expected tensor shape.
+        For the list form, the order of the tensor shapes must match the order of the selected
+        DataFrame columns.  The batch dimension (typically -1 or None in the first dimension) should
+        not be included.  Tabular datasets with scalar-valued columns should not provide this
+        argument.
 
     Returns
     -------
@@ -243,20 +249,32 @@ def predict_batch_udf(
     def predict(data: Iterator[Union[pd.Series, pd.DataFrame]]) -> Iterator[pd.DataFrame]:
         from pyspark.ml.model_cache import ModelCache
 
+        # get predict function (from cache or from running user-provided predict_batch_fn)
         predict_fn = ModelCache.get(model_uuid)
         if not predict_fn:
             predict_fn = predict_batch_fn()
             ModelCache.add(model_uuid, predict_fn)
 
+        # get number of expected parameters for predict function
         signature = inspect.signature(predict_fn)
         num_expected = len(signature.parameters)
 
+        # convert sparse input_tensor_shapes to dense if needed
+        input_shapes: list[list[int] | None]
+        if isinstance(input_tensor_shapes, Mapping):
+            input_shapes = [None] * num_expected
+            for index, shape in input_tensor_shapes.items():
+                input_shapes[index] = shape
+        else:
+            input_shapes = input_tensor_shapes  # type: ignore
+
+        # iterate over partition, invoking predict_fn with ndarrays
         for partition in data:
             has_tuple = isinstance(partition, Tuple)  # type: ignore
             has_tensors = _has_tensor_cols(partition)
 
             # require input_tensor_shapes for any tensor columns
-            if has_tensors and not input_tensor_shapes:
+            if has_tensors and not input_shapes:
                 raise ValueError("Tensor columns require input_tensor_shapes")
 
             for batch in _batched(partition, batch_size):
@@ -264,11 +282,12 @@ def predict_batch_udf(
                 if num_actual == num_expected and num_expected > 1:
                     # input column per expected input, convert each column into param
                     multi_inputs = [batch[col].to_numpy() for col in batch.columns]
-
-                    if input_tensor_shapes:
-                        if len(input_tensor_shapes) == num_actual:
+                    if input_shapes:
+                        if len(input_shapes) == num_actual:
                             multi_inputs = [
-                                np.vstack(v).reshape(input_tensor_shapes[i])
+                                np.vstack(v).reshape([-1] + input_shapes[i])  # type: ignore
+                                if input_shapes[i]
+                                else v
                                 for i, v in enumerate(multi_inputs)
                             ]
                         else:
@@ -291,9 +310,12 @@ def predict_batch_udf(
                                 "input, use `struct` or `array` to combine columns into tensors."
                             )
 
-                    if input_tensor_shapes:
-                        if len(input_tensor_shapes) == 1:
-                            single_input = single_input.reshape(input_tensor_shapes[0])
+                    # if input_tensor_shapes provided, try to reshape input
+                    if input_shapes:
+                        if len(input_shapes) == 1:
+                            single_input = single_input.reshape(
+                                [-1] + input_shapes[0]  # type: ignore
+                            )
                         else:
                             raise ValueError(
                                 "Multiple input_tensor_shapes found, but model expected one input"

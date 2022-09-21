@@ -42,6 +42,11 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         self.pdf_tensor["t2"] = self.pdf.drop(columns="d").values.tolist()
         self.df_tensor2 = self.spark.createDataFrame(self.pdf_tensor)
 
+        # 4 scalar columns with 1 tensor column
+        self.pdf_scalar_tensor = self.pdf
+        self.pdf_scalar_tensor["t1"] = self.pdf.values.tolist()
+        self.df_scalar_tensor = self.spark.createDataFrame(self.pdf_scalar_tensor)
+
     def test_identity_single(self):
         def predict_batch_fn():
             def predict(inputs):
@@ -240,7 +245,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
 
         # muliple scalar columns with one tensor_input_shape => single numpy array
         sum_cols = predict_batch_udf(
-            array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[-1, 4]]
+            array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[4]]
         )
         preds = self.df.withColumn("preds", sum_cols(struct(*columns))).toPandas()
         self.assertTrue(np.array_equal(np.sum(self.data, axis=1), preds["preds"].to_numpy()))
@@ -250,7 +255,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
             array_sum_fn,
             return_type=DoubleType(),
             batch_size=5,
-            input_tensor_shapes=[[-1, 2], [-1, 2]],
+            input_tensor_shapes=[[2], [2]],
         )
         with self.assertRaisesRegex(Exception, "Multiple input_tensor_shapes found"):
             self.df.withColumn("preds", sum_cols(struct(*columns))).toPandas()
@@ -271,7 +276,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
 
         # tensor column with tensor_input_shapes => single numpy array
         sum_cols = predict_batch_udf(
-            array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[-1, 4]]
+            array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[4]]
         )
         preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns1))).toPandas()
         self.assertTrue(np.array_equal(np.sum(self.data, axis=1), preds["preds"].to_numpy()))
@@ -281,13 +286,13 @@ class PredictBatchUDFTests(SparkSessionTestCase):
             array_sum_fn,
             return_type=DoubleType(),
             batch_size=5,
-            input_tensor_shapes=[[-1, 4], [-1, 4]],
+            input_tensor_shapes=[[4], [3]],
         )
         with self.assertRaisesRegex(Exception, "Multiple input_tensor_shapes found"):
             preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns1))).toPandas()
 
     def test_transform_multi_tensor(self):
-        def multi_dict_sum_fn():
+        def multi_sum_fn():
             def predict(t1, t2):
                 result = np.sum(t1, axis=1) + np.sum(t2, axis=1)
                 return result
@@ -296,16 +301,62 @@ class PredictBatchUDFTests(SparkSessionTestCase):
 
         # multiple tensor columns with tensor_input_shapes => list of numpy arrays
         sum_cols = predict_batch_udf(
-            multi_dict_sum_fn,
+            multi_sum_fn,
             return_type=DoubleType(),
             batch_size=5,
-            input_tensor_shapes=[[-1, 4], [-1, 3]],
+            input_tensor_shapes=[[4], [3]],
         )
-        self.df_tensor2.show()
         preds = self.df_tensor2.withColumn("preds", sum_cols("t1", "t2")).toPandas()
         self.assertTrue(
             np.array_equal(
                 np.sum(self.data, axis=1) + np.sum(self.data[:, 0:3], axis=1),
+                preds["preds"].to_numpy(),
+            )
+        )
+
+    def test_mixed_input_shapes(self):
+        def mixed_sum_fn():
+            # 4 scalars + 1 tensor
+            def predict(a, b, c, d, t1):
+                result = a + b + c + d + np.sum(t1, axis=1)
+                return result
+
+            return predict
+
+        # dense input_tensor_shapes
+        sum_cols = predict_batch_udf(
+            mixed_sum_fn,
+            return_type=DoubleType(),
+            batch_size=5,
+            input_tensor_shapes=[None, None, None, None, [4]],
+        )
+
+        preds = self.df_scalar_tensor.withColumn(
+            "preds", sum_cols("a", "b", "c", "d", "t1")
+        ).toPandas()
+
+        self.assertTrue(
+            np.array_equal(
+                np.sum(self.data, axis=1) * 2,
+                preds["preds"].to_numpy(),
+            )
+        )
+
+        # sparse input_tensor_shapes
+        sum_cols = predict_batch_udf(
+            mixed_sum_fn,
+            return_type=DoubleType(),
+            batch_size=5,
+            input_tensor_shapes={4: [4]},
+        )
+
+        preds = self.df_scalar_tensor.withColumn(
+            "preds", sum_cols("a", "b", "c", "d", "t1")
+        ).toPandas()
+
+        self.assertTrue(
+            np.array_equal(
+                np.sum(self.data, axis=1) * 2,
                 preds["preds"].to_numpy(),
             )
         )
