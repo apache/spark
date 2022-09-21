@@ -349,8 +349,8 @@ class SkipGram extends Serializable with Logging {
       a += 1
     }
     var i = 0
-    var d1 = Math.pow(cn(a), power) / trainWordsPow
     a = 0
+    var d1 = Math.pow(cn(i), power) / trainWordsPow
     while (a < table.length && i < cn.length) {
       table(a) = i
       if (a.toDouble / table.length > d1) {
