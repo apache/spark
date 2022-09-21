@@ -413,7 +413,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
     def min(self) -> FrameLike:
         """
-        Compute max of resampled values.
+        Compute min of resampled values.
 
         .. versionadded:: 3.4.0
 
@@ -589,7 +589,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
     def std(self) -> FrameLike:
         """
-        Compute mean of resampled values.
+        Compute std of resampled values.
 
         .. versionadded:: 3.4.0
 
@@ -633,7 +633,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
     def var(self) -> FrameLike:
         """
-        Compute mean of resampled values.
+        Compute var of resampled values.
 
         .. versionadded:: 3.4.0
 
