@@ -1842,23 +1842,23 @@ class SessionCatalog(
   // -----------------
 
   /**
-   * Drop all existing databases (except defaultDatabase), tables, partitions and functions,
-   * and set the current database to defaultDatabase.
+   * Drop all existing databases (except "default"), tables, partitions and functions,
+   * and set the current database to "default".
    *
    * This is mainly used for tests.
    */
   def reset(): Unit = synchronized {
-    setCurrentDatabase(defaultDatabase)
-    externalCatalog.setCurrentDatabase(defaultDatabase)
-    listDatabases().filter(_ != defaultDatabase).foreach { db =>
+    setCurrentDatabase(DEFAULT_DATABASE)
+    externalCatalog.setCurrentDatabase(DEFAULT_DATABASE)
+    listDatabases().filter(_ != DEFAULT_DATABASE).foreach { db =>
       dropDatabase(db, ignoreIfNotExists = false, cascade = true)
     }
-    listTables(defaultDatabase).foreach { table =>
+    listTables(DEFAULT_DATABASE).foreach { table =>
       dropTable(table, ignoreIfNotExists = false, purge = false)
     }
     // Temp functions are dropped below, we only need to drop permanent functions here.
-    externalCatalog.listFunctions(defaultDatabase, "*").map { f =>
-      FunctionIdentifier(f, Some(defaultDatabase))
+    externalCatalog.listFunctions(DEFAULT_DATABASE, "*").map { f =>
+      FunctionIdentifier(f, Some(DEFAULT_DATABASE))
     }.foreach(dropFunction(_, ignoreIfNotExists = false))
     clearTempTables()
     globalTempViewManager.clear()
