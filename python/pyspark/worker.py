@@ -258,7 +258,8 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
             # the number of columns of result have to match the return type
             # but it is fine for result to have no columns at all if it is empty
             if not (
-                len(result.columns) == len(return_type) or len(result.columns) == 0 and result.empty
+                len(result.columns) == len(return_type)
+                or (len(result.columns) == 0 and result.empty)
             ):
                 raise RuntimeError(
                     "Number of columns of the element (pandas.DataFrame) in return iterator "

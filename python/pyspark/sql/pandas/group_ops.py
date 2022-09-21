@@ -236,7 +236,7 @@ class PandasGroupedOpsMixin:
         state will be saved across invocations.
 
         The function should take parameters (key, Iterator[`pandas.DataFrame`], state) and
-        returns another Iterator[`pandas.DataFrame`]. The grouping key(s) will be passed as a tuple
+        return another Iterator[`pandas.DataFrame`]. The grouping key(s) will be passed as a tuple
         of numpy data types, e.g., `numpy.int32` and `numpy.float64`. The state will be passed as
         :class:`pyspark.sql.streaming.state.GroupState`.
 

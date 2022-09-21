@@ -473,8 +473,8 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                3.A. Extract the data out from entire data via the information of data range.
                3.B. Construct a new state instance if the state information is the first occurrence
                     for the current grouping key.
-               3.C. Leverage existing new state instance if the state instance is already available
-                    for the current grouping key. (Meaning it's not the first occurrence.)
+               3.C. Leverage the existing state instance if it is already available for the current
+                    grouping key. (Meaning it's not the first occurrence.)
                3.D. Remove the cache of state instance if the state information denotes the data is
                     the last chunk for current grouping key.
 
