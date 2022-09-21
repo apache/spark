@@ -96,6 +96,11 @@
           "the binary operator requires the input type <inputType>, not <actualDataType>."
         ]
       },
+      "CANNOT_CONVERT_TO_JSON" : {
+        "message" : [
+          "Unable to convert column <name> of type <type> to JSON."
+        ]
+      },
       "CAST_WITHOUT_SUGGESTION" : {
         "message" : [
           "cannot cast <srcType> to <targetType>."

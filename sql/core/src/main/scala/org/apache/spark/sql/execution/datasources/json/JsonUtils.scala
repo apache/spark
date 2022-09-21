@@ -21,7 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.JSONOptions
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -57,8 +57,10 @@ object JsonUtils {
   def checkJsonSchema(schema: DataType): Unit = {
     ExprUtils.checkJsonSchema(schema) match {
       case DataTypeMismatch("INVALID_JSON_MAP_KEY_TYPE", _) =>
-        QueryCompilationErrors.invalidJsonSchema(schema)
-      case mismatch => SparkException.internalError(s"Unknown data type mismatch: $mismatch.")
+        throw QueryCompilationErrors.invalidJsonSchema(schema)
+      case TypeCheckSuccess =>
+      case result =>
+        throw SparkException.internalError(s"Unknown type check result: $result.")
     }
   }
 }
