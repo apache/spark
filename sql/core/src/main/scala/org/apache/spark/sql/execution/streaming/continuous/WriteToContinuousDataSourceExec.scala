@@ -61,7 +61,6 @@ case class WriteToContinuousDataSourceExec(write: StreamingWrite, query: SparkPl
     } catch {
       case _: InterruptedException =>
         // Interruption is how continuous queries are ended, so accept and ignore the exception.
-      case cause: Throwable => throw cause
     }
 
     sparkContext.emptyRDD
