@@ -29,6 +29,7 @@ import org.apache.spark.{HashPartitioner, SparkContext}
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.ml.linalg.BLAS.{nativeBLAS => blas}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
@@ -575,6 +576,46 @@ class SkipGramModel private[spark] (
   @Since("3.4.0")
   def save(sc: SparkContext, path: String): Unit = {
     SkipGramModel.SaveLoadV1_0.save(sc, path, emb)
+  }
+
+  /**
+   * Find synonyms of a word; do not include the word itself in results.
+   * @param word a word
+   * @param num number of synonyms to find
+   * @return array of (word, cosineSimilarity)
+   */
+  @Since("3.4.0")
+  def findSynonyms(word: String, num: Int): Array[(String, Double)] = {
+    val f = emb.filter(_._1 == word).collect()
+    if (f.isEmpty) {
+      throw new IllegalStateException(s"$word not in vocabulary")
+    }
+    findSynonyms(f.head._2._2, num)
+  }
+
+  /**
+   * Find synonyms of a word; do not include the word itself in results.
+   * @param vector word embedding
+   * @param num number of synonyms to find
+   * @return array of (word, cosineSimilarity)
+   */
+  @Since("3.4.0")
+  def findSynonyms(vector: Array[Float], num: Int): Array[(String, Double)] = {
+    val vecNorm = BLAS.nativeBLAS.snrm2(vector.length, vector, 1)
+    if (vecNorm == 0) {
+      Array.empty[(String, Double)]
+    } else {
+      BLAS.nativeBLAS.sscal(vector.length, 1f / vecNorm, vector, 0, 1)
+      emb.map{case (w, (_, f, _)) =>
+        val wNorm = BLAS.nativeBLAS.snrm2(f.length, f, 1)
+        if (wNorm > 0) {
+          BLAS.nativeBLAS.sscal(f.length, 1f / wNorm, f, 0, 1)
+          w -> blas.sdot(f.length, f, 0, 1, vector, 0, 1).toDouble
+        } else {
+          w -> -1
+        }
+      }.takeOrdered(num)(Ordering.by(_._2))
+    }
   }
 }
 
