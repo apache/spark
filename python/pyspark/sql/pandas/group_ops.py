@@ -242,9 +242,10 @@ class PandasGroupedOpsMixin:
 
         For each group, all columns are passed together as `pandas.DataFrame` to the user-function,
         and the returned `pandas.DataFrame` across all invocations are combined as a
-        :class:`DataFrame`. Note that the user function should loop through and process all
-        elements in the iterator. The user function should not make a guess of the number of
-        elements in the iterator.
+        :class:`DataFrame`. Note that the user function should not make a guess of the number of
+        elements in the iterator. To process all data, the user function needs to iterate all
+        elements and process them. On the other hand, the user function is not strictly required to
+        iterate through all elements in the iterator if it intends to read a part of data.
 
         The `outputStructType` should be a :class:`StructType` describing the schema of all
         elements in the returned value, `pandas.DataFrame`. The column labels of all elements in
