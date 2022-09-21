@@ -403,8 +403,8 @@ class SkipGram extends Serializable with Logging {
     try {
       doFit(sent, emb, sampleProbBC, sc, expTable)
     } finally {
-      expTable.destroy()
-      sampleProbBC.destroy()
+      // expTable.destroy()
+      // sampleProbBC.destroy()
       sent.unpersist()
       countRDD.unpersist()
     }
