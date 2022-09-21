@@ -22,14 +22,18 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.parallel.ForkJoinTaskSupport
 
 import org.apache.hadoop.io.compress.GzipCodec
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{HashPartitioner, SparkContext}
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.BLAS.{nativeBLAS => blas}
-import org.apache.spark.mllib.util.Saveable
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -561,12 +565,71 @@ class SkipGramModel private[spark] (
    * @param path Path specifying the directory in which to save this model.
    *             If the directory already exists, this method throws an exception.
    */
-  override def save(sc: SparkContext, path: String): Unit = {
-    emb.map(x => s"""{
-         |"word":${x._1},
-         |"cn":${x._2._1},
-         |"syn0":[${x._2._2.mkString(",")}],
-         |"syn1Neg":[${x._2._3.mkString(",")}]}""".stripMargin)
-      .saveAsTextFile(path, classOf[GzipCodec])
+
+  @Since("1.4.0")
+  def save(sc: SparkContext, path: String): Unit = {
+    SkipGramModel.SaveLoadV1_0.save(sc, path, emb)
+  }
+}
+
+@Since("3.4.0")
+object SkipGramModel extends Loader[SkipGramModel] {
+  private object SaveLoadV1_0 {
+
+    val formatVersionV1_0 = "1.0"
+
+    val classNameV1_0 = "org.apache.spark.mllib.feature.SkipGramModel"
+
+    case class Data(word: Int, n: Long, syn0: Array[Float], syn1Neg: Array[Float])
+
+    def load(sc: SparkContext, path: String): SkipGramModel = {
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      import spark.sqlContext.implicits._
+      val dataFrame = spark.read.parquet(Loader.dataPath(path))
+      Loader.checkSchema[Data](dataFrame.schema)
+      new SkipGramModel(dataFrame.select("word", "n", "syn0", "syn1Neg")
+        .as[(Int, (Long, Array[Float], Array[Float]))].rdd)
+    }
+
+    def save(sc: SparkContext, path: String,
+             emb: RDD[(Int, (Long, Array[Float], Array[Float]))]): Unit = {
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      import spark.sqlContext.implicits._
+      val vectorSize = emb.first()._2._2.length
+      val numWords = emb.count()
+      val metadata = compact(render(
+        ("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~
+          ("vectorSize" -> vectorSize) ~ ("numWords" -> numWords)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+
+      emb.map(x => Data(x._1, x._2._1, x._2._2, x._2._3)).toDF()
+        .write.parquet(Loader.dataPath(path))
+    }
+  }
+
+  @Since("1.4.0")
+  override def load(sc: SparkContext, path: String): SkipGramModel = {
+
+    val (loadedClassName, loadedVersion, metadata) = Loader.loadMetadata(sc, path)
+    implicit val formats = DefaultFormats
+    val expectedVectorSize = (metadata \ "vectorSize").extract[Int]
+    val expectedNumWords = (metadata \ "numWords").extract[Int]
+    val classNameV1_0 = SaveLoadV1_0.classNameV1_0
+    (loadedClassName, loadedVersion) match {
+      case (classNameV1_0, "1.0") =>
+        val model = SaveLoadV1_0.load(sc, path)
+        val vectorSize = model.emb.first()._2._2.length
+        val numWords = model.emb.count()
+        require(expectedVectorSize == vectorSize,
+          s"SkipGramModel requires each word to be mapped to a vector of size " +
+            s"$expectedVectorSize, got vector of size $vectorSize")
+        require(expectedNumWords == numWords,
+          s"SkipGramModel requires $expectedNumWords words, but got $numWords")
+        model
+      case _ => throw new Exception(
+        s"SkipGramModel.load did not recognize model with (className, format version):" +
+          s"($loadedClassName, $loadedVersion).  Supported:\n" +
+          s"  ($classNameV1_0, 1.0)")
+    }
   }
 }
