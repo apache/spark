@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -30,7 +31,7 @@ import org.apache.spark.util.collection.Utils.sequenceToOption
  * reported by data sources to their catalyst counterparts. Then, annotates the plan with the
  * result.
  */
-object V2ScanPartitioning extends Rule[LogicalPlan] with SQLConfHelper {
+object V2ScanPartitioning extends Rule[LogicalPlan] with SQLConfHelper with Logging {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportPartitioning, _, None) =>
       val funCatalogOpt = relation.catalog.flatMap {
@@ -52,8 +53,10 @@ object V2ScanPartitioning extends Rule[LogicalPlan] with SQLConfHelper {
             }
           }
         case _: UnknownPartitioning => None
-        case p => throw new IllegalArgumentException("Unsupported data source V2 partitioning " +
-            "type: " + p.getClass.getSimpleName)
+        case p =>
+          logWarning("Spark ignores the partitioning ${p.getClass.getSimpleName}." +
+            " Please use KeyGroupedPartitioning for better performance")
+            None
       }
 
       d.copy(keyGroupedPartitioning = catalystPartitioning)
