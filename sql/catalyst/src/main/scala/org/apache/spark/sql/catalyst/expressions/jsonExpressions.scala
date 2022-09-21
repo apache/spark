@@ -575,11 +575,8 @@ case class JsonToStructs(
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
     case _: StructType | _: ArrayType | _: MapType =>
-      ExprUtils.checkJsonSchema(nullableSchema).map { e =>
-        TypeCheckResult.TypeCheckFailure(e.getMessage)
-      } getOrElse {
-        super.checkInputDataTypes()
-      }
+      val checkResult = ExprUtils.checkJsonSchema(nullableSchema)
+      if (checkResult.isFailure) checkResult else super.checkInputDataTypes()
     case _ =>
       DataTypeMismatch(
         errorSubClass = "INVALID_JSON_SCHEMA",
