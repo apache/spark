@@ -3333,6 +3333,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             * pearson : standard correlation coefficient
             * spearman : Spearman rank correlation
             * kendall : Kendall Tau correlation coefficient
+
+            .. versionchanged:: 3.4.0
+               support 'kendall' for method parameter
         min_periods : int, optional
             Minimum number of observations needed to have a valid result.
 
@@ -3341,6 +3344,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Returns
         -------
         correlation : float
+
+        Notes
+        -----
+        The complexity of Kendall correlation is O(#row * #row), if the dataset is too
+        large, sampling ahead of correlation computation is recommended.
 
         Examples
         --------
