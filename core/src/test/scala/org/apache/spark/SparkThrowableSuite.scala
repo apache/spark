@@ -212,13 +212,13 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("Try catching SparkError with error class") {
     try {
       throw new SparkException(
-        errorClass = "DIVIDE_BY_ZERO",
+        errorClass = "CANNOT_PARSE_DECIMAL",
         messageParameters = Map.empty,
         cause = null)
     } catch {
       case e: SparkThrowable =>
-        assert(e.getErrorClass == "DIVIDE_BY_ZERO")
-        assert(e.getSqlState == "22012")
+        assert(e.getErrorClass == "CANNOT_PARSE_DECIMAL")
+        assert(e.getSqlState == "42000")
       case _: Throwable =>
         // Should not end up here
         assert(false)
