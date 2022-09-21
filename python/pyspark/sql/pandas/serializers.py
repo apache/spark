@@ -578,7 +578,10 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
             state_properties = state.json().encode("utf-8")
             state_key_row_as_binary = state._keyAsUnsafe
-            state_object = self.pickleSer.dumps(state._value_schema.toInternal(state._value))
+            if state.exists:
+                state_object = self.pickleSer.dumps(state._value_schema.toInternal(state._value))
+            else:
+                state_object = None
             state_old_timeout_timestamp = state.oldTimeoutTimestamp
 
             state_dict = {
