@@ -97,8 +97,8 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("Type arrays are merged to highest common type") {
-    val options = new CSVOptions(Map.empty[String, String], false, "UTC")
-    val inferSchema = new CSVInferSchema(options)
+    var options = new CSVOptions(Map.empty[String, String], false, "UTC")
+    var inferSchema = new CSVInferSchema(options)
 
     assert(
       inferSchema.mergeRowTypes(Array(StringType),
@@ -109,6 +109,22 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     assert(
       inferSchema.mergeRowTypes(Array(DoubleType),
         Array(LongType)).sameElements(Array(DoubleType)))
+
+    // Can merge DateType and TimestampType into TimestampType when no timestamp format specified
+    assert(
+      inferSchema.mergeRowTypes(Array(DateType),
+        Array(TimestampNTZType)).sameElements(Array(TimestampNTZType)))
+    assert(
+      inferSchema.mergeRowTypes(Array(DateType),
+        Array(TimestampType)).sameElements(Array(TimestampType)))
+
+    // Merge DateType and TimestampType into StringType when there are timestamp formats specified
+    options = new CSVOptions(
+      Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss",
+        "timestampNTZFormat" -> "yyyy/MM/dd HH:mm:ss"),
+      false,
+      "UTC")
+    inferSchema = new CSVInferSchema(options)
     assert(
       inferSchema.mergeRowTypes(Array(DateType),
         Array(TimestampNTZType)).sameElements(Array(StringType)))
