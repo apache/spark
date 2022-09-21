@@ -66,7 +66,7 @@ To access error fields, catch exceptions that extend `org.apache.spark.SparkThro
 
 Error classes are a succinct, human-readable representation of the error category.
 
-An uncategorized errors can be assigned to a legacy error class with the prefix _LEGACY_ERROR_TEMP_ and an unused sequential number, for instance _LEGACY_ERROR_TEMP_053.
+An uncategorized errors can be assigned to a legacy error class with the prefix `_LEGACY_ERROR_TEMP_` and an unused sequential number, for instance `_LEGACY_ERROR_TEMP_0053`.
 
 #### Invariants
 
