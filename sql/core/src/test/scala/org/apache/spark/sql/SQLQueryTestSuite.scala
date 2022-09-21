@@ -256,6 +256,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           s"pandas and/or pyarrow were not available in [$pythonExec].") {
           /* Do nothing */
         }
+      case udfTestCase: UDFTest
+          if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
+            !shouldTestGroupedAggPandasUDFs =>
+        ignore(s"${testCase.name} is skipped because pyspark," +
+          s"pandas and/or pyarrow were not available in [$pythonExec].") {
+          /* Do nothing */
+        }
       case _ =>
         // Create a test case to run this case.
         test(testCase.name) {
