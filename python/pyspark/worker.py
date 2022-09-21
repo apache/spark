@@ -455,8 +455,7 @@ def read_udfs(pickleSer, infile, eval_type):
             ser = CogroupUDFSerializer(timezone, safecheck, assign_cols_by_name)
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
             arrow_max_records_per_batch = runner_conf.get(
-                "spark.sql.execution.arrow.maxRecordsPerBatch",
-                10000
+                "spark.sql.execution.arrow.maxRecordsPerBatch", 10000
             )
             arrow_max_records_per_batch = int(arrow_max_records_per_batch)
 
