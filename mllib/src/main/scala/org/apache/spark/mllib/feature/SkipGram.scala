@@ -21,7 +21,6 @@ import java.util.Random
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.parallel.ForkJoinTaskSupport
 
-import org.apache.hadoop.io.compress.GzipCodec
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
