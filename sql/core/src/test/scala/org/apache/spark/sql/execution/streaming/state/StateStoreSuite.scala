@@ -357,10 +357,10 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  test("maintenance before unload") {
+  test("SPARK-40492: maintenance before unload") {
     val conf = new SparkConf()
       .setMaster("local")
-      .setAppName("test")
+      .setAppName("SPARK-40492")
     val opId = 0
     val dir1 = newDir()
     val storeProviderId1 = StateStoreProviderId(StateStoreId(dir1, opId, 0), UUID.randomUUID)
