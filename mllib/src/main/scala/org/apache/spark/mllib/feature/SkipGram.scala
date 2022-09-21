@@ -392,33 +392,11 @@ class SkipGram extends Serializable with Logging {
   def fit(dataset: RDD[Array[Int]]): Unit = {
     val sc = dataset.context
     val expTable = sc.broadcast(createExpTable())
-    try {
-      doFit(dataset, sc, expTable)
-    } finally {
-      expTable.destroy()
-    }
-  }
-
-  private def doFit(dataset: RDD[Array[Int]],
-                    sc: SparkContext,
-                    expTable: Broadcast[Array[Float]]): Unit = {
-    import SkipGram._
-
     val sent = cacheAndCount(dataset)
     val countRDD = cacheAndCount(sent.flatMap(identity(_)).map(_ -> 1L)
       .reduceByKey(_ + _).filter(_._2 >= minCount))
 
-    var trainWordsCount = 0L
-    val countBC = {
-      val count = new OpenHashMap[Int, Long]()
-      countRDD.toLocalIterator.foreach { case (v, n) =>
-        count.update(v, n)
-        trainWordsCount += n
-      }
-      sc.broadcast(count)
-    }
-
-    var emb = countRDD.mapPartitions{it =>
+    val emb = countRDD.mapPartitions{it =>
       val rnd = new Random(0)
       it.map{case (v, n) =>
         rnd.setSeed(v)
@@ -427,6 +405,34 @@ class SkipGram extends Serializable with Logging {
       }
     }
     cacheAndCount(emb)
+
+    val countBC = {
+      val count = new OpenHashMap[Int, Long]()
+      countRDD.toLocalIterator.foreach { case (v, n) =>
+        count.update(v, n)
+      }
+      sc.broadcast(count)
+    }
+
+    try {
+      doFit(sent, emb, countBC, sc, expTable)
+    } finally {
+      expTable.destroy()
+      countBC.destroy()
+      sent.unpersist()
+      countRDD.unpersist()
+    }
+  }
+
+  private def doFit(sent: RDD[Array[Int]],
+                    inEmb: RDD[(Int, (Long, Array[Float], Array[Float]))],
+                    countBC: Broadcast[OpenHashMap[Int, Long]],
+                    sc: SparkContext,
+                    expTable: Broadcast[Array[Float]]): Unit = {
+    import SkipGram._
+
+    val trainWordsCount = countBC.value.iterator.map(_._2).sum
+    var emb = inEmb
 
     (0 until numPartitions * numIterations).foreach{pI =>
       val partitioner1 = new HashPartitioner(numPartitions) {
