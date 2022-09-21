@@ -284,14 +284,15 @@ class PandasGroupedOpsMixin:
 
         Examples
         --------
-        >>> import ...
+        >>> import pandas as pd  # doctest: +SKIP
+        >>> from pyspark.sql.streaming.state import GroupStateTimeout
         >>> def count_fn(key, pdf_iter, state):
         ...     assert isinstance(state, GroupStateImpl)
         ...     total_len = 0
         ...     for pdf in pdf_iter:
         ...         total_len += len(pdf)
         ...     state.update((total_len,))
-        ...     yield pandas.DataFrame({"id": [key[0]], "countAsString": [str(total_len)]})
+        ...     yield pd.DataFrame({"id": [key[0]], "countAsString": [str(total_len)]})
         >>> df.groupby("id").applyInPandasWithState(
         ...     count_fn, outputStructType="id long, countAsString string",
         ...     stateStructType="len long", outputMode="Update",
