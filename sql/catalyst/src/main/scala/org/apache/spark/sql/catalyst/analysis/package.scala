@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.errors.QueryErrorsBase
 
@@ -45,14 +45,33 @@ package object analysis {
       throw new AnalysisException(msg, t.origin.line, t.origin.startPosition)
     }
 
-    /** Fails the analysis at the point where a specific tree node was parsed. */
+    /** Fails the analysis at the point where a specific tree node was parsed with a given cause. */
     def failAnalysis(msg: String, cause: Throwable): Nothing = {
       throw new AnalysisException(msg, t.origin.line, t.origin.startPosition, cause = Some(cause))
     }
 
+    /**
+     * Fails the analysis at the point where a specific tree node was parsed using a provided
+     * error class and message parameters.
+     */
     def failAnalysis(errorClass: String, messageParameters: Map[String, String]): Nothing = {
       throw new AnalysisException(
         errorClass = errorClass,
+        messageParameters = messageParameters,
+        origin = t.origin)
+    }
+
+    /**
+     * Fails the analysis at the point where a specific tree node was parsed using a provided
+     * error class and subclass and message parameters.
+     */
+    def failAnalysis(
+        errorClass: String,
+        errorSubClass: String,
+        messageParameters: Map[String, String] = Map.empty[String, String]): Nothing = {
+      throw new AnalysisException(
+        errorClass = errorClass,
+        errorSubClass = errorSubClass,
         messageParameters = messageParameters,
         origin = t.origin)
     }

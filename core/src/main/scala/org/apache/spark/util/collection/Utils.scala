@@ -80,6 +80,20 @@ private[spark] object Utils {
   }
 
   /**
+   * Same function as `keys.zipWithIndex.toMap`, but has perf gain.
+   */
+  def toMapWithIndex[K](keys: Iterable[K]): Map[K, Int] = {
+    val builder = immutable.Map.newBuilder[K, Int]
+    val keyIter = keys.iterator
+    var idx = 0
+    while (keyIter.hasNext) {
+      builder += (keyIter.next(), idx).asInstanceOf[(K, Int)]
+      idx = idx + 1
+    }
+    builder.result()
+  }
+
+  /**
    * Same function as `keys.zip(values).toMap.asJava`, but has perf gain.
    */
   def toJavaMap[K, V](keys: Iterable[K], values: Iterable[V]): java.util.Map[K, V] = {
