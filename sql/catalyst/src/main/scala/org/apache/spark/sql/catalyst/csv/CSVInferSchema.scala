@@ -137,35 +137,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
           throw QueryExecutionErrors.dataTypeUnexpectedError(other)
       }
 
-      (typeSoFar, typeElemInfer) match {
-        case (DateType, TimestampType) | (DateType, TimestampNTZType) =>
-          // For a column containing mixing dates and timestamps, infer it as timestamp type
-          // if its dates can be inferred as timestamp type
-          val dateFormat = options.dateFormatInRead.getOrElse(DateFormatter.defaultPattern)
-          if (canParseDateAsTimestamp(dateFormat, typeElemInfer)) {
-            typeElemInfer
-          } else {
-            StringType
-          }
-        case _ => compatibleType(typeSoFar, typeElemInfer).getOrElse(StringType)
-      }
-    }
-  }
-
-  /**
-   * Return if strings of given date format can be parsed as timestamps
-   *  1. If user provides timestamp format, we will parse strings as timestamps using
-   *  Iso8601TimestampFormatter (with strict timestamp parsing). Any date string can not be parsed
-   *  as timestamp type in this case
-   *  2. Otherwise, we will use DefaultTimestampFormatter to parse strings as timestamps, which
-   *  is more lenient and can parse strings of some date formats as timestamps.]
-   */
-  private def canParseDateAsTimestamp(dateFormat: String, tsType: DataType): Boolean = {
-    if ((tsType.isInstanceOf[TimestampType] && options.timestampFormatInRead.isEmpty) ||
-      (tsType.isInstanceOf[TimestampNTZType] && options.timestampNTZFormatInRead.isEmpty)) {
-      LENIENT_TS_FORMATTER_SUPPORTED_DATE_FORMATS.contains(dateFormat)
-    } else {
-      false
+      compatibleType(typeSoFar, typeElemInfer).getOrElse(StringType)
     }
   }
 
@@ -265,7 +237,39 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
    * is compatible with both input data types.
    */
   private def compatibleType(t1: DataType, t2: DataType): Option[DataType] = {
-    TypeCoercion.findTightestCommonType(t1, t2).orElse(findCompatibleTypeForCSV(t1, t2))
+    (t1, t2) match {
+      case (DateType, TimestampType) | (DateType, TimestampNTZType) |
+           (TimestampNTZType, DateType) | (TimestampType, DateType) =>
+        // For a column containing mixing dates and timestamps
+        // infer it as timestamp type if its dates can be inferred as timestamp type
+        // otherwise infer it as StringType
+        val dateFormat = options.dateFormatInRead.getOrElse(DateFormatter.defaultPattern)
+        t1 match {
+          case DateType if canParseDateAsTimestamp(dateFormat, t2) =>
+            Some(t2)
+          case TimestampType | TimestampNTZType if canParseDateAsTimestamp(dateFormat, t1) =>
+            Some(t1)
+          case _ => Some(StringType)
+        }
+      case _ => TypeCoercion.findTightestCommonType(t1, t2).orElse(findCompatibleTypeForCSV(t1, t2))
+    }
+  }
+
+  /**
+   * Return if strings of given date format can be parsed as timestamps
+   *  1. If user provides timestamp format, we will parse strings as timestamps using
+   *  Iso8601TimestampFormatter (with strict timestamp parsing). Any date string can not be parsed
+   *  as timestamp type in this case
+   *  2. Otherwise, we will use DefaultTimestampFormatter to parse strings as timestamps, which
+   *  is more lenient and can parse strings of some date formats as timestamps.]
+   */
+  private def canParseDateAsTimestamp(dateFormat: String, tsType: DataType): Boolean = {
+    if ((tsType.isInstanceOf[TimestampType] && options.timestampFormatInRead.isEmpty) ||
+      (tsType.isInstanceOf[TimestampNTZType] && options.timestampNTZFormatInRead.isEmpty)) {
+      LENIENT_TS_FORMATTER_SUPPORTED_DATE_FORMATS.contains(dateFormat)
+    } else {
+      false
+    }
   }
 
   /**
