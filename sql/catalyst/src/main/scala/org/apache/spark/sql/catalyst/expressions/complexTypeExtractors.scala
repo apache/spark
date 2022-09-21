@@ -442,7 +442,7 @@ case class GetMapValue(child: Expression, key: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
-      case f: TypeCheckResult.TypeCheckFailure => f
+      case f if f.isFailure => f
       case TypeCheckResult.TypeCheckSuccess =>
         TypeUtils.checkForOrderingExpr(keyType, s"function $prettyName")
     }

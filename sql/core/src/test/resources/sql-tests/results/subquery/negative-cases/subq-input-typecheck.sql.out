@@ -61,7 +61,20 @@ FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Scalar subquery must return only one column, but got 2
+{
+  "errorClass" : "INVALID_SUBQUERY_EXPRESSION",
+  "errorSubClass" : "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+  "messageParameters" : {
+    "number" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 11,
+    "stopIndex" : 101,
+    "fragment" : "( SELECT max(t2b), min(t2b) \n    FROM t2 \n    WHERE t2.t2b = t1.t1b\n    GROUP BY t2.t2b\n  )"
+  } ]
+}
 
 
 -- !query
@@ -76,7 +89,20 @@ FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Scalar subquery must return only one column, but got 2
+{
+  "errorClass" : "INVALID_SUBQUERY_EXPRESSION",
+  "errorSubClass" : "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+  "messageParameters" : {
+    "number" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 11,
+    "stopIndex" : 96,
+    "fragment" : "( SELECT max(t2b), min(t2b) \n    FROM t2 \n    WHERE t2.t2b > 0\n    GROUP BY t2.t2b\n  )"
+  } ]
+}
 
 
 -- !query
