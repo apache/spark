@@ -2819,48 +2819,68 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-39469: Infer schema for date type") {
-    val options1 = Map(
-      "header" -> "true",
-      "inferSchema" -> "true",
-      "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
-      "dateFormat" -> "yyyy-MM-dd",
-      "prefersDate" -> "true")
-    val options2 = Map(
-      "header" -> "true",
-      "inferSchema" -> "true",
-      "prefersDate" -> "true")
+  test("SPARK-39469: Infer schema for columns with only dates " +
+    "and columns with mixing date and timestamps correctly") {
+    def checkCSVReadDatetime(
+      options: Map[String, String],
+      expectedSchema: StructType,
+      expectedData: Seq[Seq[Any]]): Unit = {
 
-    // Error should be thrown when attempting to prefersDate with Legacy parser
-    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-      checkError(
-        exception = intercept[SparkIllegalArgumentException] {
-          spark.read.format("csv").options(options1).load(testFile(dateInferSchemaFile))
-        },
-        errorClass = "CANNOT_INFER_DATE")
-    } else {
-      // 1. Specify date format and timestamp format
-      // 2. Date inference should work with default date format when dateFormat is not provided
-      Seq(options1, options2).foreach {options =>
+      // Error should be thrown when attempting to prefersDate with Legacy parser
+      if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+        checkError(
+          exception = intercept[SparkIllegalArgumentException] {
+            spark.read.format("csv").options(options).load(testFile(dateInferSchemaFile))
+          },
+          errorClass = "CANNOT_INFER_DATE")
+      } else {
         val results = spark.read
           .format("csv")
           .options(options)
           .load(testFile(dateInferSchemaFile))
 
-        val expectedSchema = StructType(List(StructField("date", DateType),
-          StructField("timestamp-date", TimestampType),
-          StructField("date-timestamp", StringType)))
         assert(results.schema == expectedSchema)
-
-        val expected =
-          Seq(
-            Seq(Date.valueOf("2001-9-8"), "2014-10-27T18:30:00", "1765-03-28"),
-            Seq(Date.valueOf("1941-1-2"), "2000-09-14T01:01:00", "1423-11-12T23:41:00"),
-            Seq(Date.valueOf("0293-11-7"), "1995-06-25", "2016-01-28T20:00:00")
-          )
-        assert(results.collect().toSeq.map(_.toSeq) == expected)
+        assert(results.collect().toSeq.map(_.toSeq) == expectedData)
       }
     }
+
+    // When timestamp format is given, infer columns with mixing dates and timestamps as string type
+    var options = Map(
+      "header" -> "true",
+      "inferSchema" -> "true",
+      "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+      "dateFormat" -> "yyyy-MM-dd",
+      "prefersDate" -> "true")
+    var expectedSchema = StructType(List(StructField("date", DateType),
+      StructField("timestamp-date", StringType),
+      StructField("date-timestamp", StringType)))
+    var expectedData =
+      Seq(
+        Seq(Date.valueOf("2001-9-8"), "2014-10-27T18:30:00", "1765-03-28"),
+        Seq(Date.valueOf("1941-1-2"), "2000-09-14T01:01:00", "1423-11-12T23:41:00"),
+        Seq(Date.valueOf("0293-11-7"), "1995-06-25", "2016-01-28T20:00:00")
+      )
+    checkCSVReadDatetime(options, expectedSchema, expectedData)
+
+    // When timestamp format is not given, infer columns with mixing dates and timestamps as
+    // timestamp type
+    options = Map(
+      "header" -> "true",
+      "inferSchema" -> "true",
+      "prefersDate" -> "true")
+    expectedSchema = StructType(List(StructField("date", DateType),
+      StructField("timestamp-date", TimestampType),
+      StructField("date-timestamp", TimestampType)))
+    expectedData =
+      Seq(
+        Seq(Date.valueOf("2001-9-8"), Timestamp.valueOf("2014-10-27 18:30:0.0"),
+          Timestamp.valueOf("1765-03-28 00:00:0.0")),
+        Seq(Date.valueOf("1941-1-2"), Timestamp.valueOf("2000-09-14 01:01:0.0"),
+          Timestamp.valueOf("1423-11-12 23:41:0.0")),
+        Seq(Date.valueOf("0293-11-7"), Timestamp.valueOf("1995-06-25 00:00:00.0"),
+          Timestamp.valueOf("2016-01-28 20:00:00.0"))
+      )
+    checkCSVReadDatetime(options, expectedSchema, expectedData)
   }
 
   test("SPARK-39904: Parse incorrect timestamp values with prefersDate=true") {

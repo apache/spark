@@ -59,6 +59,11 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     ExprUtils.getDecimalParser(options.locale)
   }
 
+  // Date formats that could be parsed in DefaultTimestampFormatter
+  // Reference: DateTimeUtils.parseTimestampString
+  private val LENIENT_TS_FORMATTER_SUPPORTED_DATE_FORMATS = Set(
+    "yyyy-MM-dd", "yyyy-M-d", "yyyy-M-dd", "yyyy-MM-d", "yyyy-MM", "yyyy-M", "yyyy")
+
   /**
    * Similar to the JSON schema inference
    *     1. Infer type of each row
@@ -131,7 +136,36 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case other: DataType =>
           throw QueryExecutionErrors.dataTypeUnexpectedError(other)
       }
-      compatibleType(typeSoFar, typeElemInfer).getOrElse(StringType)
+
+      (typeSoFar, typeElemInfer) match {
+        case (DateType, TimestampType) | (DateType, TimestampNTZType) =>
+          // For a column containing mixing dates and timestamps, infer it as timestamp type
+          // if its dates can be inferred as timestamp type
+          val dateFormat = options.dateFormatInRead.getOrElse(DateFormatter.defaultPattern)
+          if (canParseDateAsTimestamp(dateFormat, typeElemInfer)) {
+            typeElemInfer
+          } else {
+            StringType
+          }
+        case _ => compatibleType(typeSoFar, typeElemInfer).getOrElse(StringType)
+      }
+    }
+  }
+
+  /**
+   * Return if strings of given date format can be parsed as timestamps
+   *  1. If user provides timestamp format, we will parse strings as timestamps using
+   *  Iso8601TimestampFormatter (with strict timestamp parsing). Any date string can not be parsed
+   *  as timestamp type in this case
+   *  2. Otherwise, we will use DefaultTimestampFormatter to parse strings as timestamps, which
+   *  is more lenient and can parse strings of some date formats as timestamps.]
+   */
+  private def canParseDateAsTimestamp(dateFormat: String, tsType: DataType): Boolean = {
+    if ((tsType.isInstanceOf[TimestampType] && options.timestampFormatInRead.isEmpty) ||
+      (tsType.isInstanceOf[TimestampNTZType] && options.timestampNTZFormatInRead.isEmpty)) {
+      LENIENT_TS_FORMATTER_SUPPORTED_DATE_FORMATS.contains(dateFormat)
+    } else {
+      false
     }
   }
 
