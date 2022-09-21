@@ -612,7 +612,7 @@ class SkipGramModel private[spark] (
           BLAS.nativeBLAS.sscal(f.length, 1f / wNorm, f, 0, 1)
           w -> blas.sdot(f.length, f, 0, 1, vector, 0, 1).toDouble
         } else {
-          w -> -1
+          w -> -1.0
         }
       }.takeOrdered(num)(Ordering.by(_._2))
     }
