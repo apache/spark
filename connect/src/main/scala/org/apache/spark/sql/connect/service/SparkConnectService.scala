@@ -39,6 +39,7 @@ import org.apache.spark.connect.proto.{
   Response,
   SparkConnectServiceGrpc
 }
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.ExtendedMode
@@ -54,7 +55,8 @@ import org.apache.spark.sql.execution.ExtendedMode
 @Experimental
 @Since("3.3.1")
 class SparkConnectService(debug: Boolean)
-    extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {
+    extends SparkConnectServiceGrpc.SparkConnectServiceImplBase
+    with Logging {
 
   /**
    * This is the main entry method for Spark Connect and all calls to execute a plan.
@@ -71,7 +73,7 @@ class SparkConnectService(debug: Boolean)
       new SparkConnectStreamHandler(responseObserver).handle(request)
     } catch {
       case e: Exception =>
-        e.printStackTrace()
+        log.error("Error executing plan.", e)
         responseObserver.onError(
           Status.UNKNOWN.withCause(e).withDescription(e.getLocalizedMessage).asRuntimeException())
     }
@@ -119,7 +121,7 @@ class SparkConnectService(debug: Boolean)
       responseObserver.onCompleted()
     } catch {
       case e: Exception =>
-        e.printStackTrace()
+        log.error("Error analyzing plan.", e)
         responseObserver.onError(
           Status.UNKNOWN.withCause(e).withDescription(e.getLocalizedMessage).asRuntimeException())
     }

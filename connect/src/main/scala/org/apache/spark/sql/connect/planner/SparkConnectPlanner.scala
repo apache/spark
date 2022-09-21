@@ -81,7 +81,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     }
   }
 
-  private def transformSql(sql: proto.Sql): LogicalPlan = {
+  private def transformSql(sql: proto.SQL): LogicalPlan = {
     session.sessionState.sqlParser.parsePlan(sql.getQuery)
   }
 

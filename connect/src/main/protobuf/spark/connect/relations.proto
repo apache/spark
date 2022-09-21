@@ -42,7 +42,7 @@ message Relation {
     Sort sort = 7;
     Fetch fetch = 8;
     Aggregate aggregate = 9;
-    Sql sql = 10;
+    SQL sql = 10;
 
     Unknown unknown = 999;
   }
@@ -64,7 +64,7 @@ message RelationCommon {
 /*
  Relation that uses a SQL query to generate the output.
  */
-message Sql {
+message SQL {
   string query = 1;
 }
 
