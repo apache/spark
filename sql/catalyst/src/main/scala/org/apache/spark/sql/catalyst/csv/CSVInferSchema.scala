@@ -265,12 +265,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
    * is compatible with both input data types.
    */
   private def compatibleType(t1: DataType, t2: DataType): Option[DataType] = {
-    (t1, t2) match {
-      // For fields with mixing dates and timestamps, relax it as string type
-      case (DateType, TimestampType) | (TimestampType, DateType) |
-           (DateType, TimestampNTZType) | (TimestampNTZType, DateType) => Some(StringType)
-      case _ => TypeCoercion.findTightestCommonType(t1, t2).orElse(findCompatibleTypeForCSV(t1, t2))
-    }
+    TypeCoercion.findTightestCommonType(t1, t2).orElse(findCompatibleTypeForCSV(t1, t2))
   }
 
   /**
