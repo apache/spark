@@ -1311,11 +1311,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         s"an ${ArrayType.simpleString}, a ${StructType.simpleString} or a ${MapType.simpleString}")
   }
 
-  def cannotConvertColumnToJSONError(name: String, dataType: DataType): Throwable = {
-    new UnsupportedOperationException(
-      s"Unable to convert column $name of type ${dataType.catalogString} to JSON.")
-  }
-
   def malformedRecordsDetectedInSchemaInferenceError(e: Throwable): Throwable = {
     new SparkException("Malformed records are detected in schema inference. " +
       s"Parse Mode: ${FailFastMode.name}.", e)

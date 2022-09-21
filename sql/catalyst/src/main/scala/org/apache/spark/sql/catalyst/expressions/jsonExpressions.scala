@@ -729,30 +729,8 @@ case class StructsToJson(
   override def dataType: DataType = StringType
 
   override def checkInputDataTypes(): TypeCheckResult = inputSchema match {
-    case struct: StructType =>
-      try {
-        JacksonUtils.verifySchema(struct)
-        TypeCheckResult.TypeCheckSuccess
-      } catch {
-        case e: UnsupportedOperationException =>
-          TypeCheckResult.TypeCheckFailure(e.getMessage)
-      }
-    case map: MapType =>
-      try {
-        JacksonUtils.verifyType(prettyName, map)
-        TypeCheckResult.TypeCheckSuccess
-      } catch {
-        case e: UnsupportedOperationException =>
-          TypeCheckResult.TypeCheckFailure(e.getMessage)
-      }
-    case array: ArrayType =>
-      try {
-        JacksonUtils.verifyType(prettyName, array)
-        TypeCheckResult.TypeCheckSuccess
-      } catch {
-        case e: UnsupportedOperationException =>
-          TypeCheckResult.TypeCheckFailure(e.getMessage)
-      }
+    case dt @ (_: StructType | _: MapType | _: ArrayType) =>
+      JacksonUtils.verifyType(prettyName, dt)
     case _ =>
       DataTypeMismatch(
         errorSubClass = "INVALID_JSON_SCHEMA",
