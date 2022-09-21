@@ -471,7 +471,7 @@ class Word2Vec extends Serializable with Logging {
     newSentences.unpersist()
 
     val wordArray = vocab.map(_.word)
-    new Word2VecModel(CUtils.toMap(wordArray), syn0Global)
+    new Word2VecModel(CUtils.toMapWithIndex(wordArray), syn0Global)
   }
 
   /**
@@ -640,7 +640,7 @@ class Word2VecModel private[spark] (
 object Word2VecModel extends Loader[Word2VecModel] {
 
   private def buildWordIndex(model: Map[String, Array[Float]]): Map[String, Int] = {
-    CUtils.toMap(model.keys)
+    CUtils.toMapWithIndex(model.keys)
   }
 
   private def buildWordVectors(model: Map[String, Array[Float]]): Array[Float] = {

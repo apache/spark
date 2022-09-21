@@ -82,7 +82,7 @@ private[spark] object Utils {
   /**
    * Same function as `keys.zipWithIndex.toMap`, but has perf gain.
    */
-  def toMap[K](keys: Iterable[K]): Map[K, Int] = {
+  def toMapWithIndex[K](keys: Iterable[K]): Map[K, Int] = {
     val builder = immutable.Map.newBuilder[K, Int]
     val keyIter = keys.iterator
     var idx = 0

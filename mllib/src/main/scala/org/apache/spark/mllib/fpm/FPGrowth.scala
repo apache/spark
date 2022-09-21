@@ -270,7 +270,7 @@ class FPGrowth private[spark] (
       minCount: Long,
       freqItems: Array[Item],
       partitioner: Partitioner): RDD[FreqItemset[Item]] = {
-    val itemToRank = Utils.toMap(freqItems)
+    val itemToRank = Utils.toMapWithIndex(freqItems)
     data.flatMap { transaction =>
       genCondTransactions(transaction, itemToRank, partitioner)
     }.aggregateByKey(new FPTree[Int], partitioner.numPartitions)(

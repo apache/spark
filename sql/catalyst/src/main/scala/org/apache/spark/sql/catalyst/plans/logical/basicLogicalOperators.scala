@@ -1236,7 +1236,7 @@ object Expand {
     groupByAttrs: Seq[Attribute],
     gid: Attribute,
     child: LogicalPlan): Expand = {
-    val attrMap = Utils.toMap(groupByAttrs)
+    val attrMap = Utils.toMapWithIndex(groupByAttrs)
 
     val hasDuplicateGroupingSets = groupingSetsAttrs.size !=
       groupingSetsAttrs.map(_.map(_.exprId).toSet).distinct.size

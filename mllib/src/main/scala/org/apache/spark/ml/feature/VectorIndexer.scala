@@ -235,7 +235,7 @@ object VectorIndexer extends DefaultParamsReadable[VectorIndexer] {
           if (zeroExists) {
             sortedFeatureValues = 0.0 +: sortedFeatureValues
           }
-          val categoryMap: Map[Double, Int] = Utils.toMap(sortedFeatureValues)
+          val categoryMap: Map[Double, Int] = Utils.toMapWithIndex(sortedFeatureValues)
           (featureIndex, categoryMap)
       }.toMap
     }

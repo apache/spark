@@ -339,7 +339,7 @@ class NominalAttribute private[ml] (
   override def isNominal: Boolean = true
 
   private lazy val valueToIndex: Map[String, Int] = {
-    values.map(Utils.toMap(_)).getOrElse(Map.empty)
+    values.map(Utils.toMapWithIndex(_)).getOrElse(Map.empty)
   }
 
   /** Index of a specific value. */

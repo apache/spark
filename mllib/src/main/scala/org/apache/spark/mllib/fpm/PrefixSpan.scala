@@ -148,7 +148,7 @@ class PrefixSpan private (
     logInfo(s"number of frequent items: ${freqItems.length}")
 
     // Keep only frequent items from input sequences and convert them to internal storage.
-    val itemToInt = Utils.toMap(freqItems)
+    val itemToInt = Utils.toMapWithIndex(freqItems)
     val dataInternalRepr = toDatabaseInternalRepr(data, itemToInt)
       .persist(StorageLevel.MEMORY_AND_DISK)
 

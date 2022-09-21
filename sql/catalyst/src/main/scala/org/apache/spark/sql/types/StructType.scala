@@ -118,7 +118,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
-  private lazy val nameToIndex: Map[String, Int] = Utils.toMap(fieldNames)
+  private lazy val nameToIndex: Map[String, Int] = Utils.toMapWithIndex(fieldNames)
 
   override def equals(that: Any): Boolean = {
     that match {
