@@ -15,22 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.errors
+package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.QueryContext
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 
-trait QueryErrorsSuiteBase {
-
-  case class ExpectedContext(
-      objectType: String,
-      objectName: String,
-      startIndex: Int,
-      stopIndex: Int,
-      fragment: String) extends QueryContext
-
-  object ExpectedContext {
-    def apply(fragment: String, start: Int, stop: Int): ExpectedContext = {
-      ExpectedContext("", "", start, stop, fragment)
-    }
+class UnsafeArrayWriterSuite extends SparkFunSuite {
+  test("SPARK-40403: don't print negative number when array is too big") {
+    val rowWriter = new UnsafeRowWriter(1)
+    rowWriter.resetRowWriter()
+    val arrayWriter = new UnsafeArrayWriter(rowWriter, 8)
+    assert(intercept[SparkIllegalArgumentException] {
+      arrayWriter.initialize(268271216)
+    }.getMessage.contains("Cannot initialize array with 268271216 elements of size 8"))
   }
 }

@@ -327,20 +327,30 @@ class DatasetSuite extends QueryTest
           ds.select(expr("`(_1)?+.+`").as[Int])
         },
         errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = Some("WITH_SUGGESTION"),
+        errorSubClass = "WITH_SUGGESTION",
+        sqlState = None,
         parameters = Map(
           "objectName" -> "`(_1)?+.+`",
-          "proposal" -> "`_1`, `_2`"))
+          "proposal" -> "`_1`, `_2`"),
+        context = ExpectedContext(
+          fragment = "`(_1)?+.+`",
+          start = 0,
+          stop = 9))
 
       checkError(
         exception = intercept[AnalysisException] {
           ds.select(expr("`(_1|_2)`").as[Int])
         },
         errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = Some("WITH_SUGGESTION"),
+        errorSubClass = "WITH_SUGGESTION",
+        sqlState = None,
         parameters = Map(
           "objectName" -> "`(_1|_2)`",
-          "proposal" -> "`_1`, `_2`"))
+          "proposal" -> "`_1`, `_2`"),
+        context = ExpectedContext(
+          fragment = "`(_1|_2)`",
+          start = 0,
+          stop = 8))
 
       var e = intercept[AnalysisException] {
         ds.select(ds("`(_1)?+.+`"))
@@ -890,10 +900,16 @@ class DatasetSuite extends QueryTest
   test("Kryo encoder: check the schema mismatch when converting DataFrame to Dataset") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val df = Seq((1.0)).toDF("a")
-    val e = intercept[AnalysisException] {
-      df.as[KryoData]
-    }.message
-    assert(e.contains("cannot cast double to binary"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.as[KryoData]
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("CAST_WITHOUT_SUGGESTION"),
+      parameters = Map(
+        "sqlExpr" -> "\"a\"",
+        "srcType" -> "\"DOUBLE\"",
+        "targetType" -> "\"BINARY\""))
   }
 
   test("Java encoder") {

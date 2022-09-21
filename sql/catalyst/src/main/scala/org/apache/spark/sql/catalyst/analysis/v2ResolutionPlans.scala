@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Holds the name of a namespace that has yet to be looked up in a catalog. It will be resolved to
@@ -135,7 +136,8 @@ case class UnresolvedFunc(
  * Holds the name of a table/view/function identifier that we need to determine the catalog. It will
  * be resolved to [[ResolvedIdentifier]] during analysis.
  */
-case class UnresolvedIdentifier(nameParts: Seq[String]) extends LeafNode {
+case class UnresolvedIdentifier(nameParts: Seq[String], allowTemp: Boolean = false)
+  extends LeafNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
 }
@@ -243,4 +245,10 @@ case class ResolvedIdentifier(
     catalog: CatalogPlugin,
     identifier: Identifier) extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
+}
+
+// A fake v2 catalog to hold temp views.
+object FakeSystemCatalog extends CatalogPlugin {
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
+  override def name(): String = "SYSTEM"
 }

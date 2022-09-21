@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.JacksonUtils
+import org.apache.spark.util.collection.Utils
 
 /**
  * A parallel PrefixSpan algorithm to mine frequent sequential patterns.
@@ -144,7 +145,7 @@ class PrefixSpan private (
     logInfo(s"number of frequent items: ${freqItems.length}")
 
     // Keep only frequent items from input sequences and convert them to internal storage.
-    val itemToInt = freqItems.zipWithIndex.toMap
+    val itemToInt = Utils.toMapWithIndex(freqItems)
     val dataInternalRepr = toDatabaseInternalRepr(data, itemToInt)
       .persist(StorageLevel.MEMORY_AND_DISK)
 

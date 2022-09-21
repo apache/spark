@@ -328,8 +328,8 @@ case class Not(child: Expression)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(NOT)
 
-  override lazy val preCanonicalized: Expression = {
-    withNewChildren(Seq(child.preCanonicalized)) match {
+  override lazy val canonicalized: Expression = {
+    withNewChildren(Seq(child.canonicalized)) match {
       case Not(GreaterThan(l, r)) => LessThanOrEqual(l, r)
       case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
       case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
@@ -466,8 +466,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(IN)
 
-  override lazy val preCanonicalized: Expression = {
-    val basic = withNewChildren(children.map(_.preCanonicalized)).asInstanceOf[In]
+  override lazy val canonicalized: Expression = {
+    val basic = withNewChildren(children.map(_.canonicalized)).asInstanceOf[In]
     if (list.size > 1) {
       basic.copy(list = basic.list.sortBy(_.hashCode()))
     } else {
@@ -736,7 +736,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   """,
   since = "1.0.0",
   group = "predicate_funcs")
-case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
+case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate
+  with CommutativeExpression {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -807,6 +808,10 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): And =
     copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    orderCommutative({ case And(l, r) => Seq(l, r) }).reduce(And)
+  }
 }
 
 @ExpressionDescription(
@@ -824,7 +829,8 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
   """,
   since = "1.0.0",
   group = "predicate_funcs")
-case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
+case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate
+  with CommutativeExpression {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -896,6 +902,10 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Or =
     copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    orderCommutative({ case Or(l, r) => Seq(l, r) }).reduce(Or)
+  }
 }
 
 
@@ -907,8 +917,8 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_COMPARISON)
 
-  override lazy val preCanonicalized: Expression = {
-    withNewChildren(children.map(_.preCanonicalized)) match {
+  override lazy val canonicalized: Expression = {
+    withNewChildren(children.map(_.canonicalized)) match {
       case EqualTo(l, r) if l.hashCode() > r.hashCode() => EqualTo(r, l)
       case EqualNullSafe(l, r) if l.hashCode() > r.hashCode() => EqualNullSafe(r, l)
 

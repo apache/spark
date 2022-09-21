@@ -32,6 +32,10 @@ import org.apache.spark.sql.catalyst.plans.logical.*;
 @Experimental
 @Evolving
 public class GroupStateTimeout {
+  // NOTE: if you're adding new type of timeout, you should also fix the places below:
+  // - Scala:
+  //     org.apache.spark.sql.execution.streaming.GroupStateImpl.getGroupStateTimeoutFromString
+  // - Python: pyspark.sql.streaming.state.GroupStateTimeout
 
   /**
    * Timeout based on processing time.

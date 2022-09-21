@@ -26,7 +26,7 @@ from pyspark import pandas as ps
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.namespace import _get_index_map, read_delta
 from pyspark.pandas.utils import spark_column_equals
-from pyspark.pandas.missing.general_functions import _MissingPandasLikeGeneralFunctions
+from pyspark.pandas.missing.general_functions import MissingPandasLikeGeneralFunctions
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -603,7 +603,7 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
 
     def test_missing(self):
         missing_functions = inspect.getmembers(
-            _MissingPandasLikeGeneralFunctions, inspect.isfunction
+            MissingPandasLikeGeneralFunctions, inspect.isfunction
         )
         unsupported_functions = [
             name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"

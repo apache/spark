@@ -34,7 +34,7 @@ from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.frame import CachedDataFrame
-from pyspark.pandas.missing.frame import _MissingPandasLikeDataFrame
+from pyspark.pandas.missing.frame import MissingPandasLikeDataFrame
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes,
     extension_dtypes_available,
@@ -2352,7 +2352,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
     def test_missing(self):
         psdf = self.psdf
 
-        missing_functions = inspect.getmembers(_MissingPandasLikeDataFrame, inspect.isfunction)
+        missing_functions = inspect.getmembers(MissingPandasLikeDataFrame, inspect.isfunction)
         unsupported_functions = [
             name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"
         ]
@@ -2373,7 +2373,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
                 getattr(psdf, name)()
 
         missing_properties = inspect.getmembers(
-            _MissingPandasLikeDataFrame, lambda o: isinstance(o, property)
+            MissingPandasLikeDataFrame, lambda o: isinstance(o, property)
         )
         unsupported_properties = [
             name
@@ -6062,13 +6062,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self._test_corrwith((df1 + 1), (df2.C + 2))
         self._test_corrwith((df1 + 1), (df3.B + 2))
 
-        with self.assertRaisesRegex(
-            NotImplementedError, "corrwith currently works only for method='pearson'"
-        ):
-            df1.corrwith(df2, method="kendall")
-
         with self.assertRaisesRegex(TypeError, "unsupported type"):
             df1.corrwith(123)
+        with self.assertRaisesRegex(NotImplementedError, "only works for axis=0"):
+            df1.corrwith(df1.A, axis=1)
+        with self.assertRaisesRegex(ValueError, "Invalid method"):
+            df1.corrwith(df1.A, method="cov")
 
         df_bool = ps.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
         self._test_corrwith(df_bool, df_bool.A)
@@ -6077,10 +6076,11 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
     def _test_corrwith(self, psdf, psobj):
         pdf = psdf.to_pandas()
         pobj = psobj.to_pandas()
-        for drop in [True, False]:
-            p_corr = pdf.corrwith(pobj, drop=drop)
-            ps_corr = psdf.corrwith(psobj, drop=drop)
-            self.assert_eq(p_corr.sort_index(), ps_corr.sort_index(), almost=True)
+        for method in ["pearson", "spearman", "kendall"]:
+            for drop in [True, False]:
+                p_corr = pdf.corrwith(pobj, drop=drop, method=method)
+                ps_corr = psdf.corrwith(psobj, drop=drop, method=method)
+                self.assert_eq(p_corr.sort_index(), ps_corr.sort_index(), almost=True)
 
     def test_iteritems(self):
         pdf = pd.DataFrame(
@@ -6957,6 +6957,16 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
         self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4), almost=True)
         self.assert_eq(pdf.cov(min_periods=5), psdf.cov(min_periods=5))
+
+        # ddof
+        with self.assertRaisesRegex(TypeError, "ddof must be integer"):
+            psdf.cov(ddof="ddof")
+        for ddof in [-1, 0, 2]:
+            self.assert_eq(pdf.cov(ddof=ddof), psdf.cov(ddof=ddof), almost=True)
+            self.assert_eq(
+                pdf.cov(min_periods=4, ddof=ddof), psdf.cov(min_periods=4, ddof=ddof), almost=True
+            )
+            self.assert_eq(pdf.cov(min_periods=5, ddof=ddof), psdf.cov(min_periods=5, ddof=ddof))
 
         # bool
         pdf = pd.DataFrame(

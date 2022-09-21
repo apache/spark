@@ -497,8 +497,8 @@ object QueryExecution {
     case e @ (_: java.lang.NullPointerException | _: java.lang.AssertionError) =>
       new SparkException(
         errorClass = "INTERNAL_ERROR",
-        messageParameters = Array(msg +
-          " Please, fill a bug report in, and provide the full stack trace."),
+        messageParameters = Map("message" -> (msg +
+          " Please, fill a bug report in, and provide the full stack trace.")),
         cause = e)
     case e: Throwable =>
       e

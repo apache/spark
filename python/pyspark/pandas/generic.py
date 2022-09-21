@@ -1329,7 +1329,7 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            return F.coalesce(F.sum(spark_column), SF.lit(0))
+            return F.coalesce(F.sum(spark_column), F.lit(0))
 
         return self._reduce_for_stat_function(
             sum,
@@ -1426,7 +1426,7 @@ class Frame(object, metaclass=ABCMeta):
                 spark_column = F.when(spark_column.isNull(), np.nan).otherwise(spark_column)
 
             if isinstance(spark_type, BooleanType):
-                scol = F.min(F.coalesce(spark_column, SF.lit(True))).cast(LongType())
+                scol = F.min(F.coalesce(spark_column, F.lit(True))).cast(LongType())
             elif isinstance(spark_type, NumericType):
                 num_zeros = F.sum(F.when(spark_column == 0, 1).otherwise(0))
                 sign = F.when(
@@ -1446,7 +1446,7 @@ class Frame(object, metaclass=ABCMeta):
                     )
                 )
 
-            return F.coalesce(scol, SF.lit(1))
+            return F.coalesce(scol, F.lit(1))
 
         return self._reduce_for_stat_function(
             prod,

@@ -95,6 +95,28 @@
         "message" : [
           "the binary operator requires the input type <inputType>, not <actualDataType>."
         ]
+      },
+      "CAST_WITHOUT_SUGGESTION" : {
+        "message" : [
+          "cannot cast <srcType> to <targetType>."
+        ]
+      },
+      "CAST_WITH_CONF_SUGGESTION" : {
+        "message" : [
+          "cannot cast <srcType> to <targetType> with ANSI mode on.",
+          "If you have to cast <srcType> to <targetType>, you can set <config> as <configVal>."
+        ]
+      },
+      "CAST_WITH_FUN_SUGGESTION" : {
+        "message" : [
+          "cannot cast <srcType> to <targetType>.",
+          "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
+        ]
+      },
+      "UNEXPECTED_INPUT_TYPE" : {
+        "message" : [
+          "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
+        ]
       }
     }
   },
@@ -239,12 +261,6 @@
       }
     }
   },
-  "INDEX_OUT_OF_BOUNDS" : {
-    "message" : [
-      "Index <indexValue> must be between 0 and the length of the ArrayData."
-    ],
-    "sqlState" : "22023"
-  },
   "INTERNAL_ERROR" : {
     "message" : [
       "<message>"
@@ -326,6 +342,18 @@
       "Invalid SQL syntax: <inputString>"
     ],
     "sqlState" : "42000"
+  },
+  "INVALID_SUBQUERY_EXPRESSION" : {
+    "message" : [
+      "Invalid subquery:"
+    ],
+    "subClass" : {
+      "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN" : {
+        "message" : [
+          "Scalar subquery must return only one column, but got <number>"
+        ]
+      }
+    }
   },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [
@@ -429,6 +457,11 @@
     ],
     "sqlState" : "22023"
   },
+  "TOO_MANY_ARRAY_ELEMENTS" : {
+    "message" : [
+      "Cannot initialize array with <numElements> elements of size <size>"
+    ]
+  },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"
@@ -490,7 +523,7 @@
   },
   "UNRESOLVED_MAP_KEY" : {
     "message" : [
-      "Cannot resolve column <columnName> as a map key. If the key is a string literal, please add single quotes around it."
+      "Cannot resolve column <objectName> as a map key. If the key is a string literal, please add single quotes around it."
     ],
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
@@ -537,6 +570,11 @@
       "AES_MODE" : {
         "message" : [
           "AES-<mode> with the padding <padding> by the <functionName> function."
+        ]
+      },
+      "CATALOG_OPERATION" : {
+        "message" : [
+          "Catalog <catalogName> does not support <operation>."
         ]
       },
       "DESC_TABLE_COLUMN_PARTITION" : {
@@ -697,6 +735,73 @@
       "NON_EXISTENT_PATH" : {
         "message" : [
           "a non-existent path."
+        ]
+      }
+    }
+  },
+  "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
+    "message" : [
+      "Unsupported subquery expression:"
+    ],
+    "subClass" : {
+      "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED" : {
+        "message" : [
+          "Accessing outer query column is not allowed in this location<treeNode>"
+        ]
+      },
+      "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES" : {
+        "message" : [
+          "Found an aggregate function in a correlated predicate that has both outer and local references, which is not supported: <function>"
+        ]
+      },
+      "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE" : {
+        "message" : [
+          "Correlated column is not allowed in predicate: <treeNode>"
+        ]
+      },
+      "CORRELATED_COLUMN_NOT_FOUND" : {
+        "message" : [
+          "A correlated outer name reference within a subquery expression body was not found in the enclosing query: <value>"
+        ]
+      },
+      "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC" : {
+        "message" : [
+          "Lateral join condition cannot be non-deterministic: <condition>"
+        ]
+      },
+      "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY" : {
+        "message" : [
+          "Correlated scalar subqueries in the GROUP BY clause must also be in the aggregate expressions<treeNode>"
+        ]
+      },
+      "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT" : {
+        "message" : [
+          "The output of a correlated scalar subquery must be aggregated"
+        ]
+      },
+      "NON_CORRELATED_COLUMNS_IN_GROUP_BY" : {
+        "message" : [
+          "A GROUP BY clause in a scalar correlated subquery cannot contain non-correlated columns: <value>"
+        ]
+      },
+      "NON_DETERMINISTIC_LATERAL_SUBQUERIES" : {
+        "message" : [
+          "Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row<treeNode>"
+        ]
+      },
+      "UNSUPPORTED_CORRELATED_REFERENCE" : {
+        "message" : [
+          "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses<treeNode>"
+        ]
+      },
+      "UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY" : {
+        "message" : [
+          "Correlated scalar subqueries can only be used in filters, aggregations, projections, and UPDATE/MERGE/DELETE commands<treeNode>"
+        ]
+      },
+      "UNSUPPORTED_IN_EXISTS_SUBQUERY" : {
+        "message" : [
+          "IN/EXISTS predicate subqueries can only be used in filters, joins, aggregations, window functions, projections, and UPDATE/MERGE/DELETE commands<treeNode>"
         ]
       }
     }

@@ -3041,11 +3041,13 @@ abstract class JsonSuite
             val readback = spark.read.schema("aaa integer, BBB integer")
               .json(path.getCanonicalPath)
             checkAnswer(readback, Seq(Row(null, null), Row(0, 1)))
-            val ex = intercept[AnalysisException] {
-              readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
-            }
-            assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
-            assert(ex.messageParameters.head == "`AAA`")
+            checkError(
+              exception = intercept[AnalysisException] {
+                readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
+              },
+              errorClass = "UNRESOLVED_COLUMN",
+              errorSubClass = Some("WITH_SUGGESTION"),
+              parameters = Map("objectName" -> "`AAA`", "proposal" -> "`BBB`, `aaa`"))
             // Schema inferring
             val readback2 = spark.read.json(path.getCanonicalPath)
             checkAnswer(
@@ -3350,6 +3352,31 @@ abstract class JsonSuite
               Seq(Row(null, null))
             )
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-40496: disable parsing fallback when the date/timestamp format is provided") {
+    // The test verifies that the fallback can be disabled by providing dateFormat or
+    // timestampFormat without any additional configuration.
+    //
+    // We also need to disable "legacy" parsing mode that implicitly enables parsing fallback.
+    for (policy <- Seq("exception", "corrected")) {
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+        withTempPath { path =>
+          Seq("""{"col": "2020-01-01"}""").toDF()
+            .repartition(1)
+            .write.text(path.getAbsolutePath)
+
+          var df = spark.read.schema("col date").option("dateFormat", "yyyy/MM/dd")
+            .json(path.getAbsolutePath)
+          checkAnswer(df, Seq(Row(null)))
+
+          df = spark.read.schema("col timestamp").option("timestampFormat", "yyyy/MM/dd HH:mm:ss")
+            .json(path.getAbsolutePath)
+
+          checkAnswer(df, Seq(Row(null)))
         }
       }
     }
