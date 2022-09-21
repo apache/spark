@@ -548,7 +548,7 @@ class SkipGram extends Serializable with Logging {
  *                    to the word mapped with index i can be retrieved by the slice
  *                    (i * vectorSize, i * vectorSize + vectorSize)
  */
-@Since("1.1.0")
+@Since("3.4.0")
 class SkipGramModel private[spark] (
     private[spark] val emb: RDD[(Int, (Long, Array[Float], Array[Float]))]
                                    ) extends Serializable with Saveable {
@@ -566,7 +566,7 @@ class SkipGramModel private[spark] (
    *             If the directory already exists, this method throws an exception.
    */
 
-  @Since("1.4.0")
+  @Since("3.4.0")
   def save(sc: SparkContext, path: String): Unit = {
     SkipGramModel.SaveLoadV1_0.save(sc, path, emb)
   }
@@ -607,7 +607,7 @@ object SkipGramModel extends Loader[SkipGramModel] {
     }
   }
 
-  @Since("1.4.0")
+  @Since("3.4.0")
   override def load(sc: SparkContext, path: String): SkipGramModel = {
 
     val (loadedClassName, loadedVersion, metadata) = Loader.loadMetadata(sc, path)
