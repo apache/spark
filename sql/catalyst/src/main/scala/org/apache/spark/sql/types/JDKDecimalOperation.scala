@@ -124,8 +124,8 @@ object JDKDecimalOperation {
       left: JDKDecimalOperation,
       right: DecimalOperation[_])
       (f: (java.math.BigDecimal, java.math.BigDecimal) => BigDecimal): JDKDecimalOperation = {
-    val jDKDecimalOperation = new JDKDecimalOperation()
     val newBigDecimal = f(left.toJavaBigDecimal, right.toJavaBigDecimal)
+    val jDKDecimalOperation = new JDKDecimalOperation()
     jDKDecimalOperation.set(newBigDecimal)
     jDKDecimalOperation
   }

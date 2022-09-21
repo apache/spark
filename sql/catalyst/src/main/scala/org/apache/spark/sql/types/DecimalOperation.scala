@@ -200,17 +200,6 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
     }
   }
 
-  /**
-   * Set this DecimalOperation to the given DecimalOperation value.
-   */
-  def set(decimalOperation: DecimalOperation[_]): DecimalOperation[T] = {
-    setUnderlyingValue(decimalOperation.toBigDecimal)
-    this.longVal = decimalOperation.longVal
-    this._precision = decimalOperation._precision
-    this._scale = decimalOperation._scale
-    this
-  }
-
   def toBigDecimal: BigDecimal = if (underlyingIsNotNull) {
     getAsBigDecimal()
   } else {

@@ -31,10 +31,14 @@ import org.apache.spark.unsafe.types.UTF8String
  * A mutable implementation of BigDecimal that hold a `DecimalOperation`.
  */
 @Unstable
-final class Decimal extends Ordered[Decimal] with Serializable {
+final class Decimal(initEnabled: Boolean = true) extends Ordered[Decimal] with Serializable {
   import org.apache.spark.sql.types.Decimal._
 
-  private var decimalOperation: DecimalOperation[_] = DecimalOperation.createDecimalOperation()
+  private var decimalOperation: DecimalOperation[_] = null
+
+  if (initEnabled) {
+    decimalOperation = DecimalOperation.createDecimalOperation()
+  }
 
   def precision: Int = decimalOperation.precision
 
@@ -109,8 +113,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   /**
    * Set this Decimal to the given Decimal value.
    */
-  def set(decimal: Decimal): Decimal = {
-    decimalOperation.set(decimal.decimalOperation)
+  private def set(decimal: Decimal): Decimal = {
+    decimalOperation = decimal.decimalOperation
     this
   }
 
@@ -214,7 +218,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       roundMode: BigDecimal.RoundingMode.Value): Boolean =
     decimalOperation.changePrecision(precision, scale, roundMode)
 
-  override def clone(): Decimal = new Decimal().set(this)
+  override def clone(): Decimal = new Decimal(false).set(this)
 
   override def compare(other: Decimal): Int = decimalOperation.compare(other.decimalOperation)
 
@@ -235,14 +239,14 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   // e1 + e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
   // e1 - e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
   def + (that: Decimal): Decimal = {
-    val decimal = new Decimal()
+    val decimal = new Decimal(false)
     decimal.decimalOperation =
       decimalOperation.add(that.decimalOperation).asInstanceOf[DecimalOperation[_]]
     decimal
   }
 
   def - (that: Decimal): Decimal = {
-    val decimal = new Decimal()
+    val decimal = new Decimal(false)
     decimal.decimalOperation =
       decimalOperation.subtract(that.decimalOperation).asInstanceOf[DecimalOperation[_]]
     decimal
@@ -250,7 +254,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   // TypeCoercion will take care of the precision, scale of result
   def * (that: Decimal): Decimal = {
-    val decimal = new Decimal()
+    val decimal = new Decimal(false)
     decimal.decimalOperation =
       decimalOperation.multiply(that.decimalOperation).asInstanceOf[DecimalOperation[_]]
     decimal
@@ -259,7 +263,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def / (that: Decimal): Decimal = if (that.isZero) {
     null
   } else {
-    val decimal = new Decimal()
+    val decimal = new Decimal(false)
     decimal.decimalOperation =
       decimalOperation.divide(that.decimalOperation).asInstanceOf[DecimalOperation[_]]
     decimal
@@ -268,7 +272,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def % (that: Decimal): Decimal = if (that.isZero) {
     null
   } else {
-    val decimal = new Decimal()
+    val decimal = new Decimal(false)
     decimal.decimalOperation =
       decimalOperation.remainder(that.decimalOperation).asInstanceOf[DecimalOperation[_]]
     decimal
@@ -277,7 +281,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def quot(that: Decimal): Decimal = if (that.isZero) {
     null
   } else {
-    val decimal = new Decimal
+    val decimal = new Decimal(false)
     decimal.decimalOperation =
       decimalOperation.quot(that.decimalOperation).asInstanceOf[DecimalOperation[_]]
     decimal
@@ -286,7 +290,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def remainder(that: Decimal): Decimal = this % that
 
   def unary_- : Decimal = {
-    val decimal = new Decimal()
+    val decimal = new Decimal(false)
     decimal.decimalOperation = decimalOperation.negative.asInstanceOf[DecimalOperation[_]]
     decimal
   }
@@ -409,7 +413,7 @@ object Decimal {
    */
   def createUnsafe(unscaled: Long, precision: Int, scale: Int): Decimal = {
     DecimalType.checkNegativeScale(scale)
-    val dec = new Decimal()
+    val dec = new Decimal(false)
     dec.decimalOperation = DecimalOperation.createUnsafe(unscaled, precision, scale)
     dec
   }
