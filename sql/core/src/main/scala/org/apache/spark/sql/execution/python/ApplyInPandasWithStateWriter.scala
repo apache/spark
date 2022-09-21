@@ -112,13 +112,18 @@ class ApplyInPandasWithStateWriter(
   // the limit should be set very conservatively. Using a small number of limit does not introduce
   // correctness issues.
 
-  private var numRowsForCurGroup = 0
-  private var startOffsetForCurGroup = 0
+  // variables for tracking current grouping key and state
+  private var currentGroupKeyRow: UnsafeRow = _
+  private var currentGroupState: GroupStateImpl[Row] = _
+
+  // variables for tracking the status of current batch
   private var totalNumRowsForBatch = 0
   private var totalNumStatesForBatch = 0
 
-  private var currentGroupKeyRow: UnsafeRow = _
-  private var currentGroupState: GroupStateImpl[Row] = _
+  // variables for tracking the status of current chunk
+  private var startOffsetForCurrentChunk = 0
+  private var numRowsForCurrentChunk = 0
+
 
   /**
    * Indicates writer to start with new grouping key.
@@ -141,17 +146,13 @@ class ApplyInPandasWithStateWriter(
     // same group, finalize and construct a new batch.
 
     if (totalNumRowsForBatch >= arrowMaxRecordsPerBatch) {
-      // Provide state metadata row as intermediate
-      val stateInfoRow = buildStateInfoRow(currentGroupKeyRow, currentGroupState,
-        startOffsetForCurGroup, numRowsForCurGroup, isLastChunk = false)
-      arrowWriterForState.write(stateInfoRow)
-      totalNumStatesForBatch += 1
-
+      finalizeCurrentChunk(isLastChunkForGroup = false)
       finalizeCurrentArrowBatch()
     }
 
     arrowWriterForData.write(dataRow)
-    numRowsForCurGroup += 1
+
+    numRowsForCurrentChunk += 1
     totalNumRowsForBatch += 1
   }
 
@@ -160,22 +161,14 @@ class ApplyInPandasWithStateWriter(
    * the current group.
    */
   def finalizeGroup(): Unit = {
-    // Provide state metadata row
-    val stateInfoRow = buildStateInfoRow(currentGroupKeyRow, currentGroupState,
-      startOffsetForCurGroup, numRowsForCurGroup, isLastChunk = true)
-    arrowWriterForState.write(stateInfoRow)
-    totalNumStatesForBatch += 1
-
-    // The start offset for next group would be same as the total number of rows for batch,
-    // unless the next group starts with new batch.
-    startOffsetForCurGroup = totalNumRowsForBatch
+    finalizeCurrentChunk(isLastChunkForGroup = true)
   }
 
   /**
    * Indicates writer that all groups have been processed.
    */
   def finalizeData(): Unit = {
-    if (numRowsForCurGroup > 0) {
+    if (totalNumRowsForBatch > 0) {
       // We still have some rows in the current record batch. Need to finalize them as well.
       finalizeCurrentArrowBatch()
     }
@@ -210,6 +203,18 @@ class ApplyInPandasWithStateWriter(
     new GenericInternalRow(Array[Any](stateUnderlyingRow))
   }
 
+  private def finalizeCurrentChunk(isLastChunkForGroup: Boolean): Unit = {
+    val stateInfoRow = buildStateInfoRow(currentGroupKeyRow, currentGroupState,
+      startOffsetForCurrentChunk, numRowsForCurrentChunk, isLastChunkForGroup)
+    arrowWriterForState.write(stateInfoRow)
+    totalNumStatesForBatch += 1
+
+    // The start offset for next chunk would be same as the total number of rows for batch,
+    // unless the next chunk starts with new batch.
+    startOffsetForCurrentChunk = totalNumRowsForBatch
+    numRowsForCurrentChunk = 0
+  }
+
   private def finalizeCurrentArrowBatch(): Unit = {
     val remainingEmptyStateRows = totalNumRowsForBatch - totalNumStatesForBatch
     (0 until remainingEmptyStateRows).foreach { _ =>
@@ -222,8 +227,8 @@ class ApplyInPandasWithStateWriter(
     arrowWriterForState.reset()
     arrowWriterForData.reset()
 
-    startOffsetForCurGroup = 0
-    numRowsForCurGroup = 0
+    startOffsetForCurrentChunk = 0
+    numRowsForCurrentChunk = 0
     totalNumRowsForBatch = 0
     totalNumStatesForBatch = 0
   }
