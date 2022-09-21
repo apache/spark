@@ -133,7 +133,7 @@ private[spark] object SkipGram {
                    random: Random,
                    trainWordsCount: Long): Boolean = {
     if (sample > 0 && n > 0) {
-      val ran = Math.sqrt(n / (sample * trainWordsCount) + 1) *
+      val ran = (Math.sqrt(n / (sample * trainWordsCount)) + 1) *
         (sample * trainWordsCount) / n
       if (ran < random.nextFloat()) {
         true
