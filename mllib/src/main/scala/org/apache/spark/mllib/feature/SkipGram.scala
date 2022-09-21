@@ -269,8 +269,8 @@ class SkipGram extends Serializable with Logging {
    */
   @Since("3.4.0")
   def setSample(sample: Double): this.type = {
-    require(sample >= 0,
-      s"Sample must be positive but got ${sample}")
+    require(sample >= 0 && sample <= 1,
+      s"sample must be between 0 and 1 but got $sample")
     this.sample = sample
     this
   }
