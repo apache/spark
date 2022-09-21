@@ -3236,6 +3236,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf["s1"].cov(psdf["s2"])
         with self.assertRaisesRegex(TypeError, "unsupported dtype: object"):
             psdf["s2"].cov(psdf["s1"])
+        with self.assertRaisesRegex(TypeError, "ddof must be integer"):
+            psdf["s2"].cov(psdf["s2"], ddof="ddof")
 
         pdf = pd.DataFrame(
             {

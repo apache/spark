@@ -994,7 +994,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         min_periods : int, optional
             Minimum number of observations needed to have a valid result.
         ddof : int, default 1
-            Delta degrees of freedom.  The divisor used in calculations
+            Delta degrees of freedom. The divisor used in calculations
             is ``N - ddof``, where ``N`` represents the number of elements.
 
             .. versionadded:: 3.4.0
@@ -1038,9 +1038,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if len(sdf.head(min_periods)) < min_periods:
             return np.nan
         else:
-            return sdf.select(SF.covar(F.col(sdf.columns[0]), F.col(sdf.columns[1]), ddof)).head(1)[
-                0
-            ][0]
+            sdf = sdf.select(SF.covar(F.col(sdf.columns[0]), F.col(sdf.columns[1]), ddof))
+            return sdf.head(1)[0][0]
 
     # TODO: NaN and None when ``arg`` is an empty dict
     # TODO: Support ps.Series ``arg``
