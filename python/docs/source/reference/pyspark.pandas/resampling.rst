@@ -30,7 +30,6 @@ Resampler objects are returned by ``.resample`` calls: :func:`DataFrame.resample
 
 Computations / descriptive stats
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 .. autosummary::
    :toctree: api/
 
