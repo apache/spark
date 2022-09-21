@@ -26,7 +26,7 @@ import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
-import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -159,11 +159,51 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       plan: LogicalPlan,
       cascade: Boolean,
       blocking: Boolean = false): Unit = {
+    uncacheQuery(spark, _.sameResult(plan), cascade, blocking)
+  }
+
+  def uncacheTableOrView(spark: SparkSession, name: Seq[String], cascade: Boolean): Unit = {
+    uncacheQuery(
+      spark,
+      isMatchedTableOrView(_, name, spark.sessionState.conf),
+      cascade,
+      blocking = false)
+  }
+
+  private def isMatchedTableOrView(plan: LogicalPlan, name: Seq[String], conf: SQLConf): Boolean = {
+    def isSameName(nameInCache: Seq[String]): Boolean = {
+      nameInCache.length == name.length && nameInCache.zip(name).forall(conf.resolver.tupled)
+    }
+
+    plan match {
+      case SubqueryAlias(ident, LogicalRelation(_, _, Some(catalogTable), _)) =>
+        val v1Ident = catalogTable.identifier
+        isSameName(ident.qualifier :+ ident.name) &&
+          isSameName(v1Ident.catalog.toSeq ++ v1Ident.database :+ v1Ident.table)
+
+      case SubqueryAlias(ident, DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _)) =>
+        isSameName(ident.qualifier :+ ident.name) &&
+          isSameName(catalog.name() +: v2Ident.namespace() :+ v2Ident.name())
+
+      case SubqueryAlias(ident, View(catalogTable, _, _)) =>
+        val v1Ident = catalogTable.identifier
+        isSameName(ident.qualifier :+ ident.name) &&
+          isSameName(v1Ident.catalog.toSeq ++ v1Ident.database :+ v1Ident.table)
+
+      case _ => false
+    }
+  }
+
+  def uncacheQuery(
+      spark: SparkSession,
+      isMatchedPlan: LogicalPlan => Boolean,
+      cascade: Boolean,
+      blocking: Boolean): Unit = {
     val shouldRemove: LogicalPlan => Boolean =
       if (cascade) {
-        _.exists(_.sameResult(plan))
+        _.exists(isMatchedPlan)
       } else {
-        _.sameResult(plan)
+        isMatchedPlan
       }
     val plansToUncache = cachedData.filter(cd => shouldRemove(cd.plan))
     this.synchronized {
@@ -187,7 +227,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         //    will keep it as it is. It means the physical plan has been re-compiled already in the
         //    other thread.
         val cacheAlreadyLoaded = cd.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded
-        cd.plan.exists(_.sameResult(plan)) && !cacheAlreadyLoaded
+        cd.plan.exists(isMatchedPlan) && !cacheAlreadyLoaded
       })
     }
   }

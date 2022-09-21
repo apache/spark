@@ -145,27 +145,43 @@ class AnalysisErrorSuite extends AnalysisTest {
     testRelation.select(ScalarSubquery(LocalRelation()).as("a")),
     "Scalar subquery must return only one column, but got 0" :: Nil)
 
-  errorTest(
+  errorClassTest(
     "single invalid type, single arg",
     testRelation.select(TestFunction(dateLit :: Nil, IntegerType :: Nil).as("a")),
-    "cannot resolve" :: "testfunction(CAST(NULL AS DATE))" :: "argument 1" :: "requires int type" ::
-    "'CAST(NULL AS DATE)' is of date type" :: Nil)
+    errorClass = "DATATYPE_MISMATCH",
+    errorSubClass = "UNEXPECTED_INPUT_TYPE",
+    messageParameters = Map(
+      "sqlExpr" -> "\"testfunction(NULL)\"",
+      "paramIndex" -> "1",
+      "inputSql" -> "\"NULL\"",
+      "inputType" -> "\"DATE\"",
+      "requiredType" -> "\"INT\""))
 
-  errorTest(
+  errorClassTest(
     "single invalid type, second arg",
     testRelation.select(
       TestFunction(dateLit :: dateLit :: Nil, DateType :: IntegerType :: Nil).as("a")),
-    "cannot resolve" :: "testfunction(CAST(NULL AS DATE), CAST(NULL AS DATE))" ::
-      "argument 2" :: "requires int type" ::
-      "'CAST(NULL AS DATE)' is of date type" :: Nil)
+    errorClass = "DATATYPE_MISMATCH",
+    errorSubClass = "UNEXPECTED_INPUT_TYPE",
+    messageParameters = Map(
+      "sqlExpr" -> "\"testfunction(NULL, NULL)\"",
+      "paramIndex" -> "2",
+      "inputSql" -> "\"NULL\"",
+      "inputType" -> "\"DATE\"",
+      "requiredType" -> "\"INT\""))
 
-  errorTest(
+  errorClassTest(
     "multiple invalid type",
     testRelation.select(
       TestFunction(dateLit :: dateLit :: Nil, IntegerType :: IntegerType :: Nil).as("a")),
-    "cannot resolve" :: "testfunction(CAST(NULL AS DATE), CAST(NULL AS DATE))" ::
-      "argument 1" :: "argument 2" :: "requires int type" ::
-      "'CAST(NULL AS DATE)' is of date type" :: Nil)
+    errorClass = "DATATYPE_MISMATCH",
+    errorSubClass = "UNEXPECTED_INPUT_TYPE",
+    messageParameters = Map(
+      "sqlExpr" -> "\"testfunction(NULL, NULL)\"",
+      "paramIndex" -> "1",
+      "inputSql" -> "\"NULL\"",
+      "inputType" -> "\"DATE\"",
+      "requiredType" -> "\"INT\""))
 
   errorTest(
     "invalid window function",
@@ -282,7 +298,7 @@ class AnalysisErrorSuite extends AnalysisTest {
           SpecifiedWindowFrame(RowFrame, Literal(0), Literal(0)))).as("window")),
     "The 'offset' argument of nth_value must be greater than zero but it is 0." :: Nil)
 
-  errorTest(
+  errorClassTest(
     "the offset of nth_value window function is not int literal",
     testRelation2.select(
       WindowExpression(
@@ -291,7 +307,14 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           SpecifiedWindowFrame(RowFrame, Literal(0), Literal(0)))).as("window")),
-    "argument 2 requires int type, however, 'true' is of boolean type." :: Nil)
+    errorClass = "DATATYPE_MISMATCH",
+    errorSubClass = "UNEXPECTED_INPUT_TYPE",
+    messageParameters = Map(
+      "sqlExpr" -> "\"nth_value(b, true)\"",
+      "paramIndex" -> "2",
+      "inputSql" -> "\"true\"",
+      "inputType" -> "\"BOOLEAN\"",
+      "requiredType" -> "\"INT\""))
 
   errorTest(
     "too many generators",
@@ -723,7 +746,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       Seq(SortOrder(InSubquery(Seq(a), ListQuery(LocalRelation(b))), Ascending)),
       global = true,
       LocalRelation(a))
-    assertAnalysisError(plan, "Predicate sub-queries can only be used in " :: Nil)
+    assertAnalysisError(plan, "Predicate subqueries can only be used in " :: Nil)
   }
 
   test("PredicateSubQuery correlated predicate is nested in an illegal plan") {
@@ -802,10 +825,22 @@ class AnalysisErrorSuite extends AnalysisTest {
       assertAnalysisError(plan,
         s"Input argument to ${r.prettyName} must be a constant." :: Nil)
     }
-    Seq(Rand(1.0), Rand("1"), Randn("a")).foreach { r =>
+    Seq(
+      Rand(1.0) -> ("\"rand(1.0)\"", "\"1.0\"", "\"DOUBLE\""),
+      Rand("1") -> ("\"rand(1)\"", "\"1\"", "\"STRING\""),
+      Randn("a") -> ("\"randn(a)\"", "\"a\"", "\"STRING\"")
+    ).foreach { case (r, (sqlExpr, inputSql, inputType)) =>
       val plan = Project(Seq(r.as("r")), testRelation)
-      assertAnalysisError(plan,
-        s"data type mismatch: argument 1 requires (int or bigint) type" :: Nil)
+      assertAnalysisErrorClass(plan,
+        expectedErrorClass = "DATATYPE_MISMATCH",
+        expectedErrorSubClass = "UNEXPECTED_INPUT_TYPE",
+        expectedMessageParameters = Map(
+          "sqlExpr" -> sqlExpr,
+          "paramIndex" -> "1",
+          "inputSql" -> inputSql,
+          "inputType" -> inputType,
+          "requiredType" -> "(\"INT\" or \"BIGINT\")"),
+        caseSensitive = false)
     }
   }
 
@@ -857,12 +892,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     val t1 = LocalRelation(a, b, d)
     val t2 = LocalRelation(c)
     val conditions = Seq(
-      (abs($"a") === $"c", "abs(a) = outer(c)"),
-      (abs($"a") <=> $"c", "abs(a) <=> outer(c)"),
-      ($"a" + 1 === $"c", "(a + 1) = outer(c)"),
-      ($"a" + $"b" === $"c", "(a + b) = outer(c)"),
-      ($"a" + $"c" === $"b", "(a + outer(c)) = b"),
-      (And($"a" === $"c", Cast($"d", IntegerType) === $"c"), "CAST(d AS INT) = outer(c)"))
+      (abs($"a") === $"c", "abs(a#x) = outer(c#x)"),
+      (abs($"a") <=> $"c", "abs(a#x) <=> outer(c#x)"),
+      ($"a" + 1 === $"c", "(a#x + 1) = outer(c#x)"),
+      ($"a" + $"b" === $"c", "(a#x + b#x) = outer(c#x)"),
+      ($"a" + $"c" === $"b", "(a#x + outer(c#x)) = b#x"),
+      (And($"a" === $"c", Cast($"d", IntegerType) === $"c"), "CAST(d#x AS INT) = outer(c#x)"))
     conditions.foreach { case (cond, msg) =>
       val plan = Project(
         ScalarSubquery(
@@ -870,7 +905,7 @@ class AnalysisErrorSuite extends AnalysisTest {
             Filter(cond, t1))
         ).as("sub") :: Nil,
         t2)
-      assertAnalysisError(plan, s"Correlated column is not allowed in predicate ($msg)" :: Nil)
+      assertAnalysisError(plan, s"Correlated column is not allowed in predicate: ($msg)" :: Nil)
     }
   }
 

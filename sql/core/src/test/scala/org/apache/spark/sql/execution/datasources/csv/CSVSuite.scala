@@ -1658,6 +1658,32 @@ abstract class CSVSuite
       Row(1, Date.valueOf("1983-08-04"), null) :: Nil)
   }
 
+  test("SPARK-40468: column pruning with the corrupt record column") {
+    withTempPath { path =>
+      Seq("1,a").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      // Corrupt record column with the default name should return null instead of "1,a"
+      val corruptRecordCol = spark.sessionState.conf.columnNameOfCorruptRecord
+      var df = spark.read
+        .schema(s"c1 int, c2 string, x string, ${corruptRecordCol} string")
+        .csv(path.getAbsolutePath)
+        .selectExpr("c1", "c2", "'A' as x", corruptRecordCol)
+
+      checkAnswer(df, Seq(Row(1, "a", "A", null)))
+
+      // Corrupt record column with the user-provided name should return null instead of "1,a"
+      df = spark.read
+        .schema(s"c1 int, c2 string, x string, _invalid string")
+        .option("columnNameCorruptRecord", "_invalid")
+        .csv(path.getAbsolutePath)
+        .selectExpr("c1", "c2", "'A' as x", "_invalid")
+
+      checkAnswer(df, Seq(Row(1, "a", "A", null)))
+    }
+  }
+
   test("SPARK-23846: schema inferring touches less data if samplingRatio < 1.0") {
     // Set default values for the DataSource parameters to make sure
     // that whole test file is mapped to only one partition. This will guarantee
@@ -2978,6 +3004,31 @@ abstract class CSVSuite
               Seq(Row(null, null))
             )
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-40496: disable parsing fallback when the date/timestamp format is provided") {
+    // The test verifies that the fallback can be disabled by providing dateFormat or
+    // timestampFormat without any additional configuration.
+    //
+    // We also need to disable "legacy" parsing mode that implicitly enables parsing fallback.
+    for (policy <- Seq("exception", "corrected")) {
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+        withTempPath { path =>
+          Seq("2020-01-01").toDF()
+            .repartition(1)
+            .write.text(path.getAbsolutePath)
+
+          var df = spark.read.schema("col date").option("dateFormat", "yyyy/MM/dd")
+            .csv(path.getAbsolutePath)
+          checkAnswer(df, Seq(Row(null)))
+
+          df = spark.read.schema("col timestamp").option("timestampFormat", "yyyy/MM/dd HH:mm:ss")
+            .csv(path.getAbsolutePath)
+
+          checkAnswer(df, Seq(Row(null)))
         }
       }
     }
