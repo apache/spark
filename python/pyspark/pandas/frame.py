@@ -2062,7 +2062,7 @@ class DataFrame(Frame, Generic[T]):
             iteritems is deprecated and will be removed in a future version.
             Use .items instead.
         """
-        warnings.warn("Deprecated in 3.4, Use DataFrame.items instead.", FutureWarning)
+        warnings.warn("Deprecated in 3.4.0, Use DataFrame.items instead.", FutureWarning)
         return self.items()
 
     def to_clipboard(self, excel: bool = True, sep: Optional[str] = None, **kwargs: Any) -> None:
