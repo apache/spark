@@ -1012,6 +1012,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Returns
         -------
         Series or DataFrame
+            Computed prod of values within each group.
 
         See Also
         --------
@@ -1020,10 +1021,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = ps.DataFrame({'A': [1, 1, 2, 1, 2],
-        ...                    'B': [np.nan, 2, 3, 4, 5],
-        ...                    'C': [1, 2, 1, 1, 2],
-        ...                    'D': [True, False, True, False, True]})
+        >>> df = ps.DataFrame(
+        ...     {
+        ...         "A": [1, 1, 2, 1, 2],
+        ...         "B": [np.nan, 2, 3, 4, 5],
+        ...         "C": [1, 2, 1, 1, 2],
+        ...         "D": [True, False, True, False, True],
+        ...     }
+        ... )
 
         Groupby one column and return the prod of the remaining columns in
         each group.
@@ -1055,30 +1060,35 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
             stat_exprs = []
             for label in psdf._internal.column_labels:
-                tmp_count_column = verify_temp_column_name(sdf, "__tmp_%s_count_col__" % label[0])
+                label_name = label[0]
+                tmp_count_column_name = verify_temp_column_name(
+                    sdf, "__tmp_%s_count_col__" % label_name
+                )
                 psser = psdf._psser_for(label)
                 column = psser._dtype_op.nan_to_null(psser).spark.column
                 data_type = psser.spark.data_type
 
                 if isinstance(data_type, IntegralType):
-                    stat_exprs.append(F.product(column).cast(data_type).alias(label[0]))
+                    stat_exprs.append(F.product(column).cast(data_type).alias(label_name))
                 else:
-                    stat_exprs.append(F.product(column).alias(label[0]))
+                    stat_exprs.append(F.product(column).alias(label_name))
 
                 if min_count > 0:
-                    stat_exprs.append(F.count(column).alias(tmp_count_column))
+                    stat_exprs.append(F.count(column).alias(tmp_count_column_name))
 
             sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
 
             if min_count > 0:
                 for label in psdf._internal.column_labels:
-                    tmp_count_column = "__tmp_%s_count_col__"
+                    label_name = label[0]
+                    tmp_count_column_name = "__tmp_%s_count_col__"
                     sdf = sdf.withColumn(
-                        label[0],
+                        label_name,
                         F.when(
-                            F.col(tmp_count_column % label[0]).__ge__(min_count), F.col(label[0])
+                            F.col(tmp_count_column_name % label_name).__ge__(min_count),
+                            F.col(label_name),
                         ).otherwise(None),
-                    ).drop(tmp_count_column)
+                    ).drop(tmp_count_column_name)
 
         else:
             sdf = sdf.select(*groupkey_names).distinct()
