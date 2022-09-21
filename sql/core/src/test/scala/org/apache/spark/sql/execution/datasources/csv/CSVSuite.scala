@@ -3012,19 +3012,25 @@ abstract class CSVSuite
   test("SPARK-40496: disable parsing fallback when the date/timestamp format is provided") {
     // The test verifies that the fallback can be disabled by providing dateFormat or
     // timestampFormat without any additional configuration.
-    withTempPath { path =>
-      Seq("2020-01-01").toDF()
-        .repartition(1)
-        .write.text(path.getAbsolutePath)
+    //
+    // We also need to disable "legacy" parsing mode that implicitly enables parsing fallback.
+    for (policy <- Seq("exception", "corrected")) {
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+        withTempPath { path =>
+          Seq("2020-01-01").toDF()
+            .repartition(1)
+            .write.text(path.getAbsolutePath)
 
-      var df = spark.read.schema("dt date").option("dateFormat", "yyyy/MM/dd")
-        .csv(path.getAbsolutePath)
-      checkAnswer(df, Seq(Row(null)))
+          var df = spark.read.schema("col date").option("dateFormat", "yyyy/MM/dd")
+            .csv(path.getAbsolutePath)
+          checkAnswer(df, Seq(Row(null)))
 
-      df = spark.read.schema("ts timestamp").option("timestampFormat", "yyyy/MM/dd HH:mm:ss")
-        .csv(path.getAbsolutePath)
+          df = spark.read.schema("col timestamp").option("timestampFormat", "yyyy/MM/dd HH:mm:ss")
+            .csv(path.getAbsolutePath)
 
-      checkAnswer(df, Seq(Row(null)))
+          checkAnswer(df, Seq(Row(null)))
+        }
+      }
     }
   }
 }
