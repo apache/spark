@@ -416,9 +416,9 @@ class SkipGram extends Serializable with Logging {
     cacheAndCount(emb)
 
     try {
-      val emb = doFit(sent, emb, sampleProbBC, sc, expTable)
+      val result = doFit(sent, emb, sampleProbBC, sc, expTable)
       val invVocabBC = sc.broadcast(invVocab)
-      new SkipGramModel(emb.map(x => x.copy(_1 = invVocabBC.value(x._1))))
+      new SkipGramModel(result.map(x => x.copy(_1 = invVocabBC.value(x._1))))
     } finally {
       // expTable.destroy()
       // sampleProbBC.destroy()
