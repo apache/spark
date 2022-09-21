@@ -8,7 +8,7 @@ package org.apache.spark.sql.proto;
 option java_outer_classname = "SimpleMessageProtos";
 
 /* Clean Message*/
-message CleanMessage {
+message BasicMessage {
   Foo foo = 1;
 }
 

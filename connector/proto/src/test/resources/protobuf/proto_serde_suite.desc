@@ -1,7 +1,7 @@
 
 š
 Cconnector/proto/src/test/resources/protobuf/proto_serde_suite.protoorg.apache.spark.sql.proto"A
-CleanMessage1
+BasicMessage1
 foo (2.org.apache.spark.sql.proto.FooRfoo"
 Foo
 bar (Rbar"'

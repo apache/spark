@@ -19,11 +19,12 @@ package org.apache.spark.sql.proto
 
 import com.google.protobuf.Descriptors.Descriptor
 import com.google.protobuf.DynamicMessage
+
 import org.apache.spark.sql.catalyst.NoopFilters
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.CORRECTED
-import org.apache.spark.sql.proto.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.proto.utils.ProtoUtils
+import org.apache.spark.sql.proto.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
@@ -44,7 +45,7 @@ class ProtoSerdeSuite extends SharedSparkSession {
         case BY_NAME => ("foo", "bar")
         case BY_POSITION => ("NOTfoo", "NOTbar")
       }
-      val protoFile = ProtoUtils.buildDescriptor(testFileDesc, "CleanMessage")
+      val protoFile = ProtoUtils.buildDescriptor(testFileDesc, "BasicMessage")
 
       val dynamicMessageFoo = DynamicMessage.newBuilder(
         protoFile.getFile.findMessageTypeByName("Foo")).setField(
