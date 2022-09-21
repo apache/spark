@@ -387,16 +387,26 @@ class SkipGram extends Serializable with Logging {
     cacheAndCount(emb)
 
     val sampleProbBC = {
-      val sampleProb = new OpenHashMap[Int, Int]()
       val trainWordsCount = countRDD.map(_._2).reduce(_ + _)
-
-      countRDD.toLocalIterator.foreach { case (v, n) =>
-        val prob = if (sample > 0) {
-          (Math.sqrt(n / (sample * trainWordsCount)) + 1) * (sample * trainWordsCount) / n
-        } else {
-          1.0
+      val sampleProb = countRDD.mapPartitions{it =>
+        val lSampleProb = new OpenHashMap[Int, Int]()
+        it.foreach { case (v, n) =>
+          val prob = if (sample > 0) {
+            (Math.sqrt(n / (sample * trainWordsCount)) + 1) * (sample * trainWordsCount) / n
+          } else {
+            1.0
+          }
+          lSampleProb.update(v, if (prob >= 1) Int.MaxValue else (prob * Int.MaxValue).toInt)
         }
-        sampleProb.update(v, if (prob >= 1) Int.MaxValue else (prob * Int.MaxValue).toInt)
+        Iterator(lSampleProb)
+      }.reduce{(a, b) =>
+        if (a.size > b.size) {
+          b.iterator.foreach(x => a.update(x._1, x._2))
+          a
+        } else {
+          a.iterator.foreach(x => b.update(x._1, x._2))
+          b
+        }
       }
       sc.broadcast(sampleProb)
     }
