@@ -18,9 +18,10 @@ package org.apache.spark.mllib.feature
 
 import java.util.Random
 
+import org.apache.hadoop.io.compress.GzipCodec
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.parallel.ForkJoinTaskSupport
-
 import org.apache.spark.{HashPartitioner, SparkContext}
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
@@ -523,7 +524,7 @@ class SkipGram extends Serializable with Logging {
     }
 
     sent.unpersist()
-    new SkipGramModel(emb.map(x => x._1 -> x._2._2))
+    new SkipGramModel(emb)
   }
 }
 
@@ -535,7 +536,8 @@ class SkipGram extends Serializable with Logging {
  */
 @Since("1.1.0")
 class SkipGramModel private[spark] (
-    private[spark] val emb: RDD[(Int, Array[Float])]) extends Serializable with Saveable {
+    private[spark] val emb: RDD[(Int, (Long, Array[Float], Array[Float]))]
+                                   ) extends Serializable with Saveable {
   /**
    * Save this model to the given path.
    *
@@ -550,6 +552,6 @@ class SkipGramModel private[spark] (
    *             If the directory already exists, this method throws an exception.
    */
   override def save(sc: SparkContext, path: String): Unit = {
-    emb.map(x => x._1 + " " + x._2.mkString(" ")).saveAsTextFile(path)
+    emb.map(x => x._1 + " " + x._2.mkString(" ")).saveAsTextFile(path, new GzipCodec)
   }
 }
