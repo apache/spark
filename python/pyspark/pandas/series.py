@@ -3390,7 +3390,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             this = self
             that = other
         else:
-            combined = combine_frames(self._psdf, other._psdf)
+            combined = combine_frames(self._psdf, other._psdf)  # type: ignore[assignment]
             this = combined["this"]
             that = combined["that"]
 
