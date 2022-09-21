@@ -287,7 +287,7 @@ private[spark] object TestUtils {
 
   def assumePythonVersionAvailable: Unit =
     assume(isPythonVersionAvailable,
-      s"Python executable not exists or Python version < $minimumPythonSupportedVersion")
+      s"Python versions prior to $minimumPythonSupportedVersion are not supported.")
 
   def isPythonVersionAvailable: Boolean = {
     isPythonVersionAvailable("python3")
