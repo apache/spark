@@ -61,6 +61,8 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   // Date formats that could be parsed in DefaultTimestampFormatter
   // Reference: DateTimeUtils.parseTimestampString
+  // Used to determine inferring a column with mixture of dates and timestamps as TimestampType or
+  // StringType when no timestamp format is specified (the lenient timestamp formatter will be used)
   private val LENIENT_TS_FORMATTER_SUPPORTED_DATE_FORMATS = Set(
     "yyyy-MM-dd", "yyyy-M-d", "yyyy-M-dd", "yyyy-MM-d", "yyyy-MM", "yyyy-M", "yyyy")
 
@@ -239,7 +241,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     (t1, t2) match {
       case (DateType, TimestampType) | (DateType, TimestampNTZType) |
            (TimestampNTZType, DateType) | (TimestampType, DateType) =>
-        // For a column containing mixing dates and timestamps
+        // For a column containing a mixture of dates and timestamps
         // infer it as timestamp type if its dates can be inferred as timestamp type
         // otherwise infer it as StringType
         val dateFormat = options.dateFormatInRead.getOrElse(DateFormatter.defaultPattern)
@@ -255,12 +257,12 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   }
 
   /**
-   * Return if strings of given date format can be parsed as timestamps
+   * Return true if strings of given date format can be parsed as timestamps
    *  1. If user provides timestamp format, we will parse strings as timestamps using
    *  Iso8601TimestampFormatter (with strict timestamp parsing). Any date string can not be parsed
    *  as timestamp type in this case
    *  2. Otherwise, we will use DefaultTimestampFormatter to parse strings as timestamps, which
-   *  is more lenient and can parse strings of some date formats as timestamps.]
+   *  is more lenient and can parse strings of some date formats as timestamps.
    */
   private def canParseDateAsTimestamp(dateFormat: String, tsType: DataType): Boolean = {
     if ((tsType.isInstanceOf[TimestampType] && options.timestampFormatInRead.isEmpty) ||

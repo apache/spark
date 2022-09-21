@@ -111,7 +111,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>prefersDate</code></td>
     <td>false</td>
-    <td>During schema inference (<code>inferSchema</code>), attempts to infer string columns that contain dates as <code>Date</code> if the values satisfy the <code>dateFormat</code> option or default date format. For columns that contain mixing dates and timestamps, infer them as <code>StringType</code>.</td>
+    <td>During schema inference (<code>inferSchema</code>), attempts to infer string columns that contain dates as <code>Date</code> if the values satisfy the <code>dateFormat</code> option or default date format. For columns that contain a mixture of dates and timestamps, try inferring them as <code>TimestampType</code> if timestamp format not specified, otherwise infer them as StringType.</td>
     <td>read</td>
   </tr>
   <tr>

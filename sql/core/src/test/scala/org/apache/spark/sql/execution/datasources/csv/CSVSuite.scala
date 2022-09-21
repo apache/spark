@@ -2822,11 +2822,11 @@ abstract class CSVSuite
   test("SPARK-39469: Infer schema for columns with only dates " +
     "and columns with mixing date and timestamps correctly") {
     def checkCSVReadDatetime(
-      options: Map[String, String],
-      expectedSchema: StructType,
-      expectedData: Seq[Seq[Any]]): Unit = {
+        options: Map[String, String],
+        expectedSchema: StructType,
+        expectedData: Seq[Seq[Any]]): Unit = {
 
-      // Error should be thrown when attempting to prefersDate with Legacy parser
+      // Error should be thrown when attempting to use prefersDate with Legacy parser
       if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
         checkError(
           exception = intercept[SparkIllegalArgumentException] {
