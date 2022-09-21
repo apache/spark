@@ -128,28 +128,9 @@ private[spark] object SkipGram {
     (Math.abs(h) % nPart).toInt
   }
 
-  private def skip(n: Long,
-                   sample: Double,
-                   random: Random,
-                   trainWordsCount: Long): Boolean = {
-    if (sample > 0 && n > 0) {
-      val ran = (Math.sqrt(n / (sample * trainWordsCount)) + 1) *
-        (sample * trainWordsCount) / n
-      if (ran < random.nextFloat()) {
-        true
-      } else {
-        false
-      }
-    } else {
-      false
-    }
-  }
-
   private def pairs(sent: RDD[Array[Int]],
                     salt: Int,
-                    countBC: Broadcast[OpenHashMap[Int, Long]],
-                    sample: Double,
-                    trainWordsCount: Long,
+                    sampleProbBC: Broadcast[OpenHashMap[Int, Int]],
                     window: Int,
                     numPartitions: Int,
                     numThread: Int): RDD[(Int, (Array[Int], Array[Int]))] = {
@@ -158,7 +139,7 @@ private[spark] object SkipGram {
         val l = Array.fill(numPartitions)(ArrayBuffer.empty[Int])
         val r = Array.fill(numPartitions)(ArrayBuffer.empty[Int])
         val buffers = Array.fill(numPartitions)(new CyclicBuffer(window))
-        val count = countBC.value
+        val sampleProb = sampleProbBC.value
         var v = 0
         val random = new java.util.Random()
         var seed = salt
@@ -167,10 +148,9 @@ private[spark] object SkipGram {
           var skipped = 0
           random.setSeed(seed)
           while (i < s.length) {
-            val cn = count(s(i))
-            if (skip(cn, sample, random, trainWordsCount)) {
+            if (sampleProb(s(i)) < random.nextInt()) {
               skipped += 1
-            } else if (cn > 0) {
+            } else if (sampleProb.contains(s(i))) {
               val a = getPartition(s(i), salt, numPartitions)
               val buffer = buffers(a)
               buffer.checkVersion(v)
@@ -406,19 +386,26 @@ class SkipGram extends Serializable with Logging {
     }
     cacheAndCount(emb)
 
-    val countBC = {
-      val count = new OpenHashMap[Int, Long]()
+    val sampleProbBC = {
+      val sampleProb = new OpenHashMap[Int, Int]()
+      val trainWordsCount = countRDD.map(_._2).reduce(_ + _)
+
       countRDD.toLocalIterator.foreach { case (v, n) =>
-        count.update(v, n)
+        val prob = if (sample > 0) {
+          (Math.sqrt(n / (sample * trainWordsCount)) + 1) * (sample * trainWordsCount) / n
+        } else {
+          1.0
+        }
+        sampleProb.update(v, if (prob >= 1) Int.MaxValue else (prob * Int.MaxValue).toInt)
       }
-      sc.broadcast(count)
+      sc.broadcast(sampleProb)
     }
 
     try {
-      doFit(sent, emb, countBC, sc, expTable)
+      doFit(sent, emb, sampleProbBC, sc, expTable)
     } finally {
       expTable.destroy()
-      countBC.destroy()
+      sampleProbBC.destroy()
       sent.unpersist()
       countRDD.unpersist()
     }
@@ -426,12 +413,11 @@ class SkipGram extends Serializable with Logging {
 
   private def doFit(sent: RDD[Array[Int]],
                     inEmb: RDD[(Int, (Long, Array[Float], Array[Float]))],
-                    countBC: Broadcast[OpenHashMap[Int, Long]],
+                    sampleProbBC: Broadcast[OpenHashMap[Int, Int]],
                     sc: SparkContext,
                     expTable: Broadcast[Array[Float]]): Unit = {
     import SkipGram._
 
-    val trainWordsCount = countBC.value.iterator.map(_._2).sum
     var emb = inEmb
 
     (0 until numPartitions * numIterations).foreach{pI =>
@@ -444,7 +430,7 @@ class SkipGram extends Serializable with Logging {
         override def getPartition(key: Any): Int = key.asInstanceOf[Int]
       }
       emb = emb.partitionBy(partitioner1)
-      val cur = pairs(sent, pI, countBC, sample, trainWordsCount, window,
+      val cur = pairs(sent, pI, sampleProbBC, window,
         numPartitions, numThread).partitionBy(partitioner2).values
 
       val newEmb = cacheAndCount(cur.zipPartitions(emb) {case (sIt, eIt) =>
