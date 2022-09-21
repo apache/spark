@@ -268,6 +268,29 @@ class SkipGram extends Serializable with Logging {
     this
   }
 
+
+  /**
+   * Sets the negative sampling word frequency power (default: 0)
+   */
+  @Since("3.4.0")
+  def setPow(pow: Double): this.type = {
+    require(pow >= 0,
+      s"Pow must be positive but got ${pow}")
+    this.pow = pow
+    this
+  }
+
+  /**
+   * Sets the frequent word subsample ratio (default: 0)
+   */
+  @Since("3.4.0")
+  def setSample(sample: Double): this.type = {
+    require(sample >= 0,
+      s"Sample must be positive but got ${sample}")
+    this.sample = sample
+    this
+  }
+
   /**
    * Sets minCount, the minimum number of times a token must appear to be included in the word2vec
    * model's vocabulary (default: 5).
