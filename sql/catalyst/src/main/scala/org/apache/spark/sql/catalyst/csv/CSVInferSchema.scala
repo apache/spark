@@ -136,7 +136,6 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case other: DataType =>
           throw QueryExecutionErrors.dataTypeUnexpectedError(other)
       }
-
       compatibleType(typeSoFar, typeElemInfer).getOrElse(StringType)
     }
   }
