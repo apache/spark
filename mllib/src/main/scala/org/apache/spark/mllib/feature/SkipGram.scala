@@ -369,16 +369,45 @@ class SkipGram extends Serializable with Logging {
    * @return a Word2VecModel
    */
   @Since("3.4.0")
-  def fit(dataset: RDD[Array[Int]]): SkipGramModel = {
+  def fit(dataset: RDD[Array[String]]): SkipGramModel = {
     val sc = dataset.context
-    val expTable = sc.broadcast(createExpTable())
-    val sent = cacheAndCount(dataset)
-    val countRDD = cacheAndCount(sent.flatMap(identity(_)).map(_ -> 1L)
+
+    val countRDD = cacheAndCount(dataset.flatMap(identity(_)).map(_ -> 1L)
       .reduceByKey(_ + _).filter(_._2 >= minCount))
+
+    val (vocabBC, sampleProbBC, invVocab) = {
+      val map = new OpenHashMap[String, Int]()
+      val sampleProb = new OpenHashMap[Int, Int]()
+      val invVocab = ArrayBuffer.empty[String]
+
+      val trainWordsCount = countRDD.map(_._2).reduce(_ + _)
+      countRDD.map{ case (v, n) =>
+        val prob = if (sample > 0) {
+          (Math.sqrt(n / (sample * trainWordsCount)) + 1) * (sample * trainWordsCount) / n
+        } else {
+          1.0
+        }
+        (v, if (prob >= 1) Int.MaxValue else (prob * Int.MaxValue).toInt)
+      }.collect().foreach{case (w, p) =>
+        val i = map.size
+        map.update(w, i)
+        sampleProb.update(i, p)
+        invVocab.append(w)
+      }
+      (sc.broadcast(map), sc.broadcast(sampleProb), invVocab.toArray)
+    }
+
+    val sent = cacheAndCount(dataset.mapPartitions{it =>
+      val vocab = vocabBC.value
+      it.map(_.map(w => if (vocab.contains(w)) vocab(w) else -1))
+    })
+    val expTable = sc.broadcast(createExpTable())
 
     val emb = countRDD.mapPartitions{it =>
       val rnd = new Random(0)
-      it.map{case (v, n) =>
+      val vocab = vocabBC.value
+      it.map{case (w, n) =>
+        val v = vocab(w)
         rnd.setSeed(v)
         v -> (n, Array.fill(vectorSize)(((rnd.nextFloat() - 0.5) / vectorSize).toFloat),
           Array.fill(vectorSize)(((rnd.nextFloat() - 0.5) / vectorSize).toFloat))
@@ -386,22 +415,10 @@ class SkipGram extends Serializable with Logging {
     }
     cacheAndCount(emb)
 
-    val sampleProbBC = {
-      val trainWordsCount = countRDD.map(_._2).reduce(_ + _)
-      val sampleProb = new OpenHashMap[Int, Int]()
-      countRDD.map{ case (v, n) =>
-          val prob = if (sample > 0) {
-            (Math.sqrt(n / (sample * trainWordsCount)) + 1) * (sample * trainWordsCount) / n
-          } else {
-            1.0
-          }
-          (v, if (prob >= 1) Int.MaxValue else (prob * Int.MaxValue).toInt)
-      }.collect().foreach{case (v, p) => sampleProb.update(v, p)}
-      sc.broadcast(sampleProb)
-    }
-
     try {
-      doFit(sent, emb, sampleProbBC, sc, expTable)
+      val emb = doFit(sent, emb, sampleProbBC, sc, expTable)
+      val invVocabBC = sc.broadcast(invVocab)
+      new SkipGramModel(emb.map(x => x.copy(_1 = invVocabBC.value(x._1))))
     } finally {
       // expTable.destroy()
       // sampleProbBC.destroy()
@@ -414,7 +431,8 @@ class SkipGram extends Serializable with Logging {
                     inEmb: RDD[(Int, (Long, Array[Float], Array[Float]))],
                     sampleProbBC: Broadcast[OpenHashMap[Int, Int]],
                     sc: SparkContext,
-                    expTable: Broadcast[Array[Float]]): SkipGramModel = {
+                    expTable: Broadcast[Array[Float]]
+                   ): RDD[(Int, (Long, Array[Float], Array[Float]))] = {
     import SkipGram._
 
     var emb = inEmb
@@ -528,7 +546,7 @@ class SkipGram extends Serializable with Logging {
     }
 
     sent.unpersist()
-    new SkipGramModel(emb)
+    emb
   }
 }
 
@@ -540,7 +558,7 @@ class SkipGram extends Serializable with Logging {
  */
 @Since("3.4.0")
 class SkipGramModel private[spark] (
-    private[spark] val emb: RDD[(Int, (Long, Array[Float], Array[Float]))]
+    private[spark] val emb: RDD[(String, (Long, Array[Float], Array[Float]))]
                                    ) extends Serializable with Saveable {
   /**
    * Save this model to the given path.
@@ -570,7 +588,7 @@ object SkipGramModel extends Loader[SkipGramModel] {
 
     val classNameV1_0 = "org.apache.spark.mllib.feature.SkipGramModel"
 
-    case class Data(word: Int, n: Long, syn0: Array[Float], syn1Neg: Array[Float])
+    case class Data(word: String, n: Long, syn0: Array[Float], syn1Neg: Array[Float])
 
     def load(sc: SparkContext, path: String): SkipGramModel = {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
@@ -578,11 +596,11 @@ object SkipGramModel extends Loader[SkipGramModel] {
       val dataFrame = spark.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[Data](dataFrame.schema)
       new SkipGramModel(dataFrame.select("word", "n", "syn0", "syn1Neg")
-        .as[(Int, (Long, Array[Float], Array[Float]))].rdd)
+        .as[(String, (Long, Array[Float], Array[Float]))].rdd)
     }
 
     def save(sc: SparkContext, path: String,
-             emb: RDD[(Int, (Long, Array[Float], Array[Float]))]): Unit = {
+             emb: RDD[(String, (Long, Array[Float], Array[Float]))]): Unit = {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       import spark.sqlContext.implicits._
       val vectorSize = emb.first()._2._2.length
