@@ -42,7 +42,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         self.pdf_tensor["t2"] = self.pdf.drop(columns="d").values.tolist()
         self.df_tensor2 = self.spark.createDataFrame(self.pdf_tensor)
 
-    def test_identity(self):
+    def test_identity_single(self):
         def predict_batch_fn():
             def predict(inputs):
                 return inputs
@@ -63,6 +63,18 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         preds = self.df.withColumn("preds", identity("a")).toPandas()
         self.assertTrue(preds["a"].equals(preds["preds"]))
 
+        # multiple column input, single input => ERROR
+        with self.assertRaisesRegex(Exception, "Multiple input columns found, but model expected"):
+            preds = self.df.withColumn("preds", identity("a", "b")).toPandas()
+
+    def test_identity_multi(self):
+        # single input model
+        def predict_batch_fn():
+            def predict(inputs):
+                return inputs
+
+            return predict
+
         identity = predict_batch_udf(
             predict_batch_fn,
             return_type=StructType(
@@ -71,7 +83,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
             batch_size=5,
         )
 
-        # multiple column input => multiple column output (struct)
+        # multiple columns using struct, single input => multiple column output
         preds = (
             self.df.withColumn("preds", identity(struct("a", "b")))
             .select("a", "b", "preds.*")
@@ -80,9 +92,41 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         self.assertTrue(preds["a"].equals(preds["a1"]))
         self.assertTrue(preds["b"].equals(preds["b1"]))
 
-        # multiple column input => multiple column output (col)
+        # multiple columns, single input => ERROR
+        with self.assertRaisesRegex(Exception, "Multiple input columns found, but model expected"):
+            preds = (
+                self.df.withColumn("preds", identity("a", "b"))
+                .select("a", "b", "preds.*")
+                .toPandas()
+            )
+
+        # multiple input model
+        def predict_batch2_fn():
+            def predict(in1, in2):
+                return {"a1": in1, "b1": in2}
+
+            return predict
+
+        identity2 = predict_batch_udf(
+            predict_batch2_fn,
+            return_type=StructType(
+                [StructField("a1", DoubleType(), True), StructField("b1", DoubleType(), True)]
+            ),
+            batch_size=5,
+        )
+
+        # multiple columns using struct, multiple inputs => multiple column output
         preds = (
-            self.df.withColumn("preds", identity(col("a"), col("b")))
+            self.df.withColumn("preds", identity2(struct("a", "b")))
+            .select("a", "b", "preds.*")
+            .toPandas()
+        )
+        self.assertTrue(preds["a"].equals(preds["a1"]))
+        self.assertTrue(preds["b"].equals(preds["b1"]))
+
+        # multiple columns, multiple inputs => multiple column output
+        preds = (
+            self.df.withColumn("preds", identity2(col("a"), col("b")))
             .select("a", "b", "preds.*")
             .toPandas()
         )
@@ -91,7 +135,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
 
         # multiple column input => multiple column output (str)
         preds = (
-            self.df.withColumn("preds", identity("a", "b")).select("a", "b", "preds.*").toPandas()
+            self.df.withColumn("preds", identity2("a", "b")).select("a", "b", "preds.*").toPandas()
         )
         self.assertTrue(preds["a"].equals(preds["a1"]))
         self.assertTrue(preds["b"].equals(preds["b1"]))
@@ -144,10 +188,16 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         df2 = self.df.withColumn("preds", identity(struct("a"))).toPandas()
         self.assertTrue(df1.equals(df2))
 
+        identity = predict_batch_udf(predict_batch_fn, return_type=DoubleType(), batch_size=5)
+
+        # cache should now be invalidated and results should be different
+        df3 = self.df.withColumn("preds", identity(struct("a"))).toPandas()
+        self.assertFalse(df1.equals(df3))
+
     def test_transform_scalar(self):
         columns = self.df.columns
 
-        # scalar columns with no input_names or input_tensor_shapes => single numpy array
+        # multiple scalar columns, single input, no input_tensor_shapes => single numpy array
         def array_sum_fn():
             def predict(inputs):
                 return np.sum(inputs, axis=1)
@@ -158,38 +208,37 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         preds = self.df.withColumn("preds", sum_cols(struct(*columns))).toPandas()
         self.assertTrue(np.array_equal(np.sum(self.data, axis=1), preds["preds"].to_numpy()))
 
-        # scalar columns with input_names => dictionary of numpy arrays
-        def dict_sum_fn():
-            def predict(inputs):
-                result = sum([inputs["a"], inputs["b"], inputs["c"], inputs["d"]])
+        with self.assertRaisesRegex(Exception, "Multiple input columns found, but model expected"):
+            preds = self.df.withColumn("preds", sum_cols(*[col(c) for c in columns])).toPandas()
+
+        with self.assertRaisesRegex(Exception, "Multiple input columns found, but model expected"):
+            preds = self.df.withColumn("preds", sum_cols(*columns)).toPandas()
+
+        # multiple scalar columns, multiple inputs, no input_tensor_shapes => list of numpy arrays
+        def list_sum_fn():
+            def predict(a, b, c, d):
+                result = sum([a, b, c, d])
                 return result
 
             return predict
 
-        sum_cols = predict_batch_udf(
-            dict_sum_fn, return_type=DoubleType(), batch_size=5, input_names=columns
-        )
-        preds = self.df.withColumn("preds", sum_cols(struct(*columns))).toPandas()
+        sum_cols = predict_batch_udf(list_sum_fn, return_type=DoubleType(), batch_size=5)
+        preds = self.df.withColumn("preds", sum_cols(*columns)).toPandas()
         self.assertTrue(np.array_equal(np.sum(self.data, axis=1), preds["preds"].to_numpy()))
 
-        # scalar columns with non-matching input_names => dictionary of numpy arrays with new names
-        def dict_sum_fn():
-            def predict(inputs):
-                result = sum([inputs["a1"], inputs["b1"], inputs["c1"], inputs["d1"]])
+        # multiple scalar columns, mismatched inputs, no input_tensor_shapes  => ERROR
+        def list_sum_fn():
+            def predict(a, b, c):
+                result = sum([a, b, c])
                 return result
 
             return predict
 
-        sum_cols = predict_batch_udf(
-            dict_sum_fn,
-            return_type=DoubleType(),
-            batch_size=5,
-            input_names=["a1", "b1", "c1", "d1"],
-        )
-        preds = self.df.withColumn("preds", sum_cols(struct(*columns))).toPandas()
-        self.assertTrue(np.array_equal(np.sum(self.data, axis=1), preds["preds"].to_numpy()))
+        sum_cols = predict_batch_udf(list_sum_fn, return_type=DoubleType(), batch_size=5)
+        with self.assertRaisesRegex(Exception, "Model expected 3 inputs, but received 4 columns"):
+            preds = self.df.withColumn("preds", sum_cols(*columns)).toPandas()
 
-        # scalar columns with one tensor_input_shape => single numpy array
+        # muliple scalar columns with one tensor_input_shape => single numpy array
         sum_cols = predict_batch_udf(
             array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[-1, 4]]
         )
@@ -203,9 +252,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
             batch_size=5,
             input_tensor_shapes=[[-1, 2], [-1, 2]],
         )
-        with self.assertRaisesRegex(
-            Exception, "Multiple input_tensor_shapes require associated input_names"
-        ):
+        with self.assertRaisesRegex(Exception, "Multiple input_tensor_shapes found"):
             self.df.withColumn("preds", sum_cols(struct(*columns))).toPandas()
 
     def test_transform_single_tensor(self):
@@ -217,19 +264,12 @@ class PredictBatchUDFTests(SparkSessionTestCase):
 
             return predict
 
-        # tensor column with no input_names or input_tensor_shapes => ERROR
+        # tensor column with no input_tensor_shapes => ERROR
         sum_cols = predict_batch_udf(array_sum_fn, return_type=DoubleType(), batch_size=5)
         with self.assertRaisesRegex(Exception, "Tensor columns require input_tensor_shapes"):
             preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns1))).toPandas()
 
-        # tensor column with only input_names => ERROR
-        sum_cols = predict_batch_udf(
-            array_sum_fn, return_type=DoubleType(), batch_size=5, input_names=["dense_input"]
-        )
-        with self.assertRaisesRegex(Exception, "Tensor columns require input_tensor_shapes"):
-            preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns1))).toPandas()
-
-        # tensor column with only tensor_input_shapes => single numpy array
+        # tensor column with tensor_input_shapes => single numpy array
         sum_cols = predict_batch_udf(
             array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[-1, 4]]
         )
@@ -243,42 +283,26 @@ class PredictBatchUDFTests(SparkSessionTestCase):
             batch_size=5,
             input_tensor_shapes=[[-1, 4], [-1, 4]],
         )
-        with self.assertRaisesRegex(
-            Exception, "Multiple input_tensor_shapes require associated input_names"
-        ):
+        with self.assertRaisesRegex(Exception, "Multiple input_tensor_shapes found"):
             preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns1))).toPandas()
 
     def test_transform_multi_tensor(self):
-        columns = self.df_tensor2.columns
-
         def multi_dict_sum_fn():
-            def predict(inputs):
-                result = np.sum(inputs["t1"], axis=1) + np.sum(inputs["t2"], axis=1)
+            def predict(t1, t2):
+                result = np.sum(t1, axis=1) + np.sum(t2, axis=1)
                 return result
 
             return predict
 
-        # multiple tensor columns with only tensor_input_shapes => ERROR
+        # multiple tensor columns with tensor_input_shapes => list of numpy arrays
         sum_cols = predict_batch_udf(
             multi_dict_sum_fn,
             return_type=DoubleType(),
             batch_size=5,
             input_tensor_shapes=[[-1, 4], [-1, 3]],
         )
-        with self.assertRaisesRegex(
-            Exception, "Multiple input_tensor_shapes require associated input_names"
-        ):
-            preds = self.df_tensor2.withColumn("preds", sum_cols(struct(*columns))).toPandas()
-
-        # multiple tensor columns with input_names and tensor_input_shapes => dict of numpy arrays
-        sum_cols = predict_batch_udf(
-            multi_dict_sum_fn,
-            return_type=DoubleType(),
-            batch_size=5,
-            input_names=["t1", "t2"],
-            input_tensor_shapes=[[-1, 4], [-1, 3]],
-        )
-        preds = self.df_tensor2.withColumn("preds", sum_cols(struct(*columns))).toPandas()
+        self.df_tensor2.show()
+        preds = self.df_tensor2.withColumn("preds", sum_cols("t1", "t2")).toPandas()
         self.assertTrue(
             np.array_equal(
                 np.sum(self.data, axis=1) + np.sum(self.data[:, 0:3], axis=1),
@@ -287,9 +311,10 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         )
 
     def test_return_multiple(self):
-        # columnar form: dictionary of numpy arrays
+        # columnar form (dictionary of numpy arrays)
         def multiples_column_fn():
             def predict(inputs):
+                inputs = np.squeeze(inputs, axis=1)
                 return {"x2": inputs * 2, "x3": inputs * 3}
 
             return predict
@@ -309,6 +334,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         # row form: list of dictionaries
         def multiples_row_fn():
             def predict(inputs):
+                inputs = np.squeeze(inputs, axis=1)
                 return [{"x2": x * 2, "x3": x * 3} for x in inputs]
 
             return predict

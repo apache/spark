@@ -16,6 +16,7 @@
 #
 from __future__ import annotations
 
+import inspect
 import numpy as np
 import pandas as pd
 import uuid
@@ -120,12 +121,15 @@ def _batched(
     data: pd.Series | pd.DataFrame | Tuple[pd.Series], batch_size: int
 ) -> Iterator[pd.DataFrame]:
     """Generator that splits a pandas dataframe/series into batches."""
-    if isinstance(data, (pd.Series, pd.DataFrame)):
+    if isinstance(data, pd.DataFrame):
         for _, batch in data.groupby(np.arange(len(data)) // batch_size):
             yield batch
-    else:  # isinstance(data, Tuple):
-        # convert tuple of pd.Series into pd.DataFrame
-        df = pd.concat(data, axis=1)
+    else:
+        # convert (tuple of) pd.Series into pd.DataFrame
+        if isinstance(data, pd.Series):
+            df = pd.concat((data,), axis=1)
+        else:  # isinstance(data, Tuple[pd.Series]):
+            df = pd.concat(data, axis=1)
         for _, batch in df.groupby(np.arange(len(df)) // batch_size):
             yield batch
 
@@ -148,14 +152,13 @@ def predict_batch_udf(
     predict_batch_fn: Callable[
         [],
         Callable[
-            [np.ndarray | Mapping[str, np.ndarray]],
+            [np.ndarray | List[np.ndarray]],
             np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, np.dtype]],
         ],
     ],
     *,
     return_type: DataType,
     batch_size: int,
-    input_names: list[str] | None = None,
     input_tensor_shapes: list[list[int]] | None = None,
 ) -> UserDefinedFunctionLike:
     """Given a function which loads a model, returns a pandas_udf for inferencing over that model.
@@ -213,21 +216,17 @@ def predict_batch_udf(
 
     Parameters
     ----------
-    predict_batch_fn : Callable[..., Callable[np.ndarray | Mapping[str, np.ndarray]],
-        np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, np.dtype]] ]
+    predict_batch_fn : Callable[[],
+        Callable[..., np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, np.dtype]] ]
         Function which is responsible for loading a model and returning a `predict` function which
-        takes either a numpy array or a dictionary of named numpy arrays as input and returns either
-        a numpy array (for a single output), a dictionary of named numpy arrays (for multiple
-        outputs), or a row-oriented list of dictionaries (for multiple outputs).
+        takes one or more numpy arrays as input and returns either a numpy array (for a single
+        output), a dictionary of named numpy arrays (for multiple outputs), or a row-oriented list
+        of dictionaries (for multiple outputs).
     return_type : :class:`pspark.sql.types.DataType` or str.
         Spark SQL datatype for the expected output.
     batch_size : int
         Batch size to use for inference, note that this is typically a limitation of the model
         and/or the hardware resources and is usually smaller than the Spark partition size.
-    input_names: list[str]
-        Optional list of input names which will be used to map DataFrame column names to model
-        input names.  The order of names must match the order of the selected DataFrame columns.
-        If provided, the `predict()` function will be passed a dictionary of named inputs.
     input_tensor_shapes: list[list[int]]
         Optional list of input tensor shapes for models with tensor inputs.  Each tensor
         input must be represented as a single DataFrame column containing a flattened 1-D array.
@@ -249,63 +248,62 @@ def predict_batch_udf(
             predict_fn = predict_batch_fn()
             ModelCache.add(model_uuid, predict_fn)
 
+        signature = inspect.signature(predict_fn)
+        num_expected = len(signature.parameters)
+
         for partition in data:
+            has_tuple = isinstance(partition, Tuple)  # type: ignore
             has_tensors = _has_tensor_cols(partition)
+
+            # require input_tensor_shapes for any tensor columns
+            if has_tensors and not input_tensor_shapes:
+                raise ValueError("Tensor columns require input_tensor_shapes")
+
             for batch in _batched(partition, batch_size):
-                inputs: np.ndarray | Mapping[str, np.ndarray]
-                if input_names:
-                    # input names provided, expect a dictionary of named numpy arrays
-                    # check if the number of inputs matches expected
-                    num_expected = len(input_names)
-                    num_actual = len(batch.columns)
-                    if num_actual != num_expected:
-                        msg = "Model expected {} inputs, but received {} columns"
-                        raise ValueError(msg.format(num_expected, num_actual))
+                num_actual = len(batch.columns)
+                if num_actual == num_expected and num_expected > 1:
+                    # input column per expected input, convert each column into param
+                    multi_inputs = [batch[col].to_numpy() for col in batch.columns]
 
-                    # rename dataframe column names to match model input names, if needed
-                    if input_names != list(batch.columns):
-                        batch.columns = input_names
-
-                    if has_tensors and not input_tensor_shapes:
-                        raise ValueError("Tensor columns require input_tensor_shapes")
-
-                    # create a dictionary of named inputs => numpy arrays
-                    inputs_dict = batch.to_dict(orient="series")
-                    inputs_dict = {k: v.to_numpy() for k, v in inputs_dict.items()}
-
-                    # reshape tensor inputs, if needed
                     if input_tensor_shapes:
                         if len(input_tensor_shapes) == num_actual:
-                            for i, (k, v) in enumerate(inputs_dict.items()):
-                                inputs_dict[k] = np.vstack(v).reshape(input_tensor_shapes[i])
+                            multi_inputs = [
+                                np.vstack(v).reshape(input_tensor_shapes[i])
+                                for i, v in enumerate(multi_inputs)
+                            ]
                         else:
                             raise ValueError("input_tensor_shapes must match columns")
 
-                    inputs = inputs_dict  # type: ignore[assignment]
-                else:
-                    # no input names provided, expect a single numpy array
+                    # run model prediction function on transformed (numpy) inputs
+                    preds = predict_fn(*multi_inputs)
+                elif num_expected == 1:
+                    # multiple input columns for single input
+                    if has_tensors and len(batch.columns) == 1:
+                        # if one tensor input and one column, vstack/reshape the batch
+                        single_input = np.vstack(batch.iloc[:, 0])
+                    else:
+                        # otherwise, convert entire dataframe to a single np array
+                        if not has_tuple:
+                            single_input = batch.to_numpy()
+                        else:
+                            raise ValueError(
+                                "Multiple input columns found, but model expected a single "
+                                "input, use `struct` or `array` to combine columns into tensors."
+                            )
+
                     if input_tensor_shapes:
                         if len(input_tensor_shapes) == 1:
-                            input_shape = [x if x else -1 for x in input_tensor_shapes[0]]
-                            if isinstance(batch, pd.Series):
-                                inputs = np.vstack(batch).reshape(input_shape)
-                            elif isinstance(batch, pd.DataFrame):
-                                if len(batch.columns) == 1:
-                                    # if one tensor input and one column, vstack/reshape the batch
-                                    inputs = np.vstack(batch.iloc[:, 0]).reshape(input_shape)
-                                else:
-                                    # otherwise, convert entire dataframe to a single np array
-                                    inputs = batch.to_numpy()
+                            single_input = single_input.reshape(input_tensor_shapes[0])
                         else:
-                            msg = "Multiple input_tensor_shapes require associated input_names: {}"
-                            raise ValueError(msg.format(input_tensor_shapes))
-                    else:
-                        if has_tensors:
-                            raise ValueError("Tensor columns require input_tensor_shapes")
-                        inputs = batch.to_numpy()
+                            raise ValueError(
+                                "Multiple input_tensor_shapes found, but model expected one input"
+                            )
 
-                # run model prediction function on transformed (numpy) inputs
-                preds = predict_fn(inputs)
+                    # run model prediction function on transformed (numpy) inputs
+                    preds = predict_fn(single_input)
+                else:
+                    msg = "Model expected {} inputs, but received {} columns"
+                    raise ValueError(msg.format(num_expected, num_actual))
 
                 # return predictions to Spark
                 if isinstance(return_type, StructType):
