@@ -575,6 +575,11 @@ class SkipGramModel private[spark] (
    *             If the directory already exists, this method throws an exception.
    */
   override def save(sc: SparkContext, path: String): Unit = {
-    emb.map(x => x._1 + " " + x._2.mkString(" ")).saveAsTextFile(path, new GzipCodec)
+    emb.map(x => s"""{
+         |"word":${x._1},
+         |"cn":${x._2._1},
+         |"syn0":[${x._2._2.mkString(",")}],
+         |"syn1Neg":[${x._2._3.mkString(",")}]}""".stripMargin)
+      .saveAsTextFile(path, classOf[GzipCodec])
   }
 }
