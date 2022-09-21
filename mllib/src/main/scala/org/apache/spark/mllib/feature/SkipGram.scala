@@ -341,21 +341,20 @@ class SkipGram extends Serializable with Logging {
 
   private def initUnigramTable(cn: ArrayBuffer[Long]): Array[Int] = {
     var a = 0
-    val power = 0.75
     var trainWordsPow = 0.0
     val table = Array.fill(UNIGRAM_TABLE_SIZE)(-1)
     while (a < cn.length) {
-      trainWordsPow += Math.pow(cn(a), power)
+      trainWordsPow += Math.pow(cn(a), pow)
       a += 1
     }
     var i = 0
     a = 0
-    var d1 = Math.pow(cn(i), power) / trainWordsPow
+    var d1 = Math.pow(cn(i), pow) / trainWordsPow
     while (a < table.length && i < cn.length) {
       table(a) = i
       if (a.toDouble / table.length > d1) {
         i += 1
-        d1 += Math.pow(cn(i), power) / trainWordsPow
+        d1 += Math.pow(cn(i), pow) / trainWordsPow
       }
       a += 1
     }
@@ -403,7 +402,7 @@ class SkipGram extends Serializable with Logging {
     })
     val expTable = sc.broadcast(createExpTable())
 
-    val emb = countRDD.mapPartitions{it =>
+    val emb = cacheAndCount(countRDD.mapPartitions{it =>
       val rnd = new Random(0)
       val vocab = vocabBC.value
       it.map{case (w, n) =>
@@ -412,8 +411,7 @@ class SkipGram extends Serializable with Logging {
         v -> (n, Array.fill(vectorSize)(((rnd.nextFloat() - 0.5) / vectorSize).toFloat),
           Array.fill(vectorSize)(((rnd.nextFloat() - 0.5) / vectorSize).toFloat))
       }
-    }
-    cacheAndCount(emb)
+    })
 
     try {
       val result = doFit(sent, emb, sampleProbBC, sc, expTable)
