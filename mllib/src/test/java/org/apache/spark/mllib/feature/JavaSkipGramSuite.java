@@ -19,10 +19,13 @@ package org.apache.spark.mllib.feature;
 
 import com.google.common.base.Strings;
 import org.apache.spark.SharedSparkSession;
-import org.apache.spark.rdd.RDD;
+import org.apache.spark.api.java.JavaRDD;
 import org.junit.Assert;
 import org.junit.Test;
 import scala.Tuple2;
+
+import java.util.Arrays;
+import java.util.List;
 
 public class JavaSkipGramSuite extends SharedSparkSession {
 
@@ -31,11 +34,11 @@ public class JavaSkipGramSuite extends SharedSparkSession {
         // The tests are to check Java compatibility.
         String sentence = Strings.repeat("a b ", 100) + Strings.repeat("a c ", 10);
         String[] words = sentence.split(" ");
-        String[][] localDoc = new String[][]{words, words};
-        RDD<String[]> doc = jsc.parallelize(localDoc);
+        List<String[]> localDoc = Arrays.asList(words, words);
+        JavaRDD<String[]> doc = jsc.parallelize(localDoc);
         SkipGram skipGram = new SkipGram()
                 .setVectorSize(10);
-        SkipGramModel model = skipGram.fit(doc);
+        SkipGramModel model = skipGram.fit(doc.rdd());
         Tuple2<String, Object>[] syms = model.findSynonyms("a", 2);
         Assert.assertEquals(2, syms.length);
         Assert.assertEquals("b", syms[0]._1());
