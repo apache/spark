@@ -77,6 +77,13 @@ from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
 from pyspark.pandas.accessors import PandasOnSparkSeriesMethods
 from pyspark.pandas.categorical import CategoricalAccessor
 from pyspark.pandas.config import get_option
+from pyspark.pandas.correlation import (
+    compute,
+    CORRELATION_VALUE_1_COLUMN,
+    CORRELATION_VALUE_2_COLUMN,
+    CORRELATION_CORR_OUTPUT_COLUMN,
+    CORRELATION_COUNT_OUTPUT_COLUMN,
+)
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.exceptions import SparkPandasIndexingError
 from pyspark.pandas.frame import DataFrame
@@ -91,7 +98,6 @@ from pyspark.pandas.internal import (
 )
 from pyspark.pandas.missing.series import MissingPandasLikeSeries
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
-from pyspark.pandas.ml import corr
 from pyspark.pandas.utils import (
     combine_frames,
     is_name_like_tuple,
@@ -3312,20 +3318,37 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
         return np.nan if corr is None else corr
 
-    def corr(self, other: "Series", method: str = "pearson") -> float:
+    def corr(
+        self, other: "Series", method: str = "pearson", min_periods: Optional[int] = None
+    ) -> float:
         """
         Compute correlation with `other` Series, excluding missing values.
+
+        .. versionadded:: 3.3.0
 
         Parameters
         ----------
         other : Series
-        method : {'pearson', 'spearman'}
+        method : {'pearson', 'spearman', 'kendall'}
             * pearson : standard correlation coefficient
             * spearman : Spearman rank correlation
+            * kendall : Kendall Tau correlation coefficient
+
+            .. versionchanged:: 3.4.0
+               support 'kendall' for method parameter
+        min_periods : int, optional
+            Minimum number of observations needed to have a valid result.
+
+            .. versionadded:: 3.4.0
 
         Returns
         -------
         correlation : float
+
+        Notes
+        -----
+        The complexity of Kendall correlation is O(#row * #row), if the dataset is too
+        large, sampling ahead of correlation computation is recommended.
 
         Examples
         --------
@@ -3333,29 +3356,74 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ...                    's2': [.3, .6, .0, .1]})
         >>> s1 = df.s1
         >>> s2 = df.s2
-        >>> s1.corr(s2, method='pearson')  # doctest: +ELLIPSIS
-        -0.851064...
+        >>> s1.corr(s2, method='pearson')
+        -0.85106...
 
-        >>> s1.corr(s2, method='spearman')  # doctest: +ELLIPSIS
-        -0.948683...
+        >>> s1.corr(s2, method='spearman')
+        -0.94868...
 
-        Notes
-        -----
-        There are behavior differences between pandas-on-Spark and pandas.
+        >>> s1.corr(s2, method='kendall')
+        -0.91287...
 
-        * the `method` argument only accepts 'pearson', 'spearman'
-        * the data should not contain NaNs. pandas-on-Spark will return an error.
-        * pandas-on-Spark doesn't support the following argument(s).
+        >>> s1 = ps.Series([1, np.nan, 2, 1, 1, 2, 3])
+        >>> s2 = ps.Series([3, 4, 1, 1, 5])
 
-          * `min_periods` argument is not supported
+        >>> with ps.option_context("compute.ops_on_diff_frames", True):
+        ...     s1.corr(s2, method="pearson")
+        -0.52223...
+
+        >>> with ps.option_context("compute.ops_on_diff_frames", True):
+        ...     s1.corr(s2, method="spearman")
+        -0.54433...
+
+        >>> with ps.option_context("compute.ops_on_diff_frames", True):
+        ...     s1.corr(s2, method="kendall")
+        -0.51639...
+
+        >>> with ps.option_context("compute.ops_on_diff_frames", True):
+        ...     s1.corr(s2, method="kendall", min_periods=5)
+        nan
         """
-        # This implementation is suboptimal because it computes more than necessary,
-        # but it should be a start
-        columns = ["__corr_arg1__", "__corr_arg2__"]
-        psdf = self._psdf.assign(__corr_arg1__=self, __corr_arg2__=other)[columns]
-        psdf.columns = columns
-        c = corr(psdf, method=method)
-        return c.loc[tuple(columns)]
+        if method not in ["pearson", "spearman", "kendall"]:
+            raise ValueError(f"Invalid method {method}")
+        if not isinstance(other, Series):
+            raise TypeError("'other' must be a Series")
+        if min_periods is not None and not isinstance(min_periods, int):
+            raise TypeError(f"Invalid min_periods type {type(min_periods).__name__}")
+
+        min_periods = 1 if min_periods is None else min_periods
+
+        if same_anchor(self, other):
+            combined = self
+            this = self
+            that = other
+        else:
+            combined = combine_frames(self._psdf, other._psdf)  # type: ignore[assignment]
+            this = combined["this"]
+            that = combined["that"]
+
+        sdf = combined._internal.spark_frame
+        index_col_name = verify_temp_column_name(sdf, "__ser_corr_index_temp_column__")
+        this_scol = this._internal.spark_column_for(this._internal.column_labels[0])
+        that_scol = that._internal.spark_column_for(that._internal.column_labels[0])
+
+        sdf = sdf.select(
+            F.lit(0).alias(index_col_name),
+            this_scol.cast("double").alias(CORRELATION_VALUE_1_COLUMN),
+            that_scol.cast("double").alias(CORRELATION_VALUE_2_COLUMN),
+        )
+
+        sdf = compute(sdf=sdf, groupKeys=[index_col_name], method=method).select(
+            F.when(
+                F.col(CORRELATION_COUNT_OUTPUT_COLUMN) < min_periods, F.lit(None).cast("double")
+            ).otherwise(F.col(CORRELATION_CORR_OUTPUT_COLUMN))
+        )
+
+        results = sdf.take(1)
+        if len(results) == 0:
+            raise ValueError("attempt to get corr of an empty sequence")
+        else:
+            return np.nan if results[0][0] is None else results[0][0]
 
     def nsmallest(self, n: int = 5) -> "Series":
         """
