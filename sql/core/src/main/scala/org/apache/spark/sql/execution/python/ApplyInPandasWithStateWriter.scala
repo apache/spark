@@ -162,6 +162,12 @@ class ApplyInPandasWithStateWriter(
    */
   def finalizeGroup(): Unit = {
     finalizeCurrentChunk(isLastChunkForGroup = true)
+
+    // If it exceeds the condition of batch (number of records) once the all data is received for
+    // same group, finalize and construct a new batch.
+    if (totalNumRowsForBatch >= arrowMaxRecordsPerBatch) {
+      finalizeCurrentArrowBatch()
+    }
   }
 
   /**
