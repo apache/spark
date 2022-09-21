@@ -1850,7 +1850,7 @@ class DataFrame(Frame, Generic[T]):
         sser.name = None
         return sser
 
-    def iteritems(self) -> Iterator[Tuple[Name, "Series"]]:
+    def items(self) -> Iterator[Tuple[Name, "Series"]]:
         """
         Iterator over (column name, Series) pairs.
 
@@ -2054,9 +2054,16 @@ class DataFrame(Frame, Generic[T]):
             ):
                 yield tuple(([k] if index else []) + list(v))
 
-    def items(self) -> Iterator[Tuple[Name, "Series"]]:
-        """This is an alias of ``iteritems``."""
-        return self.iteritems()
+    def iteritems(self) -> Iterator[Tuple[Name, "Series"]]:
+        """
+        This is an alias of ``items``.
+
+        .. deprecated:: 3.4.0
+            iteritems is deprecated and will be removed in a future version.
+            Use .items instead.
+        """
+        warnings.warn("Deprecated in 3.4.0, Use DataFrame.items instead.", FutureWarning)
+        return self.items()
 
     def to_clipboard(self, excel: bool = True, sep: Optional[str] = None, **kwargs: Any) -> None:
         """

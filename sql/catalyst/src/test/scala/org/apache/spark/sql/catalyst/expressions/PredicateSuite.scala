@@ -528,8 +528,13 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(IsUnknown(Literal.create(null, BooleanType)), true, row0)
     checkEvaluation(IsNotUnknown(Literal.create(null, BooleanType)), false, row0)
     IsUnknown(Literal.create(null, IntegerType)).checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckFailure(msg) =>
-        assert(msg.contains("argument 1 requires boolean type"))
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass === "UNEXPECTED_INPUT_TYPE")
+        assert(messageParameters === Map(
+          "paramIndex" -> "1",
+          "requiredType" -> "\"BOOLEAN\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"INT\""))
     }
   }
 

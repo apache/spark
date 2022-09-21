@@ -149,7 +149,24 @@ SELECT '1' + cast('2017-12-11 09:30:00' as date)        FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(CAST('2017-12-11 09:30:00' AS DATE), CAST('1' AS DOUBLE))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST('1' AS DOUBLE)' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(CAST(2017-12-11 09:30:00 AS DATE), 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 48,
+    "fragment" : "'1' + cast('2017-12-11 09:30:00' as date)"
+  } ]
+}
 
 
 -- !query
@@ -270,7 +287,24 @@ SELECT '1' - cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '('1' - CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, ''1'' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"(1 - CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "'1' - cast('2017-12-11 09:30:00.0' as timestamp)"
+  } ]
+}
 
 
 -- !query
@@ -1055,7 +1089,24 @@ SELECT cast('2017-12-11 09:30:00' as date)        + '1' FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(CAST('2017-12-11 09:30:00' AS DATE), CAST('1' AS DOUBLE))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST('1' AS DOUBLE)' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(CAST(2017-12-11 09:30:00 AS DATE), 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00' as date)        + '1'"
+  } ]
+}
 
 
 -- !query
@@ -1168,7 +1219,24 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) - '1' FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) - '1')' due to data type mismatch: argument 2 requires (timestamp or timestamp without time zone) type, however, ''1'' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) - 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00.0' as timestamp) - '1'"
+  } ]
+}
 
 
 -- !query
@@ -1177,7 +1245,24 @@ SELECT cast('2017-12-11 09:30:00' as date)        - '1' FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(CAST('2017-12-11 09:30:00' AS DATE), CAST('1' AS DOUBLE))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST('1' AS DOUBLE)' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_sub(CAST(2017-12-11 09:30:00 AS DATE), 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00' as date)        - '1'"
+  } ]
+}
 
 
 -- !query
