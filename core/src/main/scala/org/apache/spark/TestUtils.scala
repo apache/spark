@@ -285,6 +285,10 @@ private[spark] object TestUtils {
   // minimum python supported version changes.
   val minimumPythonSupportedVersion: String = "3.7.0"
 
+  def assumePythonVersionAvailable: Unit =
+    assume(isPythonVersionAvailable,
+      s"Python executable not exists or Python version < $minimumPythonSupportedVersion")
+
   def isPythonVersionAvailable: Boolean = {
     isPythonVersionAvailable("python3")
   }
