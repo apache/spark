@@ -296,6 +296,12 @@ class PandasGroupedOpsMixin:
         ...     count_fn, outputStructType="id long, countAsString string",
         ...     stateStructType="len long", outputMode="Update",
         ...     timeoutConf=GroupStateTimeout.NoTimeout) # doctest: +SKIP
+
+        Notes
+        -----
+        This function requires a full shuffle.
+
+        This API is experimental.
         """
 
         from pyspark.sql import GroupedData
