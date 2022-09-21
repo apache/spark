@@ -32,16 +32,6 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.OpenHashMap
 
 
-
-case class Word2VecParams(input: String = null,
-                          output: String = null,
-                          vectorSize: Int = -1,
-                          negative: Int = 5,
-                          window: Int = 5,
-                          epoch: Int = 1,
-                          learningRate: Double = 0.025,
-                          minCount: Int = 5)
-
 private object ParItr {
 
   def foreach[A](i: Iterator[A], cpus: Int, batch: Int)(f: A => Unit): Unit = {
@@ -171,9 +161,10 @@ private[spark] object SkipGram {
           var skipped = 0
           random.setSeed(seed)
           while (i < s.length) {
-            if (skip(count(s(i)), sample, random, trainWordsCount)) {
+            val cn = count(s(i))
+            if (skip(cn, sample, random, trainWordsCount)) {
               skipped += 1
-            } else {
+            } else if (cn > 0) {
               val a = getPartition(s(i), salt, numPartitions)
               val buffer = buffers(a)
               buffer.checkVersion(v)
@@ -400,22 +391,20 @@ class SkipGram extends Serializable with Logging {
     import SkipGram._
 
     val sent = cacheAndCount(dataset)
-    val counts = cacheAndCount(sent.flatMap(identity(_)).map(_ -> 1L)
+    val countRDD = cacheAndCount(sent.flatMap(identity(_)).map(_ -> 1L)
       .reduceByKey(_ + _).filter(_._2 >= minCount))
 
     var trainWordsCount = 0L
     val countBC = {
-      val map = new OpenHashMap[Int, Long]()
-      counts.toLocalIterator.foreach { case (v, n) =>
-        if (sample > 0) {
-          map.update(v, n)
-        }
+      val count = new OpenHashMap[Int, Long]()
+      countRDD.toLocalIterator.foreach { case (v, n) =>
+        count.update(v, n)
         trainWordsCount += n
       }
-      sc.broadcast(map)
+      sc.broadcast(count)
     }
 
-    var emb = counts.mapPartitions{it =>
+    var emb = countRDD.mapPartitions{it =>
       val rnd = new Random(0)
       it.map{case (v, n) =>
         rnd.setSeed(v)
