@@ -462,7 +462,7 @@ class SkipGram extends Serializable with Logging {
           val i = vocab.size
           vocab.update(v, i)
           cn.append(n)
-          rSyn0 += f1;
+          rSyn0 += f1
           rSyn1Neg += f2
           seed = seed * 239017 + v
         }
