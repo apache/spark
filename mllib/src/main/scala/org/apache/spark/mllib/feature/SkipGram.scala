@@ -18,9 +18,11 @@ package org.apache.spark.mllib.feature
 
 import java.util.Random
 
-import org.apache.hadoop.io.compress.GzipCodec
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.parallel.ForkJoinTaskSupport
+
+import org.apache.hadoop.io.compress.GzipCodec
+
 import org.apache.spark.{HashPartitioner, SparkContext}
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
