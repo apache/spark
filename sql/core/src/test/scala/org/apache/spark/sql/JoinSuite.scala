@@ -1446,16 +1446,10 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       spark.range(5, 15).toDF("k").write.saveAsTable("t1")
       spark.range(4, 8).toDF("k").write.saveAsTable("t2")
 
-      val queryBuildLeft =
-        s"""
-           |SELECT /*+ BROADCAST(t1) */ *  FROM t1 LEFT JOIN t2 on t1.k < t2.k
-       """.stripMargin
+      val queryBuildLeft = "SELECT /*+ BROADCAST(t1) */ *  FROM t1 LEFT JOIN t2 ON t1.k < t2.k"
       val result1 = sql(queryBuildLeft)
 
-      val queryBuildRight =
-        s"""
-           |SELECT /*+ BROADCAST(t2) */ *  FROM t1 LEFT JOIN t2 on t1.k < t2.k
-       """.stripMargin
+      val queryBuildRight = "SELECT /*+ BROADCAST(t2) */ *  FROM t1 LEFT JOIN t2 ON t1.k < t2.k"
       val result2 = sql(queryBuildRight)
 
       checkAnswer(result1, result2)

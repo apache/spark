@@ -347,8 +347,8 @@ case class BroadcastNestedLoopJoinExec(
   private def getMatchedBroadcastRowsBitSet(
       streamRdd: RDD[InternalRow],
       relation: Broadcast[Array[InternalRow]]): BitSet = {
-    getMatchedBroadcastRowsBitSetRDD(streamRdd, relation).
-      fold(new BitSet(relation.value.length))(_ | _)
+    getMatchedBroadcastRowsBitSetRDD(streamRdd, relation)
+      .fold(new BitSet(relation.value.length))(_ | _)
   }
 
   private def getMatchedBroadcastRowsBitSetRDD(
