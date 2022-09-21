@@ -282,7 +282,20 @@ class PandasGroupedOpsMixin:
             timeout configuration for groups that do not receive data for a while. valid values
             are defined in :class:`pyspark.sql.streaming.state.GroupStateTimeout`.
 
-        # TODO: Examples
+        Examples
+        --------
+        >>> import ...
+        >>> def count_fn(key, pdf_iter, state):
+        ...     assert isinstance(state, GroupStateImpl)
+        ...     total_len = 0
+        ...     for pdf in pdf_iter:
+        ...         total_len += len(pdf)
+        ...     state.update((total_len,))
+        ...     yield pandas.DataFrame({"id": [key[0]], "countAsString": [str(total_len)]})
+        >>> df.groupby("id").applyInPandasWithState(
+        ...     count_fn, outputStructType="id long, countAsString string",
+        ...     stateStructType="len long", outputMode="Update",
+        ...     timeoutConf=GroupStateTimeout.NoTimeout) # doctest: +SKIP
         """
 
         from pyspark.sql import GroupedData
