@@ -1110,8 +1110,12 @@ class DataFrameTests(ReusedSQLTestCase):
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow or pyarrow_version_less_than_minimum("2.0.0"),
-        cast(str, pandas_requirement_message or pyarrow_requirement_message or
-             "Pyarrow version must be 2.0.0 or higher"),
+        cast(
+            str,
+            pandas_requirement_message
+            or pyarrow_requirement_message
+            or "Pyarrow version must be 2.0.0 or higher",
+        ),
     )
     def test_to_pandas_for_array_of_struct(self):
         # SPARK-38098: Support Array of Struct for Pandas UDFs and toPandas

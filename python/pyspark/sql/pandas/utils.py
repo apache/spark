@@ -72,6 +72,7 @@ def require_minimum_pyarrow_version() -> None:
             "please unset ARROW_PRE_0_15_IPC_FORMAT"
         )
 
+
 def pyarrow_version_less_than_minimum(minimum_pyarrow_version: str) -> bool:
     """Return False if the installed pyarrow version is less than minimum_pyarrow_version
     or if pyarrow is not installed."""
