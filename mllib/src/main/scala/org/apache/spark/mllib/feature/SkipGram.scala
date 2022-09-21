@@ -20,6 +20,7 @@ import java.util.Random
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.parallel.ForkJoinTaskSupport
+
 import org.apache.spark.{HashPartitioner, SparkContext}
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
@@ -27,7 +28,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.BLAS.{nativeBLAS => blas}
 import org.apache.spark.mllib.util.Saveable
 import org.apache.spark.rdd._
-import org.apache.spark.sql.SaveMode
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -132,8 +132,28 @@ private[spark] object SkipGram {
     (Math.abs(h) % nPart).toInt
   }
 
+  private def skip(n: Long,
+                   sample: Double,
+                   random: Random,
+                   trainWordsCount: Long): Boolean = {
+    if (sample > 0 && n > 0) {
+      val ran = Math.sqrt(n / (sample * trainWordsCount) + 1) *
+        (sample * trainWordsCount) / n
+      if (ran < random.nextFloat()) {
+        true
+      } else {
+        false
+      }
+    } else {
+      false
+    }
+  }
+
   private def pairs(sent: RDD[Array[Int]],
                     salt: Int,
+                    countBC: Broadcast[OpenHashMap[Int, Long]],
+                    sample: Double,
+                    trainWordsCount: Long,
                     window: Int,
                     numPartitions: Int,
                     numThread: Int): RDD[(Int, (Array[Int], Array[Int]))] = {
@@ -142,24 +162,34 @@ private[spark] object SkipGram {
         val l = Array.fill(numPartitions)(ArrayBuffer.empty[Int])
         val r = Array.fill(numPartitions)(ArrayBuffer.empty[Int])
         val buffers = Array.fill(numPartitions)(new CyclicBuffer(window))
+        val count = countBC.value
         var v = 0
+        val random = new java.util.Random()
+        var seed = salt
         sG.foreach { s =>
           var i = 0
+          var skipped = 0
+          random.setSeed(seed)
           while (i < s.length) {
-            val a = getPartition(s(i), salt, numPartitions)
-            val buffer = buffers(a)
-            buffer.checkVersion(v)
-            buffer.resetIter()
-            while (buffer.headInd() != -1 && buffer.headInd() >= i - window) {
-              val v = buffer.headVal()
-              l(a).append(s(i))
-              r(a).append(v)
+            if (skip(count(s(i)), sample, random, trainWordsCount)) {
+              skipped += 1
+            } else {
+              val a = getPartition(s(i), salt, numPartitions)
+              val buffer = buffers(a)
+              buffer.checkVersion(v)
+              buffer.resetIter()
+              while (buffer.headInd() != -1 && buffer.headInd() >= (i - skipped) - window) {
+                val v = buffer.headVal()
+                l(a).append(s(i))
+                r(a).append(v)
 
-              l(a).append(v)
-              r(a).append(s(i))
-              buffer.next()
+                l(a).append(v)
+                r(a).append(s(i))
+                buffer.next()
+              }
+              buffers(a).push(s(i), i - skipped)
             }
-            buffers(a).push(s(i), i)
+            seed += s(i)
             i += 1
           }
           v += 1
@@ -174,6 +204,7 @@ private[spark] object SkipGram {
 class SkipGram extends Serializable with Logging {
   val EXP_TABLE_SIZE = 1000
   val MAX_EXP = 6
+  val UNIGRAM_TABLE_SIZE = 100000000
 
   private var vectorSize: Int = 100
   private var window: Int = 5
@@ -183,6 +214,8 @@ class SkipGram extends Serializable with Logging {
   private var minCount: Int = 1
   private var numThread: Int = 1
   private var numPartitions: Int = 1
+  private var sample: Double = 0
+  private var pow: Double = 0
   private var intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
   private var finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
 
@@ -321,6 +354,35 @@ class SkipGram extends Serializable with Logging {
     expTable
   }
 
+  private def initUnigramTable(cn: ArrayBuffer[Long]): Array[Int] = {
+    var a = 0
+    val power = 0.75
+    var trainWordsPow = 0.0
+    val table = new Array[Int](UNIGRAM_TABLE_SIZE)
+
+    while (a < cn.length) {
+      trainWordsPow += Math.pow(cn(a), power)
+      a += 1
+    }
+
+    var i = 0
+    var d1 = Math.pow(cn(a), power) / trainWordsPow
+    a = 0
+    while (a < table.length) {
+      table(a) = i
+      if (a.toDouble / table.length > d1) {
+        i += 1
+        d1 += Math.pow(cn(i), power) / trainWordsPow
+      }
+      if (i >= cn.length) {
+        i = cn.length - 1
+      }
+      a += 1
+    }
+
+    table
+  }
+
   /**
    * Computes the vector representation of each word in vocabulary.
    * @param dataset an RDD of sentences,
@@ -347,11 +409,23 @@ class SkipGram extends Serializable with Logging {
     val counts = cacheAndCount(sent.flatMap(identity(_)).map(_ -> 1L)
       .reduceByKey(_ + _).filter(_._2 >= minCount))
 
-    var emb = counts.map(_._1).mapPartitions{it =>
+    var trainWordsCount = 0L
+    val countBC = {
+      val map = new OpenHashMap[Int, Long]()
+      counts.toLocalIterator.foreach { case (v, n) =>
+        if (pow > 0) {
+          map.update(v, n)
+        }
+        trainWordsCount += n
+      }
+      sc.broadcast(map)
+    }
+
+    var emb = counts.mapPartitions{it =>
       val rnd = new Random(0)
-      it.map{v =>
+      it.map{case (v, n) =>
         rnd.setSeed(v)
-        v -> (Array.fill(vectorSize)(((rnd.nextFloat() - 0.5) / vectorSize).toFloat),
+        v -> (n, Array.fill(vectorSize)(((rnd.nextFloat() - 0.5) / vectorSize).toFloat),
           Array.fill(vectorSize)(((rnd.nextFloat() - 0.5) / vectorSize).toFloat))
       }
     }
@@ -367,19 +441,24 @@ class SkipGram extends Serializable with Logging {
         override def getPartition(key: Any): Int = key.asInstanceOf[Int]
       }
       emb = emb.partitionBy(partitioner1)
-      val cur = pairs(sent, pI, window, numPartitions, numThread).partitionBy(partitioner2).values
+      val cur = pairs(sent, pI, countBC, sample, trainWordsCount, window,
+        numPartitions, numThread).partitionBy(partitioner2).values
 
       val newEmb = cacheAndCount(cur.zipPartitions(emb) {case (sIt, eIt) =>
         val vocab = new OpenHashMap[Int, Int]()
         val rSyn0 = ArrayBuffer.empty[Array[Float]]
         val rSyn1Neg = ArrayBuffer.empty[Array[Float]]
         var seed = 0
+        val cn = ArrayBuffer.empty[Long]
 
-        eIt.foreach{case (v, (f1, f2)) =>
-          vocab.update(v, vocab.size)
+        eIt.foreach{case (v, (n, f1, f2)) =>
+          val i = vocab.size
+          vocab.update(v, i)
           rSyn0 += f1; rSyn1Neg += f2
           seed = seed * 239017 + v
+          cn.append(n)
         }
+        val table = initUnigramTable(cn)
 
         val syn0 = Array.fill(rSyn0.length * vectorSize)(0f)
         rSyn0.iterator.zipWithIndex.foreach{case (f, i) =>
@@ -439,7 +518,7 @@ class SkipGram extends Serializable with Logging {
         })
 
         vocab.iterator.map{case (k, v) =>
-          k -> (syn0.slice(v * vectorSize, (v + 1) * vectorSize),
+          k -> (cn(v), syn0.slice(v * vectorSize, (v + 1) * vectorSize),
             syn1Neg.slice(v * vectorSize, (v + 1) * vectorSize))
         }
       })
@@ -448,7 +527,7 @@ class SkipGram extends Serializable with Logging {
     }
 
     sent.unpersist()
-    new SkipGramModel(emb.map(x => x._1 -> x._2._1))
+    new SkipGramModel(emb.map(x => x._1 -> x._2._2))
   }
 }
 
