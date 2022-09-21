@@ -369,7 +369,7 @@ class SkipGram extends Serializable with Logging {
    * @return a Word2VecModel
    */
   @Since("3.4.0")
-  def fit(dataset: RDD[Array[Int]]): Unit = {
+  def fit(dataset: RDD[Array[Int]]): SkipGramModel = {
     val sc = dataset.context
     val expTable = sc.broadcast(createExpTable())
     val sent = cacheAndCount(dataset)
@@ -414,7 +414,7 @@ class SkipGram extends Serializable with Logging {
                     inEmb: RDD[(Int, (Long, Array[Float], Array[Float]))],
                     sampleProbBC: Broadcast[OpenHashMap[Int, Int]],
                     sc: SparkContext,
-                    expTable: Broadcast[Array[Float]]): Unit = {
+                    expTable: Broadcast[Array[Float]]): SkipGramModel = {
     import SkipGram._
 
     var emb = inEmb
