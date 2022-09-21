@@ -358,28 +358,22 @@ class SkipGram extends Serializable with Logging {
     var a = 0
     val power = 0.75
     var trainWordsPow = 0.0
-    val table = new Array[Int](UNIGRAM_TABLE_SIZE)
-
+    val table = Array.fill(UNIGRAM_TABLE_SIZE)(-1)
     while (a < cn.length) {
       trainWordsPow += Math.pow(cn(a), power)
       a += 1
     }
-
     var i = 0
     var d1 = Math.pow(cn(a), power) / trainWordsPow
     a = 0
-    while (a < table.length) {
+    while (a < table.length && i < cn.length) {
       table(a) = i
       if (a.toDouble / table.length > d1) {
         i += 1
         d1 += Math.pow(cn(i), power) / trainWordsPow
       }
-      if (i >= cn.length) {
-        i = cn.length - 1
-      }
       a += 1
     }
-
     table
   }
 
@@ -413,7 +407,7 @@ class SkipGram extends Serializable with Logging {
     val countBC = {
       val map = new OpenHashMap[Int, Long]()
       counts.toLocalIterator.foreach { case (v, n) =>
-        if (pow > 0) {
+        if (sample > 0) {
           map.update(v, n)
         }
         trainWordsCount += n
@@ -454,11 +448,17 @@ class SkipGram extends Serializable with Logging {
         eIt.foreach{case (v, (n, f1, f2)) =>
           val i = vocab.size
           vocab.update(v, i)
-          rSyn0 += f1; rSyn1Neg += f2
-          seed = seed * 239017 + v
           cn.append(n)
+          rSyn0 += f1;
+          rSyn1Neg += f2
+          seed = seed * 239017 + v
         }
-        val table = initUnigramTable(cn)
+
+        val table = if (pow > 0) {
+          initUnigramTable(cn)
+        } else {
+          Array.empty[Int]
+        }
 
         val syn0 = Array.fill(rSyn0.length * vectorSize)(0f)
         rSyn0.iterator.zipWithIndex.foreach{case (f, i) =>
@@ -490,9 +490,16 @@ class SkipGram extends Serializable with Logging {
                   target = word
                   label = 1
                 } else {
-                  target = random.nextInt(vocab.size)
-                  while (target == word) {
+                  if (pow > 0) {
+                    target = table(random.nextInt(table.length))
+                    while (target == word || target == -1) {
+                      target = table(random.nextInt(table.length))
+                    }
+                  } else {
                     target = random.nextInt(vocab.size)
+                    while (target == word) {
+                      target = random.nextInt(vocab.size)
+                    }
                   }
                   label = 0
                 }
