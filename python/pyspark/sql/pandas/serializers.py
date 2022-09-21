@@ -665,11 +665,6 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 # This is static and won't change across batches.
                 return_schema = packaged_result[1]
 
-                state_pdf = construct_state_pdf(state)
-
-                state_pdfs.append(state_pdf)
-                state_data_cnt += 1
-
                 for pdf in pdf_iter:
                     # We ignore empty pandas DataFrame.
                     if len(pdf) > 0:
@@ -690,6 +685,13 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                             state_data_cnt = 0
 
                             yield batch
+
+                # This has to be performed 'after' evaluating all elements in iterator, so that
+                # the user function has been completed and the state is guaranteed to be updated.
+                state_pdf = construct_state_pdf(state)
+
+                state_pdfs.append(state_pdf)
+                state_data_cnt += 1
 
             # processed all output, but current batch may not be flushed yet.
             if pdf_data_cnt > 0 or state_data_cnt > 0:

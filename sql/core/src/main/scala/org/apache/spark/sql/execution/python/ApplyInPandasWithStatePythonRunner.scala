@@ -57,7 +57,7 @@ class ApplyInPandasWithStatePythonRunner(
     initialWorkerConf: Map[String, String],
     stateEncoder: ExpressionEncoder[Row],
     keySchema: StructType,
-    valueSchema: StructType,
+    outputSchema: StructType,
     stateValueSchema: StructType)
   extends BasePythonRunner[InType, OutType](funcs, evalType, argOffsets)
   with PythonArrowInput[InType]
@@ -149,7 +149,8 @@ class ApplyInPandasWithStatePythonRunner(
       //  UDF returns a StructType column in ColumnarBatch, select the children here
       val structVector = batch.column(ordinal).asInstanceOf[ArrowColumnVector]
       val dataType = schema(ordinal).dataType.asInstanceOf[StructType]
-      assert(dataType.sameType(expectedType))
+      assert(dataType.sameType(expectedType),
+        s"Schema equality check failure! type from Arrow: $dataType, expected type: $expectedType")
 
       val outputVectors = dataType.indices.map(structVector.getChild)
       val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
@@ -159,7 +160,7 @@ class ApplyInPandasWithStatePythonRunner(
     }
 
     def constructIterForData(batch: ColumnarBatch): Iterator[InternalRow] = {
-      val dataBatch = getColumnarBatchForStructTypeColumn(batch, 0, valueSchema)
+      val dataBatch = getColumnarBatchForStructTypeColumn(batch, 0, outputSchema)
       dataBatch.rowIterator.asScala.flatMap { row =>
         if (row.isNullAt(0)) {
           // The entire row in record batch seems to be for state metadata.
