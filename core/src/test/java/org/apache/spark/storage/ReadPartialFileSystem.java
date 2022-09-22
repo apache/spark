@@ -23,7 +23,8 @@ import java.io.InputStream;
 
 public class ReadPartialFileSystem extends LocalFileSystem {
 
-  public static class ReadPartialInputStream extends InputStream implements Seekable, PositionedReadable {
+  public static class ReadPartialInputStream extends InputStream
+      implements Seekable, PositionedReadable {
     private final FSDataInputStream in;
     public ReadPartialInputStream(FSDataInputStream in) {
       this.in = in;
@@ -35,7 +36,7 @@ public class ReadPartialFileSystem extends LocalFileSystem {
     }
 
     @Override
-    public int read(byte b[], int off, int len) throws IOException {
+    public int read(byte[] b, int off, int len) throws IOException {
       if (len > 1) {
         return in.read(b, off, len - 1);
       }
