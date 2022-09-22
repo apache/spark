@@ -18,14 +18,11 @@ package org.apache.spark.storage
 
 import java.io.{DataOutputStream, File, FileOutputStream, IOException}
 import java.nio.file.Files
-
 import scala.concurrent.duration._
-
 import org.apache.hadoop.conf.Configuration
 import org.mockito.{ArgumentMatchers => mc}
 import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
-
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TestUtils}
 import org.apache.spark.LocalSparkContext.withSpark
 import org.apache.spark.internal.config._
@@ -37,6 +34,8 @@ import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.util.Utils.tryWithResource
+
+import scala.util.Random
 
 class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -105,6 +104,51 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       FallbackStorage.read(conf, ShuffleBlockId(1, 1L, 0))
     }
     FallbackStorage.read(conf, ShuffleBlockId(1, 2L, 0))
+  }
+
+  test("fallback storage APIs - readFully") {
+    val conf = new SparkConf(false)
+      .set("spark.app.id", "testId")
+      .set(SHUFFLE_COMPRESS, false)
+      .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
+      .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
+        Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
+    val fallbackStorage = new FallbackStorage(conf)
+    val bmm = new BlockManagerMaster(new NoopRpcEndpointRef(conf), null, conf, false)
+
+    val bm = mock(classOf[BlockManager])
+    val dbm = new DiskBlockManager(conf, deleteFilesOnStop = false, isDriver = false)
+    when(bm.diskBlockManager).thenReturn(dbm)
+    when(bm.master).thenReturn(bmm)
+    val resolver = new IndexShuffleBlockResolver(conf, bm)
+    when(bm.migratableResolver).thenReturn(resolver)
+
+    val length = 100000
+    val content = new Array[Byte](length)
+    Random.nextBytes(content)
+
+    val indexFile = resolver.getIndexFile(1, 2L)
+    tryWithResource(new FileOutputStream(indexFile)) { fos =>
+      tryWithResource(new DataOutputStream(fos)) { dos =>
+        dos.writeLong(0)
+        dos.writeLong(length)
+      }
+    }
+
+    val dataFile = resolver.getDataFile(1, 2L)
+    tryWithResource(new FileOutputStream(dataFile)) { fos =>
+      tryWithResource(new DataOutputStream(fos)) { dos =>
+        dos.write(content)
+      }
+    }
+
+    fallbackStorage.copy(ShuffleBlockInfo(1, 2L), bm)
+
+    assert(fallbackStorage.exists(1, ShuffleIndexBlockId(1, 2L, NOOP_REDUCE_ID).name))
+    assert(fallbackStorage.exists(1, ShuffleDataBlockId(1, 2L, NOOP_REDUCE_ID).name))
+
+    val readResult = FallbackStorage.read(conf, ShuffleBlockId(1, 2L, 0))
+    assert(readResult.nioByteBuffer().array().sameElements(content))
   }
 
   test("SPARK-34142: fallback storage API - cleanUp") {
