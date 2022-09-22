@@ -31,10 +31,12 @@ import org.apache.spark.unsafe.types.UTF8String
  * A mutable implementation of BigDecimal that hold a `DecimalOperation`.
  */
 @Unstable
-final class Decimal(initEnabled: Boolean = true) extends Ordered[Decimal] with Serializable {
+final class Decimal(initEnabled: Boolean) extends Ordered[Decimal] with Serializable {
   import org.apache.spark.sql.types.Decimal._
 
   private var decimalOperation: DecimalOperation[_] = null
+
+  def this() = this(true)
 
   if (initEnabled) {
     decimalOperation = DecimalOperation.createDecimalOperation()
