@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, LocalLimit, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, LocalLimit, Project, Sort}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -40,27 +40,51 @@ class SpecialLimitsSuite
             .mode("overwrite")
             .saveAsTable("tbl")
 
-          val df = sql("select * from tbl limit 1")
-          val castCols = df.logicalPlan.output.map { col =>
+          val df1 = sql("select * from tbl limit 1")
+          val castCols1 = df1.logicalPlan.output.map { col =>
             Column(col).cast(StringType)
           }
-          val res = df.select(castCols: _*).limit(21)
+          val res1 = df1.select(castCols1: _*).limit(21)
+          val queryExecution1 = res1.queryExecution
 
-          val queryExecution = res.queryExecution
-          val optimizedLogicalPlan = queryExecution.optimizedPlan
-          val logicalPlanCheck = optimizedLogicalPlan match {
+          val optimizedLogicalPlan1 = queryExecution1.optimizedPlan
+          val logicalPlanCheck1 = optimizedLogicalPlan1 match {
             case Project(_, GlobalLimit(_, LocalLimit(_, _))) => true
             case _ => false
           }
-          assert(logicalPlanCheck)
+          assert(logicalPlanCheck1)
 
-          val physicalPlan = queryExecution.executedPlan
-          val physicalPlanCheck = (physicalPlan, codegenEnabled) match {
+          val physicalPlan1 = queryExecution1.executedPlan
+          val physicalPlanCheck1 = (physicalPlan1, codegenEnabled) match {
             case (CollectLimitExec(_, WholeStageCodegenExec(ProjectExec(_, _)), _), true) => true
             case (CollectLimitExec(_, ProjectExec(_, _), _), false) => true
             case _ => false
           }
-          assert(physicalPlanCheck)
+          assert(physicalPlanCheck1)
+
+          val df2 = sql("select * from tbl order by a limit 1")
+          val castCols2 = df2.logicalPlan.output.map { col =>
+            Column(col).cast(StringType)
+          }
+          val res2 = df2.select(castCols2: _*).limit(21)
+          val queryExecution2 = res2.queryExecution
+          val optimizedLogicalPlan2 = queryExecution2.optimizedPlan
+          val logicalPlanCheck2 = optimizedLogicalPlan2 match {
+            case Project(_, GlobalLimit(_, LocalLimit(_, Sort(_, _, _)))) => true
+            case _ => false
+          }
+          assert(logicalPlanCheck2)
+
+          val physicalPlan2 = queryExecution2.executedPlan
+          val physicalPlanCheck2 = (physicalPlan2, codegenEnabled) match {
+            case (TakeOrderedAndProjectExec(_, _, _,
+                WholeStageCodegenExec(ColumnarToRowExec(InputAdapter(
+                  FileSourceScanExec(_, _, _, _, _, _, _, _, _)))), _), true) => true
+            case (TakeOrderedAndProjectExec(_, _, _,
+                FileSourceScanExec(_, _, _, _, _, _, _, _, _), _), false) => true
+            case _ => false
+          }
+          assert(physicalPlanCheck2)
         }
       }
     }

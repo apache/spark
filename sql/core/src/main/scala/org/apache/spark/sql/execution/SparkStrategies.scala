@@ -132,6 +132,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           if limit < conf.topKSortFallbackThreshold =>
         Some(TakeOrderedAndProjectExec(
           limit, order, projectList, planLater(child)))
+      case Project(projectList, Limit(IntegerLiteral(limit), Sort(order, true, child)))
+          if limit < conf.topKSortFallbackThreshold =>
+        Some(TakeOrderedAndProjectExec(
+          limit, order, projectList, planLater(child)))
       case _ => None
     }
   }
