@@ -37,12 +37,22 @@ select 128Y
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Numeric literal 128 does not fit in range [-128, 127] for type tinyint(line 1, pos 7)
-
-== SQL ==
-select 128Y
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
+  "messageParameters" : {
+    "maxValue" : "127",
+    "minValue" : "-128",
+    "rawStrippedQualifier" : "128",
+    "typeName" : "tinyint"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 11,
+    "fragment" : "128Y"
+  } ]
+}
 
 
 -- !query
@@ -67,12 +77,22 @@ select 32768S
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Numeric literal 32768 does not fit in range [-32768, 32767] for type smallint(line 1, pos 7)
-
-== SQL ==
-select 32768S
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
+  "messageParameters" : {
+    "maxValue" : "32767",
+    "minValue" : "-32768",
+    "rawStrippedQualifier" : "32768",
+    "typeName" : "smallint"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 13,
+    "fragment" : "32768S"
+  } ]
+}
 
 
 -- !query
@@ -97,12 +117,22 @@ select 9223372036854775808L
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Numeric literal 9223372036854775808 does not fit in range [-9223372036854775808, 9223372036854775807] for type bigint(line 1, pos 7)
-
-== SQL ==
-select 9223372036854775808L
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
+  "messageParameters" : {
+    "maxValue" : "9223372036854775807",
+    "minValue" : "-9223372036854775808",
+    "rawStrippedQualifier" : "9223372036854775808",
+    "typeName" : "bigint"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 27,
+    "fragment" : "9223372036854775808L"
+  } ]
+}
 
 
 -- !query
@@ -183,12 +213,22 @@ select -3.4028235E39f
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Numeric literal -3.4028235E39 does not fit in range [-3.4028234663852886E+38, 3.4028234663852886E+38] for type float(line 1, pos 7)
-
-== SQL ==
-select -3.4028235E39f
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
+  "messageParameters" : {
+    "maxValue" : "3.4028234663852886E+38",
+    "minValue" : "-3.4028234663852886E+38",
+    "rawStrippedQualifier" : "-3.4028235E39",
+    "typeName" : "float"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "-3.4028235E39f"
+  } ]
+}
 
 
 -- !query
@@ -229,12 +269,22 @@ select 1E309, -1E309
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Numeric literal 1E309 does not fit in range [-1.7976931348623157E+308, 1.7976931348623157E+308] for type double(line 1, pos 7)
-
-== SQL ==
-select 1E309, -1E309
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
+  "messageParameters" : {
+    "maxValue" : "1.7976931348623157E+308",
+    "minValue" : "-1.7976931348623157E+308",
+    "rawStrippedQualifier" : "1E309",
+    "typeName" : "double"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "1E309"
+  } ]
+}
 
 
 -- !query
@@ -333,12 +383,20 @@ select date 'mar 11 2016'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: mar 11 2016(line 1, pos 7)
-
-== SQL ==
-select date 'mar 11 2016'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "mar 11 2016",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "date 'mar 11 2016'"
+  } ]
+}
 
 
 -- !query
@@ -355,12 +413,20 @@ select timestamp '2016-33-11 20:54:00.000'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the TIMESTAMP value: 2016-33-11 20:54:00.000(line 1, pos 7)
-
-== SQL ==
-select timestamp '2016-33-11 20:54:00.000'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "2016-33-11 20:54:00.000",
+    "valueType" : "TIMESTAMP"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "timestamp '2016-33-11 20:54:00.000'"
+  } ]
+}
 
 
 -- !query
@@ -369,12 +435,19 @@ select GEO '(10,-6)'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Literals of type 'GEO' are currently not supported.(line 1, pos 7)
-
-== SQL ==
-select GEO '(10,-6)'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0021",
+  "messageParameters" : {
+    "valueType" : "GEO"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "GEO '(10,-6)'"
+  } ]
+}
 
 
 -- !query
@@ -391,12 +464,19 @@ select 1.20E-38BD
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-decimal can only support precision up to 38(line 1, pos 7)
-
-== SQL ==
-select 1.20E-38BD
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0061",
+  "messageParameters" : {
+    "msg" : "decimal can only support precision up to 38"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "1.20E-38BD"
+  } ]
+}
 
 
 -- !query
@@ -413,12 +493,19 @@ select X'XuZ'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-contains illegal character for hexBinary: 0XuZ(line 1, pos 7)
-
-== SQL ==
-select X'XuZ'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0022",
+  "messageParameters" : {
+    "msg" : "contains illegal character for hexBinary: 0XuZ"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 13,
+    "fragment" : "X'XuZ'"
+  } ]
+}
 
 
 -- !query

@@ -238,13 +238,19 @@ RANGE BETWEEN CURRENT ROW AND current_date PRECEDING) FROM testData ORDER BY cat
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Frame bound value must be a literal.(line 2, pos 30)
-
-== SQL ==
-SELECT udf(val), cate, count(val) OVER(PARTITION BY udf(cate) ORDER BY udf(val)
-RANGE BETWEEN CURRENT ROW AND current_date PRECEDING) FROM testData ORDER BY cate, val(val)
-------------------------------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "messageParameters" : {
+    "msg" : "Frame bound value must be a literal."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 111,
+    "stopIndex" : 132,
+    "fragment" : "current_date PRECEDING"
+  } ]
+}
 
 
 -- !query
