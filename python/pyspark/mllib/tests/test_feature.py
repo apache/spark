@@ -22,7 +22,7 @@ from numpy import array, abs, tile
 
 from pyspark.mllib.linalg import SparseVector, DenseVector, Vectors
 from pyspark.mllib.linalg.distributed import RowMatrix
-from pyspark.mllib.feature import HashingTF, IDF, StandardScaler, ElementwiseProduct, Word2Vec
+from pyspark.mllib.feature import HashingTF, IDF, StandardScaler, ElementwiseProduct, Word2Vec, SkipGram
 from pyspark.testing.mllibutils import MLlibTestCase
 
 
