@@ -66,6 +66,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
 
+private[hive] class CatalogAndHiveTableImpl(
+    override val catalogTable: CatalogTable,
+    override val hiveTable: HiveTable) extends CatalogAndHiveTable
+
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
  * Note that this class is typically loaded with an internal classloader for each instantiation,
@@ -435,6 +439,14 @@ private[hive] class HiveClientImpl(
     getRawTableOption(dbName, tableName).map(convertHiveTableToCatalogTable)
   }
 
+  override def getCatalogAndHiveTableOption(
+      dbName: String,
+      tableName: String): Option[CatalogAndHiveTable] = withHiveState {
+    logDebug(s"Looking up $dbName.$tableName")
+    getRawTableOption(dbName, tableName)
+      .map(t => new CatalogAndHiveTableImpl(convertHiveTableToCatalogTable(t), t))
+  }
+
   private def convertHiveTableToCatalogTable(h: HiveTable): CatalogTable = {
     // Note: Hive separates partition columns and the schema, but for us the
     // partition columns are part of the schema
@@ -687,13 +699,14 @@ private[hive] class HiveClientImpl(
       specs: Seq[TablePartitionSpec],
       newSpecs: Seq[TablePartitionSpec]): Unit = withHiveState {
     require(specs.size == newSpecs.size, "number of old and new partition specs differ")
-    val catalogTable = getTable(db, table)
-    val hiveTable = toHiveTable(catalogTable, Some(userName))
+    val catalogAndHiveTable = getCatalogAndHiveTable(db, table)
+    val hiveTable = catalogAndHiveTable.hiveTable.asInstanceOf[HiveTable]
+    hiveTable.setOwner(userName)
     specs.zip(newSpecs).foreach { case (oldSpec, newSpec) =>
       if (shim.getPartition(client, hiveTable, newSpec.asJava, false) != null) {
         throw new PartitionAlreadyExistsException(db, table, newSpec)
       }
-      val hivePart = getPartitionOption(catalogTable, oldSpec)
+      val hivePart = getPartitionOption(catalogAndHiveTable, oldSpec)
         .map { p => toHivePartition(p.copy(spec = newSpec), hiveTable) }
         .getOrElse { throw new NoSuchPartitionException(db, table, oldSpec) }
       shim.renamePartition(client, hiveTable, oldSpec.asJava, hivePart)
@@ -711,7 +724,10 @@ private[hive] class HiveClientImpl(
     val original = state.getCurrentDatabase
     try {
       setCurrentDatabaseRaw(db)
-      val hiveTable = toHiveTable(getTable(db, table), Some(userName))
+      val hiveTable = withHiveState {
+        getRawTableOption(db, table).getOrElse(throw new NoSuchTableException(db, table))
+      }
+      hiveTable.setOwner(userName)
       shim.alterPartitions(client, table, newParts.map { toHivePartition(_, hiveTable) }.asJava)
     } finally {
       state.setCurrentDatabase(original)
@@ -740,11 +756,12 @@ private[hive] class HiveClientImpl(
   }
 
   override def getPartitionOption(
-      table: CatalogTable,
+      catalogAndHiveTable: CatalogAndHiveTable,
       spec: TablePartitionSpec): Option[CatalogTablePartition] = withHiveState {
-    val hiveTable = toHiveTable(table, Some(userName))
+    val hiveTable = catalogAndHiveTable.hiveTable.asInstanceOf[HiveTable]
     val hivePartition = shim.getPartition(client, hiveTable, spec.asJava, false)
-    Option(hivePartition).map(fromHivePartition(_, table.storage.locationUri))
+    Option(hivePartition)
+      .map(fromHivePartition(_, catalogAndHiveTable.catalogTable.storage.locationUri))
   }
 
   override def getPartitions(
@@ -775,11 +792,13 @@ private[hive] class HiveClientImpl(
   }
 
   override def getPartitionsByFilter(
-      table: CatalogTable,
+      catalogAndHiveTable: CatalogAndHiveTable,
       predicates: Seq[Expression]): Seq[CatalogTablePartition] = withHiveState {
-    val hiveTable = toHiveTable(table, Some(userName))
-    val parts = shim.getPartitionsByFilter(client, hiveTable, predicates, table)
-      .map(fromHivePartition(_, table.storage.locationUri))
+    val hiveTable = catalogAndHiveTable.hiveTable.asInstanceOf[HiveTable]
+    hiveTable.setOwner(userName)
+    val parts =
+      shim.getPartitionsByFilter(client, hiveTable, predicates, catalogAndHiveTable.catalogTable)
+        .map(fromHivePartition(_, catalogAndHiveTable.catalogTable.storage.locationUri))
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts
   }
