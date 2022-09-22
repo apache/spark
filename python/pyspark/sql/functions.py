@@ -37,6 +37,8 @@ from typing import (
     ValuesView,
 )
 
+import numpy as np
+
 from pyspark import SparkContext
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
@@ -131,12 +133,12 @@ def lit(col: Any) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column`, str, int, float, bool or list.
+    col : :class:`~pyspark.sql.Column`, str, int, float, bool, list or numpy.ndarray.
         the value to make it as a PySpark literal. If a column is passed,
         it returns the column as is.
 
         .. versionchanged:: 3.4.0
-            Since 3.4.0, it supports the list type.
+            Since 3.4.0, it supports the list and numpy.ndarray.
 
     Returns
     -------
@@ -161,6 +163,15 @@ def lit(col: Any) -> Column:
     +--------------+
     |     [1, 2, 3]|
     +--------------+
+
+    Create a literal from numpy.ndarray.
+
+    >>> spark.range(1).select(lit(np.ndarray([1, 2]))).show(truncate=False)
+    +------------------------------------------------------+
+    |array(array(2.058335917824E-312, 2.334195370625E-312))|
+    +------------------------------------------------------+
+    |[[2.058335917824E-312, 2.334195370625E-312]]          |
+    +------------------------------------------------------+
     """
     if isinstance(col, Column):
         return col
@@ -168,6 +179,8 @@ def lit(col: Any) -> Column:
         if any(isinstance(c, Column) for c in col):
             raise ValueError("lit does not allow a column in a list")
         return array(*[lit(item) for item in col])
+    elif isinstance(col, np.ndarray):
+        return array(*[lit(item) for item in col.tolist()])
     else:
         return _invoke_function("lit", col)
 
