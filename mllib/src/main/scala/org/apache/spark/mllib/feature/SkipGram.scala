@@ -629,6 +629,8 @@ class SkipGramModel private[spark] (
       }.takeOrdered(num)(Ordering.by(_._2))
     }
   }
+
+  def getVectors: RDD[(String, (Long, Array[Float], Array[Float]))] = emb
 }
 
 @Since("3.4.0")

@@ -25,6 +25,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.feature.SkipGramModel
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.rdd.RDD
+
 
 /**
  * Wrapper around SkipGram to provide helper methods in Python
@@ -58,4 +60,9 @@ private[python] class SkipGramModelWrapper(model: SkipGramModel) {
   }
 
   def save(sc: SparkContext, path: String): Unit = model.save(sc, path)
+
+  def getVectors: RDD[Array[Any]] = {
+    model.getVectors.map(x => Array(x._1.asInstanceOf[Any],
+      Array(x._2._1.asInstanceOf[Any], x._2._2.asInstanceOf[Any], x._2._3.asInstanceOf[Any])))
+  }
 }

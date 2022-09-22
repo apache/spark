@@ -1056,6 +1056,13 @@ class SkipGramModel(JavaVectorTransformer, JavaSaveable, JavaLoader["SkipGramMod
         words, similarity = self.call("findSynonyms", word, num)
         return zip(words, similarity)
 
+    @since("3.4.0")
+    def getVectors(self) -> RDD[Tuple[str, Tuple[int, List[float], List[float]:
+        """
+        Returns a map of words to their vector representations.
+        """
+        return self.call("getVectors")
+
     @classmethod
     @since("3.4.0")
     def load(cls, sc: SparkContext, path: str) -> "SkipGramModel":
