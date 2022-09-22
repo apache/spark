@@ -73,6 +73,48 @@ class Word2VecTests(MLlibTestCase):
         self.assertEqual(len(model.getVectors()), 3)
 
 
+class SkipGramTests(MLlibTestCase):
+    def test_skip_gram_setters(self):
+        model = (
+            SkipGram()
+            .setVectorSize(2)
+            .setLearningRate(0.01)
+            .setNumPartitions(2)
+            .setNumIterations(10)
+            .setMinCount(3)
+            .setWindowSize(6)
+            .setPow(0.75)
+            .setSample(1e-4)
+            .setIntermediateRDDStorageLevel("disk_only_2")
+            .setNegative(3)
+            .setNumThread(10)
+        )
+        self.assertEqual(model.vectorSize, 2)
+        self.assertTrue(model.learningRate < 0.02)
+        self.assertEqual(model.numPartitions, 2)
+        self.assertEqual(model.numIterations, 10)
+        self.assertEqual(model.minCount, 3)
+        self.assertEqual(model.windowSize, 6)
+        self.assertEqual(model.pow, 0.75)
+        self.assertEqual(model.sample, 1e-4)
+        self.assertEqual(model.intermediateRDDStorageLevel, "disk_only_2")
+        self.assertEqual(model.negative, 3)
+        self.assertEqual(model.numThread, 10)
+
+    def test_word2vec_get_vectors(self):
+        data = [
+            ["a", "b", "c", "d", "e", "f", "g"],
+            ["a", "b", "c", "d", "e", "f"],
+            ["a", "b", "c", "d", "e"],
+            ["a", "b", "c", "d"],
+            ["a", "b", "c"],
+            ["a", "b"],
+            ["a"],
+        ]
+        model = SkipGram().fit(self.sc.parallelize(data))
+        self.assertEqual(model.getVectors().count(), 3)
+
+
 class StandardScalerTests(MLlibTestCase):
     def test_model_setters(self):
         data = [[1.0, 2.0, 3.0], [2.0, 3.0, 4.0], [3.0, 4.0, 5.0]]
