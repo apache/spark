@@ -1021,6 +1021,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         Examples
         --------
+        >>> import numpy as np
         >>> df = ps.DataFrame(
         ...     {
         ...         "A": [1, 1, 2, 1, 2],
@@ -1060,35 +1061,25 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
             stat_exprs = []
             for label in psdf._internal.column_labels:
-                label_name = label[0]
-                tmp_count_column_name = verify_temp_column_name(
-                    sdf, "__tmp_%s_count_col__" % label_name
-                )
                 psser = psdf._psser_for(label)
                 column = psser._dtype_op.nan_to_null(psser).spark.column
                 data_type = psser.spark.data_type
-
-                if isinstance(data_type, IntegralType):
-                    stat_exprs.append(F.product(column).cast(data_type).alias(label_name))
-                else:
-                    stat_exprs.append(F.product(column).alias(label_name))
+                aggregating = (
+                    F.product(column).cast(data_type)
+                    if isinstance(data_type, IntegralType)
+                    else F.product(column)
+                )
 
                 if min_count > 0:
-                    stat_exprs.append(F.count(column).alias(tmp_count_column_name))
+                    prod_scol = F.when(F.count(column) < min_count, F.lit(None)).otherwise(
+                        aggregating
+                    )
+                else:
+                    prod_scol = aggregating
+
+                stat_exprs.append(prod_scol.alias(psser._internal.data_spark_column_names[0]))
 
             sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
-
-            if min_count > 0:
-                for label in psdf._internal.column_labels:
-                    label_name = label[0]
-                    tmp_count_column_name = "__tmp_%s_count_col__"
-                    sdf = sdf.withColumn(
-                        label_name,
-                        F.when(
-                            F.col(tmp_count_column_name % label_name).__ge__(min_count),
-                            F.col(label_name),
-                        ).otherwise(None),
-                    ).drop(tmp_count_column_name)
 
         else:
             sdf = sdf.select(*groupkey_names).distinct()
