@@ -423,7 +423,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       inputTypes = Nil,
       propagateNull = false,
       dataType = ObjectType(classOf[ScroogeLikeExample]),
-      outerPointer = Some(() => outerObj))
+      outerPointer = None)
     checkObjectExprEvaluation(newInst3, ScroogeLikeExample(1))
   }
 
