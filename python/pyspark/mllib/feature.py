@@ -18,6 +18,7 @@
 """
 Python package for feature in MLlib.
 """
+import array
 import sys
 import warnings
 from typing import Dict, Hashable, Iterable, List, Optional, Tuple, Union, overload, TYPE_CHECKING
@@ -1057,11 +1058,11 @@ class SkipGramModel(JavaModelWrapper, JavaSaveable, JavaLoader["SkipGramModel"])
         return zip(words, similarity)
 
     @since("3.4.0")
-    def getVectors(self) -> RDD[Tuple[str, Tuple[int, List[float], List[float]]]]:
+    def getVectors(self) -> RDD[Tuple[str, array.array]]:
         """
         Returns a map of words to their vector representations.
         """
-        return self.call("getVectors")
+        return self.call("getVectors").mapValues(lambda v: array.array("d", v))
 
     @classmethod
     @since("3.4.0")

@@ -61,7 +61,8 @@ private[python] class SkipGramModelWrapper(model: SkipGramModel) {
   def save(sc: SparkContext, path: String): Unit = model.save(sc, path)
 
   def getVectors: RDD[Array[Any]] = {
-    model.getVectors.map(x => Array(x._1.asInstanceOf[Any],
-      Array(x._2._1.asInstanceOf[Any], x._2._2.asInstanceOf[Any], x._2._3.asInstanceOf[Any])))
+    SerDe.fromTuple2RDD(model.getVectors.map {
+      case (w, (n, f1, f2)) => (w, (Vectors.dense(f1.map(_.toDouble))))
+    }.asInstanceOf[RDD[(Any, Any)]])
   }
 }
