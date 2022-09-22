@@ -603,39 +603,6 @@ class StreamingSessionWindowSuite
     }
   }
 
-  test("session window with async state checkpointing") {
-    withSQLConf(
-      "spark.databricks.streaming.statefulOperator.asyncCheckpoint.enabled" -> "true",
-      "spark.sql.streaming.stateStore.providerClass" ->
-        "com.databricks.sql.streaming.state.RocksDBStateStoreProvider") {
-
-      val inputData = MemoryStream[(String, Long)]
-      val sessionUpdates = sessionWindowQuery(inputData)
-
-      testStream(sessionUpdates, OutputMode.Append())(
-        AddData(
-          inputData,
-          ("hello world spark streaming", 40L),
-          ("world hello structured streaming", 41L)),
-        CheckNewAnswer(),
-        AddData(inputData, ("spark streaming", 25L)),
-        CheckNewAnswer(),
-        AddData(inputData, ("spark streaming", 0L)),
-        CheckNewAnswer(),
-        AddData(inputData, ("spark streaming", 30L)),
-        CheckNewAnswer(),
-        AddData(inputData, ("hello apache spark", 60L)),
-        CheckNewAnswer(),
-        AddData(inputData, ("structured streaming", 90L)),
-        CheckNewAnswer(
-          ("spark", 25, 50, 25, 3),
-          ("streaming", 25, 51, 26, 4),
-          ("hello", 40, 51, 11, 2),
-          ("world", 40, 51, 11, 2),
-          ("structured", 41, 51, 10, 1)))
-    }
-  }
-
   // Test that session window works with first, last, min_by, max_by
   testWithAllOptions("session window with first/last function") {
     val inputData = MemoryStream[(String, Long)]
