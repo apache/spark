@@ -708,7 +708,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             window_range = key[1]
 
             # Make sure the key with group and window values are correct
-            for _, i in pdf.id.iteritems():
+            for _, i in pdf.id.items():
                 assert expected_key[i][0] == group, "{} != {}".format(expected_key[i][0], group)
                 assert expected_key[i][1] == window_range, "{} != {}".format(
                     expected_key[i][1], window_range

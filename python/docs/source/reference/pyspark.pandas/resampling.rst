@@ -16,22 +16,26 @@
     under the License.
 
 
-===================
-Pandas API on Spark
-===================
+.. _api.resampling:
 
-This page gives an overview of all public pandas API on Spark.
+==========
+Resampling
+==========
+.. currentmodule:: pyspark.pandas
 
-.. toctree::
-   :maxdepth: 2
+Resampler objects are returned by ``.resample`` calls: :func:`DataFrame.resample`, :func:`Series.resample`, etc.
 
-   io
-   general_functions
-   series
-   frame
-   indexing
-   window
-   groupby
-   resampling
-   ml
-   extensions
+.. currentmodule:: pyspark.pandas.resample
+
+
+Computations / descriptive stats
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.. autosummary::
+   :toctree: api/
+
+   Resampler.max
+   Resampler.mean
+   Resampler.min
+   Resampler.std
+   Resampler.sum
+   Resampler.var

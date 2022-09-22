@@ -76,7 +76,6 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
         val root = VectorSchemaRoot.create(arrowSchema, allocator)
 
         Utils.tryWithSafeFinally {
-          val arrowWriter = ArrowWriter.create(root)
           val writer = new ArrowStreamWriter(root, null, dataOut)
           writer.start()
 
