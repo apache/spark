@@ -1022,7 +1022,7 @@ class Word2Vec:
         return Word2VecModel(jmodel)
 
 
-class SkipGramModel(JavaVectorTransformer, JavaSaveable, JavaLoader["SkipGramModel"]):
+class SkipGramModel(JavaModelWrapper, JavaSaveable, JavaLoader["SkipGramModel"]):
     """
     class for SkipGram model
     """
