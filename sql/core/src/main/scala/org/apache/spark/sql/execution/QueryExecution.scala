@@ -409,6 +409,9 @@ object QueryExecution {
     adaptiveExecutionRule.toSeq ++
     Seq(
       CoalesceBucketsInJoin,
+      // `PlanRuntimeBloomFilters` needs to be run before `PlanDynamicPruningFilters`
+      // to be able to use to compare similar plans when a bloom filter contains a DPP filter
+      PlanRuntimeBloomFilters(sparkSession),
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,

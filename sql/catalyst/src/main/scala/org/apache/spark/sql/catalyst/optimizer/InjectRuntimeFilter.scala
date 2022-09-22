@@ -46,22 +46,22 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSideExp: Expression,
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideExp: Expression,
-      filterCreationSidePlan: LogicalPlan): LogicalPlan = {
+      filterCreationSidePlan: LogicalPlan,
+      filterCreationSideBroadcastable: Boolean): LogicalPlan = {
     require(conf.runtimeFilterBloomFilterEnabled || conf.runtimeFilterSemiJoinReductionEnabled)
     if (conf.runtimeFilterBloomFilterEnabled) {
       injectBloomFilter(
         filterApplicationSideExp,
         filterApplicationSidePlan,
         filterCreationSideExp,
-        filterCreationSidePlan
-      )
+        filterCreationSidePlan,
+        filterCreationSideBroadcastable)
     } else {
       injectInSubqueryFilter(
         filterApplicationSideExp,
         filterApplicationSidePlan,
         filterCreationSideExp,
-        filterCreationSidePlan
-      )
+        filterCreationSidePlan)
     }
   }
 
@@ -69,12 +69,21 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSideExp: Expression,
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideExp: Expression,
-      filterCreationSidePlan: LogicalPlan): LogicalPlan = {
-    // Skip if the filter creation side is too big
-    if (filterCreationSidePlan.stats.sizeInBytes > conf.runtimeFilterCreationSideThreshold) {
+      filterCreationSidePlan: LogicalPlan,
+      filterCreationSideBroadcastable: Boolean): LogicalPlan = {
+
+    // Skip if the filter creation side is too big when CBO is not enabled
+    if (!conf.cboEnabled && filterCreationSidePlan.stats.sizeInBytes >
+        conf.runtimeFilterCreationSideThreshold) {
       return filterApplicationSidePlan
     }
+
     val rowCount = filterCreationSidePlan.stats.rowCount
+    if (rowCount.isDefined &&
+      rowCount.get > SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS)) {
+      return filterApplicationSidePlan
+    }
+
     val bloomFilterAgg =
       if (rowCount.isDefined && rowCount.get.longValue > 0L) {
         new BloomFilterAggregate(new XxHash64(Seq(filterCreationSideExp)),
@@ -84,11 +93,19 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       }
 
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
-    val aggregate =
+
+    val aggregate = if (!conf.cboEnabled || filterCreationSideBroadcastable) {
       ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan)))
+    } else {
+      // Not doing column Pruning here so the we can reuse the Exchange from Join
+      ConstantFolding(Aggregate(Nil, Seq(alias), filterCreationSidePlan))
+    }
     val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
-    val filter = BloomFilterMightContain(bloomFilterSubquery,
-      new XxHash64(Seq(filterApplicationSideExp)))
+    val filter = BloomFilterMightContain(
+      bloomFilterSubquery,
+      new XxHash64(Seq(filterApplicationSideExp)),
+      filterCreationSideBroadcastable)
+
     Filter(filter, filterApplicationSidePlan)
   }
 
@@ -208,12 +225,33 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSide: LogicalPlan,
       filterCreationSide: LogicalPlan,
       filterApplicationSideExp: Expression,
-      hint: JoinHint): Boolean = {
-    findExpressionAndTrackLineageDown(filterApplicationSideExp,
-      filterApplicationSide).isDefined && isSelectiveFilterOverScan(filterCreationSide) &&
-      (isProbablyShuffleJoin(filterApplicationSide, filterCreationSide, hint) ||
-        probablyHasShuffle(filterApplicationSide)) &&
-      satisfyByteSizeRequirement(filterApplicationSide)
+      filterCreationSideExp: Expression,
+      hint: JoinHint,
+      filterCreationSideBroadcastable: Boolean): Boolean = {
+    lazy val hasBenefit = if (conf.runtimeFilterBloomFilterEnabled) {
+      filteringHasBenefitFromBloomFilter(
+        filterCreationSide,
+        filterCreationSideBroadcastable)
+    } else {
+      isSelectiveFilterOverScan(filterCreationSide)
+    }
+
+    findExpressionAndTrackLineageDown(
+      filterApplicationSideExp,
+      filterApplicationSide).isDefined && hasBenefit &&
+    (isProbablyShuffleJoin(filterApplicationSide, filterCreationSide, hint) ||
+    probablyHasShuffle(filterApplicationSide)) &&
+    satisfyByteSizeRequirement(filterApplicationSide)
+  }
+
+  private def filteringHasBenefitFromBloomFilter(
+      filterCreationSide: LogicalPlan,
+      filterCreationSideBroadcastable: Boolean): Boolean = {
+    if (!conf.cboEnabled || filterCreationSideBroadcastable) {
+      isSelectiveFilterOverScan(filterCreationSide)
+    } else {
+      true
+    }
   }
 
   def hasRuntimeFilter(left: LogicalPlan, right: LogicalPlan, leftKey: Expression,
@@ -225,20 +263,28 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
   }
 
+  private def hasDynamicPruningSubquery(plan: LogicalPlan, expression: Expression) = {
+    // As predicate push down has ran after DPP, we need to compare against the pushed expr as well
+    val srcInfo = findExpressionAndTrackLineageDown(expression, plan)
+    plan.exists {
+      case Filter(condition, _) =>
+        splitConjunctivePredicates(condition).exists {
+          case DynamicPruningSubquery(pruningKey, _, _, _, _, _) =>
+            pruningKey.fastEquals(expression) ||
+              (srcInfo.isDefined && pruningKey.fastEquals(srcInfo.get._1))
+          case _ => false
+        }
+      case _ => false
+    }
+  }
+
   // This checks if there is already a DPP filter, as this rule is called just after DPP.
   def hasDynamicPruningSubquery(
       left: LogicalPlan,
       right: LogicalPlan,
       leftKey: Expression,
       rightKey: Expression): Boolean = {
-    (left, right) match {
-      case (Filter(DynamicPruningSubquery(pruningKey, _, _, _, _, _), plan), _) =>
-        pruningKey.fastEquals(leftKey) || hasDynamicPruningSubquery(plan, right, leftKey, rightKey)
-      case (_, Filter(DynamicPruningSubquery(pruningKey, _, _, _, _, _), plan)) =>
-        pruningKey.fastEquals(rightKey) ||
-          hasDynamicPruningSubquery(left, plan, leftKey, rightKey)
-      case _ => false
-    }
+    hasDynamicPruningSubquery(left, leftKey) || hasDynamicPruningSubquery(right, rightKey)
   }
 
   def hasBloomFilter(
@@ -253,7 +299,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     plan.exists {
       case Filter(condition, _) =>
         splitConjunctivePredicates(condition).exists {
-          case BloomFilterMightContain(_, XxHash64(Seq(valueExpression), _))
+          case BloomFilterMightContain(_, XxHash64(Seq(valueExpression), _), _)
             if valueExpression.fastEquals(key) => true
           case _ => false
         }
@@ -292,13 +338,18 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             isSimpleExpression(l) && isSimpleExpression(r)) {
             val oldLeft = newLeft
             val oldRight = newRight
-            if (canPruneLeft(joinType) && filteringHasBenefit(left, right, l, hint)) {
-              newLeft = injectFilter(l, newLeft, r, right)
+            var buildSideBroadcast = canBroadcastBySize(right, conf) ||
+              hintToBroadcastRight(hint)
+            if (canPruneLeft(joinType) && filteringHasBenefit(left, right, l, r, hint,
+              buildSideBroadcast)) {
+              newLeft = injectFilter(l, newLeft, r, right, buildSideBroadcast)
             }
+            buildSideBroadcast = canBroadcastBySize(left, conf) ||
+              hintToBroadcastLeft(hint)
             // Did we actually inject on the left? If not, try on the right
             if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
-              filteringHasBenefit(right, left, r, hint)) {
-              newRight = injectFilter(r, newRight, l, left)
+              filteringHasBenefit(right, left, r, l, hint, buildSideBroadcast)) {
+              newRight = injectFilter(r, newRight, l, left, buildSideBroadcast)
             }
             if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {
               filterCounter = filterCounter + 1

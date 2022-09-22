@@ -22,8 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.optimizer.MergeScalarSubqueries
 import org.apache.spark.sql.catalyst.plans.LeftSemi
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan}
-import org.apache.spark.sql.execution.{ReusedSubqueryExec, SubqueryExec}
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -293,7 +292,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     }.sum
     val numMightContains = plan.collect {
       case Filter(condition, _) => condition.collect {
-        case BloomFilterMightContain(_, _) => 1
+        case BloomFilterMightContain(_, _, _) => 1
       }.sum
     }.sum
     assert(numBloomFilterAggs == numMightContains)
@@ -574,32 +573,6 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
           |       JOIN bf2 ON bf1.c1 = bf2.c2
           |WHERE  bf2.a2 = 62
         """.stripMargin)
-    }
-  }
-
-  test("Merge runtime bloom filters") {
-    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000",
-      SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key -> "false",
-      SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true",
-      // Re-enable `MergeScalarSubqueries`
-      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "",
-      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName) {
-
-      val query = "select * from bf1 join bf2 on bf1.c1 = bf2.c2 and " +
-        "bf1.b1 = bf2.b2 where bf2.a2 = 62"
-      val df = sql(query)
-      df.collect()
-      val plan = df.queryExecution.executedPlan
-
-      val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
-      val reusedSubqueryIds = collectWithSubqueries(plan) {
-        case rs: ReusedSubqueryExec => rs.child.id
-      }
-
-      assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
-      assert(reusedSubqueryIds.size == 1,
-        "Missing or unexpected reused ReusedSubqueryExec in the plan")
     }
   }
 }

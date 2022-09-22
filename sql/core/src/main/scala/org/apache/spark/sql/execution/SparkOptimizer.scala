@@ -51,11 +51,16 @@ class SparkOptimizer(
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
     Batch("PartitionPruning", Once,
       PartitionPruning) :+
-    Batch("InjectRuntimeFilter", FixedPoint(1),
-      InjectRuntimeFilter) :+
+    Batch("Pushdown Filters from PartitionPruning", fixedPoint,
+      PushDownPredicates) :+
     Batch("MergeScalarSubqueries", Once,
       MergeScalarSubqueries) :+
-    Batch("Pushdown Filters from PartitionPruning", fixedPoint,
+    // Moving `MergeScalarSubqueries` above, side affect of it is it optimises subquery
+    // part also, which can break ReuseExchange for bloom filter added by `InjectRuntimeFilter`
+    // if it runs after this rule.
+    Batch("InjectRuntimeFilter", FixedPoint(1),
+      InjectRuntimeFilter) :+
+    Batch("Pushdown Filters from InjectRuntimeFilter", fixedPoint,
       PushDownPredicates) :+
     Batch("Cleanup filters that cannot be pushed down", Once,
       CleanupDynamicPruningFilters,

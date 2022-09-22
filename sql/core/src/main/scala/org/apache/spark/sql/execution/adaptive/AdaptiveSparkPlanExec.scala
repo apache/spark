@@ -31,6 +31,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
@@ -39,6 +40,7 @@ import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
+import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.execution.bucketing.DisableUnnecessaryBucketedScan
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
@@ -123,7 +125,8 @@ case class AdaptiveSparkPlanExec(
       ReplaceHashWithSortAgg,
       RemoveRedundantSorts,
       DisableUnnecessaryBucketedScan,
-      OptimizeSkewedJoin(ensureRequirements)
+      OptimizeSkewedJoin(ensureRequirements),
+      PlanAdaptiveRuntimeBloomFilters
     ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules
   }
 
@@ -666,6 +669,17 @@ case class AdaptiveSparkPlanExec(
       val finalPlan = inputPlan match {
         case b: BroadcastExchangeLike
           if (!newPlan.isInstanceOf[BroadcastExchangeLike]) => b.withNewChildren(Seq(newPlan))
+
+        // Since ShuffleExchangeExec for bloom creation plan reuse is not added by
+        // EnsureRequirements it can get removed after re-optimisation so
+        // we need to add it back similar to DPP
+       case oha: ObjectHashAggregateExec if oha.aggregateExpressions.exists
+       (_.aggregateFunction.isInstanceOf[BloomFilterAggregate]) &&
+         PlanAdaptiveRuntimeBloomFilters.isBloomExchangeRemoved(oha, newPlan) =>
+           val ex = oha.child.asInstanceOf[ShuffleExchangeLike].child.
+             asInstanceOf[ObjectHashAggregateExec].child.asInstanceOf[ShuffleExchangeLike]
+           PlanAdaptiveRuntimeBloomFilters.addNewExchangeNodeForBloom(newPlan,
+             ex.outputPartitioning)
         case _ => newPlan
       }
 

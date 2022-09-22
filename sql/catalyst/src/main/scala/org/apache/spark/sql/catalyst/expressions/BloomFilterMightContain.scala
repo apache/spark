@@ -37,10 +37,14 @@ import org.apache.spark.util.sketch.BloomFilter
  *
  * @param bloomFilterExpression the Binary data of Bloom filter.
  * @param valueExpression the Long value to be tested for the membership of `bloomFilterExpression`.
+ * @param buildFromBroadcast indicate if `bloomFilterExpression` child plan is
+ *                           coming from BroadcastExchange
  */
 case class BloomFilterMightContain(
     bloomFilterExpression: Expression,
-    valueExpression: Expression) extends BinaryExpression with Predicate {
+    valueExpression: Expression,
+    buildFromBroadcast: Boolean = true)
+    extends BinaryExpression with Predicate {
 
   override def nullable: Boolean = true
   override def left: Expression = bloomFilterExpression
