@@ -152,17 +152,17 @@ class CSVOptions(
    * Infer columns with all valid date entries as date type (otherwise inferred as string or
    * timestamp type) if schema inference is enabled.
    *
-   * Disabled by default for backwards compatibility.
+   * Enabled by default.
    *
    * Not compatible with legacyTimeParserPolicy == LEGACY since legacy date parser will accept
    * extra trailing characters.
    */
   val prefersDate = {
-    val inferDateFlag = getBool("prefersDate", true)
-    if (inferDateFlag && SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-      throw QueryExecutionErrors.inferDateWithLegacyTimeParserError()
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      false
+    } else {
+      getBool("prefersDate", true)
     }
-    inferDateFlag
   }
 
   // Provide a default value for dateFormatInRead when prefersDate. This ensures that the

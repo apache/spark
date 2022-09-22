@@ -139,7 +139,7 @@ select date '2012-01-01' - interval '2-2' year to month,
 -- Unsupported narrow text style
 select to_date('26/October/2015', 'dd/MMMMM/yyyy');
 select from_json('{"d":"26/October/2015"}', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'));
-select from_csv('26/October/2015', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy', 'prefersDate', 'false'));
+select from_csv('26/October/2015', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 
 -- Add a number of units to a timestamp or a date
 select dateadd(MICROSECOND, 1001, timestamp'2022-02-25 01:02:03.123');
