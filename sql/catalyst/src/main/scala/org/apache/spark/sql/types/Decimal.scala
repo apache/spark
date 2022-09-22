@@ -117,6 +117,11 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   /**
+   * Set this Decimal to the given Decimal value.
+   */
+  def set(decimal: Decimal): Decimal = set(decimal.decimalOperation)
+
+  /**
    * Set this Decimal to the given DecimalOperation value.
    */
   def set(decimalOperation: DecimalOperation): Decimal = {
