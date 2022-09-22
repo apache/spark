@@ -691,7 +691,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setWindowSize(params.get("windowSize").asInstanceOf[Int])
       .setIntermediateRDDStorageLevel(StorageLevel.fromString(
           params.get("intermediateRDDStorageLevel").asInstanceOf[String]))
-    val model = skipGram.fit(dataJRDD.rdd.map(_.toArray()))
+    val model = skipGram.fit(dataJRDD.rdd.map(_.asScala.toArray))
     new SkipGramModelWrapper(model)
   }
 
