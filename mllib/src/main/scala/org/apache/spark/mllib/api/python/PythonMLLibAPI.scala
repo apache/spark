@@ -672,43 +672,24 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Extra care needs to be taken in the Python code to ensure it gets freed on
    * exit; see the Py4J documentation.
    * @param dataJRDD input JavaRDD
-   * @param vectorSize size of vector
-   * @param learningRate initial learning rate
-   * @param numPartitions number of partitions
-   * @param numThread number of threads
-   * @param numIterations number of iterations
-   * @param pow word frequency power
-   * @param sample subsampling rate
-   * @param negative number of the negative samples
-   * @param windowSize size of window
-   * @param intermediateRDDStorageLevel storage level for intermetade uses
+   * @param params map with model parameters
    * @return A handle to java SkipGramWrapper instance at python side
    */
   def trainSkipGramModel(
       dataJRDD: JavaRDD[java.util.ArrayList[String]],
-      vectorSize: Int,
-      learningRate: Double,
-      numPartitions: Int,
-      numThread: Int,
-      numIterations: Int,
-      pow: Double,
-      sample: Double,
-      negative: Int,
-      minCount: Int,
-      windowSize: Int,
-      intermediateRDDStorageLevel: String): SkipGramModelWrapper = {
+      params: JMap[String, Any]): SkipGramModelWrapper = {
     val skipGram = new SkipGram()
-      .setVectorSize(vectorSize)
-      .setPow(pow)
-      .setSample(sample)
-      .setNumThread(numThread)
-      .setLearningRate(learningRate)
-      .setNegative(negative)
-      .setNumPartitions(numPartitions)
-      .setNumIterations(numIterations)
-      .setMinCount(minCount)
-      .setWindowSize(windowSize)
-      .setIntermediateRDDStorageLevel(StorageLevel.fromString(intermediateRDDStorageLevel))
+      .setVectorSize(params.get("vectorSize").asInstanceOf[Int])
+      .setPow(params.get("pow").asInstanceOf[Double])
+      .setSample(params.get("sample").asInstanceOf[Double])
+      .setNumThread(params.get("numThread").asInstanceOf[Int])
+      .setLearningRate(params.get("learningRate").asInstanceOf[Double])
+      .setNegative(params.get("negative").asInstanceOf[Int])
+      .setNumPartitions(params.get("numPartitions").asInstanceOf[Int])
+      .setNumIterations(params.get("numIterations").asInstanceOf[Int])
+      .setMinCount(params.get("minCount").asInstanceOf[Int])
+      .setWindowSize(params.get("windowSize").asInstanceOf[Int])
+      .setIntermediateRDDStorageLevel(StorageLevel.fromString(params.get("intermediateRDDStorageLevel").asInstanceOf[String]))
     val model = skipGram.fit(dataJRDD.rdd.map(_.toArray()))
     new SkipGramModelWrapper(model)
   }
