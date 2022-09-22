@@ -217,27 +217,6 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(kcodes.tolist(), pcodes.tolist())
         self.assert_eq(kuniques, puniques)
 
-    def test_append(self):
-        pass
-        # pidx1 = pd.CategoricalIndex(["x", "y", "z"], categories=["z", "y", "x", "w"])
-        # pidx2 = pd.CategoricalIndex(["y", "x", "w"], categories=["z", "y", "x", "w"])
-        # pidx3 = pd.Index(["y", "x", "w", "z"])
-        # psidx1 = ps.from_pandas(pidx1)
-        # psidx2 = ps.from_pandas(pidx2)
-        # psidx3 = ps.from_pandas(pidx3)
-
-        # self.assert_eq(psidx1.append(psidx2), pidx1.append(pidx2))
-        # self.assert_eq(
-        #     psidx1.append(psidx3.astype("category")), pidx1.append(pidx3.astype("category"))
-        # )
-
-        # # TODO: append non-categorical or categorical with a different category
-        # self.assertRaises(NotImplementedError, lambda: psidx1.append(psidx3))
-
-        # pidx4 = pd.CategoricalIndex(["y", "x", "w"], categories=["z", "y", "x"])
-        # psidx4 = ps.from_pandas(pidx4)
-        # self.assertRaises(NotImplementedError, lambda: psidx1.append(psidx4))
-
     def test_union(self):
         pidx1 = pd.CategoricalIndex(["x", "y", "z"], categories=["z", "y", "x", "w"])
         pidx2 = pd.CategoricalIndex(["y", "x", "w"], categories=["z", "y", "x", "w"])
