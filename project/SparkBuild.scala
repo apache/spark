@@ -624,16 +624,16 @@ object SparkConnect {
     // For some reason the resolution from the imported Maven build does not work for some
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= Seq(
-      "io.grpc"          % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
-      "org.scala-lang" % "scala-library" % "2.12.16" % "provided",
-      "com.google.guava" % "guava"                % "31.0.1-jre",
-      "com.google.guava" % "failureaccess"        % "1.0.1",
+      "io.grpc"             % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
+      "org.scala-lang"      % "scala-library"        % "2.12.16" % "provided",
+      "com.google.guava"    % "guava"                % "31.0.1-jre",
+      "com.google.guava"    % "failureaccess"        % "1.0.1",
       "com.google.protobuf" % "protobuf-java"        % protoVersion % "protobuf"
     ),
 
     dependencyOverrides ++= Seq(
-      "com.google.guava" % "guava"                % "31.0.1-jre",
-      "com.google.guava" % "failureaccess"        % "1.0.1",
+      "com.google.guava"    % "guava"                % "31.0.1-jre",
+      "com.google.guava"    % "failureaccess"        % "1.0.1",
       "com.google.protobuf" % "protobuf-java"        % protoVersion
     ),
 
@@ -648,9 +648,9 @@ object SparkConnect {
 
     (assembly / assemblyShadeRules) := Seq(
       ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.grpc.@0").inAll,
-      ShadeRule.rename("com.google.common.**"-> "org.sparkproject.connect.guava.@1").inAll,
-      ShadeRule.rename("com.google.thirdparty.**"-> "org.sparkproject.connect.guava.@1").inAll,
-      ShadeRule.rename("com.google.protobuf.**"-> "org.sparkproject.connect.protobuf.@1").inAll,
+      ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.guava.@1").inAll,
+      ShadeRule.rename("com.google.thirdparty.**" -> "org.sparkproject.connect.guava.@1").inAll,
+      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.connect.protobuf.@1").inAll,
     ),
 
     (assembly / assemblyMergeStrategy) := {
@@ -1104,7 +1104,6 @@ object Unidoc {
                       JavaUnidocPlugin.projectSettings ++
                       Seq (
     publish := {},
-
 
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
