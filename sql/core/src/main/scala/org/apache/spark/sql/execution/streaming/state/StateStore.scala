@@ -567,16 +567,13 @@ object StateStore extends Logging {
 
   /** Unload and stop all state store providers */
   def stop(): Unit = loadedProviders.synchronized {
+    loadedProviders.keySet.foreach { key => unload(key) }
+    loadedProviders.clear()
+    _coordRef = null
     if (maintenanceTask != null) {
       maintenanceTask.stop()
       maintenanceTask = null
     }
-    loadedProviders.toSeq.foreach { case (id, provider) =>
-      provider.doMaintenance()
-      unload(id)
-    }
-    loadedProviders.clear()
-    _coordRef = null
     logInfo("StateStore stopped")
   }
 
