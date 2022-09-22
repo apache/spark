@@ -427,7 +427,7 @@ class SkipGram extends Serializable with Logging {
     try {
       val result = doFit(sent, emb, sampleProbBC, sc, expTable)
       val invVocabBC = sc.broadcast(invVocab)
-      new SkipGramModel(result.map(x => x.copy(_1 = invVocabBC.value(x._1))))
+      new SkipGramModel(result.map(x => invVocabBC.value(x._1) -> x._2._2))
     } finally {
       // expTable.destroy()
       // sampleProbBC.destroy()
@@ -569,7 +569,7 @@ class SkipGram extends Serializable with Logging {
  */
 @Since("3.4.0")
 class SkipGramModel private[spark] (
-    private[spark] val emb: RDD[(String, (Long, Array[Float], Array[Float]))]
+    private[spark] val emb: RDD[(String, Array[Float])]
                                    ) extends Serializable with Saveable {
   /**
    * Save this model to the given path.
@@ -602,7 +602,7 @@ class SkipGramModel private[spark] (
     if (f.isEmpty) {
       throw new IllegalStateException(s"$word not in vocabulary")
     }
-    findSynonyms(f.head._2._2, num)
+    findSynonyms(f.head._2, num)
   }
 
   /**
@@ -618,7 +618,7 @@ class SkipGramModel private[spark] (
       Array.empty[(String, Double)]
     } else {
       BLAS.nativeBLAS.sscal(vector.length, 1f / vecNorm, vector, 0, 1)
-      emb.map{case (w, (_, f, _)) =>
+      emb.map{case (w, f) =>
         val wNorm = BLAS.nativeBLAS.snrm2(f.length, f, 1)
         if (wNorm > 0) {
           BLAS.nativeBLAS.sscal(f.length, 1f / wNorm, f, 0, 1)
@@ -630,7 +630,7 @@ class SkipGramModel private[spark] (
     }
   }
 
-  def getVectors: RDD[(String, (Long, Array[Float], Array[Float]))] = emb
+  def getVectors: RDD[(String, Array[Float])] = emb
 }
 
 @Since("3.4.0")
@@ -641,29 +641,29 @@ object SkipGramModel extends Loader[SkipGramModel] {
 
     val classNameV1_0 = "org.apache.spark.mllib.feature.SkipGramModel"
 
-    case class Data(word: String, n: Long, syn0: Array[Float], syn1Neg: Array[Float])
+    case class Data(word: String, embedding: Array[Float])
 
     def load(sc: SparkContext, path: String): SkipGramModel = {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       import spark.sqlContext.implicits._
       val dataFrame = spark.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[Data](dataFrame.schema)
-      new SkipGramModel(dataFrame.select("word", "n", "syn0", "syn1Neg")
-        .as[(String, (Long, Array[Float], Array[Float]))].rdd)
+      new SkipGramModel(dataFrame.select("word", "embedding")
+        .as[(String, Array[Float])].rdd)
     }
 
     def save(sc: SparkContext, path: String,
-             emb: RDD[(String, (Long, Array[Float], Array[Float]))]): Unit = {
+             emb: RDD[(String, Array[Float])]): Unit = {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       import spark.sqlContext.implicits._
-      val vectorSize = emb.first()._2._2.length
+      val vectorSize = emb.first()._2.length
       val numWords = emb.count()
       val metadata = compact(render(
         ("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~
           ("vectorSize" -> vectorSize) ~ ("numWords" -> numWords)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
-      emb.map(x => Data(x._1, x._2._1, x._2._2, x._2._3)).toDF()
+      emb.map(x => Data(x._1, x._2)).toDF()
         .write.parquet(Loader.dataPath(path))
     }
   }
@@ -679,7 +679,7 @@ object SkipGramModel extends Loader[SkipGramModel] {
     (loadedClassName, loadedVersion) match {
       case (classNameV1_0, "1.0") =>
         val model = SaveLoadV1_0.load(sc, path)
-        val vectorSize = model.emb.first()._2._2.length
+        val vectorSize = model.emb.first()._2.length
         val numWords = model.emb.count()
         require(expectedVectorSize == vectorSize,
           s"SkipGramModel requires each word to be mapped to a vector of size " +
