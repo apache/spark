@@ -385,7 +385,7 @@ class SkipGram extends Serializable with Logging {
 
     val (vocabBC, sampleProbBC, invVocab) = {
       val map = new OpenHashMap[String, Int]()
-      val sampleProb = new Int2IntOpenHashMap[Int, Int]()
+      val sampleProb = new Int2IntOpenHashMap()
       val invVocab = ArrayBuffer.empty[String]
 
       val trainWordsCount = countRDD.map(_._2).reduce(_ + _)
