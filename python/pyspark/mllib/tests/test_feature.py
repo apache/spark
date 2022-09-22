@@ -85,7 +85,7 @@ class SkipGramTests(MLlibTestCase):
             .setWindowSize(6)
             .setPow(0.75)
             .setSample(1e-4)
-            .setIntermediateRDDStorageLevel("disk_only_2")
+            .setIntermediateRDDStorageLevel("DISK_ONLY_2")
             .setNegative(3)
             .setNumThread(10)
         )
@@ -97,7 +97,7 @@ class SkipGramTests(MLlibTestCase):
         self.assertEqual(model.windowSize, 6)
         self.assertEqual(model.pow, 0.75)
         self.assertEqual(model.sample, 1e-4)
-        self.assertEqual(model.intermediateRDDStorageLevel, "disk_only_2")
+        self.assertEqual(model.intermediateRDDStorageLevel, "DISK_ONLY_2")
         self.assertEqual(model.negative, 3)
         self.assertEqual(model.numThread, 10)
 

@@ -62,7 +62,7 @@ private[python] class SkipGramModelWrapper(model: SkipGramModel) {
 
   def getVectors: RDD[Array[Any]] = {
     SerDe.fromTuple2RDD(model.getVectors.map {
-      case (w, (n, f1, f2)) => (w, (Vectors.dense(f1.map(_.toDouble))))
+      case (w, f) => (w, Vectors.dense(f.map(_.toDouble)))
     }.asInstanceOf[RDD[(Any, Any)]])
   }
 }
