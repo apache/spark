@@ -380,8 +380,8 @@ class Join(LogicalPlan):
         return rel
 
     def print(self, indent=0) -> str:
-        i = ' ' * indent
-        o = ' ' * (indent + LogicalPlan.INDENT)
+        i = " " * indent
+        o = " " * (indent + LogicalPlan.INDENT)
         n = indent + LogicalPlan.INDENT * 2
         return (
             f"{i}<Join on={self.on} how={self.how}>\n{o}"
@@ -415,8 +415,8 @@ class UnionAll(LogicalPlan):
         assert self._child is not None
         assert self.other is not None
 
-        i = ' ' * indent
-        o = ' ' * (indent + LogicalPlan.INDENT)
+        i = " " * indent
+        o = " " * (indent + LogicalPlan.INDENT)
         n = indent + LogicalPlan.INDENT * 2
         return (
             f"{i}UnionAll\n{o}child1=\n{self._child.print(n)}"
@@ -449,7 +449,7 @@ class SQL(LogicalPlan):
         return rel
 
     def print(self, indent=0) -> str:
-        i = ' ' * indent
+        i = " " * indent
         sub_query = self._query.replace("\n", "")[:50]
         return f"""{i}<SQL query='{sub_query}...'>"""
 
