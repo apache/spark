@@ -217,19 +217,18 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
 
   test("SPARK-39469: inferring date type") {
     // "yyyy/MM/dd" format
-    var options = new CSVOptions(Map("dateFormat" -> "yyyy/MM/dd", "prefersDate" -> "true"),
+    var options = new CSVOptions(Map("dateFormat" -> "yyyy/MM/dd"),
       false, "UTC")
     var inferSchema = new CSVInferSchema(options)
     assert(inferSchema.inferField(NullType, "2018/12/02") == DateType)
     // "MMM yyyy" format
-    options = new CSVOptions(Map("dateFormat" -> "MMM yyyy", "prefersDate" -> "true"),
+    options = new CSVOptions(Map("dateFormat" -> "MMM yyyy"),
       false, "GMT")
     inferSchema = new CSVInferSchema(options)
     assert(inferSchema.inferField(NullType, "Dec 2018") == DateType)
     // Field should strictly match date format to infer as date
     options = new CSVOptions(
-      Map("dateFormat" -> "yyyy-MM-dd", "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
-        "prefersDate" -> "true"),
+      Map("dateFormat" -> "yyyy-MM-dd", "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"),
       columnPruning = false,
       defaultTimeZoneId = "GMT")
     inferSchema = new CSVInferSchema(options)
@@ -240,7 +239,7 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
   test("SPARK-39469: inferring the schema of columns with mixing dates and timestamps properly") {
     var options = new CSVOptions(
       Map("dateFormat" -> "yyyy_MM_dd", "timestampFormat" -> "yyyy|MM|dd",
-        "timestampNTZFormat" -> "yyyy/MM/dd", "prefersDate" -> "true"),
+        "timestampNTZFormat" -> "yyyy/MM/dd"),
       columnPruning = false,
       defaultTimeZoneId = "UTC")
     var inferSchema = new CSVInferSchema(options)

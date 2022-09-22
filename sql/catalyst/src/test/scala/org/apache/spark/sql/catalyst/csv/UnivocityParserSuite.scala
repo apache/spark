@@ -351,7 +351,8 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
         days(2020, 1, 12))
     }
 
-    val options = new CSVOptions(Map.empty[String, String], false, "UTC")
+    // To use legacy date parser in UnivocityParser, `prefersDate` need to be disabled.
+    val options = new CSVOptions(Map("prefersDate" -> "false"), false, "UTC")
     check(new UnivocityParser(StructType(Seq.empty), options))
 
     def optionsWithPattern(enableFallback: Boolean): CSVOptions = new CSVOptions(
