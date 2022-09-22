@@ -206,7 +206,7 @@ object SubExprUtils extends PredicateHelper {
     def collectOutRefs(input: Expression): Unit = input match {
       case a: AggregateExpression if containsOuter(a) =>
         if (a.references.nonEmpty) {
-          throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql)
+          throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql, a.origin)
         } else {
           // Collect and update the sub-tree so that outer references inside this aggregate
           // expression will not be collected. For example: min(outer(a)) -> min(a).

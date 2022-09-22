@@ -6595,11 +6595,6 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     >>> df.select(element_at(df.data, -1)).collect()
     [Row(element_at(data, -1)='c')]
 
-    Returns `None` if there is no value corresponding to the given `extraction`.
-
-    >>> df.select(element_at(df.data, -4)).collect()
-    [Row(element_at(data, -4)=None)]
-
     >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},)], ['data'])
     >>> df.select(element_at(df.data, lit("a"))).collect()
     [Row(element_at(data, a)=1.0)]

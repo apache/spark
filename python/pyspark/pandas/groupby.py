@@ -604,7 +604,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             Return type determined by caller of GroupBy object.
 
         Notes
-        -------
+        -----
         `quantile` in pandas-on-Spark are using distributed percentile approximation
         algorithm unlike pandas, the result might different with pandas, also
         `interpolation` parameter is not supported yet.

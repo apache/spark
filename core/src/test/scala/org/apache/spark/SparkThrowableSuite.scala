@@ -124,9 +124,9 @@ class SparkThrowableSuite extends SparkFunSuite {
   }
 
   test("Message format invariants") {
-    val messageFormats = errorClassToInfoMap.values.toSeq.flatMap { i =>
-      Seq(i.messageFormat)
-    }
+    val messageFormats = errorClassToInfoMap
+      .filterKeys(!_.startsWith("_LEGACY_ERROR_TEMP_"))
+      .values.toSeq.flatMap { i => Seq(i.messageFormat) }
     checkCondition(messageFormats, s => s != null)
     checkIfUnique(messageFormats)
   }
