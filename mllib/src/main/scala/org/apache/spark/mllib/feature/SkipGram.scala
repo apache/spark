@@ -151,7 +151,12 @@ private[spark] object SkipGram {
           var skipped = 0
           random.setSeed(seed)
           while (i < s.length) {
-            val prob = sampleProb.getOrDefault(s(i), Int.MaxValue)
+            val prob = if (sampleProb.size() > 0) {
+              sampleProb.getOrDefault(s(i), Int.MaxValue)
+            } else {
+              Int.MaxValue
+            }
+
             if (prob < Int.MaxValue && prob < random.nextInt()) {
               skipped += 1
             } else {
