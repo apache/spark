@@ -1579,7 +1579,7 @@ class InternalFrame:
                     nullable=bool(col.isnull().any()),
                 ),
             )
-            for (name, col), dtype in zip(reset_index.iteritems(), index_dtypes + data_dtypes)
+            for (name, col), dtype in zip(reset_index.items(), index_dtypes + data_dtypes)
         ]
 
         return (

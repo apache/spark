@@ -30,6 +30,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.collection.Utils
 
 object StatFunctions extends Logging {
 
@@ -198,7 +199,7 @@ object StatFunctions extends Logging {
     }
     // get the distinct sorted values of column 2, so that we can make them the column names
     val distinctCol2: Map[Any, Int] =
-      counts.map(e => cleanElement(e.get(1))).distinct.sorted.zipWithIndex.toMap
+      Utils.toMapWithIndex(counts.map(e => cleanElement(e.get(1))).distinct.sorted)
     val columnSize = distinctCol2.size
     require(columnSize < 1e4, s"The number of distinct values for $col2, can't " +
       s"exceed 1e4. Currently $columnSize")

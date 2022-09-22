@@ -258,8 +258,6 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.kurt(), pdf.kurt(), almost=True)
 
     def test_dataframe_corr(self):
-        # existing 'test_corr' is mixed by df.corr and ser.corr, will delete 'test_corr'
-        # when we have separate tests for df.corr and ser.corr
         pdf = makeMissingDataframe(0.3, 42)
         psdf = ps.from_pandas(pdf)
 
@@ -333,39 +331,70 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
                 check_exact=False,
             )
 
-    def test_corr(self):
-        # Disable arrow execution since corr() is using UDT internally which is not supported.
-        with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
-            # DataFrame
-            # we do not handle NaNs for now
-            pdf = makeMissingDataframe(0.3, 42).fillna(0)
-            psdf = ps.from_pandas(pdf)
+    def test_series_corr(self):
+        pdf = makeMissingDataframe(0.3, 42)
+        pser1 = pdf.A
+        pser2 = pdf.B
+        psdf = ps.from_pandas(pdf)
+        psser1 = psdf.A
+        psser2 = psdf.B
 
-            self.assert_eq(psdf.corr(), pdf.corr(), check_exact=False)
+        with self.assertRaisesRegex(ValueError, "Invalid method"):
+            psser1.corr(psser2, method="std")
+        with self.assertRaisesRegex(TypeError, "Invalid min_periods type"):
+            psser1.corr(psser2, min_periods="3")
 
-            # Series
-            pser_a = pdf.A
-            pser_b = pdf.B
-            psser_a = psdf.A
-            psser_b = psdf.B
+        for method in ["pearson", "spearman", "kendall"]:
+            self.assert_eq(
+                psser1.corr(psser2, method=method),
+                pser1.corr(pser2, method=method),
+                almost=True,
+            )
+            self.assert_eq(
+                psser1.corr(psser2, method=method, min_periods=1),
+                pser1.corr(pser2, method=method, min_periods=1),
+                almost=True,
+            )
+            self.assert_eq(
+                psser1.corr(psser2, method=method, min_periods=3),
+                pser1.corr(pser2, method=method, min_periods=3),
+                almost=True,
+            )
+            self.assert_eq(
+                (psser1 + 1).corr(psser2 - 2, method=method, min_periods=2),
+                (pser1 + 1).corr(pser2 - 2, method=method, min_periods=2),
+                almost=True,
+            )
 
-            self.assertAlmostEqual(psser_a.corr(psser_b), pser_a.corr(pser_b))
-            self.assertRaises(TypeError, lambda: psser_a.corr(psdf))
+        # different anchors
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
 
-            # multi-index columns
-            columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B"), ("Y", "C"), ("Z", "D")])
-            pdf.columns = columns
-            psdf.columns = columns
+        with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
+            psser1.corr(psser2)
 
-            self.assert_eq(psdf.corr(), pdf.corr(), check_exact=False)
-
-            # Series
-            pser_xa = pdf[("X", "A")]
-            pser_xb = pdf[("X", "B")]
-            psser_xa = psdf[("X", "A")]
-            psser_xb = psdf[("X", "B")]
-
-            self.assert_eq(psser_xa.corr(psser_xb), pser_xa.corr(pser_xb), almost=True)
+        for method in ["pearson", "spearman", "kendall"]:
+            with ps.option_context("compute.ops_on_diff_frames", True):
+                self.assert_eq(
+                    psser1.corr(psser2, method=method),
+                    pser1.corr(pser2, method=method),
+                    almost=True,
+                )
+                self.assert_eq(
+                    psser1.corr(psser2, method=method, min_periods=1),
+                    pser1.corr(pser2, method=method, min_periods=1),
+                    almost=True,
+                )
+                self.assert_eq(
+                    psser1.corr(psser2, method=method, min_periods=3),
+                    pser1.corr(pser2, method=method, min_periods=3),
+                    almost=True,
+                )
+                self.assert_eq(
+                    (psser1 + 1).corr(psser2 - 2, method=method, min_periods=2),
+                    (pser1 + 1).corr(pser2 - 2, method=method, min_periods=2),
+                    almost=True,
+                )
 
     def test_cov_corr_meta(self):
         # Disable arrow execution since corr() is using UDT internally which is not supported.
