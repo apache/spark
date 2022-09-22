@@ -1140,7 +1140,7 @@ class SkipGram:
         self.negative = 5
         self.sample = 0
         self.pow = 0
-        self.intermediateRDDStorageLevel = "memory_and_disk"
+        self.intermediateRDDStorageLevel = "MEMORY_AND_DISK"
 
     @since("3.4.0")
     def setVectorSize(self, vectorSize: int) -> "SkipGram":
