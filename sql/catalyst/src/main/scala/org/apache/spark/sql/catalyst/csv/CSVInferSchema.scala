@@ -241,9 +241,10 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     (t1, t2) match {
       case (DateType, TimestampType) | (DateType, TimestampNTZType) |
            (TimestampNTZType, DateType) | (TimestampType, DateType) =>
-        // For a column containing a mixture of dates and timestamps
-        // infer it as timestamp type if its dates can be inferred as timestamp type
-        // otherwise infer it as StringType
+        // For a column containing a mixture of dates and timestamps, infer it as timestamp type
+        // if its dates can be inferred as timestamp type, otherwise infer it as StringType.
+        // This only happens when the timestamp pattern is not specified, as the default timestamp
+        // parser is very lenient and can parse date string as well.
         val dateFormat = options.dateFormatInRead.getOrElse(DateFormatter.defaultPattern)
         t1 match {
           case DateType if canParseDateAsTimestamp(dateFormat, t2) =>

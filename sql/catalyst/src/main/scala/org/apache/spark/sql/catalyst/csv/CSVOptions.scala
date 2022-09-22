@@ -149,8 +149,8 @@ class CSVOptions(
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
 
   /**
-   * Infer columns with all valid date entries as date type (otherwise inferred as string type)
-   * if schema inference is enabled.
+   * Infer columns with all valid date entries as date type (otherwise inferred as string or
+   * timestamp type) if schema inference is enabled.
    *
    * Disabled by default for backwards compatibility.
    *
@@ -158,7 +158,7 @@ class CSVOptions(
    * extra trailing characters.
    */
   val prefersDate = {
-    val inferDateFlag = getBool("prefersDate")
+    val inferDateFlag = getBool("prefersDate", true)
     if (inferDateFlag && SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
       throw QueryExecutionErrors.inferDateWithLegacyTimeParserError()
     }
