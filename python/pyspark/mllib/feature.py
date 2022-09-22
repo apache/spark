@@ -1057,7 +1057,7 @@ class SkipGramModel(JavaSaveable, JavaLoader["SkipGramModel"]):
         return zip(words, similarity)
 
     @since("3.4.0")
-    def getVectors(self) -> RDD[Tuple[str, Tuple[int, List[float], List[float]]:
+    def getVectors(self) -> RDD[Tuple[str, Tuple[int, List[float], List[float]]]]:
         """
         Returns a map of words to their vector representations.
         """
