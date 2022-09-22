@@ -29,7 +29,7 @@ import org.apache.spark.annotation.Unstable
  * - Otherwise, the decimal value is longVal / (10 ** _scale)
  */
 @Unstable
-class JDKDecimalOperation extends DecimalOperation[JDKDecimalOperation] {
+class JDKDecimalOperation extends DecimalOperation {
   import org.apache.spark.sql.types.JDKDecimalOperation._
 
   private var decimalVal: BigDecimal = null
@@ -73,45 +73,45 @@ class JDKDecimalOperation extends DecimalOperation[JDKDecimalOperation] {
     true
   }
 
-  def doCompare(other: DecimalOperation[_]): Int = toBigDecimal.compare(other.toBigDecimal)
+  def doCompare(other: DecimalOperation): Int = toBigDecimal.compare(other.toBigDecimal)
 
   def isEqualsZero(): Boolean = {
     assert(underlyingIsNotNull)
     this.decimalVal.signum == 0
   }
 
-  def doAdd(that: DecimalOperation[_]): JDKDecimalOperation = withNewInstance(this, that) {
+  def doAdd(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
     (left, right) => left.add(right)
   }
 
-  def doSubtract(that: DecimalOperation[_]): JDKDecimalOperation = withNewInstance(this, that) {
+  def doSubtract(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
     (left, right) => left.subtract(right)
   }
 
-  def multiply(that: DecimalOperation[_]): JDKDecimalOperation = withNewInstance(this, that) {
+  def multiply(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
     (left, right) => left.multiply(right, MATH_CONTEXT)
   }
 
-  def divide(that: DecimalOperation[_]): JDKDecimalOperation = withNewInstance(this, that) {
+  def divide(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
     (left, right) => left.divide(right, DecimalType.MAX_SCALE, MATH_CONTEXT.getRoundingMode)
   }
 
-  def remainder(that: DecimalOperation[_]): JDKDecimalOperation = withNewInstance(this, that) {
+  def remainder(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
     (left, right) => left.remainder(right, MATH_CONTEXT)
   }
 
-  def quot(that: DecimalOperation[_]): JDKDecimalOperation = withNewInstance(this, that) {
+  def quot(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
     (left, right) => left.divideToIntegralValue(right, MATH_CONTEXT)
   }
 
-  def doNegative: JDKDecimalOperation = {
-    val newDecimalOperation = new JDKDecimalOperation()
-    newDecimalOperation.set(-this.decimalVal, precision, scale)
-    newDecimalOperation
+  def doNegative: DecimalOperation = {
+    val jDKDecimalOperation = new JDKDecimalOperation()
+    jDKDecimalOperation.set(-this.decimalVal, precision, scale)
   }
 
-  def copy(from: JDKDecimalOperation): Unit = {
-    this.decimalVal = from.decimalVal
+  def copy(from: DecimalOperation): Unit = {
+    assert(from.isInstanceOf[JDKDecimalOperation])
+    this.decimalVal = from.asInstanceOf[JDKDecimalOperation].decimalVal
   }
 }
 
@@ -122,11 +122,10 @@ object JDKDecimalOperation {
 
   def withNewInstance(
       left: JDKDecimalOperation,
-      right: DecimalOperation[_])
-      (f: (java.math.BigDecimal, java.math.BigDecimal) => BigDecimal): JDKDecimalOperation = {
+      right: DecimalOperation)
+      (f: (java.math.BigDecimal, java.math.BigDecimal) => BigDecimal): DecimalOperation = {
     val newBigDecimal = f(left.toJavaBigDecimal, right.toJavaBigDecimal)
     val jDKDecimalOperation = new JDKDecimalOperation()
     jDKDecimalOperation.set(newBigDecimal)
-    jDKDecimalOperation
   }
 }

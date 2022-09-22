@@ -32,7 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * Note, for values between -1.0 and 1.0, precision digits are only counted after dot.
  */
-trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
+trait DecimalOperation extends Serializable {
   import org.apache.spark.sql.types.Decimal._
 
   private var longVal: Long = 0L
@@ -45,7 +45,7 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
   /**
    * Create a new instance for the subclass of DecimalOperation.
    */
-  def newInstance(): T
+  def newInstance(): DecimalOperation
 
   /**
    * Set Long as the underlying value.
@@ -80,7 +80,7 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
   /**
    * Set this DecimalOperation to the given Long. Will have precision 20 and scale 0.
    */
-  def set(longVal: Long): DecimalOperation[T] = {
+  def set(longVal: Long): DecimalOperation = {
     if (longVal <= -POW_10(MAX_LONG_DIGITS) || longVal >= POW_10(MAX_LONG_DIGITS)) {
       // We can't represent this compactly as a long without risking overflow
       setUnderlyingValue(longVal)
@@ -97,7 +97,7 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
   /**
    * Set this DecimalOperation to the given Int. Will have precision 10 and scale 0.
    */
-  def set(intVal: Int): DecimalOperation[T] = {
+  def set(intVal: Int): DecimalOperation = {
     setNullUnderlying()
     this.longVal = intVal
     this._precision = 10
@@ -108,7 +108,7 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
   /**
    * Set this DecimalOperation to the given unscaled Long, with a given precision and scale.
    */
-  def set(unscaled: Long, precision: Int, scale: Int): DecimalOperation[T] = {
+  def set(unscaled: Long, precision: Int, scale: Int): DecimalOperation = {
     if (setOrNull(unscaled, precision, scale) == null) {
       throw QueryExecutionErrors.unscaledValueTooLargeForPrecisionError()
     }
@@ -119,7 +119,7 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
    * Set this DecimalOperation to the given unscaled Long, with a given precision and scale,
    * and return it, or return null if it cannot be set due to overflow.
    */
-  def setOrNull(unscaled: Long, precision: Int, scale: Int): DecimalOperation[T] = {
+  def setOrNull(unscaled: Long, precision: Int, scale: Int): DecimalOperation = {
     if (unscaled <= -POW_10(MAX_LONG_DIGITS) || unscaled >= POW_10(MAX_LONG_DIGITS)) {
       // We can't represent this compactly as a long without risking overflow
       if (precision < 19) {
@@ -143,7 +143,7 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
   /**
    * Set this DecimalOperation to the given BigDecimal value, with a given precision and scale.
    */
-  def set(decimal: BigDecimal, precision: Int, scale: Int): DecimalOperation[T] = {
+  def set(decimal: BigDecimal, precision: Int, scale: Int): DecimalOperation = {
     val scaledDecimal = decimal.setScale(scale, ROUND_HALF_UP)
     if (scaledDecimal.precision > precision) {
       throw QueryExecutionErrors.decimalPrecisionExceedsMaxPrecisionError(
@@ -159,7 +159,7 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
   /**
    * Set this DecimalOperation to the given BigDecimal value, inheriting its precision and scale.
    */
-  def set(decimal: BigDecimal): DecimalOperation[T] = {
+  def set(decimal: BigDecimal): DecimalOperation = {
     setUnderlyingValue(decimal)
     this.longVal = 0L
     if (decimal.precision < decimal.scale) {
@@ -187,7 +187,7 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
    *
    * This code avoids BigDecimal object allocation as possible to improve runtime efficiency
    */
-  def set(bigintval: BigInteger): DecimalOperation[T] = {
+  def set(bigintval: BigInteger): DecimalOperation = {
     try {
       setNullUnderlying()
       this.longVal = bigintval.longValueExact()
@@ -387,79 +387,76 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
   protected def rescale(
       precision: Int, scale: Int, roundMode: BigDecimal.RoundingMode.Value): Boolean
 
-  def compare(that: DecimalOperation[_]): Int =
+  def compare(that: DecimalOperation): Int =
     if (underlyingIsNull && that.underlyingIsNull && _scale == that._scale) {
       if (longVal < that.longVal) -1 else if (longVal == that.longVal) 0 else 1
     } else {
       doCompare(that)
     }
 
-  protected def doCompare(other: DecimalOperation[_]): Int
+  protected def doCompare(other: DecimalOperation): Int
 
   def isZero: Boolean = if (underlyingIsNotNull) isEqualsZero() else longVal == 0
 
   protected def isEqualsZero(): Boolean
 
-  def add(that: DecimalOperation[_]): T = {
+  def add(that: DecimalOperation): DecimalOperation = {
     if (underlyingIsNull && that.underlyingIsNull && _scale == that._scale) {
       val newDecimalOperation = newInstance()
       newDecimalOperation.set(
         longVal + that.longVal, Math.max(precision, that.precision) + 1, scale)
-      newDecimalOperation
     } else {
       doAdd(that)
     }
   }
 
-  protected def doAdd(that: DecimalOperation[_]): T
+  protected def doAdd(that: DecimalOperation): DecimalOperation
 
-  def subtract(that: DecimalOperation[_]): T = {
+  def subtract(that: DecimalOperation): DecimalOperation = {
     if (underlyingIsNull && that.underlyingIsNull && _scale == that._scale) {
       val newDecimalOperation = newInstance()
       newDecimalOperation.set(
         longVal - that.longVal, Math.max(precision, that.precision) + 1, scale)
-      newDecimalOperation
     } else {
       doSubtract(that)
     }
   }
 
-  protected def doSubtract(that: DecimalOperation[_]): T
+  protected def doSubtract(that: DecimalOperation): DecimalOperation
 
-  def multiply(that: DecimalOperation[_]): T
+  def multiply(that: DecimalOperation): DecimalOperation
 
-  def divide(that: DecimalOperation[_]): T
+  def divide(that: DecimalOperation): DecimalOperation
 
-  def remainder(that: DecimalOperation[_]): T
+  def remainder(that: DecimalOperation): DecimalOperation
 
-  def quot(that: DecimalOperation[_]): T
+  def quot(that: DecimalOperation): DecimalOperation
 
-  def negative: T = if (underlyingIsNotNull) {
+  def negative: DecimalOperation = if (underlyingIsNotNull) {
     doNegative
   } else {
     val newDecimalOperation = newInstance()
     newDecimalOperation.set(-longVal, precision, scale)
-    newDecimalOperation
   }
 
-  def doNegative: T
+  def doNegative: DecimalOperation
 
-  protected def copy(from: T): Unit
+  protected def copy(from: DecimalOperation): Unit
 }
 
 @Unstable
 object DecimalOperation {
 
-  def createDecimalOperation[T <: DecimalOperation[T]](): T = {
+  def createDecimalOperation(): DecimalOperation = {
     SQLConf.get.getConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION) match {
-      case "JDKBigDecimal" => new JDKDecimalOperation().asInstanceOf[T]
+      case "JDKBigDecimal" => new JDKDecimalOperation()
       // We can using other implementation for Decimal.
-      case _ => new JDKDecimalOperation().asInstanceOf[T]
+      case _ => new JDKDecimalOperation()
     }
   }
 
-  def createUnsafe(unscaled: Long, precision: Int, scale: Int): DecimalOperation[_] = {
-    val decimalOperation = createDecimalOperation().asInstanceOf[DecimalOperation[_]]
+  def createUnsafe(unscaled: Long, precision: Int, scale: Int): DecimalOperation = {
+    val decimalOperation = createDecimalOperation()
     decimalOperation.longVal = unscaled
     decimalOperation._precision = precision
     decimalOperation._scale = scale
