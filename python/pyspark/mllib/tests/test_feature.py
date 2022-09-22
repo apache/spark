@@ -101,7 +101,7 @@ class SkipGramTests(MLlibTestCase):
         self.assertEqual(model.negative, 3)
         self.assertEqual(model.numThread, 10)
 
-    def test_word2vec_get_vectors(self):
+    def test_skip_gram_get_vectors(self):
         data = [
             ["a", "b", "c", "d", "e", "f", "g"],
             ["a", "b", "c", "d", "e", "f"],
