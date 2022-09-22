@@ -424,6 +424,8 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
         Examples
         --------
+        >>> import numpy as np
+        >>> from datetime import datetime
         >>> np.random.seed(22)
         >>> dates = [
         ...    datetime(2022, 5, 1, 4, 5, 6),
@@ -468,6 +470,8 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
         Examples
         --------
+        >>> import numpy as np
+        >>> from datetime import datetime
         >>> np.random.seed(22)
         >>> dates = [
         ...    datetime(2022, 5, 1, 4, 5, 6),
@@ -512,6 +516,8 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
         Examples
         --------
+        >>> import numpy as np
+        >>> from datetime import datetime
         >>> np.random.seed(22)
         >>> dates = [
         ...    datetime(2022, 5, 1, 4, 5, 6),
@@ -556,6 +562,8 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
         Examples
         --------
+        >>> import numpy as np
+        >>> from datetime import datetime
         >>> np.random.seed(22)
         >>> dates = [
         ...    datetime(2022, 5, 1, 4, 5, 6),
@@ -600,6 +608,8 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
         Examples
         --------
+        >>> import numpy as np
+        >>> from datetime import datetime
         >>> np.random.seed(22)
         >>> dates = [
         ...    datetime(2022, 5, 1, 4, 5, 6),
@@ -644,6 +654,8 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
         Examples
         --------
+        >>> import numpy as np
+        >>> from datetime import datetime
         >>> np.random.seed(22)
         >>> dates = [
         ...    datetime(2022, 5, 1, 4, 5, 6),
@@ -743,16 +755,12 @@ def _test() -> None:
     import os
     import doctest
     import sys
-    import numpy
-    from datetime import datetime
     from pyspark.sql import SparkSession
     import pyspark.pandas.resample
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.resample.__dict__.copy()
-    globs["np"] = numpy
-    globs["datetime"] = datetime
     globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
