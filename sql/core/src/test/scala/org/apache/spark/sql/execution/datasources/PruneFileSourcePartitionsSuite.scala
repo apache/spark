@@ -140,6 +140,24 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
     }
   }
 
+  test("SPARK-XXXXX: don't push down non-deterministic filters") {
+    // Force datasource v2 for parquet
+    withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
+      withTempPath { dir =>
+        spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
+          .write.partitionBy("p").parquet(dir.getCanonicalPath)
+        withTempView("tmp") {
+          spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE rand() > 0.5", 2, "")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE p > rand()", 2, "")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE p = 0 AND rand() > 0.5",
+            1,
+            "(tmp.p = 0)")
+        }
+      }
+    }
+  }
+
   protected def collectPartitionFiltersFn(): PartialFunction[SparkPlan, Seq[Expression]] = {
     case scan: FileSourceScanExec => scan.partitionFilters
   }
