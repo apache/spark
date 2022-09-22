@@ -87,7 +87,7 @@ class ProtoSerdeSuite extends SharedSparkSession {
     val extraNonnullCatalyst = new StructType().add("foo",
       new StructType().add("bar", IntegerType).add("baz", IntegerType, nullable = false))
 
-    // deserialize should have no issues when 'bar' is nullable but fail when it is nonnull
+    // deserialize should have no issues when 'bar' is nullable=false but fail when nullable=true
     Deserializer.create(CATALYST_STRUCT, protoFile, BY_NAME)
     assertFailedConversionMessage(protoFile, Deserializer, BY_NAME,
       "Cannot find field 'foo.bar' in Proto schema",
