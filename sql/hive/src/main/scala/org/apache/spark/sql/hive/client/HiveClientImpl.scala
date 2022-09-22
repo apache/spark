@@ -790,7 +790,8 @@ private[hive] class HiveClientImpl(
     parts.toSeq
   }
 
-  override def getPartitionsByFilter(rawHiveTable: RawHiveTable,
+  override def getPartitionsByFilter(
+      rawHiveTable: RawHiveTable,
       predicates: Seq[Expression]): Seq[CatalogTablePartition] = withHiveState {
     val hiveTable = rawHiveTable.rawTable.asInstanceOf[HiveTable]
     hiveTable.setOwner(userName)
