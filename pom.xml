@@ -175,6 +175,7 @@
     <fasterxml.jackson.databind.version>2.13.4</fasterxml.jackson.databind.version>
     <snappy.version>1.1.8.4</snappy.version>
     <netlib.ludovic.dev.version>3.0.2</netlib.ludovic.dev.version>
+    <it.unimi.dsi.fastutil.version>8.5.8</it.unimi.dsi.fastutil.version>
     <commons-codec.version>1.15</commons-codec.version>
     <commons-compress.version>1.21</commons-compress.version>
     <commons-io.version>2.11.0</commons-io.version>
@@ -2775,6 +2776,11 @@
         <groupId>dev.ludovic.netlib</groupId>
         <artifactId>arpack</artifactId>
         <version>${netlib.ludovic.dev.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>it.unimi.dsi</groupId>
+        <artifactId>fastutil</artifactId>
+        <version>${it.unimi.dsi.fastutil.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

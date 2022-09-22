@@ -165,6 +165,10 @@
       <groupId>dev.ludovic.netlib</groupId>
       <artifactId>arpack</artifactId>
     </dependency>
+    <dependency>
+      <groupId>it.unimi.dsi</groupId>
+      <artifactId>fastutil</artifactId>
+    </dependency>
 
   </dependencies>
 

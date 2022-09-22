@@ -21,6 +21,8 @@ import java.util.Random
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.parallel.ForkJoinTaskSupport
 
+import collection.JavaConverters._
+import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -131,7 +133,7 @@ private[spark] object SkipGram {
 
   private def pairs(sent: RDD[Array[Int]],
                     salt: Int,
-                    sampleProbBC: Broadcast[OpenHashMap[Int, Int]],
+                    sampleProbBC: Broadcast[Int2IntOpenHashMap],
                     window: Int,
                     numPartitions: Int,
                     numThread: Int): RDD[(Int, (Array[Int], Array[Int]))] = {
@@ -149,9 +151,10 @@ private[spark] object SkipGram {
           var skipped = 0
           random.setSeed(seed)
           while (i < s.length) {
-            if (sampleProb(s(i)) < random.nextInt()) {
+            val prob = sampleProb.getOrDefault(s(i), Int.MaxValue)
+            if (prob < Int.MaxValue && prob < random.nextInt()) {
               skipped += 1
-            } else if (sampleProb.contains(s(i))) {
+            } else {
               val a = getPartition(s(i), salt, numPartitions)
               val buffer = buffers(a)
               buffer.checkVersion(v)
@@ -377,7 +380,7 @@ class SkipGram extends Serializable with Logging {
 
     val (vocabBC, sampleProbBC, invVocab) = {
       val map = new OpenHashMap[String, Int]()
-      val sampleProb = new OpenHashMap[Int, Int]()
+      val sampleProb = new Int2IntOpenHashMap[Int, Int]()
       val invVocab = ArrayBuffer.empty[String]
 
       val trainWordsCount = countRDD.map(_._2).reduce(_ + _)
@@ -391,15 +394,17 @@ class SkipGram extends Serializable with Logging {
       }.collect().foreach{case (w, p) =>
         val i = map.size
         map.update(w, i)
-        sampleProb.update(i, p)
         invVocab.append(w)
+        if (p < Int.MaxValue) {
+          sampleProb.put(i, p)
+        }
       }
       (sc.broadcast(map), sc.broadcast(sampleProb), invVocab.toArray)
     }
 
     val sent = cacheAndCount(dataset.mapPartitions{it =>
       val vocab = vocabBC.value
-      it.map(_.map(w => if (vocab.contains(w)) vocab(w) else -1))
+      it.map(_.filter(vocab.contains).map(vocab(_)))
     })
     val expTable = sc.broadcast(createExpTable())
 
@@ -428,7 +433,7 @@ class SkipGram extends Serializable with Logging {
 
   private def doFit(sent: RDD[Array[Int]],
                     inEmb: RDD[(Int, (Long, Array[Float], Array[Float]))],
-                    sampleProbBC: Broadcast[OpenHashMap[Int, Int]],
+                    sampleProbBC: Broadcast[Int2IntOpenHashMap],
                     sc: SparkContext,
                     expTable: Broadcast[Array[Float]]
                    ): RDD[(Int, (Long, Array[Float], Array[Float]))] = {
@@ -450,7 +455,7 @@ class SkipGram extends Serializable with Logging {
         numPartitions, numThread).partitionBy(partitioner2).values
 
       val newEmb = cacheAndCount(cur.zipPartitions(emb) {case (sIt, eIt) =>
-        val vocab = new OpenHashMap[Int, Int]()
+        val vocab = new Int2IntOpenHashMap()
         val rSyn0 = ArrayBuffer.empty[Array[Float]]
         val rSyn1Neg = ArrayBuffer.empty[Array[Float]]
         var seed = 0
@@ -458,7 +463,7 @@ class SkipGram extends Serializable with Logging {
 
         eIt.foreach{case (v, (n, f1, f2)) =>
           val i = vocab.size
-          vocab.update(v, i)
+          vocab.put(v, i)
           cn.append(n)
           rSyn0 += f1
           rSyn1Neg += f2
@@ -488,9 +493,9 @@ class SkipGram extends Serializable with Logging {
         ParItr.foreach(sIt.zipWithIndex, numThread, 100000)({case ((l, r), ii) =>
           var pos = 0
           while (pos < l.length) {
-            if (vocab.contains(l(pos)) && vocab.contains(r(pos))) {
-              val word = vocab(l(pos))
-              val lastWord = vocab(r(pos))
+            val word = vocab.getOrDefault(l(pos), -1)
+            val lastWord = vocab.getOrDefault(r(pos), -1)
+            if (word != -1 && lastWord != -1) {
               val l1 = lastWord * vectorSize
               val neu1e = new Array[Float](vectorSize)
               var target = -1
@@ -535,7 +540,9 @@ class SkipGram extends Serializable with Logging {
           }
         })
 
-        vocab.iterator.map{case (k, v) =>
+        vocab.int2IntEntrySet().fastIterator().asScala.map{e =>
+          val k = e.getIntKey
+          val v = e.getIntValue
           k -> (cn(v), syn0.slice(v * vectorSize, (v + 1) * vectorSize),
             syn1Neg.slice(v * vectorSize, (v + 1) * vectorSize))
         }
