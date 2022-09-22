@@ -844,12 +844,6 @@
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution"
     ]
   },
-  "WRITING_JOB_ABORTED" : {
-    "message" : [
-      "Writing job aborted"
-    ],
-    "sqlState" : "40000"
-  },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
       "Invalid InsertIntoContext"

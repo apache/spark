@@ -168,7 +168,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         checkError(
           exception = intercept[SparkException] {
             sql(s"insert into $tableName values 12345678901234567890D")
-          }.getCause.getCause.getCause.asInstanceOf[SparkThrowable],
+          }.getCause.getCause.asInstanceOf[SparkThrowable],
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"DOUBLE\"",
