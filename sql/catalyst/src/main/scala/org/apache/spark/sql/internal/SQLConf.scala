@@ -2586,8 +2586,8 @@ object SQLConf {
         "1. pyspark.sql.DataFrame.toPandas. " +
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
         "or a NumPy ndarray. " +
-        "The following data types are unsupported: " +
-        "ArrayType of TimestampType, and nested StructType.")
+        "The following data type is unsupported: " +
+        "ArrayType of TimestampType.")
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 

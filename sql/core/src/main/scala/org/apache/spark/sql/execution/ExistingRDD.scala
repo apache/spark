@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.util.collection.Utils
 
 object ExternalRDD {
 
@@ -106,7 +107,7 @@ case class LogicalRDD(
     session :: originStats :: originConstraints :: Nil
 
   override def newInstance(): LogicalRDD.this.type = {
-    val rewrite = output.zip(output.map(_.newInstance())).toMap
+    val rewrite = Utils.toMap(output, output.map(_.newInstance()))
 
     val rewrittenPartitioning = outputPartitioning match {
       case p: Expression =>

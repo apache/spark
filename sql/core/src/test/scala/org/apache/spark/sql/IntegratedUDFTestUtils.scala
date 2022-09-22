@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
 import scala.collection.JavaConverters._
@@ -31,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExprId, Pyth
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
+import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType}
 
 /**
  * This object targets to integrate various UDF test cases so that Scalar UDF, Python UDF,
@@ -190,7 +191,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
   }
 
-  private lazy val pandasFunc: Array[Byte] = if (shouldTestScalarPandasUDFs) {
+  private lazy val pandasFunc: Array[Byte] = if (shouldTestPandasUDFs) {
     var binaryPandasFunc: Array[Byte] = null
     withTempPath { path =>
       Process(
@@ -213,7 +214,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
   }
 
-  private lazy val pandasGroupedAggFunc: Array[Byte] = if (shouldTestGroupedAggPandasUDFs) {
+  private lazy val pandasGroupedAggFunc: Array[Byte] = if (shouldTestPandasUDFs) {
     var binaryPandasFunc: Array[Byte] = null
     withTempPath { path =>
       Process(
@@ -235,6 +236,33 @@ object IntegratedUDFTestUtils extends SQLHelper {
     throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
   }
 
+  private def createPandasGroupedMapFuncWithState(pythonScript: String): Array[Byte] = {
+    if (shouldTestPandasUDFs) {
+      var binaryPandasFunc: Array[Byte] = null
+      withTempPath { codePath =>
+        Files.write(codePath.toPath, pythonScript.getBytes(StandardCharsets.UTF_8))
+        withTempPath { path =>
+          Process(
+            Seq(
+              pythonExec,
+              "-c",
+              "from pyspark.serializers import CloudPickleSerializer; " +
+                s"f = open('$path', 'wb');" +
+                s"exec(open('$codePath', 'r').read());" +
+                "f.write(CloudPickleSerializer().dumps((" +
+                "func, tpe)))"),
+            None,
+            "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
+          binaryPandasFunc = Files.readAllBytes(path.toPath)
+        }
+      }
+      assert(binaryPandasFunc != null)
+      binaryPandasFunc
+    } else {
+      throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
+    }
+  }
+
   // Make sure this map stays mutable - this map gets updated later in Python runners.
   private val workerEnv = new java.util.HashMap[String, String]()
   workerEnv.put("PYTHONPATH", s"$pysparkPythonPath:$pythonPath")
@@ -251,10 +279,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   lazy val shouldTestPythonUDFs: Boolean = isPythonAvailable && isPySparkAvailable
 
-  lazy val shouldTestScalarPandasUDFs: Boolean =
+  lazy val shouldTestPandasUDFs: Boolean =
     isPythonAvailable && isPandasAvailable && isPyArrowAvailable
-
-  lazy val shouldTestGroupedAggPandasUDFs: Boolean = shouldTestScalarPandasUDFs
 
   /**
    * A base trait for various UDFs defined in this object.
@@ -418,6 +444,41 @@ object IntegratedUDFTestUtils extends SQLHelper {
     def apply(exprs: Column*): Column = udf(exprs: _*)
 
     val prettyName: String = "Grouped Aggregate Pandas UDF"
+  }
+
+  /**
+   * Arbitrary stateful processing in Python is used for
+   * `DataFrame.groupBy.applyInPandasWithState`. It requires `pythonScript` to
+   * define `func` (Python function) and `tpe` (`StructType` for state key).
+   *
+   * Virtually equivalent to:
+   *
+   * {{{
+   *   # exec defines 'func' and 'tpe' (struct type for state key)
+   *   exec(pythonScript)
+   *
+   *   # ... are filled when this UDF is invoked, see also 'PythonFlatMapGroupsWithStateSuite'.
+   *   df.groupBy(...).applyInPandasWithState(func, ..., tpe, ..., ...)
+   * }}}
+   */
+  case class TestGroupedMapPandasUDFWithState(name: String, pythonScript: String) extends TestUDF {
+    private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
+      name = name,
+      func = SimplePythonFunction(
+        command = createPandasGroupedMapFuncWithState(pythonScript),
+        envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
+        pythonIncludes = List.empty[String].asJava,
+        pythonExec = pythonExec,
+        pythonVer = pythonVer,
+        broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
+        accumulator = null),
+      dataType = NullType,  // This is not respected.
+      pythonEvalType = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+      udfDeterministic = true)
+
+    def apply(exprs: Column*): Column = udf(exprs: _*)
+
+    val prettyName: String = "Grouped Map Pandas UDF with State"
   }
 
   /**

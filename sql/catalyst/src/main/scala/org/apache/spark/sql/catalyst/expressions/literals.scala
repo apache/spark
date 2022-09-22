@@ -369,6 +369,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     val valueHashCode = value match {
       case null => 0
       case binary: Array[Byte] => util.Arrays.hashCode(binary)
+      // SPARK-40315: Literals of ArrayBasedMapData should have deterministic hashCode.
+      case arrayBasedMapData: ArrayBasedMapData =>
+        arrayBasedMapData.keyArray.hashCode() * 37 + arrayBasedMapData.valueArray.hashCode()
       case other => other.hashCode()
     }
     31 * Objects.hashCode(dataType) + valueHashCode

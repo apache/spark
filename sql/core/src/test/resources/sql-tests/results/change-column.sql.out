@@ -23,12 +23,19 @@ ALTER TABLE test_change CHANGE a
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Operation not allowed: ALTER TABLE table CHANGE COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER(line 1, pos 0)
-
-== SQL ==
-ALTER TABLE test_change CHANGE a
-^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "ALTER TABLE table CHANGE COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "ALTER TABLE test_change CHANGE a"
+  } ]
+}
 
 
 -- !query
@@ -47,7 +54,15 @@ ALTER TABLE test_change RENAME COLUMN a TO a1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-RENAME COLUMN is only supported with v2 tables.
+{
+  "errorClass" : "UNSUPPORTED_FEATURE",
+  "errorSubClass" : "TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "RENAME COLUMN",
+    "tableName" : "`spark_catalog`.`default`.`test_change`"
+  }
+}
 
 
 -- !query
@@ -85,7 +100,15 @@ ALTER TABLE test_change CHANGE a AFTER b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.
+{
+  "errorClass" : "UNSUPPORTED_FEATURE",
+  "errorSubClass" : "TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "ALTER COLUMN ... FIRST | ALTER",
+    "tableName" : "`spark_catalog`.`default`.`test_change`"
+  }
+}
 
 
 -- !query
@@ -94,7 +117,15 @@ ALTER TABLE test_change CHANGE b FIRST
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.
+{
+  "errorClass" : "UNSUPPORTED_FEATURE",
+  "errorSubClass" : "TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "ALTER COLUMN ... FIRST | ALTER",
+    "tableName" : "`spark_catalog`.`default`.`test_change`"
+  }
+}
 
 
 -- !query

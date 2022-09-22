@@ -713,13 +713,13 @@ class PlanResolutionSuite extends AnalysisTest {
     val tableIdent2 = Identifier.of(Array.empty, "tab")
 
     parseResolveCompare(s"DROP TABLE $tableName1",
-      DropTable(ResolvedTable.create(testCat, tableIdent1, table), ifExists = false, purge = false))
+      DropTable(ResolvedIdentifier(testCat, tableIdent1), ifExists = false, purge = false))
     parseResolveCompare(s"DROP TABLE IF EXISTS $tableName1",
-      DropTable(ResolvedTable.create(testCat, tableIdent1, table), ifExists = true, purge = false))
+      DropTable(ResolvedIdentifier(testCat, tableIdent1), ifExists = true, purge = false))
     parseResolveCompare(s"DROP TABLE $tableName2",
-      DropTable(ResolvedTable.create(testCat, tableIdent2, table), ifExists = false, purge = false))
+      DropTable(ResolvedIdentifier(testCat, tableIdent2), ifExists = false, purge = false))
     parseResolveCompare(s"DROP TABLE IF EXISTS $tableName2",
-      DropTable(ResolvedTable.create(testCat, tableIdent2, table), ifExists = true, purge = false))
+      DropTable(ResolvedIdentifier(testCat, tableIdent2), ifExists = true, purge = false))
   }
 
   test("drop view") {
@@ -728,7 +728,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val viewName2 = "view"
     val viewIdent2 = TableIdentifier("view", Option("default"), Some(SESSION_CATALOG_NAME))
     val tempViewName = "v"
-    val tempViewIdent = TableIdentifier("v")
+    val tempViewIdent = Identifier.of(Array.empty, "v")
 
     parseResolveCompare(s"DROP VIEW $viewName1",
       DropTableCommand(viewIdent1, ifExists = false, isView = true, purge = false))
@@ -739,16 +739,19 @@ class PlanResolutionSuite extends AnalysisTest {
     parseResolveCompare(s"DROP VIEW IF EXISTS $viewName2",
       DropTableCommand(viewIdent2, ifExists = true, isView = true, purge = false))
     parseResolveCompare(s"DROP VIEW $tempViewName",
-      DropTableCommand(tempViewIdent, ifExists = false, isView = true, purge = false))
+      DropTempViewCommand(tempViewIdent))
     parseResolveCompare(s"DROP VIEW IF EXISTS $tempViewName",
-      DropTableCommand(tempViewIdent, ifExists = true, isView = true, purge = false))
+      DropTempViewCommand(tempViewIdent))
   }
 
   test("drop view in v2 catalog") {
-    intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       parseAndResolve("DROP VIEW testcat.db.view", checkAnalysis = true)
-    }.getMessage.toLowerCase(Locale.ROOT).contains(
-      "view support in catalog has not been implemented")
+    }
+    checkError(
+      e,
+      errorClass = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
+      parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
   }
 
   // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
@@ -1257,8 +1260,13 @@ class PlanResolutionSuite extends AnalysisTest {
           val e2 = intercept[AnalysisException] {
             parseAndResolve(sql4)
           }
-          assert(e2.getMessage.contains(
-            "ALTER COLUMN with qualified column is only supported with v2 tables"))
+          checkError(
+            exception = e2,
+            errorClass = "UNSUPPORTED_FEATURE",
+            errorSubClass = "TABLE_OPERATION",
+            sqlState = "0A000",
+            parameters = Map("tableName" -> "`spark_catalog`.`default`.`v1Table`",
+              "operation" -> "ALTER COLUMN with qualified column"))
         } else {
           parsed1 match {
             case AlterColumn(

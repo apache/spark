@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 import decimal
-from datetime import datetime
+from datetime import datetime, timedelta
 from distutils.version import LooseVersion
 import inspect
 import sys
@@ -34,7 +34,7 @@ from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.frame import CachedDataFrame
-from pyspark.pandas.missing.frame import _MissingPandasLikeDataFrame
+from pyspark.pandas.missing.frame import MissingPandasLikeDataFrame
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes,
     extension_dtypes_available,
@@ -108,13 +108,386 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             self.assert_eq(pdf, psdf)
 
     def test_creation_index(self):
-        err_msg = (
-            "The given index cannot be a pandas-on-Spark index. Try pandas index or array-like."
+        data = np.random.randn(5, 3)
+
+        # test local data with pd.Index
+        self.assert_eq(
+            ps.DataFrame(data=[1, 2], index=pd.Index([1, 2])),
+            pd.DataFrame(data=[1, 2], index=pd.Index([1, 2])),
         )
-        with self.assertRaisesRegex(TypeError, err_msg):
-            ps.DataFrame([1, 2], index=ps.Index([1, 2]))
-        with self.assertRaisesRegex(TypeError, err_msg):
-            ps.DataFrame([1, 2], index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)]))
+        self.assert_eq(
+            ps.DataFrame(data=[1, 2], index=pd.Index([2, 3])),
+            pd.DataFrame(data=[1, 2], index=pd.Index([2, 3])),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=[1, 2], index=pd.Index([3, 4])),
+            pd.DataFrame(data=[1, 2], index=pd.Index([3, 4])),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=data, index=pd.Index([1, 2, 3, 5, 6])),
+            pd.DataFrame(data=data, index=pd.Index([1, 2, 3, 5, 6])),
+        )
+
+        # test local data with ps.Index
+        self.assert_eq(
+            ps.DataFrame(data=[1, 2], index=ps.Index([1, 2])),
+            pd.DataFrame(data=[1, 2], index=pd.Index([1, 2])),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=[1, 2], index=ps.Index([2, 3])),
+            pd.DataFrame(data=[1, 2], index=pd.Index([2, 3])),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=[1, 2], index=ps.Index([3, 4])),
+            pd.DataFrame(data=[1, 2], index=pd.Index([3, 4])),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=data, index=ps.Index([1, 2, 3, 5, 6])),
+            pd.DataFrame(data=data, index=pd.Index([1, 2, 3, 5, 6])),
+        )
+
+        err_msg = "Cannot combine the series or dataframe"
+        with self.assertRaisesRegex(ValueError, err_msg):
+            # test ps.DataFrame with ps.Index
+            ps.DataFrame(data=ps.DataFrame([1, 2]), index=ps.Index([1, 2]))
+        with self.assertRaisesRegex(ValueError, err_msg):
+            # test ps.DataFrame with pd.Index
+            ps.DataFrame(data=ps.DataFrame([1, 2]), index=pd.Index([3, 4]))
+
+        with ps.option_context("compute.ops_on_diff_frames", True):
+            # test pd.DataFrame with pd.Index
+            self.assert_eq(
+                ps.DataFrame(data=pd.DataFrame([1, 2]), index=pd.Index([0, 1])),
+                pd.DataFrame(data=pd.DataFrame([1, 2]), index=pd.Index([0, 1])),
+            )
+            self.assert_eq(
+                ps.DataFrame(data=pd.DataFrame([1, 2]), index=pd.Index([1, 2])),
+                pd.DataFrame(data=pd.DataFrame([1, 2]), index=pd.Index([1, 2])),
+            )
+
+            # test ps.DataFrame with ps.Index
+            self.assert_eq(
+                ps.DataFrame(data=ps.DataFrame([1, 2]), index=ps.Index([0, 1])),
+                pd.DataFrame(data=pd.DataFrame([1, 2]), index=pd.Index([0, 1])),
+            )
+            self.assert_eq(
+                ps.DataFrame(data=ps.DataFrame([1, 2]), index=ps.Index([1, 2])),
+                pd.DataFrame(data=pd.DataFrame([1, 2]), index=pd.Index([1, 2])),
+            )
+
+            # test ps.DataFrame with pd.Index
+            self.assert_eq(
+                ps.DataFrame(data=ps.DataFrame([1, 2]), index=pd.Index([0, 1])),
+                pd.DataFrame(data=pd.DataFrame([1, 2]), index=pd.Index([0, 1])),
+            )
+            self.assert_eq(
+                ps.DataFrame(data=ps.DataFrame([1, 2]), index=pd.Index([1, 2])),
+                pd.DataFrame(data=pd.DataFrame([1, 2]), index=pd.Index([1, 2])),
+            )
+
+        # test with multi data columns
+        pdf = pd.DataFrame(data=data, columns=["A", "B", "C"])
+        psdf = ps.from_pandas(pdf)
+
+        # test with pd.DataFrame and pd.Index
+        self.assert_eq(
+            ps.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
+            pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
+        )
+
+        # test with pd.DataFrame and ps.Index
+        self.assert_eq(
+            ps.DataFrame(data=pdf, index=ps.Index([2, 3, 4, 5, 6])),
+            pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
+        )
+
+        with ps.option_context("compute.ops_on_diff_frames", True):
+            # test with ps.DataFrame and pd.Index
+            self.assert_eq(
+                ps.DataFrame(data=psdf, index=pd.Index([2, 3, 4, 5, 6])),
+                pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
+            )
+
+            # test with ps.DataFrame and ps.Index
+            self.assert_eq(
+                ps.DataFrame(data=psdf, index=ps.Index([2, 3, 4, 5, 6])),
+                pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
+            )
+
+        # test String Index
+        pdf = pd.DataFrame(
+            data={
+                "s": ["Hello", "World", "Databricks"],
+                "x": [2002, 2003, 2004],
+            }
+        )
+        pdf = pdf.set_index("s")
+        pdf.index.name = None
+        psdf = ps.from_pandas(pdf)
+
+        # test with pd.DataFrame and pd.Index
+        self.assert_eq(
+            ps.DataFrame(data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
+            pd.DataFrame(data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
+        )
+
+        # test with pd.DataFrame and ps.Index
+        self.assert_eq(
+            ps.DataFrame(data=pdf, index=ps.Index(["Hello", "Universe", "Databricks"])),
+            pd.DataFrame(data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
+        )
+
+        with ps.option_context("compute.ops_on_diff_frames", True):
+            # test with ps.DataFrame and pd.Index
+            self.assert_eq(
+                ps.DataFrame(data=psdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
+                pd.DataFrame(data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
+            )
+
+            # test with ps.DataFrame and ps.Index
+            self.assert_eq(
+                ps.DataFrame(data=psdf, index=ps.Index(["Hello", "Universe", "Databricks"])),
+                pd.DataFrame(data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
+            )
+
+        # test DatetimeIndex
+        pdf = pd.DataFrame(
+            data={
+                "t": [
+                    datetime(2022, 9, 1, 0, 0, 0, 0),
+                    datetime(2022, 9, 2, 0, 0, 0, 0),
+                    datetime(2022, 9, 3, 0, 0, 0, 0),
+                ],
+                "x": [2002, 2003, 2004],
+            }
+        )
+        pdf = pdf.set_index("t")
+        pdf.index.name = None
+        psdf = ps.from_pandas(pdf)
+
+        # test with pd.DataFrame and pd.DatetimeIndex
+        self.assert_eq(
+            ps.DataFrame(
+                data=pdf,
+                index=pd.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
+            ),
+            pd.DataFrame(
+                data=pdf,
+                index=pd.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
+            ),
+        )
+
+        # test with pd.DataFrame and ps.DatetimeIndex
+        self.assert_eq(
+            ps.DataFrame(
+                data=pdf,
+                index=ps.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
+            ),
+            pd.DataFrame(
+                data=pdf,
+                index=pd.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
+            ),
+        )
+
+        with ps.option_context("compute.ops_on_diff_frames", True):
+            # test with ps.DataFrame and pd.DatetimeIndex
+            self.assert_eq(
+                ps.DataFrame(
+                    data=psdf,
+                    index=pd.DatetimeIndex(
+                        ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
+                    ),
+                ),
+                pd.DataFrame(
+                    data=pdf,
+                    index=pd.DatetimeIndex(
+                        ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
+                    ),
+                ),
+            )
+
+            # test with ps.DataFrame and ps.DatetimeIndex
+            self.assert_eq(
+                ps.DataFrame(
+                    data=psdf,
+                    index=ps.DatetimeIndex(
+                        ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
+                    ),
+                ),
+                pd.DataFrame(
+                    data=pdf,
+                    index=pd.DatetimeIndex(
+                        ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
+                    ),
+                ),
+            )
+
+        # test MultiIndex
+        # test local data with ps.MultiIndex
+        self.assert_eq(
+            ps.DataFrame(data=[1, 2], index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)])),
+            pd.DataFrame(data=[1, 2], index=pd.MultiIndex.from_tuples([(1, 3), (2, 4)])),
+        )
+
+        # test distributed data with ps.MultiIndex
+        err_msg = "Cannot combine a Distributed Dataset with a MultiIndex"
+        with ps.option_context("compute.ops_on_diff_frames", True):
+            with self.assertRaisesRegex(ValueError, err_msg):
+                # test ps.DataFrame with ps.Index
+                ps.DataFrame(
+                    data=ps.DataFrame([1, 2]), index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)])
+                )
+            with self.assertRaisesRegex(ValueError, err_msg):
+                # test ps.DataFrame with pd.Index
+                ps.DataFrame(
+                    data=ps.DataFrame([1, 2]), index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)])
+                )
+
+    def test_creation_index_same_anchor(self):
+        pdf = pd.DataFrame(
+            {
+                "a": [1, 2, None, 4],
+                "b": [1, None, None, 4],
+                "c": [1, 2, None, None],
+                "d": [None, 2, None, 4],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            ps.DataFrame(data=psdf, index=psdf.index),
+            pd.DataFrame(data=pdf, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf + 1, index=psdf.index),
+            pd.DataFrame(data=pdf + 1, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf[["a", "c"]] * 2, index=psdf.index),
+            pd.DataFrame(data=pdf[["a", "c"]] * 2, index=pdf.index),
+        )
+
+        # test String Index
+        pdf = pd.DataFrame(
+            data={"s": ["Hello", "World", "Databricks"], "x": [2002, 2003, 2004], "y": [4, 5, 6]}
+        )
+        pdf = pdf.set_index("s")
+        pdf.index.name = None
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            ps.DataFrame(data=psdf, index=psdf.index),
+            pd.DataFrame(data=pdf, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf + 1, index=psdf.index),
+            pd.DataFrame(data=pdf + 1, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf[["y"]] * 2, index=psdf.index),
+            pd.DataFrame(data=pdf[["y"]] * 2, index=pdf.index),
+        )
+
+        # test DatetimeIndex
+        pdf = pd.DataFrame(
+            data={
+                "t": [
+                    datetime(2022, 9, 1, 0, 0, 0, 0),
+                    datetime(2022, 9, 2, 0, 0, 0, 0),
+                    datetime(2022, 9, 3, 0, 0, 0, 0),
+                ],
+                "x": [2002, 2003, 2004],
+                "y": [4, 5, 6],
+            }
+        )
+        pdf = pdf.set_index("t")
+        pdf.index.name = None
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            ps.DataFrame(data=psdf, index=psdf.index),
+            pd.DataFrame(data=pdf, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf + 1, index=psdf.index),
+            pd.DataFrame(data=pdf + 1, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf[["y"]] * 2, index=psdf.index),
+            pd.DataFrame(data=pdf[["y"]] * 2, index=pdf.index),
+        )
+
+        # test TimedeltaIndex
+        pdf = pd.DataFrame(
+            data={
+                "t": [
+                    timedelta(1),
+                    timedelta(3),
+                    timedelta(5),
+                ],
+                "x": [2002, 2003, 2004],
+                "y": [4, 5, 6],
+            }
+        )
+        pdf = pdf.set_index("t")
+        pdf.index.name = None
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            ps.DataFrame(data=psdf, index=psdf.index),
+            pd.DataFrame(data=pdf, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf + 1, index=psdf.index),
+            pd.DataFrame(data=pdf + 1, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf[["y"]] * 2, index=psdf.index),
+            pd.DataFrame(data=pdf[["y"]] * 2, index=pdf.index),
+        )
+
+        # test CategoricalIndex
+        pdf = pd.DataFrame(
+            data={
+                "z": [-1, -2, -3, -4],
+                "x": [2002, 2003, 2004, 2005],
+                "y": [4, 5, 6, 7],
+            },
+            index=pd.CategoricalIndex(["a", "c", "b", "a"], categories=["a", "b", "c"]),
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            ps.DataFrame(data=psdf, index=psdf.index),
+            pd.DataFrame(data=pdf, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf + 1, index=psdf.index),
+            pd.DataFrame(data=pdf + 1, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf[["y"]] * 2, index=psdf.index),
+            pd.DataFrame(data=pdf[["y"]] * 2, index=pdf.index),
+        )
+
+        # test distributed data with ps.MultiIndex
+        pdf = pd.DataFrame(
+            data={
+                "z": [-1, -2, -3, -4],
+                "x": [2002, 2003, 2004, 2005],
+                "y": [4, 5, 6, 7],
+            },
+            index=pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z"), ("a", "x")]),
+        )
+        psdf = ps.from_pandas(pdf)
+
+        err_msg = "Cannot combine a Distributed Dataset with a MultiIndex"
+        with self.assertRaisesRegex(ValueError, err_msg):
+            # test ps.DataFrame with ps.MultiIndex
+            ps.DataFrame(data=psdf, index=psdf.index)
+        with self.assertRaisesRegex(ValueError, err_msg):
+            # test ps.DataFrame with pd.MultiIndex
+            ps.DataFrame(data=psdf, index=pdf.index)
 
     def _check_extension(self, psdf, pdf):
         if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
@@ -1979,7 +2352,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
     def test_missing(self):
         psdf = self.psdf
 
-        missing_functions = inspect.getmembers(_MissingPandasLikeDataFrame, inspect.isfunction)
+        missing_functions = inspect.getmembers(MissingPandasLikeDataFrame, inspect.isfunction)
         unsupported_functions = [
             name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"
         ]
@@ -2000,7 +2373,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
                 getattr(psdf, name)()
 
         missing_properties = inspect.getmembers(
-            _MissingPandasLikeDataFrame, lambda o: isinstance(o, property)
+            MissingPandasLikeDataFrame, lambda o: isinstance(o, property)
         )
         unsupported_properties = [
             name
@@ -5689,13 +6062,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self._test_corrwith((df1 + 1), (df2.C + 2))
         self._test_corrwith((df1 + 1), (df3.B + 2))
 
-        with self.assertRaisesRegex(
-            NotImplementedError, "corrwith currently works only for method='pearson'"
-        ):
-            df1.corrwith(df2, method="kendall")
-
         with self.assertRaisesRegex(TypeError, "unsupported type"):
             df1.corrwith(123)
+        with self.assertRaisesRegex(NotImplementedError, "only works for axis=0"):
+            df1.corrwith(df1.A, axis=1)
+        with self.assertRaisesRegex(ValueError, "Invalid method"):
+            df1.corrwith(df1.A, method="cov")
 
         df_bool = ps.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
         self._test_corrwith(df_bool, df_bool.A)
@@ -5704,10 +6076,11 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
     def _test_corrwith(self, psdf, psobj):
         pdf = psdf.to_pandas()
         pobj = psobj.to_pandas()
-        for drop in [True, False]:
-            p_corr = pdf.corrwith(pobj, drop=drop)
-            ps_corr = psdf.corrwith(psobj, drop=drop)
-            self.assert_eq(p_corr.sort_index(), ps_corr.sort_index(), almost=True)
+        for method in ["pearson", "spearman", "kendall"]:
+            for drop in [True, False]:
+                p_corr = pdf.corrwith(pobj, drop=drop, method=method)
+                ps_corr = psdf.corrwith(psobj, drop=drop, method=method)
+                self.assert_eq(p_corr.sort_index(), ps_corr.sort_index(), almost=True)
 
     def test_iteritems(self):
         pdf = pd.DataFrame(
@@ -6585,6 +6958,16 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4), almost=True)
         self.assert_eq(pdf.cov(min_periods=5), psdf.cov(min_periods=5))
 
+        # ddof
+        with self.assertRaisesRegex(TypeError, "ddof must be integer"):
+            psdf.cov(ddof="ddof")
+        for ddof in [-1, 0, 2]:
+            self.assert_eq(pdf.cov(ddof=ddof), psdf.cov(ddof=ddof), almost=True)
+            self.assert_eq(
+                pdf.cov(min_periods=4, ddof=ddof), psdf.cov(min_periods=4, ddof=ddof), almost=True
+            )
+            self.assert_eq(pdf.cov(min_periods=5, ddof=ddof), psdf.cov(min_periods=5, ddof=ddof))
+
         # bool
         pdf = pd.DataFrame(
             {
@@ -6677,12 +7060,18 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         def style_negative(v, props=""):
             return props if v < 0 else None
 
-        # If the value is negative, the text color will be displayed as red.
-        pdf_style = pdf.style.applymap(style_negative, props="color:red;")
-        psdf_style = psdf.style.applymap(style_negative, props="color:red;")
+        def check_style():
+            # If the value is negative, the text color will be displayed as red.
+            pdf_style = pdf.style.applymap(style_negative, props="color:red;")
+            psdf_style = psdf.style.applymap(style_negative, props="color:red;")
 
-        # Test whether the same shape as pandas table is created including the color.
-        self.assert_eq(pdf_style.to_latex(), psdf_style.to_latex())
+            # Test whether the same shape as pandas table is created including the color.
+            self.assert_eq(pdf_style.to_latex(), psdf_style.to_latex())
+
+        check_style()
+
+        with ps.option_context("compute.max_rows", None):
+            check_style()
 
 
 if __name__ == "__main__":

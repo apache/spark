@@ -133,7 +133,7 @@ Results [4]: [w_warehouse_name#7, i_item_id#9, sum(CASE WHEN (d_date#12 < 2000-0
 
 (23) Filter [codegen id : 5]
 Input [4]: [w_warehouse_name#7, i_item_id#9, inv_before#19, inv_after#20]
-Condition : ((isnotnull(inv_before#19) AND isnotnull(inv_after#20)) AND (((inv_before#19 > 0) AND ((cast(inv_after#20 as double) / cast(inv_before#19 as double)) >= 0.666667)) AND ((cast(inv_after#20 as double) / cast(inv_before#19 as double)) <= 1.5)))
+Condition : (CASE WHEN (inv_before#19 > 0) THEN ((cast(inv_after#20 as double) / cast(inv_before#19 as double)) >= 0.666667) END AND CASE WHEN (inv_before#19 > 0) THEN ((cast(inv_after#20 as double) / cast(inv_before#19 as double)) <= 1.5) END)
 
 (24) TakeOrderedAndProject
 Input [4]: [w_warehouse_name#7, i_item_id#9, inv_before#19, inv_after#20]

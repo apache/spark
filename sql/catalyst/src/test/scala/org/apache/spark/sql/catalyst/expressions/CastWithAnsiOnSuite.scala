@@ -23,6 +23,7 @@ import java.time.DateTimeException
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
@@ -141,12 +142,26 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
   test("ANSI mode: disallow type conversions between Numeric types and Date type") {
     import DataTypeTestUtils.numericTypes
     checkInvalidCastFromNumericType(DateType)
-    var errorMsg = "you can use function DATE_FROM_UNIX_DATE instead"
-    verifyCastFailure(cast(Literal(0L), DateType), Some(errorMsg))
+    verifyCastFailure(
+      cast(Literal(0L), DateType),
+      DataTypeMismatch(
+        "CAST_WITH_FUN_SUGGESTION",
+        Map(
+          "srcType" -> "\"BIGINT\"",
+          "targetType" -> "\"DATE\"",
+          "functionNames" -> "`DATE_FROM_UNIX_DATE`")))
     val dateLiteral = Literal(1, DateType)
-    errorMsg = "you can use function UNIX_DATE instead"
     numericTypes.foreach { numericType =>
-      verifyCastFailure(cast(dateLiteral, numericType), Some(errorMsg))
+      withClue(s"numericType = ${numericType.sql}") {
+        verifyCastFailure(
+          cast(dateLiteral, numericType),
+          DataTypeMismatch(
+            "CAST_WITH_FUN_SUGGESTION",
+            Map(
+              "srcType" -> "\"DATE\"",
+              "targetType" -> s""""${numericType.sql}"""",
+              "functionNames" -> "`UNIX_DATE`")))
+      }
     }
   }
 

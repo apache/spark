@@ -624,6 +624,14 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
   <td>2.4.0</td>
 </tr>
+<tr>
+  <td><code>spark.yarn.report.interval</code></td>
+  <td><code>1s</code></td>
+  <td>
+    Interval between reports of the current Spark job status in cluster mode.
+  </td>
+  <td>0.9.0</td>
+</tr>
 </table>
 
 #### Available patterns for SHS custom executor log URL
@@ -839,6 +847,18 @@ The following extra configuration options are available when the shuffle service
     may expect the logger name to look like a class name, it's generally recommended to provide a value which
     would be a valid Java package or class name and not include spaces.
   </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.service.db.backend</code></td>
+  <td>LEVELDB</td>
+  <td>
+    When work-preserving restart is enabled in YARN, this is used to specify the disk-base store used 
+    in shuffle service state store, supports `LEVELDB` and `ROCKSDB` with `LEVELDB` as default value. 
+    The original data store in `LevelDB/RocksDB` will not be automatically converted to another kind 
+    of storage now. The original data store will be retained and the new type data store will be 
+    created when switching storage types.
+  </td>
+  <td>3.4.0</td>
 </tr>
 </table>
 

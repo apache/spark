@@ -50,28 +50,36 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case AddColumns(ResolvedV1TableIdentifier(ident), cols) =>
       cols.foreach { c =>
-        assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand")
+        if (c.name.length > 1) {
+          throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
+            Seq(ident.catalog.get, ident.database.get, ident.table),
+            "ADD COLUMN with qualified column")
+        }
         if (!c.nullable) {
           throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError
         }
       }
       AlterTableAddColumnsCommand(ident, cols.map(convertToStructField))
 
-    case ReplaceColumns(ResolvedV1TableIdentifier(_), _) =>
-      throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("REPLACE COLUMNS")
+    case ReplaceColumns(ResolvedV1TableIdentifier(ident), _) =>
+      throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
+        Seq(ident.catalog.get, ident.database.get, ident.table),
+        "REPLACE COLUMNS")
 
-    case a @ AlterColumn(ResolvedTable(catalog, _, table: V1Table, _), _, _, _, _, _, _)
+    case a @ AlterColumn(ResolvedTable(catalog, ident, table: V1Table, _), _, _, _, _, _, _)
         if isSessionCatalog(catalog) =>
       if (a.column.name.length > 1) {
-        throw QueryCompilationErrors
-          .operationOnlySupportedWithV2TableError("ALTER COLUMN with qualified column")
+        throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
+          Seq(catalog.name, ident.namespace()(0), ident.name),
+          "ALTER COLUMN with qualified column")
       }
       if (a.nullable.isDefined) {
         throw QueryCompilationErrors.alterColumnWithV1TableCannotSpecifyNotNullError
       }
       if (a.position.isDefined) {
-        throw QueryCompilationErrors
-          .operationOnlySupportedWithV2TableError("ALTER COLUMN ... FIRST | ALTER")
+        throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
+          Seq(catalog.name, ident.namespace()(0), ident.name),
+          "ALTER COLUMN ... FIRST | ALTER")
       }
       val builder = new MetadataBuilder
       // Add comment to metadata
@@ -94,11 +102,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         builder.build())
       AlterTableChangeColumnCommand(table.catalogTable.identifier, colName, newColumn)
 
-    case RenameColumn(ResolvedV1TableIdentifier(_), _, _) =>
-      throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("RENAME COLUMN")
+    case RenameColumn(ResolvedV1TableIdentifier(ident), _, _) =>
+      throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
+        Seq(ident.catalog.get, ident.database.get, ident.table),
+        "RENAME COLUMN")
 
-    case DropColumns(ResolvedV1TableIdentifier(_), _, _) =>
-      throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("DROP COLUMN")
+    case DropColumns(ResolvedV1TableIdentifier(ident), _, _) =>
+      throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
+        Seq(ident.catalog.get, ident.database.get, ident.table),
+        "DROP COLUMN")
 
     case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>
       AlterTableSetPropertiesCommand(ident, props, isView = false)
@@ -184,36 +196,42 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ ReplaceTable(ResolvedV1Identifier(_), _, _, _, _) =>
+    case c @ ReplaceTable(ResolvedV1Identifier(ident), _, _, _, _) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
-        throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("REPLACE TABLE")
+        throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
+          Seq(ident.catalog.get, ident.database.get, ident.table),
+          "REPLACE TABLE")
       } else {
         c
       }
 
-    case c @ ReplaceTableAsSelect(ResolvedV1Identifier(_), _, _, _, _, _) =>
+    case c @ ReplaceTableAsSelect(ResolvedV1Identifier(ident), _, _, _, _, _) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
-        throw QueryCompilationErrors
-          .operationOnlySupportedWithV2TableError("REPLACE TABLE AS SELECT")
+        throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
+          Seq(ident.catalog.get, ident.database.get, ident.table),
+          "REPLACE TABLE AS SELECT")
       } else {
         c
       }
 
-    case DropTable(ResolvedV1TableIdentifier(ident), ifExists, purge) =>
+    case DropTable(ResolvedV1Identifier(ident), ifExists, purge) =>
       DropTableCommand(ident, ifExists, isView = false, purge = purge)
 
     // v1 DROP TABLE supports temp view.
-    case DropTable(r: ResolvedView, ifExists, purge) =>
-      if (!r.isTemp) {
-        throw QueryCompilationErrors.cannotDropViewWithDropTableError
-      }
-      val ResolvedViewIdentifier(ident) = r
-      DropTableCommand(ident, ifExists, isView = false, purge = purge)
+    case DropTable(ResolvedIdentifier(FakeSystemCatalog, ident), _, _) =>
+      DropTempViewCommand(ident)
 
-    case DropView(ResolvedViewIdentifier(ident), ifExists) =>
+    case DropView(ResolvedV1Identifier(ident), ifExists) =>
       DropTableCommand(ident, ifExists, isView = true, purge = false)
+
+    case DropView(r @ ResolvedIdentifier(catalog, ident), _) =>
+      if (catalog == FakeSystemCatalog) {
+        DropTempViewCommand(ident)
+      } else {
+        throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
+      }
 
     case c @ CreateNamespace(DatabaseNameInSessionCatalog(name), _, _) if conf.useV1Command =>
       val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
@@ -535,14 +553,13 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   object ResolvedViewIdentifier {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-      case ResolvedView(ident, isTemp) =>
-        if (isTemp) {
-          Some(ident.asTableIdentifier)
-        } else {
-          // TODO: we should get the v1 identifier from v1 view directly, similar to `V1Table`. But
-          //       there is no general view representation in DS v2 yet.
-          Some(catalogManager.v1SessionCatalog.qualifyIdentifier(ident.asTableIdentifier))
-        }
+      case ResolvedPersistentView(catalog, ident, _) =>
+        assert(isSessionCatalog(catalog))
+        assert(ident.namespace().length == 1)
+        Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)))
+
+      case ResolvedTempView(ident, _) => Some(ident.asTableIdentifier)
+
       case _ => None
     }
   }
@@ -571,12 +588,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         }
         Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)))
       case _ => None
-    }
-  }
-
-  private def assertTopLevelColumn(colName: Seq[String], command: String): Unit = {
-    if (colName.length > 1) {
-      throw QueryCompilationErrors.commandNotSupportNestedColumnError(command, colName.quoted)
     }
   }
 

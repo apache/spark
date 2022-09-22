@@ -203,12 +203,12 @@ object SparkBuild extends PomBuild {
   // Silencer: Scala compiler plugin for warning suppression
   // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
   // depends on scala version:
-  // <2.13.2 - silencer 1.7.9 and compiler settings to enable fatal warnings
+  // <2.13.2 - silencer 1.7.10 and compiler settings to enable fatal warnings
   // 2.13.2+ - no silencer and configured warnings to achieve the same
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = "1.7.9"
+        val silencerVersion = "1.7.10"
         Seq(
           "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
           compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
@@ -1136,7 +1136,9 @@ object CopyDependencies {
 
 object TestSettings {
   import BuildCommons._
-  private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest")
+  private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest",
+    "org.apache.spark.deploy.k8s.integrationtest.YuniKornTag",
+    "org.apache.spark.internal.io.cloud.IntegrationTestSuite")
 
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those

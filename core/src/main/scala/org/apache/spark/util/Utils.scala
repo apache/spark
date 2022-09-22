@@ -74,6 +74,7 @@ import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer, SerializerInstance}
 import org.apache.spark.status.api.v1.{StackTrace, ThreadStackTrace}
+import org.apache.spark.util.collection.{Utils => CUtils}
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
@@ -1718,7 +1719,8 @@ private[spark] object Utils extends Logging {
     assert(files.length == fileLengths.length)
     val startIndex = math.max(start, 0)
     val endIndex = math.min(end, fileLengths.sum)
-    val fileToLength = files.zip(fileLengths).toMap
+    val fileToLength = CUtils.toMap(files, fileLengths)
+
     logDebug("Log files: \n" + fileToLength.mkString("\n"))
 
     val stringBuffer = new StringBuffer((endIndex - startIndex).toInt)
@@ -3051,7 +3053,7 @@ private[spark] object Utils extends Logging {
    * and return the trailing part after the last dollar sign in the middle
    */
   @scala.annotation.tailrec
-  private def stripDollars(s: String): String = {
+  def stripDollars(s: String): String = {
     val lastDollarIndex = s.lastIndexOf('$')
     if (lastDollarIndex < s.length - 1) {
       // The last char is not a dollar sign
