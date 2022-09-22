@@ -216,7 +216,6 @@ private[hive] class IsolatedClientLoader(
   /** True if `name` refers to a spark class that must see specific version of Hive. */
   protected def isBarrierClass(name: String): Boolean =
     name.startsWith(classOf[HiveClientImpl].getName) ||
-    name.startsWith(classOf[CatalogAndHiveTableImpl].getName) ||
     name.startsWith(classOf[Shim].getName) ||
     name.startsWith(classOf[ShimLoader].getName) ||
     barrierPrefixes.exists(name.startsWith)
