@@ -689,7 +689,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setNumIterations(params.get("numIterations").asInstanceOf[Int])
       .setMinCount(params.get("minCount").asInstanceOf[Int])
       .setWindowSize(params.get("windowSize").asInstanceOf[Int])
-      .setIntermediateRDDStorageLevel(StorageLevel.fromString(params.get("intermediateRDDStorageLevel").asInstanceOf[String]))
+      .setIntermediateRDDStorageLevel(StorageLevel.fromString(
+          params.get("intermediateRDDStorageLevel").asInstanceOf[String]))
     val model = skipGram.fit(dataJRDD.rdd.map(_.toArray()))
     new SkipGramModelWrapper(model)
   }
