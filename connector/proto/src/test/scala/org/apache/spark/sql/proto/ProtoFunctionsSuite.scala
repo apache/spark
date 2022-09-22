@@ -17,6 +17,7 @@
 package org.apache.spark.sql.proto
 
 import com.google.protobuf.{ByteString, Descriptors, DynamicMessage}
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.functions.{lit, struct}

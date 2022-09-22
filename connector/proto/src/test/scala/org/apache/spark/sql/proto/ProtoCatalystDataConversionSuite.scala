@@ -60,7 +60,9 @@ class ProtoCatalystDataConversionSuite extends SparkFunSuite
       val descriptor = ProtoUtils.buildDescriptor(descFilePath, badSchema)
       val expectedSchema = protoOptions.schema.getOrElse(descriptor)
       SchemaConverters.toSqlType(expectedSchema).dataType match {
-        case st: StructType => Row.fromSeq((0 until st.length).map(_ => null))
+        case st: StructType => Row.fromSeq((0 until st.length).map {
+          _ => null
+        })
         case _ => null
       }
     }
@@ -92,7 +94,7 @@ class ProtoCatalystDataConversionSuite extends SparkFunSuite
     StructType(StructField("bytes_type", BinaryType, nullable = false) :: Nil),
     StructType(StructField("string_type", StringType, nullable = false) :: Nil),
     StructType(StructField("int32_type", ByteType, nullable = false) :: Nil),
-    StructType(StructField("int32_type", ShortType, nullable = false) :: Nil),
+    StructType(StructField("int32_type", ShortType, nullable = false) :: Nil)
   )
 
   private val catalystTypesToProtoMessages: Map[DataType, String] = Map(

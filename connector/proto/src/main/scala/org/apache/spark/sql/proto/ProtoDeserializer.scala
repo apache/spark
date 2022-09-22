@@ -31,8 +31,8 @@ import org.apache.spark.sql.proto.utils.ProtoUtils.ProtoMatchedField
 import org.apache.spark.sql.proto.utils.ProtoUtils.toFieldStr
 import org.apache.spark.sql.proto.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, DataType,
-  DateType, DayTimeIntervalType, Decimal, DoubleType, FloatType, IntegerType, LongType, NullType,
-  ShortType, StringType, StructType, YearMonthIntervalType}
+  DateType, Decimal, DoubleType, FloatType, IntegerType, LongType, NullType,
+  ShortType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] class ProtoDeserializer(
@@ -216,13 +216,6 @@ private[sql] class ProtoDeserializer(
       case (ENUM, ArrayType(StringType, containsNull)) =>
         newArrayWriter(protoType, protoPath,
           catalystPath, StringType, containsNull)
-
-      // TBD: Do we need this here ?
-      case (INT, _: YearMonthIntervalType) => (updater, ordinal, value) =>
-        updater.setInt(ordinal, value.asInstanceOf[Int])
-
-      case (LONG, _: DayTimeIntervalType) => (updater, ordinal, value) =>
-        updater.setLong(ordinal, value.asInstanceOf[Long])
 
       case _ => throw new IncompatibleSchemaException(incompatibleMsg)
     }
