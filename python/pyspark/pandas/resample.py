@@ -302,9 +302,9 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
         # a simple example to illustrate the computation:
         #   dates = [
-        #         datetime.datetime(2012, 1, 2),
-        #         datetime.datetime(2012, 5, 3),
-        #         datetime.datetime(2022, 5, 3),
+        #         datetime(2012, 1, 2),
+        #         datetime(2012, 5, 3),
+        #         datetime(2022, 5, 3),
         #   ]
         #   index = pd.DatetimeIndex(dates)
         #   pdf = pd.DataFrame(np.array([1,2,3]), index=index, columns=['A'])
@@ -412,21 +412,279 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         pass
 
     def min(self) -> FrameLike:
+        """
+        Compute min of resampled values.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from datetime import datetime
+        >>> np.random.seed(22)
+        >>> dates = [
+        ...    datetime(2022, 5, 1, 4, 5, 6),
+        ...    datetime(2022, 5, 3),
+        ...    datetime(2022, 5, 3, 23, 59, 59),
+        ...    datetime(2022, 5, 4),
+        ...    pd.NaT,
+        ...    datetime(2022, 5, 4, 0, 0, 1),
+        ...    datetime(2022, 5, 11),
+        ... ]
+        >>> df = ps.DataFrame(
+        ...    np.random.rand(len(dates), 2), index=pd.DatetimeIndex(dates), columns=["A", "B"]
+        ... )
+        >>> df
+                                    A         B
+        2022-05-01 04:05:06  0.208461  0.481681
+        2022-05-03 00:00:00  0.420538  0.859182
+        2022-05-03 23:59:59  0.171162  0.338864
+        2022-05-04 00:00:00  0.270533  0.691041
+        NaT                  0.220405  0.811951
+        2022-05-04 00:00:01  0.010527  0.561204
+        2022-05-11 00:00:00  0.813726  0.745100
+        >>> df.resample("3D").min().sort_index()
+                           A         B
+        2022-05-01  0.171162  0.338864
+        2022-05-04  0.010527  0.561204
+        2022-05-07       NaN       NaN
+        2022-05-10  0.813726  0.745100
+        """
         return self._handle_output(self._downsample("min"))
 
     def max(self) -> FrameLike:
+        """
+        Compute max of resampled values.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from datetime import datetime
+        >>> np.random.seed(22)
+        >>> dates = [
+        ...    datetime(2022, 5, 1, 4, 5, 6),
+        ...    datetime(2022, 5, 3),
+        ...    datetime(2022, 5, 3, 23, 59, 59),
+        ...    datetime(2022, 5, 4),
+        ...    pd.NaT,
+        ...    datetime(2022, 5, 4, 0, 0, 1),
+        ...    datetime(2022, 5, 11),
+        ... ]
+        >>> df = ps.DataFrame(
+        ...    np.random.rand(len(dates), 2), index=pd.DatetimeIndex(dates), columns=["A", "B"]
+        ... )
+        >>> df
+                                    A         B
+        2022-05-01 04:05:06  0.208461  0.481681
+        2022-05-03 00:00:00  0.420538  0.859182
+        2022-05-03 23:59:59  0.171162  0.338864
+        2022-05-04 00:00:00  0.270533  0.691041
+        NaT                  0.220405  0.811951
+        2022-05-04 00:00:01  0.010527  0.561204
+        2022-05-11 00:00:00  0.813726  0.745100
+        >>> df.resample("3D").max().sort_index()
+                           A         B
+        2022-05-01  0.420538  0.859182
+        2022-05-04  0.270533  0.691041
+        2022-05-07       NaN       NaN
+        2022-05-10  0.813726  0.745100
+        """
         return self._handle_output(self._downsample("max"))
 
     def sum(self) -> FrameLike:
+        """
+        Compute sum of resampled values.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from datetime import datetime
+        >>> np.random.seed(22)
+        >>> dates = [
+        ...    datetime(2022, 5, 1, 4, 5, 6),
+        ...    datetime(2022, 5, 3),
+        ...    datetime(2022, 5, 3, 23, 59, 59),
+        ...    datetime(2022, 5, 4),
+        ...    pd.NaT,
+        ...    datetime(2022, 5, 4, 0, 0, 1),
+        ...    datetime(2022, 5, 11),
+        ... ]
+        >>> df = ps.DataFrame(
+        ...    np.random.rand(len(dates), 2), index=pd.DatetimeIndex(dates), columns=["A", "B"]
+        ... )
+        >>> df
+                                    A         B
+        2022-05-01 04:05:06  0.208461  0.481681
+        2022-05-03 00:00:00  0.420538  0.859182
+        2022-05-03 23:59:59  0.171162  0.338864
+        2022-05-04 00:00:00  0.270533  0.691041
+        NaT                  0.220405  0.811951
+        2022-05-04 00:00:01  0.010527  0.561204
+        2022-05-11 00:00:00  0.813726  0.745100
+        >>> df.resample("3D").sum().sort_index()
+                           A         B
+        2022-05-01  0.800160  1.679727
+        2022-05-04  0.281060  1.252245
+        2022-05-07  0.000000  0.000000
+        2022-05-10  0.813726  0.745100
+        """
         return self._handle_output(self._downsample("sum").fillna(0.0))
 
     def mean(self) -> FrameLike:
+        """
+        Compute mean of resampled values.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from datetime import datetime
+        >>> np.random.seed(22)
+        >>> dates = [
+        ...    datetime(2022, 5, 1, 4, 5, 6),
+        ...    datetime(2022, 5, 3),
+        ...    datetime(2022, 5, 3, 23, 59, 59),
+        ...    datetime(2022, 5, 4),
+        ...    pd.NaT,
+        ...    datetime(2022, 5, 4, 0, 0, 1),
+        ...    datetime(2022, 5, 11),
+        ... ]
+        >>> df = ps.DataFrame(
+        ...    np.random.rand(len(dates), 2), index=pd.DatetimeIndex(dates), columns=["A", "B"]
+        ... )
+        >>> df
+                                    A         B
+        2022-05-01 04:05:06  0.208461  0.481681
+        2022-05-03 00:00:00  0.420538  0.859182
+        2022-05-03 23:59:59  0.171162  0.338864
+        2022-05-04 00:00:00  0.270533  0.691041
+        NaT                  0.220405  0.811951
+        2022-05-04 00:00:01  0.010527  0.561204
+        2022-05-11 00:00:00  0.813726  0.745100
+        >>> df.resample("3D").mean().sort_index()
+                           A         B
+        2022-05-01  0.266720  0.559909
+        2022-05-04  0.140530  0.626123
+        2022-05-07       NaN       NaN
+        2022-05-10  0.813726  0.745100
+        """
         return self._handle_output(self._downsample("mean"))
 
     def std(self) -> FrameLike:
+        """
+        Compute std of resampled values.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from datetime import datetime
+        >>> np.random.seed(22)
+        >>> dates = [
+        ...    datetime(2022, 5, 1, 4, 5, 6),
+        ...    datetime(2022, 5, 3),
+        ...    datetime(2022, 5, 3, 23, 59, 59),
+        ...    datetime(2022, 5, 4),
+        ...    pd.NaT,
+        ...    datetime(2022, 5, 4, 0, 0, 1),
+        ...    datetime(2022, 5, 11),
+        ... ]
+        >>> df = ps.DataFrame(
+        ...    np.random.rand(len(dates), 2), index=pd.DatetimeIndex(dates), columns=["A", "B"]
+        ... )
+        >>> df
+                                    A         B
+        2022-05-01 04:05:06  0.208461  0.481681
+        2022-05-03 00:00:00  0.420538  0.859182
+        2022-05-03 23:59:59  0.171162  0.338864
+        2022-05-04 00:00:00  0.270533  0.691041
+        NaT                  0.220405  0.811951
+        2022-05-04 00:00:01  0.010527  0.561204
+        2022-05-11 00:00:00  0.813726  0.745100
+        >>> df.resample("3D").std().sort_index()
+                           A         B
+        2022-05-01  0.134509  0.268835
+        2022-05-04  0.183852  0.091809
+        2022-05-07       NaN       NaN
+        2022-05-10       NaN       NaN
+        """
         return self._handle_output(self._downsample("std"))
 
     def var(self) -> FrameLike:
+        """
+        Compute var of resampled values.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from datetime import datetime
+        >>> np.random.seed(22)
+        >>> dates = [
+        ...    datetime(2022, 5, 1, 4, 5, 6),
+        ...    datetime(2022, 5, 3),
+        ...    datetime(2022, 5, 3, 23, 59, 59),
+        ...    datetime(2022, 5, 4),
+        ...    pd.NaT,
+        ...    datetime(2022, 5, 4, 0, 0, 1),
+        ...    datetime(2022, 5, 11),
+        ... ]
+        >>> df = ps.DataFrame(
+        ...    np.random.rand(len(dates), 2), index=pd.DatetimeIndex(dates), columns=["A", "B"]
+        ... )
+        >>> df
+                                    A         B
+        2022-05-01 04:05:06  0.208461  0.481681
+        2022-05-03 00:00:00  0.420538  0.859182
+        2022-05-03 23:59:59  0.171162  0.338864
+        2022-05-04 00:00:00  0.270533  0.691041
+        NaT                  0.220405  0.811951
+        2022-05-04 00:00:01  0.010527  0.561204
+        2022-05-11 00:00:00  0.813726  0.745100
+        >>> df.resample("3D").var().sort_index()
+                           A         B
+        2022-05-01  0.018093  0.072272
+        2022-05-04  0.033802  0.008429
+        2022-05-07       NaN       NaN
+        2022-05-10       NaN       NaN
+        """
         return self._handle_output(self._downsample("var"))
 
 
@@ -491,3 +749,33 @@ class SeriesResampler(Resampler[Series]):
 
     def _handle_output(self, psdf: DataFrame) -> Series:
         return first_series(psdf).rename(self._psser.name)
+
+
+def _test() -> None:
+    import os
+    import doctest
+    import sys
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.resample
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.resample.__dict__.copy()
+    globs["ps"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("pyspark.pandas.resample tests")
+        .getOrCreate()
+    )
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.resample,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()
