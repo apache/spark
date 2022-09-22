@@ -30,7 +30,7 @@ import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{SparkContext, SparkEnv}
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{
@@ -45,15 +45,15 @@ import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.ExtendedMode
 
 /**
- * The SparkConnectService Implementation.
+ * The SparkConnectService implementation.
  *
  * This class implements the service stub from the generated code of GRPC.
  *
  * @param debug
  *   delegates debug behavior to the handlers.
  */
-@Experimental
-@Since("3.3.1")
+@Unstable
+@Since("3.4.0")
 class SparkConnectService(debug: Boolean)
     extends SparkConnectServiceGrpc.SparkConnectServiceImplBase
     with Logging {
@@ -72,7 +72,7 @@ class SparkConnectService(debug: Boolean)
     try {
       new SparkConnectStreamHandler(responseObserver).handle(request)
     } catch {
-      case e: Exception =>
+      case e: Throwable =>
         log.error("Error executing plan.", e)
         responseObserver.onError(
           Status.UNKNOWN.withCause(e).withDescription(e.getLocalizedMessage).asRuntimeException())
@@ -120,7 +120,7 @@ class SparkConnectService(debug: Boolean)
       responseObserver.onNext(resp.build())
       responseObserver.onCompleted()
     } catch {
-      case e: Exception =>
+      case e: Throwable =>
         log.error("Error analyzing plan.", e)
         responseObserver.onError(
           Status.UNKNOWN.withCause(e).withDescription(e.getLocalizedMessage).asRuntimeException())
@@ -134,8 +134,8 @@ class SparkConnectService(debug: Boolean)
  * @param userId
  * @param session
  */
-@Experimental
-case class SessionHolder(userId: String, session: SparkSession) {}
+@Unstable
+case class SessionHolder(userId: String, session: SparkSession)
 
 /**
  * Satic instance of the SparkConnectService.
@@ -143,7 +143,7 @@ case class SessionHolder(userId: String, session: SparkSession) {}
  * Used to start the overall SparkConnect service and provides global state to manage the
  * different SparkSession from different users connecting to the cluster.
  */
-@Experimental
+@Unstable
 object SparkConnectService {
 
   // Type alias for the SessionCacheKey. Right now this is a String but allows us to switch to a
@@ -185,7 +185,7 @@ object SparkConnectService {
   /**
    * Starts the GRPC Serivce.
    *
-   * TODO(martin.grund) Make port number configurable.
+   * TODO(SPARK-40536) Make port number configurable.
    */
   def startGRPCService(): Unit = {
     val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", true)
@@ -222,7 +222,7 @@ object SparkConnectService {
  * implement it as a Driver Plugin. To enable Spark Connect, simply make sure that the appropriate
  * JAR is available in the CLASSPATH and the driver plugin is configured to load this class.
  */
-@Experimental
+@Unstable
 class SparkConnectPlugin extends SparkPlugin {
 
   /**

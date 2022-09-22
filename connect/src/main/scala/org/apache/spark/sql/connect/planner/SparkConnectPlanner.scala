@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, plans}
@@ -49,8 +49,8 @@ final case class InvalidPlanInput(
     private val cause: Throwable = None.orNull)
     extends Exception(message, cause)
 
-@Experimental
-@Since("3.3.1")
+@Unstable
+@Since("3.4.0")
 class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   def transform(): LogicalPlan = {
@@ -142,7 +142,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   /**
    * Transforms the protocol buffers literal into the appropriate Catalyst literal expression.
    *
-   * TODO: Missing support for Instant, BigDecimal, LocalDate, LocalTimestamp, Duration, Period.
+   * TODO(SPARK-40533): Missing support for Instant, BigDecimal, LocalDate, LocalTimestamp,
+   *   Duration, Period.
    * @param lit
    * @return
    *   Expression
@@ -215,7 +216,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     logical.Join(
       left = transformRelation(rel.getLeft),
       right = transformRelation(rel.getRight),
-      // TODO
+      // TODO(SPARK-40534)
       joinType = plans.Inner,
       condition = Some(transformExpression(rel.getOn)),
       hint = logical.JoinHint.NONE)

@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{Request, Response}
 import org.apache.spark.internal.Logging
@@ -38,12 +38,11 @@ import org.apache.spark.sql.execution.adaptive.{
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.ArrowUtils
 
-@Experimental
-@Since("3.3.1")
+@Unstable
+@Since("3.4.0")
 class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) extends Logging {
 
   def handle(v: Request): Unit = {
-    // Preconditions.checkState(v.userContext.nonEmpty, "User Context must be present")
     val session =
       SparkConnectService.getOrCreateIsolatedSession(v.getUserContext.getUserId).session
     v.getPlan.getOpTypeCase match {
@@ -68,9 +67,6 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
       ByteString.copyFrom(ArrowUtils.toArrowSchema(rows.schema, timeZoneId).toByteArray)
 
     val textSchema = rows.schema.fields.map(f => f.name).mkString("|")
-
-    // TODO empty results (except limit 0) will not yield a schema.
-
     val data = rows.collect().map(x => x.toSeq.mkString("|")).mkString("\n")
     val bbb = proto.Response.CSVBatch.newBuilder
       .setRowCount(-1)

@@ -21,15 +21,15 @@ import scala.collection.JavaConverters._
 
 import com.google.common.collect.{Lists, Maps}
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.types.StringType
 
-@Experimental
-@Since("3.3.1")
+@Unstable
+@Since("3.4.0")
 class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) {
 
   lazy val pythonVersion =
@@ -44,14 +44,14 @@ class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) 
   }
 
   // This is a helper function that registers a new Python function in the
-  // [[SparkSession]].
+  // `SparkSession`.
   def handleCreateScalarFunction(cf: proto.CreateScalarFunction): Unit = {
     val function = SimplePythonFunction(
       cf.getSerializedFunction.toByteArray,
       Maps.newHashMap(),
       Lists.newArrayList(),
       pythonVersion,
-      "3.9", // TODO This needs to be an actual version.
+      "3.9", // TODO(SPARK-40532) This needs to be an actual Python version.
       Lists.newArrayList(),
       null)
 
