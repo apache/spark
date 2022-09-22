@@ -224,7 +224,7 @@ class UnivocityParser(
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
             // compatibility if enabled.
-            if (!enableParsingFallbackForTimestampType) {
+            if (!enableParsingFallbackForDateType) {
               throw e
             }
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
@@ -244,7 +244,7 @@ class UnivocityParser(
             } else {
               // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
               // compatibility if enabled.
-              if (!enableParsingFallbackForDateType) {
+              if (!enableParsingFallbackForTimestampType) {
                 throw e
               }
               val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))

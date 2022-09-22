@@ -238,7 +238,7 @@ class ParseException(
     val stop: Origin,
     errorClass: Option[String] = None,
     errorSubClass: Option[String] = None,
-    messageParameters: Array[String] = Array.empty,
+    messageParameters: Map[String, String] = Map.empty,
     queryContext: Array[QueryContext] = ParseException.getQueryContext())
   extends AnalysisException(
     message,
@@ -250,14 +250,7 @@ class ParseException(
     errorSubClass,
     messageParameters) {
 
-  def this(message: String, ctx: ParserRuleContext) = {
-    this(Option(ParserUtils.command(ctx)),
-      message,
-      ParserUtils.position(ctx.getStart),
-      ParserUtils.position(ctx.getStop))
-  }
-
-  def this(errorClass: String, messageParameters: Array[String], ctx: ParserRuleContext) =
+  def this(errorClass: String, messageParameters: Map[String, String], ctx: ParserRuleContext) =
     this(Option(ParserUtils.command(ctx)),
       SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
       ParserUtils.position(ctx.getStart),
@@ -266,11 +259,15 @@ class ParseException(
       None,
       messageParameters)
 
-  def this(errorClass: String,
-           errorSubClass: String,
-           messageParameters: Array[String],
-           ctx: ParserRuleContext) =
-    this(Option(ParserUtils.command(ctx)),
+  def this(errorClass: String, ctx: ParserRuleContext) = this(errorClass, Map.empty, ctx)
+
+  def this(
+      errorClass: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String],
+      ctx: ParserRuleContext) =
+    this(
+      Option(ParserUtils.command(ctx)),
       SparkThrowableHelper.getMessage(errorClass, errorSubClass, messageParameters),
       ParserUtils.position(ctx.getStart),
       ParserUtils.position(ctx.getStop),
@@ -284,7 +281,7 @@ class ParseException(
       start: Origin,
       stop: Origin,
       errorClass: String,
-      messageParameters: Array[String]) =
+      messageParameters: Map[String, String]) =
     this(
       command,
       SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
@@ -319,7 +316,7 @@ class ParseException(
     val (cls, subCls, params) =
       if (errorClass == Some("PARSE_SYNTAX_ERROR") && cmd.trim().isEmpty) {
         // PARSE_EMPTY_STATEMENT error class overrides the PARSE_SYNTAX_ERROR when cmd is empty
-        (Some("PARSE_EMPTY_STATEMENT"), None, Array[String]())
+        (Some("PARSE_EMPTY_STATEMENT"), None, Map.empty[String, String])
       } else {
         (errorClass, errorSubClass, messageParameters)
       }

@@ -1728,20 +1728,6 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     }
   }
 
-  test("SPARK-24544: test print actual failure cause when look up function failed") {
-    withBasicCatalog { catalog =>
-      val cause = intercept[NoSuchFunctionException] {
-        catalog.failFunctionLookup(FunctionIdentifier("failureFunc"),
-          Some(new Exception("Actual error")))
-      }
-
-      // fullStackTrace will be printed, but `cause.getMessage` has been
-      // override in `AnalysisException`,so here we get the root cause
-      // exception message for check.
-      assert(cause.cause.get.getMessage.contains("Actual error"))
-    }
-  }
-
   test("expire table relation cache if TTL is configured") {
     case class TestCommand() extends LeafCommand
 

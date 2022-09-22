@@ -79,6 +79,9 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
     def test_rolling_mean(self):
         self._test_rolling_func("mean")
 
+    def test_rolling_quantile(self):
+        self._test_rolling_func(lambda x: x.quantile(0.5), lambda x: x.quantile(0.5, "lower"))
+
     def test_rolling_sum(self):
         self._test_rolling_func("sum")
 
@@ -211,6 +214,11 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
 
     def test_groupby_rolling_mean(self):
         self._test_groupby_rolling_func("mean")
+
+    def test_groupby_rolling_quantile(self):
+        self._test_groupby_rolling_func(
+            lambda x: x.quantile(0.5), lambda x: x.quantile(0.5, "lower")
+        )
 
     def test_groupby_rolling_sum(self):
         self._test_groupby_rolling_func("sum")

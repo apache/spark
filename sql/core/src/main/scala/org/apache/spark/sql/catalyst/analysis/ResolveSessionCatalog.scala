@@ -216,18 +216,22 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
-    case DropTable(ResolvedV1TableIdentifier(ident), ifExists, purge) =>
+    case DropTable(ResolvedV1Identifier(ident), ifExists, purge) =>
       DropTableCommand(ident, ifExists, isView = false, purge = purge)
 
-    case DropTable(_: ResolvedPersistentView, ifExists, purge) =>
-      throw QueryCompilationErrors.cannotDropViewWithDropTableError
-
     // v1 DROP TABLE supports temp view.
-    case DropTable(ResolvedTempView(ident, _), ifExists, purge) =>
-      DropTableCommand(ident.asTableIdentifier, ifExists, isView = false, purge = purge)
+    case DropTable(ResolvedIdentifier(FakeSystemCatalog, ident), _, _) =>
+      DropTempViewCommand(ident)
 
-    case DropView(ResolvedViewIdentifier(ident), ifExists) =>
+    case DropView(ResolvedV1Identifier(ident), ifExists) =>
       DropTableCommand(ident, ifExists, isView = true, purge = false)
+
+    case DropView(r @ ResolvedIdentifier(catalog, ident), _) =>
+      if (catalog == FakeSystemCatalog) {
+        DropTempViewCommand(ident)
+      } else {
+        throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
+      }
 
     case c @ CreateNamespace(DatabaseNameInSessionCatalog(name), _, _) if conf.useV1Command =>
       val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)

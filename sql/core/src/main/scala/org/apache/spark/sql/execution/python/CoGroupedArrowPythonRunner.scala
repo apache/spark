@@ -48,7 +48,7 @@ class CoGroupedArrowPythonRunner(
     conf: Map[String, String])
   extends BasePythonRunner[
     (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](funcs, evalType, argOffsets)
-  with PythonArrowOutput {
+  with BasicPythonArrowOutput {
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 

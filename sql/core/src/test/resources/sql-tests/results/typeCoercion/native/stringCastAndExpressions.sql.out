@@ -101,7 +101,22 @@ select cast(a as array<string>) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't.a' due to data type mismatch: cannot cast string to array<string>; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITHOUT_SUGGESTION",
+  "messageParameters" : {
+    "sqlExpr" : "\"a\"",
+    "srcType" : "\"STRING\"",
+    "targetType" : "\"ARRAY<STRING>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "cast(a as array<string>)"
+  } ]
+}
 
 
 -- !query
@@ -110,7 +125,22 @@ select cast(a as struct<s:string>) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't.a' due to data type mismatch: cannot cast string to struct<s:string>; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITHOUT_SUGGESTION",
+  "messageParameters" : {
+    "sqlExpr" : "\"a\"",
+    "srcType" : "\"STRING\"",
+    "targetType" : "\"STRUCT<s: STRING>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "cast(a as struct<s:string>)"
+  } ]
+}
 
 
 -- !query
@@ -119,7 +149,22 @@ select cast(a as map<string, string>) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't.a' due to data type mismatch: cannot cast string to map<string,string>; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITHOUT_SUGGESTION",
+  "messageParameters" : {
+    "sqlExpr" : "\"a\"",
+    "srcType" : "\"STRING\"",
+    "targetType" : "\"MAP<STRING, STRING>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "cast(a as map<string, string>)"
+  } ]
+}
 
 
 -- !query
@@ -140,8 +185,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
   "messageParameters" : {
-    "pattern" : "'aa'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'aa'"
   }
 }
 
@@ -164,8 +209,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
   "messageParameters" : {
-    "pattern" : "'aa'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'aa'"
   }
 }
 
@@ -188,8 +233,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
   "messageParameters" : {
-    "pattern" : "'aa'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'aa'"
   }
 }
 
