@@ -17,12 +17,11 @@
 
 package org.apache.spark.mllib.api.python
 
-import java.util.{List => JList, Map => JMap}
+import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.feature.SkipGramModel
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
