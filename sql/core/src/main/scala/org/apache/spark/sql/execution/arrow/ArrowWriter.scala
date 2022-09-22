@@ -98,16 +98,6 @@ class ArrowWriter(val root: VectorSchemaRoot, fields: Array[ArrowFieldWriter]) {
     count += 1
   }
 
-  def sizeInBytes(): Int = {
-    var i = 0
-    var bytes = 0
-    while (i < fields.size) {
-      bytes += fields(i).getSizeInBytes()
-      i += 1
-    }
-    bytes
-  }
-
   def finish(): Unit = {
     root.setRowCount(count)
     fields.foreach(_.finish())
@@ -140,10 +130,6 @@ private[arrow] abstract class ArrowFieldWriter {
       setValue(input, ordinal)
     }
     count += 1
-  }
-
-  def getSizeInBytes(): Int = {
-    valueVector.getBufferSizeFor(count)
   }
 
   def finish(): Unit = {
