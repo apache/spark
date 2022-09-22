@@ -1022,7 +1022,7 @@ class Word2Vec:
         return Word2VecModel(jmodel)
 
 
-class SkipGramModel(JavaVectorTransformer, JavaSaveable, JavaLoader["SkipGramModel"]):
+class SkipGramModel(JavaSaveable, JavaLoader["SkipGramModel"]):
     """
     class for SkipGram model
     """
@@ -1057,7 +1057,7 @@ class SkipGramModel(JavaVectorTransformer, JavaSaveable, JavaLoader["SkipGramMod
         return zip(words, similarity)
 
     @since("3.4.0")
-    def getVectors(self) -> RDD[Tuple[str, Tuple[int, List[float], List[float]:
+    def getVectors(self) -> RDD[Tuple[str, Tuple[int, List[float], List[float]]:
         """
         Returns a map of words to their vector representations.
         """
