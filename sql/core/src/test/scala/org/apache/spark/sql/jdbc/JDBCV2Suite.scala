@@ -1255,13 +1255,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
         val df4 = spark.table("h2.test.employee")
           .filter(($"salary" > 1000d).and($"salary" < 12000d))
-        checkFiltersRemoved(df4, ansiMode)
-        val expectedPlanFragment4 = if (ansiMode) {
-          "PushedFilters: [SALARY IS NOT NULL, " +
-            "CAST(SALARY AS double) > 1000.0, CAST(SALARY AS double) < 12000.0], "
-        } else {
-          "PushedFilters: [SALARY IS NOT NULL], "
-        }
+        checkFiltersRemoved(df4)
+        val expectedPlanFragment4 = "PushedFilters: [SALARY IS NOT NULL, " +
+          "SALARY > 1000.00, SALARY < 12000.00], "
         checkPushedInfo(df4, expectedPlanFragment4)
         checkAnswer(df4, Seq(Row(1, "amy", 10000, 1000, true),
           Row(1, "cathy", 9000, 1200, false), Row(2, "david", 10000, 1300, true)))
@@ -1274,7 +1270,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           "PushedFilters: [DEPT IS NOT NULL, ABS(DEPT - 3) > 1, " +
             "(COALESCE(CAST(SALARY AS double), BONUS)) > 2000.0]"
         } else {
-          "PushedFilters: [DEPT IS NOT NULL]"
+          "PushedFilters: [DEPT IS NOT NULL, " +
+            "(COALESCE(CAST(SALARY AS double), BONUS)) > 2000.0]"
         }
         checkPushedInfo(df5, expectedPlanFragment5)
         checkAnswer(df5, Seq(Row(1, "amy", 10000, 1000, true),
