@@ -39,7 +39,6 @@ import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.util.Utils.tryWithResource
 
-
 class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
 
   def getSparkConf(initialExecutor: Int = 1, minExecutor: Int = 1): SparkConf = {
