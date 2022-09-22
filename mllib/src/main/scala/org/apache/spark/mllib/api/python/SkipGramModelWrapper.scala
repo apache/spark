@@ -47,8 +47,8 @@ private[python] class SkipGramModelWrapper(model: SkipGramModel) {
    * @param num number of synonyms to find
    * @return a list consisting of a list of words and a vector of cosine similarities
    */
-  def findSynonyms(vector: JList[Float], num: Int): JList[Object] = {
-    prepareResult(model.findSynonyms(vector.iterator().asScala.toArray, num))
+  def findSynonyms(vector: Vector, num: Int): JList[Object] = {
+    prepareResult(model.findSynonyms(vector.toArray.map(_.toFloat), num))
   }
 
   private def prepareResult(result: Array[(String, Double)]) = {

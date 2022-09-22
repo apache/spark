@@ -48,6 +48,8 @@ __all__ = [
     "IDF",
     "Word2Vec",
     "Word2VecModel",
+    "SkipGram",
+    "SkipGramModel",
     "ChiSqSelector",
     "ChiSqSelectorModel",
     "ElementwiseProduct",
@@ -1018,6 +1020,245 @@ class Word2Vec:
             int(self.windowSize),
         )
         return Word2VecModel(jmodel)
+
+
+class SkipGramModel(JavaVectorTransformer, JavaSaveable, JavaLoader["SkipGramModel"]):
+    """
+    class for SkipGram model
+    """
+
+    @since("3.4.0")
+    def findSynonyms(self, word: Union[str, "VectorLike"], num: int) -> Iterable[Tuple[str, float]]:
+        """
+        Find synonyms of a word
+
+        .. versionadded:: 1.2.0
+
+        Parameters
+        ----------
+
+        word : str or  :py:class:`pyspark.mllib.linalg.Vector`
+            a word or a vector representation of word
+        num : int
+            number of synonyms to find
+
+        Returns
+        -------
+        :py:class:`collections.abc.Iterable`
+            array of (word, cosineSimilarity)
+
+        Notes
+        -----
+        Local use only
+        """
+        if not isinstance(word, str):
+            word = _convert_to_vector(word)
+        words, similarity = self.call("findSynonyms", word, num)
+        return zip(words, similarity)
+
+    @classmethod
+    @since("3.4.0")
+    def load(cls, sc: SparkContext, path: str) -> "SkipGramModel":
+        """
+        Load a model from the given path.
+        """
+        assert sc._jvm is not None
+
+        jmodel = sc._jvm.org.apache.spark.mllib.feature.SkipGramModel.load(sc._jsc.sc(), path)
+        model = sc._jvm.org.apache.spark.mllib.api.python.SkipGramModelWrapper(jmodel)
+        return SkipGramModel(model)
+
+
+class SkipGram:
+    """SkipGram creates vector representation of words in a text corpus.
+    The algorithm first constructs a vocabulary from the corpus
+    and then learns vector representation of words in the vocabulary.
+    The vector representation can be used as features in
+    natural language processing and machine learning algorithms.
+
+    We used skip-gram model in our implementation and negative sampling
+    method to train the model. The variable names in the
+    implementation matches the original C implementation.
+
+    For original C implementation,
+    see https://code.google.com/p/word2vec/
+    For research papers, see
+    Efficient Estimation of Word Representations in Vector Space
+    and Distributed Representations of Words and Phrases and their
+    Compositionality.
+
+    .. versionadded:: 1.2.0
+
+    Examples
+    --------
+    >>> sentence = "a b " * 100 + "a c " * 10
+    >>> localDoc = [sentence, sentence]
+    >>> doc = sc.parallelize(localDoc).map(lambda line: line.split(" "))
+    >>> model = SkipGram().setVectorSize(10).fit(doc)
+
+    Querying for synonyms of a word will not return that word:
+
+    >>> syms = model.findSynonyms("a", 2)
+    >>> [s[0] for s in syms]
+    ['b', 'c']
+
+    But querying for synonyms of a vector may return the word whose
+    representation is that vector:
+
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> model.save(sc, path)
+    >>> sameModel = SkipGram.load(sc, path)
+    >>> syms = sameModel.findSynonyms("a", 2)
+    >>> [s[0] for s in syms]
+    ['b', 'c']
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
+    """
+
+    def __init__(self) -> None:
+        """
+        Construct SkipGram instance
+        """
+        self.vectorSize = 100
+        self.learningRate = 0.025
+        self.numPartitions = 1
+        self.numIterations = 1
+        self.minCount = 5
+        self.windowSize = 5
+        self.numThread = 1
+        self.negative = 5
+        self.sample = 0
+        self.pow = 0
+        self.intermediateRDDStorageLevel = "memory_and_disk"
+
+    @since("3.4.0")
+    def setVectorSize(self, vectorSize: int) -> "SkipGram":
+        """
+        Sets vector size (default: 100).
+        """
+        self.vectorSize = vectorSize
+        return self
+
+    @since("3.4.0")
+    def setLearningRate(self, learningRate: float) -> "SkipGram":
+        """
+        Sets initial learning rate (default: 0.025).
+        """
+        self.learningRate = learningRate
+        return self
+
+    @since("3.4.0")
+    def setNumPartitions(self, numPartitions: int) -> "SkipGram":
+        """
+        Sets number of partitions (default: 1). Use a small number for
+        accuracy.
+        """
+        self.numPartitions = numPartitions
+        return self
+
+    @since("3.4.0")
+    def setNumIterations(self, numIterations: int) -> "SkipGram":
+        """
+        Sets number of iterations (default: 1), which should be smaller
+        than or equal to number of partitions.
+        """
+        self.numIterations = numIterations
+        return self
+
+    @since("3.4.0")
+    def setMinCount(self, minCount: int) -> "SkipGram":
+        """
+        Sets minCount, the minimum number of times a token must appear
+        to be included in the model's vocabulary (default: 5).
+        """
+        self.minCount = minCount
+        return self
+
+    @since("3.4.0")
+    def setWindowSize(self, windowSize: int) -> "SkipGram":
+        """
+        Sets window size (default: 5).
+        """
+        self.windowSize = windowSize
+        return self
+
+    @since("3.4.0")
+    def setNumThread(self, numThread: int) -> "SkipGram":
+        """
+        Sets numThread (default: 1).
+        """
+        self.numThread = numThread
+        return self
+
+    @since("3.4.0")
+    def setNegative(self, negative: int) -> "SkipGram":
+        """
+        Sets negative (default: 5).
+        """
+        self.negative = negative
+        return self
+
+    @since("3.4.0")
+    def setSample(self, sample: float) -> "SkipGram":
+        """
+        Sets sample (default: 0).
+        """
+        self.sample = sample
+        return self
+
+    @since("3.4.0")
+    def setPow(self, pow: float) -> "SkipGram":
+        """
+        Sets pow (default: 0).
+        """
+        self.pow = pow
+        return self
+
+    @since("3.4.0")
+    def setIntermediateRDDStorageLevel(self, intermediateRDDStorageLevel: str) -> "SkipGram":
+        """
+        Sets intermediateRDDStorageLevel (default: "memory_and_disk")
+        """
+        self.intermediateRDDStorageLevel = intermediateRDDStorageLevel
+        return self
+
+    def fit(self, data: RDD[List[str]]) -> "SkipGramModel":
+        """
+        Computes the vector representation of each word in vocabulary.
+
+        .. versionadded:: 1.2.0
+
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            training data. RDD of list of string
+
+        Returns
+        -------
+        :py:class:`SkipGramModel`
+        """
+        if not isinstance(data, RDD):
+            raise TypeError("data should be an RDD of list of string")
+        jmodel = callMLlibFunc(
+            "trainSkipGramModel",
+            data,
+            int(self.vectorSize),
+            float(self.learningRate),
+            int(self.numPartitions),
+            int(self.numThread),
+            int(self.numIterations),
+            float(self.pow),
+            float(self.sample),
+            int(self.negative),
+            int(self.minCount),
+            int(self.windowSize),
+            str(self.intermediateRDDStorageLevel),
+        )
+        return SkipGramModel(jmodel)
 
 
 class ElementwiseProduct(VectorTransformer):

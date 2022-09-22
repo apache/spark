@@ -667,6 +667,53 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib SkipGram fit(). This stub returns a
+   * handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on
+   * exit; see the Py4J documentation.
+   * @param dataJRDD input JavaRDD
+   * @param vectorSize size of vector
+   * @param learningRate initial learning rate
+   * @param numPartitions number of partitions
+   * @param numThread number of threads
+   * @param numIterations number of iterations
+   * @param pow word frequency power
+   * @param sample subsampling rate
+   * @param negative number of the negative samples
+   * @param windowSize size of window
+   * @param intermediateRDDStorageLevel storage level for intermetade uses
+   * @return A handle to java SkipGramWrapper instance at python side
+   */
+  def trainSkipGramModel(
+      dataJRDD: JavaRDD[java.util.ArrayList[String]],
+      vectorSize: Int,
+      learningRate: Double,
+      numPartitions: Int,
+      numThread: Int,
+      numIterations: Int,
+      pow: Double,
+      sample: Double,
+      negative: Int,
+      minCount: Int,
+      windowSize: Int,
+      intermediateRDDStorageLevel: String): SkipGramModelWrapper = {
+    val skipGram = new SkipGram()
+      .setVectorSize(vectorSize)
+      .setPow(pow)
+      .setSample(sample)
+      .setNumThread(numThread)
+      .setLearningRate(learningRate)
+      .setNegative(negative)
+      .setNumPartitions(numPartitions)
+      .setNumIterations(numIterations)
+      .setMinCount(minCount)
+      .setWindowSize(windowSize)
+      .setIntermediateRDDStorageLevel(StorageLevel.fromString(intermediateRDDStorageLevel))
+    val model = skipGram.fit(dataJRDD.rdd.map(_.toArray()))
+    new SkipGramModelWrapper(model)
+  }
+
+  /**
    * Java stub for Python mllib Word2Vec fit(). This stub returns a
    * handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on
