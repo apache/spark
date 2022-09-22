@@ -56,7 +56,7 @@ class MessageDefinition(val messageType: DescriptorProto = null) {
     }
 
     def addField(label: FieldDescriptorProto.Label, typeName: String, name: String, num: Int,
-                 defaultVal: String) {
+                 defaultVal: String) = {
       val fieldBuilder: FieldDescriptorProto.Builder = FieldDescriptorProto.newBuilder()
       fieldBuilder.setLabel(label)
       val primType: FieldDescriptorProto.Type = protoTypeMap.getOrElse(typeName, null)

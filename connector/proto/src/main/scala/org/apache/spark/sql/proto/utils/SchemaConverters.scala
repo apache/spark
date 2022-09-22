@@ -19,6 +19,7 @@ package org.apache.spark.sql.proto.utils
 import java.util
 
 import scala.collection.mutable
+import scala.collection.JavaConverters._
 
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 
@@ -45,8 +46,7 @@ object SchemaConverters {
   }
 
   def toSqlTypeHelper(descriptor: Descriptor): SchemaType = ScalaReflectionLock.synchronized {
-    import scala.collection.JavaConverters._
-    SchemaType(StructType(descriptor.getFields.asScala.flatMap(structFieldFor)), nullable = true)
+    SchemaType(StructType(descriptor.getFields.asScala.flatMap(structFieldFor).toSeq), nullable = true)
   }
 
   def structFieldFor(fd: FieldDescriptor): Option[StructField] = {
@@ -61,8 +61,7 @@ object SchemaConverters {
       case BYTE_STRING => Some(BinaryType)
       case ENUM => Some(StringType)
       case MESSAGE =>
-        import collection.JavaConverters._
-        Option(fd.getMessageType.getFields.asScala.flatMap(structFieldFor))
+        Option(fd.getMessageType.getFields.asScala.flatMap(structFieldFor).toSeq)
           .filter(_.nonEmpty)
           .map(StructType.apply)
 
@@ -77,7 +76,7 @@ object SchemaConverters {
   /**
    * Converts a Spark SQL schema to a corresponding Proto Descriptor
    *
-   * @since 2.4.0
+   * @since 3.4.0
    */
   def toProtoType(catalystType: DataType,
                   nullable: Boolean = false,
@@ -91,7 +90,7 @@ object SchemaConverters {
   }
 
   def toMessageDefinition(catalystType: DataType, recordName: String,
-                          nameSpace: String, schemaBuilder: DynamicSchema#Builder) {
+                          nameSpace: String, schemaBuilder: DynamicSchema#Builder) = {
     catalystType match {
       case st: StructType =>
         val queue = mutable.Queue[ProtoMessage]()

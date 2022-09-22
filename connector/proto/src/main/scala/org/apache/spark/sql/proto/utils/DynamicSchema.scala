@@ -27,7 +27,7 @@ import com.google.protobuf.Descriptors.{Descriptor, FileDescriptor}
 class DynamicSchema {
   var fileDescSet: FileDescriptorSet = null
 
-  def this(fileDescSet: FileDescriptorSet) {
+  def this(fileDescSet: FileDescriptorSet) = {
     this
     this.fileDescSet = fileDescSet;
     val fileDescMap: util.Map[String, FileDescriptor] = init(fileDescSet)
@@ -52,7 +52,7 @@ class DynamicSchema {
     new Builder()
   }
 
-  def addMessageType(msgType: Descriptor, scope: String, msgDupes: util.Set[String]) {
+  def addMessageType(msgType: Descriptor, scope: String, msgDupes: util.Set[String]) : Unit = {
     val msgTypeNameFull: String = msgType.getFullName()
     val msgTypeNameShort: String = {
       if (scope == null) {
@@ -71,8 +71,9 @@ class DynamicSchema {
     messageDescriptorMapFull.put(msgTypeNameFull, msgType);
     messageMsgDescriptorMapShort.put(msgTypeNameShort, msgType);
 
-    for (nestedType <- msgType.getNestedTypes().asScala)  {
-      addMessageType(nestedType, msgTypeNameShort, msgDupes)
+
+    for(nestedType <- msgType.getNestedTypes.asScala) {
+        addMessageType(nestedType, msgTypeNameShort, msgDupes)
     }
   }
 
