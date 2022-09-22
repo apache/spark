@@ -134,7 +134,7 @@ class UnivocityParser(
       .orElse(SQLConf.get.csvEnableDateTimeParsingFallback)
       .getOrElse {
         SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
-          options.dateFormatInRead.isEmpty
+          options.dateFormatParamOpt.isEmpty
       }
 
   // Retrieve the raw record string.

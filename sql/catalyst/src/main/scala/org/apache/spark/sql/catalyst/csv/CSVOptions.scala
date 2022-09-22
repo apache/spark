@@ -155,7 +155,7 @@ class CSVOptions(
    * Enabled by default.
    *
    * Not compatible with legacyTimeParserPolicy == LEGACY since legacy date parser will accept
-   * extra trailing characters.
+   * extra trailing characters. Thus, disabled when legacyTimeParserPolicy == LEGACY
    */
   val prefersDate = {
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
@@ -165,13 +165,14 @@ class CSVOptions(
     }
   }
 
+  val dateFormatParamOpt: Option[String] = parameters.get("dateFormat")
   // Provide a default value for dateFormatInRead when prefersDate. This ensures that the
   // Iso8601DateFormatter (with strict date parsing) is used for date inference
   val dateFormatInRead: Option[String] =
     if (prefersDate) {
-      Option(parameters.getOrElse("dateFormat", DateFormatter.defaultPattern))
+      Option(dateFormatParamOpt.getOrElse(DateFormatter.defaultPattern))
     } else {
-      parameters.get("dateFormat")
+      dateFormatParamOpt
     }
   val dateFormatInWrite: String = parameters.getOrElse("dateFormat", DateFormatter.defaultPattern)
 
