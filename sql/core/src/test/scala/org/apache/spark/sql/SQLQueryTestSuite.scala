@@ -251,14 +251,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           /* Do nothing */
         }
       case udfTestCase: UDFTest
-          if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && !shouldTestScalarPandasUDFs =>
+          if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && !shouldTestPandasUDFs =>
         ignore(s"${testCase.name} is skipped because pyspark," +
           s"pandas and/or pyarrow were not available in [$pythonExec].") {
           /* Do nothing */
         }
       case udfTestCase: UDFTest
           if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
-            !shouldTestGroupedAggPandasUDFs =>
+            !shouldTestPandasUDFs =>
         ignore(s"${testCase.name} is skipped because pyspark," +
           s"pandas and/or pyarrow were not available in [$pythonExec].") {
           /* Do nothing */
@@ -447,12 +447,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           if udfTestCase.udf.isInstanceOf[TestPythonUDF] && shouldTestPythonUDFs =>
         s"${testCase.name}${System.lineSeparator()}Python: $pythonVer${System.lineSeparator()}"
       case udfTestCase: UDFTest
-          if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && shouldTestScalarPandasUDFs =>
+          if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && shouldTestPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
       case udfTestCase: UDFTest
           if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
-            shouldTestGroupedAggPandasUDFs =>
+            shouldTestPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
       case _ =>

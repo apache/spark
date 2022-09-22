@@ -14,7 +14,7 @@ and message parameters rather than an arbitrary error message.
 4. Check if the exception type already extends `SparkThrowable`.
    If true, skip to step 6.
 5. Mix `SparkThrowable` into the exception.
-6. Throw the exception with the error class and message parameters.
+6. Throw the exception with the error class and message parameters. If the same exception is thrown in several places, create an util function in a central place such as `QueryCompilationErrors.scala` to instantiate the exception.
 
 ### Before
 
@@ -65,6 +65,8 @@ To access error fields, catch exceptions that extend `org.apache.spark.SparkThro
 ### Error class
 
 Error classes are a succinct, human-readable representation of the error category.
+
+An uncategorized errors can be assigned to a legacy error class with the prefix `_LEGACY_ERROR_TEMP_` and an unused sequential number, for instance `_LEGACY_ERROR_TEMP_0053`.
 
 #### Invariants
 

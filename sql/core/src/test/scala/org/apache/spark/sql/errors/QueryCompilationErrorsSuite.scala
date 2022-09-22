@@ -128,7 +128,7 @@ class QueryCompilationErrorsSuite
 
   test("INVALID_PANDAS_UDF_PLACEMENT: Using aggregate function with grouped aggregate pandas UDF") {
     import IntegratedUDFTestUtils._
-    assume(shouldTestGroupedAggPandasUDFs)
+    assume(shouldTestPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),
@@ -180,7 +180,7 @@ class QueryCompilationErrorsSuite
 
   test("UNSUPPORTED_FEATURE: Using pandas UDF aggregate expression with pivot") {
     import IntegratedUDFTestUtils._
-    assume(shouldTestGroupedAggPandasUDFs)
+    assume(shouldTestPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),

@@ -819,5 +819,325 @@
       "Writing job aborted"
     ],
     "sqlState" : "40000"
+  },
+  "_LEGACY_ERROR_TEMP_0001" : {
+    "message" : [
+      "Invalid InsertIntoContext"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0002" : {
+    "message" : [
+      "INSERT OVERWRITE DIRECTORY is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0003" : {
+    "message" : [
+      "Columns aliases are not allowed in <op>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0004" : {
+    "message" : [
+      "Empty source for merge: you should specify a source table/subquery in merge."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0005" : {
+    "message" : [
+      "Unrecognized matched action: <matchedAction>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0006" : {
+    "message" : [
+      "The number of inserted values cannot match the fields."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0007" : {
+    "message" : [
+      "Unrecognized not matched action: <notMatchedAction>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0008" : {
+    "message" : [
+      "There must be at least one WHEN clause in a MERGE statement."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0009" : {
+    "message" : [
+      "When there are more than one MATCHED clauses in a MERGE statement, only the last MATCHED clause can omit the condition."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0010" : {
+    "message" : [
+      "When there are more than one NOT MATCHED clauses in a MERGE statement, only the last NOT MATCHED clause can omit the condition."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0011" : {
+    "message" : [
+      "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0012" : {
+    "message" : [
+      "DISTRIBUTE BY is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0013" : {
+    "message" : [
+      "LATERAL cannot be used together with PIVOT in FROM clause."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0014" : {
+    "message" : [
+      "TABLESAMPLE does not accept empty inputs."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0015" : {
+    "message" : [
+      "TABLESAMPLE(<msg>) is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0016" : {
+    "message" : [
+      "<bytesStr> is not a valid byte length literal, expected syntax: DIGIT+ ('B' | 'K' | 'M' | 'G')."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0017" : {
+    "message" : [
+      "Invalid escape string. Escape string must contain only one character."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0018" : {
+    "message" : [
+      "Function trim doesn't support with type <trimOption>. Please use BOTH, LEADING or TRAILING as trim type."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0019" : {
+    "message" : [
+      "Cannot parse the <valueType> value: <value>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0020" : {
+    "message" : [
+      "Cannot parse the INTERVAL value: <value>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0021" : {
+    "message" : [
+      "Literals of type '<valueType>' are currently not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0022" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0023" : {
+    "message" : [
+      "Numeric literal <rawStrippedQualifier> does not fit in range [<minValue>, <maxValue>] for type <typeName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0024" : {
+    "message" : [
+      "Can only have a single from-to unit in the interval literal syntax."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0025" : {
+    "message" : [
+      "At least one time unit should be given for interval literal."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0026" : {
+    "message" : [
+      "Can only use numbers in the interval value part for multiple unit value pairs interval form, but got invalid value: <value>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0027" : {
+    "message" : [
+      "The value of from-to unit must be a string."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0028" : {
+    "message" : [
+      "Intervals FROM <from> TO <to> are not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0029" : {
+    "message" : [
+      "Cannot mix year-month and day-time fields: <literal>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0030" : {
+    "message" : [
+      "DataType <dataType> is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0031" : {
+    "message" : [
+      "Invalid number of buckets: <describe>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0032" : {
+    "message" : [
+      "Duplicated table paths found: '<pathOne>' and '<pathTwo>'. LOCATION and the case insensitive key 'path' in OPTIONS are all used to indicate the custom table path, you can only specify one of them."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0033" : {
+    "message" : [
+      "Expected either STORED AS or STORED BY, not both."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0034" : {
+    "message" : [
+      "<operation> is not supported in Hive-style <command><msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0035" : {
+    "message" : [
+      "Operation not allowed: <message>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0036" : {
+    "message" : [
+      "Expected `NOSCAN` instead of `<ctx>`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0037" : {
+    "message" : [
+      "It is not allowed to add catalog/namespace prefix <quoted> to the table name in CACHE TABLE AS SELECT."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0038" : {
+    "message" : [
+      "CTE definition can't have duplicate names: <duplicateNames>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0039" : {
+    "message" : [
+      "Unsupported SQL statement."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0040" : {
+    "message" : [
+      "Possibly unquoted identifier <ident> detected. Please consider quoting it with back-quotes as `<ident>`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0041" : {
+    "message" : [
+      "Found duplicate clauses: <clauseName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0042" : {
+    "message" : [
+      "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use quotes, e.g., SET `key`=`value`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0043" : {
+    "message" : [
+      "Expected format is 'RESET' or 'RESET key'. If you want to include special characters in key, please use quotes, e.g., RESET `key`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0044" : {
+    "message" : [
+      "The interval value must be in the range of [-18, +18] hours with second precision."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0045" : {
+    "message" : [
+      "Invalid time zone displacement value."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0046" : {
+    "message" : [
+      "CREATE TEMPORARY TABLE without a provider is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0047" : {
+    "message" : [
+      "'ROW FORMAT' must be used with 'STORED AS'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0048" : {
+    "message" : [
+      "Unsupported operation: Used defined record reader/writer classes."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0049" : {
+    "message" : [
+      "Directory path and 'path' in OPTIONS should be specified one, but not both."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0050" : {
+    "message" : [
+      "LOCAL is supported only with file: scheme."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0051" : {
+    "message" : [
+      "Empty set in <element> grouping sets is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0052" : {
+    "message" : [
+      "CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0053" : {
+    "message" : [
+      "It is not allowed to define a TEMPORARY view with IF NOT EXISTS."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0054" : {
+    "message" : [
+      "It is not allowed to add database prefix `<database>` for the TEMPORARY view name."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0055" : {
+    "message" : [
+      "Unclosed bracketed comment"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0056" : {
+    "message" : [
+      "Invalid time travel spec: <reason>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0057" : {
+    "message" : [
+      "Support for DEFAULT column values is not implemented yet."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0058" : {
+    "message" : [
+      "Support for DEFAULT column values is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0059" : {
+    "message" : [
+      "References to DEFAULT column values are not allowed within the PARTITION clause."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0060" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0061" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0062" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0063" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0064" : {
+    "message" : [
+      "<msg>."
+    ]
   }
 }

@@ -143,8 +143,9 @@ private[spark] object SparkThrowableHelper {
         s"Undefined an error message parameter: $messageParameters")
     }
     val displayQueryContext = (if (context.isEmpty) "" else "\n") + context
+    val prefix = if (displayClass.startsWith("_LEGACY_ERROR_TEMP_")) "" else s"[$displayClass] "
 
-    s"[$displayClass] $displayMessage$displayQueryContext"
+    s"$prefix$displayMessage$displayQueryContext"
   }
 
   def getSqlState(errorClass: String): String = {
