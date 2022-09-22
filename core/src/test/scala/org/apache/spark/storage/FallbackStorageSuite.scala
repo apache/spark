@@ -18,11 +18,15 @@ package org.apache.spark.storage
 
 import java.io.{DataOutputStream, File, FileOutputStream, IOException}
 import java.nio.file.Files
+
 import scala.concurrent.duration._
+import scala.util.Random
+
 import org.apache.hadoop.conf.Configuration
 import org.mockito.{ArgumentMatchers => mc}
 import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
+
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TestUtils}
 import org.apache.spark.LocalSparkContext.withSpark
 import org.apache.spark.internal.config._
@@ -35,7 +39,6 @@ import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.util.Utils.tryWithResource
 
-import scala.util.Random
 
 class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -106,13 +109,14 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     FallbackStorage.read(conf, ShuffleBlockId(1, 2L, 0))
   }
 
-  test("fallback storage APIs - readFully") {
+  test("SPARK-39200: fallback storage APIs - readFully") {
     val conf = new SparkConf(false)
       .set("spark.app.id", "testId")
+      .set("spark.hadoop.fs.file.impl", "org.apache.spark.storage.ReadPartialFileSystem")
       .set(SHUFFLE_COMPRESS, false)
       .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
       .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
-        Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
+        "file://" + Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
     val fallbackStorage = new FallbackStorage(conf)
     val bmm = new BlockManagerMaster(new NoopRpcEndpointRef(conf), null, conf, false)
 
@@ -129,17 +133,14 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
 
     val indexFile = resolver.getIndexFile(1, 2L)
     tryWithResource(new FileOutputStream(indexFile)) { fos =>
-      tryWithResource(new DataOutputStream(fos)) { dos =>
-        dos.writeLong(0)
-        dos.writeLong(length)
-      }
+      val dos = new DataOutputStream(fos)
+      dos.writeLong(0)
+      dos.writeLong(length)
     }
 
     val dataFile = resolver.getDataFile(1, 2L)
     tryWithResource(new FileOutputStream(dataFile)) { fos =>
-      tryWithResource(new DataOutputStream(fos)) { dos =>
-        dos.write(content)
-      }
+        fos.write(content)
     }
 
     fallbackStorage.copy(ShuffleBlockInfo(1, 2L), bm)
