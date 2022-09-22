@@ -1367,17 +1367,19 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
     _.containsAnyPattern(FILTER, JOIN)) {
     case filter @ Filter(condition, child) =>
       val newFilters = filter.constraints --
-        (child.constraints ++ splitConjunctivePredicates(condition).
-          map(filter.constraints.convertToCanonicalizedIfRequired).toSet)
+        (child.constraints ++ splitConjunctivePredicates(condition).map(
+          filter.constraints.convertToCanonicalizedIfRequired).toSet)
       // do not directly use map on newFilters because the map function in ExpressionSet
       // will reccanionicalize the expression
       val decanonicalzedNewFilters = newFilters.iterator.map(
         filter.constraints.rewriteUsingAlias(_))
+
       if (decanonicalzedNewFilters.nonEmpty) {
         Filter(And(decanonicalzedNewFilters.reduce(And), condition), child)
       } else {
         filter
       }
+
     case join @ Join(left, right, joinType, conditionOpt, _) =>
       joinType match {
         // For inner join, we can infer additional filters for both sides. LeftSemi is kind of an
@@ -1392,6 +1394,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
         case RightOuter =>
           val newLeft = inferAdditionalNewFilter(left, right.constraints, conditionOpt)
           join.copy(left = newLeft)
+
         // For left join, we can only infer additional filters for right side.
         case LeftOuter | LeftAnti =>
           val newRight = inferAdditionalNewFilter(right, left.constraints, conditionOpt)
@@ -1400,20 +1403,10 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       }
   }
 
-  private def getAllConstraints(
-      left: LogicalPlan,
-      right: LogicalPlan,
-      conditionOpt: Option[Expression]): ExpressionSet = {
-    val baseConstraints = left.constraints.union(right.constraints).
-        union(ExpressionSet(conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil)))
-    baseConstraints.union(inferAdditionalConstraints(baseConstraints))
-  }
-
   private def inferNewFilter(plan: LogicalPlan, constraints: ExpressionSet): LogicalPlan = {
-    val newPredicates = constraints
-      .union(constructIsNotNullConstraints(constraints, plan.output))
-      .filter { c =>
-        c.references.nonEmpty && c.references.subsetOf(plan.outputSet) && c.deterministic
+    val newPredicates = constraints.union(constructIsNotNullConstraints(constraints, plan.output))
+      .filter {
+        c => c.references.nonEmpty && c.references.subsetOf(plan.outputSet) && c.deterministic
       } -- plan.constraints
     if (newPredicates.isEmpty) {
       plan
@@ -1457,7 +1450,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
    * In the above case d and a are attributes of the same table.
    * since d == a and a == x and since d > 13, it means x > 13
    * to get this new filer of type x > 13. the way it it is achieved is
-   1) First using the base equalTo constraints, generate extra equalTo
+   * 1) First using the base equalTo constraints, generate extra equalTo
    * constraints which means using a == x, b == y,  c == z and d == a,
    * the [[inferAdditionalConstraints]], will yield a new equality
    * constraint d == x
@@ -1483,7 +1476,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
    * @return
    */
   private def inferAdditionalNewFilter(plan: LogicalPlan, otherSideConstraint: ExpressionSet,
-    conditionOpt: Option[Expression]): LogicalPlan = {
+                                       conditionOpt: Option[Expression]): LogicalPlan = {
     conditionOpt.map(condition => {
       val predicates = splitConjunctivePredicates(condition)
       val baseEqualityConstraints = predicates.filter(_.isInstanceOf[EqualTo])
@@ -1495,13 +1488,13 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
 
       val allEqualityMappings = totalEqualityConstraints.map { case EqualTo(l, r) => (l, r) }
       val planOutput = plan.outputSet
-      val validConstraintsFilter = (constraints: Iterable[Expression]) => constraints.filter(x =>
-        x.references.subsetOf(planOutput) && !plan.constraints.contains(x))
+      val validConstraintsFilter = (constraints: Iterable[Expression]) => constraints.filter(
+        x => x.references.subsetOf(planOutput) && !plan.constraints.contains(x))
       val isAttributeContainedInAttributeSet = (expr: Expression, superSet: AttributeSet) =>
         expr.references.subsetOf(superSet)
 
-      val exprsOfOtherSide = allEqualityMappings.flatMap { case (l, r) =>
-        if (!isAttributeContainedInAttributeSet(l, planOutput)) {
+      val exprsOfOtherSide = allEqualityMappings.flatMap {
+        case (l, r) => if (!isAttributeContainedInAttributeSet(l, planOutput)) {
           if (!isAttributeContainedInAttributeSet(r, planOutput)) {
             Seq(l, r)
           } else {
@@ -1513,9 +1506,10 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
           Seq.empty[Expression]
         }
       }.toSet
-      val mappingsForThisSide = allEqualityMappings.filter{case (lhsExpr, rhsExpr) =>
-        isAttributeContainedInAttributeSet(lhsExpr, planOutput) ||
-          isAttributeContainedInAttributeSet(rhsExpr, planOutput)}
+      val mappingsForThisSide = allEqualityMappings.filter {
+        case (lhsExpr, rhsExpr) => isAttributeContainedInAttributeSet(lhsExpr, planOutput) ||
+          isAttributeContainedInAttributeSet(rhsExpr, planOutput)
+      }
       val totalNewFilters = if (exprsOfOtherSide.nonEmpty) {
         val inferredFromOtherConstraint = inferNewConstraintsForThisSideFromOtherSideConstraints(
           otherSideConstraint, exprsOfOtherSide, mappingsForThisSide)
@@ -1525,29 +1519,30 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
         // if we have x = x as a condition, then the constraint is trivial,
         // but it will still generate IsNotNull(x) constraint.
         // this will be used to generate not null constraints
-        val (trivialConstraints, constraintsPart1) = inferredFromOtherConstraint.partition(expr =>
-          expr match {
-          case EqualNullSafe(x, y) => x.canonicalized == y.canonicalized
-          case EqualTo(x, y) => x.canonicalized == y.canonicalized
-          case _ => false
-        })
-        val constraintsOfInterest = validConstraintsFilter(ExpressionSet(extraOtherConstraints ++
-          predicates ++ constraintsPart1 ++ extraEqualityConstraints)).flatMap(x => x match {
-          case IsNotNull(_: Attribute) => Seq(x)
+        val (trivialConstraints, constraintsPart1) = inferredFromOtherConstraint.partition {
+           case EqualNullSafe(x, y) => x.canonicalized == y.canonicalized
+           case EqualTo(x, y) => x.canonicalized == y.canonicalized
+           case _ => false
+        }
+        val constraintsOfInterest = validConstraintsFilter(ExpressionSet(
+          extraOtherConstraints ++ predicates ++ constraintsPart1 ++ extraEqualityConstraints))
+          .flatMap{
+          case x @ IsNotNull(_: Attribute) => Seq(x)
           case IsNotNull(exp: Expression) => validConstraintsFilter(inferIsNotNullConstraints(
             plan.constraints.rewriteUsingAlias(exp)))
-          case _ => Seq(x)
-        })
-        val newNotNulls = validConstraintsFilter(constructIsNotNullConstraints(ExpressionSet(
-          constraintsOfInterest ++ predicates ++ extraEqualityConstraints ++
+          case x => Seq(x)
+        }
+        val newNotNulls = validConstraintsFilter(constructIsNotNullConstraints(
+          ExpressionSet( constraintsOfInterest ++ predicates ++ extraEqualityConstraints ++
             extraOtherConstraints ++ trivialConstraints), plan.output))
         constraintsOfInterest ++ newNotNulls
       } else {
-        val constraintsOfInterest = validConstraintsFilter(ExpressionSet(extraOtherConstraints ++
-          predicates ++ extraEqualityConstraints))
-        constraintsOfInterest ++ validConstraintsFilter(constructIsNotNullConstraints(
-          ExpressionSet(constraintsOfInterest ++ predicates ++ extraEqualityConstraints ++
-            extraOtherConstraints), plan.output))
+        val constraintsOfInterest = validConstraintsFilter(
+          ExpressionSet(extraOtherConstraints ++ predicates ++ extraEqualityConstraints))
+        constraintsOfInterest ++ validConstraintsFilter(
+          constructIsNotNullConstraints(
+            ExpressionSet(constraintsOfInterest ++ predicates ++ extraEqualityConstraints ++
+                            extraOtherConstraints), plan.output))
       }
 
       if (totalNewFilters.isEmpty) {
@@ -1555,25 +1550,25 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       } else {
         Filter(totalNewFilters.reduce(And), plan)
       }
-
     }).getOrElse(plan)
   }
 
   private def inferNewConstraintsForThisSideFromOtherSideConstraints(
-    otherSideConstraint: ExpressionSet, exprsOfOtherSide: Set[Expression],
-    mappingsForThisSide: Seq[(Expression, Expression)]): Seq[Expression] = {
-    otherSideConstraint.getConstraintsSubsetOfAttributes(exprsOfOtherSide).map(
-      expr => expr.transformUp {
-        case _expr: Expression => mappingsForThisSide.find { case (lhsExpr, rhsExpr) =>
-          lhsExpr.canonicalized == _expr.canonicalized ||
-            rhsExpr.canonicalized == _expr.canonicalized
-        }.map { case (lhsExpr, rhsExpr) => if (lhsExpr.canonicalized == _expr.canonicalized) {
-          rhsExpr
-        } else {
-          lhsExpr
-        }}.getOrElse(_expr)
-      })
-  }
+      otherSideConstraint: ExpressionSet,
+      exprsOfOtherSide: Set[Expression],
+      mappingsForThisSide: Seq[(Expression, Expression)]): Seq[Expression] =
+    otherSideConstraint.getConstraintsSubsetOfAttributes(exprsOfOtherSide).map(_.transformUp {
+      case _expr: Expression => mappingsForThisSide.find {
+        case (lhsExpr, rhsExpr) => lhsExpr.canonicalized == _expr.canonicalized ||
+          rhsExpr.canonicalized == _expr.canonicalized
+        }.map {
+          case (lhsExpr, rhsExpr) => if (lhsExpr.canonicalized == _expr.canonicalized) {
+            rhsExpr
+          } else {
+            lhsExpr
+          }
+        }.getOrElse(_expr)
+    })
 }
 
 /**

@@ -28,18 +28,16 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
    * example, if this set contains the expression `a = 2` then that expression is guaranteed to
    * evaluate to `true` for all rows produced.
    */
-  lazy val constraints: ExpressionSet = {
-    if (conf.constraintPropagationEnabled) {
-      val newConstraints = validConstraints.union(
-        inferAdditionalConstraints(validConstraints)).union(constructIsNotNullConstraints(
-          validConstraints.getConstraintsWithDecanonicalizedNullIntolerant, output))
+  lazy val constraints: ExpressionSet = if (conf.constraintPropagationEnabled) {
+    val newConstraints = validConstraints.union(
+      inferAdditionalConstraints(validConstraints)).union(constructIsNotNullConstraints(
+        validConstraints.getConstraintsWithDecanonicalizedNullIntolerant, output))
       // Removed the criteria  c.references.nonEmpty as it was causing a constraint of the
       // of the form literal true or false being eliminated, causing idempotency check failure
       newConstraints.filter(c => c.references.subsetOf(outputSet) && c.deterministic)
     } else {
       ExpressionSet(Set.empty)
     }
-  }
 
   /**
    * This method can be overridden by any child class of QueryPlan to specify a set of constraints
@@ -49,11 +47,9 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
    *
    * See [[Canonicalize]] for more details.
    */
-  protected lazy val validConstraints: ExpressionSet =
-       if (conf.constraintPropagationEnabled) {
-         new ConstraintSet()
-       }
-       else ExpressionSet(Set.empty[Expression])
+  protected lazy val validConstraints: ExpressionSet = if (conf.constraintPropagationEnabled) {
+    new ConstraintSet()
+  } else ExpressionSet(Set.empty[Expression])
 
   // For testing purposes
   def getValidConstraints: ExpressionSet = validConstraints
@@ -75,8 +71,10 @@ trait ConstraintHelper {
         val candidateConstraints = predicates - eq
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
+
       case eq @ EqualTo(l @ Cast(_: Attribute, _, _, _), r: Attribute) =>
         inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
+
       case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _, _)) =>
         inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
 
@@ -84,6 +82,7 @@ trait ConstraintHelper {
     }
     inferredConstraints -- constraints
   }
+
   private def replaceConstraints(
       constraints: ExpressionSet,
       source: Expression,

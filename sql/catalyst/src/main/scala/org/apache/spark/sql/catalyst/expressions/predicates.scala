@@ -1081,6 +1081,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): EqualNullSafe =
     copy(left = newLeft, right = newRight)
+
   def reverseOperands(): BinaryComparison = this
 }
 
@@ -1192,6 +1193,7 @@ case class LessThanOrEqual(left: Expression, right: Expression)
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
+
   def reverseOperands(): BinaryComparison = GreaterThanOrEqual(right, left)
 }
 
