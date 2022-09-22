@@ -97,7 +97,8 @@ def _create_udf(function, return_type):
 
 def udf(function, return_type=pyspark.sql.types.StringType()):
     """
-    Returns a callable that represents the column ones arguments are applied
+    Returns a callable that represents the column once arguments are applied
+
     Parameters
     ----------
     function

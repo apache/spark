@@ -15,20 +15,24 @@ of Spark. To enable it, you only need to activate the driver plugin for Spark Co
 
 1. Build Spark as usual per the documentation.
 2. Build and package the Spark Connect package
-   ```commandline
-   ./build/mvn package
+   ```bash
+   ./build/mvn -Phive package
+   ```
+   or
+   ```shell
+   ./build/sbt -Phive package
    ```
    
 ## Run Spark Shell
 
-```commandline
+```bash
 ./bin/spark-shell --conf spark.plugins=org.apache.spark.sql.connect.service.SparkConnectPlugin
 ```
 
 ## Run Tests
 
 
-```commandline
+```bash
 ./run-tests --testnames 'pyspark.sql.tests.connect.test_spark_connect'
 ```
 

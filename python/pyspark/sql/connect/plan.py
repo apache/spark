@@ -81,7 +81,6 @@ class LogicalPlan(object):
 
         return test_plan == plan
 
-    # TODO(martin.grund) explain , schema
     def collect(self, session: "RemoteSparkSession" = None, debug: bool = False):
         plan = proto.Plan()
         plan.root.CopyFrom(self.plan(session))
@@ -90,9 +89,6 @@ class LogicalPlan(object):
             print(plan)
 
         return plan
-
-    def _i(self, indent) -> str:
-        return " " * indent
 
     def print(self, indent=0) -> str:
         ...
@@ -112,7 +108,7 @@ class Read(LogicalPlan):
         return plan
 
     def print(self, indent=0) -> str:
-        return f"{self._i(indent)}<Read table_name={self.table_name}>\n"
+        return f"{' ' * indent}<Read table_name={self.table_name}>\n"
 
     def _repr_html_(self):
         return f"""
@@ -159,7 +155,7 @@ class Project(LogicalPlan):
             if isinstance(c, Expression)
             else self.unresolved_attr(*cast(str, c).split("."))
             for c in self._raw_columns
-        ]  # [self.unresolved_attr(*x) for x in self.columns]
+        ]
         common = proto.RelationCommon()
         if self.alias is not None:
             common.alias = self.alias
@@ -172,7 +168,7 @@ class Project(LogicalPlan):
 
     def print(self, indent=0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{self._i(indent)}<Project cols={self._raw_columns}>\n{c_buf}"
+        return f"{' ' * indent}<Project cols={self._raw_columns}>\n{c_buf}"
 
     def _repr_html_(self):
         return f"""
@@ -200,7 +196,7 @@ class Filter(LogicalPlan):
 
     def print(self, indent=0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{self._i(indent)}<Filter filter={self.filter}>\n{c_buf}"
+        return f"{' ' * indent}<Filter filter={self.filter}>\n{c_buf}"
 
     def _repr_html_(self):
         return f"""
@@ -229,7 +225,7 @@ class Limit(LogicalPlan):
 
     def print(self, indent=0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{self._i(indent)}<Limit limit={self.limit} offset={self.offset}>\n{c_buf}"
+        return f"{' ' * indent}<Limit limit={self.limit} offset={self.offset}>\n{c_buf}"
 
     def _repr_html_(self):
         return f"""
@@ -289,7 +285,7 @@ class Sort(LogicalPlan):
 
     def print(self, indent=0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{self._i(indent)}<Sort columns={self.columns}>\n{c_buf}"
+        return f"{' ' * indent}<Sort columns={self.columns}>\n{c_buf}"
 
     def _repr_html_(self):
         return f"""
@@ -345,7 +341,7 @@ class Aggregate(LogicalPlan):
     def print(self, indent=0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
         return (
-            f"{self._i(indent)}<Sort columns={self.grouping_cols}"
+            f"{' ' * indent}<Sort columns={self.grouping_cols}"
             f"measures={self.measures}>\n{c_buf}"
         )
 
@@ -384,8 +380,8 @@ class Join(LogicalPlan):
         return rel
 
     def print(self, indent=0) -> str:
-        i = self._i(indent)
-        o = self._i(indent + LogicalPlan.INDENT)
+        i = ' ' * indent
+        o = ' ' * (indent + LogicalPlan.INDENT)
         n = indent + LogicalPlan.INDENT * 2
         return (
             f"{i}<Join on={self.on} how={self.how}>\n{o}"
@@ -419,8 +415,8 @@ class UnionAll(LogicalPlan):
         assert self._child is not None
         assert self.other is not None
 
-        i = self._i(indent)
-        o = self._i(indent + LogicalPlan.INDENT)
+        i = ' ' * indent
+        o = ' ' * (indent + LogicalPlan.INDENT)
         n = indent + LogicalPlan.INDENT * 2
         return (
             f"{i}UnionAll\n{o}child1=\n{self._child.print(n)}"
@@ -442,7 +438,7 @@ class UnionAll(LogicalPlan):
         """
 
 
-class Sql(LogicalPlan):
+class SQL(LogicalPlan):
     def __init__(self, query: str) -> None:
         super().__init__(None)
         self._query = query
@@ -453,7 +449,7 @@ class Sql(LogicalPlan):
         return rel
 
     def print(self, indent=0) -> str:
-        i = self._i(indent)
+        i = ' ' * indent
         sub_query = self._query.replace("\n", "")[:50]
         return f"""{i}<SQL query='{sub_query}...'>"""
 

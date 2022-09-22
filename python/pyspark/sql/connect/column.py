@@ -56,7 +56,7 @@ class LiteralExpression(Expression):
     def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
         """Converts the literal expression to the literal in proto.
 
-        TODO This method always assumes the largest type and can thus
+        TODO(SPARK-40533) This method always assumes the largest type and can thus
              create weird interpretations of the literal."""
         value_type = type(self._value)
         exp = proto.Expression()

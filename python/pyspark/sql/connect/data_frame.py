@@ -125,7 +125,6 @@ class DataFrame(object):
         ...
 
     def colRegex(self, regex) -> "DataFrame":
-        # TODO needs analysis to pick the right column
         ...
 
     @property
@@ -147,11 +146,9 @@ class DataFrame(object):
         ...
 
     def coalesce(self, num_partitions: int) -> "DataFrame":
-        # TODO needs repartition operator for substrait
         ...
 
     def describe(self, cols):
-        # TODO needs analyze to filter out the right columns
         ...
 
     def distinct(self) -> "DataFrame":
@@ -161,7 +158,6 @@ class DataFrame(object):
         return gf.agg()
 
     def drop(self, *cols: ColumnOrString):
-        # TODO Needs analyze to know which columns to drop
         all_cols = self.columns()
         dropped = set([c.name() if isinstance(c, ColumnRef) else self[c].name() for c in cols])
         filter(lambda x: x in dropped, all_cols)
@@ -214,7 +210,6 @@ class DataFrame(object):
             if isinstance(p, plan.Project) and p.alias:
                 return p.alias
             p = p._child
-        return None
 
     def __getattr__(self, name) -> "ColumnRef":
         return self[name]

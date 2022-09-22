@@ -17,6 +17,8 @@
 from pyspark.sql.connect.column import ColumnRef, LiteralExpression
 from pyspark.sql.connect.column import PrimitiveType
 
+# TODO(SPARK-40538) Add support for the missing PySpark functions.
+
 
 def col(x: str) -> ColumnRef:
     return ColumnRef(x)

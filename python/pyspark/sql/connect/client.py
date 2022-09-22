@@ -31,7 +31,7 @@ import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 from pyspark import cloudpickle
 from pyspark.sql.connect.data_frame import DataFrame
 from pyspark.sql.connect.readwriter import DataFrameReader
-from pyspark.sql.connect.plan import Sql
+from pyspark.sql.connect.plan import SQL
 
 
 NumericType = typing.Union[int, float]
@@ -139,7 +139,7 @@ class RemoteSparkSession(object):
         ]
 
     def sql(self, sql_string: str) -> "DataFrame":
-        return DataFrame.withPlan(Sql(sql_string), self)
+        return DataFrame.withPlan(SQL(sql_string), self)
 
     def collect(self, plan: pb2.Plan) -> pandas.DataFrame:
         req = pb2.Request()

@@ -20,6 +20,10 @@ from pyspark.sql.connect.plan import Read
 
 
 class DataFrameReader:
+    """
+    TODO(SPARK-40539) Achieve parity with PySpark.
+    """
+
     def __init__(self, client):
         self._client = client
 
