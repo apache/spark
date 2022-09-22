@@ -1163,5 +1163,56 @@
     "message" : [
       "<msg>."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1000" : {
+    "message" : [
+      "LEGACY store assignment policy is disallowed in Spark data source V2. Please set the configuration <configKey> to other values."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1001" : {
+    "message" : [
+      "USING column `<colName>` cannot be resolved on the <side> side of the join. The <side>-side columns: [<plan>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1002" : {
+    "message" : [
+      "Unable to generate an encoder for inner class `<className>` without access to the scope that this class was defined in.",
+      "Try moving this class out of its parent class."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1003" : {
+    "message" : [
+      "Couldn't find the reference column for <after> at <parentName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1004" : {
+    "message" : [
+      "Window specification <windowName> is not defined in the WINDOW clause."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1005" : {
+    "message" : [
+      "<expr> doesn't show up in the GROUP BY list <groupByAliases>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1006" : {
+    "message" : [
+      "Aggregate expression required for pivot, but '<sql>' did not appear in any aggregate function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1007" : {
+    "message" : [
+      "Cannot write into temp view <quoted> as it's not a data source v2 relation."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1008" : {
+    "message" : [
+      "<quoted> is not a temp view of streaming logical plan, please use batch API such as `DataFrameReader.table` to read it."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1009" : {
+    "message" : [
+      "The depth of view <identifier> exceeds the maximum view resolution depth (<maxNestedViewDepth>). Analysis is aborted to avoid errors. Increase the value of <config> to work around this."
+    ]
   }
 }

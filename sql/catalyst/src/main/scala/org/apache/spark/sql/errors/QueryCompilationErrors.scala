@@ -164,15 +164,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def legacyStoreAssignmentPolicyError(): Throwable = {
     val configKey = SQLConf.STORE_ASSIGNMENT_POLICY.key
     new AnalysisException(
-      "LEGACY store assignment policy is disallowed in Spark data source V2. " +
-        s"Please set the configuration $configKey to other values.")
+      errorClass = "_LEGACY_ERROR_TEMP_1000",
+      messageParameters = Map("configKey" -> configKey))
   }
 
   def unresolvedUsingColForJoinError(
       colName: String, plan: LogicalPlan, side: String): Throwable = {
     new AnalysisException(
-      s"USING column `$colName` cannot be resolved on the $side " +
-        s"side of the join. The $side-side columns: [${plan.output.map(_.name).mkString(", ")}]")
+      errorClass = "_LEGACY_ERROR_TEMP_1001",
+      messageParameters = Map(
+        "colName" -> colName,
+        "side" -> side,
+        "plan" -> plan.output.map(_.name).mkString(", ")))
   }
 
   def unresolvedAttributeError(
@@ -262,23 +265,29 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def outerScopeFailureForNewInstanceError(className: String): Throwable = {
     new AnalysisException(
-      s"Unable to generate an encoder for inner class `$className` without " +
-        "access to the scope that this class was defined in.\n" +
-        "Try moving this class out of its parent class.")
+      errorClass = "_LEGACY_ERROR_TEMP_1002",
+      messageParameters = Map("className" -> className))
   }
 
   def referenceColNotFoundForAlterTableChangesError(
       after: TableChange.After, parentName: String): Throwable = {
     new AnalysisException(
-      s"Couldn't find the reference column for $after at $parentName")
+      errorClass = "_LEGACY_ERROR_TEMP_1003",
+      messageParameters = Map("after" -> after.toString, "parentName" -> parentName))
   }
 
   def windowSpecificationNotDefinedError(windowName: String): Throwable = {
-    new AnalysisException(s"Window specification $windowName is not defined in the WINDOW clause.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1004",
+      messageParameters = Map("windowName" -> windowName))
   }
 
   def selectExprNotInGroupByError(expr: Expression, groupByAliases: Seq[Alias]): Throwable = {
-    new AnalysisException(s"$expr doesn't show up in the GROUP BY list $groupByAliases")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1005",
+      messageParameters = Map(
+        "expr" -> expr.toString,
+        "groupByAliases" -> groupByAliases.toString()))
   }
 
   def groupingMustWithGroupingSetsOrCubeOrRollupError(): Throwable = {
@@ -295,26 +304,32 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def aggregateExpressionRequiredForPivotError(sql: String): Throwable = {
-    new AnalysisException(s"Aggregate expression required for pivot, but '$sql' " +
-      "did not appear in any aggregate function.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1006",
+      messageParameters = Map("sql" -> sql))
   }
 
   def writeIntoTempViewNotAllowedError(quoted: String): Throwable = {
-    new AnalysisException("Cannot write into temp view " +
-      s"$quoted as it's not a data source v2 relation.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1007",
+      messageParameters = Map("quoted" -> quoted))
   }
 
   def readNonStreamingTempViewError(quoted: String): Throwable = {
-    new AnalysisException(s"$quoted is not a temp view of streaming " +
-      "logical plan, please use batch API such as `DataFrameReader.table` to read it.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1008",
+      messageParameters = Map("quoted" -> quoted))
   }
 
   def viewDepthExceedsMaxResolutionDepthError(
       identifier: TableIdentifier, maxNestedViewDepth: Int, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"The depth of view $identifier exceeds the maximum " +
-      s"view resolution depth ($maxNestedViewDepth). Analysis is aborted to " +
-      s"avoid errors. Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to work " +
-      "around this.", t.origin.line, t.origin.startPosition)
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1009",
+      messageParameters = Map(
+        "identifier" -> identifier.toString,
+        "maxNestedViewDepth" -> maxNestedViewDepth.toString,
+        "config" -> SQLConf.MAX_NESTED_VIEW_DEPTH.key),
+      origin = t.origin)
   }
 
   def insertIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
