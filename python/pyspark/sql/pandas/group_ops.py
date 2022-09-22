@@ -260,7 +260,7 @@ class PandasGroupedOpsMixin:
         https://spark.apache.org/docs/latest/sql-ref-datatypes.html (Python tab).
 
         The size of each `pandas.DataFrame` in both the input and output can be arbitrary. The
-        number `pandas.DataFrame` in both the input and output can also be arbitrary.
+        number of `pandas.DataFrame` in both the input and output can also be arbitrary.
 
         .. versionadded:: 3.4.0
 
