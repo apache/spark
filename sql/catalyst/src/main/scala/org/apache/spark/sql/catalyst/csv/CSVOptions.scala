@@ -165,14 +165,13 @@ class CSVOptions(
     }
   }
 
-  val dateFormatParamOpt: Option[String] = parameters.get("dateFormat")
   // Provide a default value for dateFormatInRead when prefersDate. This ensures that the
   // Iso8601DateFormatter (with strict date parsing) is used for date inference
   val dateFormatInRead: Option[String] =
     if (prefersDate) {
-      Option(dateFormatParamOpt.getOrElse(DateFormatter.defaultPattern))
+      Option(parameters.getOrElse("dateFormat", DateFormatter.defaultPattern))
     } else {
-      dateFormatParamOpt
+      parameters.get("dateFormat")
     }
   val dateFormatInWrite: String = parameters.getOrElse("dateFormat", DateFormatter.defaultPattern)
 
