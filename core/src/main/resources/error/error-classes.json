@@ -1267,7 +1267,7 @@
   },
   "_LEGACY_ERROR_TEMP_1020" : {
     "message" : [
-      "Invalid usage of $elem in <prettyName>"
+      "Invalid usage of <elem> in <prettyName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1021" : {
