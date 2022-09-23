@@ -28,7 +28,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.catalyst.expressions.{Cast, EmptyRow, ExprUtils, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{daysToMicros, TimeZoneUTC}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -135,7 +134,7 @@ class UnivocityParser(
       .orElse(SQLConf.get.csvEnableDateTimeParsingFallback)
       .getOrElse {
         SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
-          options.dateFormatInRead.isEmpty
+          options.dateFormatOption.isEmpty
       }
 
   // Retrieve the raw record string.
@@ -238,29 +237,19 @@ class UnivocityParser(
           timestampFormatter.parse(datum)
         } catch {
           case NonFatal(e) =>
-            // There may be date type entries in timestamp column due to schema inference
-            if (options.prefersDate) {
-              daysToMicros(dateFormatter.parse(datum), options.zoneId)
-            } else {
-              // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-              // compatibility if enabled.
-              if (!enableParsingFallbackForTimestampType) {
-                throw e
-              }
-              val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-              DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw(e))
+            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+            // compatibility if enabled.
+            if (!enableParsingFallbackForTimestampType) {
+              throw e
             }
+            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
+            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw(e))
         }
       }
 
     case _: TimestampNTZType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        try {
-          timestampNTZFormatter.parseWithoutTimeZone(datum, false)
-        } catch {
-          case NonFatal(e) if options.prefersDate =>
-            daysToMicros(dateFormatter.parse(datum), TimeZoneUTC.toZoneId)
-        }
+        timestampNTZFormatter.parseWithoutTimeZone(datum, false)
       }
 
     case _: StringType => (d: String) =>
