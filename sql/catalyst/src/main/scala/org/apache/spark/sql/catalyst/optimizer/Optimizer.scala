@@ -832,21 +832,6 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes Project operator to Limit operator.
- */
-object PushProjectionThroughLimit extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAllPatterns(PROJECT, LIMIT)) {
-
-    // Push down deterministic projection through Limit
-    case Project(projectList, limit @ Limit(l, child))
-        if projectList.forall(_.deterministic) =>
-      val newChild = Project(projectList, child)
-      limit.copy(child = LocalLimit(l, newChild))
-  }
-}
-
-/**
  * Attempts to eliminate the reading of unneeded columns from the query plan.
  *
  * Since adding Project before Filter conflicts with PushPredicatesThroughProject, this rule will
