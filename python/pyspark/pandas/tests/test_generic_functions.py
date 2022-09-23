@@ -166,6 +166,7 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         self._test_stat_functions(lambda x: x.max(skipna=False))
         self._test_stat_functions(lambda x: x.std())
         self._test_stat_functions(lambda x: x.std(skipna=False))
+        self._test_stat_functions(lambda x: x.std(ddof=2))
         self._test_stat_functions(lambda x: x.sem())
         self._test_stat_functions(lambda x: x.sem(skipna=False))
         # self._test_stat_functions(lambda x: x.skew())
@@ -174,6 +175,11 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         # Test cases below return differently from pandas (either by design or to be fixed)
         pdf = pd.DataFrame({"a": [np.nan, np.nan, np.nan], "b": [1, np.nan, 2], "c": [1, 2, 3]})
         psdf = ps.from_pandas(pdf)
+
+        with self.assertRaisesRegex(TypeError, "ddof must be integer"):
+            psdf.std(ddof="ddof")
+        with self.assertRaisesRegex(TypeError, "ddof must be integer"):
+            psdf.a.std(ddof="ddof")
 
         self.assert_eq(pdf.a.median(), psdf.a.median())
         self.assert_eq(pdf.a.median(skipna=False), psdf.a.median(skipna=False))

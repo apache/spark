@@ -155,6 +155,10 @@ private[sql] object PythonSQLUtils extends Logging {
     Column(TimestampDiff(unit, start.expr, end.expr))
   }
 
+  def pandasStddev(e: Column, ddof: Int): Column = {
+    Column(PandasStddev(e.expr, ddof).toAggregateExpression(false))
+  }
+
   def pandasSkewness(e: Column): Column = {
     Column(PandasSkewness(e.expr).toAggregateExpression(false))
   }

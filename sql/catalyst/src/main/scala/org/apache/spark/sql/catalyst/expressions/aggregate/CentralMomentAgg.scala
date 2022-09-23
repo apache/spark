@@ -340,6 +340,29 @@ case class Kurtosis(
 }
 
 /**
+ * Standard deviation in Pandas' fashion.
+ * This expression is dedicated only for Pandas API on Spark.
+ * Refer to pandas.core.nanops.nanstd.
+ */
+case class PandasStddev(
+    child: Expression,
+    ddof: Int)
+  extends CentralMomentAgg(child, true) {
+
+  override protected def momentOrder = 2
+
+  override val evaluateExpression: Expression = {
+    If(n === 0.0, Literal.create(null, DoubleType),
+      If(n === ddof, divideByZeroEvalResult, sqrt(m2 / (n - ddof))))
+  }
+
+  override def prettyName: String = "pandas_stddev"
+
+  override protected def withNewChildInternal(newChild: Expression): PandasStddev =
+    copy(child = newChild)
+}
+
+/**
  * Skewness in Pandas' fashion. This expression is dedicated only for Pandas API on Spark.
  * Refer to pandas.core.nanops.nanskew.
  */

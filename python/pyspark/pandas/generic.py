@@ -1810,6 +1810,8 @@ class Frame(object, metaclass=ABCMeta):
         """
         Return sample standard deviation.
 
+        .. versionadded:: 3.3.0
+
         Parameters
         ----------
         axis : {index (0), columns (1)}
@@ -1822,6 +1824,9 @@ class Frame(object, metaclass=ABCMeta):
         ddof : int, default 1
             Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
             where N represents the number of elements.
+
+            .. versionchanged:: 3.4.0
+               Supported including arbitary integers.
         numeric_only : bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
@@ -1843,6 +1848,11 @@ class Frame(object, metaclass=ABCMeta):
         b    0.1
         dtype: float64
 
+        >>> df.std(ddof=2)
+        a    1.414214
+        b    0.141421
+        dtype: float64
+
         >>> df.std(axis=1)
         0    0.636396
         1    1.272792
@@ -1862,8 +1872,12 @@ class Frame(object, metaclass=ABCMeta):
 
         >>> df['a'].std(ddof=0)
         0.816496580927726
+
+        >>> df['a'].std(ddof=-1)
+        0.707106...
         """
-        assert ddof in (0, 1)
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
 
         axis = validate_axis(axis)
 
@@ -1881,10 +1895,7 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            if ddof == 0:
-                return F.stddev_pop(spark_column)
-            else:
-                return F.stddev_samp(spark_column)
+            return SF.stddev(spark_column, ddof)
 
         return self._reduce_for_stat_function(
             std, name="std", axis=axis, numeric_only=numeric_only, ddof=ddof, skipna=skipna
