@@ -60,7 +60,9 @@ class SparkSQLEnvSuite extends SparkFunSuite {
           .exists(_.isInstanceOf[DummyStreamingQueryListener]))
       } finally {
         SparkSQLEnv.stop()
-        FileUtils.forceDelete(metastorePath)
+        if (metastorePath.exists()) {
+          FileUtils.forceDelete(metastorePath)
+        }
       }
     }
   }
