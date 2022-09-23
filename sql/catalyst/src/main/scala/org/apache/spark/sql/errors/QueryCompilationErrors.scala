@@ -441,17 +441,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       None
     }
     val elem = Seq(starMsg, resExprMsg).flatten.mkString(" and ")
-    new AnalysisException(s"Invalid usage of $elem in $prettyName")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1020",
+      messageParameters = Map("elem" -> elem, "prettyName" -> prettyName))
   }
 
   def singleTableStarInCountNotAllowedError(targetString: String): Throwable = {
-    new AnalysisException(s"count($targetString.*) is not allowed. " +
-      "Please use count(*) or expand the columns manually, e.g. count(col1, col2)")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1021",
+      messageParameters = Map("targetString" -> targetString))
   }
 
   def orderByPositionRangeError(index: Int, size: Int, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"ORDER BY position $index is not in select list " +
-      s"(valid range is [1, $size])", t.origin.line, t.origin.startPosition)
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1022",
+      messageParameters = Map(
+        "index" -> index.toString,
+        "size" -> size.toString),
+      origin = t.origin)
   }
 
   def groupByPositionRefersToAggregateFunctionError(
@@ -481,41 +488,52 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def functionWithUnsupportedSyntaxError(prettyName: String, syntax: String): Throwable = {
-    new AnalysisException(s"Function $prettyName does not support $syntax")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1023",
+      messageParameters = Map("prettyName" -> prettyName, "syntax" -> syntax))
   }
 
   def nonDeterministicFilterInAggregateError(): Throwable = {
-    new AnalysisException("FILTER expression is non-deterministic, " +
-      "it cannot be used in aggregate functions")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1024",
+      messageParameters = Map.empty)
   }
 
   def nonBooleanFilterInAggregateError(): Throwable = {
-    new AnalysisException("FILTER expression is not of type boolean. " +
-      "It cannot be used in an aggregate function")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1025",
+      messageParameters = Map.empty)
   }
 
   def aggregateInAggregateFilterError(): Throwable = {
-    new AnalysisException("FILTER expression contains aggregate. " +
-      "It cannot be used in an aggregate function")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1026",
+      messageParameters = Map.empty)
   }
 
   def windowFunctionInAggregateFilterError(): Throwable = {
-    new AnalysisException("FILTER expression contains window function. " +
-      "It cannot be used in an aggregate function")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1027",
+      messageParameters = Map.empty)
   }
 
   def aliasNumberNotMatchColumnNumberError(
       columnSize: Int, outputSize: Int, t: TreeNode[_]): Throwable = {
-    new AnalysisException("Number of column aliases does not match number of columns. " +
-      s"Number of column aliases: $columnSize; " +
-      s"number of columns: $outputSize.", t.origin.line, t.origin.startPosition)
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1028",
+      messageParameters = Map(
+        "columnSize" -> columnSize.toString,
+        "outputSize" -> outputSize.toString),
+      origin = t.origin)
   }
 
   def aliasesNumberNotMatchUDTFOutputError(
       aliasesSize: Int, aliasesNames: String): Throwable = {
-    new AnalysisException("The number of aliases supplied in the AS clause does not " +
-      s"match the number of columns output by the UDTF expected $aliasesSize " +
-      s"aliases but got $aliasesNames ")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1029",
+      messageParameters = Map(
+        "aliasesSize" -> aliasesSize.toString,
+        "aliasesNames" -> aliasesNames))
   }
 
   def windowAggregateFunctionWithFilterNotSupportedError(): Throwable = {
