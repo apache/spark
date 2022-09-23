@@ -592,7 +592,6 @@ pyspark_pandas = Module(
         "pyspark.pandas.groupby",
         "pyspark.pandas.indexing",
         "pyspark.pandas.internal",
-        "pyspark.pandas.ml",
         "pyspark.pandas.mlflow",
         "pyspark.pandas.namespace",
         "pyspark.pandas.numpy_compat",

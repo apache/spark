@@ -367,6 +367,9 @@ object functions {
    */
   def collect_set(columnName: String): Column = collect_set(Column(columnName))
 
+  private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
+    withAggregateFunction { CollectTopK(e.expr, num, reverse) }
+
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
    *

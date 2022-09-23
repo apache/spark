@@ -23,10 +23,11 @@ import com.univocity.parsers.csv.CsvParser
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.csv._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -166,7 +167,7 @@ case class CsvToStructs(
 case class SchemaOfCsv(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with CodegenFallback {
+  extends UnaryExpression with CodegenFallback with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -185,9 +186,9 @@ case class SchemaOfCsv(
     if (child.foldable && csv != null) {
       super.checkInputDataTypes()
     } else {
-      TypeCheckResult.TypeCheckFailure(
-        "The input csv should be a foldable string expression and not null; " +
-        s"however, got ${child.sql}.")
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map("inputExpr" -> toSQLExpr(child)))
     }
   }
 
