@@ -32,6 +32,11 @@ def stddev(col: Column, ddof: int) -> Column:
     return Column(sc._jvm.PythonSQLUtils.pandasStddev(col._jc, ddof))
 
 
+def var(col: Column, ddof: int) -> Column:
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.PythonSQLUtils.pandasVariance(col._jc, ddof))
+
+
 def skew(col: Column) -> Column:
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.PythonSQLUtils.pandasSkewness(col._jc))
