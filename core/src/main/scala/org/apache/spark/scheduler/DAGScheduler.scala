@@ -1867,7 +1867,7 @@ private[spark] class DAGScheduler(
             s"(attempt ${failedStage.latestInfo.attemptNumber}) running")
         } else {
           val ignoreStageFailure = ignoreDecommissionFetchFailure &&
-            isExecutorDecommissioned(taskScheduler, bmAddress)
+            isExecutorDecommissioningOrDecommissioned(taskScheduler, bmAddress)
           if (ignoreStageFailure) {
             logInfo("Ignoring fetch failure from $task of $failedStage attempt " +
               s"${task.stageAttemptId} when count spark.stage.maxConsecutiveAttempts " +
@@ -2177,13 +2177,15 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Whether executor is decommissioned. Return true when executors are in below cases:
+   * Whether executor is decommissioning or decommissioned.
+   * Return true when:
    *  1. Waiting for decommission start
    *  2. Under decommission process
-   *  3. Stopped or terminated after finishing decommission
-   *  4. Under decommission process, then removed by driver with other reasons
+   * Return false when:
+   *  1. Stopped or terminated after finishing decommission
+   *  2. Under decommission process, then removed by driver with other reasons
    */
-  private[scheduler] def isExecutorDecommissioned(
+  private[scheduler] def isExecutorDecommissioningOrDecommissioned(
       taskScheduler: TaskScheduler, bmAddress: BlockManagerId): Boolean = {
     if (bmAddress != null) {
       taskScheduler

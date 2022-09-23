@@ -1147,8 +1147,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("SPARK-40481: Multiple consecutive stage fetch failures from decommissioned executor" +
-    "should not fail job when ignoreOnDecommissionFetchFailure is enabled.") {
+  test("SPARK-40481: Multiple consecutive stage fetch failures from decommissioned executor " +
+    "should not fail job when ignoreDecommissionFetchFailure is enabled.") {
     conf.set(config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key, "true")
 
     setupStageAbortTest(sc)
