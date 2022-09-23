@@ -196,6 +196,23 @@ private[spark] class SparkUnsupportedOperationException(
 }
 
 /**
+ * Default catalog database not exists exception thrown from Spark with an error class.
+ */
+private[spark] class SparkDefaultCatalogDatabaseNotExistsException(
+   errorClass: String,
+   errorSubClass: Option[String] = None,
+   messageParameters: Array[String],
+   cause: Throwable = null)
+  extends IOException(
+    SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters))
+    with SparkThrowable {
+
+  override def getMessageParameters: Array[String] = messageParameters
+  override def getErrorClass: String = errorClass
+  override def getErrorSubClass: String = errorSubClass.orNull
+}
+
+/**
  * Class not found exception thrown from Spark with an error class.
  */
 private[spark] class SparkClassNotFoundException(

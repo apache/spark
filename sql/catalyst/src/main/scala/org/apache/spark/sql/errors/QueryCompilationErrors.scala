@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkDefaultCatalogDatabaseNotExistsException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -683,6 +684,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotDropDefaultDatabaseError(): Throwable = {
     new AnalysisException("Can not drop default database")
+  }
+
+  def defaultCatalogDatabaseNotExistsError(defaultDatabase: String): Throwable = {
+    new SparkDefaultCatalogDatabaseNotExistsException(
+      errorClass = "DEFAULT_CATALOG_DATABASE_NOT_EXISTS",
+      messageParameters = Array(defaultDatabase),
+    )
   }
 
   def cannotUsePreservedDatabaseAsCurrentDatabaseError(database: String): Throwable = {

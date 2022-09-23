@@ -156,6 +156,11 @@
     ],
     "sqlState" : "22008"
   },
+  "DEFAULT_CATALOG_DATABASE_NOT_EXISTS" : {
+    "message" : [
+      "Default catalog database <defaultDatabase> not exist, please create it first or change default database to 'default'. "
+    ]
+  },
   "DIVIDE_BY_ZERO" : {
     "message" : [
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."

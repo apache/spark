@@ -36,7 +36,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -361,7 +361,7 @@ private[sql] trait SQLTestUtilsBase
 
     try f(dbName) finally {
       if (spark.catalog.currentDatabase == dbName) {
-        spark.sql(s"USE ${SessionCatalog.DEFAULT_DATABASE}")
+        spark.sql(s"USE $DEFAULT_DATABASE")
       }
       spark.sql(s"DROP DATABASE $dbName CASCADE")
     }
@@ -375,7 +375,7 @@ private[sql] trait SQLTestUtilsBase
       dbNames.foreach { name =>
         spark.sql(s"DROP DATABASE IF EXISTS $name CASCADE")
       }
-      spark.sql(s"USE ${SessionCatalog.DEFAULT_DATABASE}")
+      spark.sql(s"USE $DEFAULT_DATABASE")
     }
   }
 

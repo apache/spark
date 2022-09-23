@@ -21,18 +21,15 @@ import java.net.URL
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.annotation.concurrent.GuardedBy
-
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FsUrlStreamHandlerFactory, Path}
-
-import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.diagnostic.DiagnosticListener
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab, StreamingQueryStatusStore}
@@ -152,8 +149,9 @@ private[sql] class SharedState(
     // If database name not equals 'default', throw exception
     if (!externalCatalog.databaseExists(SQLConf.get.defaultDatabase)) {
       if (SessionCatalog.DEFAULT_DATABASE != SQLConf.get.defaultDatabase) {
-        throw new SparkException(s"Default catalog database '${SQLConf.get.defaultDatabase}' " +
-          s"not exist, please create it first or change default database to 'default'.")
+        throw QueryCompilationErrors.defaultCatalogDatabaseNotExistsError(
+          SQLConf.get.defaultDatabase
+        )
       }
       val defaultDbDefinition = CatalogDatabase(
         SQLConf.get.defaultDatabase,
