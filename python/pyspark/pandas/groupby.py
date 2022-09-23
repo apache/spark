@@ -1065,15 +1065,15 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 column = psser._dtype_op.nan_to_null(psser).spark.column
                 data_type = psser.spark.data_type
                 aggregating = (
-                    F.product(column).cast(data_type)
+                    F.product(column).cast("long")
                     if isinstance(data_type, IntegralType)
                     else F.product(column)
                 )
 
                 if min_count > 0:
-                    prod_scol = F.when(F.count(column) < min_count, F.lit(None)).otherwise(
-                        aggregating
-                    )
+                    prod_scol = F.when(
+                        F.count(F.when(~F.isnull(column), F.lit(0))) < min_count, F.lit(None)
+                    ).otherwise(aggregating)
                 else:
                     prod_scol = aggregating
 
