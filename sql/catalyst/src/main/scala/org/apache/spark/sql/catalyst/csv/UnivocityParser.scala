@@ -132,7 +132,10 @@ class UnivocityParser(
   private val enableParsingFallbackForDateType =
     options.enableDateTimeParsingFallback
       .orElse(SQLConf.get.csvEnableDateTimeParsingFallback)
-      .getOrElse(!options.prefersDate)
+      .getOrElse {
+        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+          options.dateFormatOption.isEmpty
+      }
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {

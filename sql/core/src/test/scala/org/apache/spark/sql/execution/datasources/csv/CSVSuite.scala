@@ -2612,8 +2612,7 @@ abstract class CSVSuite
 
   test("SPARK-30960: parse date/timestamp string with legacy format") {
     val ds = Seq("2020-1-12 3:23:34.12, 2020-1-12 T").toDS()
-    val csv = spark.read.option("header", false).option("prefersDate", false)
-      .schema("t timestamp, d date").csv(ds)
+    val csv = spark.read.option("header", false).schema("t timestamp, d date").csv(ds)
     checkAnswer(csv, Row(Timestamp.valueOf("2020-1-12 3:23:34.12"), Date.valueOf("2020-1-12")))
   }
 
@@ -2778,10 +2777,10 @@ abstract class CSVSuite
       withTempPath { path =>
         Seq(
           """d,ts_ltz,ts_ntz""",
-          """2021-01-01,2021,2021""",
-          """2021-01-02,2021-01 ,2021-01""",
-          """2021-02-01,2021-3-02,2021-10-1""",
-          """2021-08-18,2021-8-18 21:44:30Z,2021-8-18T21:44:30.123"""
+          """2021,2021,2021""",
+          """2021-01,2021-01 ,2021-01""",
+          """ 2021-2-1,2021-3-02,2021-10-1""",
+          """2021-8-18 00:00:00,2021-8-18 21:44:30Z,2021-8-18T21:44:30.123"""
         ).toDF().repartition(1).write.text(path.getCanonicalPath)
         val readback = spark.read.schema("d date, ts_ltz timestamp_ltz, ts_ntz timestamp_ntz")
           .option("header", true)
@@ -2791,7 +2790,7 @@ abstract class CSVSuite
           Seq(
             Row(LocalDate.of(2021, 1, 1), Instant.parse("2021-01-01T00:00:00Z"),
               LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
-            Row(LocalDate.of(2021, 1, 2), Instant.parse("2021-01-01T00:00:00Z"),
+            Row(LocalDate.of(2021, 1, 1), Instant.parse("2021-01-01T00:00:00Z"),
               LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
             Row(LocalDate.of(2021, 2, 1), Instant.parse("2021-03-02T00:00:00Z"),
               LocalDateTime.of(2021, 10, 1, 0, 0, 0)),
