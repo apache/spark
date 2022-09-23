@@ -387,6 +387,12 @@ trait DecimalOperation extends Serializable {
   protected def rescale(
       precision: Int, scale: Int, roundMode: BigDecimal.RoundingMode.Value): Boolean
 
+  override def clone(): DecimalOperation = {
+    val newDecimalOperation = newInstance()
+    newDecimalOperation.copy(this)
+    newDecimalOperation
+  }
+
   def compare(that: DecimalOperation): Int =
     if (underlyingIsNull && that.underlyingIsNull && _scale == that._scale) {
       if (longVal < that.longVal) -1 else if (longVal == that.longVal) 0 else 1
@@ -406,11 +412,11 @@ trait DecimalOperation extends Serializable {
       newDecimalOperation.set(
         longVal + that.longVal, Math.max(precision, that.precision) + 1, scale)
     } else {
-      doAdd(that)
+      addUnderlying(that)
     }
   }
 
-  protected def doAdd(that: DecimalOperation): DecimalOperation
+  protected def addUnderlying(that: DecimalOperation): DecimalOperation
 
   def subtract(that: DecimalOperation): DecimalOperation = {
     if (underlyingIsNull && that.underlyingIsNull && _scale == that._scale) {
@@ -418,11 +424,11 @@ trait DecimalOperation extends Serializable {
       newDecimalOperation.set(
         longVal - that.longVal, Math.max(precision, that.precision) + 1, scale)
     } else {
-      doSubtract(that)
+      subtractUnderlying(that)
     }
   }
 
-  protected def doSubtract(that: DecimalOperation): DecimalOperation
+  protected def subtractUnderlying(that: DecimalOperation): DecimalOperation
 
   def multiply(that: DecimalOperation): DecimalOperation
 
@@ -441,7 +447,16 @@ trait DecimalOperation extends Serializable {
 
   def doNegative: DecimalOperation
 
-  protected def copy(from: DecimalOperation): Unit
+  def copy(from: DecimalOperation): Unit = {
+    this.longVal = from.longVal
+    this._precision = from._precision
+    this._scale = from._scale
+    if (from.underlyingIsNotNull) {
+      copyUnderlying(from)
+    }
+  }
+
+  def copyUnderlying(from: DecimalOperation): Unit
 }
 
 @Unstable

@@ -80,11 +80,11 @@ class JDKDecimalOperation extends DecimalOperation {
     this.decimalVal.signum == 0
   }
 
-  def doAdd(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
+  def addUnderlying(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
     (left, right) => left.add(right)
   }
 
-  def doSubtract(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
+  def subtractUnderlying(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
     (left, right) => left.subtract(right)
   }
 
@@ -109,7 +109,7 @@ class JDKDecimalOperation extends DecimalOperation {
     jDKDecimalOperation.set(-this.decimalVal, precision, scale)
   }
 
-  def copy(from: DecimalOperation): Unit = {
+  def copyUnderlying(from: DecimalOperation): Unit = {
     assert(from.isInstanceOf[JDKDecimalOperation])
     this.decimalVal = from.asInstanceOf[JDKDecimalOperation].decimalVal
   }

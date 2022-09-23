@@ -117,14 +117,12 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
   }
 
   // Accessor for the BigDecimal value of a Decimal, which will be null if it's using Longs
-  private val initDecimalOperation = PrivateMethod[Unit](Symbol("initDecimalOperation"))
   private val decimalOperation = PrivateMethod[DecimalOperation](Symbol("decimalOperation"))
   private val decimalVal = PrivateMethod[BigDecimal](Symbol("decimalVal"))
 
   /** Check whether a decimal is represented compactly (passing whether we expect it to be) */
   private def checkCompact(d: Decimal, expected: Boolean): Unit = {
     assert(SQLConf.get.getConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION) == "JDKBigDecimal")
-    d.invokePrivate(initDecimalOperation())
     val isCompact = d.invokePrivate(decimalOperation()).invokePrivate(decimalVal()).eq(null)
     assert(isCompact == expected, s"$d ${if (expected) "was not" else "was"} compact")
   }
