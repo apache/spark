@@ -16,13 +16,14 @@
  */
 package org.apache.spark.storage
 
-import java.io.{DataOutputStream, File, FileOutputStream, IOException}
+import java.io.{DataOutputStream, File, FileOutputStream, InputStream, IOException}
 import java.nio.file.Files
 
 import scala.concurrent.duration._
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FSDataInputStream, LocalFileSystem, Path, PositionedReadable, Seekable}
 import org.mockito.{ArgumentMatchers => mc}
 import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
@@ -111,7 +112,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
   test("SPARK-39200: fallback storage APIs - readFully") {
     val conf = new SparkConf(false)
       .set("spark.app.id", "testId")
-      .set("spark.hadoop.fs.file.impl", "org.apache.spark.storage.ReadPartialFileSystem")
+      .set("spark.hadoop.fs.file.impl", classOf[ReadPartialFileSystem].getName)
       .set(SHUFFLE_COMPRESS, false)
       .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
       .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
@@ -331,5 +332,48 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
         assert(sc.getExecutorIds().nonEmpty)
       }
     }
+  }
+}
+class ReadPartialInputStream(val in: FSDataInputStream) extends InputStream
+  with Seekable with PositionedReadable {
+  override def read: Int = in.read
+
+  override def read(b: Array[Byte], off: Int, len: Int): Int = {
+    if (len > 1) {
+      in.read(b, off, len - 1)
+    } else {
+      in.read(b, off, len)
+    }
+  }
+
+  override def seek(pos: Long): Unit = {
+    in.seek(pos)
+  }
+
+  override def getPos: Long = in.getPos
+
+  override def seekToNewSource(targetPos: Long): Boolean = in.seekToNewSource(targetPos)
+
+  override def read(position: Long, buffer: Array[Byte], offset: Int, length: Int): Int = {
+    if (length > 1) {
+      in.read(position, buffer, offset, length - 1)
+    } else {
+      in.read(position, buffer, offset, length)
+    }
+  }
+
+  override def readFully(position: Long, buffer: Array[Byte], offset: Int, length: Int): Unit = {
+    in.readFully(position, buffer, offset, length)
+  }
+
+  override def readFully(position: Long, buffer: Array[Byte]): Unit = {
+    in.readFully(position, buffer)
+  }
+}
+
+class ReadPartialFileSystem extends LocalFileSystem {
+  override def open(f: Path): FSDataInputStream = {
+    val stream = super.open(f)
+    new FSDataInputStream(new ReadPartialInputStream(stream))
   }
 }
