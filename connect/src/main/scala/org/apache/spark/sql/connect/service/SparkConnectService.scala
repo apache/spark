@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.util
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -29,16 +28,10 @@ import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.SparkEnv
 import org.apache.spark.annotation.{Since, Unstable}
-import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{
-  AnalyzeResponse,
-  Request,
-  Response,
-  SparkConnectServiceGrpc
-}
+import org.apache.spark.connect.proto.{AnalyzeResponse, Request, Response, SparkConnectServiceGrpc}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
@@ -137,7 +130,7 @@ class SparkConnectService(
  */
 @Unstable
 @Since("3.4.0")
-private case class SessionHolder(userId: String, session: SparkSession)
+private[connect] case class SessionHolder(userId: String, session: SparkSession)
 
 /**
  * Static instance of the SparkConnectService.
@@ -177,7 +170,7 @@ object SparkConnectService {
   /**
    * Based on the `key` find or create a new SparkSession.
    */
-  def getOrCreateIsolatedSession(key: SessionCacheKey): SessionHolder = {
+  private[connect] def getOrCreateIsolatedSession(key: SessionCacheKey): SessionHolder = {
     userSessionMapping.get(
       key,
       () => {
