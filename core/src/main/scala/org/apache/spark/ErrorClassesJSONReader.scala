@@ -32,7 +32,8 @@ import org.apache.spark.annotation.DeveloperApi
 
 /**
  * A reader to load error information from one or more JSON files. Note that, if one error appears
- * in more than one JSON files, the latter wins.
+ * in more than one JSON files, the latter wins. Please read core/src/main/resources/error/README.md
+ * for more details.
  */
 @DeveloperApi
 class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
@@ -49,6 +50,19 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
   private[spark] val errorInfoMap = jsonFileURLs.map(readAsMap).reduce(_ ++ _)
 
   def getErrorMessage(errorClass: String, messageParameters: Map[String, String]): String = {
+    val messageTemplate = getMessageTemplate(errorClass)
+    val sub = new StringSubstitutor(messageParameters.asJava)
+    sub.setEnableUndefinedVariableException(true)
+    try {
+      sub.replace(messageTemplate.replaceAll("<([a-zA-Z0-9_-]+)>", "\\$\\{$1\\}"))
+    } catch {
+      case _: IllegalArgumentException => throw SparkException.internalError(
+        s"Undefined error message parameter for error class: '$errorClass'. " +
+          s"Parameters: $messageParameters")
+    }
+  }
+
+  def getMessageTemplate(errorClass: String): String = {
     val errorClasses = errorClass.split("\\.")
     assert(errorClasses.length == 1 || errorClasses.length == 2)
 
@@ -56,26 +70,16 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     val subErrorClass = errorClasses.tail.headOption
     val errorInfo = errorInfoMap.getOrElse(
       mainErrorClass,
-      throw SparkException.internalError(s"Cannot find error class '$errorClass'"))
+      throw SparkException.internalError(s"Cannot find main error class '$errorClass'"))
     assert(errorInfo.subClass.isDefined == subErrorClass.isDefined)
 
-    val finalFormat = if (subErrorClass.isEmpty) {
+    if (subErrorClass.isEmpty) {
       errorInfo.messageFormat
     } else {
       val errorSubInfo = errorInfo.subClass.get.getOrElse(
         subErrorClass.get,
-        throw SparkException.internalError(s"Cannot find sub error class '${subErrorClass.get}'"))
+        throw SparkException.internalError(s"Cannot find sub error class '$errorClass'"))
       errorInfo.messageFormat + " " + errorSubInfo.messageFormat
-    }
-
-    val sub = new StringSubstitutor(messageParameters.asJava)
-    sub.setEnableUndefinedVariableException(true)
-    try {
-      sub.replace(finalFormat.replaceAll("<([a-zA-Z0-9_-]+)>", "\\$\\{$1\\}"))
-    } catch {
-      case _: IllegalArgumentException => throw SparkException.internalError(
-        s"Undefined error message parameter for error class: '$errorClass'. " +
-          s"Parameters: $messageParameters")
     }
   }
 

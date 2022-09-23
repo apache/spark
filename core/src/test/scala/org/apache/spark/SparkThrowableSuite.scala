@@ -149,12 +149,12 @@ class SparkThrowableSuite extends SparkFunSuite {
     val ex1 = intercept[SparkException] {
       getMessage("", null, Map.empty[String, String])
     }
-    assert(ex1.getMessage.contains("Cannot find error class"))
+    assert(ex1.getMessage.contains("Cannot find main error class"))
 
     val ex2 = intercept[SparkException] {
       getMessage("LOREM_IPSUM", null, Map.empty[String, String])
     }
-    assert(ex2.getMessage.contains("Cannot find error class"))
+    assert(ex2.getMessage.contains("Cannot find main error class"))
   }
 
   test("Check if message parameters match message format") {
@@ -264,6 +264,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       "[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 " +
       "and return NULL instead. If necessary set CONFIG to \"false\" to bypass this error." +
       "\nQuery summary")
+    // scalastyle:off line.size.limit
     assert(SparkThrowableHelper.getMessage(e, MINIMAL) ===
       """{
         |  "errorClass" : "DIVIDE_BY_ZERO",
@@ -278,13 +279,10 @@ class SparkThrowableSuite extends SparkFunSuite {
         |    "fragment" : "1 / 0"
         |  } ]
         |}""".stripMargin)
-    val errorMsgInJson = SparkThrowableHelper.getMessage(e, PRETTY)
-      .replace("\"", "\\\"")
-      .replace("\n", "\\n")
     assert(SparkThrowableHelper.getMessage(e, STANDARD) ===
-      s"""{
+      """{
         |  "errorClass" : "DIVIDE_BY_ZERO",
-        |  "message" : "$errorMsgInJson",
+        |  "message" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
         |  "sqlState" : "22012",
         |  "messageParameters" : {
         |    "config" : "CONFIG"
@@ -296,22 +294,21 @@ class SparkThrowableSuite extends SparkFunSuite {
         |    "fragment" : "1 / 0"
         |  } ]
         |}""".stripMargin)
+      // scalastyle:on line.size.limit
     // STANDARD w/ errorSubClass but w/o queryContext
     val e2 = new SparkIllegalArgumentException(
       errorClass = "UNSUPPORTED_SAVE_MODE",
       errorSubClass = Some("EXISTENT_PATH"),
       messageParameters = Map("saveMode" -> "UNSUPPORTED_MODE"))
-    // scalastyle:off line.size.limit
     assert(SparkThrowableHelper.getMessage(e2, STANDARD) ===
       """{
         |  "errorClass" : "UNSUPPORTED_SAVE_MODE",
         |  "errorSubClass" : "EXISTENT_PATH",
-        |  "message" : "[UNSUPPORTED_SAVE_MODE.EXISTENT_PATH] The save mode UNSUPPORTED_MODE is not supported for: an existent path.",
+        |  "message" : "The save mode <saveMode> is not supported for: an existent path.",
         |  "messageParameters" : {
         |    "saveMode" : "UNSUPPORTED_MODE"
         |  }
         |}""".stripMargin)
-    // scalastyle:on line.size.limit
     // Legacy mode when an exception does not have any error class
     class LegacyException extends Throwable with SparkThrowable {
       override def getErrorClass: String = null
