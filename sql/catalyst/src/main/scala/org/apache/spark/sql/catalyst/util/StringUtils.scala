@@ -67,6 +67,36 @@ object StringUtils extends Logging {
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
   }
 
+  def escapeLikeJoniRegex(pattern: Array[Byte], escapeChar: Char): Array[Byte] = {
+    val in = pattern.toIterator
+    val out = new ArrayBuffer[Byte]()
+    out.appendAll("(?s)".getBytes())
+
+    def fail(message: String) = throw new AnalysisException(
+      s"the pattern '$pattern' is invalid, $message")
+
+    while (in.hasNext) {
+      in.next match {
+        case c1 if c1 == escapeChar && in.hasNext =>
+          val c = in.next
+          c match {
+            case '_' | '%' =>
+              out.appendAll(Pattern.quote(Character.toString(c.toChar)).getBytes())
+            case c if c == escapeChar =>
+              out.appendAll(Pattern.quote(Character.toString(c.toChar)).getBytes())
+            case _ => fail(s"the escape character is not allowed to precede '$c'")
+            // case c => out += '\\' +=c
+          }
+        case c if c == escapeChar => fail("it is not allowed to end with the escape character")
+        case '_' => out += '.'
+        case '%' => out.appendAll(Array[Byte]('.', '*'))
+        case c if c < 0 => out.append(c)
+        case c => out.appendAll(Pattern.quote(Character.toString(c.toChar)).getBytes())
+      }
+    }
+    out.result().toArray
+  }
+
   private[this] val trueStrings =
     Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
 

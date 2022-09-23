@@ -130,6 +130,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkLiteralRow("a\nb" like _, "a_b", true)
     checkLiteralRow("ab" like _, "a%b", true)
     checkLiteralRow("a\nb" like _, "a%b", true)
+    checkLiteralRow("" like _, "", true)
 
     // empty input
     checkLiteralRow("" like _, "", true)

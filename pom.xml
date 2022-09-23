@@ -295,6 +295,8 @@
     <CodeCacheSize>128m</CodeCacheSize>
     <!-- Needed for consistent times -->
     <maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss z</maven.build.timestamp.format>
+    <joni.version>2.1.26</joni.version>
+    <jcodings.version>1.0.43</jcodings.version>
 
     <!-- SPARK-36796 for JDK-17 test-->
     <extraJavaTestArgs>

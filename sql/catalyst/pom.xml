@@ -127,6 +127,16 @@
       <groupId>org.apache.arrow</groupId>
       <artifactId>arrow-memory-netty</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.jruby.jcodings</groupId>
+      <artifactId>jcodings</artifactId>
+      <version>${jcodings.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.jruby.joni</groupId>
+      <artifactId>joni</artifactId>
+      <version>${joni.version}</version>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>

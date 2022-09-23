@@ -265,7 +265,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      SubstituteUnresolvedOrdinals),
+      SubstituteUnresolvedOrdinals,
+      RegexSubstitution),
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
@@ -4406,5 +4407,14 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
 
   def restoreTempResolvedColumn(t: TempResolvedColumn): Expression = {
     CurrentOrigin.withOrigin(t.origin)(UnresolvedAttribute(t.nameParts))
+  }
+}
+
+object RegexSubstitution extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    case Like(left, right, escapeChar) if (conf.regexEngine == "joni") =>
+      LikeJoni(left, right, escapeChar)
+    case RLike(left, right) if (conf.regexEngine == "joni") =>
+      RLikeJoni(left, right)
   }
 }

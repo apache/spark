@@ -3920,6 +3920,12 @@ object SQLConf {
     .checkValues(ErrorMessageFormat.values.map(_.toString))
     .createWithDefault(ErrorMessageFormat.PRETTY.toString)
 
+  val REGEX_ENGINE =
+    buildConf("spark.sql.Regex.Engine")
+      .version("3.1.2-mdh")
+      .stringConf
+      .createWithDefault("java")
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4718,6 +4724,8 @@ class SQLConf extends Serializable with Logging {
     ErrorMessageFormat.withName(getConf(SQLConf.ERROR_MESSAGE_FORMAT))
 
   def defaultDatabase: String = getConf(StaticSQLConf.CATALOG_DEFAULT_DATABASE)
+
+  def regexEngine: String = getConf(REGEX_ENGINE)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -55,6 +55,37 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(escapeLikeRegex("a_b", '\"') === expectedEscapedStrSeven)
   }
 
+  test("escapeLikeJoinRegex") {
+    val expectedEscapedStrOne = "(?s)\\Qa\\E\\Qb\\E\\Qd\\E\\Qe\\E\\Qf\\E"
+    val expectedEscapedStrTwo = "(?s)\\Qa\\E\\Q_\\E.\\Qb\\E"
+    val expectedEscapedStrThree = "(?s)\\Qa\\E..*\\Qb\\E"
+    val expectedEscapedStrFour = "(?s)\\Qa\\E.*\\Q%\\E\\Qb\\E"
+    val expectedEscapedStrFive = "(?s)\\Qa\\E.*"
+    val expectedEscapedStrSix = "(?s)\\Q*\\E\\Q*\\E"
+    val expectedEscapedStrSeven = "(?s)\\Qa\\E.\\Qb\\E"
+    assert(escapeLikeJoniRegex("abdef".getBytes(), '\\') === expectedEscapedStrOne.getBytes())
+    assert(escapeLikeJoniRegex("abdef".getBytes(), '\"') === expectedEscapedStrOne.getBytes())
+    assert(escapeLikeJoniRegex("abdef".getBytes(), '/') === expectedEscapedStrOne.getBytes())
+    assert(escapeLikeJoniRegex("a\\__b".getBytes(), '\\') === expectedEscapedStrTwo.getBytes())
+    assert(escapeLikeJoniRegex("a\"__b".getBytes(), '\"') === expectedEscapedStrTwo.getBytes())
+    assert(escapeLikeJoniRegex("a/__b".getBytes(), '/') === expectedEscapedStrTwo.getBytes())
+    assert(escapeLikeJoniRegex("a_%b".getBytes(), '\\') === expectedEscapedStrThree.getBytes())
+    assert(escapeLikeJoniRegex("a_%b".getBytes(), '\"') === expectedEscapedStrThree.getBytes())
+    assert(escapeLikeJoniRegex("a_%b".getBytes(), '/') === expectedEscapedStrThree.getBytes())
+    assert(escapeLikeJoniRegex("a%\\%b".getBytes(), '\\') === expectedEscapedStrFour.getBytes())
+    assert(escapeLikeJoniRegex("a%\"%b".getBytes(), '\"') === expectedEscapedStrFour.getBytes())
+    assert(escapeLikeJoniRegex("a%/%b".getBytes(), '/') === expectedEscapedStrFour.getBytes())
+    assert(escapeLikeJoniRegex("a%".getBytes(), '\\') === expectedEscapedStrFive.getBytes())
+    assert(escapeLikeJoniRegex("a%".getBytes(), '\"') === expectedEscapedStrFive.getBytes())
+    assert(escapeLikeJoniRegex("a%".getBytes(), '/') === expectedEscapedStrFive.getBytes())
+    assert(escapeLikeJoniRegex("**".getBytes(), '\\') === expectedEscapedStrSix.getBytes())
+    assert(escapeLikeJoniRegex("**".getBytes(), '\"') === expectedEscapedStrSix.getBytes())
+    assert(escapeLikeJoniRegex("**".getBytes(), '/') === expectedEscapedStrSix.getBytes())
+    assert(escapeLikeJoniRegex("a_b".getBytes(), '\\') === expectedEscapedStrSeven.getBytes())
+    assert(escapeLikeJoniRegex("a_b".getBytes(), '\"') === expectedEscapedStrSeven.getBytes())
+    assert(escapeLikeJoniRegex("a_b".getBytes(), '/') === expectedEscapedStrSeven.getBytes())
+  }
+
   test("filter pattern") {
     val names = Seq("a1", "a2", "b2", "c3")
     assert(filterPattern(names, " * ") === Seq("a1", "a2", "b2", "c3"))

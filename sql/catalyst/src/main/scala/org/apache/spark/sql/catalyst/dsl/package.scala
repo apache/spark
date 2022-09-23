@@ -107,6 +107,9 @@ package object dsl {
     def rlike(other: Expression): Predicate = RLike(expr, other)
     def likeAll(others: Expression*): Predicate =
       LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+    def jlike(other: Expression, escapeChar: Char = '\\'): Expression =
+      LikeJoni(expr, other, escapeChar) // just for test
+    def jrlike(other: Expression): Expression = RLikeJoni(expr, other) // just for test
     def notLikeAll(others: Expression*): Predicate =
       NotLikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
     def likeAny(others: Expression*): Predicate =
