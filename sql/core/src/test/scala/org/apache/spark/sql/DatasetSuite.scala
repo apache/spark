@@ -787,6 +787,8 @@ class DatasetSuite extends QueryTest
 
     observe(spark.range(100), Map("percentile_approx_val" -> 49))
     observe(spark.range(0), Map("percentile_approx_val" -> null))
+    observe(spark.range(1, 10), Map("percentile_approx_val" -> 5))
+    observe(spark.range(1, 10, 1, 11), Map("percentile_approx_val" -> 5))
   }
 
   test("sample with replacement") {
