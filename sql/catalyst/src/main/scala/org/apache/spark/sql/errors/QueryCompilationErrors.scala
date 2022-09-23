@@ -333,18 +333,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def insertIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"Inserting into a view is not allowed. View: $identifier.",
-      t.origin.line, t.origin.startPosition)
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1010",
+      messageParameters = Map("identifier" -> identifier.toString),
+      origin = t.origin)
   }
 
   def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"Writing into a view is not allowed. View: $identifier.",
-      t.origin.line, t.origin.startPosition)
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1011",
+      messageParameters = Map("identifier" -> identifier.toString),
+      origin = t.origin)
   }
 
   def writeIntoV1TableNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"Cannot write into v1 table: $identifier.",
-      t.origin.line, t.origin.startPosition)
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1012",
+      messageParameters = Map("identifier" -> identifier.toString),
+      origin = t.origin)
   }
 
   def expectTableNotViewError(
@@ -355,48 +361,72 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       t: TreeNode[_]): Throwable = {
     val viewStr = if (isTemp) "temp view" else "view"
     val hintStr = mismatchHint.map(" " + _).getOrElse("")
-    new AnalysisException(s"${nameParts.quoted} is a $viewStr. '$cmd' expects a table.$hintStr",
-      t.origin.line, t.origin.startPosition)
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1013",
+      messageParameters = Map(
+        "nameParts" -> nameParts.quoted,
+        "viewStr" -> viewStr,
+        "cmd" -> cmd,
+        "hintStr" -> hintStr),
+      origin = t.origin)
   }
 
   def expectViewNotTempViewError(
       nameParts: Seq[String],
       cmd: String,
       t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"${nameParts.quoted} is a temp view. '$cmd' expects a permanent view.",
-      t.origin.line, t.origin.startPosition)
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1014",
+      messageParameters = Map(
+        "nameParts" -> nameParts.quoted,
+        "cmd" -> cmd),
+      origin = t.origin)
   }
 
   def expectViewNotTableError(
       v: ResolvedTable, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
     val hintStr = mismatchHint.map(" " + _).getOrElse("")
-    new AnalysisException(s"${v.identifier.quoted} is a table. '$cmd' expects a view.$hintStr",
-      t.origin.line, t.origin.startPosition)
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1015",
+      messageParameters = Map(
+        "identifier" -> v.identifier.quoted,
+        "cmd" -> cmd,
+        "hintStr" -> hintStr),
+      origin = t.origin)
   }
 
   def expectTableOrPermanentViewNotTempViewError(
       nameParts: Seq[String], cmd: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      s"${nameParts.quoted} is a temp view. '$cmd' expects a table or permanent view.",
-      t.origin.line, t.origin.startPosition)
+      errorClass = "_LEGACY_ERROR_TEMP_1016",
+      messageParameters = Map(
+        "nameParts" -> nameParts.quoted,
+        "cmd" -> cmd),
+      origin = t.origin)
   }
 
   def expectPersistentFuncError(
       name: String, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
     val hintStr = mismatchHint.map(" " + _).getOrElse("")
     new AnalysisException(
-      s"$name is a built-in/temporary function. '$cmd' expects a persistent function.$hintStr",
-      t.origin.line, t.origin.startPosition)
+      errorClass = "_LEGACY_ERROR_TEMP_1017",
+      messageParameters = Map(
+        "name" -> name,
+        "cmd" -> cmd,
+        "hintStr" -> hintStr),
+      origin = t.origin)
   }
 
   def permanentViewNotSupportedByStreamingReadingAPIError(quoted: String): Throwable = {
-    new AnalysisException(s"$quoted is a permanent view, which is not supported by " +
-      "streaming reading API such as `DataStreamReader.table` yet.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1018",
+      messageParameters = Map("quoted" -> quoted))
   }
 
   def starNotAllowedWhenGroupByOrdinalPositionUsedError(): Throwable = {
     new AnalysisException(
-      "Star (*) is not allowed in select list when GROUP BY ordinal position is used")
+      errorClass = "_LEGACY_ERROR_TEMP_1019",
+      messageParameters = Map.empty)
   }
 
   def invalidStarUsageError(prettyName: String, stars: Seq[Star]): Throwable = {

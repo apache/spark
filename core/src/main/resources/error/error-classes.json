@@ -1214,5 +1214,55 @@
     "message" : [
       "The depth of view <identifier> exceeds the maximum view resolution depth (<maxNestedViewDepth>). Analysis is aborted to avoid errors. Increase the value of <config> to work around this."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1010" : {
+    "message" : [
+      "Inserting into a view is not allowed. View: <identifier>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1011" : {
+    "message" : [
+      "Writing into a view is not allowed. View: <identifier>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1012" : {
+    "message" : [
+      "Cannot write into v1 table: <identifier>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1013" : {
+    "message" : [
+      "<nameParts> is a <viewStr>. '<cmd>' expects a table.<hintStr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1014" : {
+    "message" : [
+      "<nameParts> is a temp view. '<cmd>' expects a permanent view."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1015" : {
+    "message" : [
+      "<identifier> is a table. '<cmd>' expects a view.<hintStr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1016" : {
+    "message" : [
+      "<nameParts> is a temp view. '<cmd>' expects a table or permanent view."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1017" : {
+    "message" : [
+      "<name> is a built-in/temporary function. '<cmd>' expects a persistent function.<hintStr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1018" : {
+    "message" : [
+      "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table` yet."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1019" : {
+    "message" : [
+      "Star (*) is not allowed in select list when GROUP BY ordinal position is used"
+    ]
   }
 }
