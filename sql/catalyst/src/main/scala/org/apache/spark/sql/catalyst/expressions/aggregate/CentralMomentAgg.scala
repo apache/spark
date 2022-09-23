@@ -363,6 +363,28 @@ case class PandasStddev(
 }
 
 /**
+ * Variance in Pandas' fashion. This expression is dedicated only for Pandas API on Spark.
+ * Refer to pandas.core.nanops.nanvar.
+ */
+case class PandasVariance(
+    child: Expression,
+    ddof: Int)
+  extends CentralMomentAgg(child, true) {
+
+  override protected def momentOrder = 2
+
+  override val evaluateExpression: Expression = {
+    If(n === 0.0, Literal.create(null, DoubleType),
+      If(n === ddof, divideByZeroEvalResult, m2 / (n - ddof)))
+  }
+
+  override def prettyName: String = "pandas_variance"
+
+  override protected def withNewChildInternal(newChild: Expression): PandasVariance =
+    copy(child = newChild)
+}
+
+/**
  * Skewness in Pandas' fashion. This expression is dedicated only for Pandas API on Spark.
  * Refer to pandas.core.nanops.nanskew.
  */

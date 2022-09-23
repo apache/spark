@@ -1907,6 +1907,8 @@ class Frame(object, metaclass=ABCMeta):
         """
         Return unbiased variance.
 
+        .. versionadded:: 3.3.0
+
         Parameters
         ----------
         axis : {index (0), columns (1)}
@@ -1914,6 +1916,9 @@ class Frame(object, metaclass=ABCMeta):
         ddof : int, default 1
             Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
             where N represents the number of elements.
+
+            .. versionchanged:: 3.4.0
+               Supported including arbitary integers.
         numeric_only : bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
@@ -1935,6 +1940,11 @@ class Frame(object, metaclass=ABCMeta):
         b    0.01
         dtype: float64
 
+        >>> df.var(ddof=2)
+        a    2.00
+        b    0.02
+        dtype: float64
+
         >>> df.var(axis=1)
         0    0.405
         1    1.620
@@ -1954,8 +1964,12 @@ class Frame(object, metaclass=ABCMeta):
 
         >>> df['a'].var(ddof=0)
         0.6666666666666666
+
+        >>> df['a'].var(ddof=-2)
+        0.4
         """
-        assert ddof in (0, 1)
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
 
         axis = validate_axis(axis)
 
@@ -1973,10 +1987,7 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            if ddof == 0:
-                return F.var_pop(spark_column)
-            else:
-                return F.var_samp(spark_column)
+            return SF.var(spark_column, ddof)
 
         return self._reduce_for_stat_function(
             var, name="var", axis=axis, numeric_only=numeric_only, ddof=ddof

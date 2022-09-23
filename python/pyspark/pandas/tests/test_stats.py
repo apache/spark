@@ -448,6 +448,7 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(psser.var(), pser.var(), almost=True)
         self.assert_eq(psser.var(ddof=0), pser.var(ddof=0), almost=True)
+        self.assert_eq(psser.var(ddof=2), pser.var(ddof=2), almost=True)
         self.assert_eq(psser.std(), pser.std(), almost=True)
         self.assert_eq(psser.std(ddof=0), pser.std(ddof=0), almost=True)
         self.assert_eq(psser.std(ddof=2), pser.std(ddof=2), almost=True)
@@ -481,6 +482,11 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(
             psdf.var(ddof=0, numeric_only=True),
             pdf.var(ddof=0, numeric_only=True),
+            check_exact=False,
+        )
+        self.assert_eq(
+            psdf.var(ddof=2, numeric_only=True),
+            pdf.var(ddof=2, numeric_only=True),
             check_exact=False,
         )
         self.assert_eq(psdf.std(numeric_only=True), pdf.std(numeric_only=True), check_exact=False)
