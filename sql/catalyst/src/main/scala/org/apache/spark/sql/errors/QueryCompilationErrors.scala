@@ -689,7 +689,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def defaultCatalogDatabaseNotExistsError(defaultDatabase: String): Throwable = {
     new SparkDefaultCatalogDatabaseNotExistsException(
       errorClass = "DEFAULT_CATALOG_DATABASE_NOT_EXISTS",
-      messageParameters = Array(defaultDatabase),
+      messageParameters = Array(defaultDatabase)
     )
   }
 
