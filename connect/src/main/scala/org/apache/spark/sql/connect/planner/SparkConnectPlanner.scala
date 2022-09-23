@@ -23,26 +23,11 @@ import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, plans}
-import org.apache.spark.sql.catalyst.analysis.{
-  UnresolvedAlias,
-  UnresolvedAttribute,
-  UnresolvedFunction,
-  UnresolvedRelation,
-  UnresolvedStar
-}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.types.{
-  BinaryType,
-  ByteType,
-  DateType,
-  DoubleType,
-  FloatType,
-  IntegerType,
-  ShortType,
-  TimestampType
-}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.types._
 
 final case class InvalidPlanInput(
     private val message: String = "",
@@ -140,7 +125,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   }
 
   /**
-   * Transforms the protocol buffers literal into the appropriate Catalyst literal expression.
+   * Transforms the protocol buffers literals into the appropriate Catalyst literal expression.
    *
    * TODO(SPARK-40533): Missing support for Instant, BigDecimal, LocalDate, LocalTimestamp,
    *   Duration, Period.
@@ -169,7 +154,9 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       // Days since UNIX epoch.
       case proto.Expression.Literal.LiteralTypeCase.DATE =>
         expressions.Literal(lit.getDate, DateType)
-      case _ => throw InvalidPlanInput("Unsupported Literal Type")
+      case _ => throw InvalidPlanInput(
+        s"Unsupported Literal Type: ${lit.getLiteralTypeCase.getNumber}" +
+          s"(${lit.getLiteralTypeCase.name})")
     }
   }
 
@@ -183,14 +170,24 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     UnresolvedFunction(Seq(name), args, isDistinct = false)
   }
 
+  /**
+   * Translates a scalar function from proto to the Catalyst expression.
+   *
+   * TODO(SPARK-40546) We need to homogenize the function names for binary operators.
+   *
+   * @param fun Proto representation of the function call.
+   * @return
+   */
   private def transformScalarFunction(fun: proto.Expression.UnresolvedFunction): Expression = {
     val funName = fun.getPartsList.asScala.mkString(".")
     funName match {
       case "gt" =>
+        assert(fun.getArgumentsCount == 2, "`gt` function must have two arguments.")
         expressions.GreaterThan(
           transformExpression(fun.getArguments(0)),
           transformExpression(fun.getArguments(1)))
       case "eq" =>
+        assert(fun.getArgumentsCount == 2, "`eq` function must have two arguments.")
         expressions.EqualTo(
           transformExpression(fun.getArguments(0)),
           transformExpression(fun.getArguments(1)))
@@ -216,14 +213,14 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     logical.Join(
       left = transformRelation(rel.getLeft),
       right = transformRelation(rel.getRight),
-      // TODO(SPARK-40534)
+      // TODO(SPARK-40534) Support additional join types and configuration.
       joinType = plans.Inner,
       condition = Some(transformExpression(rel.getOn)),
       hint = logical.JoinHint.NONE)
   }
 
   private def transformSort(rel: proto.Sort): LogicalPlan = {
-    assert(rel.getSortFieldsCount > 0, "SortFields must be present.")
+    assert(rel.getSortFieldsCount > 0, "'sort_fields' must be present and contain elements.")
     logical.Sort(
       child = transformRelation(rel.getInput),
       global = true,
@@ -246,7 +243,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   private def transformAggregate(rel: proto.Aggregate): LogicalPlan = {
     assert(rel.hasInput)
-    assert(rel.getGroupingSetsCount == 1, "Only one grouping set supported")
+    assert(rel.getGroupingSetsCount == 1, "Only one grouping set is supported")
 
     val groupingSet = rel.getGroupingSetsList.asScala.take(1)
     val ge = groupingSet

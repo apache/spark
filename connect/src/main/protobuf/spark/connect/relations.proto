@@ -23,14 +23,11 @@ import "spark/connect/expressions.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
-option go_package = "github.com/databricks/spark-connect/proto";
 
-/*
- The main [[Relation]] type. Fundamentally, a relation is a typed container
- that has exactly one explicit relation type set.
-
- When adding new relation types, they have to be registered here.
- */
+// The main [[Relation]] type. Fundamentally, a relation is a typed container
+// that has exactly one explicit relation type set.
+//
+// When adding new relation types, they have to be registered here.
 message Relation {
   RelationCommon common = 1;
   oneof rel_type {
@@ -48,30 +45,22 @@ message Relation {
   }
 }
 
-/*
- * Used for testing purposes only.
- */
+// Used for testing purposes only.
 message Unknown {}
 
-/*
- Common metadata of all relations.
- */
+// Common metadata of all relations.
 message RelationCommon {
   string source_info = 1;
   string alias = 2;
 }
 
-/*
- Relation that uses a SQL query to generate the output.
- */
+// Relation that uses a SQL query to generate the output.
 message SQL {
   string query = 1;
 }
 
-/*
- Relation that reads from a file / table or other data source. Does not have additional
- inputs.
- */
+// Relation that reads from a file / table or other data source. Does not have additional
+// inputs.
 message Read {
   oneof read_type {
     NamedTable named_table = 1;
@@ -82,30 +71,25 @@ message Read {
   }
 }
 
-/*
- Projection of a bag of expressions for a given input relation.
-
- The input relation must be specified.
- The projected expression can be an arbitrary expression.
- */
+// Projection of a bag of expressions for a given input relation.
+//
+// The input relation must be specified.
+// The projected expression can be an arbitrary expression.
 message Project {
   Relation input = 1;
   repeated Expression expressions = 3;
 }
 
-/*
- Relation that applies a boolean expression `condition` on each row of `input` to produce the output result.
- */
+// Relation that applies a boolean expression `condition` on each row of `input` to produce
+// the output result.
 message Filter {
   Relation input = 1;
   Expression condition = 2;
 }
 
-/*
- Relation of type [[Join]].
-
- `left` and `right` must be present.
- */
+// Relation of type [[Join]].
+//
+// `left` and `right` must be present.
 message Join {
   Relation left = 1;
   Relation right = 2;
@@ -122,9 +106,7 @@ message Join {
   }
 }
 
-/*
- Relation of type [[Union]], at least one input must be set.
- */
+// Relation of type [[Union]], at least one input must be set.
 message Union {
   repeated Relation inputs = 1;
   UnionType union_type = 2;
@@ -136,18 +118,14 @@ message Union {
   }
 }
 
-/*
- Relation of type [[Fetch]] that is used to read `limit` / `offset` rows from the input relation.
- */
+// Relation of type [[Fetch]] that is used to read `limit` / `offset` rows from the input relation.
 message Fetch {
   Relation input = 1;
   int32 limit = 2;
   int32 offset = 3;
 }
 
-/*
- Relation of type [[Aggregate]].
- */
+// Relation of type [[Aggregate]].
 message Aggregate {
   Relation input = 1;
 
@@ -173,9 +151,7 @@ message Aggregate {
   }
 }
 
-/*
- Relation of type [[Sort]].
- */
+// Relation of type [[Sort]].
 message Sort {
   Relation input = 1;
   repeated SortField sort_fields = 2;

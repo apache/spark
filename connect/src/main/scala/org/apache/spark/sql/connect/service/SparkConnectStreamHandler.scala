@@ -30,13 +30,10 @@ import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connect.command.SparkConnectCommandPlanner
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.adaptive.{
-  AdaptiveSparkPlanExec,
-  AdaptiveSparkPlanHelper,
-  QueryStageExec
-}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.ArrowUtils
+
 
 @Unstable
 @Since("3.4.0")
@@ -94,9 +91,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
     val planner = new SparkConnectCommandPlanner(session, command)
     planner.process()
     responseObserver.onCompleted()
-
   }
-
 }
 
 object MetricGenerator extends AdaptiveSparkPlanHelper {

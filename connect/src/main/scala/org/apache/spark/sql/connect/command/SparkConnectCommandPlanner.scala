@@ -28,6 +28,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.types.StringType
 
+
 @Unstable
 @Since("3.4.0")
 class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) {
@@ -39,12 +40,20 @@ class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) 
     command.getCommandTypeCase match {
       case proto.Command.CommandTypeCase.CREATE_FUNCTION =>
         handleCreateScalarFunction(command.getCreateFunction)
-      case _ => throw new UnsupportedOperationException(s"${command} not supported.")
+      case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
   }
 
-  // This is a helper function that registers a new Python function in the
-  // `SparkSession`.
+  /**
+   * This is a helper function that registers a new Python function in the SparkSession.
+   *
+   * Right now this function is very rudimentary and bare-bones just to showcase how it
+   * is possible to remotely serialize a Python function and execute it on the Spark cluster.
+   * If the Python version on the client and server diverge, the execution of the function that
+   * is serialized will most likely fail.
+   *
+   * @param cf
+   */
   def handleCreateScalarFunction(cf: proto.CreateScalarFunction): Unit = {
     val function = SimplePythonFunction(
       cf.getSerializedFunction.toByteArray,

@@ -21,12 +21,9 @@ package spark.connect;
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
-option go_package = "github.com/databricks/spark-connect/proto";
 
-/*
- This message describes the logical [[Type]] of something. It does not carry the value
- itself but only describes it.
- */
+// This message describes the logical [[Type]] of something. It does not carry the value
+// itself but only describes it.
 message Type {
   oneof kind {
     Boolean bool = 1;
@@ -68,6 +65,7 @@ message Type {
     uint32 type_variation_reference = 1;
     Nullability nullability = 2;
   }
+
   message I8 {
     uint32 type_variation_reference = 1;
     Nullability nullability = 2;
