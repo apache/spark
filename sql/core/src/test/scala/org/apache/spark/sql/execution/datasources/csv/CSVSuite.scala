@@ -2974,17 +2974,17 @@ abstract class CSVSuite
       }
 
       check(
-        "corrected",
+        "legacy",
         Seq(
-          Row(1, null, null),
+          Row(1, Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00")),
           Row(2, Date.valueOf("2020-12-03"), Timestamp.valueOf("2020-12-03 00:00:00"))
         )
       )
 
       check(
-        "legacy",
+        "corrected",
         Seq(
-          Row(1, Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00")),
+          Row(1, null, null),
           Row(2, Date.valueOf("2020-12-03"), Timestamp.valueOf("2020-12-03 00:00:00"))
         )
       )
