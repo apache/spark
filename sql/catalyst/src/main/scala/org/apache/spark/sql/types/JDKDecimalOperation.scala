@@ -84,9 +84,10 @@ class JDKDecimalOperation extends DecimalOperation {
     (left, right) => left.add(right)
   }
 
-  def subtractUnderlyingValue(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
-    (left, right) => left.subtract(right)
-  }
+  def subtractUnderlyingValue(that: DecimalOperation): DecimalOperation =
+    withNewInstance(this, that) {
+      (left, right) => left.subtract(right)
+    }
 
   def multiply(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
     (left, right) => left.multiply(right, MATH_CONTEXT)
