@@ -1365,5 +1365,55 @@
     "message" : [
       "Multiple time/session window expressions would result in a cartesian product of rows, therefore they are currently not supported."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1040" : {
+    "message" : [
+      "Gap duration expression used in session window must be CalendarIntervalType, but got <dt>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1041" : {
+    "message" : [
+      "Undefined function <name>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1042" : {
+    "message" : [
+      "Invalid number of arguments for function <name>. Expected: <expectedInfo>; Found: <actualNumber>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1043" : {
+    "message" : [
+      "Invalid arguments for function <name>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1044" : {
+    "message" : [
+      "Function <name> accepts only one argument."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1045" : {
+    "message" : [
+      "ALTER TABLE SET LOCATION does not support partition for v2 tables."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1046" : {
+    "message" : [
+      "Join strategy hint parameter should be an identifier or string but was <unsupported> (<class>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1047" : {
+    "message" : [
+      "<hintName> Hint parameter should include columns, but <invalidParams> found."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1048" : {
+    "message" : [
+      "<hintName> Hint expects a partition number as a parameter."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1049" : {
+    "message" : [
+      "Syntax error in attribute name: <name>."
+    ]
   }
 }

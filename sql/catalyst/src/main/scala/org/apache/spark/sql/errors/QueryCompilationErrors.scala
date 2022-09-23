@@ -608,24 +608,33 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def sessionWindowGapDurationDataTypeError(dt: DataType): Throwable = {
-    new AnalysisException("Gap duration expression used in session window must be " +
-      s"CalendarIntervalType, but got ${dt}")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1040",
+      messageParameters = Map("dt" -> dt.toString))
   }
 
   def functionUndefinedError(name: FunctionIdentifier): Throwable = {
-    new AnalysisException(s"undefined function $name")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1041",
+      messageParameters = Map("name" -> name.toString))
   }
 
   def invalidFunctionArgumentsError(
       name: String, expectedInfo: String, actualNumber: Int): Throwable = {
-    new AnalysisException(s"Invalid number of arguments for function $name. " +
-      s"Expected: $expectedInfo; Found: $actualNumber")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1042",
+      messageParameters = Map(
+        "name" -> name,
+        "expectedInfo" -> expectedInfo,
+        "actualNumber" -> actualNumber.toString))
   }
 
   def invalidFunctionArgumentNumberError(
       validParametersCount: Seq[Int], name: String, actualNumber: Int): Throwable = {
     if (validParametersCount.length == 0) {
-      new AnalysisException(s"Invalid arguments for function $name")
+      new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_1043",
+        messageParameters = Map("name" -> name))
     } else {
       val expectedNumberOfParameters = if (validParametersCount.length == 1) {
         validParametersCount.head.toString
@@ -638,30 +647,44 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def functionAcceptsOnlyOneArgumentError(name: String): Throwable = {
-    new AnalysisException(s"Function $name accepts only one argument")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1044",
+      messageParameters = Map("name" -> name))
   }
 
   def alterV2TableSetLocationWithPartitionNotSupportedError(): Throwable = {
-    new AnalysisException("ALTER TABLE SET LOCATION does not support partition for v2 tables.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1045",
+      messageParameters = Map.empty)
   }
 
   def joinStrategyHintParameterNotSupportedError(unsupported: Any): Throwable = {
-    new AnalysisException("Join strategy hint parameter " +
-      s"should be an identifier or string but was $unsupported (${unsupported.getClass}")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1046",
+      messageParameters = Map(
+        "unsupported" -> unsupported.toString,
+        "class" -> unsupported.getClass.toString))
   }
 
   def invalidHintParameterError(
       hintName: String, invalidParams: Seq[Any]): Throwable = {
-    new AnalysisException(s"$hintName Hint parameter should include columns, but " +
-      s"${invalidParams.mkString(", ")} found")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1047",
+      messageParameters = Map(
+        "hintName" -> hintName,
+        "invalidParams" -> invalidParams.mkString(", ")))
   }
 
   def invalidCoalesceHintParameterError(hintName: String): Throwable = {
-    new AnalysisException(s"$hintName Hint expects a partition number as a parameter")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1048",
+      messageParameters = Map("hintName" -> hintName))
   }
 
   def attributeNameSyntaxError(name: String): Throwable = {
-    new AnalysisException(s"syntax error in attribute name: $name")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1049",
+      messageParameters = Map("name" -> name))
   }
 
   def starExpandDataTypeNotSupportedError(attributes: Seq[String]): Throwable = {
