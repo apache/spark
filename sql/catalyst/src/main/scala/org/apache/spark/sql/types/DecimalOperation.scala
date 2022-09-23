@@ -412,11 +412,11 @@ trait DecimalOperation extends Serializable {
       newDecimalOperation.set(
         longVal + that.longVal, Math.max(precision, that.precision) + 1, scale)
     } else {
-      addUnderlying(that)
+      addUnderlyingValue(that)
     }
   }
 
-  protected def addUnderlying(that: DecimalOperation): DecimalOperation
+  protected def addUnderlyingValue(that: DecimalOperation): DecimalOperation
 
   def subtract(that: DecimalOperation): DecimalOperation = {
     if (underlyingIsNull && that.underlyingIsNull && _scale == that._scale) {
@@ -424,11 +424,11 @@ trait DecimalOperation extends Serializable {
       newDecimalOperation.set(
         longVal - that.longVal, Math.max(precision, that.precision) + 1, scale)
     } else {
-      subtractUnderlying(that)
+      subtractUnderlyingValue(that)
     }
   }
 
-  protected def subtractUnderlying(that: DecimalOperation): DecimalOperation
+  protected def subtractUnderlyingValue(that: DecimalOperation): DecimalOperation
 
   def multiply(that: DecimalOperation): DecimalOperation
 
@@ -452,11 +452,11 @@ trait DecimalOperation extends Serializable {
     this._precision = from._precision
     this._scale = from._scale
     if (from.underlyingIsNotNull) {
-      copyUnderlying(from)
+      copyUnderlyingValue(from)
     }
   }
 
-  def copyUnderlying(from: DecimalOperation): Unit
+  def copyUnderlyingValue(from: DecimalOperation): Unit
 }
 
 @Unstable
