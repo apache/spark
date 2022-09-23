@@ -72,7 +72,7 @@ class DynamicSchema {
     messageMsgDescriptorMapShort.put(msgTypeNameShort, msgType);
 
 
-    for(nestedType <- msgType.getNestedTypes.asScala) {
+    for (nestedType <- msgType.getNestedTypes.asScala) {
         addMessageType(nestedType, msgTypeNameShort, msgDupes)
     }
   }

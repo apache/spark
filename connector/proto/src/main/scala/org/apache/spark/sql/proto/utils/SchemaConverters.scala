@@ -18,8 +18,8 @@ package org.apache.spark.sql.proto.utils
 
 import java.util
 
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 
@@ -46,7 +46,8 @@ object SchemaConverters {
   }
 
   def toSqlTypeHelper(descriptor: Descriptor): SchemaType = ScalaReflectionLock.synchronized {
-    SchemaType(StructType(descriptor.getFields.asScala.flatMap(structFieldFor).toSeq), nullable = true)
+    SchemaType(StructType(descriptor.getFields.asScala.flatMap(structFieldFor).toSeq),
+      nullable = true)
   }
 
   def structFieldFor(fd: FieldDescriptor): Option[StructField] = {
@@ -90,7 +91,7 @@ object SchemaConverters {
   }
 
   def toMessageDefinition(catalystType: DataType, recordName: String,
-                          nameSpace: String, schemaBuilder: DynamicSchema#Builder) = {
+                          nameSpace: String, schemaBuilder: DynamicSchema#Builder): Unit = {
     catalystType match {
       case st: StructType =>
         val queue = mutable.Queue[ProtoMessage]()
