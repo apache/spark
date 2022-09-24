@@ -91,7 +91,7 @@ sed_i 's/scala\-'$FROM_VERSION'/scala\-'$TO_VERSION'/' "$BASEDIR/docs/_plugins/c
 
 
 sed_i 's/^\([[:space:]]*\/\* \(#if scala-'$TO_VERSION'\)\)/\/\/ \2/' "$BASEDIR/mllib/src/main/scala/org/apache/spark/mllib/feature/SkipGram.scala"
-sed_i 's/^\(#endif scala-'$TO_VERSION'\) \(\*\/\)/\/\/ \1/' "$BASEDIR/mllib/src/main/scala/org/apache/spark/mllib/feature/SkipGram.scala"
+sed_i 's/^\([[:space:]]#endif scala-'$TO_VERSION'\) \(\*\/\)/\/\/ \1/' "$BASEDIR/mllib/src/main/scala/org/apache/spark/mllib/feature/SkipGram.scala"
 
 echo "$BASEDIR/dev/mima"
 if [ $TO_VERSION = "2.13" ]; then
