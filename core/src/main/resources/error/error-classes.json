@@ -1565,5 +1565,105 @@
     "message" : [
       "Resource Type '<resourceType>' is not supported."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1080" : {
+    "message" : [
+      "Table <identifier> did not specify database."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1081" : {
+    "message" : [
+      "Table <identifier> did not specify locationUri."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1082" : {
+    "message" : [
+      "Partition [<specString>] did not specify locationUri."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1083" : {
+    "message" : [
+      "Number of buckets should be greater than 0 but less than or equal to bucketing.maxBuckets (`<bucketingMaxBuckets>`). Got `<numBuckets>`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1084" : {
+    "message" : [
+      "Corrupted table name context in catalog: <numParts> parts expected, but part <index> is missing."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1085" : {
+    "message" : [
+      "Corrupted view SQL configs in catalog."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1086" : {
+    "message" : [
+      "Corrupted view query output column names in catalog: <numCols> parts expected, but part <index> is missing."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1087" : {
+    "message" : [
+      "Corrupted view referred temp view names in catalog."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1088" : {
+    "message" : [
+      "Corrupted view referred temp functions names in catalog."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1089" : {
+    "message" : [
+      "Column statistics deserialization is not supported for column <name> of data type: <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1090" : {
+    "message" : [
+      "Column statistics serialization is not supported for column <colName> of data type: <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1091" : {
+    "message" : [
+      "Cannot read table property '<key>' as it's corrupted.<details>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1092" : {
+    "message" : [
+      "The expression '<expr>' is not a valid schema string."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1093" : {
+    "message" : [
+      "Schema should be specified in DDL format as a string literal or output of the schema_of_json/schema_of_csv functions instead of <expr>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1094" : {
+    "message" : [
+      "Schema should be struct type but got <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1095" : {
+    "message" : [
+      "A type of keys and values in map() must be string, but got <map>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1096" : {
+    "message" : [
+      "Must use a map() function for options."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1097" : {
+    "message" : [
+      "The field for corrupt records must be string type and nullable."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1098" : {
+    "message" : [
+      "DataType '<x>' is not supported by <className>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1099" : {
+    "message" : [
+      "<funcName>() doesn't support the <mode> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
+    ]
   }
 }

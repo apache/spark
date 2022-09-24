@@ -918,96 +918,138 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tableNotSpecifyDatabaseError(identifier: TableIdentifier): Throwable = {
-    new AnalysisException(s"table $identifier did not specify database")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1080",
+      messageParameters = Map("identifier" -> identifier.toString))
   }
 
   def tableNotSpecifyLocationUriError(identifier: TableIdentifier): Throwable = {
-    new AnalysisException(s"table $identifier did not specify locationUri")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1081",
+      messageParameters = Map("identifier" -> identifier.toString))
   }
 
   def partitionNotSpecifyLocationUriError(specString: String): Throwable = {
-    new AnalysisException(s"Partition [$specString] did not specify locationUri")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1082",
+      messageParameters = Map("specString" -> specString))
   }
 
   def invalidBucketNumberError(bucketingMaxBuckets: Int, numBuckets: Int): Throwable = {
     new AnalysisException(
-      s"Number of buckets should be greater than 0 but less than or equal to " +
-        s"bucketing.maxBuckets (`$bucketingMaxBuckets`). Got `$numBuckets`")
+      errorClass = "_LEGACY_ERROR_TEMP_1083",
+      messageParameters = Map(
+        "bucketingMaxBuckets" -> bucketingMaxBuckets.toString,
+        "numBuckets" -> numBuckets.toString))
   }
 
   def corruptedTableNameContextInCatalogError(numParts: Int, index: Int): Throwable = {
-    new AnalysisException("Corrupted table name context in catalog: " +
-      s"$numParts parts expected, but part $index is missing.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1084",
+      messageParameters = Map(
+        "numParts" -> numParts.toString,
+        "index" -> index.toString))
   }
 
   def corruptedViewSQLConfigsInCatalogError(e: Exception): Throwable = {
-    new AnalysisException("Corrupted view SQL configs in catalog", cause = Some(e))
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1085",
+      messageParameters = Map.empty,
+      cause = Some(e))
   }
 
   def corruptedViewQueryOutputColumnsInCatalogError(numCols: String, index: Int): Throwable = {
-    new AnalysisException("Corrupted view query output column names in catalog: " +
-      s"$numCols parts expected, but part $index is missing.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1086",
+      messageParameters = Map(
+        "numCols" -> numCols,
+        "index" -> index.toString))
   }
 
   def corruptedViewReferredTempViewInCatalogError(e: Exception): Throwable = {
-    new AnalysisException("corrupted view referred temp view names in catalog", cause = Some(e))
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1087",
+      messageParameters = Map.empty,
+      cause = Some(e))
   }
 
   def corruptedViewReferredTempFunctionsInCatalogError(e: Exception): Throwable = {
-    new AnalysisException(
-      "corrupted view referred temp functions names in catalog", cause = Some(e))
+        new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1088",
+      messageParameters = Map.empty,
+      cause = Some(e))
   }
 
   def columnStatisticsDeserializationNotSupportedError(
       name: String, dataType: DataType): Throwable = {
-    new AnalysisException("Column statistics deserialization is not supported for " +
-      s"column $name of data type: $dataType.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1089",
+      messageParameters = Map("name" -> name, "dataType" -> dataType.toString))
   }
 
   def columnStatisticsSerializationNotSupportedError(
       colName: String, dataType: DataType): Throwable = {
-    new AnalysisException("Column statistics serialization is not supported for " +
-      s"column $colName of data type: $dataType.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1090",
+      messageParameters = Map("colName" -> colName, "dataType" -> dataType.toString))
   }
 
   def cannotReadCorruptedTablePropertyError(key: String, details: String = ""): Throwable = {
-    new AnalysisException(s"Cannot read table property '$key' as it's corrupted.$details")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1091",
+      messageParameters = Map("key" -> key, "details" -> details))
   }
 
   def invalidSchemaStringError(exp: Expression): Throwable = {
-    new AnalysisException(s"The expression '${exp.sql}' is not a valid schema string.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1092",
+      messageParameters = Map("expr" -> exp.sql))
   }
 
   def schemaNotFoldableError(exp: Expression): Throwable = {
     new AnalysisException(
-      "Schema should be specified in DDL format as a string literal or output of " +
-        s"the schema_of_json/schema_of_csv functions instead of ${exp.sql}")
+      errorClass = "_LEGACY_ERROR_TEMP_1093",
+      messageParameters = Map("expr" -> exp.sql))
   }
 
   def schemaIsNotStructTypeError(dataType: DataType): Throwable = {
-    new AnalysisException(s"Schema should be struct type but got ${dataType.sql}.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1094",
+      messageParameters = Map("dataType" -> dataType.toString))
   }
 
   def keyValueInMapNotStringError(m: CreateMap): Throwable = {
     new AnalysisException(
-      s"A type of keys and values in map() must be string, but got ${m.dataType.catalogString}")
+      errorClass = "_LEGACY_ERROR_TEMP_1095",
+      messageParameters = Map("map" -> m.dataType.catalogString))
   }
 
   def nonMapFunctionNotAllowedError(): Throwable = {
-    new AnalysisException("Must use a map() function for options")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1096",
+      messageParameters = Map.empty)
   }
 
   def invalidFieldTypeForCorruptRecordError(): Throwable = {
-    new AnalysisException("The field for corrupt records must be string type and nullable")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1097",
+      messageParameters = Map.empty)
   }
 
   def dataTypeUnsupportedByClassError(x: DataType, className: String): Throwable = {
-    new AnalysisException(s"DataType '$x' is not supported by $className.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1098",
+      messageParameters = Map("x" -> x.toString, "className" -> className))
   }
 
   def parseModeUnsupportedError(funcName: String, mode: ParseMode): Throwable = {
-    new AnalysisException(s"$funcName() doesn't support the ${mode.name} mode. " +
-      s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1099",
+      messageParameters = Map(
+        "funcName" -> funcName,
+        "mode" -> mode.name,
+        "permissiveMode" -> PermissiveMode.name,
+        "failFastMode" -> FailFastMode.name))
   }
 
   def requireLiteralParameter(
