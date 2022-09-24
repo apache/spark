@@ -47,7 +47,7 @@ import org.apache.spark.util.collection.OpenHashMap
 private object ParItr {
 
   def foreach[A](i: Iterator[A], cpus: Int, batch: Int)(f: A => Unit): Unit = {
-    val support = new ForkJoinTaskSupport(new scala.concurrent.forkjoin.ForkJoinPool(cpus))
+    val support = new ForkJoinTaskSupport(new java.util.concurrent.ForkJoinPool(cpus))
     i.grouped(batch).foreach{arr =>
       val parr = arr.par
       parr.tasksupport = support
@@ -56,7 +56,7 @@ private object ParItr {
   }
 
   def map[A, B](i: Iterator[A], cpus: Int, batch: Int)(f: A => B): Iterator[B] = {
-    val support = new ForkJoinTaskSupport(new scala.concurrent.forkjoin.ForkJoinPool(cpus))
+    val support = new ForkJoinTaskSupport(new java.util.concurrent.ForkJoinPool(cpus))
     i.grouped(batch).flatMap{arr =>
       val parr = arr.par
       parr.tasksupport = support
