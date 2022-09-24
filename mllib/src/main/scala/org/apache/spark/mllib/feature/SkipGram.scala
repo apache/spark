@@ -19,6 +19,9 @@ package org.apache.spark.mllib.feature
 import java.util.Random
 
 import scala.collection.mutable.ArrayBuffer
+/* #if scala-2.13
+import scala.collection.parallel.CollectionConverters._
+#endif scala-2.13 */
 import scala.collection.parallel.ForkJoinTaskSupport
 
 import collection.JavaConverters._
