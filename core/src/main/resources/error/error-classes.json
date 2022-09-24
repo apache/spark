@@ -1468,7 +1468,7 @@
   },
   "_LEGACY_ERROR_TEMP_1060" : {
     "message" : [
-      "<command> does not support nested column: <quoted>."
+      "<command> does not support nested column: <column>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1061" : {
@@ -1488,7 +1488,7 @@
   },
   "_LEGACY_ERROR_TEMP_1064" : {
     "message" : [
-      "Cannot drop a non-empty namespace: <namespace.quoted>. Use CASCADE option to drop a non-empty namespace."
+      "Cannot drop a non-empty namespace: <namespace>. Use CASCADE option to drop a non-empty namespace."
     ]
   },
   "_LEGACY_ERROR_TEMP_1065" : {
