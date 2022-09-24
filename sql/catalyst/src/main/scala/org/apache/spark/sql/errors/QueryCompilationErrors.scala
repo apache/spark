@@ -842,58 +842,79 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotOperateManagedTableWithExistingLocationError(
       methodName: String, tableIdentifier: TableIdentifier, tableLocation: Path): Throwable = {
-    new AnalysisException(s"Can not $methodName the managed table('$tableIdentifier')" +
-      s". The associated location('${tableLocation.toString}') already exists.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1070",
+      messageParameters = Map(
+        "methodName" -> methodName,
+        "tableIdentifier" -> tableIdentifier.toString,
+        "tableLocation" -> tableLocation.toString))
   }
 
   def dropNonExistentColumnsNotSupportedError(
       nonExistentColumnNames: Seq[String]): Throwable = {
     new AnalysisException(
-      s"""
-         |Some existing schema fields (${nonExistentColumnNames.mkString("[", ",", "]")}) are
-         |not present in the new schema. We don't support dropping columns yet.
-         """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1071",
+      messageParameters = Map(
+        "nonExistentColumnNames" -> nonExistentColumnNames.mkString("[", ",", "]")))
   }
 
   def cannotRetrieveTableOrViewNotInSameDatabaseError(
       qualifiedTableNames: Seq[QualifiedTableName]): Throwable = {
-    new AnalysisException("Only the tables/views belong to the same database can be retrieved. " +
-      s"Querying tables/views are $qualifiedTableNames")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1072",
+      messageParameters = Map("qualifiedTableNames" -> qualifiedTableNames.toString()))
   }
 
   def renameTableSourceAndDestinationMismatchError(db: String, newDb: String): Throwable = {
     new AnalysisException(
-      s"RENAME TABLE source and destination databases do not match: '$db' != '$newDb'")
+      errorClass = "_LEGACY_ERROR_TEMP_1073",
+      messageParameters = Map("db" -> db, "newDb" -> newDb))
   }
 
   def cannotRenameTempViewWithDatabaseSpecifiedError(
       oldName: TableIdentifier, newName: TableIdentifier): Throwable = {
-    new AnalysisException(s"RENAME TEMPORARY VIEW from '$oldName' to '$newName': cannot " +
-      s"specify database name '${newName.database.get}' in the destination table")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1074",
+      messageParameters = Map(
+        "oldName" -> oldName.toString,
+        "newName" -> newName.toString,
+        "db" -> newName.database.get))
   }
 
   def cannotRenameTempViewToExistingTableError(
       oldName: TableIdentifier, newName: TableIdentifier): Throwable = {
-    new AnalysisException(s"RENAME TEMPORARY VIEW from '$oldName' to '$newName': " +
-      "destination table already exists")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1075",
+      messageParameters = Map(
+        "oldName" -> oldName.toString,
+        "newName" -> newName.toString))
   }
 
   def invalidPartitionSpecError(details: String): Throwable = {
-    new AnalysisException(s"Partition spec is invalid. $details")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1076",
+      messageParameters = Map("details" -> details))
   }
 
   def functionAlreadyExistsError(func: FunctionIdentifier): Throwable = {
-    new AnalysisException(s"Function $func already exists")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1077",
+      messageParameters = Map("func" -> func.toString))
   }
 
   def cannotLoadClassWhenRegisteringFunctionError(
       className: String, func: FunctionIdentifier): Throwable = {
-    new AnalysisException(s"Can not load class '$className' when registering " +
-      s"the function '$func', please make sure it is on the classpath")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1078",
+      messageParameters = Map(
+        "className" -> className,
+        "func" -> func.toString))
   }
 
   def resourceTypeNotSupportedError(resourceType: String): Throwable = {
-    new AnalysisException(s"Resource Type '$resourceType' is not supported.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1079",
+      messageParameters = Map("resourceType" -> resourceType))
   }
 
   def tableNotSpecifyDatabaseError(identifier: TableIdentifier): Throwable = {

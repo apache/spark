@@ -1515,5 +1515,55 @@
     "message" : [
       "CREATE EXTERNAL TABLE must be accompanied by LOCATION."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1070" : {
+    "message" : [
+      "Can not <methodName> the managed table('<tableIdentifier>'). The associated location('<tableLocation>') already exists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1071" : {
+    "message" : [
+      "Some existing schema fields (<nonExistentColumnNames>) are not present in the new schema. We don't support dropping columns yet."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1072" : {
+    "message" : [
+      "Only the tables/views belong to the same database can be retrieved. Querying tables/views are <qualifiedTableNames>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1073" : {
+    "message" : [
+      "RENAME TABLE source and destination databases do not match: '<db>' != '<newDb>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1074" : {
+    "message" : [
+      "RENAME TEMPORARY VIEW from '<oldName>' to '<newName>': cannot specify database name '<db>' in the destination table."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1075" : {
+    "message" : [
+      "RENAME TEMPORARY VIEW from '<oldName>' to '<newName>': destination table already exists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1076" : {
+    "message" : [
+      "Partition spec is invalid. <details>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1077" : {
+    "message" : [
+      "Function <func> already exists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1078" : {
+    "message" : [
+      "Can not load class '<className>' when registering the function '<func>', please make sure it is on the classpath."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1079" : {
+    "message" : [
+      "Resource Type '<resourceType>' is not supported."
+    ]
   }
 }
