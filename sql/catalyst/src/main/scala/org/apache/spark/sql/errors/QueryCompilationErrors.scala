@@ -688,16 +688,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def starExpandDataTypeNotSupportedError(attributes: Seq[String]): Throwable = {
-    new AnalysisException(s"Can only star expand struct data types. Attribute: `$attributes`")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1050",
+      messageParameters = Map("attributes" -> attributes.toString()))
   }
 
   def cannotResolveStarExpandGivenInputColumnsError(
       targetString: String, columns: String): Throwable = {
-    new AnalysisException(s"cannot resolve '$targetString.*' given input columns '$columns'")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1051",
+      messageParameters = Map(
+        "targetString" -> targetString,
+        "columns" -> columns))
   }
 
   def addColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
-    new AnalysisException("ADD COLUMN with v1 tables cannot specify NOT NULL.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1052",
+      messageParameters = Map.empty)
   }
 
   def operationOnlySupportedWithV2TableError(
@@ -721,85 +729,115 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def alterColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
-    new AnalysisException("ALTER COLUMN with v1 tables cannot specify NOT NULL.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1053",
+      messageParameters = Map.empty)
   }
 
   def alterColumnCannotFindColumnInV1TableError(colName: String, v1Table: V1Table): Throwable = {
     new AnalysisException(
-      s"ALTER COLUMN cannot find column $colName in v1 table. " +
-        s"Available: ${v1Table.schema.fieldNames.mkString(", ")}")
+      errorClass = "_LEGACY_ERROR_TEMP_1054",
+      messageParameters = Map(
+        "colName" -> colName,
+        "fieldNames" -> v1Table.schema.fieldNames.mkString(", ")))
   }
 
   def invalidDatabaseNameError(quoted: String): Throwable = {
-    new AnalysisException(s"The database name is not valid: $quoted")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1055",
+      messageParameters = Map("database" -> quoted))
   }
 
   def cannotDropViewWithDropTableError(): Throwable = {
-    new AnalysisException("Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1056",
+      messageParameters = Map.empty)
   }
 
   def showColumnsWithConflictDatabasesError(
       db: Seq[String], v1TableName: TableIdentifier): Throwable = {
-    new AnalysisException("SHOW COLUMNS with conflicting databases: " +
-        s"'${db.head}' != '${v1TableName.database.get}'")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1057",
+      messageParameters = Map(
+        "dbA" -> db.head,
+        "dbB" -> v1TableName.database.get))
   }
 
   def cannotCreateTableWithBothProviderAndSerdeError(
       provider: Option[String], maybeSerdeInfo: Option[SerdeInfo]): Throwable = {
     new AnalysisException(
-      s"Cannot create table with both USING $provider and ${maybeSerdeInfo.get.describe}")
+      errorClass = "_LEGACY_ERROR_TEMP_1058",
+      messageParameters = Map(
+        "provider" -> provider.toString,
+        "serDeInfo" -> maybeSerdeInfo.get.describe))
   }
 
   def invalidFileFormatForStoredAsError(serdeInfo: SerdeInfo): Throwable = {
     new AnalysisException(
-      s"STORED AS with file format '${serdeInfo.storedAs.get}' is invalid.")
+      errorClass = "_LEGACY_ERROR_TEMP_1059",
+      messageParameters = Map("serdeInfo" -> serdeInfo.storedAs.get))
   }
 
   def commandNotSupportNestedColumnError(command: String, quoted: String): Throwable = {
-    new AnalysisException(s"$command does not support nested column: $quoted")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1060",
+      messageParameters = Map(
+        "command" -> command,
+        "column" -> quoted))
   }
 
   def columnDoesNotExistError(colName: String): Throwable = {
-    new AnalysisException(s"Column $colName does not exist")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1061",
+      messageParameters = Map("colName" -> colName))
   }
 
   def renameTempViewToExistingViewError(oldName: String, newName: String): Throwable = {
     new AnalysisException(
-      s"rename temporary view from '$oldName' to '$newName': destination view already exists")
+      errorClass = "_LEGACY_ERROR_TEMP_1062",
+      messageParameters = Map("oldName" -> oldName, "newName" -> newName))
   }
 
   def cannotDropNonemptyDatabaseError(db: String): Throwable = {
-    new AnalysisException(s"Cannot drop a non-empty database: $db. " +
-      "Use CASCADE option to drop a non-empty database.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1063",
+      messageParameters = Map("db" -> db))
   }
 
   def cannotDropNonemptyNamespaceError(namespace: Seq[String]): Throwable = {
-    new AnalysisException(s"Cannot drop a non-empty namespace: ${namespace.quoted}. " +
-      "Use CASCADE option to drop a non-empty namespace.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1064",
+      messageParameters = Map("namespace" -> namespace.quoted))
   }
 
   def invalidNameForTableOrDatabaseError(name: String): Throwable = {
-    new AnalysisException(s"`$name` is not a valid name for tables/databases. " +
-      "Valid names only contain alphabet characters, numbers and _.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1065",
+      messageParameters = Map("name" -> name))
   }
 
   def cannotCreateDatabaseWithSameNameAsPreservedDatabaseError(database: String): Throwable = {
-    new AnalysisException(s"$database is a system preserved database, " +
-      "you cannot create a database with this name.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1066",
+      messageParameters = Map("database" -> database))
   }
 
   def cannotDropDefaultDatabaseError(): Throwable = {
-    new AnalysisException("Can not drop default database")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1067",
+      messageParameters = Map.empty)
   }
 
   def cannotUsePreservedDatabaseAsCurrentDatabaseError(database: String): Throwable = {
-    new AnalysisException(s"$database is a system preserved database, you cannot use it as " +
-      "current database. To access global temporary views, you should use qualified name with " +
-      s"the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM $database.viewName.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1068",
+      messageParameters = Map("database" -> database))
   }
 
   def createExternalTableWithoutLocationError(): Throwable = {
-    new AnalysisException("CREATE EXTERNAL TABLE must be accompanied by LOCATION")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1069",
+      messageParameters = Map.empty)
   }
 
   def cannotOperateManagedTableWithExistingLocationError(
