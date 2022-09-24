@@ -1116,7 +1116,7 @@ class SkipGram:
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> model.save(sc, path)
-    >>> sameModel = SkipGram.load(sc, path)
+    >>> sameModel = SkipGramModel.load(sc, path)
     >>> syms = sameModel.findSynonyms("a", 2)
     >>> [s[0] for s in syms]
     ['b', 'c']
