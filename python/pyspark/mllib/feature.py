@@ -18,7 +18,6 @@
 """
 Python package for feature in MLlib.
 """
-import array
 import sys
 import warnings
 from typing import Dict, Hashable, Iterable, List, Optional, Tuple, Union, overload, TYPE_CHECKING
