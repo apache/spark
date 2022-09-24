@@ -196,18 +196,6 @@ private[spark] class SparkUnsupportedOperationException(
 }
 
 /**
- * Default catalog database not exists exception thrown from Spark with an error class.
- */
-private[spark] class SparkDefaultDatabaseNotExistsException(
-    errorClass: String,
-    messageParameters: Array[String],
-    cause: Throwable = null)
-  extends SparkException(
-    errorClass = errorClass,
-    messageParameters = messageParameters,
-    cause = cause)
-
-/**
  * Class not found exception thrown from Spark with an error class.
  */
 private[spark] class SparkClassNotFoundException(

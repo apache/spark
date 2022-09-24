@@ -1932,6 +1932,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new UnsupportedOperationException(s"$nodeName does not implement doExecuteBroadcast")
   }
 
+  def defaultDatabaseNotExistsError(defaultDatabase: String): Throwable = {
+    new SparkException(
+      errorClass = "DEFAULT_DATABASE_NOT_EXISTS",
+      messageParameters = Array(defaultDatabase),
+      cause = null)
+  }
+
   def databaseNameConflictWithSystemPreservedDatabaseError(globalTempDB: String): Throwable = {
     new SparkException(
       s"""

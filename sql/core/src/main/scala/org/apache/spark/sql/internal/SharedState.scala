@@ -32,7 +32,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.diagnostic.DiagnosticListener
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab, StreamingQueryStatusStore}
@@ -152,7 +152,7 @@ private[sql] class SharedState(
     // If database name not equals 'default', throw exception
     if (!externalCatalog.databaseExists(SQLConf.get.defaultDatabase)) {
       if (SessionCatalog.DEFAULT_DATABASE != SQLConf.get.defaultDatabase) {
-        throw QueryCompilationErrors.defaultDatabaseNotExistsError(
+        throw QueryExecutionErrors.defaultDatabaseNotExistsError(
           SQLConf.get.defaultDatabase
         )
       }
