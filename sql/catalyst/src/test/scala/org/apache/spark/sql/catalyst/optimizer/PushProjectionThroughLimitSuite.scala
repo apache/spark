@@ -58,5 +58,33 @@ class PushProjectionThroughLimitSuite extends PlanTest {
       .select('a, 'b, 'c')
       .limit(10).analyze
     comparePlans(optimized2, expected2)
+
+    val query3 = testRelation
+      .limit(10)
+      .select('a, 'b, 'c')
+      .limit(20)
+      .select('a)
+      .limit(15).analyze
+    val optimized3 = Optimize.execute(query3)
+    val expected3 = testRelation
+      .select('a, 'b, 'c')
+      .select('a)
+      .limit(10).analyze
+    comparePlans(optimized3, expected3)
+
+    val query4 = testRelation
+      .sortBy($"a".asc)
+      .limit(10)
+      .select('a, 'b, 'c')
+      .limit(20)
+      .select('a)
+      .limit(15).analyze
+    val optimized4 = Optimize.execute(query4)
+    val expected4 = testRelation
+      .sortBy($"a".asc)
+      .select('a, 'b, 'c')
+      .select('a)
+      .limit(10).analyze
+    comparePlans(optimized4, expected4)
   }
 }
