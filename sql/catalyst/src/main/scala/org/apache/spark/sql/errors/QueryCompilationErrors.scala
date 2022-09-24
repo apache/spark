@@ -604,6 +604,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "operation" -> operation))
   }
 
+  def catalogOperationNotSupported(catalog: CatalogPlugin, operation: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = "CATALOG_OPERATION",
+      messageParameters = Map(
+        "catalogName" -> toSQLId(Seq(catalog.name())),
+        "operation" -> operation))
+  }
+
   def alterColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
     new AnalysisException("ALTER COLUMN with v1 tables cannot specify NOT NULL.")
   }
@@ -956,6 +965,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def noSuchTableError(ident: Identifier): Throwable = {
     new NoSuchTableException(ident)
+  }
+
+  def noSuchTableError(nameParts: Seq[String]): Throwable = {
+    new NoSuchTableException(nameParts)
   }
 
   def noSuchNamespaceError(namespace: Array[String]): Throwable = {
@@ -1563,10 +1576,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(s"'$operation' does not support partitioning")
   }
 
-  def mixedRefsInAggFunc(funcStr: String): Throwable = {
-    val msg = "Found an aggregate function in a correlated predicate that has both " +
-      "outer and local references, which is not supported: " + funcStr
-    new AnalysisException(msg)
+  def mixedRefsInAggFunc(funcStr: String, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+      errorSubClass = "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
+      origin = origin,
+      messageParameters = Map("function" -> funcStr))
   }
 
   def functionCannotProcessInputError(

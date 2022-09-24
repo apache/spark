@@ -73,7 +73,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.sum(scol).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(sum)
 
@@ -82,7 +82,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.min(scol).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(min)
 
@@ -91,7 +91,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.max(scol).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(max)
 
@@ -100,7 +100,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.mean(scol).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(mean)
 
@@ -109,7 +109,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.percentile_approx(scol.cast(DoubleType()), q, accuracy).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(quantile)
 
@@ -118,7 +118,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.stddev(scol).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(std)
 
@@ -127,7 +127,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.variance(scol).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(var)
 
@@ -136,7 +136,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 SF.skew(scol).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(skew)
 
@@ -145,7 +145,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 SF.kurt(scol).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(kurt)
 
@@ -976,7 +976,7 @@ class RollingGroupby(RollingLike[FrameLike]):
             data_fields=[c._internal.data_fields[0] for c in applied],
         )
 
-        return groupby._cleanup_and_return(DataFrame(internal))
+        return groupby._handle_output(DataFrame(internal))
 
     def count(self) -> FrameLike:
         """
@@ -2453,7 +2453,7 @@ class ExponentialMovingLike(Generic[FrameLike], metaclass=ABCMeta):
                 F.count(F.when(~scol.isNull(), 1).otherwise(None)).over(self._unbounded_window)
                 >= self._min_periods,
                 Column(sql_utils.ewm(scol._jc, unified_alpha, self._ignore_na)).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(mean)
 

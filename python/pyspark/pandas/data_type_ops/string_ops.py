@@ -53,7 +53,7 @@ class StringOps(DataTypeOps):
             return cast(
                 SeriesOrIndex,
                 left._with_new_scol(
-                    F.concat(left.spark.column, SF.lit(right)), field=left._internal.data_fields[0]
+                    F.concat(left.spark.column, F.lit(right)), field=left._internal.data_fields[0]
                 ),
             )
         elif isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType):
@@ -85,7 +85,7 @@ class StringOps(DataTypeOps):
             return cast(
                 SeriesOrIndex,
                 left._with_new_scol(
-                    F.concat(SF.lit(right), left.spark.column), field=left._internal.data_fields[0]
+                    F.concat(F.lit(right), left.spark.column), field=left._internal.data_fields[0]
                 ),
             )
         else:
@@ -137,7 +137,7 @@ class StringOps(DataTypeOps):
             if isinstance(dtype, extension_dtypes):
                 scol = index_ops.spark.column.cast(spark_type)
             else:
-                scol = F.when(index_ops.spark.column.isNull(), SF.lit(False)).otherwise(
+                scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
                     F.length(index_ops.spark.column) > 0
                 )
             return index_ops._with_new_scol(

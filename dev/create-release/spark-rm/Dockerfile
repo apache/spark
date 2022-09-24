@@ -53,7 +53,7 @@ ARG GEM_PKGS="bundler:2.2.9"
 # the most current package versions (instead of potentially using old versions cached by docker).
 RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list && \
-  gpg --keyserver keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9 && \
+  gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9 && \
   gpg -a --export E084DAB9 | apt-key add - && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/* && \

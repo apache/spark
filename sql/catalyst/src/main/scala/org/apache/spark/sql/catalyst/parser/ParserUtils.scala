@@ -135,7 +135,10 @@ object ParserUtils {
   /** Validate the condition. If it doesn't throw a parse exception. */
   def validate(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
     if (!f) {
-      throw new ParseException(message, ctx)
+      throw new ParseException(
+        errorClass = "_LEGACY_ERROR_TEMP_0064",
+        messageParameters = Map("msg" -> message),
+        ctx)
     }
   }
 

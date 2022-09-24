@@ -668,10 +668,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new UnsupportedOperationException(s"buildReader is not supported for $format")
   }
 
-  def jobAbortedError(cause: Throwable): Throwable = {
-    new SparkException("Job aborted.", cause)
-  }
-
   def taskFailedWhileWritingRowsError(cause: Throwable): Throwable = {
     new SparkException("Task failed while writing rows.", cause)
   }
@@ -773,13 +769,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def writingJobFailedError(cause: Throwable): Throwable = {
     new SparkException("Writing job failed.", cause)
-  }
-
-  def writingJobAbortedError(e: Throwable): Throwable = {
-    new SparkException(
-      errorClass = "WRITING_JOB_ABORTED",
-      messageParameters = Map.empty,
-      cause = e)
   }
 
   def commitDeniedError(
@@ -1311,11 +1300,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         s"an ${ArrayType.simpleString}, a ${StructType.simpleString} or a ${MapType.simpleString}")
   }
 
-  def cannotConvertColumnToJSONError(name: String, dataType: DataType): Throwable = {
-    new UnsupportedOperationException(
-      s"Unable to convert column $name of type ${dataType.catalogString} to JSON.")
-  }
-
   def malformedRecordsDetectedInSchemaInferenceError(e: Throwable): Throwable = {
     new SparkException("Malformed records are detected in schema inference. " +
       s"Parse Mode: ${FailFastMode.name}.", e)
@@ -1599,9 +1583,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       s"$commitProtocol does not support adding files with an absolute path")
   }
 
-  def microBatchUnsupportedByDataSourceError(srcName: String): Throwable = {
-    new UnsupportedOperationException(
-      s"Data source $srcName does not support microbatch processing.")
+  def microBatchUnsupportedByDataSourceError(
+      srcName: String,
+      disabledSources: String,
+      table: Table): Throwable = {
+    new UnsupportedOperationException(s"""
+         |Data source $srcName does not support microbatch processing.
+         |
+         |Either the data source is disabled at
+         |SQLConf.get.DISABLED_V2_STREAMING_MICROBATCH_READERS.key (The disabled sources
+         |are [$disabledSources]) or the table $table does not have MICRO_BATCH_READ
+         |capability. Meanwhile, the fallback, data source v1, is not available."
+       """.stripMargin)
   }
 
   def cannotExecuteStreamingRelationExecError(): Throwable = {

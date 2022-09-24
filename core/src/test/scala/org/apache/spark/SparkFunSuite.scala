@@ -300,10 +300,15 @@ abstract class SparkFunSuite
       parameters: Map[String, String] = Map.empty,
       matchPVals: Boolean = false,
       queryContext: Array[QueryContext] = Array.empty): Unit = {
-    assert(exception.getErrorClass === errorClass)
+    val mainErrorClass :: tail = errorClass.split("\\.").toList
+    assert(tail.isEmpty || tail.length == 1)
+    // TODO: remove the `errorSubClass` parameter.
+    assert(tail.isEmpty || errorSubClass.isEmpty)
+    assert(exception.getErrorClass === mainErrorClass)
     if (exception.getErrorSubClass != null) {
-      assert(errorSubClass.isDefined)
-      assert(exception.getErrorSubClass === errorSubClass.get)
+      val subClass = errorSubClass.orElse(tail.headOption)
+      assert(subClass.isDefined)
+      assert(exception.getErrorSubClass === subClass.get)
     }
     sqlState.foreach(state => assert(exception.getSqlState === state))
     val expectedParameters = exception.getMessageParameters.asScala
@@ -380,6 +385,16 @@ abstract class SparkFunSuite
       context: QueryContext): Unit =
     checkError(exception, errorClass, Some(errorSubClass), sqlState, parameters,
       false, Array(context))
+
+  protected def checkErrorMatchPVals(
+      exception: SparkThrowable,
+      errorClass: String,
+      errorSubClass: String,
+      sqlState: Option[String],
+      parameters: Map[String, String],
+      context: QueryContext): Unit =
+    checkError(exception, errorClass, Some(errorSubClass), sqlState, parameters,
+      matchPVals = true, Array(context))
 
   protected def checkError(
       exception: SparkThrowable,

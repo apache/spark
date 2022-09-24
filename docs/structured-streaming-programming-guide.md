@@ -498,14 +498,14 @@ to track the read position in the stream. The engine uses checkpointing and writ
 
 # API using Datasets and DataFrames
 Since Spark 2.0, DataFrames and Datasets can represent static, bounded data, as well as streaming, unbounded data. Similar to static Datasets/DataFrames, you can use the common entry point `SparkSession`
-([Scala](api/scala/org/apache/spark/sql/SparkSession.html)/[Java](api/java/org/apache/spark/sql/SparkSession.html)/[Python](api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.html#pyspark.sql.SparkSession)/[R](api/R/sparkR.session.html) docs)
+([Scala](api/scala/org/apache/spark/sql/SparkSession.html)/[Java](api/java/org/apache/spark/sql/SparkSession.html)/[Python](api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.html#pyspark.sql.SparkSession)/[R](api/R/reference/sparkR.session.html) docs)
 to create streaming DataFrames/Datasets from streaming sources, and apply the same operations on them as static DataFrames/Datasets. If you are not familiar with Datasets/DataFrames, you are strongly advised to familiarize yourself with them using the
 [DataFrame/Dataset Programming Guide](sql-programming-guide.html).
 
 ## Creating streaming DataFrames and streaming Datasets
 Streaming DataFrames can be created through the `DataStreamReader` interface
 ([Scala](api/scala/org/apache/spark/sql/streaming/DataStreamReader.html)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamReader.html)/[Python](api/python/reference/pyspark.ss/api/pyspark.sql.streaming.DataStreamReader.html#pyspark.sql.streaming.DataStreamReader) docs)
-returned by `SparkSession.readStream()`. In [R](api/R/read.stream.html), with the `read.stream()` method. Similar to the read interface for creating static DataFrame, you can specify the details of the source – data format, schema, options, etc.
+returned by `SparkSession.readStream()`. In [R](api/R/reference/read.stream.html), with the `read.stream()` method. Similar to the read interface for creating static DataFrame, you can specify the details of the source – data format, schema, options, etc.
 
 #### Input Sources
 There are a few built-in sources.

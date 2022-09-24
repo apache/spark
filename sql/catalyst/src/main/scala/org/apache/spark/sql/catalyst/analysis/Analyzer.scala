@@ -58,6 +58,7 @@ import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.{Utils => CUtils}
 
 /**
  * A trivial [[Analyzer]] with a dummy [[SessionCatalog]], [[EmptyFunctionRegistry]] and
@@ -1090,7 +1091,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         }.getOrElse(u)
 
       case u @ UnresolvedView(identifier, cmd, allowTemp, relationTypeMismatchHint) =>
-        lookupTableOrView(identifier).map {
+        lookupTableOrView(identifier, viewOnly = true).map {
           case _: ResolvedTempView if !allowTemp =>
             throw QueryCompilationErrors.expectViewNotTempViewError(identifier, cmd, u)
           case t: ResolvedTable =>
@@ -1136,12 +1137,17 @@ class Analyzer(override val catalogManager: CatalogManager)
      * Resolves relations to `ResolvedTable` or `Resolved[Temp/Persistent]View`. This is
      * for resolving DDL and misc commands.
      */
-    private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {
+    private def lookupTableOrView(
+        identifier: Seq[String],
+        viewOnly: Boolean = false): Option[LogicalPlan] = {
       lookupTempView(identifier).map { tempView =>
         ResolvedTempView(identifier.asIdentifier, tempView.tableMeta.schema)
       }.orElse {
         expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
+            if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog)) {
+              throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
+            }
             CatalogV2Util.loadTable(catalog, ident).map {
               case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
                 v1Table.v1Table.tableType == CatalogTableType.VIEW =>
@@ -3457,7 +3463,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw QueryCompilationErrors.writeTableWithMismatchedColumnsError(
           cols.size, query.output.size, query)
       }
-      val nameToQueryExpr = cols.zip(query.output).toMap
+      val nameToQueryExpr = CUtils.toMap(cols, query.output)
       // Static partition columns in the table output should not appear in the column list
       // they will be handled in another rule ResolveInsertInto
       val reordered = tableOutput.flatMap { nameToQueryExpr.get(_).orElse(None) }
