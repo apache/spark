@@ -1252,17 +1252,17 @@ class SkipGram:
         if not isinstance(data, RDD):
             raise TypeError("data should be an RDD of list of string")
         params = {
-             'vectorSize': int(self.vectorSize),
-             'learningRate': float(self.learningRate),
-             'numPartitions': int(self.numPartitions),
-             'numThread': int(self.numThread),
-             'numIterations': int(self.numIterations),
-             'pow': float(self.pow),
-             'sample': float(self.sample),
-             'negative': int(self.negative),
-             'minCount': int(self.minCount),
-             'windowSize': int(self.windowSize),
-             'intermediateRDDStorageLevel': str(self.intermediateRDDStorageLevel)
+            "vectorSize": int(self.vectorSize),
+            "learningRate": float(self.learningRate),
+            "numPartitions": int(self.numPartitions),
+            "numThread": int(self.numThread),
+            "numIterations": int(self.numIterations),
+            "pow": float(self.pow),
+            "sample": float(self.sample),
+            "negative": int(self.negative),
+            "minCount": int(self.minCount),
+            "windowSize": int(self.windowSize),
+            "intermediateRDDStorageLevel": str(self.intermediateRDDStorageLevel),
         }
         jmodel = callMLlibFunc(
             "trainSkipGramModel",
