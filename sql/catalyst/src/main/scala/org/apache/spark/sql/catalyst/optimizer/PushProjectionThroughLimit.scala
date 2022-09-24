@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIMIT, PROJECT}
 
 /**
- * Pushes Project operator to Limit operator.
+ * Pushes Project operator through Limit operator.
  */
 object PushProjectionThroughLimit extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
