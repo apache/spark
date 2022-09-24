@@ -1138,8 +1138,8 @@ class SkipGram:
         self.windowSize = 5
         self.numThread = 1
         self.negative = 5
-        self.sample = 0
-        self.pow = 0
+        self.sample = 0.0
+        self.pow = 0.0
         self.intermediateRDDStorageLevel = "MEMORY_AND_DISK"
 
     @since("3.4.0")
@@ -1212,7 +1212,7 @@ class SkipGram:
     @since("3.4.0")
     def setSample(self, sample: float) -> "SkipGram":
         """
-        Sets sample (default: 0).
+        Sets sample (default: 0.0).
         """
         self.sample = sample
         return self
@@ -1220,7 +1220,7 @@ class SkipGram:
     @since("3.4.0")
     def setPow(self, pow: float) -> "SkipGram":
         """
-        Sets pow (default: 0).
+        Sets pow (default: 0.0).
         """
         self.pow = pow
         return self
