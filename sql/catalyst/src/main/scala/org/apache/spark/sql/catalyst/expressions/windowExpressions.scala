@@ -71,7 +71,7 @@ case class WindowSpecDefinition(
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && !f.isUnbounded &&
           orderSpec.isEmpty =>
         DataTypeMismatch(
-          errorSubClass = "RANGE_FRAME_EMPTY_ORDER"
+          errorSubClass = "RANGE_FRAME_WITHOUT_ORDER"
         )
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
           orderSpec.size > 1 =>
