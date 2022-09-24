@@ -89,6 +89,9 @@ else
 fi
 sed_i 's/scala\-'$FROM_VERSION'/scala\-'$TO_VERSION'/' "$BASEDIR/docs/_plugins/copy_api_dirs.rb"
 
+
+sed_i 's/^\([[:space:]]*\/\* \(#if scala-'$TO_VERSION'\)\)/\/\/ \2/' "$BASEDIR/mllib/src/main/scala/org/apache/spark/mllib/feature/SkipGram.scala"
+
 echo "$BASEDIR/dev/mima"
 if [ $TO_VERSION = "2.13" ]; then
   sed_i '/\-Pscala-'$TO_VERSION'/!s:build/sbt:build/sbt \-Pscala\-'$TO_VERSION':' "$BASEDIR/dev/mima"
