@@ -242,7 +242,7 @@ jobs:
     - name: Install Python packages (Python 3.8)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
       run: |
-        python3.8 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting
+        python3.8 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting grpcio protobuf
         python3.8 -m pip list
     # Run the tests.
     - name: Run tests
@@ -333,6 +333,8 @@ jobs:
             pyspark-pandas
           - >-
             pyspark-pandas-slow
+          - >-
+            pyspark-sql-connect
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
@@ -576,7 +578,7 @@ jobs:
         #   See also https://issues.apache.org/jira/browse/SPARK-38279.
         python3.9 -m pip install 'sphinx<3.1.0' mkdocs pydata_sphinx_theme ipython nbsphinx numpydoc 'jinja2<3.0.0' 'markupsafe==2.0.1' 'pyzmq<24.0.0'
         python3.9 -m pip install ipython_genutils # See SPARK-38517
-        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8' 
+        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8' grpcio protobuf
         python3.9 -m pip install 'docutils<0.18.0' # See SPARK-39421
         apt-get update -y
         apt-get install -y ruby ruby-dev

@@ -149,32 +149,30 @@ class CSVOptions(
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
 
   /**
-   * Infer columns with all valid date entries as date type (otherwise inferred as timestamp type)
-   * if schema inference is enabled. When being used with user-provided schema, tries to parse
-   * timestamp values as dates if the values do not conform to the timestamp formatter before
-   * falling back to the backward compatible parsing - the parsed values will be cast to timestamp
-   * afterwards.
+   * Infer columns with all valid date entries as date type (otherwise inferred as string or
+   * timestamp type) if schema inference is enabled.
    *
-   * Disabled by default for backwards compatibility and performance.
+   * Enabled by default.
    *
    * Not compatible with legacyTimeParserPolicy == LEGACY since legacy date parser will accept
-   * extra trailing characters.
+   * extra trailing characters. Thus, disabled when legacyTimeParserPolicy == LEGACY
    */
   val prefersDate = {
-    val inferDateFlag = getBool("prefersDate")
-    if (inferDateFlag && SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-      throw QueryExecutionErrors.inferDateWithLegacyTimeParserError()
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      false
+    } else {
+      getBool("prefersDate", true)
     }
-    inferDateFlag
   }
 
+  val dateFormatOption: Option[String] = parameters.get("dateFormat")
   // Provide a default value for dateFormatInRead when prefersDate. This ensures that the
   // Iso8601DateFormatter (with strict date parsing) is used for date inference
   val dateFormatInRead: Option[String] =
     if (prefersDate) {
-      Option(parameters.getOrElse("dateFormat", DateFormatter.defaultPattern))
+      Option(dateFormatOption.getOrElse(DateFormatter.defaultPattern))
     } else {
-      parameters.get("dateFormat")
+      dateFormatOption
     }
   val dateFormatInWrite: String = parameters.getOrElse("dateFormat", DateFormatter.defaultPattern)
 

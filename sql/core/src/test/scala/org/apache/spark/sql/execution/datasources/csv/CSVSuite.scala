@@ -36,7 +36,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkUpgradeException, TestUtils}
+import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
@@ -2819,54 +2819,107 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-39469: Infer schema for date type") {
-    val options1 = Map(
-      "header" -> "true",
-      "inferSchema" -> "true",
-      "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
-      "dateFormat" -> "yyyy-MM-dd",
-      "prefersDate" -> "true")
-    val options2 = Map(
-      "header" -> "true",
-      "inferSchema" -> "true",
-      "prefersDate" -> "true")
+  test("SPARK-39469: Infer schema for columns with all dates") {
+    withTempPath { path =>
+      Seq(
+        "2001-09-08",
+        "1941-01-02",
+        "0293-11-07"
+      ).toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
 
-    // Error should be thrown when attempting to prefersDate with Legacy parser
-    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-      checkError(
-        exception = intercept[SparkIllegalArgumentException] {
-          spark.read.format("csv").options(options1).load(testFile(dateInferSchemaFile))
-        },
-        errorClass = "CANNOT_INFER_DATE")
-    } else {
-      // 1. Specify date format and timestamp format
-      // 2. Date inference should work with default date format when dateFormat is not provided
-      Seq(options1, options2).foreach {options =>
-        val results = spark.read
+      val options = Map(
+        "header" -> "false",
+        "inferSchema" -> "true",
+        "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss")
+
+      val df = spark.read
+        .format("csv")
+        .options(options)
+        .load(path.getAbsolutePath)
+
+      val expected = if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+        // When legacy parser is enabled, `prefersDate` will be disabled
+        Seq(
+          Row("2001-09-08"),
+          Row("1941-01-02"),
+          Row("0293-11-07")
+        )
+      } else {
+        Seq(
+          Row(Date.valueOf("2001-9-8")),
+          Row(Date.valueOf("1941-1-2")),
+          Row(Date.valueOf("0293-11-7"))
+        )
+      }
+
+      checkAnswer(df, expected)
+    }
+  }
+
+  test("SPARK-40474: Infer schema for columns with a mix of dates and timestamp") {
+    withTempPath { path =>
+      Seq(
+        "1765-03-28",
+        "1423-11-12T23:41:00",
+        "2016-01-28T20:00:00"
+      ).toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+        val options = Map(
+          "header" -> "false",
+          "inferSchema" -> "true",
+          "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss")
+        val df = spark.read
           .format("csv")
           .options(options)
-          .load(testFile(dateInferSchemaFile))
+          .load(path.getAbsolutePath)
+        val expected = Seq(
+          Row(Timestamp.valueOf("1765-03-28 00:00:00.0")),
+          Row(Timestamp.valueOf("1423-11-12 23:41:00.0")),
+          Row(Timestamp.valueOf("2016-01-28 20:00:00.0"))
+        )
+        checkAnswer(df, expected)
+      } else {
+        // When timestampFormat is specified, infer and parse the column as strings
+        val options1 = Map(
+          "header" -> "false",
+          "inferSchema" -> "true",
+          "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss")
+        val df1 = spark.read
+          .format("csv")
+          .options(options1)
+          .load(path.getAbsolutePath)
+        val expected1 = Seq(
+          Row("1765-03-28"),
+          Row("1423-11-12T23:41:00"),
+          Row("2016-01-28T20:00:00")
+        )
+        checkAnswer(df1, expected1)
 
-        val expectedSchema = StructType(List(StructField("date", DateType),
-          StructField("timestamp-date", TimestampType),
-          StructField("date-timestamp", TimestampType)))
-        assert(results.schema == expectedSchema)
-
-        val expected =
-          Seq(
-            Seq(Date.valueOf("2001-9-8"), Timestamp.valueOf("2014-10-27 18:30:0.0"),
-              Timestamp.valueOf("1765-03-28 00:00:0.0")),
-            Seq(Date.valueOf("1941-1-2"), Timestamp.valueOf("2000-09-14 01:01:0.0"),
-              Timestamp.valueOf("1423-11-12 23:41:0.0")),
-            Seq(Date.valueOf("0293-11-7"), Timestamp.valueOf("1995-06-25 00:00:00.0"),
-              Timestamp.valueOf("2016-01-28 20:00:00.0"))
-          )
-        assert(results.collect().toSeq.map(_.toSeq) == expected)
+        // When timestampFormat is not specified, infer and parse the column as
+        // timestamp type if possible
+        val options2 = Map(
+          "header" -> "false",
+          "inferSchema" -> "true")
+        val df2 = spark.read
+          .format("csv")
+          .options(options2)
+          .load(path.getAbsolutePath)
+        val expected2 = Seq(
+          Row(Timestamp.valueOf("1765-03-28 00:00:00.0")),
+          Row(Timestamp.valueOf("1423-11-12 23:41:00.0")),
+          Row(Timestamp.valueOf("2016-01-28 20:00:00.0"))
+        )
+        checkAnswer(df2, expected2)
       }
     }
   }
 
-  test("SPARK-39904: Parse incorrect timestamp values with prefersDate=true") {
+  test("SPARK-39904: Parse incorrect timestamp values") {
     withTempPath { path =>
       Seq(
         "2020-02-01 12:34:56",
@@ -2881,16 +2934,10 @@ abstract class CSVSuite
 
       val output = spark.read
         .schema(schema)
-        .option("prefersDate", "true")
         .csv(path.getAbsolutePath)
 
-      if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-        checkError(
-          exception = intercept[SparkIllegalArgumentException] {
-            output.collect()
-          },
-          errorClass = "CANNOT_INFER_DATE")
-      } else {
+      if (SQLConf.get.legacyTimeParserPolicy != LegacyBehaviorPolicy.LEGACY) {
+        // When legacy parser is enabled, `prefersDate` will be disabled
         checkAnswer(
           output,
           Seq(

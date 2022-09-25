@@ -1,0 +1,158 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = 'proto3';
+
+import "spark/connect/types.proto";
+import "google/protobuf/any.proto";
+
+package spark.connect;
+
+option java_multiple_files = true;
+option java_package = "org.apache.spark.connect.proto";
+
+// Expression used to refer to fields, functions and similar. This can be used everywhere
+// expressions in SQL appear.
+message Expression {
+
+  oneof expr_type {
+    Literal literal = 1;
+    UnresolvedAttribute unresolved_attribute = 2;
+    UnresolvedFunction unresolved_function = 3;
+    ExpressionString expression_string = 4;
+  }
+
+  message Literal {
+    oneof literal_type {
+      bool boolean = 1;
+      int32 i8 = 2;
+      int32 i16 = 3;
+      int32 i32 = 5;
+      int64 i64 = 7;
+      float fp32 = 10;
+      double fp64 = 11;
+      string string = 12;
+      bytes binary = 13;
+      // Timestamp in units of microseconds since the UNIX epoch.
+      int64 timestamp = 14;
+      // Date in units of days since the UNIX epoch.
+      int32 date = 16;
+      // Time in units of microseconds past midnight
+      int64 time = 17;
+      IntervalYearToMonth interval_year_to_month = 19;
+      IntervalDayToSecond interval_day_to_second = 20;
+      string fixed_char = 21;
+      VarChar var_char = 22;
+      bytes fixed_binary = 23;
+      Decimal decimal = 24;
+      Struct struct = 25;
+      Map map = 26;
+      // Timestamp in units of microseconds since the UNIX epoch.
+      int64 timestamp_tz = 27;
+      bytes uuid = 28;
+      Type null = 29; // a typed null literal
+      List list = 30;
+      Type.List empty_list = 31;
+      Type.Map empty_map = 32;
+      UserDefined user_defined = 33;
+    }
+
+    // whether the literal type should be treated as a nullable type. Applies to
+    // all members of union other than the Typed null (which should directly
+    // declare nullability).
+    bool nullable = 50;
+
+    // optionally points to a type_variation_anchor defined in this plan.
+    // Applies to all members of union other than the Typed null (which should
+    // directly declare the type variation).
+    uint32 type_variation_reference = 51;
+
+    message VarChar {
+      string value = 1;
+      uint32 length = 2;
+    }
+
+    message Decimal {
+      // little-endian twos-complement integer representation of complete value
+      // (ignoring precision) Always 16 bytes in length
+      bytes value = 1;
+      // The maximum number of digits allowed in the value.
+      // the maximum precision is 38.
+      int32 precision = 2;
+      // declared scale of decimal literal
+      int32 scale = 3;
+    }
+
+    message Map {
+      message KeyValue {
+        Literal key = 1;
+        Literal value = 2;
+      }
+
+      repeated KeyValue key_values = 1;
+    }
+
+    message IntervalYearToMonth {
+      int32 years = 1;
+      int32 months = 2;
+    }
+
+    message IntervalDayToSecond {
+      int32 days = 1;
+      int32 seconds = 2;
+      int32 microseconds = 3;
+    }
+
+    message Struct {
+      // A possibly heterogeneously typed list of literals
+      repeated Literal fields = 1;
+    }
+
+    message List {
+      // A homogeneously typed list of literals
+      repeated Literal values = 1;
+    }
+
+    message UserDefined {
+      // points to a type_anchor defined in this plan
+      uint32 type_reference = 1;
+
+      // the value of the literal, serialized using some type-specific
+      // protobuf message
+      google.protobuf.Any value = 2;
+    }
+  }
+
+  // An unresolved attribute that is not explicitly bound to a specific column, but the column
+  // is resolved during analysis by name.
+  message UnresolvedAttribute {
+    repeated string parts = 1;
+  }
+
+  // An unresolved function is not explicitly bound to one explicit function, but the function
+  // is resolved during analysis following Sparks name resolution rules.
+  message UnresolvedFunction {
+    repeated string parts = 1;
+    repeated Expression arguments = 2;
+  }
+
+  // Expression as string.
+  message ExpressionString {
+    string expression = 1;
+  }
+
+}

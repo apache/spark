@@ -251,6 +251,7 @@ def build_spark_sbt(extra_profiles):
     sbt_goals = [
         "Test/package",  # Build test jars as some tests depend on them
         "streaming-kinesis-asl-assembly/assembly",
+        "connect/assembly",  # Build Spark Connect assembly
     ]
     profiles_and_goals = build_profiles + sbt_goals
 
