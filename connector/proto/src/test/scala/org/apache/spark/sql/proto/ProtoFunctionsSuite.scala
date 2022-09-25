@@ -504,6 +504,35 @@ class ProtoFunctionsSuite extends QueryTest with SharedSparkSession with Seriali
     }
   }
 
+  test("from_proto filter to_proto") {
+    val basicMessageDesc = ProtoUtils.buildDescriptor(testFileDesc, "BasicMessage")
+
+    val basicMessage = DynamicMessage.newBuilder(basicMessageDesc)
+      .setField(basicMessageDesc.findFieldByName("id"), 1111L)
+      .setField(basicMessageDesc.findFieldByName("string_value"), "slam")
+      .setField(basicMessageDesc.findFieldByName("int32_value"), 12345)
+      .setField(basicMessageDesc.findFieldByName("int64_value"), 0x90000000000L)
+      .setField(basicMessageDesc.findFieldByName("double_value"), 10000000000.0D)
+      .setField(basicMessageDesc.findFieldByName("float_value"), 10902.0f)
+      .setField(basicMessageDesc.findFieldByName("bool_value"), true)
+      .setField(basicMessageDesc.findFieldByName("bytes_value"),
+        ByteString.copyFromUtf8("ProtobufDeserializer"))
+      .build()
+
+
+    val df = Seq(basicMessage.toByteArray).toDF("value")
+    val resultFrom = df.select(functions.from_proto($"value", testFileDesc,
+      "BasicMessage") as 'sample)
+      .where("sample.string_value == \"slam\"")
+
+    val resultToFrom = resultFrom.select(functions.to_proto($"sample") as 'value)
+      .select(functions.from_proto($"value", testFileDesc,
+        "BasicMessage") as 'sample)
+      .where("sample.string_value == \"slam\"")
+
+    assert(resultFrom.except(resultToFrom).isEmpty)
+  }
+
   def buildDescriptor(desc: String): Descriptors.Descriptor = {
     val descriptor = ProtoUtils.parseFileDescriptor(testFileDesc).getMessageTypes().get(0)
     descriptor
