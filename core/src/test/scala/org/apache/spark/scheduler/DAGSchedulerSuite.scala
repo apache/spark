@@ -4495,7 +4495,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       sendRequestsLatch.await()
       verify(blockStoreClient, times(2))
         .finalizeShuffleMerge(any(), any(), any(), any(), any())
-      assert(sentHosts === Seq("hostB"))
+      assert(sentHosts.nonEmpty)
+      assert(sentHosts.head === "hostB" && sentHosts.length == 1)
       completeLatch.await()
       assert(hostAInterrupted)
     }
