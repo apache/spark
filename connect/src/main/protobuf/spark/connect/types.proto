@@ -1,0 +1,188 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = 'proto3';
+
+package spark.connect;
+
+option java_multiple_files = true;
+option java_package = "org.apache.spark.connect.proto";
+
+// This message describes the logical [[Type]] of something. It does not carry the value
+// itself but only describes it.
+message Type {
+  oneof kind {
+    Boolean bool = 1;
+    I8 i8 = 2;
+    I16 i16 = 3;
+    I32 i32 = 5;
+    I64 i64 = 7;
+    FP32 fp32 = 10;
+    FP64 fp64 = 11;
+    String string = 12;
+    Binary binary = 13;
+    Timestamp timestamp = 14;
+    Date date = 16;
+    Time time = 17;
+    IntervalYear interval_year = 19;
+    IntervalDay interval_day = 20;
+    TimestampTZ timestamp_tz = 29;
+    UUID uuid = 32;
+
+    FixedChar fixed_char = 21;
+    VarChar varchar = 22;
+    FixedBinary fixed_binary = 23;
+    Decimal decimal = 24;
+
+    Struct struct = 25;
+    List list = 27;
+    Map map = 28;
+
+    uint32 user_defined_type_reference = 31;
+  }
+
+  enum Nullability {
+    NULLABILITY_UNSPECIFIED = 0;
+    NULLABILITY_NULLABLE = 1;
+    NULLABILITY_REQUIRED = 2;
+  }
+
+  message Boolean {
+    uint32 type_variation_reference = 1;
+    Nullability nullability = 2;
+  }
+
+  message I8 {
+    uint32 type_variation_reference = 1;
+    Nullability nullability = 2;
+  }
+
+  message I16 {
+    uint32 type_variation_reference = 1;
+    Nullability nullability = 2;
+  }
+
+  message I32 {
+    uint32 type_variation_reference = 1;
+    Nullability nullability = 2;
+  }
+
+  message I64 {
+    uint32 type_variation_reference = 1;
+    Nullability nullability = 2;
+  }
+
+  message FP32 {
+    uint32 type_variation_reference = 1;
+    Nullability nullability = 2;
+  }
+
+  message FP64 {
+    uint32 type_variation_reference = 1;
+    Nullability nullability = 2;
+  }
+
+  message String {
+    uint32 type_variation_reference = 1;
+    Nullability nullability = 2;
+  }
+
+  message Binary {
+    uint32 type_variation_reference = 1;
+    Nullability nullability = 2;
+  }
+
+  message Timestamp {
+    uint32 type_variation_reference = 1;
+    Nullability nullability = 2;
+  }
+
+  message Date {
+    uint32 type_variation_reference = 1;
+    Nullability nullability = 2;
+  }
+
+  message Time {
+    uint32 type_variation_reference = 1;
+    Nullability nullability = 2;
+  }
+
+  message TimestampTZ {
+    uint32 type_variation_reference = 1;
+    Nullability nullability = 2;
+  }
+
+  message IntervalYear {
+    uint32 type_variation_reference = 1;
+    Nullability nullability = 2;
+  }
+
+  message IntervalDay {
+    uint32 type_variation_reference = 1;
+    Nullability nullability = 2;
+  }
+
+  message UUID {
+    uint32 type_variation_reference = 1;
+    Nullability nullability = 2;
+  }
+
+  // Start compound types.
+  message FixedChar {
+    int32 length = 1;
+    uint32 type_variation_reference = 2;
+    Nullability nullability = 3;
+  }
+
+  message VarChar {
+    int32 length = 1;
+    uint32 type_variation_reference = 2;
+    Nullability nullability = 3;
+  }
+
+  message FixedBinary {
+    int32 length = 1;
+    uint32 type_variation_reference = 2;
+    Nullability nullability = 3;
+  }
+
+  message Decimal {
+    int32 scale = 1;
+    int32 precision = 2;
+    uint32 type_variation_reference = 3;
+    Nullability nullability = 4;
+  }
+
+  message Struct {
+    repeated Type types = 1;
+    uint32 type_variation_reference = 2;
+    Nullability nullability = 3;
+  }
+
+  message List {
+    Type type = 1;
+    uint32 type_variation_reference = 2;
+    Nullability nullability = 3;
+  }
+
+  message Map {
+    Type key = 1;
+    Type value = 2;
+    uint32 type_variation_reference = 3;
+    Nullability nullability = 4;
+  }
+}
