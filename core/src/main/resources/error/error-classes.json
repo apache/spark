@@ -1265,5 +1265,55 @@
     "message" : [
       "<cmd> is not supported in JDBC catalog."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1120" : {
+    "message" : [
+      "Unsupported NamespaceChange <changes> in JDBC catalog."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1121" : {
+    "message" : [
+      "Table does not support <cmd>: <table>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1122" : {
+    "message" : [
+      "Table <table> is not a row-level operation table."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1123" : {
+    "message" : [
+      "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1124" : {
+    "message" : [
+      "<cmd> is not supported for v2 tables."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1125" : {
+    "message" : [
+      "Database from v1 session catalog is not specified."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1126" : {
+    "message" : [
+      "Nested databases are not supported by v1 session catalog: <catalog>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1127" : {
+    "message" : [
+      "Invalid partitionExprs specified: <sortOrders> For range partitioning use REPARTITION_BY_RANGE instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1128" : {
+    "message" : [
+      "Failed to resolve the schema for <format> for the partition column: <partitionColumn>. It must be specified manually."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1129" : {
+    "message" : [
+      "Unable to infer schema for <format>. It must be specified manually."
+    ]
   }
 }
