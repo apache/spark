@@ -196,6 +196,23 @@ private[spark] class SparkUnsupportedOperationException(
 }
 
 /**
+ * Default  database not exists exception thrown from Spark with an error class.
+ */
+private[spark] class SparkDefaultDatabaseNotExistsException(
+   errorClass: String,
+   errorSubClass: Option[String] = None,
+   messageParameters: Map[String, String],
+   cause: Throwable = null)
+  extends SparkException(
+    SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters))
+    with SparkThrowable {
+
+  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+  override def getErrorClass: String = errorClass
+  override def getErrorSubClass: String = errorSubClass.orNull
+}
+
+/**
  * Class not found exception thrown from Spark with an error class.
  */
 private[spark] class SparkClassNotFoundException(
