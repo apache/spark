@@ -65,3 +65,6 @@ RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='ht
 
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
+
+# Add Python deps for Spark Connect.
+RUN python3.9 -m pip install grpcio protobuf

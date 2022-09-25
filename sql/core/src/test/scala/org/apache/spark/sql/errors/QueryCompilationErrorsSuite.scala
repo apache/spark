@@ -20,7 +20,7 @@ package org.apache.spark.sql.errors
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.functions.{grouping, grouping_id, lit, struct, sum, udf}
+import org.apache.spark.sql.functions.{from_json, grouping, grouping_id, lit, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
@@ -654,6 +654,16 @@ class QueryCompilationErrorsSuite
       context = ExpectedContext(
         fragment = "LATERAL VIEW array_contains(value, 1) AS explodedvalue",
         start = 62, stop = 115))
+  }
+
+  test("DATATYPE_MISMATCH.INVALID_JSON_SCHEMA: invalid top type passed to from_json()") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("""{"a":1}""").toDF("a").select(from_json($"a", IntegerType)).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("INVALID_JSON_SCHEMA"),
+      parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
   }
 }
 

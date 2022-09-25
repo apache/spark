@@ -951,7 +951,7 @@ RDD API doc
 ([Scala](api/scala/org/apache/spark/rdd/RDD.html),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
  [Python](api/python/reference/api/pyspark.RDD.html#pyspark.RDD),
- [R](api/R/index.html))
+ [R](api/R/reference/index.html))
 and pair RDD functions doc
 ([Scala](api/scala/org/apache/spark/rdd/PairRDDFunctions.html),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
@@ -1065,7 +1065,7 @@ RDD API doc
 ([Scala](api/scala/org/apache/spark/rdd/RDD.html),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
  [Python](api/python/reference/api/pyspark.RDD.html#pyspark.RDD),
- [R](api/R/index.html))
+ [R](api/R/reference/index.html))
 
 and pair RDD functions doc
 ([Scala](api/scala/org/apache/spark/rdd/PairRDDFunctions.html),

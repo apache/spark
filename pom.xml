@@ -100,6 +100,7 @@
     <module>connector/kafka-0-10-assembly</module>
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
+    <module>connect</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -798,7 +799,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.2-3</version>
+        <version>1.5.2-4</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>

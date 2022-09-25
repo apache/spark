@@ -987,7 +987,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         return lmask & rmask
 
-    def cov(self, other: "Series", min_periods: Optional[int] = None) -> float:
+    def cov(self, other: "Series", min_periods: Optional[int] = None, ddof: int = 1) -> float:
         """
         Compute covariance with Series, excluding missing values.
 
@@ -999,6 +999,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Series with which to compute the covariance.
         min_periods : int, optional
             Minimum number of observations needed to have a valid result.
+        ddof : int, default 1
+            Delta degrees of freedom. The divisor used in calculations
+            is ``N - ddof``, where ``N`` represents the number of elements.
+
+            .. versionadded:: 3.4.0
 
         Returns
         -------
@@ -1008,12 +1013,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
         >>> from pyspark.pandas.config import set_option, reset_option
-        >>> set_option("compute.ops_on_diff_frames", True)
         >>> s1 = ps.Series([0.90010907, 0.13484424, 0.62036035])
         >>> s2 = ps.Series([0.12528585, 0.26962463, 0.51111198])
-        >>> s1.cov(s2)
-        -0.016857626527158744
-        >>> reset_option("compute.ops_on_diff_frames")
+        >>> with ps.option_context("compute.ops_on_diff_frames", True):
+        ...     s1.cov(s2)
+        -0.016857...
+        >>> with ps.option_context("compute.ops_on_diff_frames", True):
+        ...     s1.cov(s2, ddof=2)
+        -0.033715...
         """
         if not isinstance(other, Series):
             raise TypeError("unsupported type: %s" % type(other))
@@ -1021,6 +1028,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise TypeError("unsupported dtype: %s" % self.dtype)
         if not np.issubdtype(other.dtype, np.number):  # type: ignore[arg-type]
             raise TypeError("unsupported dtype: %s" % other.dtype)
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
 
         min_periods = 1 if min_periods is None else min_periods
 
@@ -1035,7 +1044,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if len(sdf.head(min_periods)) < min_periods:
             return np.nan
         else:
-            return sdf.select(F.covar_samp(*sdf.columns)).head(1)[0][0]
+            sdf = sdf.select(SF.covar(F.col(sdf.columns[0]), F.col(sdf.columns[1]), ddof))
+            return sdf.head(1)[0][0]
 
     # TODO: NaN and None when ``arg`` is an empty dict
     # TODO: Support ps.Series ``arg``

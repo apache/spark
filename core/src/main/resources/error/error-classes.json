@@ -96,6 +96,11 @@
           "the binary operator requires the input type <inputType>, not <actualDataType>."
         ]
       },
+      "CANNOT_CONVERT_TO_JSON" : {
+        "message" : [
+          "Unable to convert column <name> of type <type> to JSON."
+        ]
+      },
       "CAST_WITHOUT_SUGGESTION" : {
         "message" : [
           "cannot cast <srcType> to <targetType>."
@@ -113,9 +118,34 @@
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
         ]
       },
+      "INVALID_JSON_MAP_KEY_TYPE" : {
+        "message" : [
+          "Input schema <schema> can only contain STRING as a key type for a MAP."
+        ]
+      },
+      "INVALID_JSON_SCHEMA" : {
+        "message" : [
+          "Input schema <schema> must be a struct, an array or a map."
+        ]
+      },
+      "NON_FOLDABLE_INPUT" : {
+        "message" : [
+          "the input should be a foldable string expression and not null; however, got <inputExpr>."
+        ]
+      },
+      "NON_STRING_TYPE" : {
+        "message" : [
+          "all arguments must be strings."
+        ]
+      },
       "UNEXPECTED_INPUT_TYPE" : {
         "message" : [
           "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
+        ]
+      },
+      "WRONG_NUM_PARAMS" : {
+        "message" : [
+          "wrong number of parameters: <actualNum>."
         ]
       }
     }
@@ -813,12 +843,6 @@
       "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive",
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution"
     ]
-  },
-  "WRITING_JOB_ABORTED" : {
-    "message" : [
-      "Writing job aborted"
-    ],
-    "sqlState" : "40000"
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
