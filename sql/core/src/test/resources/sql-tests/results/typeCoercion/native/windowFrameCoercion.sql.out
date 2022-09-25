@@ -169,8 +169,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
   "messageParameters" : {
-    "expectedType" : "(numeric or interval day to second or interval year to month or interval)",
-    "exprType" : "string",
+    "expectedType" : "\"(NUMERIC OR INTERVAL DAY TO SECOND OR INTERVAL YEAR TO MONTH OR INTERVAL)\"",
+    "exprType" : "\"STRING\"",
     "location" : "upper",
     "sqlExpr" : "\"RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING\""
   },
@@ -194,8 +194,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
   "messageParameters" : {
-    "expectedType" : "(numeric or interval day to second or interval year to month or interval)",
-    "exprType" : "binary",
+    "expectedType" : "\"(NUMERIC OR INTERVAL DAY TO SECOND OR INTERVAL YEAR TO MONTH OR INTERVAL)\"",
+    "exprType" : "\"BINARY\"",
     "location" : "upper",
     "sqlExpr" : "\"RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING\""
   },
@@ -219,8 +219,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
   "messageParameters" : {
-    "expectedType" : "(numeric or interval day to second or interval year to month or interval)",
-    "exprType" : "boolean",
+    "expectedType" : "\"(NUMERIC OR INTERVAL DAY TO SECOND OR INTERVAL YEAR TO MONTH OR INTERVAL)\"",
+    "exprType" : "\"BOOLEAN\"",
     "location" : "upper",
     "sqlExpr" : "\"RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING\""
   },
@@ -244,9 +244,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "RANGE_FRAME_INVALID_TYPE",
   "messageParameters" : {
-    "orderSpecType" : "timestamp",
+    "orderSpecType" : "\"TIMESTAMP\"",
     "sqlExpr" : "\"(PARTITION BY 1 ORDER BY CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)\"",
-    "valueBoundaryType" : "int"
+    "valueBoundaryType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",

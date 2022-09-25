@@ -207,23 +207,53 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
           window.rangeBetween(Window.unboundedPreceding, Window.unboundedFollowing))),
       Row("non_numeric", "non_numeric") :: Nil)
 
-    val e1 = intercept[AnalysisException](
-      df.select(
-        min("value").over(window.rangeBetween(Window.unboundedPreceding, 1))))
-    assert(e1.message.contains("The data type of the upper bound 'string' " +
-      "does not match the expected data type"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          min("value").over(window.rangeBetween(Window.unboundedPreceding, 1)))
+      ),
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE"),
+      parameters = Map(
+        "location" -> "upper",
+        "exprType" -> "\"STRING\"",
+        "expectedType" -> ("\"(NUMERIC OR INTERVAL DAY TO SECOND OR INTERVAL YEAR " +
+          "TO MONTH OR INTERVAL)\""),
+        "sqlExpr" -> "\"RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\""
+      )
+    )
 
-    val e2 = intercept[AnalysisException](
-      df.select(
-        min("value").over(window.rangeBetween(-1, Window.unboundedFollowing))))
-    assert(e2.message.contains("The data type of the lower bound 'string' " +
-      "does not match the expected data type"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          min("value").over(window.rangeBetween(-1, Window.unboundedFollowing)))
+      ),
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE"),
+      parameters = Map(
+        "location" -> "lower",
+        "exprType" -> "\"STRING\"",
+        "expectedType" -> ("\"(NUMERIC OR INTERVAL DAY TO SECOND OR INTERVAL YEAR " +
+          "TO MONTH OR INTERVAL)\""),
+        "sqlExpr" -> "\"RANGE BETWEEN -1 FOLLOWING AND UNBOUNDED FOLLOWING\""
+      )
+    )
 
-    val e3 = intercept[AnalysisException](
-      df.select(
-        min("value").over(window.rangeBetween(-1, 1))))
-    assert(e3.message.contains("The data type of the lower bound 'string' " +
-      "does not match the expected data type"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          min("value").over(window.rangeBetween(-1, 1)))
+      ),
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE"),
+      parameters = Map(
+        "location" -> "lower",
+        "exprType" -> "\"STRING\"",
+        "expectedType" -> ("\"(NUMERIC OR INTERVAL DAY TO SECOND OR INTERVAL YEAR " +
+          "TO MONTH OR INTERVAL)\""),
+        "sqlExpr" -> "\"RANGE BETWEEN -1 FOLLOWING AND 1 FOLLOWING\""
+      )
+    )
   }
 
   test("range between should accept int/long values as boundary") {

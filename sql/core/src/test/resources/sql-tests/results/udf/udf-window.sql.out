@@ -62,8 +62,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
   "messageParameters" : {
-    "expectedType" : "int",
-    "exprType" : "bigint",
+    "expectedType" : "\"INT\"",
+    "exprType" : "\"BIGINT\"",
     "location" : "upper",
     "sqlExpr" : "\"ROWS BETWEEN CURRENT ROW AND 2147483648 FOLLOWING\""
   },
@@ -208,9 +208,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "SPECIFIED_WINDOW_FRAME_INVALID_BOUND",
   "messageParameters" : {
-    "lower" : "unboundedfollowing$()",
+    "lower" : "\"UNBOUNDED FOLLOWING\"",
     "sqlExpr" : "\"ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING\"",
-    "upper" : "1"
+    "upper" : "\"1\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -280,9 +280,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "RANGE_FRAME_INVALID_TYPE",
   "messageParameters" : {
-    "orderSpecType" : "timestamp",
+    "orderSpecType" : "\"TIMESTAMP\"",
     "sqlExpr" : "\"(PARTITION BY udf(cate) ORDER BY current_timestamp() ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)\"",
-    "valueBoundaryType" : "int"
+    "valueBoundaryType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",

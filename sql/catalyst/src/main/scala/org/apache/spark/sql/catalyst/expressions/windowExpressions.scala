@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_WINDOW_EXPRESSION, WINDOW_EXPRESSION}
@@ -65,20 +66,16 @@ case class WindowSpecDefinition(
   override def checkInputDataTypes(): TypeCheckResult = {
     frameSpecification match {
       case UnspecifiedFrame =>
-        DataTypeMismatch(
-          errorSubClass = "UNSPECIFIED_FRAME"
-        )
+        DataTypeMismatch(errorSubClass = "UNSPECIFIED_FRAME")
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && !f.isUnbounded &&
           orderSpec.isEmpty =>
-        DataTypeMismatch(
-          errorSubClass = "RANGE_FRAME_WITHOUT_ORDER"
-        )
+        DataTypeMismatch(errorSubClass = "RANGE_FRAME_WITHOUT_ORDER")
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
           orderSpec.size > 1 =>
         DataTypeMismatch(
           errorSubClass = "RANGE_FRAME_MULTI_ORDER",
           messageParameters = Map(
-            "orderSpec" -> s"${orderSpec.mkString(",")}"
+            "orderSpec" -> orderSpec.mkString(",")
           )
         )
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
@@ -86,8 +83,8 @@ case class WindowSpecDefinition(
         DataTypeMismatch(
           errorSubClass = "RANGE_FRAME_INVALID_TYPE",
           messageParameters = Map(
-            "orderSpecType" -> s"${orderSpec.head.dataType.catalogString}",
-            "valueBoundaryType" -> s"${f.valueBoundary.head.dataType.catalogString}"
+            "orderSpecType" -> toSQLType(orderSpec.head.dataType.catalogString),
+            "valueBoundaryType" -> toSQLType(f.valueBoundary.head.dataType.catalogString)
           )
         )
       case _ => TypeCheckSuccess
@@ -225,8 +222,8 @@ case class SpecifiedWindowFrame(
         DataTypeMismatch(
           errorSubClass = "SPECIFIED_WINDOW_FRAME_INVALID_BOUND",
           messageParameters = Map(
-            "upper" -> s"$upper",
-            "lower" -> s"${lower}"
+            "upper" -> toSQLExpr(upper),
+            "lower" -> toSQLExpr(lower)
           )
         )
       case (l: SpecialFrameBoundary, _) => TypeCheckSuccess
@@ -235,10 +232,10 @@ case class SpecifiedWindowFrame(
         DataTypeMismatch(
           errorSubClass = "SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
           messageParameters = Map(
-            "lower" -> s"$lower",
-            "upper" -> s"$upper",
-            "lowerType" -> s"${l.dataType.catalogString}",
-            "upperType" -> s"${u.dataType.catalogString}"
+            "lower" -> toSQLExpr(lower),
+            "upper" -> toSQLExpr(upper),
+            "lowerType" -> toSQLType(l.dataType.catalogString),
+            "upperType" -> toSQLType(u.dataType.catalogString)
           )
         )
       case (l: Expression, u: Expression) if isGreaterThan(l, u) =>
@@ -287,17 +284,17 @@ case class SpecifiedWindowFrame(
       DataTypeMismatch(
         errorSubClass = "SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
         messageParameters = Map(
-          "location" -> s"$location",
-          "expression" -> s"$e"
+          "location" -> location,
+          "expression" -> toSQLExpr(e)
         )
       )
     case e: Expression if !frameType.inputType.acceptsType(e.dataType) =>
       DataTypeMismatch(
         errorSubClass = "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
         messageParameters = Map(
-          "location" -> s"$location",
-          "exprType" -> s"${e.dataType.catalogString}",
-          "expectedType" -> s"${frameType.inputType.simpleString}"
+          "location" -> location,
+          "exprType" -> toSQLType(e.dataType.catalogString),
+          "expectedType" -> toSQLType(frameType.inputType.simpleString)
         )
       )
     case _ => TypeCheckSuccess
@@ -457,7 +454,7 @@ sealed abstract class FrameLessOffsetWindowFunction
       DataTypeMismatch(
         errorSubClass = "FRAME_LESS_OFFSET_WITHOUT_FOLDABLE",
         messageParameters = Map(
-          "offset" -> s"$offset"
+          "offset" -> toSQLExpr(offset)
         )
       )
     } else {
