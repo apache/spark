@@ -1368,5 +1368,55 @@
     "message" : [
       "Failed to find data source: <provider>. Avro is built-in but external data source module since Spark 2.4. Please deploy the application as per the deployment section of Apache Avro Data Source Guide."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1140" : {
+    "message" : [
+      "Failed to find data source: <provider>. Please deploy the application as per the deployment section of Structured Streaming + Kafka Integration Guide."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1141" : {
+    "message" : [
+      "Multiple sources found for <provider> (<sourceNames>), please specify the fully qualified class name."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1142" : {
+    "message" : [
+      "Datasource does not support writing empty or nested empty schemas. Please make sure the data schema has at least one or more column(s)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1143" : {
+    "message" : [
+      "The data to be inserted needs to have the same number of columns as the target table: target table has <targetSize> column(s) but the inserted data has <actualSize> column(s), which contain <staticPartitionsSize> partition column(s) having assigned constant values."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1144" : {
+    "message" : [
+      "The data to be inserted needs to have the same number of partition columns as the target table: target table has <targetSize> partition column(s) but the inserted data has <providedPartitionsSize> partition columns specified."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1145" : {
+    "message" : [
+      "<partKey> is not a partition column. Partition columns are <partitionColumns>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1146" : {
+    "message" : [
+      "Partition column <partColumn> have multiple values specified, <values>. Please only specify a single value."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1147" : {
+    "message" : [
+      "The ordering of partition columns is <partColumns>. All partition columns having constant values need to appear before other partition columns that do not have an assigned constant value."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1148" : {
+    "message" : [
+      "Can only write data to relations with a single path."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1149" : {
+    "message" : [
+      "Fail to rebuild expression: missing key <filter> in `translatedFilterToExpr`."
+    ]
   }
 }

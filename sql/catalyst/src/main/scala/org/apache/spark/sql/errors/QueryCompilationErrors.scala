@@ -1227,9 +1227,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def cannotResolveAttributeError(name: String, outputStr: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1137",
-      messageParameters = Map(
-        "name" -> name,
-        "outputStr" -> outputStr))
+      messageParameters = Map("name" -> name, "outputStr" -> outputStr))
   }
 
   def orcNotUsedWithHiveEnabledError(): Throwable = {
@@ -1246,26 +1244,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def failedToFindKafkaDataSourceError(provider: String): Throwable = {
     new AnalysisException(
-      s"""
-         |Failed to find data source: $provider. Please deploy the application as
-         |per the deployment section of "Structured Streaming + Kafka Integration Guide".
-       """.stripMargin.replaceAll("\n", " "))
+      errorClass = "_LEGACY_ERROR_TEMP_1140",
+      messageParameters = Map("provider" -> provider))
   }
 
   def findMultipleDataSourceError(provider: String, sourceNames: Seq[String]): Throwable = {
     new AnalysisException(
-      s"""
-         |Multiple sources found for $provider (${sourceNames.mkString(", ")}),
-         | please specify the fully qualified class name.
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1141",
+      messageParameters = Map(
+        "provider" -> provider,
+        "sourceNames" -> sourceNames.mkString(", ")))
   }
 
   def writeEmptySchemasUnsupportedByDataSourceError(): Throwable = {
     new AnalysisException(
-      s"""
-         |Datasource does not support writing empty or nested empty schemas.
-         |Please make sure the data schema has at least one or more column(s).
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1142",
+      messageParameters = Map.empty)
   }
 
   def insertMismatchedColumnNumberError(
@@ -1273,63 +1267,59 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       sourceAttributes: Seq[Attribute],
       staticPartitionsSize: Int): Throwable = {
     new AnalysisException(
-      s"""
-         |The data to be inserted needs to have the same number of columns as the
-         |target table: target table has ${targetAttributes.size} column(s) but the
-         |inserted data has ${sourceAttributes.size + staticPartitionsSize} column(s),
-         |which contain $staticPartitionsSize partition column(s) having assigned
-         |constant values.
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1143",
+      messageParameters = Map(
+        "targetSize" -> targetAttributes.size.toString,
+        "actualSize" -> (sourceAttributes.size + staticPartitionsSize).toString,
+        "staticPartitionsSize" -> staticPartitionsSize.toString))
   }
 
   def insertMismatchedPartitionNumberError(
       targetPartitionSchema: StructType,
       providedPartitionsSize: Int): Throwable = {
     new AnalysisException(
-      s"""
-         |The data to be inserted needs to have the same number of partition columns
-         |as the target table: target table has ${targetPartitionSchema.fields.size}
-         |partition column(s) but the inserted data has $providedPartitionsSize
-         |partition columns specified.
-       """.stripMargin.replaceAll("\n", " "))
+      errorClass = "_LEGACY_ERROR_TEMP_1144",
+      messageParameters = Map(
+        "targetSize" -> targetPartitionSchema.fields.size.toString,
+        "providedPartitionsSize" -> providedPartitionsSize.toString))
   }
 
   def invalidPartitionColumnError(
       partKey: String, targetPartitionSchema: StructType): Throwable = {
     new AnalysisException(
-      s"""
-         |$partKey is not a partition column. Partition columns are
-         |${targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")}
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1145",
+      messageParameters = Map(
+        "partKey" -> partKey,
+        "partitionColumns" -> targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")))
   }
 
   def multiplePartitionColumnValuesSpecifiedError(
       field: StructField, potentialSpecs: Map[String, String]): Throwable = {
     new AnalysisException(
-      s"""
-         |Partition column ${field.name} have multiple values specified,
-         |${potentialSpecs.mkString("[", ", ", "]")}. Please only specify a single value.
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1146",
+      messageParameters = Map(
+        "partColumn" -> field.name,
+        "values" -> potentialSpecs.mkString("[", ", ", "]")))
   }
 
   def invalidOrderingForConstantValuePartitionColumnError(
       targetPartitionSchema: StructType): Throwable = {
     new AnalysisException(
-      s"""
-         |The ordering of partition columns is
-         |${targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")}
-         |All partition columns having constant values need to appear before other
-         |partition columns that do not have an assigned constant value.
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1147",
+      messageParameters = Map(
+        "partColumns" -> targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")))
   }
 
   def cannotWriteDataToRelationsWithMultiplePathsError(): Throwable = {
-    new AnalysisException("Can only write data to relations with a single path.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1148",
+      messageParameters = Map.empty)
   }
 
   def failedToRebuildExpressionError(filter: Filter): Throwable = {
     new AnalysisException(
-      s"Fail to rebuild expression: missing key $filter in `translatedFilterToExpr`")
+      errorClass = "_LEGACY_ERROR_TEMP_1149",
+      messageParameters = Map("filter" -> filter.toString))
   }
 
   def dataTypeUnsupportedByDataSourceError(format: String, field: StructField): Throwable = {
