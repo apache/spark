@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.util.Arrays
 import java.util.concurrent.TimeUnit
 
-import io.fabric8.kubernetes.api.model.{ObjectMeta, Pod, PodList}
+import io.fabric8.kubernetes.api.model.{ConfigMap, ObjectMeta, Pod, PodList}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.{NonNamespaceOperation, PodResource}
 import org.jmock.lib.concurrent.DeterministicScheduler
@@ -73,6 +73,12 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private var configMapsOperations: CONFIG_MAPS = _
 
   @Mock
+  private var configMap: CONFIG_MAPS_OPERATION = _
+
+  @Mock
+  private var configMapResource: CONFIG_MAPS_RESOURCE = _
+
+  @Mock
   private var labeledConfigMaps: LABELED_CONFIG_MAPS = _
 
   @Mock
@@ -118,6 +124,8 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       .thenReturn(driverEndpointRef)
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(kubernetesClient.configMaps()).thenReturn(configMapsOperations)
+    when(configMapsOperations.inAnyNamespace()).thenReturn(configMap)
+    when(configMap.resource(any[ConfigMap]())).thenReturn(configMapResource)
     when(podAllocator.driverPod).thenReturn(None)
     schedulerBackendUnderTest = new KubernetesClusterSchedulerBackend(
       taskScheduler,
@@ -142,7 +150,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     verify(lifecycleEventHandler).start(schedulerBackendUnderTest)
     verify(watchEvents).start(TEST_SPARK_APP_ID)
     verify(pollEvents).start(TEST_SPARK_APP_ID)
-    verify(configMapsOperations).create(any())
+    verify(configMapResource).create()
   }
 
   test("Stop all components") {
@@ -178,7 +186,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     schedulerBackendUnderTest.start()
 
     val operation = mock(classOf[NonNamespaceOperation[
-      Pod, PodList, PodResource[Pod]]])
+      Pod, PodList, PodResource]])
 
     when(podOperations.inNamespace(any())).thenReturn(operation)
     when(podOperations.withField(any(), any())).thenReturn(labeledPods)
@@ -199,8 +207,8 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     when(pod2Metadata.getName).thenReturn("pod2")
     when(pod2.getMetadata).thenReturn(pod2Metadata)
 
-    val pod1op = mock(classOf[PodResource[Pod]])
-    val pod2op = mock(classOf[PodResource[Pod]])
+    val pod1op = mock(classOf[PodResource])
+    val pod2op = mock(classOf[PodResource])
     when(operation.withName("pod1")).thenReturn(pod1op)
     when(operation.withName("pod2")).thenReturn(pod2op)
 

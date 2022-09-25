@@ -85,7 +85,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
       Map(SPARK_APP_ID_LABEL -> applicationId(), SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE)
     val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap, labels)
     KubernetesUtils.addOwnerReference(driverPod.orNull, Seq(configMap))
-    kubernetesClient.configMaps().create(configMap)
+    kubernetesClient.configMaps().inAnyNamespace().resource(configMap).create()
   }
 
   /**
