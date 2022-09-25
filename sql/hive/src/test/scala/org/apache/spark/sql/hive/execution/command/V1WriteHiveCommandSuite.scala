@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.hive.execution.command
 
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.datasources.V1WriteCommandSuiteBase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingleton {
+class V1WriteHiveCommandSuite
+    extends QueryTest with TestHiveSingleton with V1WriteCommandSuiteBase  {
 
   test("create hive table as select - no partition column") {
     withPlannedWrite { enabled =>
@@ -36,7 +38,8 @@ class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingl
     withPlannedWrite { enabled =>
       withTable("t") {
         withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
-          executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
+          executeAndCheckOrdering(
+            hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
             sql(
               """
                 |CREATE TABLE t
@@ -59,7 +62,8 @@ class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingl
             |CLUSTERED BY (i, j) SORTED BY (j) INTO 2 BUCKETS
             |""".stripMargin)
         withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
-          executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
+          executeAndCheckOrdering(
+            hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
             sql("INSERT INTO t SELECT * FROM t0")
           }
         }
@@ -77,7 +81,8 @@ class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingl
             |PARTITIONED BY (k)
             |AS SELECT * FROM t0
             |""".stripMargin)
-          executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
+          executeAndCheckOrdering(
+            hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
             sql("INSERT OVERWRITE t SELECT j AS i, i AS j, k FROM t0")
           }
         }

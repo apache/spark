@@ -36,8 +36,9 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 
@@ -56,8 +57,6 @@ import com.google.common.cache.Weigher;
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
 
-import org.iq80.leveldb.DB;
-import org.iq80.leveldb.DBIterator;
 import org.roaringbitmap.RoaringBitmap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,8 +71,12 @@ import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
+import org.apache.spark.network.shuffledb.DB;
+import org.apache.spark.network.shuffledb.DBBackend;
+import org.apache.spark.network.shuffledb.DBIterator;
+import org.apache.spark.network.shuffledb.StoreVersion;
+import org.apache.spark.network.util.DBProvider;
 import org.apache.spark.network.util.JavaUtils;
-import org.apache.spark.network.util.LevelDBProvider;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
@@ -107,8 +110,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   private static final String APP_ATTEMPT_SHUFFLE_FINALIZE_STATUS_KEY_PREFIX =
       "AppAttemptShuffleFinalized";
   private static final String APP_ATTEMPT_PATH_KEY_PREFIX = "AppAttemptPathInfo";
-  private static final LevelDBProvider.StoreVersion
-      CURRENT_VERSION = new LevelDBProvider.StoreVersion(1, 0);
+  private static final StoreVersion CURRENT_VERSION = new StoreVersion(1, 0);
 
   /**
    * A concurrent hashmap where the key is the applicationId, and the value includes
@@ -119,8 +121,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @VisibleForTesting
   final ConcurrentMap<String, AppShuffleInfo> appsShuffleInfo;
 
-  private final Executor mergedShuffleCleaner;
+  private final ExecutorService mergedShuffleCleaner;
+
   private final TransportConf conf;
+
+  private final long cleanerShutdownTimeout;
+
   private final int minChunkSize;
   private final int ioExceptionsThresholdDuringMerge;
 
@@ -140,6 +146,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     this.mergedShuffleCleaner = Executors.newSingleThreadExecutor(
       // Add `spark` prefix because it will run in NM in Yarn mode.
       NettyUtils.createThreadFactory("spark-shuffle-merged-shuffle-directory-cleaner"));
+    this.cleanerShutdownTimeout = conf.mergedShuffleCleanerShutdownTimeout();
     this.minChunkSize = conf.minChunkSizeInMergedShuffleFile();
     this.ioExceptionsThresholdDuringMerge = conf.ioExceptionsThresholdDuringMerge();
     CacheLoader<String, ShuffleIndexInformation> indexCacheLoader =
@@ -155,8 +162,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         (filePath, indexInfo) -> indexInfo.getRetainedMemorySize())
       .build(indexCacheLoader);
     this.recoveryFile = recoveryFile;
-    db = LevelDBProvider.initLevelDB(this.recoveryFile, CURRENT_VERSION, mapper);
+    String dbBackendName =
+      conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.LEVELDB.name());
+    DBBackend dbBackend = DBBackend.byName(dbBackendName);
+    db = DBProvider.initDB(dbBackend, this.recoveryFile, CURRENT_VERSION, mapper);
     if (db != null) {
+      logger.info("Use {} as the implementation of {}",
+        dbBackend, Constants.SHUFFLE_SERVICE_DB_BACKEND);
       reloadAndCleanUpAppShuffleInfo(db);
     }
   }
@@ -786,10 +798,28 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   }
 
   /**
-   * Close the DB during shutdown
+   * Shutdown mergedShuffleCleaner and close the DB during shutdown
    */
   @Override
   public void close() {
+    if (!mergedShuffleCleaner.isShutdown()) {
+      // SPARK-40186：Use two phases shutdown refer to
+      // https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ExecutorService.html
+      // Use two phases shutdown can prevent new tasks and wait for executing tasks to
+      // complete gracefully, and once timeout is reached, we want to interrupt running tasks,
+      // so that they fail. This is to prevent updates to shuffle state db after it is closed.
+      try {
+        mergedShuffleCleaner.shutdown();
+        // Wait a while for existing tasks to terminate
+        if (!mergedShuffleCleaner.awaitTermination(cleanerShutdownTimeout, TimeUnit.SECONDS)) {
+          shutdownMergedShuffleCleanerNow();
+        }
+      } catch (InterruptedException e) {
+        logger.info("mergedShuffleCleaner is interrupted in the process of graceful shutdown", e);
+        shutdownMergedShuffleCleanerNow();
+        Thread.currentThread().interrupt();
+      }
+    }
     if (db != null) {
       try {
         db.close();
@@ -797,6 +827,25 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         logger.error("Exception closing leveldb with registered app paths info and "
             + "shuffle partition info", e);
       }
+    }
+  }
+
+  /**
+   * Call `shutdownNow` to stop all actively executing tasks and halts the
+   * processing of waiting tasks in `mergedShuffleCleaner`.
+   */
+  private void shutdownMergedShuffleCleanerNow() {
+    try {
+      List<Runnable> unfinishedTasks = mergedShuffleCleaner.shutdownNow();
+      logger.warn("There are still {} tasks not completed in mergedShuffleCleaner " +
+        "after {} seconds.", unfinishedTasks.size(), cleanerShutdownTimeout);
+      // Wait a while for tasks to respond to being cancelled
+      if (!mergedShuffleCleaner.awaitTermination(cleanerShutdownTimeout, TimeUnit.SECONDS)) {
+        logger.warn("mergedShuffleCleaner did not terminate in {} seconds.",
+          cleanerShutdownTimeout);
+      }
+    } catch (InterruptedException ignored) {
+      Thread.currentThread().interrupt();
     }
   }
 
@@ -1019,6 +1068,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @VisibleForTesting
   void submitCleanupTask(Runnable task) {
     mergedShuffleCleaner.execute(task);
+  }
+
+  /**
+   * Check `mergedShuffleCleaner` is already shutdown.
+   */
+  @VisibleForTesting
+  boolean isCleanerShutdown() {
+    return mergedShuffleCleaner.isShutdown();
   }
 
   /**

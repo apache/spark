@@ -24,7 +24,7 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -76,8 +76,11 @@ case class InsertIntoHiveTable(
     outputColumnNames: Seq[String]
   ) extends SaveAsHiveFile with V1WriteCommand with V1WritesHiveUtils {
 
+  override lazy val partitionColumns: Seq[Attribute] = {
+    getDynamicPartitionColumns(table, partition, query)
+  }
+
   override def requiredOrdering: Seq[SortOrder] = {
-    val partitionColumns = getDynamicPartitionColumns(table, partition, query)
     val options = getOptionsWithHiveBucketWrite(table.bucketSpec)
     V1WritesUtils.getSortOrder(outputColumns, partitionColumns, table.bucketSpec, options)
   }

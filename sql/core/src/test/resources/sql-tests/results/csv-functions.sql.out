@@ -95,7 +95,21 @@ select schema_of_csv(null)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'schema_of_csv(NULL)' due to data type mismatch: The input csv should be a foldable string expression and not null; however, got NULL.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "NON_FOLDABLE_INPUT",
+  "messageParameters" : {
+    "inputExpr" : "\"NULL\"",
+    "sqlExpr" : "\"schema_of_csv(NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "schema_of_csv(null)"
+  } ]
+}
 
 
 -- !query
@@ -112,7 +126,21 @@ SELECT schema_of_csv(csvField) FROM csvTable
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'schema_of_csv(csvtable.csvField)' due to data type mismatch: The input csv should be a foldable string expression and not null; however, got csvtable.csvField.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "NON_FOLDABLE_INPUT",
+  "messageParameters" : {
+    "inputExpr" : "\"csvField\"",
+    "sqlExpr" : "\"schema_of_csv(csvField)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "schema_of_csv(csvField)"
+  } ]
+}
 
 
 -- !query

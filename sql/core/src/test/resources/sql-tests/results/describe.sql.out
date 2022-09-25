@@ -382,12 +382,20 @@ DESC t PARTITION (c='Us', d)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[INVALID_SQL_SYNTAX] Invalid SQL syntax: PARTITION specification is incomplete: `d`(line 1, pos 0)
-
-== SQL ==
-DESC t PARTITION (c='Us', d)
-^^^
+{
+  "errorClass" : "INVALID_SQL_SYNTAX",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "inputString" : "PARTITION specification is incomplete: `d`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 28,
+    "fragment" : "DESC t PARTITION (c='Us', d)"
+  } ]
+}
 
 
 -- !query
@@ -463,7 +471,14 @@ DESC temp_v PARTITION (c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[FORBIDDEN_OPERATION] The operation DESC PARTITION is not allowed on the TEMPORARY VIEW: `temp_v`
+{
+  "errorClass" : "FORBIDDEN_OPERATION",
+  "messageParameters" : {
+    "objectName" : "`temp_v`",
+    "objectType" : "TEMPORARY VIEW",
+    "statement" : "DESC PARTITION"
+  }
+}
 
 
 -- !query
@@ -542,7 +557,14 @@ DESC v PARTITION (c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[FORBIDDEN_OPERATION] The operation DESC PARTITION is not allowed on the VIEW: `v`
+{
+  "errorClass" : "FORBIDDEN_OPERATION",
+  "messageParameters" : {
+    "objectName" : "`v`",
+    "objectType" : "VIEW",
+    "statement" : "DESC PARTITION"
+  }
+}
 
 
 -- !query

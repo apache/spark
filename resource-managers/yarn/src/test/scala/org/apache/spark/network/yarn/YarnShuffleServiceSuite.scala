@@ -45,16 +45,17 @@ import org.apache.spark.SecurityManager
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config._
 import org.apache.spark.network.server.BlockPushNonFatalFailure
-import org.apache.spark.network.shuffle.{MergedShuffleFileManager, NoOpMergedShuffleFileManager, RemoteBlockPushResolver, ShuffleTestAccessor}
+import org.apache.spark.network.shuffle.{Constants, MergedShuffleFileManager, NoOpMergedShuffleFileManager, RemoteBlockPushResolver, ShuffleTestAccessor}
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver._
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
+import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.network.yarn.util.HadoopConfigProvider
 import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
 
-@ExtendedLevelDBTest
-class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
+abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
+
   private[yarn] var yarnConfig: YarnConfiguration = null
   private[yarn] val SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager"
   private[yarn] val SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID1 =
@@ -69,6 +70,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
   private var recoveryLocalDir: File = _
   protected var tempDir: File = _
+
+  protected def shuffleDBBackend(): DBBackend
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -85,6 +88,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     yarnConfig.set(YarnConfiguration.NM_LOCAL_DIRS, localDir.getAbsolutePath)
     yarnConfig.set("spark.shuffle.push.server.mergedShuffleFileManagerImpl",
       "org.apache.spark.network.shuffle.RemoteBlockPushResolver")
+    yarnConfig.set(SHUFFLE_SERVICE_DB_BACKEND.key, shuffleDBBackend().name())
 
     recoveryLocalDir = Utils.createTempDir()
     tempDir = Utils.createTempDir()
@@ -158,10 +162,12 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
   private def createYarnShuffleServiceWithCustomMergeManager(
       createMergeManager: (TransportConf, File) => MergedShuffleFileManager): YarnShuffleService = {
     val shuffleService = createYarnShuffleService(false)
+    val dBBackend = shuffleDBBackend()
     val transportConf = new TransportConf("shuffle", new HadoopConfigProvider(yarnConfig))
+    val dbName = dBBackend.fileName(YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME)
     val testShuffleMergeManager = createMergeManager(
         transportConf,
-        shuffleService.initRecoveryDb(YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME))
+        shuffleService.initRecoveryDb(dbName))
     shuffleService.setShuffleMergeManager(testShuffleMergeManager)
     shuffleService.init(yarnConfig)
     shuffleService
@@ -372,7 +378,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     prepareAppShufflePartition(mergeManager, partitionId3, 1, "3")
     prepareAppShufflePartition(mergeManager, partitionId4, 2, "4")
 
-    val blockResolverDB = ShuffleTestAccessor.shuffleServiceLevelDB(blockResolver)
+    val blockResolverDB = ShuffleTestAccessor.shuffleServiceDB(blockResolver)
     ShuffleTestAccessor.reloadRegisteredExecutors(blockResolverDB) should not be empty
     val mergeManagerDB = ShuffleTestAccessor.mergeManagerLevelDB(mergeManager)
     ShuffleTestAccessor.reloadAppShuffleInfo(mergeManager, mergeManagerDB) should not be empty
@@ -764,6 +770,32 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     s1.stop()
   }
 
+  test("SPARK-40186: shuffleMergeManager should have been shutdown before db closed") {
+    val maxId = 100
+    s1 = createYarnShuffleService()
+    val resolver = s1.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
+    (0 until maxId).foreach { id =>
+      val appId = ApplicationId.newInstance(0, id)
+      val appInfo = makeAppInfo("user", appId)
+      s1.initializeApplication(appInfo)
+      val mergedShuffleInfo =
+        new ExecutorShuffleInfo(
+          Array(new File(tempDir, "foo/foo").getAbsolutePath,
+            new File(tempDir, "bar/bar").getAbsolutePath), 3,
+          SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID1)
+      resolver.registerExecutor(appId.toString, mergedShuffleInfo)
+    }
+
+    (0 until maxId).foreach { id =>
+      val appId = ApplicationId.newInstance(0, id)
+      resolver.applicationRemoved(appId.toString, true)
+    }
+
+    s1.stop()
+
+    assert(ShuffleTestAccessor.isMergedShuffleCleanerShutdown(resolver))
+  }
+
   test("Dangling finalized merged partition info in DB will be removed during restart") {
     s1 = createYarnShuffleServiceWithCustomMergeManager(
       ShuffleTestAccessor.createMergeManagerWithNoOpAppShuffleDBCleanup)
@@ -1062,6 +1094,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
   test("create remote block push resolver instance") {
     val mockConf = mock(classOf[TransportConf])
+    when(mockConf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.LEVELDB.name()))
+      .thenReturn(shuffleDBBackend().name())
     when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
       "org.apache.spark.network.shuffle.RemoteBlockPushResolver")
     val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf, null)
@@ -1075,4 +1109,13 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf, null)
     assert(mergeMgr.isInstanceOf[NoOpMergedShuffleFileManager])
   }
+}
+
+@ExtendedLevelDBTest
+class YarnShuffleServiceWithLevelDBBackendSuite extends YarnShuffleServiceSuite {
+  override protected def shuffleDBBackend(): DBBackend = DBBackend.LEVELDB
+}
+
+class YarnShuffleServiceWithRocksDBBackendSuite extends YarnShuffleServiceSuite {
+  override protected def shuffleDBBackend(): DBBackend = DBBackend.ROCKSDB
 }

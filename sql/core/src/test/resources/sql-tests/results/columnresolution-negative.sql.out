@@ -158,7 +158,22 @@ SELECT db1.t1.i1 FROM t1, mydb2.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `db1`.`t1`.`i1` cannot be resolved. Did you mean one of the following? [`spark_catalog`.`mydb2`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]; line 1 pos 7
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`db1`.`t1`.`i1`",
+    "proposal" : "`spark_catalog`.`mydb2`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "db1.t1.i1"
+  } ]
+}
 
 
 -- !query
@@ -183,7 +198,22 @@ SELECT mydb1.t1 FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `mydb1`.`t1` cannot be resolved. Did you mean one of the following? [`spark_catalog`.`mydb1`.`t1`.`i1`]; line 1 pos 7
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`mydb1`.`t1`",
+    "proposal" : "`spark_catalog`.`mydb1`.`t1`.`i1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "mydb1.t1"
+  } ]
+}
 
 
 -- !query
@@ -201,7 +231,22 @@ SELECT t1 FROM mydb1.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `t1` cannot be resolved. Did you mean one of the following? [`spark_catalog`.`mydb1`.`t1`.`i1`]; line 1 pos 7
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`t1`",
+    "proposal" : "`spark_catalog`.`mydb1`.`t1`.`i1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 9,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -218,7 +263,22 @@ SELECT mydb1.t1.i1 FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `mydb1`.`t1`.`i1` cannot be resolved. Did you mean one of the following? [`spark_catalog`.`mydb2`.`t1`.`i1`]; line 1 pos 7
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`mydb1`.`t1`.`i1`",
+    "proposal" : "`spark_catalog`.`mydb2`.`t1`.`i1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "mydb1.t1.i1"
+  } ]
+}
 
 
 -- !query

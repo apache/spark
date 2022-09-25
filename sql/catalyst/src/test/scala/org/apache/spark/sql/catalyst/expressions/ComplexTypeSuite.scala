@@ -85,19 +85,11 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-33460: GetMapValue NoSuchElementException") {
+  test("SPARK-40066: GetMapValue returns null on invalid map value access") {
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
         val map = Literal.create(Map(1 -> "a", 2 -> "b"), MapType(IntegerType, StringType))
-
-        if (ansiEnabled) {
-          checkExceptionInExpression[Exception](
-            GetMapValue(map, Literal(5)),
-            "Key 5 does not exist."
-          )
-        } else {
-          checkEvaluation(GetMapValue(map, Literal(5)), null)
-        }
+        checkEvaluation(GetMapValue(map, Literal(5)), null)
       }
     }
   }
@@ -484,6 +476,10 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val m5 = Map("a" -> null)
     checkEvaluation(new StringToMap(s5), m5)
 
+    val s6 = Literal("a=1&b=2&c=3")
+    val m6 = Map("a" -> "1", "b" -> "2", "c" -> "3")
+    checkEvaluation(new StringToMap(s6, NonFoldableLiteral("&"), NonFoldableLiteral("=")), m6)
+
     checkExceptionInExpression[RuntimeException](
       new StringToMap(Literal("a:1,b:2,a:3")), "Duplicate map key")
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
@@ -500,12 +496,6 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(StringToMap(Literal("a:1,b:2,c:3"), Literal(null), Literal(null))
       .checkInputDataTypes().isFailure)
     assert(new StringToMap(Literal(null), Literal(null)).checkInputDataTypes().isFailure)
-
-    assert(new StringToMap(Literal("a:1_b:2_c:3"), NonFoldableLiteral("_"))
-        .checkInputDataTypes().isFailure)
-    assert(
-      new StringToMap(Literal("a=1_b=2_c=3"), Literal("_"), NonFoldableLiteral("="))
-        .checkInputDataTypes().isFailure)
   }
 
   test("SPARK-22693: CreateNamedStruct should not use global variables") {
@@ -526,5 +516,31 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val m2 = GetMapValue(Literal.create(d2, MapType(StringType, StringType)), Literal("a"))
 
     assert(m1.semanticEquals(m2))
+  }
+
+  test("SPARK-40315: Literals of ArrayBasedMapData should have deterministic hashCode.") {
+    val keys = new Array[UTF8String](1)
+    val values1 = new Array[UTF8String](1)
+    val values2 = new Array[UTF8String](1)
+
+    keys(0) = UTF8String.fromString("key")
+    values1(0) = UTF8String.fromString("value1")
+    values2(0) = UTF8String.fromString("value2")
+
+    val d1 = new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values1))
+    val d2 = new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values1))
+    val d3 = new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values2))
+    val m1 = Literal.create(d1, MapType(StringType, StringType))
+    val m2 = Literal.create(d2, MapType(StringType, StringType))
+    val m3 = Literal.create(d3, MapType(StringType, StringType))
+
+    // If two Literals of ArrayBasedMapData have the same elements, we expect them to be equal and
+    // to have the same hashCode().
+    assert(m1 == m2)
+    assert(m1.hashCode() == m2.hashCode())
+    // If two Literals of ArrayBasedMapData have different elements, we expect them not to be equal
+    // and to have different hashCode().
+    assert(m1 != m3)
+    assert(m1.hashCode() != m3.hashCode())
   }
 }

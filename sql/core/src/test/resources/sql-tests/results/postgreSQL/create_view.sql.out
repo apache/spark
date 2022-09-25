@@ -53,7 +53,13 @@ CREATE VIEW key_dependent_view AS
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-expression 'spark_catalog.default.view_base_table.data' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "\"data\""
+  }
+}
 
 
 -- !query
@@ -63,7 +69,21 @@ CREATE VIEW key_dependent_view_no_cols AS
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `FROM` cannot be resolved. Did you mean one of the following? []; line 2 pos 10
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITHOUT_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`FROM`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 53,
+    "stopIndex" : 56,
+    "fragment" : "FROM"
+  } ]
+}
 
 
 -- !query

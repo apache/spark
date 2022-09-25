@@ -157,6 +157,7 @@ class CsvTest(PandasOnSparkTestCase, TestUtils):
             check(index_col=["amount"])
             check(header=None, index_col=[1])
             check(names=["n", "a"], index_col=["a"])
+            check(names=["n", "a"], index_col="a")
 
             # check with pyspark patch.
             expected = pd.read_csv(fn)

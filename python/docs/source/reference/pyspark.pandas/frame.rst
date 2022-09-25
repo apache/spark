@@ -151,6 +151,7 @@ Computations / Descriptive Stats
    DataFrame.count
    DataFrame.cov
    DataFrame.describe
+   DataFrame.ewm
    DataFrame.kurt
    DataFrame.kurtosis
    DataFrame.mad
@@ -158,6 +159,7 @@ Computations / Descriptive Stats
    DataFrame.mean
    DataFrame.min
    DataFrame.median
+   DataFrame.mode
    DataFrame.pct_change
    DataFrame.prod
    DataFrame.product

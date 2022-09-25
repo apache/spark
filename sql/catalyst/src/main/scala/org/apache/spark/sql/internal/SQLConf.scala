@@ -31,7 +31,7 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkContext, TaskContext}
+import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
@@ -525,6 +525,16 @@ object SQLConf {
     .intConf
     .checkValue(_ >= 1, "The shuffle hash join factor cannot be negative.")
     .createWithDefault(3)
+
+  val LIMIT_INITIAL_NUM_PARTITIONS = buildConf("spark.sql.limit.initialNumPartitions")
+    .internal()
+    .doc("Initial number of partitions to try when executing a take on a query. Higher values " +
+      "lead to more partitions read. Lower values might lead to longer execution times as more" +
+      "jobs will be run")
+    .version("3.4.0")
+    .intConf
+    .checkValue(_ > 0, "value should be positive")
+    .createWithDefault(1)
 
   val LIMIT_SCALE_UP_FACTOR = buildConf("spark.sql.limit.scaleUpFactor")
     .internal()
@@ -2576,8 +2586,8 @@ object SQLConf {
         "1. pyspark.sql.DataFrame.toPandas. " +
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
         "or a NumPy ndarray. " +
-        "The following data types are unsupported: " +
-        "ArrayType of TimestampType, and nested StructType.")
+        "The following data type is unsupported: " +
+        "ArrayType of TimestampType.")
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 
@@ -2954,15 +2964,6 @@ object SQLConf {
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
-
-  val ANSI_STRICT_INDEX_OPERATOR = buildConf("spark.sql.ansi.strictIndexOperator")
-    .internal()
-    .doc(s"When true and '${ANSI_ENABLED.key}' is true, accessing complex SQL types via [] " +
-      "operator will throw an exception if array index is out of bound, or map key does not " +
-      "exist. Otherwise, Spark will return a null result when accessing an invalid index.")
-    .version("3.3.0")
-    .booleanConf
-    .createWithDefault(true)
 
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
@@ -3529,6 +3530,22 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
+    buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
+      .internal()
+      .doc("When true, enable legacy date/time parsing fallback in CSV")
+      .version("3.4.0")
+      .booleanConf
+      .createOptional
+
+  val LEGACY_JSON_ENABLE_DATE_TIME_PARSING_FALLBACK =
+    buildConf("spark.sql.legacy.json.enableDateTimeParsingFallback")
+      .internal()
+      .doc("When true, enable legacy date/time parsing fallback in JSON")
+      .version("3.4.0")
+      .booleanConf
+      .createOptional
+
   val ADD_PARTITION_BATCH_SIZE =
     buildConf("spark.sql.addPartitionInBatch.size")
       .internal()
@@ -3884,6 +3901,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ERROR_MESSAGE_FORMAT = buildConf("spark.sql.error.messageFormat")
+    .doc("When PRETTY, the error message consists of textual representation of error class, " +
+      "message and query context. The MINIMAL and STANDARD formats are pretty JSON formats where " +
+      "STANDARD includes an additional JSON field `message`. This configuration property " +
+      "influences on error messages of Thrift Server and SQL CLI while running queries.")
+    .version("3.4.0")
+    .stringConf.transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(ErrorMessageFormat.values.map(_.toString))
+    .createWithDefault(ErrorMessageFormat.PRETTY.toString)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3982,7 +4009,11 @@ object SQLConf {
       RemovedConfig("spark.sql.optimizer.planChangeLog.rules", "3.1.0", "",
         s"Please use `${PLAN_CHANGE_LOG_RULES.key}` instead."),
       RemovedConfig("spark.sql.optimizer.planChangeLog.batches", "3.1.0", "",
-        s"Please use `${PLAN_CHANGE_LOG_BATCHES.key}` instead.")
+        s"Please use `${PLAN_CHANGE_LOG_BATCHES.key}` instead."),
+      RemovedConfig("spark.sql.ansi.strictIndexOperator", "3.4.0", "true",
+        "This was an internal configuration. It is not needed anymore since Spark SQL always " +
+          "returns null when getting a map value with a non-existing key. See SPARK-40066 " +
+          "for more details.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -4295,6 +4326,8 @@ class SQLConf extends Serializable with Logging {
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
+  def limitInitialNumPartitions: Int = getConf(LIMIT_INITIAL_NUM_PARTITIONS)
+
   def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
 
   def advancedPartitionPredicatePushdownEnabled: Boolean =
@@ -4543,8 +4576,6 @@ class SQLConf extends Serializable with Logging {
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
 
-  def strictIndexOperator: Boolean = ansiEnabled && getConf(ANSI_STRICT_INDEX_OPERATOR)
-
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>
       // For historical reason, the TimestampType maps to TIMESTAMP WITH LOCAL TIME ZONE
@@ -4618,6 +4649,12 @@ class SQLConf extends Serializable with Logging {
 
   def avroFilterPushDown: Boolean = getConf(AVRO_FILTER_PUSHDOWN_ENABLED)
 
+  def jsonEnableDateTimeParsingFallback: Option[Boolean] =
+    getConf(LEGACY_JSON_ENABLE_DATE_TIME_PARSING_FALLBACK)
+
+  def csvEnableDateTimeParsingFallback: Option[Boolean] =
+    getConf(LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK)
+
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
 
   def metadataCacheTTL: Long = getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
@@ -4664,6 +4701,9 @@ class SQLConf extends Serializable with Logging {
 
   def histogramNumericPropagateInputType: Boolean =
     getConf(SQLConf.HISTOGRAM_NUMERIC_PROPAGATE_INPUT_TYPE)
+
+  def errorMessageFormat: ErrorMessageFormat.Value =
+    ErrorMessageFormat.withName(getConf(SQLConf.ERROR_MESSAGE_FORMAT))
 
   /** ********************** SQLConf functionality methods ************ */
 

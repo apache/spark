@@ -20,8 +20,9 @@ package org.apache.spark.sql.errors
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.functions.{grouping, grouping_id, lit, struct, sum, udf}
+import org.apache.spark.sql.functions.{from_json, grouping, grouping_id, lit, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
 
 case class StringLongClass(a: String, b: Long)
@@ -34,7 +35,7 @@ case class ArrayClass(arr: Seq[StringIntClass])
 
 class QueryCompilationErrorsSuite
   extends QueryTest
-  with QueryErrorsSuiteBase {
+  with SharedSparkSession {
   import testImplicits._
 
   test("CANNOT_UP_CAST_DATATYPE: invalid upcast data type") {
@@ -119,13 +120,15 @@ class QueryCompilationErrorsSuite
         parameters = Map(
           "parameter" -> "strfmt",
           "functionName" -> "`format_string`",
-          "expected" -> "expects %1$, %2$ and so on, but got %0$."))
+          "expected" -> "expects %1$, %2$ and so on, but got %0$."),
+        context = ExpectedContext(
+          fragment = "format_string('%0$s', 'Hello')", start = 7, stop = 36))
     }
   }
 
   test("INVALID_PANDAS_UDF_PLACEMENT: Using aggregate function with grouped aggregate pandas UDF") {
     import IntegratedUDFTestUtils._
-    assume(shouldTestGroupedAggPandasUDFs)
+    assume(shouldTestPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),
@@ -148,6 +151,7 @@ class QueryCompilationErrorsSuite
 
   test("UNSUPPORTED_FEATURE: Using Python UDF with unsupported join condition") {
     import IntegratedUDFTestUtils._
+    assume(shouldTestPythonUDFs)
 
     val df1 = Seq(
       (536361, "85123A", 2, 17850),
@@ -176,7 +180,7 @@ class QueryCompilationErrorsSuite
 
   test("UNSUPPORTED_FEATURE: Using pandas UDF aggregate expression with pivot") {
     import IntegratedUDFTestUtils._
-    assume(shouldTestGroupedAggPandasUDFs)
+    assume(shouldTestPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),
@@ -212,7 +216,9 @@ class QueryCompilationErrorsSuite
       checkError(
         exception = e,
         errorClass = "NO_HANDLER_FOR_UDAF",
-        parameters = Map("functionName" -> "org.apache.spark.sql.errors.MyCastToString"))
+        parameters = Map("functionName" -> "org.apache.spark.sql.errors.MyCastToString"),
+        context = ExpectedContext(
+          fragment = "myCast(123)", start = 7, stop = 17))
     }
   }
 
@@ -401,14 +407,20 @@ class QueryCompilationErrorsSuite
 
   test("UNRESOLVED_MAP_KEY: string type literal should be quoted") {
     checkAnswer(sql("select m['a'] from (select map('a', 'b') as m, 'aa' as aa)"), Row("b"))
+    val query = "select m[a] from (select map('a', 'b') as m, 'aa' as aa)"
     checkError(
-      exception = intercept[AnalysisException] {
-        sql("select m[a] from (select map('a', 'b') as m, 'aa' as aa)")
-      },
+      exception = intercept[AnalysisException] {sql(query)},
       errorClass = "UNRESOLVED_MAP_KEY",
-      parameters = Map("columnName" -> "`a`",
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`",
         "proposal" ->
-          "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`aa`"))
+          "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`aa`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 9,
+        stop = 9)
+    )
   }
 
   test("UNRESOLVED_COLUMN: SELECT distinct does not work correctly " +
@@ -435,7 +447,17 @@ class QueryCompilationErrorsSuite
             |""".stripMargin)
       },
       errorClass = "UNRESOLVED_COLUMN",
-      parameters = Map("objectName" -> "`struct`.`a`", "objectList" -> "`a`, `b`"))
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map(
+        "objectName" -> "`struct`.`a`",
+        "proposal" -> "`a`, `b`"
+      ),
+      context = ExpectedContext(
+        fragment = "struct.a",
+        start = 180,
+        stop = 187)
+    )
   }
 
   test("UNRESOLVED_COLUMN - SPARK-21335: support un-aliased subquery") {
@@ -443,12 +465,19 @@ class QueryCompilationErrorsSuite
       Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")
       checkAnswer(sql("SELECT i from (SELECT i FROM v)"), Row(1))
 
+      val query = "SELECT v.i from (SELECT i FROM v)"
       checkError(
-        exception = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)")),
+        exception = intercept[AnalysisException](sql(query)),
         errorClass = "UNRESOLVED_COLUMN",
+        errorSubClass = "WITH_SUGGESTION",
+        sqlState = None,
         parameters = Map(
           "objectName" -> "`v`.`i`",
-          "objectList" -> "`__auto_generated_subquery_name`.`i`"))
+          "proposal" -> "`__auto_generated_subquery_name`.`i`"),
+        context = ExpectedContext(
+          fragment = "v.i",
+          start = 7,
+          stop = 9))
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }
@@ -460,12 +489,15 @@ class QueryCompilationErrorsSuite
         sql("CREATE TABLE t(c struct<X:String, x:String>) USING parquet")
       }
 
+      val query = "ALTER TABLE t CHANGE COLUMN c.X COMMENT 'new comment'"
       checkError(
         exception = intercept[AnalysisException] {
-          sql("ALTER TABLE t CHANGE COLUMN c.X COMMENT 'new comment'")
+          sql(query)
         },
         errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
-        parameters = Map("name" -> "`c`.`X`", "n" -> "2"))
+        parameters = Map("name" -> "`c`.`X`", "n" -> "2"),
+        context = ExpectedContext(
+          fragment = query, start = 0, stop = 52))
     }
   }
 
@@ -502,7 +534,9 @@ class QueryCompilationErrorsSuite
       checkError(
         exception = e,
         errorClass = "INVALID_FIELD_NAME",
-        parameters = Map("fieldName" -> "`m`.`n`", "path" -> "`m`"))
+        parameters = Map("fieldName" -> "`m`.`n`", "path" -> "`m`"),
+        context = ExpectedContext(
+          fragment = "m.n int", start = 27, stop = 33))
     }
   }
 
@@ -547,7 +581,8 @@ class QueryCompilationErrorsSuite
       exception = e1,
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
-      parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT>\"",
+      parameters = Map(
+        "schema" -> "\"STRUCT<a: STRING, b: INT>\"",
         "ordinal" -> "3"))
 
     val e2 = intercept[AnalysisException] {
@@ -611,10 +646,24 @@ class QueryCompilationErrorsSuite
     checkError(
       exception = e,
       errorClass = "UNSUPPORTED_GENERATOR",
-      errorSubClass = Some("NOT_GENERATOR"),
+      errorSubClass = "NOT_GENERATOR",
+      sqlState = None,
       parameters = Map(
         "functionName" -> "`array_contains`",
-        "classCanonicalName" -> "org.apache.spark.sql.catalyst.expressions.ArrayContains"))
+        "classCanonicalName" -> "org.apache.spark.sql.catalyst.expressions.ArrayContains"),
+      context = ExpectedContext(
+        fragment = "LATERAL VIEW array_contains(value, 1) AS explodedvalue",
+        start = 62, stop = 115))
+  }
+
+  test("DATATYPE_MISMATCH.INVALID_JSON_SCHEMA: invalid top type passed to from_json()") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("""{"a":1}""").toDF("a").select(from_json($"a", IntegerType)).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("INVALID_JSON_SCHEMA"),
+      parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
   }
 }
 

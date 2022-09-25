@@ -1309,7 +1309,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     }
 
     val tvf = UnresolvedTableValuedFunction(
-      name.asFunctionIdentifier, func.expression.asScala.map(expression).toSeq, aliases)
+      name, func.expression.asScala.map(expression).toSeq, aliases)
     tvf.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
   }
 
@@ -2360,7 +2360,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       Literal(converter(rawStrippedQualifier))
     } catch {
       case e: NumberFormatException =>
-        throw new ParseException(e.getMessage, ctx)
+        throw new ParseException(
+          errorClass = "_LEGACY_ERROR_TEMP_0060",
+          messageParameters = Map("msg" -> e.getMessage),
+          ctx)
     }
   }
 
@@ -2418,7 +2421,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       Literal(BigDecimal(raw).underlying())
     } catch {
       case e: AnalysisException =>
-        throw new ParseException(e.message, ctx)
+        throw new ParseException(
+          errorClass = "_LEGACY_ERROR_TEMP_0061",
+          messageParameters = Map("msg" -> e.getMessage),
+          ctx)
     }
   }
 
@@ -2616,7 +2622,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         IntervalUtils.stringToInterval(UTF8String.concat(kvs: _*))
       } catch {
         case i: IllegalArgumentException =>
-          val e = new ParseException(i.getMessage, ctx)
+          val e = new ParseException(
+            errorClass = "_LEGACY_ERROR_TEMP_0062",
+            messageParameters = Map("msg" -> i.getMessage),
+            ctx)
           e.setStackTrace(i.getStackTrace)
           throw e
       }
@@ -2655,7 +2664,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       } catch {
         // Handle Exceptions thrown by CalendarInterval
         case e: IllegalArgumentException =>
-          val pe = new ParseException(e.getMessage, ctx)
+          val pe = new ParseException(
+            errorClass = "_LEGACY_ERROR_TEMP_0063",
+            messageParameters = Map("msg" -> e.getMessage),
+            ctx)
           pe.setStackTrace(e.getStackTrace)
           throw pe
       }
@@ -3673,7 +3685,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
     // DROP TABLE works with either a table or a temporary view.
     DropTable(
-      createUnresolvedTableOrView(ctx.multipartIdentifier(), "DROP TABLE"),
+      UnresolvedIdentifier(visitMultipartIdentifier(ctx.multipartIdentifier()), allowTemp = true),
       ctx.EXISTS != null,
       ctx.PURGE != null)
   }
@@ -3683,11 +3695,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitDropView(ctx: DropViewContext): AnyRef = withOrigin(ctx) {
     DropView(
-      createUnresolvedView(
-        ctx.multipartIdentifier(),
-        commandName = "DROP VIEW",
-        allowTemp = true,
-        relationTypeMismatchHint = Some("Please use DROP TABLE instead.")),
+      UnresolvedIdentifier(visitMultipartIdentifier(ctx.multipartIdentifier()), allowTemp = true),
       ctx.EXISTS != null)
   }
 

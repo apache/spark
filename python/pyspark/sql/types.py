@@ -46,9 +46,13 @@ from typing import (
 )
 
 from py4j.protocol import register_input_converter
-from py4j.java_gateway import GatewayClient, JavaClass, JavaObject
+from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway, JavaObject
 
 from pyspark.serializers import CloudPickleSerializer
+from pyspark.sql.utils import has_numpy
+
+if has_numpy:
+    import numpy as np
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -856,6 +860,97 @@ class StructType(DataType):
 
     @classmethod
     def fromJson(cls, json: Dict[str, Any]) -> "StructType":
+        """
+        Constructs :class:`StructType` from a schema defined in JSON format.
+
+        Below is a JSON schema it must adhere to::
+
+            {
+              "title":"StructType",
+              "description":"Schema of StructType in json format",
+              "type":"object",
+              "properties":{
+                 "fields":{
+                    "description":"Array of struct fields",
+                    "type":"array",
+                    "items":{
+                        "type":"object",
+                        "properties":{
+                           "name":{
+                              "description":"Name of the field",
+                              "type":"string"
+                           },
+                           "type":{
+                              "description": "Type of the field. Can either be
+                                              another nested StructType or primitive type",
+                              "type":"object/string"
+                           },
+                           "nullable":{
+                              "description":"If nulls are allowed",
+                              "type":"boolean"
+                           },
+                           "metadata":{
+                              "description":"Additional metadata to supply",
+                              "type":"object"
+                           },
+                           "required":[
+                              "name",
+                              "type",
+                              "nullable",
+                              "metadata"
+                           ]
+                        }
+                   }
+                }
+             }
+           }
+
+        Parameters
+        ----------
+        json : dict or a dict-like object e.g. JSON object
+            This "dict" must have "fields" key that returns an array of fields
+            each of which must have specific keys (name, type, nullable, metadata).
+
+        Returns
+        -------
+        :class:`StructType`
+
+        Examples
+        --------
+        >>> json_str = '''
+        ...  {
+        ...      "fields": [
+        ...          {
+        ...              "metadata": {},
+        ...              "name": "Person",
+        ...              "nullable": true,
+        ...              "type": {
+        ...                  "fields": [
+        ...                      {
+        ...                          "metadata": {},
+        ...                          "name": "name",
+        ...                          "nullable": false,
+        ...                          "type": "string"
+        ...                      },
+        ...                      {
+        ...                          "metadata": {},
+        ...                          "name": "surname",
+        ...                          "nullable": false,
+        ...                          "type": "string"
+        ...                      }
+        ...                  ],
+        ...                  "type": "struct"
+        ...              }
+        ...          }
+        ...      ],
+        ...      "type": "struct"
+        ...  }
+        ...  '''
+        >>> import json
+        >>> scheme = StructType.fromJson(json.loads(json_str))
+        >>> scheme.simpleString()
+        'struct<Person:struct<name:string,surname:string>>'
+        """
         return StructType([StructField.fromJson(f) for f in json["fields"]])
 
     def fieldNames(self) -> List[str]:
@@ -2165,11 +2260,67 @@ class DayTimeIntervalTypeConverter:
         )
 
 
+class NumpyScalarConverter:
+    def can_convert(self, obj: Any) -> bool:
+        return has_numpy and isinstance(obj, np.generic)
+
+    def convert(self, obj: "np.generic", gateway_client: GatewayClient) -> Any:
+        return obj.item()
+
+
+class NumpyArrayConverter:
+    def _from_numpy_type_to_java_type(
+        self, nt: "np.dtype", gateway: JavaGateway
+    ) -> Optional[JavaClass]:
+        """Convert NumPy type to Py4J Java type."""
+        if nt in [np.dtype("int8"), np.dtype("int16")]:
+            # Mapping int8 to gateway.jvm.byte causes
+            #   TypeError: 'bytes' object does not support item assignment
+            return gateway.jvm.short
+        elif nt == np.dtype("int32"):
+            return gateway.jvm.int
+        elif nt == np.dtype("int64"):
+            return gateway.jvm.long
+        elif nt == np.dtype("float32"):
+            return gateway.jvm.float
+        elif nt == np.dtype("float64"):
+            return gateway.jvm.double
+        elif nt == np.dtype("bool"):
+            return gateway.jvm.boolean
+
+        return None
+
+    def can_convert(self, obj: Any) -> bool:
+        return has_numpy and isinstance(obj, np.ndarray) and obj.ndim == 1
+
+    def convert(self, obj: "np.ndarray", gateway_client: GatewayClient) -> JavaObject:
+        from pyspark import SparkContext
+
+        gateway = SparkContext._gateway
+        assert gateway is not None
+        plist = obj.tolist()
+
+        if len(obj) > 0 and isinstance(plist[0], str):
+            jtpe = gateway.jvm.String
+        else:
+            jtpe = self._from_numpy_type_to_java_type(obj.dtype, gateway)
+            if jtpe is None:
+                raise TypeError("The type of array scalar '%s' is not supported" % (obj.dtype))
+        jarr = gateway.new_array(jtpe, len(obj))
+        for i in range(len(plist)):
+            jarr[i] = plist[i]
+        return jarr
+
+
 # datetime is a subclass of date, we should register DatetimeConverter first
 register_input_converter(DatetimeNTZConverter())
 register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
 register_input_converter(DayTimeIntervalTypeConverter())
+register_input_converter(NumpyScalarConverter())
+# NumPy array satisfies py4j.java_collections.ListConverter,
+# so prepend NumpyArrayConverter
+register_input_converter(NumpyArrayConverter(), prepend=True)
 
 
 def _test() -> None:

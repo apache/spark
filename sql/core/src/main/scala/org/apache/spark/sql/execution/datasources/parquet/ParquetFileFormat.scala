@@ -366,9 +366,11 @@ class ParquetFileFormat
         } else {
           new ParquetRecordReader[InternalRow](readSupport)
         }
-        val iter = new RecordReaderIterator[InternalRow](reader)
+        val readerWithRowIndexes = ParquetRowIndexUtil.addRowIndexToRecordReaderIfNeeded(reader,
+            requiredSchema)
+        val iter = new RecordReaderIterator[InternalRow](readerWithRowIndexes)
         try {
-          reader.initialize(split, hadoopAttemptContext)
+          readerWithRowIndexes.initialize(split, hadoopAttemptContext)
 
           val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
           val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)

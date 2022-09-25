@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, ResolvedView, Star, TableAlreadyExistsException, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMo
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
-import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED, LEGACY_CTE_PRECEDENCE_POLICY}
@@ -52,51 +51,59 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
       errorClass = "GROUPING_ID_COLUMN_MISMATCH",
-      messageParameters = Array(groupingID.groupByExprs.mkString(","), groupByExprs.mkString(",")))
+      messageParameters = Map(
+        "groupingIdColumn" -> groupingID.groupByExprs.mkString(","),
+        "groupByColumns" -> groupByExprs.mkString(",")))
   }
 
   def groupingColInvalidError(groupingCol: Expression, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
       errorClass = "GROUPING_COLUMN_MISMATCH",
-      messageParameters = Array(groupingCol.toString, groupByExprs.mkString(",")))
+      messageParameters = Map(
+        "grouping" -> groupingCol.toString,
+        "groupingColumns" -> groupByExprs.mkString(",")))
   }
 
   def groupingSizeTooLargeError(sizeLimit: Int): Throwable = {
     new AnalysisException(
       errorClass = "GROUPING_SIZE_LIMIT_EXCEEDED",
-      messageParameters = Array(sizeLimit.toString))
+      messageParameters = Map("maxSize" -> sizeLimit.toString))
   }
 
   def zeroArgumentIndexError(): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_PARAMETER_VALUE",
-      messageParameters = Array(
-        "strfmt", toSQLId("format_string"), "expects %1$, %2$ and so on, but got %0$."))
+      messageParameters = Map(
+        "parameter" -> "strfmt",
+        "functionName" -> toSQLId("format_string"),
+        "expected" -> "expects %1$, %2$ and so on, but got %0$."))
   }
 
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
-      messageParameters = Array(toSQLId(pivotCol.sql)))
+      messageParameters = Map("columnName" -> toSQLId(pivotCol.sql)))
   }
 
   def nonLiteralPivotValError(pivotVal: Expression): Throwable = {
     new AnalysisException(
       errorClass = "NON_LITERAL_PIVOT_VALUES",
-      messageParameters = Array(toSQLExpr(pivotVal)))
+      messageParameters = Map("expression" -> toSQLExpr(pivotVal)))
   }
 
   def pivotValDataTypeMismatchError(pivotVal: Expression, pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "PIVOT_VALUE_DATA_TYPE_MISMATCH",
-      messageParameters = Array(
-        pivotVal.toString, pivotVal.dataType.simpleString, pivotCol.dataType.catalogString))
+      messageParameters = Map(
+        "value" -> pivotVal.toString,
+        "valueType" -> pivotVal.dataType.simpleString,
+        "pivotType" -> pivotCol.dataType.catalogString))
   }
 
   def unpivotRequiresValueColumns(): Throwable = {
     new AnalysisException(
       errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
-      messageParameters = Array.empty)
+      messageParameters = Map.empty)
   }
 
   def unpivotValDataTypeMismatchError(values: Seq[NamedExpression]): Throwable = {
@@ -109,45 +116,49 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
     new AnalysisException(
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      messageParameters = Array(dataTypes.mkString(", ")))
+      messageParameters = Map("types" -> dataTypes.mkString(", ")))
   }
 
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
       errorSubClass = "INSERT_PARTITION_SPEC_IF_NOT_EXISTS",
-      messageParameters = Array(toSQLId(tableName)))
+      messageParameters = Map("tableName" -> toSQLId(tableName)))
   }
 
   def nonPartitionColError(partitionName: String): Throwable = {
     new AnalysisException(
       errorClass = "NON_PARTITION_COLUMN",
-      messageParameters = Array(toSQLId(partitionName)))
+      messageParameters = Map("columnName" -> toSQLId(partitionName)))
   }
 
   def missingStaticPartitionColumn(staticName: String): Throwable = {
     new AnalysisException(
       errorClass = "MISSING_STATIC_PARTITION_COLUMN",
-      messageParameters = Array(staticName))
+      messageParameters = Map("columnName" -> staticName))
   }
 
   def nestedGeneratorError(trimmedNestedGenerator: Expression): Throwable = {
     new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
       errorSubClass = "NESTED_IN_EXPRESSIONS",
-      messageParameters = Array(toSQLExpr(trimmedNestedGenerator)))
+      messageParameters = Map("expression" -> toSQLExpr(trimmedNestedGenerator)))
   }
 
   def moreThanOneGeneratorError(generators: Seq[Expression], clause: String): Throwable = {
-    new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_GENERATOR",
       errorSubClass = "MULTI_GENERATOR",
-      messageParameters = Array(clause,
-        generators.size.toString, generators.map(toSQLExpr).mkString(", ")))
+      messageParameters = Map(
+        "clause" -> clause,
+        "num" -> generators.size.toString,
+        "generators" -> generators.map(toSQLExpr).mkString(", ")))
   }
 
   def generatorOutsideSelectError(plan: LogicalPlan): Throwable = {
-    new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_GENERATOR",
       errorSubClass = "OUTSIDE_SELECT",
-      messageParameters = Array(plan.simpleString(SQLConf.get.maxToStringFields)))
+      messageParameters = Map("plan" -> plan.simpleString(SQLConf.get.maxToStringFields)))
   }
 
   def legacyStoreAssignmentPolicyError(): Throwable = {
@@ -169,30 +180,49 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       colName: String,
       candidates: Seq[String],
       origin: Origin): Throwable = {
-    val candidateIds = candidates.map(candidate => toSQLId(candidate))
+    val commonParam = Map("objectName" -> toSQLId(colName))
+    val proposalParam = if (candidates.isEmpty) {
+        Map.empty[String, String]
+      } else {
+        Map("proposal" -> candidates.take(5).map(toSQLId).mkString(", "))
+      }
     new AnalysisException(
       errorClass = errorClass,
-      messageParameters = Array(toSQLId(colName), candidateIds.mkString(", ")),
-      origin = origin)
+      errorSubClass = if (candidates.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION",
+      messageParameters = commonParam ++ proposalParam,
+      origin = origin
+    )
   }
 
-  def unresolvedColumnError(
-      columnName: String,
-      proposal: Seq[String]): Throwable = {
-    val proposalStr = proposal.map(toSQLId).mkString(", ")
+  def unresolvedColumnError(columnName: String, proposal: Seq[String]): Throwable = {
+    val commonParam = Map("objectName" -> toSQLId(columnName))
+    val proposalParam = if (proposal.isEmpty) {
+      Map.empty[String, String]
+    } else {
+      Map("proposal" -> proposal.take(5).map(toSQLId).mkString(", "))
+    }
     new AnalysisException(
       errorClass = "UNRESOLVED_COLUMN",
-      messageParameters = Array(toSQLId(columnName), proposalStr))
+      errorSubClass = if (proposal.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION",
+      messageParameters = commonParam ++ proposalParam)
   }
 
   def unresolvedFieldError(
       fieldName: String,
       columnPath: Seq[String],
       proposal: Seq[String]): Throwable = {
-    val proposalStr = proposal.map(toSQLId).mkString(", ")
+    val commonParams = Map(
+      "fieldName" -> toSQLId(fieldName),
+      "columnPath" -> toSQLId(columnPath))
+    val proposalParam = if (proposal.isEmpty) {
+        Map.empty[String, String]
+      } else {
+        Map("proposal" -> proposal.map(toSQLId).mkString(", "))
+      }
     new AnalysisException(
       errorClass = "UNRESOLVED_FIELD",
-      messageParameters = Array(toSQLId(fieldName), toSQLId(columnPath), proposalStr))
+      errorSubClass = if (proposal.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION",
+      messageParameters = commonParams ++ proposalParam)
   }
 
   def dataTypeMismatchForDeserializerError(
@@ -200,8 +230,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = "DATA_TYPE_MISMATCH",
-      messageParameters =
-        Array(toSQLType(desiredType), toSQLType(dataType)))
+      messageParameters = Map(
+        "desiredType" -> toSQLType(desiredType),
+        "dataType" -> toSQLType(dataType)))
   }
 
   def fieldNumberMismatchForDeserializerError(
@@ -209,22 +240,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = "FIELD_NUMBER_MISMATCH",
-      messageParameters =
-        Array(toSQLType(schema), (maxOrdinal + 1).toString))
+      messageParameters = Map(
+        "schema" -> toSQLType(schema),
+        "ordinal" -> (maxOrdinal + 1).toString))
   }
 
   def upCastFailureError(
       fromStr: String, from: Expression, to: DataType, walkedTypePath: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "CANNOT_UP_CAST_DATATYPE",
-      messageParameters = Array(
-        fromStr,
-        toSQLType(from.dataType),
-        toSQLType(to),
-        s"The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
+      messageParameters = Map(
+        "expression" -> fromStr,
+        "sourceType" -> toSQLType(from.dataType),
+        "targetType" ->  toSQLType(to),
+        "details" -> (s"The type path of the target object is:\n" +
+          walkedTypePath.mkString("", "\n", "\n") +
           "You can either add an explicit cast to the input data or choose a higher precision " +
-          "type of the field in the target object"
-      )
+          "type of the field in the target object"))
     )
   }
 
@@ -252,14 +284,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def groupingMustWithGroupingSetsOrCubeOrRollupError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_GROUPING_EXPRESSION",
-      messageParameters = Array.empty)
+      messageParameters = Map.empty)
   }
 
   def pandasUDFAggregateNotSupportedInPivotError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
       errorSubClass = "PANDAS_UDAF_IN_PIVOT",
-        messageParameters = Array[String]())
+      messageParameters = Map.empty)
   }
 
   def aggregateExpressionRequiredForPivotError(sql: String): Throwable = {
@@ -270,12 +302,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def writeIntoTempViewNotAllowedError(quoted: String): Throwable = {
     new AnalysisException("Cannot write into temp view " +
       s"$quoted as it's not a data source v2 relation.")
-  }
-
-  def expectTableOrPermanentViewNotTempViewError(
-      quoted: String, cmd: String, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"$quoted is a temp view. '$cmd' expects a table or permanent view.",
-      t.origin.line, t.origin.startPosition)
   }
 
   def readNonStreamingTempViewError(quoted: String): Throwable = {
@@ -307,10 +333,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def expectTableNotViewError(
-      v: ResolvedView, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
-    val viewStr = if (v.isTemp) "temp view" else "view"
+      nameParts: Seq[String],
+      isTemp: Boolean,
+      cmd: String,
+      mismatchHint: Option[String],
+      t: TreeNode[_]): Throwable = {
+    val viewStr = if (isTemp) "temp view" else "view"
     val hintStr = mismatchHint.map(" " + _).getOrElse("")
-    new AnalysisException(s"${v.identifier.quoted} is a $viewStr. '$cmd' expects a table.$hintStr",
+    new AnalysisException(s"${nameParts.quoted} is a $viewStr. '$cmd' expects a table.$hintStr",
+      t.origin.line, t.origin.startPosition)
+  }
+
+  def expectViewNotTempViewError(
+      nameParts: Seq[String],
+      cmd: String,
+      t: TreeNode[_]): Throwable = {
+    new AnalysisException(s"${nameParts.quoted} is a temp view. '$cmd' expects a permanent view.",
       t.origin.line, t.origin.startPosition)
   }
 
@@ -318,6 +356,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       v: ResolvedTable, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
     val hintStr = mismatchHint.map(" " + _).getOrElse("")
     new AnalysisException(s"${v.identifier.quoted} is a table. '$cmd' expects a view.$hintStr",
+      t.origin.line, t.origin.startPosition)
+  }
+
+  def expectTableOrPermanentViewNotTempViewError(
+      nameParts: Seq[String], cmd: String, t: TreeNode[_]): Throwable = {
+    new AnalysisException(
+      s"${nameParts.quoted} is a temp view. '$cmd' expects a table or permanent view.",
       t.origin.line, t.origin.startPosition)
   }
 
@@ -367,20 +412,27 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def groupByPositionRefersToAggregateFunctionError(
       index: Int,
       expr: Expression): Throwable = {
-    new AnalysisException(s"GROUP BY $index refers to an expression that is or contains " +
-      "an aggregate function. Aggregate functions are not allowed in GROUP BY, " +
-      s"but got ${expr.sql}")
+    new AnalysisException(
+      errorClass = "GROUP_BY_POS_REFERS_AGG_EXPR",
+      messageParameters = Map(
+        "index" -> index.toString,
+        "aggExpr" -> expr.sql))
   }
 
   def groupByPositionRangeError(index: Int, size: Int): Throwable = {
-    new AnalysisException(s"GROUP BY position $index is not in select list " +
-      s"(valid range is [1, $size])")
+    new AnalysisException(
+      errorClass = "GROUP_BY_POS_OUT_OF_RANGE",
+      messageParameters = Map(
+        "index" -> index.toString,
+        "size" -> size.toString))
   }
 
   def generatorNotExpectedError(name: FunctionIdentifier, classCanonicalName: String): Throwable = {
     new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
       errorSubClass = "NOT_GENERATOR",
-      messageParameters = Array(toSQLId(name.toString), classCanonicalName))
+      messageParameters = Map(
+        "functionName" -> toSQLId(name.toString),
+        "classCanonicalName" -> classCanonicalName))
   }
 
   def functionWithUnsupportedSyntaxError(prettyName: String, syntax: String): Throwable = {
@@ -476,20 +528,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       s"CalendarIntervalType, but got ${dt}")
   }
 
-  def viewOutputNumberMismatchQueryColumnNamesError(
-      output: Seq[Attribute], queryColumnNames: Seq[String]): Throwable = {
-    new AnalysisException(
-      s"The view output ${output.mkString("[", ",", "]")} doesn't have the same" +
-        "number of columns with the query column names " +
-        s"${queryColumnNames.mkString("[", ",", "]")}")
-  }
-
-  def attributeNotFoundError(colName: String, child: LogicalPlan): Throwable = {
-    new AnalysisException(
-      s"Attribute with name '$colName' is not found in " +
-        s"'${child.output.map(_.name).mkString("(", ",", ")")}'")
-  }
-
   def functionUndefinedError(name: FunctionIdentifier): Throwable = {
     new AnalysisException(s"undefined function $name")
   }
@@ -555,8 +593,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException("ADD COLUMN with v1 tables cannot specify NOT NULL.")
   }
 
-  def operationOnlySupportedWithV2TableError(operation: String): Throwable = {
-    new AnalysisException(s"$operation is only supported with v2 tables.")
+  def operationOnlySupportedWithV2TableError(
+      nameParts: Seq[String],
+      operation: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = "TABLE_OPERATION",
+      messageParameters = Map(
+        "tableName" -> toSQLId(nameParts),
+        "operation" -> operation))
+  }
+
+  def catalogOperationNotSupported(catalog: CatalogPlugin, operation: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = "CATALOG_OPERATION",
+      messageParameters = Map(
+        "catalogName" -> toSQLId(Seq(catalog.name())),
+        "operation" -> operation))
   }
 
   def alterColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
@@ -581,10 +635,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       db: Seq[String], v1TableName: TableIdentifier): Throwable = {
     new AnalysisException("SHOW COLUMNS with conflicting databases: " +
         s"'${db.head}' != '${v1TableName.database.get}'")
-  }
-
-  def sqlOnlySupportedWithV1TablesError(sql: String): Throwable = {
-    new AnalysisException(s"$sql is only supported with v1 tables.")
   }
 
   def cannotCreateTableWithBothProviderAndSerdeError(
@@ -837,7 +887,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def noHandlerForUDAFError(name: String): Throwable = {
     new InvalidUDFClassException(
       errorClass = "NO_HANDLER_FOR_UDAF",
-      messageParameters = Array(name))
+      messageParameters = Map("functionName" -> name))
   }
 
   def batchWriteCapabilityError(
@@ -860,10 +910,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def cannotDeleteTableWhereFiltersError(table: Table, filters: Array[Predicate]): Throwable = {
     new AnalysisException(
       s"Cannot delete from table ${table.name} where ${filters.mkString("[", ", ", "]")}")
-  }
-
-  def deleteOnlySupportedWithV2TablesError(): Throwable = {
-    new AnalysisException("DELETE is only supported with v2 tables.")
   }
 
   def describeDoesNotSupportPartitionForV2TablesError(): Throwable = {
@@ -919,6 +965,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def noSuchTableError(ident: Identifier): Throwable = {
     new NoSuchTableException(ident)
+  }
+
+  def noSuchTableError(nameParts: Seq[String]): Throwable = {
+    new NoSuchTableException(nameParts)
   }
 
   def noSuchNamespaceError(namespace: Array[String]): Throwable = {
@@ -1209,8 +1259,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def dataTypeUnsupportedByDataSourceError(format: String, field: StructField): Throwable = {
-    new AnalysisException(
-      s"$format data source does not support ${field.dataType.catalogString} data type.")
+    new AnalysisException(s"Column `${field.name}` has a data type of " +
+      s"${field.dataType.catalogString}, which is not supported by $format."
+    )
   }
 
   def failToResolveDataSourceForTableError(table: CatalogTable, key: String): Throwable = {
@@ -1417,7 +1468,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       groupAggPandasUDFNames: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_PANDAS_UDF_PLACEMENT",
-      messageParameters = Array(groupAggPandasUDFNames.map(toSQLId).mkString(", ")))
+      messageParameters = Map(
+        "functionList" -> groupAggPandasUDFNames.map(toSQLId).mkString(", ")))
   }
 
   def ambiguousAttributesInSelfJoinError(
@@ -1438,7 +1490,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       name: Seq[String], numMatches: Int, context: Origin): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
-      messageParameters = Array(toSQLId(name), numMatches.toString),
+      messageParameters = Map(
+        "name" -> toSQLId(name),
+        "n" -> numMatches.toString),
       origin = context)
   }
 
@@ -1446,15 +1500,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       name: Seq[String], numMatches: Int): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
-      messageParameters = Array(toSQLId(name), numMatches.toString))
+      messageParameters = Map(
+        "name" -> toSQLId(name),
+        "n" -> numMatches.toString))
   }
 
   def cannotUseIntervalTypeInTableSchemaError(): Throwable = {
     new AnalysisException("Cannot use interval type in the table schema.")
-  }
-
-  def cannotPartitionByNestedColumnError(reference: NamedReference): Throwable = {
-    new AnalysisException(s"Cannot partition by nested column: $reference")
   }
 
   def missingCatalogAbilityError(plugin: CatalogPlugin, ability: String): Throwable = {
@@ -1524,16 +1576,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(s"'$operation' does not support partitioning")
   }
 
-  def mixedRefsInAggFunc(funcStr: String): Throwable = {
-    val msg = "Found an aggregate function in a correlated predicate that has both " +
-      "outer and local references, which is not supported: " + funcStr
-    new AnalysisException(msg)
-  }
-
-  def lookupFunctionInNonFunctionCatalogError(
-      ident: Identifier, catalog: CatalogPlugin): Throwable = {
-    new AnalysisException(s"Trying to lookup function '$ident' in " +
-      s"catalog '${catalog.name()}', but it is not a FunctionCatalog.")
+  def mixedRefsInAggFunc(funcStr: String, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+      errorSubClass = "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
+      origin = origin,
+      messageParameters = Map("function" -> funcStr))
   }
 
   def functionCannotProcessInputError(
@@ -1597,7 +1645,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     // The second argument of {function} function needs to be an integer
     new AnalysisException(
       errorClass = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
-      messageParameters = Array(function),
+      messageParameters = Map("functionName" -> function),
       cause = Some(e))
   }
 
@@ -1650,7 +1698,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
       errorSubClass = "PYTHON_UDF_IN_ON_CLAUSE",
-      messageParameters = Array(s"${toSQLStmt(joinType.sql)}"))
+      messageParameters = Map("joinType" -> toSQLStmt(joinType.sql)))
   }
 
   def conflictingAttributesInJoinConditionError(
@@ -1722,10 +1770,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       .map(i => s"$i (${YearMonthIntervalType.fieldToString(i)})")
     new AnalysisException(s"Invalid field id '$field' in year-month interval. " +
       s"Supported interval fields: ${supportedIds.mkString(", ")}.")
-  }
-
-  def invalidYearMonthIntervalType(startFieldName: String, endFieldName: String): Throwable = {
-    new AnalysisException(s"'interval $startFieldName to $endFieldName' is invalid.")
   }
 
   def configRemovedInVersionError(
@@ -2010,15 +2054,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def descPartitionNotAllowedOnTempView(table: String): Throwable = {
     new AnalysisException(
       errorClass = "FORBIDDEN_OPERATION",
-      messageParameters =
-        Array(toSQLStmt("DESC PARTITION"), "TEMPORARY VIEW", toSQLId(table)))
+      messageParameters = Map(
+        "statement" -> toSQLStmt("DESC PARTITION"),
+        "objectType" -> "TEMPORARY VIEW",
+        "objectName" -> toSQLId(table)))
   }
 
   def descPartitionNotAllowedOnView(table: String): Throwable = {
     new AnalysisException(
       errorClass = "FORBIDDEN_OPERATION",
-      messageParameters = Array(
-        toSQLStmt("DESC PARTITION"), "VIEW", toSQLId(table)))
+      messageParameters = Map(
+        "statement" -> toSQLStmt("DESC PARTITION"),
+        "objectType" -> "VIEW",
+        "objectName" -> toSQLId(table)))
   }
 
   def showPartitionNotAllowedOnTableNotPartitionedError(tableIdentWithDB: String): Throwable = {
@@ -2235,18 +2283,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(s"Boundary end is not a valid integer: $end")
   }
 
-  def databaseDoesNotExistError(dbName: String): Throwable = {
-    new AnalysisException(s"Database '$dbName' does not exist.")
-  }
-
-  def tableDoesNotExistInDatabaseError(tableName: String, dbName: String): Throwable = {
-    new AnalysisException(s"Table '$tableName' does not exist in database '$dbName'.")
-  }
-
-  def tableOrViewNotFoundInDatabaseError(tableName: String, dbName: String): Throwable = {
-    new AnalysisException(s"Table or view '$tableName' not found in database '$dbName'")
-  }
-
   def tableOrViewNotFound(ident: Seq[String]): Throwable = {
     new AnalysisException(s"Table or view '${ident.quoted}' not found")
   }
@@ -2351,7 +2387,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def usingUntypedScalaUDFError(): Throwable = {
     new AnalysisException(
       errorClass = "UNTYPED_SCALA_UDF",
-      messageParameters = Array.empty)
+      messageParameters = Map.empty)
   }
 
   def aggregationFunctionAppliedOnNonNumericColumnError(colName: String): Throwable = {
@@ -2389,20 +2425,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def udfClassDoesNotImplementAnyUDFInterfaceError(className: String): Throwable = {
     new AnalysisException(
       errorClass = "NO_UDF_INTERFACE_ERROR",
-      messageParameters = Array(className))
+      messageParameters = Map("className" -> className))
   }
 
   def udfClassImplementMultiUDFInterfacesError(className: String): Throwable = {
     new AnalysisException(
       errorClass = "MULTI_UDF_INTERFACE_ERROR",
-      messageParameters = Array(className))
+      messageParameters = Map("className" -> className))
   }
 
   def udfClassWithTooManyTypeArgumentsError(n: Int): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
       errorSubClass = "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS",
-      messageParameters = Array(s"$n"))
+      messageParameters = Map("num" -> s"$n"))
   }
 
   def classWithoutPublicNonArgumentConstructorError(className: String): Throwable = {
@@ -2431,14 +2467,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def invalidFieldName(fieldName: Seq[String], path: Seq[String], context: Origin): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FIELD_NAME",
-      messageParameters = Array(toSQLId(fieldName), toSQLId(path)),
+      messageParameters = Map(
+        "fieldName" -> toSQLId(fieldName),
+        "path" -> toSQLId(path)),
       origin = context)
   }
 
   def invalidJsonSchema(schema: DataType): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_JSON_SCHEMA_MAP_TYPE",
-      messageParameters = Array(toSQLType(schema)))
+      messageParameters = Map("jsonSchema" -> toSQLType(schema)))
   }
 
   def tableIndexNotSupportedError(errorMessage: String): Throwable = {
@@ -2540,13 +2578,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def nullableColumnOrFieldError(name: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "NULLABLE_COLUMN_OR_FIELD",
-      messageParameters = Array(toSQLId(name)))
+      messageParameters = Map("name" -> toSQLId(name)))
   }
 
   def nullableArrayOrMapElementError(path: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "NULLABLE_ARRAY_OR_MAP_ELEMENT",
-      messageParameters = Array(toSQLId(path)))
+      messageParameters = Map("columnPath" -> toSQLId(path)))
   }
 
   def invalidColumnOrFieldDataTypeError(
@@ -2555,6 +2593,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       expected: DataType): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
-      messageParameters = Array(toSQLId(name), toSQLType(dt), toSQLType(expected)))
+      messageParameters = Map(
+        "name" -> toSQLId(name),
+        "type" -> toSQLType(dt),
+        "expectedType" -> toSQLType(expected)))
+  }
+
+  def columnNotInGroupByClauseError(expression: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+      messageParameters = Map("expression" -> toSQLExpr(expression))
+    )
   }
 }

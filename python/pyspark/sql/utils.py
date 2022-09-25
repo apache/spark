@@ -29,6 +29,15 @@ from py4j.protocol import Py4JJavaError
 from pyspark import SparkContext
 from pyspark.find_spark_home import _find_spark_home
 
+has_numpy = False
+try:
+    import numpy as np  # noqa: F401
+
+    has_numpy = True
+except ImportError:
+    pass
+
+
 if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame

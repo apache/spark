@@ -20,10 +20,13 @@ import org.apache.spark._
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.{Cast, CheckOverflowInTableInsert, Literal}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.ByteType
 
 // Test suite for all the execution errors that requires enable ANSI SQL mode.
-class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
+class QueryExecutionAnsiErrorsSuite extends QueryTest
+  with SharedSparkSession {
+
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "true")
 
   private val ansiConf = "\"" + SQLConf.ANSI_ENABLED.key + "\""
@@ -49,7 +52,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       errorClass = "DIVIDE_BY_ZERO",
       sqlState = "22012",
       parameters = Map("config" -> ansiConf),
-      context = ExpectedContext(fragment = "6/", start = 7, stop = 9))
+      context = ExpectedContext(fragment = "6/0", start = 7, stop = 9))
   }
 
   test("INTERVAL_DIVIDED_BY_ZERO: interval divided by zero") {
@@ -60,7 +63,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       errorClass = "INTERVAL_DIVIDED_BY_ZERO",
       sqlState = "22012",
       parameters = Map.empty[String, String],
-      context = ExpectedContext(fragment = "interval 1 day / ", start = 7, stop = 24))
+      context = ExpectedContext(fragment = "interval 1 day / 0", start = 7, stop = 24))
   }
 
   test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
@@ -73,20 +76,20 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       parameters = Map("ansiConfig" -> ansiConf))
   }
 
-  test("CANNOT_CHANGE_DECIMAL_PRECISION: cast string to decimal") {
+  test("NUMERIC_VALUE_OUT_OF_RANGE: cast string to decimal") {
     checkError(
       exception = intercept[SparkArithmeticException] {
         sql("select CAST('66666666666666.666' AS DECIMAL(8, 1))").collect()
       },
-      errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
       sqlState = "22005",
       parameters = Map(
-        "value" -> "Decimal(expanded, 66666666666666.666, 17, 3)",
+        "value" -> "66666666666666.666",
         "precision" -> "8",
         "scale" -> "1",
         "config" -> ansiConf),
       context = ExpectedContext(
-        fragment = "CAST('66666666666666.666' AS DECIMAL(8, 1)",
+        fragment = "CAST('66666666666666.666' AS DECIMAL(8, 1))",
         start = 7,
         stop = 49))
   }
@@ -98,7 +101,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       },
       errorClass = "INVALID_ARRAY_INDEX",
       parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
-      context = ExpectedContext(fragment = "array(1, 2, 3, 4, 5)[8", start = 7, stop = 29))
+      context = ExpectedContext(fragment = "array(1, 2, 3, 4, 5)[8]", start = 7, stop = 29))
   }
 
   test("INVALID_ARRAY_INDEX_IN_ELEMENT_AT: element_at from array") {
@@ -109,24 +112,23 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
       context = ExpectedContext(
-        fragment = "element_at(array(1, 2, 3, 4, 5), 8",
+        fragment = "element_at(array(1, 2, 3, 4, 5), 8)",
         start = 7,
         stop = 41))
   }
 
-  test("MAP_KEY_DOES_NOT_EXIST: key does not exist in element_at") {
+  test("ELEMENT_AT_BY_INDEX_ZERO: element_at from array by index zero") {
     checkError(
-      exception = intercept[SparkNoSuchElementException] {
-        sql("select element_at(map(1, 'a', 2, 'b'), 3)").collect()
-      },
-      errorClass = "MAP_KEY_DOES_NOT_EXIST",
-      parameters = Map(
-        "keyValue" -> "3",
-        "config" -> ansiConf),
+      exception = intercept[SparkRuntimeException](
+        sql("select element_at(array(1, 2, 3, 4, 5), 0)").collect()
+      ),
+      errorClass = "ELEMENT_AT_BY_INDEX_ZERO",
+      parameters = Map.empty,
       context = ExpectedContext(
-        fragment = "element_at(map(1, 'a', 2, 'b'), 3",
+        fragment = "element_at(array(1, 2, 3, 4, 5), 0)",
         start = 7,
-        stop = 40))
+        stop = 41)
+    )
   }
 
   test("CAST_INVALID_INPUT: cast string to double") {
@@ -141,7 +143,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         "targetType" -> "\"DOUBLE\"",
         "ansiConfig" -> ansiConf),
       context = ExpectedContext(
-        fragment = "CAST('111111111111xe23' AS DOUBLE",
+        fragment = "CAST('111111111111xe23' AS DOUBLE)",
         start = 7,
         stop = 40))
   }
@@ -166,7 +168,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         checkError(
           exception = intercept[SparkException] {
             sql(s"insert into $tableName values 12345678901234567890D")
-          }.getCause.getCause.getCause.asInstanceOf[SparkThrowable],
+          }.getCause.getCause.asInstanceOf[SparkThrowable],
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"DOUBLE\"",

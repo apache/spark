@@ -100,6 +100,7 @@
     <module>connector/kafka-0-10-assembly</module>
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
+    <module>connect</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -113,7 +114,7 @@
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.36</slf4j.version>
-    <log4j.version>2.18.0</log4j.version>
+    <log4j.version>2.19.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.4</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
@@ -128,11 +129,12 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.2.1</kafka.version>
+    <kafka.version>3.2.3</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.3</parquet.version>
-    <orc.version>1.7.5</orc.version>
+    <orc.version>1.8.0</orc.version>
+    <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>9.4.48.v20220622</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
@@ -150,6 +152,7 @@
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
+    <gcs-connector.version>hadoop3-2.2.7</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.13</commons.httpclient.version>
     <commons.httpcore.version>4.4.14</commons.httpcore.version>
@@ -157,7 +160,7 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.12.16</scala.version>
+    <scala.version>2.12.17</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalatest-maven-plugin.version>2.1.0</scalatest-maven-plugin.version>
     <!--
@@ -169,11 +172,10 @@
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.13.3</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.13.3</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.13.4</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.13.4</fasterxml.jackson.databind.version>
     <snappy.version>1.1.8.4</snappy.version>
-    <netlib.java.version>1.1.2</netlib.java.version>
-    <netlib.ludovic.dev.version>2.2.1</netlib.ludovic.dev.version>
+    <netlib.ludovic.dev.version>3.0.2</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
     <commons-compress.version>1.21</commons-compress.version>
     <commons-io.version>2.11.0</commons-io.version>
@@ -191,9 +193,11 @@
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
-    <antlr4.version>4.8</antlr4.version>
+    <!-- Please don't upgrade the version to 4.10+, it depends on JDK 11 -->
+    <antlr4.version>4.9.3</antlr4.version>
     <jpam.version>1.1</jpam.version>
-    <selenium.version>3.141.59</selenium.version>
+    <selenium.version>4.2.2</selenium.version>
+    <htmlunit-driver.version>3.62.0</htmlunit-driver.version>
     <htmlunit.version>2.62.0</htmlunit.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
@@ -203,8 +207,8 @@
     <!-- When upgrading `netty.version`, need to check whether
          the version of `netty-tcnative-classes.version` also needs to be upgraded
     -->
-    <netty.version>4.1.77.Final</netty.version>
-    <netty-tcnative-classes.version>2.0.52.Final</netty-tcnative-classes.version>
+    <netty.version>4.1.80.Final</netty.version>
+    <netty-tcnative-classes.version>2.0.54.Final</netty-tcnative-classes.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -396,17 +400,17 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
+      <artifactId>scalacheck-1-16_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-4-5_${scala.binary.version}</artifactId>
+      <artifactId>mockito-4-6_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>selenium-3-141_${scala.binary.version}</artifactId>
+      <artifactId>selenium-4-2_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -674,7 +678,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>7.4.4</version>
+        <version>7.6.0</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -692,8 +696,12 @@
             <artifactId>guava</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>com.google.auto.service</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
+            <artifactId>*</artifactId>
           </exclusion>
           <exclusion>
             <groupId>net.bytebuddy</groupId>
@@ -704,7 +712,7 @@
       <dependency>
         <groupId>org.seleniumhq.selenium</groupId>
         <artifactId>htmlunit-driver</artifactId>
-        <version>${htmlunit.version}</version>
+        <version>${htmlunit-driver.version}</version>
         <scope>test</scope>
       </dependency>
       <!-- Update htmlunit dependency that selenium uses for better JS support -->
@@ -790,7 +798,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.2-3</version>
+        <version>1.5.2-4</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -818,7 +826,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.9.30</version>
+        <version>0.9.32</version>
       </dependency>
 
       <!-- Netty Begin -->
@@ -1080,7 +1088,7 @@
       <dependency>
         <groupId>org.scalanlp</groupId>
         <artifactId>breeze_${scala.binary.version}</artifactId>
-        <version>2.0</version>
+        <version>2.1.0</version>
         <exclusions>
           <exclusion>
             <groupId>org.apache.commons</groupId>
@@ -1107,12 +1115,18 @@
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-xml_${scala.binary.version}</artifactId>
-        <version>1.2.0</version>
+        <version>2.1.0</version>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-compiler</artifactId>
         <version>${scala.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.scala-lang.modules</groupId>
+            <artifactId>scala-xml_2.12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
@@ -1137,37 +1151,37 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.3.0-SNAP3</version>
+        <version>3.2.13</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
-        <version>3.3.0.0-SNAP3</version>
+        <artifactId>scalacheck-1-16_${scala.binary.version}</artifactId>
+        <version>3.2.13.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-4-5_${scala.binary.version}</artifactId>
-        <version>3.2.12.0</version>
+        <artifactId>mockito-4-6_${scala.binary.version}</artifactId>
+        <version>3.2.13.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>selenium-3-141_${scala.binary.version}</artifactId>
-        <version>3.3.0.0-SNAP3</version>
+        <artifactId>selenium-4-2_${scala.binary.version}</artifactId>
+        <version>3.2.13.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>4.5.1</version>
+        <version>4.6.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-inline</artifactId>
-        <version>4.5.1</version>
+        <version>4.6.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1179,7 +1193,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.15.4</version>
+        <version>1.16.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1226,7 +1240,7 @@
       <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
-        <version>42.3.3</version>
+        <version>42.5.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2525,6 +2539,7 @@
         <groupId>org.apache.orc</groupId>
         <artifactId>orc-core</artifactId>
         <version>${orc.version}</version>
+        <classifier>${orc.classifier}</classifier>
         <scope>${orc.deps.scope}</scope>
         <exclusions>
           <exclusion>
@@ -2549,6 +2564,7 @@
         <groupId>org.apache.orc</groupId>
         <artifactId>orc-mapreduce</artifactId>
         <version>${orc.version}</version>
+        <classifier>${orc.classifier}</classifier>
         <scope>${orc.deps.scope}</scope>
         <exclusions>
           <exclusion>
@@ -2907,7 +2923,7 @@
               <compilerPlugin>
                 <groupId>com.github.ghik</groupId>
                 <artifactId>silencer-plugin_${scala.version}</artifactId>
-                <version>1.7.9</version>
+                <version>1.7.10</version>
               </compilerPlugin>
             </compilerPlugins>
           </configuration>
@@ -3501,6 +3517,7 @@
         <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
         <hadoop-client-runtime.artifact>hadoop-yarn-api</hadoop-client-runtime.artifact>
         <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
+        <gcs-connector.version>hadoop2-2.2.7</gcs-connector.version>
         <!-- SPARK-36547: Please don't upgrade the version below, otherwise there will be an error on building Hadoop 2.7 package -->
         <scala-maven-plugin.version>4.3.0</scala-maven-plugin.version>
       </properties>
@@ -3572,7 +3589,7 @@
          SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
          property correctly.
         -->
-        <scala.version>2.12.16</scala.version>
+        <scala.version>2.12.17</scala.version>
       </properties>
       <build>
         <pluginManagement>

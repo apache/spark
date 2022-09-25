@@ -595,7 +595,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Unhex(Literal("E4B889E9878DE79A84")), "三重的".getBytes(StandardCharsets.UTF_8))
     checkEvaluation(Unhex(Literal("三重的")), null)
     // scalastyle:on
-    checkConsistencyBetweenInterpretedAndCodegen(Unhex, StringType)
+    checkConsistencyBetweenInterpretedAndCodegen((e: Expression) => Unhex(e), StringType)
   }
 
   test("hypot") {

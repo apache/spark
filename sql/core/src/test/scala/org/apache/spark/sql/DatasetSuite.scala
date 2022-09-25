@@ -322,19 +322,37 @@ class DatasetSuite extends QueryTest
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
 
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          ds.select(expr("`(_1)?+.+`").as[Int])
+        },
+        errorClass = "UNRESOLVED_COLUMN",
+        errorSubClass = "WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map(
+          "objectName" -> "`(_1)?+.+`",
+          "proposal" -> "`_1`, `_2`"),
+        context = ExpectedContext(
+          fragment = "`(_1)?+.+`",
+          start = 0,
+          stop = 9))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          ds.select(expr("`(_1|_2)`").as[Int])
+        },
+        errorClass = "UNRESOLVED_COLUMN",
+        errorSubClass = "WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map(
+          "objectName" -> "`(_1|_2)`",
+          "proposal" -> "`_1`, `_2`"),
+        context = ExpectedContext(
+          fragment = "`(_1|_2)`",
+          start = 0,
+          stop = 8))
+
       var e = intercept[AnalysisException] {
-        ds.select(expr("`(_1)?+.+`").as[Int])
-      }
-      assert(e.getErrorClass == "UNRESOLVED_COLUMN")
-      assert(e.messageParameters.head == "`(_1)?+.+`")
-
-      e = intercept[AnalysisException] {
-        ds.select(expr("`(_1|_2)`").as[Int])
-      }
-      assert(e.getErrorClass == "UNRESOLVED_COLUMN")
-      assert(e.messageParameters.head == "`(_1|_2)`")
-
-      e = intercept[AnalysisException] {
         ds.select(ds("`(_1)?+.+`"))
       }
       assert(e.getMessage.contains("Cannot resolve column name \"`(_1)?+.+`\""))
@@ -769,6 +787,8 @@ class DatasetSuite extends QueryTest
 
     observe(spark.range(100), Map("percentile_approx_val" -> 49))
     observe(spark.range(0), Map("percentile_approx_val" -> null))
+    observe(spark.range(1, 10), Map("percentile_approx_val" -> 5))
+    observe(spark.range(1, 10, 1, 11), Map("percentile_approx_val" -> 5))
   }
 
   test("sample with replacement") {
@@ -882,10 +902,16 @@ class DatasetSuite extends QueryTest
   test("Kryo encoder: check the schema mismatch when converting DataFrame to Dataset") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val df = Seq((1.0)).toDF("a")
-    val e = intercept[AnalysisException] {
-      df.as[KryoData]
-    }.message
-    assert(e.contains("cannot cast double to binary"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.as[KryoData]
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("CAST_WITHOUT_SUGGESTION"),
+      parameters = Map(
+        "sqlExpr" -> "\"a\"",
+        "srcType" -> "\"DOUBLE\"",
+        "targetType" -> "\"BINARY\""))
   }
 
   test("Java encoder") {
@@ -931,11 +957,13 @@ class DatasetSuite extends QueryTest
 
   test("verify mismatching field names fail with a good error") {
     val ds = Seq(ClassData("a", 1)).toDS()
-    val e = intercept[AnalysisException] {
-      ds.as[ClassData2]
-    }
-    assert(e.getErrorClass == "UNRESOLVED_COLUMN")
-    assert(e.messageParameters.sameElements(Array("`c`", "`a`, `b`")))
+    checkError(
+      exception = intercept[AnalysisException] (ds.as[ClassData2]),
+      errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
+      parameters = Map(
+        "objectName" -> "`c`",
+        "proposal" -> "`a`, `b`"))
   }
 
   test("runtime nullability check") {
@@ -2136,6 +2164,12 @@ class DatasetSuite extends QueryTest
       (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
       (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
       (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13))
+  }
+
+  test("SPARK-40407: repartition should not result in severe data skew") {
+    val df = spark.range(0, 100, 1, 50).repartition(4)
+    val result = df.mapPartitions(iter => Iterator.single(iter.length)).collect()
+    assert(result.sorted.toSeq === Seq(19, 25, 25, 31))
   }
 }
 

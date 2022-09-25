@@ -43,7 +43,13 @@ SELECT a, COUNT(b) FROM testData GROUP BY b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-expression 'testdata.a' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "\"a\""
+  }
+}
 
 
 -- !query
@@ -107,7 +113,13 @@ SELECT a + 2, COUNT(b) FROM testData GROUP BY a + 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-expression 'testdata.a' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "\"a\""
+  }
+}
 
 
 -- !query
@@ -164,7 +176,22 @@ SELECT a AS k, COUNT(non_existing) FROM testData GROUP BY k
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `non_existing` cannot be resolved. Did you mean one of the following? [`testdata`.`a`, `testdata`.`b`]; line 1 pos 21
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`non_existing`",
+    "proposal" : "`testdata`.`a`, `testdata`.`b`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 33,
+    "fragment" : "non_existing"
+  } ]
+}
 
 
 -- !query
@@ -191,7 +218,13 @@ SELECT k AS a, COUNT(v) FROM testDataHasSameNameWithAlias GROUP BY a
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-expression 'testdatahassamenamewithalias.k' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "\"k\""
+  }
+}
 
 
 -- !query
@@ -208,7 +241,22 @@ SELECT a AS k, COUNT(b) FROM testData GROUP BY k
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `k` cannot be resolved. Did you mean one of the following? [`testdata`.`a`, `testdata`.`b`]; line 1 pos 47
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`k`",
+    "proposal" : "`testdata`.`a`, `testdata`.`b`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 48,
+    "stopIndex" : 48,
+    "fragment" : "k"
+  } ]
+}
 
 
 -- !query
@@ -447,7 +495,24 @@ SELECT every(1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'every(1)' due to data type mismatch: argument 1 requires boolean type, however, '1' is of int type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"every(1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "every(1)"
+  } ]
+}
 
 
 -- !query
@@ -456,7 +521,24 @@ SELECT some(1S)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'some(1S)' due to data type mismatch: argument 1 requires boolean type, however, '1S' is of smallint type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"SMALLINT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"some(1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "some(1S)"
+  } ]
+}
 
 
 -- !query
@@ -465,7 +547,24 @@ SELECT any(1L)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'any(1L)' due to data type mismatch: argument 1 requires boolean type, however, '1L' is of bigint type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"BIGINT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"any(1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 14,
+    "fragment" : "any(1L)"
+  } ]
+}
 
 
 -- !query
@@ -474,7 +573,24 @@ SELECT every("true")
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'every('true')' due to data type mismatch: argument 1 requires boolean type, however, ''true'' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"true\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"every(true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "every(\"true\")"
+  } ]
+}
 
 
 -- !query
@@ -483,7 +599,24 @@ SELECT bool_and(1.0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'bool_and(1.0BD)' due to data type mismatch: argument 1 requires boolean type, however, '1.0BD' is of decimal(2,1) type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1.0\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"bool_and(1.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "bool_and(1.0)"
+  } ]
+}
 
 
 -- !query
@@ -492,7 +625,24 @@ SELECT bool_or(1.0D)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'bool_or(1.0D)' due to data type mismatch: argument 1 requires boolean type, however, '1.0D' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"bool_or(1.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "bool_or(1.0D)"
+  } ]
+}
 
 
 -- !query

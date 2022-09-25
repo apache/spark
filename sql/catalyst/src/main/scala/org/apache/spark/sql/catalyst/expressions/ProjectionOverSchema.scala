@@ -65,8 +65,8 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
         getProjection(child).map { projection => MapKeys(projection) }
       case MapValues(child) =>
         getProjection(child).map { projection => MapValues(projection) }
-      case GetMapValue(child, key, failOnError) =>
-        getProjection(child).map { projection => GetMapValue(projection, key, failOnError) }
+      case GetMapValue(child, key) =>
+        getProjection(child).map { projection => GetMapValue(projection, key) }
       case GetStructFieldObject(child, field: StructField) =>
         getProjection(child).map(p => (p, p.dataType)).map {
           case (projection, projSchema: StructType) =>
@@ -76,6 +76,8 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
               s"unmatched child schema for GetStructField: ${projSchema.toString}"
             )
         }
+      case ElementAt(left, right, defaultValueOutOfBound, failOnError) if right.foldable =>
+        getProjection(left).map(p => ElementAt(p, right, defaultValueOutOfBound, failOnError))
       case _ =>
         None
     }

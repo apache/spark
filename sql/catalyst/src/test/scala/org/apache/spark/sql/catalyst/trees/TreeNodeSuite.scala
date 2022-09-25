@@ -888,7 +888,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val expectedFragment =
       """cast('a'
         |as /* comment */
-        |int)""".stripMargin
+        |int),""".stripMargin
     assert(origin.context.summary == expectedSummary)
     assert(origin.context.startIndex == origin.startIndex.get)
     assert(origin.context.stopIndex == origin.stopIndex.get)

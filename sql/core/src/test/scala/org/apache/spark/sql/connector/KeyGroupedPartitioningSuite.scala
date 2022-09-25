@@ -20,7 +20,7 @@ import java.util.Collections
 
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.TransformExpression
+import org.apache.spark.sql.catalyst.expressions.{Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
@@ -38,6 +38,12 @@ import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
 
 class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
+  private val functions = Seq(
+    UnboundYearsFunction,
+    UnboundDaysFunction,
+    UnboundBucketFunction,
+    UnboundTruncateFunction)
+
   private var originalV2BucketingEnabled: Boolean = false
   private var originalAutoBroadcastJoinThreshold: Long = -1
 
@@ -59,7 +65,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
   }
 
   before {
-    Seq(UnboundYearsFunction, UnboundDaysFunction, UnboundBucketFunction).foreach { f =>
+    functions.foreach { f =>
       catalog.createFunction(Identifier.of(Array.empty, f.name()), f)
     }
   }
@@ -177,6 +183,25 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
       checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
     }
+  }
+
+  test("non-clustered distribution: V2 function with multiple args") {
+    val partitions: Array[Transform] = Array(
+      Expressions.apply("truncate", Expressions.column("data"), Expressions.literal(2))
+    )
+
+    // create a table with 3 partitions, partitioned by `truncate` transform
+    createTable(table, schema, partitions)
+    sql(s"INSERT INTO testcat.ns.$table VALUES " +
+      s"(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
+      s"(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
+      s"(2, 'ccc', CAST('2020-01-01' AS timestamp))")
+
+    val df = sql(s"SELECT * FROM testcat.ns.$table")
+    val distribution = physical.ClusteredDistribution(
+      Seq(TransformExpression(TruncateFunction, Seq(attr("data"), Literal(2)))))
+
+    checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
   }
 
   /**

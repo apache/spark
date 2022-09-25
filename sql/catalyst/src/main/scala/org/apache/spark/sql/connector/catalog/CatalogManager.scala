@@ -135,7 +135,7 @@ class CatalogManager(
   }
 
   def listCatalogs(pattern: Option[String]): Seq[String] = {
-    val allCatalogs = synchronized(catalogs.keys.toSeq).sorted
+    val allCatalogs = (synchronized(catalogs.keys.toSeq) :+ SESSION_CATALOG_NAME).distinct.sorted
     pattern.map(StringUtils.filterPattern(allCatalogs, _)).getOrElse(allCatalogs)
   }
 
