@@ -232,6 +232,17 @@ abstract class InMemoryBaseTable(
     dataMap(key).clear()
   }
 
+  def withDeletes(data: Array[BufferedRows]): InMemoryBaseTable = {
+    data.foreach { p =>
+      dataMap ++= dataMap.map { case (key, currentRows) =>
+        val newRows = new BufferedRows(currentRows.key)
+        newRows.rows ++= currentRows.rows.filter(r => !p.deletes.contains(r.getInt(0)))
+        key -> newRows
+      }
+    }
+    this
+  }
+
   def withData(data: Array[BufferedRows]): InMemoryBaseTable = {
     withData(data, schema)
   }
@@ -521,6 +532,7 @@ object InMemoryBaseTable {
 class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
     with InputPartition with HasPartitionKey with Serializable {
   val rows = new mutable.ArrayBuffer[InternalRow]()
+  val deletes = new mutable.ArrayBuffer[Int]()
 
   def withRow(row: InternalRow): BufferedRows = {
     rows.append(row)
@@ -615,7 +627,7 @@ private object BufferedRowsWriterFactory extends DataWriterFactory with Streamin
 }
 
 private class BufferWriter extends DataWriter[InternalRow] {
-  private val buffer = new BufferedRows
+  protected val buffer = new BufferedRows
 
   override def write(row: InternalRow): Unit = buffer.rows.append(row.copy())
 
