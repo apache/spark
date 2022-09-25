@@ -1175,62 +1175,73 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def dataPathNotExistError(path: String): Throwable = {
-    new AnalysisException(s"Path does not exist: $path")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1130",
+      messageParameters = Map("path" -> path))
   }
 
   def dataSourceOutputModeUnsupportedError(
       className: String, outputMode: OutputMode): Throwable = {
-    new AnalysisException(s"Data source $className does not support $outputMode output mode")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1131",
+      messageParameters = Map(
+        "className" -> className,
+        "outputMode" -> outputMode.toString))
   }
 
   def schemaNotSpecifiedForSchemaRelationProviderError(className: String): Throwable = {
-    new AnalysisException(s"A schema needs to be specified when using $className.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1132",
+      messageParameters = Map("className" -> className))
   }
 
   def userSpecifiedSchemaMismatchActualSchemaError(
       schema: StructType, actualSchema: StructType): Throwable = {
     new AnalysisException(
-      s"""
-         |The user-specified schema doesn't match the actual schema:
-         |user-specified: ${schema.toDDL}, actual: ${actualSchema.toDDL}. If you're using
-         |DataFrameReader.schema API or creating a table, please do not specify the schema.
-         |Or if you're scanning an existed table, please drop it and re-create it.
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1133",
+      messageParameters = Map(
+        "schema" -> schema.toDDL,
+        "actualSchema" -> actualSchema.toDDL))
   }
 
   def dataSchemaNotSpecifiedError(format: String, fileCatalog: String): Throwable = {
     new AnalysisException(
-      s"Unable to infer schema for $format at $fileCatalog. It must be specified manually")
+      errorClass = "_LEGACY_ERROR_TEMP_1134",
+      messageParameters = Map(
+        "format" -> format,
+        "fileCatalog" -> fileCatalog))
   }
 
   def invalidDataSourceError(className: String): Throwable = {
-    new AnalysisException(s"$className is not a valid Spark SQL Data Source.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1135",
+      messageParameters = Map("className" -> className))
   }
 
   def cannotSaveIntervalIntoExternalStorageError(): Throwable = {
-    new AnalysisException("Cannot save interval data type into external storage.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1136",
+      messageParameters = Map.empty)
   }
 
   def cannotResolveAttributeError(name: String, outputStr: String): Throwable = {
     new AnalysisException(
-      s"Unable to resolve $name given [$outputStr]")
+      errorClass = "_LEGACY_ERROR_TEMP_1137",
+      messageParameters = Map(
+        "name" -> name,
+        "outputStr" -> outputStr))
   }
 
   def orcNotUsedWithHiveEnabledError(): Throwable = {
     new AnalysisException(
-      s"""
-         |Hive built-in ORC data source must be used with Hive support enabled.
-         |Please use the native ORC data source by setting 'spark.sql.orc.impl' to 'native'
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1138",
+      messageParameters = Map.empty)
   }
 
   def failedToFindAvroDataSourceError(provider: String): Throwable = {
     new AnalysisException(
-      s"""
-         |Failed to find data source: $provider. Avro is built-in but external data
-         |source module since Spark 2.4. Please deploy the application as per
-         |the deployment section of "Apache Avro Data Source Guide".
-       """.stripMargin.replaceAll("\n", " "))
+      errorClass = "_LEGACY_ERROR_TEMP_1139",
+      messageParameters = Map("provider" -> provider))
   }
 
   def failedToFindKafkaDataSourceError(provider: String): Throwable = {
