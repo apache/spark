@@ -45,7 +45,11 @@ case class NoSuchNamespaceException(
 case class NoSuchTableException(
     override val message: String,
     override val cause: Option[Throwable] = None)
-  extends AnalysisException(message, cause = cause) {
+  extends AnalysisException(
+    message,
+    errorClass = Some("_LEGACY_ERROR_TEMP_1115"),
+    messageParameters = Map("msg" -> message),
+    cause = cause) {
 
   def this(db: String, table: String) = {
     this(s"Table or view '$table' not found in database '$db'")

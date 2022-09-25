@@ -847,7 +847,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def requireLiteralParameter(
       funcName: String, argName: String, requiredType: String): Throwable = {
     new AnalysisException(
-      s"The '$argName' parameter of function '$funcName' needs to be a $requiredType literal.")
+      errorClass = "_LEGACY_ERROR_TEMP_1100",
+      messageParameters = Map(
+        "argName" -> argName,
+        "funcName" -> funcName,
+        "requiredType" -> requiredType))
   }
 
   def invalidStringLiteralParameter(
@@ -856,32 +860,49 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       invalidValue: String,
       allowedValues: Option[String] = None): Throwable = {
     val endingMsg = allowedValues.map(" " + _).getOrElse("")
-    new AnalysisException(s"Invalid value for the '$argName' parameter of function '$funcName': " +
-      s"$invalidValue.$endingMsg")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1101",
+      messageParameters = Map(
+        "argName" -> argName,
+        "funcName" -> funcName,
+        "invalidValue" -> invalidValue,
+        "endingMsg" -> endingMsg))
   }
 
   def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
-    new AnalysisException(s"Literals of type '$field' are currently not supported " +
-      s"for the ${source.dataType.catalogString} type.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1102",
+      messageParameters = Map(
+        "field" -> field,
+        "srcDataType" -> source.dataType.catalogString))
   }
 
   def arrayComponentTypeUnsupportedError(clz: Class[_]): Throwable = {
-    new AnalysisException(s"Unsupported component type $clz in arrays")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1103",
+      messageParameters = Map("clz" -> clz.toString))
   }
 
   def secondArgumentNotDoubleLiteralError(): Throwable = {
-    new AnalysisException("The second argument should be a double literal.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1104",
+      messageParameters = Map.empty)
   }
 
   def dataTypeUnsupportedByExtractValueError(
       dataType: DataType, extraction: Expression, child: Expression): Throwable = {
-    val errorMsg = dataType match {
+    dataType match {
       case StructType(_) =>
-        s"Field name should be String Literal, but it's $extraction"
+        new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_1105",
+          messageParameters = Map("extraction" -> extraction.toString))
       case other =>
-        s"Can't extract value from $child: need struct type but got ${other.catalogString}"
+        new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_1106",
+          messageParameters = Map(
+            "child" -> child.toString,
+            "other" -> other.catalogString))
     }
-    new AnalysisException(errorMsg)
   }
 
   def noHandlerForUDAFError(name: String): Throwable = {
@@ -893,27 +914,38 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def batchWriteCapabilityError(
       table: Table, v2WriteClassName: String, v1WriteClassName: String): Throwable = {
     new AnalysisException(
-      s"Table ${table.name} declares ${TableCapability.V1_BATCH_WRITE} capability but " +
-        s"$v2WriteClassName is not an instance of $v1WriteClassName")
+      errorClass = "_LEGACY_ERROR_TEMP_1107",
+      messageParameters = Map(
+        "table" -> table.name,
+        "batchWrite" -> TableCapability.V1_BATCH_WRITE.toString,
+        "v2WriteClassName" -> v2WriteClassName,
+        "v1WriteClassName" -> v1WriteClassName))
   }
 
   def unsupportedDeleteByConditionWithSubqueryError(condition: Expression): Throwable = {
     new AnalysisException(
-      s"Delete by condition with subquery is not supported: $condition")
+      errorClass = "_LEGACY_ERROR_TEMP_1108",
+      messageParameters = Map("condition" -> condition.toString))
   }
 
   def cannotTranslateExpressionToSourceFilterError(f: Expression): Throwable = {
-    new AnalysisException("Exec update failed:" +
-      s" cannot translate expression to source filter: $f")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1109",
+      messageParameters = Map("f" -> f.toString))
   }
 
   def cannotDeleteTableWhereFiltersError(table: Table, filters: Array[Predicate]): Throwable = {
     new AnalysisException(
-      s"Cannot delete from table ${table.name} where ${filters.mkString("[", ", ", "]")}")
+      errorClass = "_LEGACY_ERROR_TEMP_1110",
+      messageParameters = Map(
+        "table" -> table.name,
+        "filters" -> filters.mkString("[", ", ", "]")))
   }
 
   def describeDoesNotSupportPartitionForV2TablesError(): Throwable = {
-    new AnalysisException("DESCRIBE does not support partition for v2 tables.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1111",
+      messageParameters = Map.empty)
   }
 
   def cannotReplaceMissingTableError(
@@ -927,7 +959,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def unsupportedTableOperationError(table: Table, cmd: String): Throwable = {
-    new AnalysisException(s"Table ${table.name} does not support $cmd.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1113",
+      messageParameters = Map(
+        "table" -> table.name,
+        "cmd" -> cmd))
   }
 
   def unsupportedBatchReadError(table: Table): Throwable = {
@@ -958,9 +994,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       microBatchSources: Seq[String],
       continuousSources: Seq[String]): Throwable = {
     new AnalysisException(
-      "The streaming sources in a query do not have a common supported execution mode.\n" +
-        "Sources support micro-batch: " + microBatchSources.mkString(", ") + "\n" +
-        "Sources support continuous: " + continuousSources.mkString(", "))
+      errorClass = "_LEGACY_ERROR_TEMP_1114",
+      messageParameters = Map(
+        "microBatchSources" -> microBatchSources.mkString(", "),
+        "continuousSources" -> continuousSources.mkString(", ")))
   }
 
   def noSuchTableError(ident: Identifier): Throwable = {
@@ -980,8 +1017,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def requiresSinglePartNamespaceError(ns: Seq[String]): Throwable = {
-    new AnalysisException(CatalogManager.SESSION_CATALOG_NAME +
-      " requires a single-part namespace, but got " + ns.mkString("[", ", ", "]"))
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1117",
+      messageParameters = Map(
+        "sessionCatalog" -> CatalogManager.SESSION_CATALOG_NAME,
+        "ns" -> ns.mkString("[", ", ", "]")))
   }
 
   def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {
@@ -989,7 +1029,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   private def notSupportedInJDBCCatalog(cmd: String): Throwable = {
-    new AnalysisException(s"$cmd is not supported in JDBC catalog.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1119",
+      messageParameters = Map("cmd" -> cmd))
   }
 
   def cannotCreateJDBCTableUsingProviderError(): Throwable = {

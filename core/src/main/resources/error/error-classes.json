@@ -1163,5 +1163,107 @@
     "message" : [
       "<msg>."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1100" : {
+    "message" : [
+      "The '<argName>' parameter of function '<funcName>' needs to be a <requiredType> literal."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1101" : {
+    "message" : [
+      "Invalid value for the '<argName>' parameter of function '<funcName>': <invalidValue>.<endingMsg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1102" : {
+    "message" : [
+      "Literals of type '<field>' are currently not supported for the <srcDataType> type."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1103" : {
+    "message" : [
+      "Unsupported component type <clz> in arrays."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1104" : {
+    "message" : [
+      "The second argument should be a double literal."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1105" : {
+    "message" : [
+      "Field name should be String Literal, but it's <extraction>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1106" : {
+    "message" : [
+      "Can't extract value from <child>: need struct type but got <other>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1107" : {
+    "message" : [
+      "Table <table> declares <batchWrite> capability but <v2WriteClassName> is not an instance of <v1WriteClassName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1108" : {
+    "message" : [
+      "Delete by condition with subquery is not supported: <condition>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1109" : {
+    "message" : [
+      "Exec update failed: cannot translate expression to source filter: <f>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1110" : {
+    "message" : [
+      "Cannot delete from table <table> where <filters>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1111" : {
+    "message" : [
+      "DESCRIBE does not support partition for v2 tables."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1112" : {
+    "message" : [
+      "Table <table> cannot be replaced as it did not exist. Use CREATE OR REPLACE TABLE to create the table."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1113" : {
+    "message" : [
+      "Table <table> does not support <cmd>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1114" : {
+    "message" : [
+      "The streaming sources in a query do not have a common supported execution mode.",
+      "Sources support micro-batch: <microBatchSources>",
+      "Sources support continuous: <continuousSources>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1115" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1116" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1117" : {
+    "message" : [
+      "<sessionCatalog> requires a single-part namespace, but got <ns>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1118" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1119" : {
+    "message" : [
+      "<cmd> is not supported in JDBC catalog."
+    ]
   }
 }
