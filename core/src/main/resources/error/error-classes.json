@@ -158,7 +158,7 @@
   },
   "DEFAULT_DATABASE_NOT_EXISTS" : {
     "message" : [
-      "Default database <defaultDatabase> not exist, please create it first or change default database to 'default'."
+      "Default database <defaultDatabase> does not exist, please create it first or change default database to 'default'."
     ]
   },
   "DIVIDE_BY_ZERO" : {
