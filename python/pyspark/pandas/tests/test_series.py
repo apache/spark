@@ -3085,7 +3085,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         pser3 = pd.Series([1.0, 2.0, 3.0], index=index3, name="name")
 
-        for pser in [pser1, pser2, pser3]:
+        pser4 = pd.Series([])
+
+        for pser in [pser1, pser2, pser3, pser4]:
             psser = ps.from_pandas(pser)
             for value in [0.5, 1, 2, 3.0, 4, 5]:
                 for side in ["left", "right"]:

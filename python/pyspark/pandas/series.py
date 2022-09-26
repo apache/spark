@@ -6610,13 +6610,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
         return DataFrame(internal)
 
-    # todo: 1, support array-like 'value'; 2, add parameter 'sorter'
+    # TODO(SPARK-40553): 1, support array-like 'value'; 2, add parameter 'sorter'
     def searchsorted(self, value: Any, side: str = "left") -> int:
         """
         Find indices where elements should be inserted to maintain order.
 
         Find the indices into a sorted Series self such that, if the corresponding elements
         in value were inserted before the indices, the order of self would be preserved.
+
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
