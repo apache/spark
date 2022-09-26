@@ -267,8 +267,9 @@ class ResourceProfile(
  * Resource profile which only contains task resources, can be used for stage level task schedule
  * when dynamic allocation is disabled, tasks will be scheduled to executors with default resource
  * profile based on task resources described by this task resource profile.
- * And when dynamic allocation is enabled, will require new executors for this profile base on
- * default build-in executor resources and assign tasks by resource profile id.
+ * And when dynamic allocation is enabled, will require new executors for this profile based on
+ * the default executor resources requested at startup and assign tasks only on executors created
+ * with this resource profile.
  *
  * @param taskResources Resource requests for tasks. Mapped from the resource
  *                      name (e.g., cores, memory, CPU) to its specific request.
