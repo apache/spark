@@ -1435,6 +1435,9 @@ class DataFrame(Frame, Generic[T]):
             * pearson : standard correlation coefficient
             * spearman : Spearman rank correlation
             * kendall : Kendall Tau correlation coefficient
+
+            .. versionchanged:: 3.4.0
+               support 'kendall' for method parameter
         min_periods : int, optional
             Minimum number of observations required per pair of columns
             to have a valid result.
@@ -9009,7 +9012,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Minimum number of observations required per pair of columns
             to have a valid result.
         ddof : int, default 1
-            Delta degrees of freedom.  The divisor used in calculations
+            Delta degrees of freedom. The divisor used in calculations
             is ``N - ddof``, where ``N`` represents the number of elements.
 
             .. versionadded:: 3.4.0

@@ -1,0 +1,176 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = 'proto3';
+
+package spark.connect;
+
+import "spark/connect/expressions.proto";
+
+option java_multiple_files = true;
+option java_package = "org.apache.spark.connect.proto";
+
+// The main [[Relation]] type. Fundamentally, a relation is a typed container
+// that has exactly one explicit relation type set.
+//
+// When adding new relation types, they have to be registered here.
+message Relation {
+  RelationCommon common = 1;
+  oneof rel_type {
+    Read read = 2;
+    Project project = 3;
+    Filter filter = 4;
+    Join join = 5;
+    Union union = 6;
+    Sort sort = 7;
+    Fetch fetch = 8;
+    Aggregate aggregate = 9;
+    SQL sql = 10;
+
+    Unknown unknown = 999;
+  }
+}
+
+// Used for testing purposes only.
+message Unknown {}
+
+// Common metadata of all relations.
+message RelationCommon {
+  string source_info = 1;
+  string alias = 2;
+}
+
+// Relation that uses a SQL query to generate the output.
+message SQL {
+  string query = 1;
+}
+
+// Relation that reads from a file / table or other data source. Does not have additional
+// inputs.
+message Read {
+  oneof read_type {
+    NamedTable named_table = 1;
+  }
+
+  message NamedTable {
+    repeated string parts = 1;
+  }
+}
+
+// Projection of a bag of expressions for a given input relation.
+//
+// The input relation must be specified.
+// The projected expression can be an arbitrary expression.
+message Project {
+  Relation input = 1;
+  repeated Expression expressions = 3;
+}
+
+// Relation that applies a boolean expression `condition` on each row of `input` to produce
+// the output result.
+message Filter {
+  Relation input = 1;
+  Expression condition = 2;
+}
+
+// Relation of type [[Join]].
+//
+// `left` and `right` must be present.
+message Join {
+  Relation left = 1;
+  Relation right = 2;
+  Expression on = 3;
+  JoinType how = 4;
+
+  enum JoinType {
+    JOIN_TYPE_UNSPECIFIED = 0;
+    JOIN_TYPE_INNER = 1;
+    JOIN_TYPE_OUTER = 2;
+    JOIN_TYPE_LEFT_OUTER = 3;
+    JOIN_TYPE_RIGHT_OUTER = 4;
+    JOIN_TYPE_ANTI = 5;
+  }
+}
+
+// Relation of type [[Union]], at least one input must be set.
+message Union {
+  repeated Relation inputs = 1;
+  UnionType union_type = 2;
+
+  enum UnionType {
+    UNION_TYPE_UNSPECIFIED = 0;
+    UNION_TYPE_DISTINCT = 1;
+    UNION_TYPE_ALL = 2;
+  }
+}
+
+// Relation of type [[Fetch]] that is used to read `limit` / `offset` rows from the input relation.
+message Fetch {
+  Relation input = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+// Relation of type [[Aggregate]].
+message Aggregate {
+  Relation input = 1;
+
+  // Grouping sets are used in rollups
+  repeated GroupingSet grouping_sets = 2;
+
+  // Measures
+  repeated Measure measures = 3;
+
+  message GroupingSet {
+    repeated Expression aggregate_expressions = 1;
+  }
+
+  message Measure {
+    AggregateFunction function = 1;
+    // Conditional filter for SUM(x FILTER WHERE x < 10)
+    Expression filter = 2;
+  }
+
+  message AggregateFunction {
+    string name = 1;
+    repeated Expression arguments = 2;
+  }
+}
+
+// Relation of type [[Sort]].
+message Sort {
+  Relation input = 1;
+  repeated SortField sort_fields = 2;
+
+  message SortField {
+    Expression expression = 1;
+    SortDirection direction = 2;
+    SortNulls nulls = 3;
+  }
+
+  enum SortDirection {
+    SORT_DIRECTION_UNSPECIFIED = 0;
+    SORT_DIRECTION_ASCENDING = 1;
+    SORT_DIRECTION_DESCENDING = 2;
+  }
+
+  enum SortNulls {
+    SORT_NULLS_UNSPECIFIED = 0;
+    SORT_NULLS_FIRST = 1;
+    SORT_NULLS_LAST = 2;
+  }
+}

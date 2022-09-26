@@ -3236,6 +3236,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf["s1"].cov(psdf["s2"])
         with self.assertRaisesRegex(TypeError, "unsupported dtype: object"):
             psdf["s2"].cov(psdf["s1"])
+        with self.assertRaisesRegex(TypeError, "ddof must be integer"):
+            psdf["s2"].cov(psdf["s2"], ddof="ddof")
 
         pdf = pd.DataFrame(
             {
@@ -3258,17 +3260,32 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
     def _test_cov(self, pdf):
         psdf = ps.from_pandas(pdf)
 
-        pcov = pdf["s1"].cov(pdf["s2"])
-        pscov = psdf["s1"].cov(psdf["s2"])
-        self.assert_eq(pcov, pscov, almost=True)
+        self.assert_eq(pdf["s1"].cov(pdf["s2"]), psdf["s1"].cov(psdf["s2"]), almost=True)
+        self.assert_eq(
+            pdf["s1"].cov(pdf["s2"], ddof=2), psdf["s1"].cov(psdf["s2"], ddof=2), almost=True
+        )
 
-        pcov = pdf["s1"].cov(pdf["s2"], min_periods=3)
-        pscov = psdf["s1"].cov(psdf["s2"], min_periods=3)
-        self.assert_eq(pcov, pscov, almost=True)
+        self.assert_eq(
+            pdf["s1"].cov(pdf["s2"], min_periods=3),
+            psdf["s1"].cov(psdf["s2"], min_periods=3),
+            almost=True,
+        )
+        self.assert_eq(
+            pdf["s1"].cov(pdf["s2"], min_periods=3, ddof=-1),
+            psdf["s1"].cov(psdf["s2"], min_periods=3, ddof=-1),
+            almost=True,
+        )
 
-        pcov = pdf["s1"].cov(pdf["s2"], min_periods=4)
-        pscov = psdf["s1"].cov(psdf["s2"], min_periods=4)
-        self.assert_eq(pcov, pscov, almost=True)
+        self.assert_eq(
+            pdf["s1"].cov(pdf["s2"], min_periods=4),
+            psdf["s1"].cov(psdf["s2"], min_periods=4),
+            almost=True,
+        )
+        self.assert_eq(
+            pdf["s1"].cov(pdf["s2"], min_periods=4, ddof=3),
+            psdf["s1"].cov(psdf["s2"], min_periods=4, ddof=3),
+            almost=True,
+        )
 
     def test_eq(self):
         pser = pd.Series([1, 2, 3, 4, 5, 6], name="x")

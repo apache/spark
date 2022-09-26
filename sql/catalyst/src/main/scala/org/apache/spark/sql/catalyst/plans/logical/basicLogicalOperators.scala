@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.Utils
 import org.apache.spark.util.random.RandomSampler
 
 /**
@@ -1235,7 +1236,7 @@ object Expand {
     groupByAttrs: Seq[Attribute],
     gid: Attribute,
     child: LogicalPlan): Expand = {
-    val attrMap = groupByAttrs.zipWithIndex.toMap
+    val attrMap = Utils.toMapWithIndex(groupByAttrs)
 
     val hasDuplicateGroupingSets = groupingSetsAttrs.size !=
       groupingSetsAttrs.map(_.map(_.exprId).toSet).distinct.size

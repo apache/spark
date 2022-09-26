@@ -668,10 +668,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new UnsupportedOperationException(s"buildReader is not supported for $format")
   }
 
-  def jobAbortedError(cause: Throwable): Throwable = {
-    new SparkException("Job aborted.", cause)
-  }
-
   def taskFailedWhileWritingRowsError(cause: Throwable): Throwable = {
     new SparkException("Task failed while writing rows.", cause)
   }
@@ -773,13 +769,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def writingJobFailedError(cause: Throwable): Throwable = {
     new SparkException("Writing job failed.", cause)
-  }
-
-  def writingJobAbortedError(e: Throwable): Throwable = {
-    new SparkException(
-      errorClass = "WRITING_JOB_ABORTED",
-      messageParameters = Map.empty,
-      cause = e)
   }
 
   def commitDeniedError(
@@ -1309,11 +1298,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new UnsupportedOperationException(
       s"Initial type ${dataType.catalogString} must be " +
         s"an ${ArrayType.simpleString}, a ${StructType.simpleString} or a ${MapType.simpleString}")
-  }
-
-  def cannotConvertColumnToJSONError(name: String, dataType: DataType): Throwable = {
-    new UnsupportedOperationException(
-      s"Unable to convert column $name of type ${dataType.catalogString} to JSON.")
   }
 
   def malformedRecordsDetectedInSchemaInferenceError(e: Throwable): Throwable = {

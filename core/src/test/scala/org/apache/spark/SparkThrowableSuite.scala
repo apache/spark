@@ -124,9 +124,9 @@ class SparkThrowableSuite extends SparkFunSuite {
   }
 
   test("Message format invariants") {
-    val messageFormats = errorClassToInfoMap.values.toSeq.flatMap { i =>
-      Seq(i.messageFormat)
-    }
+    val messageFormats = errorClassToInfoMap
+      .filterKeys(!_.startsWith("_LEGACY_ERROR_TEMP_"))
+      .values.toSeq.flatMap { i => Seq(i.messageFormat) }
     checkCondition(messageFormats, s => s != null)
     checkIfUnique(messageFormats)
   }
@@ -212,13 +212,13 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("Try catching SparkError with error class") {
     try {
       throw new SparkException(
-        errorClass = "WRITING_JOB_ABORTED",
+        errorClass = "CANNOT_PARSE_DECIMAL",
         messageParameters = Map.empty,
         cause = null)
     } catch {
       case e: SparkThrowable =>
-        assert(e.getErrorClass == "WRITING_JOB_ABORTED")
-        assert(e.getSqlState == "40000")
+        assert(e.getErrorClass == "CANNOT_PARSE_DECIMAL")
+        assert(e.getSqlState == "42000")
       case _: Throwable =>
         // Should not end up here
         assert(false)

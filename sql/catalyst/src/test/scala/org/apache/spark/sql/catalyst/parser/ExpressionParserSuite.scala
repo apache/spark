@@ -753,7 +753,7 @@ class ExpressionParserSuite extends AnalysisTest {
     }
 
     // Empty interval statement
-    intercept("interval", "at least one time unit should be given for interval literal")
+    intercept("interval", "At least one time unit should be given for interval literal")
 
     // Single Intervals.
     val forms = Seq("", "s")

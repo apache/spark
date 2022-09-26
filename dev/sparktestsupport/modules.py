@@ -452,6 +452,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_group",
         "pyspark.sql.tests.test_pandas_cogrouped_map",
         "pyspark.sql.tests.test_pandas_grouped_map",
+        "pyspark.sql.tests.test_pandas_grouped_map_with_state",
         "pyspark.sql.tests.test_pandas_map",
         "pyspark.sql.tests.test_arrow_map",
         "pyspark.sql.tests.test_pandas_udf",
@@ -472,6 +473,24 @@ pyspark_sql = Module(
     ],
 )
 
+pyspark_sql = Module(
+    name="pyspark-sql-connect",
+    dependencies=[pyspark_core, hive, avro],
+    source_file_regexes=["python/pyspark/sql/connect"],
+    python_test_goals=[
+        # doctests
+        # No doctests yet.
+        # unittests
+        "pyspark.sql.tests.connect.test_column_expressions",
+        "pyspark.sql.tests.connect.test_plan_only",
+        "pyspark.sql.tests.connect.test_select_ops",
+        "pyspark.sql.tests.connect.test_spark_connect",
+    ],
+    excluded_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
+        # they aren't available there
+    ],
+)
 
 pyspark_resource = Module(
     name="pyspark-resource",
@@ -591,7 +610,6 @@ pyspark_pandas = Module(
         "pyspark.pandas.groupby",
         "pyspark.pandas.indexing",
         "pyspark.pandas.internal",
-        "pyspark.pandas.ml",
         "pyspark.pandas.mlflow",
         "pyspark.pandas.namespace",
         "pyspark.pandas.numpy_compat",

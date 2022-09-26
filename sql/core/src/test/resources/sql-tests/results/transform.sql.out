@@ -400,36 +400,19 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-LINES TERMINATED BY only supports newline '\n' right now: @(line 3, pos 4)
-
-== SQL ==
-SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
-  SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l)
-    ROW FORMAT DELIMITED
-----^^^
-    FIELDS TERMINATED BY ','
-    LINES TERMINATED BY '@'
-    NULL DEFINED AS 'NULL'
-    USING 'cat' AS (
-      a string,
-      b string,
-      c string,
-      d string,
-      e string,
-      f string,
-      g string,
-      h string,
-      i string,
-      j string,
-      k string,
-      l string)
-    ROW FORMAT DELIMITED
-    FIELDS TERMINATED BY ','
-    LINES TERMINATED BY '@'
-    NULL DEFINED AS 'NULL'
-  FROM t
-) tmp
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "messageParameters" : {
+    "msg" : "LINES TERMINATED BY only supports newline '\\n' right now: @"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 69,
+    "stopIndex" : 560,
+    "fragment" : "SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l)\n    ROW FORMAT DELIMITED\n    FIELDS TERMINATED BY ','\n    LINES TERMINATED BY '@'\n    NULL DEFINED AS 'NULL'\n    USING 'cat' AS (\n      a string,\n      b string,\n      c string,\n      d string,\n      e string,\n      f string,\n      g string,\n      h string,\n      i string,\n      j string,\n      k string,\n      l string)\n    ROW FORMAT DELIMITED\n    FIELDS TERMINATED BY ','\n    LINES TERMINATED BY '@'\n    NULL DEFINED AS 'NULL'\n  FROM t"
+  } ]
+}
 
 
 -- !query
