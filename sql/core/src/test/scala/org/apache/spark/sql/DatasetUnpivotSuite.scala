@@ -152,16 +152,12 @@ class DatasetUnpivotSuite extends QueryTest
       parameters = Map())
 
     val unpivotedRows = Seq(
-      Row(1, "id", 1L),
       Row(1, "int1", 1L),
       Row(1, "long1", 1L),
-      Row(2, "id", 2L),
       Row(2, "int1", null),
       Row(2, "long1", 2L),
-      Row(3, "id", 3L),
       Row(3, "int1", 3L),
       Row(3, "long1", null),
-      Row(4, "id", 4L),
       Row(4, "int1", null),
       Row(4, "long1", null)
     )

@@ -60,17 +60,53 @@ dotNET	2014	22500
 -- !query
 SELECT * FROM courseEarnings
 UNPIVOT (
+  earningsYear FOR year IN (`2013`, `2014`)
+)
+-- !query schema
+struct<course:string,2012:int,year:string,earningsYear:int>
+-- !query output
+Java	20000	2013	30000
+Java	20000	2014	NULL
+dotNET	15000	2013	48000
+dotNET	15000	2014	22500
+
+
+-- !query
+SELECT * FROM courseEarningsAndSales
+UNPIVOT (
+  values FOR year IN ()
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "')'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT * FROM courseEarnings
+UNPIVOT (
   earningsYear FOR year IN (`2012` as `twenty-twelve`, `2013` as `twenty-thirteen`, `2014` as `twenty-fourteen`)
 )
 -- !query schema
-struct<course:string,2012:int,2013:int,2014:int,year:string,earningsYear:int>
+struct<>
 -- !query output
-Java	20000	30000	NULL	twenty-fourteen	NULL
-Java	20000	30000	NULL	twenty-thirteen	30000
-Java	20000	30000	NULL	twenty-twelve	20000
-dotNET	15000	48000	22500	twenty-fourteen	22500
-dotNET	15000	48000	22500	twenty-thirteen	48000
-dotNET	15000	48000	22500	twenty-twelve	15000
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'as'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -110,59 +146,6 @@ create temporary view courseEarningsAndSales as select * from values
 struct<>
 -- !query output
 
-
-
--- !query
-SELECT * FROM courseEarningsAndSales
-UNPIVOT (
-  values FOR year IN ((earnings2012, sales2012) as `2012`, (earnings2013, sales2013) as `2013`, (earnings2014, sales2014) as `2014`)
-)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "types" : "\"STRUCT<earnings2012: INT, sales2012: INT>\" (`2012`), \"STRUCT<earnings2013: INT, sales2013: INT>\" (`2013`), \"STRUCT<earnings2014: INT, sales2014: INT>\" (`2014`)"
-  }
-}
-
-
--- !query
-SELECT * FROM courseEarningsAndSales
-UNPIVOT (
-  values FOR year IN ((earnings2012 as earnings, sales2012 as sales) as `2012`, (earnings2013 as earnings, sales2013 as sales) as `2013`, (earnings2014 as earnings, sales2014 as sales) as `2014`)
-)
--- !query schema
-struct<course:string,earnings2012:int,sales2012:int,earnings2013:int,sales2013:int,earnings2014:int,sales2014:int,year:string,values:struct<earnings:int,sales:int>>
--- !query output
-Java	20000	1	30000	2	NULL	NULL	2012	{"earnings":20000,"sales":1}
-Java	20000	1	30000	2	NULL	NULL	2013	{"earnings":30000,"sales":2}
-Java	20000	1	30000	2	NULL	NULL	2014	{"earnings":0,"sales":0}
-dotNET	15000	2	48000	1	22500	1	2012	{"earnings":15000,"sales":2}
-dotNET	15000	2	48000	1	22500	1	2013	{"earnings":48000,"sales":1}
-dotNET	15000	2	48000	1	22500	1	2014	{"earnings":22500,"sales":1}
-
-
--- !query
-SELECT * FROM courseEarningsAndSales
-UNPIVOT (
-  values FOR year IN ()
-)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "error" : "')'",
-    "hint" : ""
-  }
-}
 
 
 -- !query
@@ -210,6 +193,20 @@ Java	(`earnings2014`,`sales2014`)	NULL	NULL
 dotNET	(`earnings2012`,`sales2012`)	15000	2
 dotNET	(`earnings2013`,`sales2013`)	48000	1
 dotNET	(`earnings2014`,`sales2014`)	22500	1
+
+
+-- !query
+SELECT * FROM courseEarningsAndSales
+UNPIVOT (
+  (earnings, sales) FOR year IN ((earnings2013, sales2013), (earnings2014, sales2014))
+)
+-- !query schema
+struct<course:string,earnings2012:int,sales2012:int,year:string,earnings:int,sales:int>
+-- !query output
+Java	20000	1	(`earnings2013`,`sales2013`)	30000	2
+Java	20000	1	(`earnings2014`,`sales2014`)	NULL	NULL
+dotNET	15000	2	(`earnings2013`,`sales2013`)	48000	1
+dotNET	15000	2	(`earnings2014`,`sales2014`)	22500	1
 
 
 -- !query

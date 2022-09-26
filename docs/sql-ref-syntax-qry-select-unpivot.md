@@ -21,7 +21,8 @@ license: |
 
 ### Description
 
-The `UNPIVOT` clause transforms multiple columns into multiple rows used in `SELECT` clause. The `UNPIVOT` clause can be specified after the table name or subquery.
+The `UNPIVOT` clause transforms multiple columns into multiple rows used in `SELECT` clause.
+The `UNPIVOT` clause can be specified after the table name or subquery.
 
 ### Syntax
 
@@ -45,7 +46,7 @@ multi_value_column_unpivot:
 
 * **unpivot_column**
 
-    Column or expression to be unpivoted.
+    Contains columns in the `FROM` clause, which specifies the columns we want to unpivot.
 
 * **name_column**
 
@@ -87,11 +88,10 @@ SELECT * FROM sales_quarterly
 +------+---------+-------+
 
 -- NULL values can be excluded
--- column aliases are used in the name column when given
 -- unpivot result can be referenced via its alias
 SELECT up.* FROM sales_quarterly
     UNPIVOT EXCLUDE NULLS (
-        sales FOR quarter IN (q1 AS Q1, q2 AS Q2, q3 AS Q3, q4 AS Q4)
+        sales FOR quarter IN (q1, q2, q3, q4)
     ) AS up;
 +------+---------+-------+
 | year | quarter | sales |

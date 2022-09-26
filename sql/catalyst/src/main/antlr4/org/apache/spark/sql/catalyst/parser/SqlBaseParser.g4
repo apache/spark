@@ -666,7 +666,7 @@ unpivotNameColumn
     ;
 
 unpivotColumn
-    : namedExpression
+    : identifier
     ;
 
 lateralView
