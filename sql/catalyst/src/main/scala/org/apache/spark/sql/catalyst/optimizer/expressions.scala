@@ -109,12 +109,20 @@ object ConstantFolding extends Rule[LogicalPlan] {
  * - Using this mapping, replace occurrence of the attributes with the corresponding constant values
  *   in the AND node.
  */
-object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
+object ConstantPropagation extends Rule[LogicalPlan] {
+
+  private val CONSTANT_SOURCE = TreeNodeTag[Unit]("CONSTANT_SOURCE")
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAllPatterns(LITERAL, FILTER), ruleId) {
     case f: Filter =>
       val (newCondition, _) = traverse(f.condition, replaceChildren = true, nullIsFalse = true)
       if (newCondition.isDefined) {
+        newCondition.get transform {
+          case e: Expression if e.getTagValue(CONSTANT_SOURCE).isDefined =>
+            e.unsetTagValue(CONSTANT_SOURCE)
+            e
+        }
         f.copy(condition = newCondition.get)
       } else {
         f
@@ -146,15 +154,19 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
     condition match {
       case e @ EqualTo(left: AttributeReference, right: Literal)
         if safeToReplace(left, nullIsFalse) =>
+        e.setTagValue(CONSTANT_SOURCE, ())
         (None, Seq(((left, right), e)))
       case e @ EqualTo(left: Literal, right: AttributeReference)
         if safeToReplace(right, nullIsFalse) =>
+        e.setTagValue(CONSTANT_SOURCE, ())
         (None, Seq(((right, left), e)))
       case e @ EqualNullSafe(left: AttributeReference, right: Literal)
         if safeToReplace(left, nullIsFalse) =>
+        e.setTagValue(CONSTANT_SOURCE, ())
         (None, Seq(((left, right), e)))
       case e @ EqualNullSafe(left: Literal, right: AttributeReference)
         if safeToReplace(right, nullIsFalse) =>
+        e.setTagValue(CONSTANT_SOURCE, ())
         (None, Seq(((right, left), e)))
       case a: And =>
         val (newLeft, equalityPredicatesLeft) =
@@ -201,18 +213,19 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   private def replaceConstants(condition: Expression, equalityPredicates: EqualityPredicates)
     : Expression = {
     val constantsMap = AttributeMap(equalityPredicates.map(_._1))
-    val predicates = equalityPredicates.map(_._2).toSet
-    def replaceConstants0(expression: Expression) = expression transform {
-      case a: AttributeReference => constantsMap.getOrElse(a, a)
+    def replaceConstants0(expression: Expression): Expression = expression match {
+      case And(cond1, cond2) =>
+        And(replaceConstants0(cond1), replaceConstants0(cond2))
+      case isNotNull @ IsNotNull(_: Attribute) => isNotNull
+      case e: EqualTo if e.getTagValue(CONSTANT_SOURCE).isDefined => e
+      case e: EqualNullSafe if e.getTagValue(CONSTANT_SOURCE).isDefined => e
+      case other =>
+        other transform {
+          case a: AttributeReference => constantsMap.getOrElse(a, a)
+        }
     }
-    splitConjunctivePredicates(condition).map {
-      // Don't replace constants in IsNotNull because InferFiltersFromConstraints may infer
-      // another IsNotNull
-      case isNotNull: IsNotNull => isNotNull
-      case e: EqualTo if predicates.contains(e) => e
-      case e: EqualNullSafe if predicates.contains(e) => e
-      case other => replaceConstants0(other)
-    }.reduceLeft(And)
+
+    replaceConstants0(condition)
   }
 }
 
