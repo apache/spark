@@ -2127,6 +2127,8 @@ class Frame(object, metaclass=ABCMeta):
         """
         Return unbiased standard error of the mean over requested axis.
 
+        .. versionadded:: 3.3.0
+
         Parameters
         ----------
         axis : {index (0), columns (1)}
