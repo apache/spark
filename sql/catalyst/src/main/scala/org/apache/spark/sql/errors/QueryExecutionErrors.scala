@@ -1933,9 +1933,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def defaultDatabaseNotExistsError(defaultDatabase: String): Throwable = {
-    new SparkDefaultDatabaseNotExistsException(
+    new SparkException(
       errorClass = "DEFAULT_DATABASE_NOT_EXISTS",
-      messageParameters = Map("defaultDatabase" -> defaultDatabase)
+      messageParameters = Map("defaultDatabase" -> defaultDatabase),
+      cause = null
     )
   }
 

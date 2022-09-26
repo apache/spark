@@ -151,7 +151,7 @@ private[sql] class SharedState(
     // Create default database if it doesn't exist
     // If database name not equals 'default', throw exception
     if (!externalCatalog.databaseExists(SQLConf.get.defaultDatabase)) {
-      if (SessionCatalog.DEFAULT_DATABASE != SQLConf.get.defaultDatabase) {
+      if (SessionCatalog.DEFAULT_DATABASE.equalsIgnoreCase(SQLConf.get.defaultDatabase)) {
         throw QueryExecutionErrors.defaultDatabaseNotExistsError(
           SQLConf.get.defaultDatabase
         )
