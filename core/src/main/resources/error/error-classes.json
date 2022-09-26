@@ -1920,5 +1920,55 @@
     "message" : [
       "Fail to rebuild expression: missing key <filter> in `translatedFilterToExpr`."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1150" : {
+    "message" : [
+      "Column `<field>` has a data type of <fieldType>, which is not supported by <format>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1151" : {
+    "message" : [
+      "Fail to resolve data source for the table <table> since the table serde property has the duplicated key <key> with extra options specified for this scan operation. To fix this, you can rollback to the legacy behavior of ignoring the extra options by setting the config <config> to `false`, or address the conflicts of the same config."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1152" : {
+    "message" : [
+      "Path <outputPath> already exists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1153" : {
+    "message" : [
+      "Cannot use <field> for partition column."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1154" : {
+    "message" : [
+      "Cannot use all columns for partition columns."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1155" : {
+    "message" : [
+      "Partition column `<col>` not found in schema <schemaCatalog>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1156" : {
+    "message" : [
+      "Column <colName> not found in schema <tableSchema>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1157" : {
+    "message" : [
+      "Unsupported data source type for direct query on files: <className>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1158" : {
+    "message" : [
+      "Saving data into a view is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1159" : {
+    "message" : [
+      "The format of the existing table <tableName> is `<existingProvider>`. It doesn't match the specified format `<specifiedProvider>`."
+    ]
   }
 }

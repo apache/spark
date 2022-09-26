@@ -1531,59 +1531,76 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def dataTypeUnsupportedByDataSourceError(format: String, field: StructField): Throwable = {
-    new AnalysisException(s"Column `${field.name}` has a data type of " +
-      s"${field.dataType.catalogString}, which is not supported by $format."
-    )
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1150",
+      messageParameters = Map(
+        "field" -> field.name,
+        "fieldType" -> field.dataType.catalogString,
+        "format" -> format))
   }
 
   def failToResolveDataSourceForTableError(table: CatalogTable, key: String): Throwable = {
     new AnalysisException(
-      s"""
-         |Fail to resolve data source for the table ${table.identifier} since the table
-         |serde property has the duplicated key $key with extra options specified for this
-         |scan operation. To fix this, you can rollback to the legacy behavior of ignoring
-         |the extra options by setting the config
-         |${SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR.key} to `false`, or address the
-         |conflicts of the same config.
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1151",
+      messageParameters = Map(
+        "table" -> table.identifier.toString,
+        "key" -> key,
+        "config" -> SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR.key))
   }
 
   def outputPathAlreadyExistsError(outputPath: Path): Throwable = {
-    new AnalysisException(s"path $outputPath already exists.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1152",
+      messageParameters = Map("outputPath" -> outputPath.toString))
   }
 
   def cannotUseDataTypeForPartitionColumnError(field: StructField): Throwable = {
-    new AnalysisException(s"Cannot use ${field.dataType} for partition column")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1153",
+      messageParameters = Map("field" -> field.dataType.toString))
   }
 
   def cannotUseAllColumnsForPartitionColumnsError(): Throwable = {
-    new AnalysisException(s"Cannot use all columns for partition columns")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1154",
+      messageParameters = Map.empty)
   }
 
   def partitionColumnNotFoundInSchemaError(col: String, schemaCatalog: String): Throwable = {
-    new AnalysisException(s"Partition column `$col` not found in schema $schemaCatalog")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1155",
+      messageParameters = Map("col" -> col, "schemaCatalog" -> schemaCatalog))
   }
 
   def columnNotFoundInSchemaError(
       col: StructField, tableSchema: Option[StructType]): Throwable = {
-    new AnalysisException(s"""Column "${col.name}" not found in schema $tableSchema""")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1156",
+      messageParameters = Map(
+        "colName" -> col.name,
+        "tableSchema" -> tableSchema.toString))
   }
 
   def unsupportedDataSourceTypeForDirectQueryOnFilesError(className: String): Throwable = {
-    new AnalysisException(s"Unsupported data source type for direct query on files: $className")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1157",
+      messageParameters = Map("className" -> className))
   }
 
   def saveDataIntoViewNotAllowedError(): Throwable = {
-    new AnalysisException("Saving data into a view is not allowed.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1158",
+      messageParameters = Map.empty)
   }
 
   def mismatchedTableFormatError(
       tableName: String, existingProvider: Class[_], specifiedProvider: Class[_]): Throwable = {
     new AnalysisException(
-      s"""
-         |The format of the existing table $tableName is `${existingProvider.getSimpleName}`.
-         |It doesn't match the specified format `${specifiedProvider.getSimpleName}`.
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1159",
+      messageParameters = Map(
+        "tableName" -> tableName,
+        "existingProvider" -> existingProvider.getSimpleName,
+        "specifiedProvider" -> specifiedProvider.getSimpleName))
   }
 
   def mismatchedTableLocationError(
