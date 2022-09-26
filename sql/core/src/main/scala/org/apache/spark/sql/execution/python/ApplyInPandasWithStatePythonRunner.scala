@@ -23,8 +23,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
-import org.json4s._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.api.python._
 import org.apache.spark.sql.Row
@@ -38,7 +36,7 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
-
+import org.apache.spark.util.JacksonUtils
 
 /**
  * A variant implementation of [[ArrowPythonRunner]] to serve the operation
@@ -176,7 +174,6 @@ class ApplyInPandasWithStatePythonRunner(
         STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER)
 
       stateMetadataBatch.rowIterator().asScala.flatMap { row =>
-        implicit val formats = org.json4s.DefaultFormats
 
         if (row.isNullAt(0)) {
           // The entire row in record batch seems to be for data.
@@ -184,7 +181,7 @@ class ApplyInPandasWithStatePythonRunner(
         } else {
           // NOTE: See ApplyInPandasWithStatePythonRunner.STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER
           // for the schema.
-          val propertiesAsJson = parse(row.getUTF8String(0).toString)
+          val propertiesAsJson = JacksonUtils.readTree(row.getUTF8String(0).toString)
           val keyRowAsUnsafeAsBinary = row.getBinary(1)
           val keyRowAsUnsafe = new UnsafeRow(keySchema.fields.length)
           keyRowAsUnsafe.pointTo(keyRowAsUnsafeAsBinary, keyRowAsUnsafeAsBinary.length)
