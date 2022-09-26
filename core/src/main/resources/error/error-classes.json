@@ -1970,5 +1970,61 @@
     "message" : [
       "The format of the existing table <tableName> is `<existingProvider>`. It doesn't match the specified format `<specifiedProvider>`."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1160" : {
+    "message" : [
+      "The location of the existing table <identifier> is `<existingTableLoc>`. It doesn't match the specified location `<tableDescLoc>`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1161" : {
+    "message" : [
+      "The column number of the existing table <tableName> (<existingTableLoc>) doesn't match the data schema (<querySchema>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1162" : {
+    "message" : [
+      "Cannot resolve '<col>' given input columns: [<inputColumns>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1163" : {
+    "message" : [
+      "Specified partitioning does not match that of the existing table <tableName>.",
+      "Specified partition columns: [<specifiedPartCols>]",
+      "Existing partition columns: [<existingPartCols>]"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1164" : {
+    "message" : [
+      "Specified bucketing does not match that of the existing table <tableName>.",
+      "Specified bucketing: <specifiedBucketString>",
+      "Existing bucketing: <existingBucketString>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1165" : {
+    "message" : [
+      "It is not allowed to specify partitioning when the table schema is not defined."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1166" : {
+    "message" : [
+      "Bucketing column '<bucketCol>' should not be part of partition columns '<normalizedPartCols>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1167" : {
+    "message" : [
+      "Bucket sorting column '<sortCol>' should not be part of partition columns '<normalizedPartCols>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1168" : {
+    "message" : [
+      "<tableName> requires that the data to be inserted have the same number of columns as the target table: target table has <targetColumns> column(s) but the inserted data has <insertedColumns> column(s), including <staticPartCols> partition column(s) having constant value(s)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1169" : {
+    "message" : [
+      "Requested partitioning does not match the table $tableName:",
+      "Requested partitions: <normalizedPartSpec>",
+      "Table partitions: <partColNames>"
+    ]
   }
 }

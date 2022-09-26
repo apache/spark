@@ -1608,11 +1608,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       existingTable: CatalogTable,
       tableDesc: CatalogTable): Throwable = {
     new AnalysisException(
-      s"""
-         |The location of the existing table ${identifier.quotedString} is
-         |`${existingTable.location}`. It doesn't match the specified location
-         |`${tableDesc.location}`.
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1160",
+      messageParameters = Map(
+        "identifier" -> identifier.quotedString,
+        "existingTableLoc" -> existingTable.location.toString,
+        "tableDescLoc" -> tableDesc.location.toString))
   }
 
   def mismatchedTableColumnNumberError(
@@ -1620,15 +1620,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       existingTable: CatalogTable,
       query: LogicalPlan): Throwable = {
     new AnalysisException(
-      s"""
-         |The column number of the existing table $tableName
-         |(${existingTable.schema.catalogString}) doesn't match the data schema
-         |(${query.schema.catalogString})
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1161",
+      messageParameters = Map(
+        "tableName" -> tableName,
+        "existingTableSchema" -> existingTable.schema.catalogString,
+        "querySchema" -> query.schema.catalogString))
   }
 
   def cannotResolveColumnGivenInputColumnsError(col: String, inputColumns: String): Throwable = {
-    new AnalysisException(s"cannot resolve '$col' given input columns: [$inputColumns]")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1162",
+      messageParameters = Map(
+        "col" -> col,
+        "inputColumns" -> inputColumns))
   }
 
   def mismatchedTablePartitionColumnError(
@@ -1636,11 +1640,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       specifiedPartCols: Seq[String],
       existingPartCols: String): Throwable = {
     new AnalysisException(
-      s"""
-         |Specified partitioning does not match that of the existing table $tableName.
-         |Specified partition columns: [${specifiedPartCols.mkString(", ")}]
-         |Existing partition columns: [$existingPartCols]
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1163",
+      messageParameters = Map(
+        "tableName" -> tableName,
+        "specifiedPartCols" -> specifiedPartCols.mkString(", "),
+        "existingPartCols" -> existingPartCols))
   }
 
   def mismatchedTableBucketingError(
@@ -1648,37 +1652,46 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       specifiedBucketString: String,
       existingBucketString: String): Throwable = {
     new AnalysisException(
-      s"""
-         |Specified bucketing does not match that of the existing table $tableName.
-         |Specified bucketing: $specifiedBucketString
-         |Existing bucketing: $existingBucketString
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1164",
+      messageParameters = Map(
+        "tableName" -> tableName,
+        "specifiedBucketString" -> specifiedBucketString,
+        "existingBucketString" -> existingBucketString))
   }
 
   def specifyPartitionNotAllowedWhenTableSchemaNotDefinedError(): Throwable = {
-    new AnalysisException("It is not allowed to specify partitioning when the " +
-      "table schema is not defined.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1165",
+      messageParameters = Map.empty)
   }
 
   def bucketingColumnCannotBePartOfPartitionColumnsError(
       bucketCol: String, normalizedPartCols: Seq[String]): Throwable = {
-    new AnalysisException(s"bucketing column '$bucketCol' should not be part of " +
-      s"partition columns '${normalizedPartCols.mkString(", ")}'")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1166",
+      messageParameters = Map(
+        "bucketCol" -> bucketCol,
+        "normalizedPartCols" -> normalizedPartCols.mkString(", ")))
   }
 
   def bucketSortingColumnCannotBePartOfPartitionColumnsError(
     sortCol: String, normalizedPartCols: Seq[String]): Throwable = {
-    new AnalysisException(s"bucket sorting column '$sortCol' should not be part of " +
-      s"partition columns '${normalizedPartCols.mkString(", ")}'")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1167",
+      messageParameters = Map(
+        "sortCol" -> sortCol,
+        "normalizedPartCols" -> normalizedPartCols.mkString(", ")))
   }
 
   def mismatchedInsertedDataColumnNumberError(
       tableName: String, insert: InsertIntoStatement, staticPartCols: Set[String]): Throwable = {
     new AnalysisException(
-      s"$tableName requires that the data to be inserted have the same number of columns as " +
-        s"the target table: target table has ${insert.table.output.size} column(s) but the " +
-        s"inserted data has ${insert.query.output.length + staticPartCols.size} column(s), " +
-        s"including ${staticPartCols.size} partition column(s) having constant value(s).")
+      errorClass = "_LEGACY_ERROR_TEMP_1168",
+      messageParameters = Map(
+        "tableName" -> tableName,
+        "targetColumns" -> insert.table.output.size.toString,
+        "insertedColumns" -> (insert.query.output.length + staticPartCols.size).toString,
+        "staticPartCols" -> staticPartCols.size.toString))
   }
 
   def requestedPartitionsMismatchTablePartitionsError(
@@ -1686,11 +1699,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       normalizedPartSpec: Map[String, Option[String]],
       partColNames: StructType): Throwable = {
     new AnalysisException(
-      s"""
-         |Requested partitioning does not match the table $tableName:
-         |Requested partitions: ${normalizedPartSpec.keys.mkString(",")}
-         |Table partitions: ${partColNames.mkString(",")}
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1169",
+      messageParameters = Map(
+        "tableName" -> tableName,
+        "normalizedPartSpec" -> normalizedPartSpec.keys.mkString(","),
+        "partColNames" -> partColNames.mkString(",")))
   }
 
   def ddlWithoutHiveSupportEnabledError(detail: String): Throwable = {
