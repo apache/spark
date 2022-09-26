@@ -69,7 +69,7 @@ select to_json(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Must use a map() function for options; line 1 pos 7
+Must use a map() function for options.; line 1 pos 7
 
 
 -- !query
@@ -78,7 +78,7 @@ select to_json(named_struct('a', 1, 'b', 2), map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-A type of keys and values in map() must be string, but got map<string,int>; line 1 pos 7
+A type of keys and values in map() must be string, but got map<string,int>.; line 1 pos 7
 
 
 -- !query
@@ -87,7 +87,21 @@ select to_json()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function to_json. Expected: one of 1 and 2; Found: 0; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "messageParameters" : {
+    "actualNumber" : "0",
+    "expectedInfo" : "one of 1 and 2",
+    "name" : "to_json"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "to_json()"
+  } ]
+}
 
 
 -- !query
@@ -143,7 +157,7 @@ select from_json('{"a":1}', 'a INT', named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Must use a map() function for options; line 1 pos 7
+Must use a map() function for options.; line 1 pos 7
 
 
 -- !query
@@ -152,7 +166,7 @@ select from_json('{"a":1}', 'a INT', map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-A type of keys and values in map() must be string, but got map<string,int>; line 1 pos 7
+A type of keys and values in map() must be string, but got map<string,int>.; line 1 pos 7
 
 
 -- !query
@@ -161,7 +175,21 @@ select from_json()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function from_json. Expected: one of 2 and 3; Found: 0; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "messageParameters" : {
+    "actualNumber" : "0",
+    "expectedInfo" : "one of 2 and 3",
+    "name" : "from_json"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "from_json()"
+  } ]
+}
 
 
 -- !query
@@ -491,7 +519,21 @@ select json_array_length()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function json_array_length. Expected: 1; Found: 0; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "messageParameters" : {
+    "actualNumber" : "0",
+    "expectedInfo" : "1",
+    "name" : "json_array_length"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "json_array_length()"
+  } ]
+}
 
 
 -- !query
@@ -564,7 +606,21 @@ select json_object_keys()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function json_object_keys. Expected: 1; Found: 0; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "messageParameters" : {
+    "actualNumber" : "0",
+    "expectedInfo" : "1",
+    "name" : "json_object_keys"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "json_object_keys()"
+  } ]
+}
 
 
 -- !query

@@ -17,50 +17,12 @@
 
 package org.apache.spark
 
-import java.net.URL
-
 import scala.collection.JavaConverters._
-import scala.collection.immutable.SortedMap
-
-import com.fasterxml.jackson.annotation.JsonIgnore
-import com.fasterxml.jackson.core.`type`.TypeReference
-import com.fasterxml.jackson.databind.json.JsonMapper
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.apache.commons.text.StringSubstitutor
 
 import org.apache.spark.util.JsonProtocol.toJsonString
 import org.apache.spark.util.Utils
 
-/**
- * Information associated with an error subclass.
- *
- * @param message C-style message format compatible with printf.
- *                The error message is constructed by concatenating the lines with newlines.
- */
-private[spark] case class ErrorSubInfo(message: Seq[String]) {
-  // For compatibility with multi-line error messages
-  @JsonIgnore
-  val messageFormat: String = message.mkString("\n")
-}
-
-/**
- * Information associated with an error class.
- *
- * @param sqlState SQLSTATE associated with this class.
- * @param subClass SubClass associated with this class.
- * @param message C-style message format compatible with printf.
- *                The error message is constructed by concatenating the lines with newlines.
- */
-private[spark] case class ErrorInfo(
-    message: Seq[String],
-    subClass: Option[Map[String, ErrorSubInfo]],
-    sqlState: Option[String]) {
-  // For compatibility with multi-line error messages
-  @JsonIgnore
-  val messageFormat: String = message.mkString("\n")
-}
-
-object ErrorMessageFormat extends Enumeration {
+private[spark] object ErrorMessageFormat extends Enumeration {
   val PRETTY, MINIMAL, STANDARD = Value
 }
 
@@ -69,37 +31,8 @@ object ErrorMessageFormat extends Enumeration {
  * construct error messages.
  */
 private[spark] object SparkThrowableHelper {
-  val errorClassesUrl: URL =
-    Utils.getSparkClassLoader.getResource("error/error-classes.json")
-  val errorClassToInfoMap: SortedMap[String, ErrorInfo] = {
-    val mapper: JsonMapper = JsonMapper.builder()
-      .addModule(DefaultScalaModule)
-      .build()
-    mapper.readValue(errorClassesUrl, new TypeReference[SortedMap[String, ErrorInfo]]() {})
-  }
-
-  def getParameterNames(errorClass: String, errorSubCLass: String): Array[String] = {
-    val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
-      throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
-    if (errorInfo.subClass.isEmpty && errorSubCLass != null) {
-      throw new IllegalArgumentException(s"'$errorClass' has no subclass")
-    }
-    if (errorInfo.subClass.isDefined && errorSubCLass == null) {
-      throw new IllegalArgumentException(s"'$errorClass' requires subclass")
-    }
-    var parameterizedMessage = errorInfo.messageFormat
-    if (errorInfo.subClass.isDefined) {
-      val givenSubClass = errorSubCLass
-      val errorSubInfo = errorInfo.subClass.get.getOrElse(givenSubClass,
-        throw new IllegalArgumentException(s"Cannot find sub error class '$givenSubClass'"))
-      parameterizedMessage = parameterizedMessage + errorSubInfo.messageFormat
-    }
-    val pattern = "<[a-zA-Z0-9_-]+>".r
-    val matches = pattern.findAllIn(parameterizedMessage)
-    val parameterSeq = matches.toArray
-    val parameterNames = parameterSeq.map(p => p.stripPrefix("<").stripSuffix(">"))
-    parameterNames
-  }
+  val errorReader = new ErrorClassesJsonReader(
+    Seq(Utils.getSparkClassLoader.getResource("error/error-classes.json")))
 
   def getMessage(
       errorClass: String,
@@ -120,36 +53,15 @@ private[spark] object SparkThrowableHelper {
       errorSubClass: String,
       messageParameters: Map[String, String],
       context: String): String = {
-    val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
-      throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
-    val (displayClass, displayFormat) = if (errorInfo.subClass.isEmpty) {
-      (errorClass, errorInfo.messageFormat)
-    } else {
-      val subClasses = errorInfo.subClass.get
-      if (errorSubClass == null) {
-        throw new IllegalArgumentException(s"Subclass required for error class '$errorClass'")
-      }
-      val errorSubInfo = subClasses.getOrElse(errorSubClass,
-        throw new IllegalArgumentException(s"Cannot find sub error class '$errorSubClass'"))
-      (errorClass + "." + errorSubClass,
-        errorInfo.messageFormat + " " + errorSubInfo.messageFormat)
-    }
-    val sub = new StringSubstitutor(messageParameters.asJava)
-    sub.setEnableUndefinedVariableException(true)
-    val displayMessage = try {
-      sub.replace(displayFormat.replaceAll("<([a-zA-Z0-9_-]+)>", "\\$\\{$1\\}"))
-    } catch {
-      case _: IllegalArgumentException => throw SparkException.internalError(
-        s"Undefined an error message parameter: $messageParameters")
-    }
+    val displayClass = errorClass + Option(errorSubClass).map("." + _).getOrElse("")
+    val displayMessage = errorReader.getErrorMessage(displayClass, messageParameters)
     val displayQueryContext = (if (context.isEmpty) "" else "\n") + context
     val prefix = if (displayClass.startsWith("_LEGACY_ERROR_TEMP_")) "" else s"[$displayClass] "
-
     s"$prefix$displayMessage$displayQueryContext"
   }
 
   def getSqlState(errorClass: String): String = {
-    Option(errorClass).flatMap(errorClassToInfoMap.get).flatMap(_.sqlState).orNull
+    errorReader.getSqlState(errorClass)
   }
 
   def isInternalError(errorClass: String): Boolean = {
@@ -179,9 +91,8 @@ private[spark] object SparkThrowableHelper {
           val errorSubClass = e.getErrorSubClass
           if (errorSubClass != null) g.writeStringField("errorSubClass", errorSubClass)
           if (format == STANDARD) {
-            val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
-              throw SparkException.internalError(s"Cannot find the error class '$errorClass'"))
-            g.writeStringField("messageFormat", errorInfo.messageFormat)
+            val finalClass = errorClass + Option(errorSubClass).map("." + _).getOrElse("")
+            g.writeStringField("messageFormat", errorReader.getMessageTemplate(finalClass))
           }
           val sqlState = e.getSqlState
           if (sqlState != null) g.writeStringField("sqlState", sqlState)

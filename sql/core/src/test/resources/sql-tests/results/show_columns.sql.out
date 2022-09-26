@@ -109,7 +109,13 @@ SHOW COLUMNS IN showdb.showcolumn1 FROM baddb
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-SHOW COLUMNS with conflicting databases: 'baddb' != 'showdb'
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1057",
+  "messageParameters" : {
+    "dbA" : "baddb",
+    "dbB" : "showdb"
+  }
+}
 
 
 -- !query
