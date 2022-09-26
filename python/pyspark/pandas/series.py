@@ -6382,6 +6382,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise ValueError("axis can only be 0 or 'index'")
         sdf = self._internal.spark_frame.select(self.spark.column, NATURAL_ORDER_COLUMN_NAME)
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
+        sdf0 = sdf
         sdf = InternalFrame.attach_distributed_sequence_column(
             sdf,
             seq_col_name,
@@ -6394,6 +6395,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             sdf = sdf.orderBy(scol.desc_nulls_first(), NATURAL_ORDER_COLUMN_NAME, seq_col_name)
 
         results = sdf.select(scol, seq_col_name).take(1)
+
+        if sdf0.is_cached:
+            sdf0.unpersist(blocking=False)
 
         if len(results) == 0:
             raise ValueError("attempt to get argmax of an empty sequence")
@@ -6442,6 +6446,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise ValueError("axis can only be 0 or 'index'")
         sdf = self._internal.spark_frame.select(self.spark.column, NATURAL_ORDER_COLUMN_NAME)
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
+        sdf0 = sdf
         sdf = InternalFrame.attach_distributed_sequence_column(
             sdf,
             seq_col_name,
@@ -6454,6 +6459,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             sdf = sdf.orderBy(scol.asc_nulls_first(), NATURAL_ORDER_COLUMN_NAME, seq_col_name)
 
         results = sdf.select(scol, seq_col_name).take(1)
+
+        if sdf0.is_cached:
+            sdf0.unpersist(blocking=False)
 
         if len(results) == 0:
             raise ValueError("attempt to get argmin of an empty sequence")
@@ -6664,9 +6672,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf = self._internal.spark_frame
         index_col_name = verify_temp_column_name(sdf, "__search_sorted_index_col__")
         value_col_name = verify_temp_column_name(sdf, "__search_sorted_value_col__")
-        sdf = InternalFrame.attach_distributed_sequence_column(
-            sdf.select(self.spark.column.alias(value_col_name)), index_col_name
-        )
+        sdf = sdf.select(self.spark.column.alias(value_col_name))
+        sdf0 = sdf
+        sdf = InternalFrame.attach_distributed_sequence_column(sdf, index_col_name)
 
         if side == "left":
             results = sdf.select(
@@ -6678,6 +6686,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 F.min(F.when(F.lit(value) < F.col(value_col_name), F.col(index_col_name))),
                 F.count(F.lit(0)),
             ).take(1)
+
+        if sdf0.is_cached:
+            sdf0.unpersist(blocking=False)
 
         if len(results) == 0:
             return 0

@@ -911,6 +911,9 @@ class InternalFrame:
         +--------+---+
         """
         if len(sdf.columns) > 0:
+            if not sdf.is_cached and sdf.rdd.getNumPartitions() > 1:
+                sdf.persist()
+
             return SparkDataFrame(
                 sdf._jdf.toDF().withSequenceColumn(column_name),
                 sdf.sparkSession,
