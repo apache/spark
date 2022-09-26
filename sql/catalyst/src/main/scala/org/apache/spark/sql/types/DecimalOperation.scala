@@ -25,7 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The proxy layer of Decimal's underlying implementation.
- * At present, the only underlying implementation supported is Java BigDecimal.
+ * At present, Java BigDecimal is the only underlying implementation.
  *
  * `DecimalOperation` can hold a Long if values are small enough.
  * _precision and _scale represent the SQL precision and scale we are looking for.
@@ -200,10 +200,10 @@ trait DecimalOperation extends Serializable {
     }
   }
 
-  def toBigDecimal: BigDecimal = if (underlyingIsNotNull) {
-    getAsBigDecimal()
-  } else {
+  def toBigDecimal: BigDecimal = if (underlyingIsNull) {
     BigDecimal(longVal, _scale)
+  } else {
+    getAsBigDecimal()
   }
 
   /**
@@ -211,10 +211,10 @@ trait DecimalOperation extends Serializable {
    */
   def getAsBigDecimal(): BigDecimal
 
-  def toJavaBigDecimal: java.math.BigDecimal = if (underlyingIsNotNull) {
-    getAsJavaBigDecimal()
-  } else {
+  def toJavaBigDecimal: java.math.BigDecimal = if (underlyingIsNull) {
     java.math.BigDecimal.valueOf(longVal, _scale)
+  } else {
+    getAsJavaBigDecimal()
   }
 
   /**
@@ -222,16 +222,16 @@ trait DecimalOperation extends Serializable {
    */
   protected def getAsJavaBigDecimal(): java.math.BigDecimal
 
-  def toScalaBigInt: BigInt = if (underlyingIsNotNull) {
-    getAsBigDecimal().toBigInt
-  } else {
+  def toScalaBigInt: BigInt = if (underlyingIsNull) {
     BigInt(actualLongVal)
+  } else {
+    getAsBigDecimal().toBigInt
   }
 
-  def toJavaBigInteger: java.math.BigInteger = if (underlyingIsNotNull) {
-    getAsJavaBigInteger()
-  } else {
+  def toJavaBigInteger: java.math.BigInteger = if (underlyingIsNull) {
     java.math.BigInteger.valueOf(actualLongVal)
+  } else {
+    getAsJavaBigInteger()
   }
 
   /**
@@ -239,16 +239,16 @@ trait DecimalOperation extends Serializable {
    */
   protected def getAsJavaBigInteger(): java.math.BigInteger
 
-  def toUnscaledLong: Long = if (underlyingIsNotNull) {
-    getAsJavaBigDecimal().unscaledValue().longValueExact()
-  } else {
+  def toUnscaledLong: Long = if (underlyingIsNull) {
     longVal
+  } else {
+    getAsJavaBigDecimal().unscaledValue().longValueExact()
   }
 
-  def toDebugString: String = if (underlyingIsNotNull) {
-    s"Decimal(expanded, ${getAsBigDecimal()}, $precision, $scale)"
-  } else {
+  def toDebugString: String = if (underlyingIsNull) {
     s"Decimal(compact, $longVal, $precision, $scale)"
+  } else {
+    s"Decimal(expanded, ${getAsBigDecimal()}, $precision, $scale)"
   }
 
   def toLong: Long = if (underlyingIsNull) {
@@ -387,11 +387,7 @@ trait DecimalOperation extends Serializable {
   protected def rescale(
       precision: Int, scale: Int, roundMode: BigDecimal.RoundingMode.Value): Boolean
 
-  override def clone(): DecimalOperation = {
-    val newDecimalOperation = newInstance()
-    newDecimalOperation.copy(this)
-    newDecimalOperation
-  }
+  override def clone(): DecimalOperation = newInstance().copy(this)
 
   def compare(that: DecimalOperation): Int =
     if (underlyingIsNull && that.underlyingIsNull && _scale == that._scale) {
@@ -402,7 +398,7 @@ trait DecimalOperation extends Serializable {
 
   protected def doCompare(other: DecimalOperation): Int
 
-  def isZero: Boolean = if (underlyingIsNotNull) isEqualsZero() else longVal == 0
+  def isZero: Boolean = if (underlyingIsNull) longVal == 0 else isEqualsZero()
 
   protected def isEqualsZero(): Boolean
 
@@ -438,25 +434,26 @@ trait DecimalOperation extends Serializable {
 
   def quot(that: DecimalOperation): DecimalOperation
 
-  def negative: DecimalOperation = if (underlyingIsNotNull) {
-    doNegative
-  } else {
+  def negative: DecimalOperation = if (underlyingIsNull) {
     val newDecimalOperation = newInstance()
     newDecimalOperation.set(-longVal, precision, scale)
+  } else {
+    doNegative
   }
 
-  def doNegative: DecimalOperation
+  protected def doNegative: DecimalOperation
 
-  def copy(from: DecimalOperation): Unit = {
+  def copy(from: DecimalOperation): DecimalOperation = {
     this.longVal = from.longVal
     this._precision = from._precision
     this._scale = from._scale
     if (from.underlyingIsNotNull) {
       copyUnderlyingValue(from)
     }
+    this
   }
 
-  def copyUnderlyingValue(from: DecimalOperation): Unit
+  protected def copyUnderlyingValue(from: DecimalOperation): Unit
 }
 
 @Unstable
