@@ -3074,6 +3074,33 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser.backfill(inplace=True)
             self.assert_eq(expected, psser)
 
+    def test_searchsorted(self):
+        pser1 = pd.Series([1, 2, 2, 3])
+
+        index2 = pd.date_range("2018-04-09", periods=4, freq="2D")
+        pser2 = pd.Series([1, 2, 3, 4], index=index2)
+
+        index3 = pd.MultiIndex.from_tuples(
+            [("A", "B"), ("C", "D"), ("E", "F")], names=["index1", "index2"]
+        )
+        pser3 = pd.Series([1.0, 2.0, 3.0], index=index3, name="name")
+
+        pser4 = pd.Series([])
+
+        for pser in [pser1, pser2, pser3, pser4]:
+            psser = ps.from_pandas(pser)
+            for value in [0.5, 1, 2, 3.0, 4, 5]:
+                for side in ["left", "right"]:
+                    self.assert_eq(
+                        pser.searchsorted(value, side=side),
+                        psser.searchsorted(value, side=side),
+                    )
+
+        with self.assertRaisesRegex(ValueError, "Invalid side"):
+            ps.from_pandas(pser1).searchsorted(1.1, side=[1, 2])
+        with self.assertRaisesRegex(ValueError, "Invalid side"):
+            ps.from_pandas(pser1).searchsorted(1.1, side="middle")
+
     def test_align(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
         psdf = ps.from_pandas(pdf)
