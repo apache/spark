@@ -222,7 +222,9 @@ select * from data group by a, b, 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Star (*) is not allowed in select list when GROUP BY ordinal position is used
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1019"
+}
 
 
 -- !query

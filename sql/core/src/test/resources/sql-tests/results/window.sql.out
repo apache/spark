@@ -490,7 +490,12 @@ SELECT val, cate, row_number() OVER(PARTITION BY cate) FROM testData ORDER BY ca
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Window function row_number() requires window to be ordered, please add ORDER BY clause. For example SELECT row_number()(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1037",
+  "messageParameters" : {
+    "wf" : "row_number()"
+  }
+}
 
 
 -- !query
@@ -562,7 +567,9 @@ FROM testData ORDER BY cate, val
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-window aggregate function with filter predicate is not supported yet.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1030"
+}
 
 
 -- !query
@@ -1210,7 +1217,12 @@ FROM
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Window specification w is not defined in the WINDOW clause.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1004",
+  "messageParameters" : {
+    "windowName" : "w"
+  }
+}
 
 
 -- !query
@@ -1222,4 +1234,9 @@ FROM
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Window specification w is not defined in the WINDOW clause.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1004",
+  "messageParameters" : {
+    "windowName" : "w"
+  }
+}
