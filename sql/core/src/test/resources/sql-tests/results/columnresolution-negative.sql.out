@@ -222,7 +222,20 @@ SELECT t1.x.y.* FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't1.x.y.*' given input columns 'i1'; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1051",
+  "messageParameters" : {
+    "columns" : "i1",
+    "targetString" : "t1.x.y"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "t1.x.y.*"
+  } ]
+}
 
 
 -- !query

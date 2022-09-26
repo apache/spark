@@ -72,7 +72,7 @@ Table-valued function range with alternatives:
     range(start: long, end: long, step: long)
     range(start: long, end: long)
     range(end: long)
-cannot be applied to (integer, integer, integer, integer, integer): Invalid number of arguments for function range. Expected: one of 1, 2, 3 and 4; Found: 5; line 1 pos 14
+cannot be applied to (integer, integer, integer, integer, integer): Invalid number of arguments for function range. Expected: one of 1, 2, 3 and 4; Found: 5.; line 1 pos 14
 
 
 -- !query

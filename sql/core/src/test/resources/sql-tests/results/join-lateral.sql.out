@@ -114,7 +114,20 @@ SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2, LATERAL (SELECT t1.*, t2.*
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't1.*' given input columns 'c1, c2'; line 1 pos 70
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1051",
+  "messageParameters" : {
+    "columns" : "c1, c2",
+    "targetString" : "t1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 71,
+    "stopIndex" : 74,
+    "fragment" : "t1.*"
+  } ]
+}
 
 
 -- !query

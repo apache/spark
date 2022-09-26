@@ -254,7 +254,22 @@ ALTER TABLE temp_view CHANGE a TYPE INT
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-temp_view is a temp view. 'ALTER TABLE ... CHANGE COLUMN' expects a table.; line 1 pos 12
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1013",
+  "messageParameters" : {
+    "cmd" : "ALTER TABLE ... CHANGE COLUMN",
+    "hintStr" : "",
+    "nameParts" : "temp_view",
+    "viewStr" : "temp view"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 21,
+    "fragment" : "temp_view"
+  } ]
+}
 
 
 -- !query
@@ -271,7 +286,22 @@ ALTER TABLE global_temp.global_temp_view CHANGE a TYPE INT
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-global_temp.global_temp_view is a temp view. 'ALTER TABLE ... CHANGE COLUMN' expects a table.; line 1 pos 12
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1013",
+  "messageParameters" : {
+    "cmd" : "ALTER TABLE ... CHANGE COLUMN",
+    "hintStr" : "",
+    "nameParts" : "global_temp.global_temp_view",
+    "viewStr" : "temp view"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 40,
+    "fragment" : "global_temp.global_temp_view"
+  } ]
+}
 
 
 -- !query
