@@ -400,9 +400,7 @@ object Decimal {
    */
   def createUnsafe(unscaled: Long, precision: Int, scale: Int): Decimal = {
     DecimalType.checkNegativeScale(scale)
-    val dec = new Decimal()
-    dec._decimalOperation = DecimalOperation.createUnsafe(unscaled, precision, scale)
-    dec
+    Decimal(DecimalOperation.createUnsafe(unscaled, precision, scale))
   }
 
   // Max precision of a decimal value stored in `numBytes` bytes
