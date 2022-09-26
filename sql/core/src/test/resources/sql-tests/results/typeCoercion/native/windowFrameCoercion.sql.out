@@ -169,7 +169,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
   "messageParameters" : {
-    "expectedType" : "\"(NUMERIC OR INTERVAL DAY TO SECOND OR INTERVAL YEAR TO MONTH OR INTERVAL)\"",
+    "expectedType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
     "exprType" : "\"STRING\"",
     "location" : "upper",
     "sqlExpr" : "\"RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING\""
@@ -194,7 +194,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
   "messageParameters" : {
-    "expectedType" : "\"(NUMERIC OR INTERVAL DAY TO SECOND OR INTERVAL YEAR TO MONTH OR INTERVAL)\"",
+    "expectedType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
     "exprType" : "\"BINARY\"",
     "location" : "upper",
     "sqlExpr" : "\"RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING\""
@@ -219,7 +219,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
   "messageParameters" : {
-    "expectedType" : "\"(NUMERIC OR INTERVAL DAY TO SECOND OR INTERVAL YEAR TO MONTH OR INTERVAL)\"",
+    "expectedType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
     "exprType" : "\"BOOLEAN\"",
     "location" : "upper",
     "sqlExpr" : "\"RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING\""

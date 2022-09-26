@@ -83,8 +83,8 @@ case class WindowSpecDefinition(
         DataTypeMismatch(
           errorSubClass = "RANGE_FRAME_INVALID_TYPE",
           messageParameters = Map(
-            "orderSpecType" -> toSQLType(orderSpec.head.dataType.catalogString),
-            "valueBoundaryType" -> toSQLType(f.valueBoundary.head.dataType.catalogString)
+            "orderSpecType" -> toSQLType(orderSpec.head.dataType),
+            "valueBoundaryType" -> toSQLType(f.valueBoundary.head.dataType)
           )
         )
       case _ => TypeCheckSuccess
@@ -234,8 +234,8 @@ case class SpecifiedWindowFrame(
           messageParameters = Map(
             "lower" -> toSQLExpr(lower),
             "upper" -> toSQLExpr(upper),
-            "lowerType" -> toSQLType(l.dataType.catalogString),
-            "upperType" -> toSQLType(u.dataType.catalogString)
+            "lowerType" -> toSQLType(l.dataType),
+            "upperType" -> toSQLType(u.dataType)
           )
         )
       case (l: Expression, u: Expression) if isGreaterThan(l, u) =>
@@ -293,8 +293,8 @@ case class SpecifiedWindowFrame(
         errorSubClass = "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
         messageParameters = Map(
           "location" -> location,
-          "exprType" -> toSQLType(e.dataType.catalogString),
-          "expectedType" -> toSQLType(frameType.inputType.simpleString)
+          "exprType" -> toSQLType(e.dataType),
+          "expectedType" -> toSQLType(frameType.inputType)
         )
       )
     case _ => TypeCheckSuccess

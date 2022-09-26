@@ -217,8 +217,8 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "location" -> "upper",
         "exprType" -> "\"STRING\"",
-        "expectedType" -> ("\"(NUMERIC OR INTERVAL DAY TO SECOND OR INTERVAL YEAR " +
-          "TO MONTH OR INTERVAL)\""),
+        "expectedType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR " +
+          "TO MONTH\" or \"INTERVAL\")"),
         "sqlExpr" -> "\"RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\""
       )
     )
@@ -233,8 +233,8 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "location" -> "lower",
         "exprType" -> "\"STRING\"",
-        "expectedType" -> ("\"(NUMERIC OR INTERVAL DAY TO SECOND OR INTERVAL YEAR " +
-          "TO MONTH OR INTERVAL)\""),
+        "expectedType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR " +
+          "TO MONTH\" or \"INTERVAL\")"),
         "sqlExpr" -> "\"RANGE BETWEEN -1 FOLLOWING AND UNBOUNDED FOLLOWING\""
       )
     )
@@ -249,8 +249,8 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "location" -> "lower",
         "exprType" -> "\"STRING\"",
-        "expectedType" -> ("\"(NUMERIC OR INTERVAL DAY TO SECOND OR INTERVAL YEAR " +
-          "TO MONTH OR INTERVAL)\""),
+        "expectedType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR " +
+          "TO MONTH\" or \"INTERVAL\")"),
         "sqlExpr" -> "\"RANGE BETWEEN -1 FOLLOWING AND 1 FOLLOWING\""
       )
     )
