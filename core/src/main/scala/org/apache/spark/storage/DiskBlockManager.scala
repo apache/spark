@@ -32,7 +32,7 @@ import org.apache.spark.network.shuffle.ExecutorDiskUtils
 import org.apache.spark.storage.DiskBlockManager.ATTEMPT_ID_KEY
 import org.apache.spark.storage.DiskBlockManager.MERGE_DIR_KEY
 import org.apache.spark.storage.DiskBlockManager.MERGE_DIRECTORY
-import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.{JacksonUtils, ShutdownHookManager, Utils}
 
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
@@ -332,7 +332,6 @@ private[spark] class DiskBlockManager(
   }
 
   def getMergeDirectoryAndAttemptIDJsonString(): String = {
-    import org.apache.spark.util.JacksonUtils
     val mergedMetaMap: HashMap[String, String] = new HashMap[String, String]()
     mergedMetaMap.put(MERGE_DIR_KEY, mergeDirName)
     conf.get(config.APP_ATTEMPT_ID).foreach(

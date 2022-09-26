@@ -18,7 +18,6 @@ package org.apache.spark.deploy.k8s
 
 import java.io.File
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient, KubernetesClient}
@@ -33,7 +32,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{JacksonUtils, ThreadUtils}
 
 /**
  * Spark-opinionated builder for Kubernetes clients. It uses a prefix plus common suffixes to
@@ -50,7 +49,6 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       sparkConf: SparkConf,
       defaultServiceAccountToken: Option[File],
       defaultServiceAccountCaCert: Option[File]): KubernetesClient = {
-    import org.apache.spark.util.JacksonUtils
     val oauthTokenFileConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_FILE_CONF_SUFFIX"
     val oauthTokenConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_CONF_SUFFIX"
     val oauthTokenFile = sparkConf.getOption(oauthTokenFileConf)
