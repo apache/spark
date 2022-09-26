@@ -50,6 +50,14 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def scale: Int = _scale
 
   /**
+   * Set this Decimal to the given DecimalOperation value.
+   */
+  private[sql] def set(decimalOperation: DecimalOperation): Decimal = {
+    this._decimalOperation = decimalOperation
+    this
+  }
+
+  /**
    * Set this Decimal to the given Long. Will have precision 20 and scale 0.
    */
   def set(longVal: Long): Decimal = {
@@ -119,11 +127,11 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def set(decimal: BigDecimal, precision: Int, scale: Int): Decimal = {
     DecimalType.checkNegativeScale(scale)
     val scaledDecimal = decimal.setScale(scale, ROUND_HALF_UP)
+    getOrCreateDecimalOperation.setUnderlyingValue(scaledDecimal)
     if (scaledDecimal.precision > precision) {
       throw QueryExecutionErrors.decimalPrecisionExceedsMaxPrecisionError(
         scaledDecimal.precision, precision)
     }
-    getOrCreateDecimalOperation.setUnderlyingValue(scaledDecimal)
     this.longVal = 0L
     this._precision = precision
     this._scale = scale
@@ -184,14 +192,6 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     this.longVal = decimal.longVal
     this._precision = decimal._precision
     this._scale = decimal._scale
-    this
-  }
-
-  /**
-   * Set this Decimal to the given DecimalOperation value.
-   */
-  private[sql] def set(decimalOperation: DecimalOperation): Decimal = {
-    this._decimalOperation = decimalOperation
     this
   }
 
