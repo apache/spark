@@ -180,7 +180,6 @@ abstract class InjectRuntimeFilterReuseSuite
   def checkBloomFilterPredicate(
                                  df: DataFrame,
                                  hasBloomFilter: Boolean,
-                                 hadBroadcastBloom: Boolean,
                                  reuseExpected: Boolean = true): Unit = {
     df.collect()
 
@@ -244,7 +243,7 @@ abstract class InjectRuntimeFilterReuseSuite
           |       JOIN t3
           |         ON t11.a = t3.a AND t3.b < 6
           |""".stripMargin)
-      checkBloomFilterPredicate(df, true, false)
+      checkBloomFilterPredicate(df, true)
     }
   }
 
@@ -265,7 +264,7 @@ abstract class InjectRuntimeFilterReuseSuite
           |WHERE coalesce(t3new.sumb, 0) > 0
           |""".stripMargin)
 
-      checkBloomFilterPredicate(df, false, false)
+      checkBloomFilterPredicate(df, false)
       val trueNode = find(df.queryExecution.executedPlan) {
         case fe: FilterExec => fe.condition.containsChild.contains(Literal.TrueLiteral)
         case _ => false
@@ -293,7 +292,7 @@ abstract class InjectRuntimeFilterReuseSuite
           |         ON t11.a = t3.a
           |""".stripMargin)
 
-      checkBloomFilterPredicate(df, false, false)
+      checkBloomFilterPredicate(df, false)
     }
   }
 
@@ -398,7 +397,7 @@ abstract class InjectRuntimeFilterReuseSuite
       //                        +- Filter
       //                           +- ColumnarToRow
       //                              +- FileScan
-      checkBloomFilterPredicate(df, true, false, !adaptiveExecutionOn)
+      checkBloomFilterPredicate(df, true, !adaptiveExecutionOn)
     }
   }
 }
