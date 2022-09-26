@@ -213,23 +213,21 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     case a: Aggregate if mayNeedtoRewrite(a) => rewrite(a)
   }
 
-  def rewrite(aOrig: Aggregate): Aggregate = {
-    // Make children of distinct aggregations the same if they are only
-    // different due to superficial reasons, e.g.:
-    //   "1 + col1" vs "col1 + 1", both should become "1 + col1"
-    // or
-    //   "col1" vs "Col1", both should become "col1"
-    // This could potentially reduce the number of distinct
-    // aggregate groups, and therefore reduce the number of
-    // projections in Expand (or eliminate the need for Expand)
-    val a = reduceDistinctAggregateGroups(aOrig)
+  def rewrite(a: Aggregate): Aggregate = {
 
     val aggExpressions = collectAggregateExprs(a)
     val distinctAggs = aggExpressions.filter(_.isDistinct)
 
+    val funcChildren = distinctAggs.flatMap { e =>
+      e.aggregateFunction.children.filter(!_.foldable)
+    }
+    val funcChildrenLookup = funcChildren.map { e =>
+      (e, funcChildren.find(fc => e.semanticEquals(fc)).getOrElse(e))
+    }.toMap
+
     // Extract distinct aggregate expressions.
     val distinctAggGroups = aggExpressions.filter(_.isDistinct).groupBy { e =>
-        val unfoldableChildren = e.aggregateFunction.children.filter(!_.foldable).toSet
+        val unfoldableChildren = ExpressionSet(e.aggregateFunction.children.filter(!_.foldable))
         if (unfoldableChildren.nonEmpty) {
           // Only expand the unfoldable children
           unfoldableChildren
@@ -300,7 +298,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             val naf = if (af.children.forall(_.foldable)) {
               af
             } else {
-              patchAggregateFunctionChildren(af) { x =>
+              patchAggregateFunctionChildren(af) { x1 =>
+                val x = funcChildrenLookup.getOrElse(x1, x1)
                 distinctAggChildAttrLookup.get(x)
               }
             }
@@ -411,11 +410,21 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       }
       Aggregate(groupByAttrs, patchedAggExpressions, firstAggregate)
     } else {
-      // It's possible we avoided rewriting the plan to use Expand only because
-      // reduceDistinctAggregateGroups reduced the number of distinct aggregate groups
-      // from > 1 to 1. To prevent SparkStrategies from complaining during sanity check,
-      // we use the potentially patched Aggregate returned by reduceDistinctAggregateGroups.
-      a
+      // We may have one distinct group only because we grouped using ExpressionSet.
+      // To prevent SparkStrategies from complaining during sanity check, we need to check whether
+      // the original list of aggregate expressions had multiple distinct groups and, if so,
+      // patch that list so we have only one distinct group.
+      if (funcChildrenLookup.keySet.size > funcChildrenLookup.values.toSet.size) {
+        val patchedAggExpressions = a.aggregateExpressions.map { e =>
+          e.transformDown {
+            case e: Expression =>
+              funcChildrenLookup.getOrElse(e, e)
+          }.asInstanceOf[NamedExpression]
+        }
+        a.copy(aggregateExpressions = patchedAggExpressions)
+      } else {
+        a
+      }
     }
   }
 
@@ -424,43 +433,6 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     a.aggregateExpressions.flatMap { _.collect {
         case ae: AggregateExpression => ae
     }}
-  }
-
-  private def reduceDistinctAggregateGroups(a: Aggregate): Aggregate = {
-    val aggExpressions = collectAggregateExprs(a)
-    val distinctAggs = aggExpressions.filter(_.isDistinct)
-
-    val funcChildren = distinctAggs.flatMap { e =>
-      e.aggregateFunction.children.filter(!_.foldable)
-    }
-
-    // For each function child, find the first instance that is semantically equivalent.
-    // E.g., assume funcChildren is the following three expressions:
-    //   [('a + 1), (1 + 'a), 'b]
-    // then we want the map to be:
-    //   Map(('a + 1) -> ('a + 1), (1 + 'a) -> ('a + 1), 'b -> 'b)
-    // That is, both ('a + 1) and (1 + 'a) map to ('a + 1).
-    // This is an n^2 operation, where n is the number of distinct aggregate children, but it
-    // happens only once every time this rule is called.
-    val funcChildrenLookup = funcChildren.map { e =>
-      (e, funcChildren.find(fc => e.semanticEquals(fc)).getOrElse(e))
-    }.toMap
-
-    val funcChildrenPatched = funcChildren.map { e =>
-      funcChildrenLookup.getOrElse(e, e)
-    }
-
-    if (funcChildren.distinct.size == funcChildrenPatched.distinct.size) {
-      return a;
-    }
-
-    val patchedAggExpressions = a.aggregateExpressions.map { e =>
-      e.transformDown {
-        case e: Expression =>
-          funcChildrenLookup.getOrElse(e, e)
-      }.asInstanceOf[NamedExpression]
-    }
-    a.copy(aggregateExpressions = patchedAggExpressions)
   }
 
   private def nullify(e: Expression) = Literal.create(null, e.dataType)

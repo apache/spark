@@ -1486,20 +1486,38 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(df, Row(2, 3, 1))
   }
 
-  test("SPARK-40382: All distinct aggregation children are semantically equivalent") {
-    val df = Seq(
-      (1, 1, 1),
+  test("SPARK-40382: Distinct aggregation expression grouping by semantic equivalence") {
+   Seq(
+      (1, 1, 3),
       (1, 2, 3),
       (1, 2, 3),
       (2, 1, 1),
       (2, 2, 5)
-    ).toDF("k", "c1", "c2")
-    val res1 = df.groupBy("k")
-      .agg(sum("c1"), countDistinct($"c2" + 1), sum_distinct(lit(1) + $"c2"))
-    checkAnswer(res1, Row(1, 5, 2, 6) :: Row(2, 3, 2, 8) :: Nil)
+    ).toDF("k", "c1", "c2").createOrReplaceTempView("df")
 
-    val res2 = df.selectExpr("count(distinct C2)", "count(distinct c2)")
-    checkAnswer(res2, Row(3, 3) :: Nil)
+    // all distinct aggregation children are semantically equivalent
+    val res1 = sql(
+      """select k, sum(distinct c1 + 1), avg(distinct 1 + c1), count(distinct 1 + C1)
+        |from df
+        |group by k
+        |""".stripMargin)
+    checkAnswer(res1, Row(1, 5, 2.5, 2) :: Row(2, 5, 2.5, 2) :: Nil)
+
+    // some distinct aggregation children are semantically equivalent
+    val res2 = sql(
+      """select k, sum(distinct c1 + 2), avg(distinct 2 + c1), count(distinct c2)
+        |from df
+        |group by k
+        |""".stripMargin)
+    checkAnswer(res2, Row(1, 7, 3.5, 1) :: Row(2, 7, 3.5, 2) :: Nil)
+
+    // no distinct aggregation children are semantically equivalent
+    val res3 = sql(
+      """select k, sum(distinct c1 + 2), avg(distinct 3 + c1), count(distinct c2)
+        |from df
+        |group by k
+        |""".stripMargin)
+    checkAnswer(res3, Row(1, 7, 4.5, 1) :: Row(2, 7, 4.5, 2) :: Nil)
   }
 }
 
