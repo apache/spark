@@ -1917,7 +1917,7 @@
     ]
   },
   "_LEGACY_ERROR_TEMP_1149" : {
-    "message": [
+    "message" : [
       "Fail to rebuild expression: missing key <filter> in `translatedFilterToExpr`."
     ]
   }
