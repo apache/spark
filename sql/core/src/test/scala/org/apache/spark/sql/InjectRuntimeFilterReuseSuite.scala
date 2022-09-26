@@ -233,15 +233,10 @@ abstract class InjectRuntimeFilterReuseSuite
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
       SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "10000") {
       val df = sql("""
-          |SELECT t11.a,
-          |       t11.b
-          |FROM   (SELECT t1.a,
-          |               t2.b
-          |        FROM t1
-          |        JOIN t2
-          |            ON t1.a = t2.a AND t2.b < 10) t11
-          |       JOIN t3
-          |         ON t11.a = t3.a AND t3.b < 6
+          |SELECT t1.a, t2.b
+          |FROM t1
+          |JOIN t2
+          |ON t1.a = t2.a AND t2.b < 10
           |""".stripMargin)
       checkBloomFilterPredicate(df, true)
     }
