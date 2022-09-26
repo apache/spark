@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import java.math.{MathContext, RoundingMode}
-
 import org.apache.spark.annotation.Unstable
 
 /**
@@ -30,6 +28,7 @@ import org.apache.spark.annotation.Unstable
  */
 @Unstable
 class JDKDecimalOperation extends DecimalOperation {
+  import org.apache.spark.sql.types.Decimal.MATH_CONTEXT
   import org.apache.spark.sql.types.JDKDecimalOperation._
 
   private var decimalVal: BigDecimal = null
@@ -48,10 +47,6 @@ class JDKDecimalOperation extends DecimalOperation {
     this.decimalVal = decimalVal
   }
 
-  def setNullUnderlying(): Unit = {
-    this.decimalVal = null
-  }
-
   def underlyingIsNull: Boolean = decimalVal.eq(null)
 
   def underlyingIsNotNull: Boolean = decimalVal.ne(null)
@@ -62,7 +57,7 @@ class JDKDecimalOperation extends DecimalOperation {
 
   def getAsJavaBigInteger(): java.math.BigInteger = this.decimalVal.underlying().toBigInteger
 
-  def getAsLongValue: Long = decimalVal.longValue
+  def getAsLongValue(): Long = decimalVal.longValue
 
   def rescale(precision: Int, scale: Int, roundMode: BigDecimal.RoundingMode.Value): Boolean = {
     val newDecimalVal = this.decimalVal.setScale(scale, roundMode)
@@ -73,18 +68,24 @@ class JDKDecimalOperation extends DecimalOperation {
     true
   }
 
-  def doCompare(other: DecimalOperation): Int = toBigDecimal.compare(other.toBigDecimal)
+  def compare(other: DecimalOperation): Int = getAsBigDecimal().compare(other.getAsBigDecimal())
+
+  def copyUnderlyingValue(from: DecimalOperation): DecimalOperation = {
+    assert(from.isInstanceOf[JDKDecimalOperation])
+    this.decimalVal = from.asInstanceOf[JDKDecimalOperation].decimalVal
+    this
+  }
 
   def isEqualsZero(): Boolean = {
     assert(underlyingIsNotNull)
     this.decimalVal.signum == 0
   }
 
-  def addUnderlyingValue(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
+  def add(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
     (left, right) => left.add(right)
   }
 
-  def subtractUnderlyingValue(that: DecimalOperation): DecimalOperation =
+  def subtract(that: DecimalOperation): DecimalOperation =
     withNewInstance(this, that) {
       (left, right) => left.subtract(right)
     }
@@ -105,28 +106,23 @@ class JDKDecimalOperation extends DecimalOperation {
     (left, right) => left.divideToIntegralValue(right, MATH_CONTEXT)
   }
 
-  def doNegative: DecimalOperation = {
-    val jDKDecimalOperation = new JDKDecimalOperation()
-    jDKDecimalOperation.set(-this.decimalVal, precision, scale)
-  }
-
-  def copyUnderlyingValue(from: DecimalOperation): Unit = {
-    assert(from.isInstanceOf[JDKDecimalOperation])
-    this.decimalVal = from.asInstanceOf[JDKDecimalOperation].decimalVal
+  def negative: DecimalOperation = {
+    val jDKDecimalOperation = newInstance()
+    jDKDecimalOperation.setUnderlyingValue(-this.decimalVal)
+    jDKDecimalOperation
   }
 }
 
 @Unstable
 object JDKDecimalOperation {
 
-  val MATH_CONTEXT = new MathContext(DecimalType.MAX_PRECISION, RoundingMode.HALF_UP)
-
   def withNewInstance(
       left: JDKDecimalOperation,
       right: DecimalOperation)
       (f: (java.math.BigDecimal, java.math.BigDecimal) => BigDecimal): DecimalOperation = {
-    val newBigDecimal = f(left.toJavaBigDecimal, right.toJavaBigDecimal)
+    val newBigDecimal = f(left.getAsJavaBigDecimal(), right.getAsJavaBigDecimal())
     val jDKDecimalOperation = new JDKDecimalOperation()
-    jDKDecimalOperation.set(newBigDecimal)
+    jDKDecimalOperation.setUnderlyingValue(newBigDecimal)
+    jDKDecimalOperation
   }
 }
