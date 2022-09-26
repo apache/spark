@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationTable, Write}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, MapType, MetadataBuilder, StringType, StructType}
 
 /**
  * Base trait for DataSourceV2 write commands
@@ -1208,6 +1208,27 @@ case class DropIndex(
     ignoreIfNotExists: Boolean) extends UnaryCommand {
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): DropIndex =
+    copy(table = newChild)
+}
+
+object ShowIndex {
+  def getOutputAttrs: Seq[Attribute] = Seq(
+    AttributeReference("Index Name", StringType, nullable = false)(),
+    AttributeReference("Index Type", StringType, nullable = false)(),
+    AttributeReference("Columns", ArrayType.apply(StringType), nullable = false)(),
+    AttributeReference("Column Properties", MapType.apply(StringType, StringType),
+      nullable = false)(),
+    AttributeReference("Properties", MapType.apply(StringType, StringType), nullable = false)())
+}
+
+/**
+ * The logical plan of the SHOW INDEX command.
+ */
+case class ShowIndex(
+    table: LogicalPlan,
+    override val output: Seq[Attribute] = ShowIndex.getOutputAttrs) extends UnaryCommand {
+  override def child: LogicalPlan = table
+  override protected def withNewChildInternal(newChild: LogicalPlan): ShowIndex =
     copy(table = newChild)
 }
 

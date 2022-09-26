@@ -494,6 +494,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           s"DropIndex is not supported in this table ${table.name}.")
       }
 
+    case ShowIndex(ResolvedTable(_, _, table, _), output) =>
+      table match {
+        case s: SupportsIndex =>
+          ShowIndexExec(output, s) :: Nil
+        case _ => throw QueryCompilationErrors.tableIndexNotSupportedError(
+          s"ShowIndex is not supported in this table ${table.name}.")
+      }
+
     case ShowFunctions(ResolvedNamespace(catalog, ns), userScope, systemScope, pattern, output) =>
       ShowFunctionsExec(
         output,

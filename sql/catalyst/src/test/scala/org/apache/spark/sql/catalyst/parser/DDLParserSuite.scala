@@ -1928,6 +1928,14 @@ class DDLParserSuite extends AnalysisTest {
       DropIndex(UnresolvedTable(Seq("a", "b", "c"), "DROP INDEX", None), "i1", true))
   }
 
+  test("SHOW INDEX") {
+    parseCompare("SHOW INDEX ON a.b.c",
+      ShowIndex(UnresolvedTable(Seq("a", "b", "c"), "SHOW INDEX", None), ShowIndex.getOutputAttrs))
+
+    parseCompare("SHOW INDEXES FROM TABLE a.b.c",
+      ShowIndex(UnresolvedTable(Seq("a", "b", "c"), "SHOW INDEX", None), ShowIndex.getOutputAttrs))
+  }
+
   private case class TableSpec(
       name: Seq[String],
       schema: Option[StructType],

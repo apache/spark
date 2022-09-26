@@ -2635,6 +2635,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val tableIndex = indexes2.head
     assert(tableIndex.indexName() == "people_index")
 
+
+    val df = sql(s"SHOW INDEX ON TABLE h2.test.people")
+    checkAnswer(df, Seq(Row("people_index", "INDEX", Array("ID"), Map(), Map())))
+
     sql(s"DROP INDEX people_index ON TABLE h2.test.people")
     assert(jdbcTable.indexExists("people_index") == false)
     val indexes3 = jdbcTable.listIndexes()

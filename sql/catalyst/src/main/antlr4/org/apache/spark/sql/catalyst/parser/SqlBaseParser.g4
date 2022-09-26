@@ -216,6 +216,7 @@ statement
         LEFT_PAREN columns=multipartIdentifierPropertyList RIGHT_PAREN
         (OPTIONS options=propertyList)?                                #createIndex
     | DROP INDEX (IF EXISTS)? identifier ON TABLE? multipartIdentifier #dropIndex
+    | SHOW (INDEX|INDEXES) (FROM|ON|IN) TABLE? multipartIdentifier     #showIndex
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 

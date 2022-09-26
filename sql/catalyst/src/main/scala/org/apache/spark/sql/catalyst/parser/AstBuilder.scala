@@ -4617,6 +4617,18 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       ctx.EXISTS != null)
   }
 
+  /**
+   * Show indexes, returning a [[ShowIndex]] logical plan.
+   * For example:
+   * {{{
+   *   SHOW INDEX ON [TABLE] table_name
+   * }}}
+   */
+  override def visitShowIndex(ctx: ShowIndexContext): LogicalPlan = withOrigin(ctx) {
+    ShowIndex(
+      createUnresolvedTable(ctx.multipartIdentifier(), "SHOW INDEX"))
+  }
+
   private def alterViewTypeMismatchHint: Option[String] = Some("Please use ALTER TABLE instead.")
 
   private def alterTableTypeMismatchHint: Option[String] = Some("Please use ALTER VIEW instead.")
