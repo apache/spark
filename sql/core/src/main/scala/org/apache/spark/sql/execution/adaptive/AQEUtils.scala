@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, HashPartitioning, UnspecifiedDistribution}
-import org.apache.spark.sql.execution.{CollectMetricsExec, FilterExec, ProjectExec, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{CollectMetricsExec, DeserializeToObjectExec, FilterExec, ProjectExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 
 object AQEUtils {
@@ -41,6 +41,7 @@ object AQEUtils {
     case f: FilterExec => getRequiredDistribution(f.child)
     case s: SortExec if !s.global => getRequiredDistribution(s.child)
     case c: CollectMetricsExec => getRequiredDistribution(c.child)
+    case d: DeserializeToObjectExec => getRequiredDistribution(d.child)
     case p: ProjectExec =>
       getRequiredDistribution(p.child).flatMap {
         case h: ClusteredDistribution =>

@@ -23,12 +23,19 @@ ALTER TABLE test_change CHANGE a
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Operation not allowed: ALTER TABLE table CHANGE COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER(line 1, pos 0)
-
-== SQL ==
-ALTER TABLE test_change CHANGE a
-^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "ALTER TABLE table CHANGE COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "ALTER TABLE test_change CHANGE a"
+  } ]
+}
 
 
 -- !query
@@ -52,8 +59,8 @@ org.apache.spark.sql.AnalysisException
   "errorSubClass" : "TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "tableName" : "`spark_catalog`.`default`.`test_change`",
-    "operation" : "RENAME COLUMN"
+    "operation" : "RENAME COLUMN",
+    "tableName" : "`spark_catalog`.`default`.`test_change`"
   }
 }
 
@@ -98,8 +105,8 @@ org.apache.spark.sql.AnalysisException
   "errorSubClass" : "TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "tableName" : "`spark_catalog`.`default`.`test_change`",
-    "operation" : "ALTER COLUMN ... FIRST | ALTER"
+    "operation" : "ALTER COLUMN ... FIRST | ALTER",
+    "tableName" : "`spark_catalog`.`default`.`test_change`"
   }
 }
 
@@ -115,8 +122,8 @@ org.apache.spark.sql.AnalysisException
   "errorSubClass" : "TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "tableName" : "`spark_catalog`.`default`.`test_change`",
-    "operation" : "ALTER COLUMN ... FIRST | ALTER"
+    "operation" : "ALTER COLUMN ... FIRST | ALTER",
+    "tableName" : "`spark_catalog`.`default`.`test_change`"
   }
 }
 

@@ -326,8 +326,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             "DESC TABLE COLUMN", toPrettySQL(nested))
       }
 
-    case DropTable(r: ResolvedTable, ifExists, purge) =>
-      DropTableExec(r.catalog, r.identifier, ifExists, purge, invalidateTableCache(r)) :: Nil
+    case DropTable(r: ResolvedIdentifier, ifExists, purge) =>
+      val invalidateFunc = () => session.sharedState.cacheManager.uncacheTableOrView(
+        session, r.catalog.name() +: r.identifier.namespace() :+ r.identifier.name(),
+        cascade = true)
+      DropTableExec(r.catalog.asTableCatalog, r.identifier, ifExists, purge, invalidateFunc) :: Nil
 
     case _: NoopCommand =>
       LocalTableScanExec(Nil, Nil) :: Nil

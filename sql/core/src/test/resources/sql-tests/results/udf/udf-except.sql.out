@@ -100,12 +100,17 @@ WHERE  udf(t1.v) >= (SELECT   min(udf(t2.v))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Correlated column is not allowed in predicate (CAST(udf(cast(k as string)) AS STRING) = CAST(udf(cast(outer(k#x) as string)) AS STRING)):
-Aggregate [cast(udf(cast(max(cast(udf(cast(v#x as string)) as int)) as string)) as int) AS udf(max(udf(v)))#x]
-+- Filter (cast(udf(cast(k#x as string)) as string) = cast(udf(cast(outer(k#x) as string)) as string))
-   +- SubqueryAlias t2
-      +- View (`t2`, [k#x,v#x])
-         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
-            +- Project [k#x, v#x]
-               +- SubqueryAlias t2
-                  +- LocalRelation [k#x, v#x]
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+  "errorSubClass" : "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
+  "messageParameters" : {
+    "treeNode" : "(cast(udf(cast(k#x as string)) as string) = cast(udf(cast(outer(k#x) as string)) as string))\nAggregate [cast(udf(cast(max(cast(udf(cast(v#x as string)) as int)) as string)) as int) AS udf(max(udf(v)))#x]\n+- Filter (cast(udf(cast(k#x as string)) as string) = cast(udf(cast(outer(k#x) as string)) as string))\n   +- SubqueryAlias t2\n      +- View (`t2`, [k#x,v#x])\n         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]\n            +- Project [k#x, v#x]\n               +- SubqueryAlias t2\n                  +- LocalRelation [k#x, v#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 141,
+    "fragment" : "SELECT   udf(max(udf(t2.v)))\n                FROM     t2\n                WHERE    udf(t2.k) = udf(t1.k)"
+  } ]
+}

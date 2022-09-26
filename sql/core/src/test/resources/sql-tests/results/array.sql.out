@@ -296,7 +296,24 @@ select array_size(map('a', 1, 'b', 2))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array_size(map('a', 1, 'b', 2))' due to data type mismatch: argument 1 requires array type, however, 'map('a', 1, 'b', 2)' is of map<string,int> type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"map(a, 1, b, 2)\"",
+    "inputType" : "\"MAP<STRING, INT>\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"ARRAY\"",
+    "sqlExpr" : "\"array_size(map(a, 1, b, 2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 38,
+    "fragment" : "array_size(map('a', 1, 'b', 2))"
+  } ]
+}
 
 
 -- !query

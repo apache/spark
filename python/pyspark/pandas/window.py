@@ -40,6 +40,9 @@ from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, SPARK_INDEX_NAME_
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.utils import scol_for
 from pyspark.sql.column import Column
+from pyspark.sql.types import (
+    DoubleType,
+)
 from pyspark.sql.window import WindowSpec
 
 
@@ -70,7 +73,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.sum(scol).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(sum)
 
@@ -79,7 +82,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.min(scol).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(min)
 
@@ -88,7 +91,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.max(scol).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(max)
 
@@ -97,16 +100,25 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.mean(scol).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(mean)
+
+    def quantile(self, q: float, accuracy: int = 10000) -> FrameLike:
+        def quantile(scol: Column) -> Column:
+            return F.when(
+                F.row_number().over(self._unbounded_window) >= self._min_periods,
+                F.percentile_approx(scol.cast(DoubleType()), q, accuracy).over(self._window),
+            ).otherwise(F.lit(None))
+
+        return self._apply_as_series_or_frame(quantile)
 
     def std(self) -> FrameLike:
         def std(scol: Column) -> Column:
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.stddev(scol).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(std)
 
@@ -115,7 +127,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.variance(scol).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(var)
 
@@ -124,7 +136,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 SF.skew(scol).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(skew)
 
@@ -133,7 +145,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 SF.kurt(scol).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(kurt)
 
@@ -212,10 +224,15 @@ class Rolling(RollingLike[FrameLike]):
 
         Returns
         -------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.count : Count of the full Series.
-        DataFrame.count : Count of the full DataFrame.
+        Series or DataFrame
+            Return type is the same as the original object with `np.float64` dtype.
+
+        See Also
+        --------
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.count : Count of the full Series.
+        pyspark.pandas.DataFrame.count : Count of the full DataFrame.
 
         Examples
         --------
@@ -267,10 +284,10 @@ class Rolling(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.sum : Reducing sum for Series.
-        DataFrame.sum : Reducing sum for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.sum : Reducing sum for Series.
+        pyspark.pandas.DataFrame.sum : Reducing sum for DataFrame.
 
         Examples
         --------
@@ -345,10 +362,10 @@ class Rolling(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with a Series.
-        DataFrame.rolling : Calling object with a DataFrame.
-        Series.min : Similar method for Series.
-        DataFrame.min : Similar method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with a Series.
+        pyspark.pandas.DataFrame.rolling : Calling object with a DataFrame.
+        pyspark.pandas.Series.min : Similar method for Series.
+        pyspark.pandas.DataFrame.min : Similar method for DataFrame.
 
         Examples
         --------
@@ -422,10 +439,10 @@ class Rolling(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Series rolling.
-        DataFrame.rolling : DataFrame rolling.
-        Series.max : Similar method for Series.
-        DataFrame.max : Similar method for DataFrame.
+        pyspark.pandas.Series.rolling : Series rolling.
+        pyspark.pandas.DataFrame.rolling : DataFrame rolling.
+        pyspark.pandas.Series.max : Similar method for Series.
+        pyspark.pandas.DataFrame.max : Similar method for DataFrame.
 
         Examples
         --------
@@ -500,10 +517,10 @@ class Rolling(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.mean : Equivalent method for Series.
-        DataFrame.mean : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.mean : Equivalent method for Series.
+        pyspark.pandas.DataFrame.mean : Equivalent method for DataFrame.
 
         Examples
         --------
@@ -561,6 +578,101 @@ class Rolling(RollingLike[FrameLike]):
         """
         return super().mean()
 
+    def quantile(self, quantile: float, accuracy: int = 10000) -> FrameLike:
+        """
+        Calculate the rolling quantile of the values.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        quantile : float
+            Value between 0 and 1 providing the quantile to compute.
+        accuracy : int, optional
+            Default accuracy of approximation. Larger value means better accuracy.
+            The relative error can be deduced by 1.0 / accuracy.
+            This is a panda-on-Spark specific parameter.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returned object type is determined by the caller of the rolling
+            calculation.
+
+        Notes
+        -----
+        `quantile` in pandas-on-Spark are using distributed percentile approximation
+        algorithm unlike pandas, the result might different with pandas, also `interpolation`
+        parameter is not supported yet.
+
+        the current implementation of this API uses Spark's Window without
+        specifying partition specification. This leads to move all data into
+        single partition in single machine and could cause serious
+        performance degradation. Avoid this method against very large dataset.
+
+        See Also
+        --------
+        pyspark.pandas.Series.rolling : Calling rolling with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling rolling with DataFrames.
+        pyspark.pandas.Series.quantile : Aggregating quantile for Series.
+        pyspark.pandas.DataFrame.quantile : Aggregating quantile for DataFrame.
+
+        Examples
+        --------
+        >>> s = ps.Series([4, 3, 5, 2, 6])
+        >>> s
+        0    4
+        1    3
+        2    5
+        3    2
+        4    6
+        dtype: int64
+
+        >>> s.rolling(2).quantile(0.5)
+        0    NaN
+        1    3.0
+        2    3.0
+        3    2.0
+        4    2.0
+        dtype: float64
+
+        >>> s.rolling(3).quantile(0.5)
+        0    NaN
+        1    NaN
+        2    4.0
+        3    3.0
+        4    5.0
+        dtype: float64
+
+        For DataFrame, each rolling quantile is computed column-wise.
+
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df
+           A   B
+        0  4  16
+        1  3   9
+        2  5  25
+        3  2   4
+        4  6  36
+
+        >>> df.rolling(2).quantile(0.5)
+             A    B
+        0  NaN  NaN
+        1  3.0  9.0
+        2  3.0  9.0
+        3  2.0  4.0
+        4  2.0  4.0
+
+        >>> df.rolling(3).quantile(0.5)
+             A     B
+        0  NaN   NaN
+        1  NaN   NaN
+        2  4.0  16.0
+        3  3.0   9.0
+        4  5.0  25.0
+        """
+        return super().quantile(quantile, accuracy)
+
     def std(self) -> FrameLike:
         """
         Calculate rolling standard deviation.
@@ -577,10 +689,10 @@ class Rolling(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.std : Equivalent method for Series.
-        DataFrame.std : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.std : Equivalent method for Series.
+        pyspark.pandas.DataFrame.std : Equivalent method for DataFrame.
         numpy.std : Equivalent method for Numpy array.
 
         Examples
@@ -677,10 +789,10 @@ class Rolling(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.std : Equivalent method for Series.
-        DataFrame.std : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.std : Equivalent method for Series.
+        pyspark.pandas.DataFrame.std : Equivalent method for DataFrame.
         numpy.std : Equivalent method for Numpy array.
 
         Examples
@@ -729,10 +841,10 @@ class Rolling(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.var : Equivalent method for Series.
-        DataFrame.var : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.var : Equivalent method for Series.
+        pyspark.pandas.DataFrame.var : Equivalent method for DataFrame.
         numpy.var : Equivalent method for Numpy array.
 
         Examples
@@ -864,7 +976,7 @@ class RollingGroupby(RollingLike[FrameLike]):
             data_fields=[c._internal.data_fields[0] for c in applied],
         )
 
-        return groupby._cleanup_and_return(DataFrame(internal))
+        return groupby._handle_output(DataFrame(internal))
 
     def count(self) -> FrameLike:
         """
@@ -878,10 +990,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.count : Count of the full Series.
-        DataFrame.count : Count of the full DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.count : Count of the full Series.
+        pyspark.pandas.DataFrame.count : Count of the full DataFrame.
 
         Examples
         --------
@@ -932,10 +1044,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.sum : Sum of the full Series.
-        DataFrame.sum : Sum of the full DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.sum : Sum of the full Series.
+        pyspark.pandas.DataFrame.sum : Sum of the full DataFrame.
 
         Examples
         --------
@@ -986,10 +1098,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.min : Min of the full Series.
-        DataFrame.min : Min of the full DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.min : Min of the full Series.
+        pyspark.pandas.DataFrame.min : Min of the full DataFrame.
 
         Examples
         --------
@@ -1040,10 +1152,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.max : Max of the full Series.
-        DataFrame.max : Max of the full DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.max : Max of the full Series.
+        pyspark.pandas.DataFrame.max : Max of the full DataFrame.
 
         Examples
         --------
@@ -1094,10 +1206,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.mean : Mean of the full Series.
-        DataFrame.mean : Mean of the full DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.mean : Mean of the full Series.
+        pyspark.pandas.DataFrame.mean : Mean of the full DataFrame.
 
         Examples
         --------
@@ -1136,6 +1248,77 @@ class RollingGroupby(RollingLike[FrameLike]):
         """
         return super().mean()
 
+    def quantile(self, quantile: float, accuracy: int = 10000) -> FrameLike:
+        """
+        Calculate rolling quantile.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        quantile : float
+            Value between 0 and 1 providing the quantile to compute.
+        accuracy : int, optional
+            Default accuracy of approximation. Larger value means better accuracy.
+            The relative error can be deduced by 1.0 / accuracy.
+            This is a panda-on-Spark specific parameter.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returned object type is determined by the caller of the rolling
+            calculation.
+
+        Notes
+        -----
+        `quantile` in pandas-on-Spark are using distributed percentile approximation
+        algorithm unlike pandas, the result might different with pandas, also `interpolation`
+        parameter is not supported yet.
+
+        See Also
+        --------
+        pyspark.pandas.Series.rolling : Calling rolling with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling rolling with DataFrames.
+        pyspark.pandas.Series.quantile : Aggregating quantile for Series.
+        pyspark.pandas.DataFrame.quantile : Aggregating quantile for DataFrame.
+
+        Examples
+        --------
+        >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
+        >>> s.groupby(s).rolling(3).quantile(0.5).sort_index()
+        2  0     NaN
+           1     NaN
+        3  2     NaN
+           3     NaN
+           4     3.0
+        4  5     NaN
+           6     NaN
+           7     4.0
+           8     4.0
+        5  9     NaN
+           10    NaN
+        dtype: float64
+
+        For DataFrame, each rolling quantile is computed column-wise.
+
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df.groupby(df.A).rolling(2).quantile(0.5).sort_index()
+                 B
+        A
+        2 0    NaN
+          1    4.0
+        3 2    NaN
+          3    9.0
+          4    9.0
+        4 5    NaN
+          6   16.0
+          7   16.0
+          8   16.0
+        5 9    NaN
+          10  25.0
+        """
+        return super().quantile(quantile, accuracy)
+
     def std(self) -> FrameLike:
         """
         Calculate rolling standard deviation.
@@ -1147,10 +1330,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.std : Equivalent method for Series.
-        DataFrame.std : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.std : Equivalent method for Series.
+        pyspark.pandas.DataFrame.std : Equivalent method for DataFrame.
         numpy.std : Equivalent method for Numpy array.
         """
         return super().std()
@@ -1166,10 +1349,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.var : Equivalent method for Series.
-        DataFrame.var : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.var : Equivalent method for Series.
+        pyspark.pandas.DataFrame.var : Equivalent method for DataFrame.
         numpy.var : Equivalent method for Numpy array.
         """
         return super().var()
@@ -1185,10 +1368,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.std : Equivalent method for Series.
-        DataFrame.std : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.std : Equivalent method for Series.
+        pyspark.pandas.DataFrame.std : Equivalent method for DataFrame.
         numpy.std : Equivalent method for Numpy array.
         """
         return super().skew()
@@ -1204,10 +1387,10 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         See Also
         --------
-        Series.rolling : Calling object with Series data.
-        DataFrame.rolling : Calling object with DataFrames.
-        Series.var : Equivalent method for Series.
-        DataFrame.var : Equivalent method for DataFrame.
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.var : Equivalent method for Series.
+        pyspark.pandas.DataFrame.var : Equivalent method for DataFrame.
         numpy.var : Equivalent method for Numpy array.
         """
         return super().kurt()
@@ -1280,10 +1463,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.count : Count of the full Series.
-        DataFrame.count : Count of the full DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.count : Count of the full Series.
+        pyspark.pandas.DataFrame.count : Count of the full DataFrame.
 
         Examples
         --------
@@ -1321,10 +1504,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.sum : Reducing sum for Series.
-        DataFrame.sum : Reducing sum for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.sum : Reducing sum for Series.
+        pyspark.pandas.DataFrame.sum : Reducing sum for DataFrame.
 
         Examples
         --------
@@ -1383,10 +1566,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with a Series.
-        DataFrame.expanding : Calling object with a DataFrame.
-        Series.min : Similar method for Series.
-        DataFrame.min : Similar method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with a Series.
+        pyspark.pandas.DataFrame.expanding : Calling object with a DataFrame.
+        pyspark.pandas.Series.min : Similar method for Series.
+        pyspark.pandas.DataFrame.min : Similar method for DataFrame.
 
         Examples
         --------
@@ -1419,10 +1602,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.max : Similar method for Series.
-        DataFrame.max : Similar method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.max : Similar method for Series.
+        pyspark.pandas.DataFrame.max : Similar method for DataFrame.
 
         Examples
         --------
@@ -1456,10 +1639,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.mean : Equivalent method for Series.
-        DataFrame.mean : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.mean : Equivalent method for Series.
+        pyspark.pandas.DataFrame.mean : Equivalent method for DataFrame.
 
         Examples
         --------
@@ -1483,6 +1666,66 @@ class Expanding(ExpandingLike[FrameLike]):
         """
         return super().mean()
 
+    def quantile(self, quantile: float, accuracy: int = 10000) -> FrameLike:
+        """
+        Calculate the expanding quantile of the values.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returned object type is determined by the caller of the expanding
+            calculation.
+
+        Parameters
+        ----------
+        quantile : float
+            Value between 0 and 1 providing the quantile to compute.
+        accuracy : int, optional
+            Default accuracy of approximation. Larger value means better accuracy.
+            The relative error can be deduced by 1.0 / accuracy.
+            This is a panda-on-Spark specific parameter.
+
+        Notes
+        -----
+        `quantile` in pandas-on-Spark are using distributed percentile approximation
+        algorithm unlike pandas, the result might different with pandas (the result is
+        similar to the interpolation set to `lower`), also `interpolation` parameter is
+        not supported yet.
+
+        the current implementation of this API uses Spark's Window without
+        specifying partition specification. This leads to move all data into
+        single partition in single machine and could cause serious
+        performance degradation. Avoid this method against very large dataset.
+
+        See Also
+        --------
+        pyspark.pandas.Series.expanding : Calling expanding with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling expanding with DataFrames.
+        pyspark.pandas.Series.quantile : Aggregating quantile for Series.
+        pyspark.pandas.DataFrame.quantile : Aggregating quantile for DataFrame.
+
+        Examples
+        --------
+        The below examples will show expanding quantile calculations with window sizes of
+        two and three, respectively.
+
+        >>> s = ps.Series([1, 2, 3, 4])
+        >>> s.expanding(2).quantile(0.5)
+        0    NaN
+        1    1.0
+        2    2.0
+        3    2.0
+        dtype: float64
+
+        >>> s.expanding(3).quantile(0.5)
+        0    NaN
+        1    NaN
+        2    2.0
+        3    2.0
+        dtype: float64
+        """
+        return super().quantile(quantile, accuracy)
+
     def std(self) -> FrameLike:
         """
         Calculate expanding standard deviation.
@@ -1499,10 +1742,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.std : Equivalent method for Series.
-        DataFrame.std : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.std : Equivalent method for Series.
+        pyspark.pandas.DataFrame.std : Equivalent method for DataFrame.
         numpy.std : Equivalent method for Numpy array.
 
         Examples
@@ -1549,10 +1792,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.var : Equivalent method for Series.
-        DataFrame.var : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.var : Equivalent method for Series.
+        pyspark.pandas.DataFrame.var : Equivalent method for DataFrame.
         numpy.var : Equivalent method for Numpy array.
 
         Examples
@@ -1599,10 +1842,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.std : Equivalent method for Series.
-        DataFrame.std : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.std : Equivalent method for Series.
+        pyspark.pandas.DataFrame.std : Equivalent method for DataFrame.
         numpy.std : Equivalent method for Numpy array.
 
         Examples
@@ -1651,10 +1894,10 @@ class Expanding(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.var : Equivalent method for Series.
-        DataFrame.var : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.var : Equivalent method for Series.
+        pyspark.pandas.DataFrame.var : Equivalent method for DataFrame.
         numpy.var : Equivalent method for Numpy array.
 
         Examples
@@ -1721,10 +1964,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.count : Count of the full Series.
-        DataFrame.count : Count of the full DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.count : Count of the full Series.
+        pyspark.pandas.DataFrame.count : Count of the full DataFrame.
 
         Examples
         --------
@@ -1775,10 +2018,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.sum : Reducing sum for Series.
-        DataFrame.sum : Reducing sum for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.sum : Reducing sum for Series.
+        pyspark.pandas.DataFrame.sum : Reducing sum for DataFrame.
 
         Examples
         --------
@@ -1829,10 +2072,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with a Series.
-        DataFrame.expanding : Calling object with a DataFrame.
-        Series.min : Similar method for Series.
-        DataFrame.min : Similar method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with a Series.
+        pyspark.pandas.DataFrame.expanding : Calling object with a DataFrame.
+        pyspark.pandas.Series.min : Similar method for Series.
+        pyspark.pandas.DataFrame.min : Similar method for DataFrame.
 
         Examples
         --------
@@ -1882,10 +2125,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.max : Similar method for Series.
-        DataFrame.max : Similar method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.max : Similar method for Series.
+        pyspark.pandas.DataFrame.max : Similar method for DataFrame.
 
         Examples
         --------
@@ -1936,10 +2179,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.mean : Equivalent method for Series.
-        DataFrame.mean : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.mean : Equivalent method for Series.
+        pyspark.pandas.DataFrame.mean : Equivalent method for DataFrame.
 
         Examples
         --------
@@ -1978,6 +2221,77 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
         """
         return super().mean()
 
+    def quantile(self, quantile: float, accuracy: int = 10000) -> FrameLike:
+        """
+         Calculate the expanding quantile of the values.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        quantile : float
+            Value between 0 and 1 providing the quantile to compute.
+        accuracy : int, optional
+            Default accuracy of approximation. Larger value means better accuracy.
+            The relative error can be deduced by 1.0 / accuracy.
+            This is a panda-on-Spark specific parameter.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returned object type is determined by the caller of the expanding
+            calculation.
+
+        Notes
+        -----
+        `quantile` in pandas-on-Spark are using distributed percentile approximation
+        algorithm unlike pandas, the result might different with pandas, also `interpolation`
+        parameter is not supported yet.
+
+        See Also
+        --------
+        pyspark.pandas.Series.expanding : Calling expanding with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling expanding with DataFrames.
+        pyspark.pandas.Series.quantile : Aggregating quantile for Series.
+        pyspark.pandas.DataFrame.quantile : Aggregating quantile for DataFrame.
+
+        Examples
+        --------
+        >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
+        >>> s.groupby(s).expanding(3).quantile(0.5).sort_index()
+        2  0     NaN
+           1     NaN
+        3  2     NaN
+           3     NaN
+           4     3.0
+        4  5     NaN
+           6     NaN
+           7     4.0
+           8     4.0
+        5  9     NaN
+           10    NaN
+        dtype: float64
+
+        For DataFrame, each expanding quantile is computed column-wise.
+
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df.groupby(df.A).expanding(2).quantile(0.5).sort_index()
+                 B
+        A
+        2 0    NaN
+          1    4.0
+        3 2    NaN
+          3    9.0
+          4    9.0
+        4 5    NaN
+          6   16.0
+          7   16.0
+          8   16.0
+        5 9    NaN
+          10  25.0
+        """
+        return super().quantile(quantile, accuracy)
+
     def std(self) -> FrameLike:
         """
         Calculate expanding standard deviation.
@@ -1990,10 +2304,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding: Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.std : Equivalent method for Series.
-        DataFrame.std : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding: Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.std : Equivalent method for Series.
+        pyspark.pandas.DataFrame.std : Equivalent method for DataFrame.
         numpy.std : Equivalent method for Numpy array.
         """
         return super().std()
@@ -2009,10 +2323,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.var : Equivalent method for Series.
-        DataFrame.var : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.var : Equivalent method for Series.
+        pyspark.pandas.DataFrame.var : Equivalent method for DataFrame.
         numpy.var : Equivalent method for Numpy array.
         """
         return super().var()
@@ -2029,10 +2343,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding: Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.std : Equivalent method for Series.
-        DataFrame.std : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding: Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.std : Equivalent method for Series.
+        pyspark.pandas.DataFrame.std : Equivalent method for DataFrame.
         numpy.std : Equivalent method for Numpy array.
         """
         return super().skew()
@@ -2048,10 +2362,10 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.var : Equivalent method for Series.
-        DataFrame.var : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.var : Equivalent method for Series.
+        pyspark.pandas.DataFrame.var : Equivalent method for DataFrame.
         numpy.var : Equivalent method for Numpy array.
         """
         return super().kurt()
@@ -2139,7 +2453,7 @@ class ExponentialMovingLike(Generic[FrameLike], metaclass=ABCMeta):
                 F.count(F.when(~scol.isNull(), 1).otherwise(None)).over(self._unbounded_window)
                 >= self._min_periods,
                 Column(sql_utils.ewm(scol._jc, unified_alpha, self._ignore_na)).over(self._window),
-            ).otherwise(SF.lit(None))
+            ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(mean)
 
@@ -2203,10 +2517,10 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.mean : Equivalent method for Series.
-        DataFrame.mean : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.mean : Equivalent method for Series.
+        pyspark.pandas.DataFrame.mean : Equivalent method for DataFrame.
 
         Examples
         --------
@@ -2304,10 +2618,10 @@ class ExponentialMovingGroupby(ExponentialMovingLike[FrameLike]):
 
         See Also
         --------
-        Series.expanding : Calling object with Series data.
-        DataFrame.expanding : Calling object with DataFrames.
-        Series.mean : Equivalent method for Series.
-        DataFrame.mean : Equivalent method for DataFrame.
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.mean : Equivalent method for Series.
+        pyspark.pandas.DataFrame.mean : Equivalent method for DataFrame.
 
         Examples
         --------

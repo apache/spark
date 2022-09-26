@@ -20,7 +20,7 @@ package org.apache.spark.sql.errors
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.functions.{grouping, grouping_id, lit, struct, sum, udf}
+import org.apache.spark.sql.functions.{from_json, grouping, grouping_id, lit, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
@@ -128,7 +128,7 @@ class QueryCompilationErrorsSuite
 
   test("INVALID_PANDAS_UDF_PLACEMENT: Using aggregate function with grouped aggregate pandas UDF") {
     import IntegratedUDFTestUtils._
-    assume(shouldTestGroupedAggPandasUDFs)
+    assume(shouldTestPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),
@@ -180,7 +180,7 @@ class QueryCompilationErrorsSuite
 
   test("UNSUPPORTED_FEATURE: Using pandas UDF aggregate expression with pivot") {
     import IntegratedUDFTestUtils._
-    assume(shouldTestGroupedAggPandasUDFs)
+    assume(shouldTestPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),
@@ -413,11 +413,14 @@ class QueryCompilationErrorsSuite
       errorClass = "UNRESOLVED_MAP_KEY",
       errorSubClass = "WITH_SUGGESTION",
       sqlState = None,
-      parameters = Map("columnName" -> "`a`",
+      parameters = Map("objectName" -> "`a`",
         "proposal" ->
           "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`aa`"),
       context = ExpectedContext(
-        fragment = query, start = 0, stop = 55))
+        fragment = "a",
+        start = 9,
+        stop = 9)
+    )
   }
 
   test("UNRESOLVED_COLUMN: SELECT distinct does not work correctly " +
@@ -451,7 +454,9 @@ class QueryCompilationErrorsSuite
         "proposal" -> "`a`, `b`"
       ),
       context = ExpectedContext(
-        fragment = "order by struct.a, struct.b", start = 171, stop = 197)
+        fragment = "struct.a",
+        start = 180,
+        stop = 187)
     )
   }
 
@@ -470,7 +475,9 @@ class QueryCompilationErrorsSuite
           "objectName" -> "`v`.`i`",
           "proposal" -> "`__auto_generated_subquery_name`.`i`"),
         context = ExpectedContext(
-          fragment = query, start = 0, stop = 32))
+          fragment = "v.i",
+          start = 7,
+          stop = 9))
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }
@@ -574,7 +581,8 @@ class QueryCompilationErrorsSuite
       exception = e1,
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
-      parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT>\"",
+      parameters = Map(
+        "schema" -> "\"STRUCT<a: STRING, b: INT>\"",
         "ordinal" -> "3"))
 
     val e2 = intercept[AnalysisException] {
@@ -646,6 +654,16 @@ class QueryCompilationErrorsSuite
       context = ExpectedContext(
         fragment = "LATERAL VIEW array_contains(value, 1) AS explodedvalue",
         start = 62, stop = 115))
+  }
+
+  test("DATATYPE_MISMATCH.INVALID_JSON_SCHEMA: invalid top type passed to from_json()") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("""{"a":1}""").toDF("a").select(from_json($"a", IntegerType)).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("INVALID_JSON_SCHEMA"),
+      parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
   }
 }
 

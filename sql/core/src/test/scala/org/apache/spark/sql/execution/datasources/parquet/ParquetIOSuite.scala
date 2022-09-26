@@ -1164,9 +1164,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName
       )
       withTempPath { dir =>
-        val message = intercept[SparkException] {
+        val message = intercept[RuntimeException] {
           spark.range(0, 1).write.options(extraOptions).parquet(dir.getCanonicalPath)
-        }.getCause.getMessage
+        }.getMessage
         assert(message === "Intentional exception for testing purposes")
       }
     }
@@ -1201,7 +1201,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       withTempPath { dir =>
         val m1 = intercept[SparkException] {
           spark.range(1).coalesce(1).write.options(extraOptions).parquet(dir.getCanonicalPath)
-        }.getCause.getMessage
+        }.getMessage
         assert(m1.contains("Intentional exception for testing purposes"))
       }
 
@@ -1210,7 +1210,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           val df = spark.range(1).select($"id" as Symbol("a"), $"id" as Symbol("b"))
             .coalesce(1)
           df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
-        }.getCause.getMessage
+        }.getMessage
         assert(m2.contains("Intentional exception for testing purposes"))
       }
     }

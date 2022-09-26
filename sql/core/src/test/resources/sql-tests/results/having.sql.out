@@ -39,16 +39,16 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(v = array(1))\"",
     "left" : "\"INT\"",
-    "right" : "\"ARRAY<INT>\""
+    "right" : "\"ARRAY<INT>\"",
+    "sqlExpr" : "\"(v = array(1))\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 44,
     "stopIndex" : 55,
-    "fragment" : "SELECT count(k) FROM hav GROUP BY v HAVING v = array(1)"
+    "fragment" : "v = array(1)"
   } ]
 }
 

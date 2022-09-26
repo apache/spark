@@ -18,7 +18,6 @@
 """
 A wrapper for GroupedData to behave similar to pandas GroupBy.
 """
-
 from abc import ABCMeta, abstractmethod
 import inspect
 from collections import defaultdict, namedtuple
@@ -63,6 +62,7 @@ from pyspark.sql.types import (
     StructField,
     StructType,
     StringType,
+    IntegralType,
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
@@ -150,7 +150,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def _cleanup_and_return(self, psdf: DataFrame) -> FrameLike:
+    def _handle_output(self, psdf: DataFrame) -> FrameLike:
         pass
 
     # TODO: Series support is not implemented yet.
@@ -604,10 +604,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             Return type determined by caller of GroupBy object.
 
         Notes
-        -------
+        -----
         `quantile` in pandas-on-Spark are using distributed percentile approximation
         algorithm unlike pandas, the result might different with pandas, also
-        `interpolation` parameters are not supported yet.
+        `interpolation` parameter is not supported yet.
 
         See Also
         --------
@@ -1055,6 +1055,106 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         return self._prepare_return(DataFrame(internal))
 
+    def prod(self, numeric_only: Optional[bool] = True, min_count: int = 0) -> FrameLike:
+        """
+        Compute prod of groups.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        numeric_only : bool, default False
+            Include only float, int, boolean columns. If None, will attempt to use
+            everything, then use only numeric data.
+
+        min_count: int, default 0
+            The required number of valid values to perform the operation.
+            If fewer than min_count non-NA values are present the result will be NA.
+
+        Returns
+        -------
+        Series or DataFrame
+            Computed prod of values within each group.
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> df = ps.DataFrame(
+        ...     {
+        ...         "A": [1, 1, 2, 1, 2],
+        ...         "B": [np.nan, 2, 3, 4, 5],
+        ...         "C": [1, 2, 1, 1, 2],
+        ...         "D": [True, False, True, False, True],
+        ...     }
+        ... )
+
+        Groupby one column and return the prod of the remaining columns in
+        each group.
+
+        >>> df.groupby('A').prod().sort_index()
+             B  C  D
+        A
+        1  8.0  2  0
+        2  15.0 2  1
+
+        >>> df.groupby('A').prod(min_count=3).sort_index()
+             B  C   D
+        A
+        1  NaN  2.0  0.0
+        2  NaN NaN  NaN
+        """
+
+        self._validate_agg_columns(numeric_only=numeric_only, function_name="prod")
+
+        groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
+        internal, agg_columns, sdf = self._prepare_reduce(
+            groupkey_names=groupkey_names,
+            accepted_spark_types=(NumericType, BooleanType),
+            bool_to_numeric=True,
+        )
+
+        psdf: DataFrame = DataFrame(internal)
+        if len(psdf._internal.column_labels) > 0:
+
+            stat_exprs = []
+            for label in psdf._internal.column_labels:
+                psser = psdf._psser_for(label)
+                column = psser._dtype_op.nan_to_null(psser).spark.column
+                data_type = psser.spark.data_type
+                aggregating = (
+                    F.product(column).cast("long")
+                    if isinstance(data_type, IntegralType)
+                    else F.product(column)
+                )
+
+                if min_count > 0:
+                    prod_scol = F.when(
+                        F.count(F.when(~F.isnull(column), F.lit(0))) < min_count, F.lit(None)
+                    ).otherwise(aggregating)
+                else:
+                    prod_scol = aggregating
+
+                stat_exprs.append(prod_scol.alias(psser._internal.data_spark_column_names[0]))
+
+            sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
+
+        else:
+            sdf = sdf.select(*groupkey_names).distinct()
+
+        internal = internal.copy(
+            spark_frame=sdf,
+            index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
+            data_spark_columns=[scol_for(sdf, col) for col in internal.data_spark_column_names],
+            data_fields=None,
+        )
+
+        return self._prepare_return(DataFrame(internal))
+
     def all(self, skipna: bool = True) -> FrameLike:
         """
         Returns True if all values in the group are truthful, else False.
@@ -1113,12 +1213,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         def sfun(scol: Column, scol_type: DataType) -> Column:
             if isinstance(scol_type, NumericType) or skipna:
                 # np.nan takes no effect to the result; None takes no effect if `skipna`
-                all_col = F.min(F.coalesce(scol.cast("boolean"), SF.lit(True)))
+                all_col = F.min(F.coalesce(scol.cast("boolean"), F.lit(True)))
             else:
                 # Take None as False when not `skipna`
-                all_col = F.min(
-                    F.when(scol.isNull(), SF.lit(False)).otherwise(scol.cast("boolean"))
-                )
+                all_col = F.min(F.when(scol.isNull(), F.lit(False)).otherwise(scol.cast("boolean")))
             return all_col
 
         if len(psdf._internal.column_labels) > 0:
@@ -1182,7 +1280,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         5  False
         """
         return self._reduce_for_stat_function(
-            lambda col: F.max(F.coalesce(col.cast("boolean"), SF.lit(False)))
+            lambda col: F.max(F.coalesce(col.cast("boolean"), F.lit(False)))
         )
 
     # TODO: groupby multiply columns should be implemented.
@@ -1372,7 +1470,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         ret = (
             self._groupkeys[0]
             .rename()
-            .spark.transform(lambda _: SF.lit(0))
+            .spark.transform(lambda _: F.lit(0))
             ._cum(F.count, True, part_cols=self._groupkeys_scols, ascending=ascending)
             - 1
         )
@@ -2212,7 +2310,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 for psser in self._agg_columns
             ],
         )
-        return self._cleanup_and_return(DataFrame(internal))
+        return self._handle_output(DataFrame(internal))
 
     # TODO: add axis parameter
     def idxmin(self, skipna: bool = True) -> FrameLike:
@@ -2295,7 +2393,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 for psser in self._agg_columns
             ],
         )
-        return self._cleanup_and_return(DataFrame(internal))
+        return self._handle_output(DataFrame(internal))
 
     def fillna(
         self,
@@ -2554,7 +2652,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             )
 
         internal = psdf._internal.with_new_sdf(sdf)
-        return self._cleanup_and_return(DataFrame(internal).drop(groupkey_labels, axis=1))
+        return self._handle_output(DataFrame(internal).drop(groupkey_labels, axis=1))
 
     def head(self, n: int = 5) -> FrameLike:
         """
@@ -2897,7 +2995,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 )
             )
             if len(pdf) <= limit:
-                return self._cleanup_and_return(psdf_from_pandas)
+                return self._handle_output(psdf_from_pandas)
 
             sdf = GroupBy._spark_group_map_apply(
                 psdf,
@@ -2947,7 +3045,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 spark_frame=sdf, index_spark_columns=None, data_fields=data_fields
             )
 
-        return self._cleanup_and_return(DataFrame(internal))
+        return self._handle_output(DataFrame(internal))
 
     def nunique(self, dropna: bool = True) -> FrameLike:
         """
@@ -3179,7 +3277,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 )
         if not is_list_like(name):
             name = [name]
-        cond = SF.lit(True)
+        cond = F.lit(True)
         for groupkey, item in zip(groupkeys, name):
             scol = groupkey.spark.column
             cond = cond & (scol == item)
@@ -3206,7 +3304,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if internal.spark_frame.head() is None:
             raise KeyError(name)
 
-        return self._cleanup_and_return(DataFrame(internal))
+        return self._handle_output(DataFrame(internal))
 
     def median(self, numeric_only: Optional[bool] = True, accuracy: int = 10000) -> FrameLike:
         """
@@ -3299,10 +3397,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             if not numeric_only:
                 if has_non_numeric:
                     warnings.warn(
-                        "Dropping invalid columns in DataFrameGroupBy.mean is deprecated. "
+                        "Dropping invalid columns in DataFrameGroupBy.%s is deprecated. "
                         "In a future version, a TypeError will be raised. "
                         "Before calling .%s, select only columns which should be "
-                        "valid for the function." % function_name,
+                        "valid for the function." % (function_name, function_name),
                         FutureWarning,
                     )
 
@@ -3369,7 +3467,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 psdf = psdf.reset_index(level=should_drop_index, drop=True)
             if len(should_drop_index) < len(self._groupkeys):
                 psdf = psdf.reset_index()
-        return self._cleanup_and_return(psdf)
+        return self._handle_output(psdf)
 
     def _prepare_reduce(
         self,
@@ -3609,7 +3707,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
             internal = internal.resolved_copy
         return DataFrame(internal)
 
-    def _cleanup_and_return(self, psdf: DataFrame) -> DataFrame:
+    def _handle_output(self, psdf: DataFrame) -> DataFrame:
         return psdf
 
     # TODO: Implement 'percentiles', 'include', and 'exclude' arguments.
@@ -3761,8 +3859,8 @@ class SeriesGroupBy(GroupBy[Series]):
         else:
             return psser.copy()
 
-    def _cleanup_and_return(self, psdf: DataFrame) -> Series:
-        return first_series(psdf).rename().rename(self._psser.name)
+    def _handle_output(self, psdf: DataFrame) -> Series:
+        return first_series(psdf).rename(self._psser.name)
 
     def agg(self, *args: Any, **kwargs: Any) -> None:
         return MissingPandasLikeSeriesGroupBy.agg(self, *args, **kwargs)

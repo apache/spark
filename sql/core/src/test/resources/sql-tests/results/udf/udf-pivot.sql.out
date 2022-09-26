@@ -240,9 +240,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 62,
     "stopIndex" : 118,
-    "fragment" : "SELECT * FROM (\n  SELECT course, earnings FROM courseSales\n)\nPIVOT (\n  udf(sum(earnings))\n  FOR year IN (2012, 2013)\n)"
+    "fragment" : "PIVOT (\n  udf(sum(earnings))\n  FOR year IN (2012, 2013)\n)"
   } ]
 }
 
@@ -329,9 +329,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "PIVOT_VALUE_DATA_TYPE_MISMATCH",
   "sqlState" : "42000",
   "messageParameters" : {
+    "pivotType" : "struct<course:string,year:int>",
     "value" : "dotNET",
-    "valueType" : "string",
-    "pivotType" : "struct<course:string,year:int>"
+    "valueType" : "string"
   }
 }
 
@@ -357,9 +357,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 80,
-    "fragment" : "SELECT * FROM courseSales\nPIVOT (\n  udf(sum(earnings))\n  FOR year IN (s, 2013)\n)"
+    "startIndex" : 71,
+    "stopIndex" : 71,
+    "fragment" : "s"
   } ]
 }
 

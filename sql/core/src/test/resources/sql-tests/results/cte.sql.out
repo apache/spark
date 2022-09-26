@@ -148,15 +148,19 @@ SELECT * FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-CTE definition can't have duplicate names: 't'.(line 1, pos 0)
-
-== SQL ==
-WITH
-^^^
-  t(x) AS (SELECT 1),
-  t(x) AS (SELECT 2)
-SELECT * FROM t
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0038",
+  "messageParameters" : {
+    "duplicateNames" : "'t'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 63,
+    "fragment" : "WITH\n  t(x) AS (SELECT 1),\n  t(x) AS (SELECT 2)\nSELECT * FROM t"
+  } ]
+}
 
 
 -- !query
