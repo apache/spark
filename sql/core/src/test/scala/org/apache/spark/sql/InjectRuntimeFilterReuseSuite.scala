@@ -159,7 +159,7 @@ abstract class InjectRuntimeFilterReuseSuite
       case _ => fail(s"Invalid child node found in\n$plan")
     }
   }
-  
+
   def checkSubqueryForReuseExchange(reuseExpected: Boolean,
                                     plan: SparkPlan, rootPlan: SparkPlan): Unit = {
     plan match {
