@@ -100,6 +100,7 @@
     <module>connector/kafka-0-10-assembly</module>
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
+    <module>connect</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -677,7 +678,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>7.5.3</version>
+        <version>7.6.0</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
