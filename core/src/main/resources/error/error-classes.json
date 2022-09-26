@@ -118,6 +118,11 @@
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
         ]
       },
+      "FRAME_LESS_OFFSET_WITHOUT_FOLDABLE" : {
+        "message" : [
+          "Offset expression <offset> must be a literal."
+        ]
+      },
       "INVALID_JSON_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."
@@ -138,9 +143,54 @@
           "all arguments must be strings."
         ]
       },
+      "RANGE_FRAME_INVALID_TYPE" : {
+        "message" : [
+          "The data type <orderSpecType> used in the order specification does not match the data type <valueBoundaryType> which is used in the range frame."
+        ]
+      },
+      "RANGE_FRAME_MULTI_ORDER" : {
+        "message" : [
+          "A range window frame with value boundaries cannot be used in a window specification with multiple order by expressions: <orderSpec>."
+        ]
+      },
+      "RANGE_FRAME_WITHOUT_ORDER" : {
+        "message" : [
+          "A range window frame cannot be used in an unordered window specification."
+        ]
+      },
+      "SPECIFIED_WINDOW_FRAME_DIFF_TYPES" : {
+        "message" : [
+          "Window frame bounds <lower> and <upper> do not have the same type: <lowerType> <> <upperType>."
+        ]
+      },
+      "SPECIFIED_WINDOW_FRAME_INVALID_BOUND" : {
+        "message" : [
+          "Window frame upper bound <upper> does not follow the lower bound <lower>."
+        ]
+      },
+      "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE" : {
+        "message" : [
+          "The data type of the <location> bound <exprType> does not match the expected data type <expectedType>."
+        ]
+      },
+      "SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE" : {
+        "message" : [
+          "Window frame <location> bound <expression> is not a literal."
+        ]
+      },
+      "SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON" : {
+        "message" : [
+          "The lower bound of a window frame must be <comparison> to the upper bound."
+        ]
+      },
       "UNEXPECTED_INPUT_TYPE" : {
         "message" : [
           "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
+        ]
+      },
+      "UNSPECIFIED_FRAME" : {
+        "message" : [
+          "Cannot use an UnspecifiedFrame. This should have been converted during analysis."
         ]
       },
       "WRONG_NUM_PARAMS" : {

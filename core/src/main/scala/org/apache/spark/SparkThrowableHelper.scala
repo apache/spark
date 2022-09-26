@@ -102,7 +102,8 @@ private[spark] object SparkThrowableHelper {
             messageParameters.asScala
               .toMap // To remove duplicates
               .toSeq.sortBy(_._1)
-              .foreach { case (name, value) => g.writeStringField(name, value) }
+              .foreach { case (name, value) =>
+                g.writeStringField(name, value.replaceAll("#\\d+", "#x")) }
             g.writeEndObject()
           }
           val queryContext = e.getQueryContext
