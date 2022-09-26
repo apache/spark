@@ -6,11 +6,11 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_311-b11 on Mac OS X 10.16
 Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
 Decimal For bigDecimal and smallDecimal:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Operator +                                        22014          23073        1497          6.1         164.0       1.0X
-Operator -                                        17268          17701         612          7.8         128.7       1.3X
-Operator *                                        16852          17367         727          8.0         125.6       1.3X
-Operator /                                        32835          33526         977          4.1         244.6       0.7X
-Operator %                                        16530          17394        1223          8.1         123.2       1.3X
+Operator +                                        17969          18788        1159          7.5         133.9       1.0X
+Operator -                                        17755          22272        1981          7.6         132.3       1.0X
+Operator *                                        16503          17196         980          8.1         123.0       1.1X
+Operator /                                        33914          35547        2310          4.0         252.7       0.5X
+Operator %                                        15099          15873        1095          8.9         112.5       1.2X
 
 
 ================================================================================================
@@ -21,11 +21,11 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_311-b11 on Mac OS X 10.16
 Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
 Decimal For smallDecimal and bigDecimal:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Operator +                                        19122          19999        1241          7.0         142.5       1.0X
-Operator -                                        19393          19717         457          6.9         144.5       1.0X
-Operator *                                        16727          18360        2310          8.0         124.6       1.1X
-Operator /                                        43874          44201         463          3.1         326.9       0.4X
-Operator %                                        78813          79159         490          1.7         587.2       0.2X
+Operator +                                        18722          18770          68          7.2         139.5       1.0X
+Operator -                                        17709          17775          95          7.6         131.9       1.1X
+Operator *                                        15323          15388          93          8.8         114.2       1.2X
+Operator /                                        40692          40700          11          3.3         303.2       0.5X
+Operator %                                        74394          77301         NaN          1.8         554.3       0.3X
 
 
 ================================================================================================
@@ -36,11 +36,11 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_311-b11 on Mac OS X 10.16
 Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
 Decimal For smallDecimal and smallDecimal:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-Operator +                                          3275           3636         511         41.0          24.4       1.0X
-Operator -                                          4450           4481          44         30.2          33.2       0.7X
-Operator *                                         17246          17401         219          7.8         128.5       0.2X
-Operator /                                         33267          33775         719          4.0         247.9       0.1X
-Operator %                                         29593          34189        2316          4.5         220.5       0.1X
+Operator +                                          3732           3763          45         36.0          27.8       1.0X
+Operator -                                          3369           3376           9         39.8          25.1       1.1X
+Operator *                                         16184          16779         841          8.3         120.6       0.2X
+Operator /                                         33275          33616         483          4.0         247.9       0.1X
+Operator %                                         28803          29009         291          4.7         214.6       0.1X
 
 
 ================================================================================================
@@ -51,10 +51,10 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_311-b11 on Mac OS X 10.16
 Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
 Decimal For bigDecimal and bigDecimal:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Operator +                                         2966           2972           9         45.3          22.1       1.0X
-Operator -                                         3948           4007          83         34.0          29.4       0.8X
-Operator *                                        15428          15457          40          8.7         114.9       0.2X
-Operator /                                        35010          37789         NaN          3.8         260.8       0.1X
-Operator %                                        30766          37613        1240          4.4         229.2       0.1X
+Operator +                                         3819           3959         197         35.1          28.5       1.0X
+Operator -                                         3379           3450         100         39.7          25.2       1.1X
+Operator *                                        16278          16808         749          8.2         121.3       0.2X
+Operator /                                        33721          34187         659          4.0         251.2       0.1X
+Operator %                                        28911          29671        1075          4.6         215.4       0.1X
 
 

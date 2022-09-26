@@ -36,16 +36,16 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   private var _decimalOperation: DecimalOperation = null
 
-  def precision: Int = _decimalOperation.precision
-
-  def scale: Int = _decimalOperation.scale
-
   def decimalOperation: DecimalOperation = {
     if (_decimalOperation.eq(null)) {
       _decimalOperation = DecimalOperation.createDecimalOperation()
     }
     _decimalOperation
   }
+
+  def precision: Int = decimalOperation.precision
+
+  def scale: Int = decimalOperation.scale
 
   /**
    * Set this Decimal to the given Long. Will have precision 20 and scale 0.
@@ -116,13 +116,16 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   /**
    * Set this Decimal to the given Decimal value.
    */
-  def set(decimal: Decimal): Decimal = set(decimal.decimalOperation)
+  def set(decimal: Decimal): Decimal = {
+    this._decimalOperation = decimal.decimalOperation.clone()
+    this
+  }
 
   /**
    * Set this Decimal to the given DecimalOperation value.
    */
-  def set(decimalOperation: DecimalOperation): Decimal = {
-    this._decimalOperation = decimalOperation.clone()
+  private[sql] def set(decimalOperation: DecimalOperation): Decimal = {
+    this._decimalOperation = decimalOperation
     this
   }
 
@@ -226,7 +229,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       roundMode: BigDecimal.RoundingMode.Value): Boolean =
     decimalOperation.changePrecision(precision, scale, roundMode)
 
-  override def clone(): Decimal = new Decimal().set(this.decimalOperation)
+  override def clone(): Decimal = new Decimal().set(this)
 
   override def compare(other: Decimal): Int = decimalOperation.compare(other.decimalOperation)
 
