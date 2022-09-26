@@ -1401,8 +1401,10 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
     def test_min(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.min())
+        self._test_stat_func(lambda groupby_obj: groupby_obj.min(min_count=2))
         self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=None))
         self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=True))
+        self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=True, min_count=2))
 
     def test_max(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.max())
