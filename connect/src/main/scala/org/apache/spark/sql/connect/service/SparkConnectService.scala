@@ -189,7 +189,7 @@ object SparkConnectService {
    */
   def startGRPCService(): Unit = {
     val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", true)
-    val port = 15002
+    val port = SparkEnv.get.conf.getInt("spark.connect.grpc.binding.port", 15002)
     val sb = NettyServerBuilder
       .forPort(port)
       .addService(new SparkConnectService(debugMode))
