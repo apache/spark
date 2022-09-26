@@ -25,6 +25,10 @@ import com.fasterxml.jackson.module.scala.ClassTagExtensions
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.fasterxml.jackson.module.scala.JavaTypeable
 
+/**
+ * `JacksonUtils` is a helper class used to delegate the methods of
+ *  Jackson `ObjectMapper` and use a singleton `ObjectMapper`.
+ */
 object JacksonUtils {
 
   private val mapper = {
