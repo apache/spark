@@ -20,9 +20,6 @@ package org.apache.spark.sql.execution.streaming
 import java.sql.Date
 import java.util.concurrent.TimeUnit
 
-import org.json4s._
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.api.java.Optional
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, NoTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
@@ -30,6 +27,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.GroupStateImpl._
 import org.apache.spark.sql.streaming.{GroupStateTimeout, TestGroupState}
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -181,25 +179,31 @@ private[sql] class GroupStateImpl[S] private(
     }
   }
 
-  private[sql] def json(): String = compact(render(new JObject(
+  private[sql] def json(): String = {
+    val obj = JacksonUtils.createObjectNode
     // Constructor
-    "optionalValue" -> JNull :: // Note that optionalValue will be manually serialized.
-    "batchProcessingTimeMs" -> JLong(batchProcessingTimeMs) ::
-    "eventTimeWatermarkMs" -> JLong(eventTimeWatermarkMs) ::
-    "timeoutConf" -> JString(Utils.stripDollars(Utils.getSimpleName(timeoutConf.getClass))) ::
-    "hasTimedOut" -> JBool(hasTimedOut) ::
-    "watermarkPresent" -> JBool(watermarkPresent) ::
+    obj.putNull("optionalValue")
+    obj.put("batchProcessingTimeMs", batchProcessingTimeMs)
+    obj.put("eventTimeWatermarkMs", eventTimeWatermarkMs)
+    obj.put("timeoutConf", Utils.stripDollars(Utils.getSimpleName(timeoutConf.getClass)))
+    obj.put("hasTimedOut", hasTimedOut)
+    obj.put("watermarkPresent", watermarkPresent)
 
     // Internal state
-    "defined" -> JBool(defined) ::
-    "updated" -> JBool(updated) ::
-    "removed" -> JBool(removed) ::
-    "timeoutTimestamp" -> JLong(timeoutTimestamp) :: Nil
-  )))
+    obj.put("defined", defined)
+    obj.put("updated", updated)
+    obj.put("removed", removed)
+    obj.put("timeoutTimestamp", timeoutTimestamp)
+
+    JacksonUtils.writeValueAsString(obj)
+  }
 }
 
 
 private[sql] object GroupStateImpl {
+
+  import com.fasterxml.jackson.databind.JsonNode
+
   // Value used represent the lack of valid timestamp as a long
   val NO_TIMESTAMP = -1L
 
@@ -245,10 +249,8 @@ private[sql] object GroupStateImpl {
     case _ => throw new IllegalStateException("Invalid string for GroupStateTimeout: " + clazz)
   }
 
-  def fromJson[S](value: Option[S], json: JValue): GroupStateImpl[S] = {
-    implicit val formats = org.json4s.DefaultFormats
-
-    val hmap = json.extract[Map[String, Any]]
+  def fromJson[S](value: Option[S], json: JsonNode): GroupStateImpl[S] = {
+    val hmap = JacksonUtils.treeToValue[Map[String, Any]](json)
 
     // Constructor
     val newGroupState = new GroupStateImpl[S](
