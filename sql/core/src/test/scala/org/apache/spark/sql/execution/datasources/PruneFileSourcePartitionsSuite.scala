@@ -140,7 +140,7 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
     }
   }
 
-  test("SPARK-XXXXX: don't push down non-deterministic filters") {
+  test("SPARK-40565: don't push down non-deterministic filters") {
     // Force datasource v2 for parquet
     withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
       withTempPath { dir =>
