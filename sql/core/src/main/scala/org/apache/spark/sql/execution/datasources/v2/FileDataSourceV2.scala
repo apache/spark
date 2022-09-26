@@ -20,7 +20,6 @@ import java.util
 
 import scala.collection.JavaConverters._
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -32,7 +31,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{JacksonUtils, Utils}
 
 /**
  * A base interface for data source v2 implementations of the built-in file-based data sources.
@@ -50,9 +49,8 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   lazy val sparkSession = SparkSession.active
 
   protected def getPaths(map: CaseInsensitiveStringMap): Seq[String] = {
-    val objectMapper = new ObjectMapper()
     val paths = Option(map.get("paths")).map { pathStr =>
-      objectMapper.readValue(pathStr, classOf[Array[String]]).toSeq
+      JacksonUtils.readValue[Seq[String]](pathStr)
     }.getOrElse(Seq.empty)
     paths ++ Option(map.get("path")).toSeq
   }

@@ -50,6 +50,7 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       sparkConf: SparkConf,
       defaultServiceAccountToken: Option[File],
       defaultServiceAccountCaCert: Option[File]): KubernetesClient = {
+    import org.apache.spark.util.JacksonUtils
     val oauthTokenFileConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_FILE_CONF_SUFFIX"
     val oauthTokenConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_CONF_SUFFIX"
     val oauthTokenFile = sparkConf.getOption(oauthTokenFileConf)
@@ -113,8 +114,7 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
         builder.dispatcher(dispatcher)
       }
     }
-    logDebug("Kubernetes client config: " +
-      new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(config))
+    logDebug(s"Kubernetes client config: ${JacksonUtils.writeValuePrettyAsString(config)}")
     new DefaultKubernetesClient(factoryWithCustomDispatcher.createHttpClient(config), config)
   }
 

@@ -24,9 +24,6 @@ import java.util.UUID
 
 import scala.collection.mutable.HashMap
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
-
 import org.apache.spark.SparkConf
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorExitCode
@@ -335,14 +332,12 @@ private[spark] class DiskBlockManager(
   }
 
   def getMergeDirectoryAndAttemptIDJsonString(): String = {
+    import org.apache.spark.util.JacksonUtils
     val mergedMetaMap: HashMap[String, String] = new HashMap[String, String]()
     mergedMetaMap.put(MERGE_DIR_KEY, mergeDirName)
     conf.get(config.APP_ATTEMPT_ID).foreach(
       attemptId => mergedMetaMap.put(ATTEMPT_ID_KEY, attemptId))
-    val mapper = new ObjectMapper()
-    mapper.registerModule(DefaultScalaModule)
-    val jsonString = mapper.writeValueAsString(mergedMetaMap)
-    jsonString
+    JacksonUtils.writeValueAsString(mergedMetaMap)
   }
 
   private def addShutdownHook(): AnyRef = {
