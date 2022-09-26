@@ -1049,6 +1049,10 @@ def read_excel(
         Duplicate columns will be specified as 'X', 'X.1', ...'X.N', rather than
         'X'...'X'. Passing in False will cause data to be overwritten if there
         are duplicate names in the columns.
+        .. note:: This process is not case sensitive. If two columns are spelled the
+        same with different casing then an ambiguity error will arise. Specifying
+        `spark.conf.set("spark.sql.caseSensitive","true")` will resolve this issue.
+
     **kwds : optional
         Optional keyword arguments can be passed to ``TextFileReader``.
 
