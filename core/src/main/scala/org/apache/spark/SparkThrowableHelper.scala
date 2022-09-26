@@ -181,7 +181,7 @@ private[spark] object SparkThrowableHelper {
           if (format == STANDARD) {
             val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
               throw SparkException.internalError(s"Cannot find the error class '$errorClass'"))
-            g.writeStringField("message", errorInfo.messageFormat)
+            g.writeStringField("messageFormat", errorInfo.messageFormat)
           }
           val sqlState = e.getSqlState
           if (sqlState != null) g.writeStringField("sqlState", sqlState)

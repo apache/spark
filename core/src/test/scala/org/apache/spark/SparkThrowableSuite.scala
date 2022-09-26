@@ -280,7 +280,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     assert(SparkThrowableHelper.getMessage(e, STANDARD) ===
       """{
         |  "errorClass" : "DIVIDE_BY_ZERO",
-        |  "message" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
+        |  "messageFormat" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
         |  "sqlState" : "22012",
         |  "messageParameters" : {
         |    "config" : "CONFIG"
@@ -302,7 +302,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       """{
         |  "errorClass" : "UNSUPPORTED_SAVE_MODE",
         |  "errorSubClass" : "EXISTENT_PATH",
-        |  "message" : "The save mode <saveMode> is not supported for:",
+        |  "messageFormat" : "The save mode <saveMode> is not supported for:",
         |  "messageParameters" : {
         |    "saveMode" : "UNSUPPORTED_MODE"
         |  }
