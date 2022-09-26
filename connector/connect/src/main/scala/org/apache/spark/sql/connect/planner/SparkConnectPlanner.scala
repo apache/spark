@@ -24,7 +24,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, plans}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.types._
@@ -60,6 +60,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
       case proto.Relation.RelTypeCase.AGGREGATE => transformAggregate(rel.getAggregate)
       case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
+      case proto.Relation.RelTypeCase.LOCAL_RELATION => transformLocalRelation(rel.getLocalRelation)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -68,6 +69,16 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
     session.sessionState.sqlParser.parsePlan(sql.getQuery)
+  }
+
+  private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
+    val attributes = rel.getAttributesList.asScala.map(transformAttribute(_))
+    new org.apache.spark.sql.catalyst.plans.logical.LocalRelation(attributes)
+  }
+
+  private def transformAttribute(exp: proto.Expression.Attribute): Attribute = {
+    // TODO: use data type from the proto.
+    AttributeReference(exp.getName, IntegerType)()
   }
 
   private def transformReadRel(
@@ -111,8 +122,12 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     }
   }
 
-  private def transformUnresolvedExpression(exp: proto.Expression): UnresolvedAttribute = {
-    UnresolvedAttribute(exp.getUnresolvedAttribute.getPartsList.asScala.toSeq)
+  private def transformUnresolvedExpression(exp: proto.Expression): Expression = {
+    if (exp.getUnresolvedAttribute.getPartsCount == 1) {
+      Literal.create(exp.getUnresolvedAttribute.getParts(0), StringType)
+    } else {
+      UnresolvedAttribute(exp.getUnresolvedAttribute.getPartsList.asScala.toSeq)
+    }
   }
 
   private def transformExpression(exp: proto.Expression): Expression = {
