@@ -454,6 +454,7 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.std(ddof=2), pser.std(ddof=2), almost=True)
         self.assert_eq(psser.sem(), pser.sem(), almost=True)
         self.assert_eq(psser.sem(ddof=0), pser.sem(ddof=0), almost=True)
+        self.assert_eq(psser.sem(ddof=2), pser.sem(ddof=2), almost=True)
 
     def test_stats_on_non_numeric_columns_should_be_discarded_if_numeric_only_is_true(self):
         pdf = pd.DataFrame({"i": [0, 1, 2], "b": [False, False, True], "s": ["x", "y", "z"]})
@@ -504,6 +505,11 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(
             psdf.sem(ddof=0, numeric_only=True),
             pdf.sem(ddof=0, numeric_only=True),
+            check_exact=False,
+        )
+        self.assert_eq(
+            psdf.sem(ddof=2, numeric_only=True),
+            pdf.sem(ddof=2, numeric_only=True),
             check_exact=False,
         )
 

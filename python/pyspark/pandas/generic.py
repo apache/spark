@@ -2187,7 +2187,8 @@ class Frame(object, metaclass=ABCMeta):
         >>> psser.sem(ddof=0)
         0.47140452079103173
         """
-        assert ddof in (0, 1)
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
 
         axis = validate_axis(axis)
 
@@ -2205,10 +2206,7 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            if ddof == 0:
-                return F.stddev_pop(spark_column)
-            else:
-                return F.stddev_samp(spark_column)
+            return SF.stddev(spark_column, ddof)
 
         def sem(psser: "Series") -> Column:
             return std(psser) / F.sqrt(Frame._count_expr(psser))
