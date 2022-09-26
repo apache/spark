@@ -92,7 +92,7 @@ private[spark] object SparkThrowableHelper {
           if (errorSubClass != null) g.writeStringField("errorSubClass", errorSubClass)
           if (format == STANDARD) {
             val finalClass = errorClass + Option(errorSubClass).map("." + _).getOrElse("")
-            g.writeStringField("message", errorReader.getMessageTemplate(finalClass))
+            g.writeStringField("messageTemplate", errorReader.getMessageTemplate(finalClass))
           }
           val sqlState = e.getSqlState
           if (sqlState != null) g.writeStringField("sqlState", sqlState)

@@ -128,7 +128,7 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("Message format invariants") {
     val messageFormats = errorReader.errorInfoMap
       .filterKeys(!_.startsWith("_LEGACY_ERROR_TEMP_"))
-      .values.toSeq.flatMap { i => Seq(i.messageFormat) }
+      .values.toSeq.flatMap { i => Seq(i.messageTemplate) }
     checkCondition(messageFormats, s => s != null)
     checkIfUnique(messageFormats)
   }
@@ -282,7 +282,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     assert(SparkThrowableHelper.getMessage(e, STANDARD) ===
       """{
         |  "errorClass" : "DIVIDE_BY_ZERO",
-        |  "message" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
+        |  "messageTemplate" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
         |  "sqlState" : "22012",
         |  "messageParameters" : {
         |    "config" : "CONFIG"
@@ -304,7 +304,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       """{
         |  "errorClass" : "UNSUPPORTED_SAVE_MODE",
         |  "errorSubClass" : "EXISTENT_PATH",
-        |  "message" : "The save mode <saveMode> is not supported for: an existent path.",
+        |  "messageTemplate" : "The save mode <saveMode> is not supported for: an existent path.",
         |  "messageParameters" : {
         |    "saveMode" : "UNSUPPORTED_MODE"
         |  }
