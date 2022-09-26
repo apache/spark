@@ -2934,9 +2934,9 @@ abstract class JsonSuite
           exp.write.option("timestampNTZFormat", pattern).json(path.getAbsolutePath)
         }
         assert(
-          err.getCause.getMessage.contains("Unsupported field: OffsetSeconds") ||
-          err.getCause.getMessage.contains("Unable to extract value") ||
-          err.getCause.getMessage.contains("Unable to extract ZoneId"))
+          err.getMessage.contains("Unsupported field: OffsetSeconds") ||
+          err.getMessage.contains("Unable to extract value") ||
+          err.getMessage.contains("Unable to extract ZoneId"))
       }
     }
   }

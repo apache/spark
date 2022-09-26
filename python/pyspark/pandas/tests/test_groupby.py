@@ -1433,6 +1433,16 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         with self.assertRaisesRegex(TypeError, "Invalid index"):
             self.psdf.groupby("B").nth("x")
 
+    def test_prod(self):
+        for n in [0, 1, 2, 128, -1, -2, -128]:
+            self._test_stat_func(lambda groupby_obj: groupby_obj.prod(min_count=n))
+            self._test_stat_func(
+                lambda groupby_obj: groupby_obj.prod(numeric_only=None, min_count=n)
+            )
+            self._test_stat_func(
+                lambda groupby_obj: groupby_obj.prod(numeric_only=True, min_count=n)
+            )
+
     def test_cumcount(self):
         pdf = pd.DataFrame(
             {

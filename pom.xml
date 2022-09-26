@@ -100,6 +100,7 @@
     <module>connector/kafka-0-10-assembly</module>
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
+    <module>connect</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -128,7 +129,7 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.2.1</kafka.version>
+    <kafka.version>3.2.3</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.3</parquet.version>
@@ -677,7 +678,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>7.5.3</version>
+        <version>7.6.0</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -797,7 +798,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.2-3</version>
+        <version>1.5.2-4</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>

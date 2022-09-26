@@ -987,7 +987,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         return lmask & rmask
 
-    def cov(self, other: "Series", min_periods: Optional[int] = None) -> float:
+    def cov(self, other: "Series", min_periods: Optional[int] = None, ddof: int = 1) -> float:
         """
         Compute covariance with Series, excluding missing values.
 
@@ -999,6 +999,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Series with which to compute the covariance.
         min_periods : int, optional
             Minimum number of observations needed to have a valid result.
+        ddof : int, default 1
+            Delta degrees of freedom. The divisor used in calculations
+            is ``N - ddof``, where ``N`` represents the number of elements.
+
+            .. versionadded:: 3.4.0
 
         Returns
         -------
@@ -1008,12 +1013,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
         >>> from pyspark.pandas.config import set_option, reset_option
-        >>> set_option("compute.ops_on_diff_frames", True)
         >>> s1 = ps.Series([0.90010907, 0.13484424, 0.62036035])
         >>> s2 = ps.Series([0.12528585, 0.26962463, 0.51111198])
-        >>> s1.cov(s2)
-        -0.016857626527158744
-        >>> reset_option("compute.ops_on_diff_frames")
+        >>> with ps.option_context("compute.ops_on_diff_frames", True):
+        ...     s1.cov(s2)
+        -0.016857...
+        >>> with ps.option_context("compute.ops_on_diff_frames", True):
+        ...     s1.cov(s2, ddof=2)
+        -0.033715...
         """
         if not isinstance(other, Series):
             raise TypeError("unsupported type: %s" % type(other))
@@ -1021,6 +1028,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise TypeError("unsupported dtype: %s" % self.dtype)
         if not np.issubdtype(other.dtype, np.number):  # type: ignore[arg-type]
             raise TypeError("unsupported dtype: %s" % other.dtype)
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
 
         min_periods = 1 if min_periods is None else min_periods
 
@@ -1035,7 +1044,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if len(sdf.head(min_periods)) < min_periods:
             return np.nan
         else:
-            return sdf.select(F.covar_samp(*sdf.columns)).head(1)[0][0]
+            sdf = sdf.select(SF.covar(F.col(sdf.columns[0]), F.col(sdf.columns[1]), ddof))
+            return sdf.head(1)[0][0]
 
     # TODO: NaN and None when ``arg`` is an empty dict
     # TODO: Support ps.Series ``arg``
@@ -6599,6 +6609,80 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             column_label_names=[None],
         )
         return DataFrame(internal)
+
+    # TODO(SPARK-40553): 1, support array-like 'value'; 2, add parameter 'sorter'
+    def searchsorted(self, value: Any, side: str = "left") -> int:
+        """
+        Find indices where elements should be inserted to maintain order.
+
+        Find the indices into a sorted Series self such that, if the corresponding elements
+        in value were inserted before the indices, the order of self would be preserved.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        value : scalar
+            Values to insert into self.
+        side : {‘left’, ‘right’}, optional
+            If ‘left’, the index of the first suitable location found is given.
+            If ‘right’, return the last such index. If there is no suitable index,
+            return either 0 or N (where N is the length of self).
+
+        Returns
+        -------
+        int
+            insertion point
+
+        Notes
+        -----
+        The Series must be monotonically sorted, otherwise wrong locations will likely be returned.
+
+        Examples
+        --------
+        >>> ser = ps.Series([1, 2, 2, 3])
+        >>> ser.searchsorted(0)
+        0
+        >>> ser.searchsorted(1)
+        0
+        >>> ser.searchsorted(2)
+        1
+        >>> ser.searchsorted(5)
+        4
+        >>> ser.searchsorted(0, side="right")
+        0
+        >>> ser.searchsorted(1, side="right")
+        1
+        >>> ser.searchsorted(2, side="right")
+        3
+        >>> ser.searchsorted(5, side="right")
+        4
+        """
+        if side not in ["left", "right"]:
+            raise ValueError(f"Invalid side {side}")
+
+        sdf = self._internal.spark_frame
+        index_col_name = verify_temp_column_name(sdf, "__search_sorted_index_col__")
+        value_col_name = verify_temp_column_name(sdf, "__search_sorted_value_col__")
+        sdf = InternalFrame.attach_distributed_sequence_column(
+            sdf.select(self.spark.column.alias(value_col_name)), index_col_name
+        )
+
+        if side == "left":
+            results = sdf.select(
+                F.min(F.when(F.lit(value) <= F.col(value_col_name), F.col(index_col_name))),
+                F.count(F.lit(0)),
+            ).take(1)
+        else:
+            results = sdf.select(
+                F.min(F.when(F.lit(value) < F.col(value_col_name), F.col(index_col_name))),
+                F.count(F.lit(0)),
+            ).take(1)
+
+        if len(results) == 0:
+            return 0
+        else:
+            return results[0][1] if results[0][0] is None else results[0][0]
 
     def align(
         self,

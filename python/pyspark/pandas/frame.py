@@ -9012,7 +9012,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Minimum number of observations required per pair of columns
             to have a valid result.
         ddof : int, default 1
-            Delta degrees of freedom.  The divisor used in calculations
+            Delta degrees of freedom. The divisor used in calculations
             is ``N - ddof``, where ``N`` represents the number of elements.
 
             .. versionadded:: 3.4.0

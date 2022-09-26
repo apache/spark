@@ -403,7 +403,21 @@ select schema_of_json(null)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'schema_of_json(NULL)' due to data type mismatch: The input json should be a foldable string expression and not null; however, got NULL.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "NON_FOLDABLE_INPUT",
+  "messageParameters" : {
+    "inputExpr" : "\"NULL\"",
+    "sqlExpr" : "\"schema_of_json(NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 27,
+    "fragment" : "schema_of_json(null)"
+  } ]
+}
 
 
 -- !query
@@ -420,7 +434,21 @@ SELECT schema_of_json(jsonField) FROM jsonTable
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'schema_of_json(jsontable.jsonField)' due to data type mismatch: The input json should be a foldable string expression and not null; however, got jsontable.jsonField.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "NON_FOLDABLE_INPUT",
+  "messageParameters" : {
+    "inputExpr" : "\"jsonField\"",
+    "sqlExpr" : "\"schema_of_json(jsonField)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "schema_of_json(jsonField)"
+  } ]
+}
 
 
 -- !query
