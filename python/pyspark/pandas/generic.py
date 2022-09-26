@@ -2139,6 +2139,9 @@ class Frame(object, metaclass=ABCMeta):
         ddof : int, default 1
             Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
             where N represents the number of elements.
+
+            .. versionchanged:: 3.4.0
+               Supported including arbitary integers.
         numeric_only : bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
@@ -2164,6 +2167,11 @@ class Frame(object, metaclass=ABCMeta):
         >>> psdf.sem(ddof=0)
         a    0.471405
         b    0.471405
+        dtype: float64
+
+        >>> psdf.sem(ddof=2)
+        a    0.816497
+        b    0.816497
         dtype: float64
 
         >>> psdf.sem(axis=1)
