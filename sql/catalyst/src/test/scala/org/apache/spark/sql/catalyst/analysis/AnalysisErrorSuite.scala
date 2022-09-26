@@ -340,7 +340,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "unresolved star expansion in max",
     testRelation2.groupBy($"a")(sum(UnresolvedStar(None))),
-    "Invalid usage of '*'" :: "in expression 'sum'" :: Nil)
+    "Invalid usage of '*' in expression 'sum'." :: Nil)
 
   errorTest(
     "sorting by unsupported column types",

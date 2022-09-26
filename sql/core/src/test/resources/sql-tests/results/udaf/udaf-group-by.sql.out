@@ -146,7 +146,20 @@ SELECT udaf(DISTINCT b), udaf(DISTINCT b, c) FROM (SELECT 1 AS a, 2 AS b, 3 AS c
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Function pythonudf does not support DISTINCT; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1023",
+  "messageParameters" : {
+    "prettyName" : "pythonudf",
+    "syntax" : "DISTINCT"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "udaf(DISTINCT b)"
+  } ]
+}
 
 
 -- !query

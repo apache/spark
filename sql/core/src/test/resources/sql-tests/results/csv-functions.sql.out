@@ -52,7 +52,7 @@ select from_csv('1', 'a INT', named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Must use a map() function for options; line 1 pos 7
+Must use a map() function for options.; line 1 pos 7
 
 
 -- !query
@@ -61,7 +61,7 @@ select from_csv('1', 'a INT', map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-A type of keys and values in map() must be string, but got map<string,int>; line 1 pos 7
+A type of keys and values in map() must be string, but got map<string,int>.; line 1 pos 7
 
 
 -- !query
@@ -70,7 +70,21 @@ select from_csv()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function from_csv. Expected: one of 2 and 3; Found: 0; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "messageParameters" : {
+    "actualNumber" : "0",
+    "expectedInfo" : "one of 2 and 3",
+    "name" : "from_csv"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "from_csv()"
+  } ]
+}
 
 
 -- !query
@@ -173,7 +187,7 @@ select to_csv(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Must use a map() function for options; line 1 pos 7
+Must use a map() function for options.; line 1 pos 7
 
 
 -- !query
@@ -182,4 +196,4 @@ select to_csv(named_struct('a', 1, 'b', 2), map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-A type of keys and values in map() must be string, but got map<string,int>; line 1 pos 7
+A type of keys and values in map() must be string, but got map<string,int>.; line 1 pos 7
