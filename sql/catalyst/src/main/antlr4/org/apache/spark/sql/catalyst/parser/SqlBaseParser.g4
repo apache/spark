@@ -666,7 +666,7 @@ unpivotNameColumn
     ;
 
 unpivotColumn
-    : identifier
+    : multipartIdentifier
     ;
 
 lateralView

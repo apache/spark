@@ -1177,7 +1177,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create an Unpivot column as Attribute.
    */
   override def visitUnpivotColumn(ctx: UnpivotColumnContext): Attribute = withOrigin(ctx) {
-    UnresolvedAttribute.quotedString(ctx.identifier.getText)
+    UnresolvedAttribute(visitMultipartIdentifier(ctx.multipartIdentifier))
   }
 
   /**
