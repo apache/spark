@@ -43,7 +43,7 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.streaming.state import GroupStateTimeout, GroupState
 import pandas as pd
-from typing import Iterator
+from typing import Iterable, Any
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
@@ -83,8 +83,8 @@ if __name__ == "__main__":
     ]
 
     def func(
-        key: tuple, pdf_iter: Iterator[pd.DataFrame], state: GroupState
-    ) -> Iterator[pd.DataFrame]:
+        key: Any, pdf_iter: Iterable[pd.DataFrame], state: GroupState
+    ) -> Iterable[pd.DataFrame]:
         if state.hasTimedOut:
             count, start, end = state.get
             state.remove()
