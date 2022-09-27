@@ -16,9 +16,7 @@
 #
 
 r"""
- Counts words in UTF8 encoded, '\n' delimited text received from the network over a
- sliding window of configurable duration. Each line from the network is tagged
- with a timestamp that is used to determine the windows into which it falls.
+ split lines into words, group by words as key and use the state per key to track session of each key.
 
  Usage: structured_network_wordcount_windowed.py <hostname> <port>
  <hostname> and <port> describe the TCP server that Structured Streaming
