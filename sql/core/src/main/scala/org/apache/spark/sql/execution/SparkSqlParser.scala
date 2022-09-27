@@ -161,14 +161,19 @@ class SparkSqlAstBuilder extends AstBuilder {
         SetCommand(Some(key -> Some(ZoneOffset.ofTotalSeconds(seconds).toString)))
       }
     } else if (ctx.timezone != null) {
-      ctx.timezone.getType match {
-        case SqlBaseParser.LOCAL =>
-          SetCommand(Some(key -> Some(TimeZone.getDefault.getID)))
-        case _ =>
-          SetCommand(Some(key -> Some(string(ctx.STRING))))
-      }
+      SetCommand(Some(key -> Some(visitTimezone(ctx.timezone()))))
     } else {
       throw QueryParsingErrors.invalidTimeZoneDisplacementValueError(ctx)
+    }
+  }
+
+  override def visitTimezone (ctx: TimezoneContext): String = {
+    if (ctx.STRING() != null) {
+      string(ctx.STRING)
+    } else if (ctx.DOUBLEQUOTED_STRING() != null) {
+      string(ctx.DOUBLEQUOTED_STRING())
+    } else {
+      TimeZone.getDefault.getID
     }
   }
 
@@ -176,7 +181,11 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create a [[RefreshResource]] logical plan.
    */
   override def visitRefreshResource(ctx: RefreshResourceContext): LogicalPlan = withOrigin(ctx) {
-    val path = if (ctx.STRING != null) string(ctx.STRING) else extractUnquotedResourcePath(ctx)
+    val path = if (ctx.stringLit != null) {
+      string(visitStringLit(ctx.stringLit))
+    } else {
+      extractUnquotedResourcePath(ctx)
+    }
     RefreshResource(path)
   }
 
@@ -258,8 +267,8 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitSetCatalog(ctx: SetCatalogContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.identifier() != null) {
       SetCatalogCommand(ctx.identifier().getText)
-    } else if (ctx.STRING() != null) {
-      SetCatalogCommand(string(ctx.STRING()))
+    } else if (ctx.stringLit() != null) {
+      SetCatalogCommand(string(visitStringLit(ctx.stringLit())))
     } else {
       throw new IllegalStateException("Invalid catalog name")
     }
@@ -269,7 +278,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create a [[ShowCatalogsCommand]] logical command.
    */
   override def visitShowCatalogs(ctx: ShowCatalogsContext) : LogicalPlan = withOrigin(ctx) {
-    ShowCatalogsCommand(Option(ctx.pattern).map(string))
+    ShowCatalogsCommand(Option(ctx.pattern).map(x => string(visitStringLit(x))))
   }
 
   /**
@@ -534,7 +543,8 @@ class SparkSqlAstBuilder extends AstBuilder {
       val resourceType = resource.identifier.getText.toLowerCase(Locale.ROOT)
       resourceType match {
         case "jar" | "file" | "archive" =>
-          FunctionResource(FunctionResourceType.fromString(resourceType), string(resource.STRING))
+          FunctionResource(FunctionResourceType.fromString(resourceType),
+            string(visitStringLit(resource.stringLit())))
         case other =>
           operationNotAllowed(s"CREATE FUNCTION with resource type '$resourceType'", ctx)
       }
@@ -548,7 +558,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     if (ctx.TEMPORARY == null) {
       CreateFunction(
         UnresolvedIdentifier(functionIdentifier),
-        string(ctx.className),
+        string(visitStringLit(ctx.className)),
         resources.toSeq,
         ctx.EXISTS != null,
         ctx.REPLACE != null)
@@ -566,7 +576,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
       CreateFunctionCommand(
         FunctionIdentifier(functionIdentifier.last),
-        string(ctx.className),
+        string(visitStringLit(ctx.className)),
         resources.toSeq,
         true,
         ctx.EXISTS != null,
@@ -788,7 +798,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
     var storage = DataSource.buildStorageFormatFromOptions(options)
 
-    val path = Option(ctx.path).map(string).getOrElse("")
+    val path = Option(ctx.path).map(x => string(visitStringLit(x))).getOrElse("")
 
     if (!(path.isEmpty ^ storage.locationUri.isEmpty)) {
       throw QueryParsingErrors.directoryPathAndOptionsPathBothSpecifiedError(ctx)
@@ -833,7 +843,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       ctx: InsertOverwriteHiveDirContext): InsertDirParams = withOrigin(ctx) {
     val serdeInfo = getSerdeInfo(
       Option(ctx.rowFormat).toSeq, Option(ctx.createFileFormat).toSeq, ctx)
-    val path = string(ctx.path)
+    val path = string(visitStringLit(ctx.path))
     // The path field is required
     if (path.isEmpty) {
       operationNotAllowed("INSERT OVERWRITE DIRECTORY must be accompanied by path", ctx)
