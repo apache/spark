@@ -4,7 +4,7 @@ py4j
 # PySpark dependencies (optional)
 numpy
 pyarrow
-pandas
+pandas<=1.5.0
 scipy
 plotly
 mlflow>=1.0
