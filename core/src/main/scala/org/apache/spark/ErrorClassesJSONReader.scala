@@ -74,12 +74,12 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     assert(errorInfo.subClass.isDefined == subErrorClass.isDefined)
 
     if (subErrorClass.isEmpty) {
-      errorInfo.messageFormat
+      errorInfo.messageTemplate
     } else {
       val errorSubInfo = errorInfo.subClass.get.getOrElse(
         subErrorClass.get,
         throw SparkException.internalError(s"Cannot find sub error class '$errorClass'"))
-      errorInfo.messageFormat + " " + errorSubInfo.messageFormat
+      errorInfo.messageTemplate + " " + errorSubInfo.messageTemplate
     }
   }
 
@@ -102,7 +102,7 @@ private case class ErrorInfo(
     sqlState: Option[String]) {
   // For compatibility with multi-line error messages
   @JsonIgnore
-  val messageFormat: String = message.mkString("\n")
+  val messageTemplate: String = message.mkString("\n")
 }
 
 /**
@@ -114,5 +114,5 @@ private case class ErrorInfo(
 private case class ErrorSubInfo(message: Seq[String]) {
   // For compatibility with multi-line error messages
   @JsonIgnore
-  val messageFormat: String = message.mkString("\n")
+  val messageTemplate: String = message.mkString("\n")
 }

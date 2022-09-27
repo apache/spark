@@ -643,7 +643,8 @@ object Murmur3HashFunction extends InterpretedHashFunction {
  * A xxHash64 64-bit hash expression.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2, ...) - Returns a 64-bit hash value of the arguments.",
+  usage = "_FUNC_(expr1, expr2, ...) - Returns a 64-bit hash value of the arguments. " +
+    "Hash seed is 42.",
   examples = """
     Examples:
       > SELECT _FUNC_('Spark', array(123), 2);
