@@ -24,6 +24,9 @@ import java.util.UUID
 
 import scala.collection.mutable.HashMap
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
+
 import org.apache.spark.SparkConf
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorExitCode
@@ -32,7 +35,7 @@ import org.apache.spark.network.shuffle.ExecutorDiskUtils
 import org.apache.spark.storage.DiskBlockManager.ATTEMPT_ID_KEY
 import org.apache.spark.storage.DiskBlockManager.MERGE_DIR_KEY
 import org.apache.spark.storage.DiskBlockManager.MERGE_DIRECTORY
-import org.apache.spark.util.{JacksonUtils, ShutdownHookManager, Utils}
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
@@ -336,7 +339,10 @@ private[spark] class DiskBlockManager(
     mergedMetaMap.put(MERGE_DIR_KEY, mergeDirName)
     conf.get(config.APP_ATTEMPT_ID).foreach(
       attemptId => mergedMetaMap.put(ATTEMPT_ID_KEY, attemptId))
-    JacksonUtils.writeValueAsString(mergedMetaMap)
+    val mapper = new ObjectMapper()
+    mapper.registerModule(DefaultScalaModule)
+    val jsonString = mapper.writeValueAsString(mergedMetaMap)
+    jsonString
   }
 
   private def addShutdownHook(): AnyRef = {

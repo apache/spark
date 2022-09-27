@@ -32,9 +32,10 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.JacksonUtils
 
 private[sql] object DataSourceV2Utils extends Logging {
+
+  import org.apache.spark.util.Utils
 
   /**
    * Helper method that extracts and transforms session configs into k/v pairs, the k/v pairs will
@@ -149,6 +150,7 @@ private[sql] object DataSourceV2Utils extends Logging {
     }
   }
 
+  private lazy val objectMapper = Utils.createObjectMapper
   private def getOptionsWithPaths(
       extraOptions: CaseInsensitiveMap[String],
       paths: String*): CaseInsensitiveMap[String] = {
@@ -157,7 +159,7 @@ private[sql] object DataSourceV2Utils extends Logging {
     } else if (paths.length == 1) {
       extraOptions + ("path" -> paths.head)
     } else {
-      extraOptions + ("paths" -> JacksonUtils.writeValueAsString(paths.toArray))
+      extraOptions + ("paths" -> objectMapper.writeValueAsString(paths.toArray))
     }
   }
 }

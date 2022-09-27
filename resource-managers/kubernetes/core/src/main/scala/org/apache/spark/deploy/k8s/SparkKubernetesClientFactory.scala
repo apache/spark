@@ -18,6 +18,7 @@ package org.apache.spark.deploy.k8s
 
 import java.io.File
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient, KubernetesClient}
@@ -32,7 +33,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
-import org.apache.spark.util.{JacksonUtils, ThreadUtils}
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Spark-opinionated builder for Kubernetes clients. It uses a prefix plus common suffixes to
@@ -112,7 +113,8 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
         builder.dispatcher(dispatcher)
       }
     }
-    logDebug(s"Kubernetes client config: ${JacksonUtils.writeValuePrettyAsString(config)}")
+    logDebug("Kubernetes client config: " +
+      new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(config))
     new DefaultKubernetesClient(factoryWithCustomDispatcher.createHttpClient(config), config)
   }
 

@@ -24,10 +24,13 @@ import java.util.Calendar.{DAY_OF_MONTH, DST_OFFSET, ERA, HOUR_OF_DAY, MINUTE, M
 
 import scala.collection.mutable.AnyRefMap
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
+
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
-import org.apache.spark.util.{JacksonUtils, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * The collection of functions for rebasing days and microseconds from/to the hybrid calendar
@@ -265,12 +268,14 @@ object RebaseDateTime {
     micros + rebaseInfo.diffs(i)
   }
 
+  private lazy val mapper = Utils.createObjectMapper
+
   // Loads rebasing info from an JSON file. JSON records in the files should conform to
   // `JsonRebaseRecord`. AnyRefMap is used here instead of Scala's immutable map because
   // it is 2 times faster in DateTimeRebaseBenchmark.
   private[sql] def loadRebaseRecords(fileName: String): AnyRefMap[String, RebaseInfo] = {
     val file = Utils.getSparkClassLoader.getResource(fileName)
-    val jsonRebaseRecords = JacksonUtils.readValue[Seq[JsonRebaseRecord]](file)
+    val jsonRebaseRecords = mapper.readValue[Seq[JsonRebaseRecord]](file)
     val anyRefMap = new AnyRefMap[String, RebaseInfo]((3 * jsonRebaseRecords.size) / 2)
     jsonRebaseRecords.foreach { jsonRecord =>
       val rebaseInfo = RebaseInfo(jsonRecord.switches, jsonRecord.diffs)

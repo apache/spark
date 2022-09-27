@@ -23,10 +23,11 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable.SortedMap
 
 import com.fasterxml.jackson.annotation.JsonIgnore
+import com.fasterxml.jackson.core.`type`.TypeReference
 import org.apache.commons.text.StringSubstitutor
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.JacksonUtils
+import org.apache.spark.util.Utils
 
 /**
  * A reader to load error information from one or more JSON files. Note that, if one error appears
@@ -37,8 +38,10 @@ import org.apache.spark.util.JacksonUtils
 class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
   assert(jsonFileURLs.nonEmpty)
 
+  private lazy val mapper = Utils.createObjectMapper
+
   private def readAsMap(url: URL): SortedMap[String, ErrorInfo] = {
-    JacksonUtils.readValue[SortedMap[String, ErrorInfo]](url)
+    mapper.readValue[SortedMap[String, ErrorInfo]](url)
   }
 
   // Exposed for testing
