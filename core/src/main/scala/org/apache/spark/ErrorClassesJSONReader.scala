@@ -38,7 +38,7 @@ import org.apache.spark.util.Utils
 class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
   assert(jsonFileURLs.nonEmpty)
 
-  private lazy val mapper = Utils.createObjectMapper
+  private lazy val mapper = Utils.withScalaModuleMapper
 
   private def readAsMap(url: URL): SortedMap[String, ErrorInfo] = {
     mapper.readValue[SortedMap[String, ErrorInfo]](url)

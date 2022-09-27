@@ -113,7 +113,7 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
 }
 
 private object FileDataSourceV2 {
-  private lazy val objectMapper = Utils.createObjectMapper
+  private lazy val objectMapper = Utils.withScalaModuleMapper
   def readPathsToSeq(paths: String): Seq[String] =
     objectMapper.readValue[Seq[String]](paths)
 }

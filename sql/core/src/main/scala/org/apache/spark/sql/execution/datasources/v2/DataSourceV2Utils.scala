@@ -149,7 +149,7 @@ private[sql] object DataSourceV2Utils extends Logging {
     }
   }
 
-  private lazy val objectMapper = Utils.createObjectMapper
+  private lazy val objectMapper = Utils.withScalaModuleMapper
   private def getOptionsWithPaths(
       extraOptions: CaseInsensitiveMap[String],
       paths: String*): CaseInsensitiveMap[String] = {
