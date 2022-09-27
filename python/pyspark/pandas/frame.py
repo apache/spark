@@ -5266,12 +5266,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         **options: "OptionalPrimitiveType",
     ) -> None:
         """
-        Write the DataFrame out as a ORC file or directory.
+        Write a DataFrame to the ORC format.
 
         Parameters
         ----------
         path : str, required
-            Path to write to.
+            Path to write to. It's required in pandas API on Spark whereas optional in pandas.
         mode : str
             Python write mode, default 'w'.
 
@@ -5317,6 +5317,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     '%s/to_orc/foo.orc' % path,
         ...     mode = 'overwrite',
         ...     partition_cols=['date', 'country'])
+
+        Notes
+        -----
+        pandas-on-Spark writes ORC files into the directory, `path`, and writes
+        multiple `part-...` files in the directory unlike pandas.
+        pandas-on-Spark respects HDFS's property such as 'fs.default.name'.
         """
         if index_col is None:
             log_advice(
