@@ -643,15 +643,22 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             bool_to_numeric=True,
         )
 
-    def min(self, numeric_only: Optional[bool] = False) -> FrameLike:
+    def min(self, numeric_only: Optional[bool] = False, min_count: int = -1) -> FrameLike:
         """
         Compute min of group values.
+
+        .. versionadded:: 3.3.0
 
         Parameters
         ----------
         numeric_only : bool, default False
             Include only float, int, boolean columns. If None, will attempt to use
             everything, then use only numeric data.
+
+            .. versionadded:: 3.4.0
+        min_count : bool, default -1
+            The required number of valid values to perform the operation. If fewer
+            than min_count non-NA values are present the result will be NA.
 
             .. versionadded:: 3.4.0
 
@@ -663,7 +670,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Examples
         --------
         >>> df = ps.DataFrame({"A": [1, 2, 1, 2], "B": [True, False, False, True],
-        ...                    "C": [3, 4, 3, 4], "D": ["a", "b", "b", "a"]})
+        ...                    "C": [3, 4, 3, 4], "D": ["a", "a", "b", "a"]})
         >>> df.groupby("A").min().sort_index()
                B  C  D
         A
@@ -677,9 +684,37 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         A
         1  False  3
         2  False  4
+
+        >>> df.groupby("D").min().sort_index()
+           A      B  C
+        D
+        a  1  False  3
+        b  1  False  3
+
+
+        >>> df.groupby("D").min(min_count=3).sort_index()
+             A      B    C
+        D
+        a  1.0  False  3.0
+        b  NaN   None  NaN
         """
+        if not isinstance(min_count, int):
+            raise TypeError("min_count must be integer")
+
+        if min_count > 0:
+
+            def min(col: Column) -> Column:
+                return F.when(
+                    F.count(F.when(~F.isnull(col), F.lit(0))) < min_count, F.lit(None)
+                ).otherwise(F.min(col))
+
+        else:
+
+            def min(col: Column) -> Column:
+                return F.min(col)
+
         return self._reduce_for_stat_function(
-            F.min, accepted_spark_types=(NumericType, BooleanType) if numeric_only else None
+            min, accepted_spark_types=(NumericType, BooleanType) if numeric_only else None
         )
 
     # TODO: sync the doc.
@@ -687,11 +722,16 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         Compute standard deviation of groups, excluding missing values.
 
+        .. versionadded:: 3.3.0
+
         Parameters
         ----------
         ddof : int, default 1
             Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
             where N represents the number of elements.
+
+            .. versionchanged:: 3.4.0
+               Supported including arbitary integers.
 
         Examples
         --------
@@ -709,7 +749,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
-        assert ddof in (0, 1)
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
 
         # Raise the TypeError when all aggregation columns are of unaccepted data types
         any_accepted = any(
@@ -721,8 +762,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 "Unaccepted data types of aggregation columns; numeric or bool expected."
             )
 
+        def std(col: Column) -> Column:
+            return SF.stddev(col, ddof)
+
         return self._reduce_for_stat_function(
-            F.stddev_pop if ddof == 0 else F.stddev_samp,
+            std,
             accepted_spark_types=(NumericType,),
             bool_to_numeric=True,
         )
@@ -756,11 +800,16 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         Compute variance of groups, excluding missing values.
 
+        .. versionadded:: 3.3.0
+
         Parameters
         ----------
         ddof : int, default 1
             Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
             where N represents the number of elements.
+
+            .. versionchanged:: 3.4.0
+               Supported including arbitary integers.
 
         Examples
         --------
@@ -778,10 +827,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
-        assert ddof in (0, 1)
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
+
+        def var(col: Column) -> Column:
+            return SF.var(col, ddof)
 
         return self._reduce_for_stat_function(
-            F.var_pop if ddof == 0 else F.var_samp,
+            var,
             accepted_spark_types=(NumericType,),
             bool_to_numeric=True,
         )
@@ -928,8 +981,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.sem
         pyspark.pandas.DataFrame.sem
         """
-        if ddof not in [0, 1]:
-            raise TypeError("ddof must be 0 or 1")
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
 
         # Raise the TypeError when all aggregation columns are of unaccepted data types
         any_accepted = any(
@@ -941,15 +994,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 "Unaccepted data types of aggregation columns; numeric or bool expected."
             )
 
-        if ddof == 0:
-
-            def sem(col: Column) -> Column:
-                return F.stddev_pop(col) / F.sqrt(F.count(col))
-
-        else:
-
-            def sem(col: Column) -> Column:
-                return F.stddev_samp(col) / F.sqrt(F.count(col))
+        def sem(col: Column) -> Column:
+            return SF.stddev(col, ddof) / F.sqrt(F.count(col))
 
         return self._reduce_for_stat_function(
             sem,

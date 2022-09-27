@@ -165,7 +165,23 @@ SELECT COUNT(*) OVER (PARTITION BY 1 ORDER BY cast(1 as string) DESC RANGE BETWE
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'RANGE BETWEEN CURRENT ROW AND CAST(1 AS STRING) FOLLOWING' due to data type mismatch: The data type of the upper bound 'string' does not match the expected data type '(numeric or interval day to second or interval year to month or interval)'.; line 1 pos 21
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+  "messageParameters" : {
+    "expectedType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "exprType" : "\"STRING\"",
+    "location" : "upper",
+    "sqlExpr" : "\"RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 111,
+    "fragment" : "(PARTITION BY 1 ORDER BY cast(1 as string) DESC RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)"
+  } ]
+}
 
 
 -- !query
@@ -174,7 +190,23 @@ SELECT COUNT(*) OVER (PARTITION BY 1 ORDER BY cast('1' as binary) DESC RANGE BET
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'RANGE BETWEEN CURRENT ROW AND CAST(1 AS BINARY) FOLLOWING' due to data type mismatch: The data type of the upper bound 'binary' does not match the expected data type '(numeric or interval day to second or interval year to month or interval)'.; line 1 pos 21
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+  "messageParameters" : {
+    "expectedType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "exprType" : "\"BINARY\"",
+    "location" : "upper",
+    "sqlExpr" : "\"RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 113,
+    "fragment" : "(PARTITION BY 1 ORDER BY cast('1' as binary) DESC RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)"
+  } ]
+}
 
 
 -- !query
@@ -183,7 +215,23 @@ SELECT COUNT(*) OVER (PARTITION BY 1 ORDER BY cast(1 as boolean) DESC RANGE BETW
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'RANGE BETWEEN CURRENT ROW AND CAST(1 AS BOOLEAN) FOLLOWING' due to data type mismatch: The data type of the upper bound 'boolean' does not match the expected data type '(numeric or interval day to second or interval year to month or interval)'.; line 1 pos 21
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+  "messageParameters" : {
+    "expectedType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "exprType" : "\"BOOLEAN\"",
+    "location" : "upper",
+    "sqlExpr" : "\"RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 112,
+    "fragment" : "(PARTITION BY 1 ORDER BY cast(1 as boolean) DESC RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)"
+  } ]
+}
 
 
 -- !query
@@ -192,7 +240,22 @@ SELECT COUNT(*) OVER (PARTITION BY 1 ORDER BY cast('2017-12-11 09:30:00.0' as ti
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY 1 ORDER BY CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)' due to data type mismatch: The data type 'timestamp' used in the order specification does not match the data type 'int' which is used in the range frame.; line 1 pos 21
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "RANGE_FRAME_INVALID_TYPE",
+  "messageParameters" : {
+    "orderSpecType" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(PARTITION BY 1 ORDER BY CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)\"",
+    "valueBoundaryType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 136,
+    "fragment" : "(PARTITION BY 1 ORDER BY cast('2017-12-11 09:30:00.0' as timestamp) DESC RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)"
+  } ]
+}
 
 
 -- !query

@@ -4705,6 +4705,8 @@ class SQLConf extends Serializable with Logging {
   def errorMessageFormat: ErrorMessageFormat.Value =
     ErrorMessageFormat.withName(getConf(SQLConf.ERROR_MESSAGE_FORMAT))
 
+  def defaultDatabase: String = getConf(StaticSQLConf.CATALOG_DEFAULT_DATABASE)
+
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
