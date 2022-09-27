@@ -20,7 +20,6 @@ import shutil
 import string
 import sys
 import tempfile
-import time
 
 import unittest
 from typing import cast
