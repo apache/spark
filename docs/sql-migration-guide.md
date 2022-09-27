@@ -105,6 +105,8 @@ license: |
 
   - In Spark 3.2, date +/- interval with only day-time fields such as `date '2011-11-11' + interval 12 hours` returns timestamp. In Spark 3.1 and earlier, the same expression returns date. To restore the behavior before Spark 3.2, you can use `cast` to convert timestamp as date.
 
+  - Since Spark 3.2.3, for `SELECT ... GROUP BY a GROUPING SETS (b)`-style SQL statements, `grouping__id` returns different values from Apache Spark 3.2.0, 3.2.1, and 3.2.2. It computes based on user-given group-by expressions plus grouping set columns. To restore the behavior before 3.2.3, you can set `spark.sql.legacy.groupingIdWithAppendedUserGroupBy`. For details, see [SPARK-40218](https://issues.apache.org/jira/browse/SPARK-40218) and [SPARK-40562](https://issues.apache.org/jira/browse/SPARK-40562).
+
 ## Upgrading from Spark SQL 3.0 to 3.1
 
   - In Spark 3.1, statistical aggregation function includes `std`, `stddev`, `stddev_samp`, `variance`, `var_samp`, `skewness`, `kurtosis`, `covar_samp`, `corr` will return `NULL` instead of `Double.NaN` when `DivideByZero` occurs during expression evaluation, for example, when `stddev_samp` applied on a single element set. In Spark version 3.0 and earlier, it will return `Double.NaN` in such case. To restore the behavior before Spark 3.1, you can set `spark.sql.legacy.statisticalAggregate` to `true`.
