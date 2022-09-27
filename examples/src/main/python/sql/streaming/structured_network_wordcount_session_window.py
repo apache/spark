@@ -16,7 +16,7 @@
 #
 
 r"""
- split lines into words, group by words as key and use the state per key to track session of each key.
+ split lines into words, group by words and use the state per key to track session of each key.
 
  Usage: structured_network_wordcount_windowed.py <hostname> <port>
  <hostname> and <port> describe the TCP server that Structured Streaming
@@ -35,62 +35,74 @@ import math
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import explode
 from pyspark.sql.functions import split
-from pyspark.sql.functions import window
 from pyspark.sql.types import (
     LongType,
     StringType,
     StructType,
     StructField,
-    Row,
 )
-from pyspark.sql.streaming.state import GroupStateTimeout, GroupState
+from pyspark.sql.streaming.state import GroupStateTimeout
 import pandas as pd
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        msg = ("Usage: structured_network_wordcount_session_window.py <hostname> <port>")
+        msg = "Usage: structured_network_wordcount_session_window.py <hostname> <port>"
         print(msg, file=sys.stderr)
         sys.exit(-1)
 
     host = sys.argv[1]
     port = int(sys.argv[2])
 
-    spark = SparkSession.builder.appName("StructuredNetworkWordCountSessionWindow").getOrCreate()
+    spark = SparkSession.builder.appName(
+        "StructuredNetworkWordCountSessionWindow"
+    ).getOrCreate()
 
     spark.sparkContext.setLogLevel("WARN")
 
     # Create DataFrame representing the stream of input lines from connection to host:port
-    lines = (spark.readStream
-        .format('socket')
-        .option('host', host)
-        .option('port', port)
-        .option('includeTimestamp', 'true')
-        .load())
+    lines = (
+        spark.readStream.format("socket")
+        .option("host", host)
+        .option("port", port)
+        .option("includeTimestamp", "true")
+        .load()
+    )
 
     # Split the lines into words, retaining timestamps
     # split() splits each line into an array, and explode() turns the array into multiple rows
-    events = (lines.select(
-        explode(split(lines.value, ' ')).alias('sessionId'),
-        lines.timestamp.cast("long")
-    ))
+    events = lines.select(
+        explode(split(lines.value, " ")).alias("sessionId"),
+        lines.timestamp.cast("long"),
+    )
 
     session_type = StructType(
-    [StructField("sessionId", StringType()), StructField("count", LongType()),
-    StructField("start", LongType()), StructField("end", LongType())]
+        [
+            StructField("sessionId", StringType()),
+            StructField("count", LongType()),
+            StructField("start", LongType()),
+            StructField("end", LongType()),
+        ]
     )
 
     def func(key, pdf_iter, state):
         if state.hasTimedOut:
             session_id, count, start, end = state.get
             state.remove()
-            yield pd.DataFrame({"sessionId": [session_id], "count": [count], "start": [start], "end": [end]})
+            yield pd.DataFrame(
+                {
+                    "sessionId": [session_id],
+                    "count": [count],
+                    "start": [start],
+                    "end": [end],
+                }
+            )
         else:
             start = math.inf
             end = 0
             count = 0
             for pdf in pdf_iter:
-                start = min(start, min(pdf['timestamp']))
-                end = max(end, max(pdf['timestamp']))
+                start = min(start, min(pdf["timestamp"]))
+                end = max(end, max(pdf["timestamp"]))
                 count = count + len(pdf)
             if state.exists:
                 old_session = state.get
@@ -102,13 +114,15 @@ if __name__ == "__main__":
             yield pd.DataFrame()
 
     # Group the data by window and word and compute the count of each group
-    sessions = events.groupBy(events["sessionId"]).applyInPandasWithState(func, session_type, session_type, "Update", GroupStateTimeout.ProcessingTimeTimeout)
+    sessions = events.groupBy(events["sessionId"]).applyInPandasWithState(
+        func,
+        session_type,
+        session_type,
+        "Update",
+        GroupStateTimeout.ProcessingTimeTimeout,
+    )
 
     # Start running the query that prints the windowed word counts to the console
-    query = (sessions
-        .writeStream
-        .outputMode('update')
-        .format('console')
-        .start())
+    query = sessions.writeStream.outputMode("update").format("console").start()
 
     query.awaitTermination()
