@@ -41,8 +41,9 @@ from pyspark.sql.types import (
     StructType,
     StructField,
 )
-from pyspark.sql.streaming.state import GroupStateTimeout
+from pyspark.sql.streaming.state import GroupStateTimeout, GroupState
 import pandas as pd
+from typing import Iterator
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
@@ -74,23 +75,22 @@ if __name__ == "__main__":
         explode(split(lines.value, " ")).alias("sessionId"),
         lines.timestamp.cast("long"),
     )
+    session_fields = [
+        StructField("sessionId", StringType()),
+        StructField("count", LongType()),
+        StructField("start", LongType()),
+        StructField("end", LongType()),
+    ]
 
-    session_type = StructType(
-        [
-            StructField("sessionId", StringType()),
-            StructField("count", LongType()),
-            StructField("start", LongType()),
-            StructField("end", LongType()),
-        ]
-    )
-
-    def func(key, pdf_iter, state):
+    def func(
+        key: tuple, pdf_iter: Iterator[pd.DataFrame], state: GroupState
+    ) -> Iterator[pd.DataFrame]:
         if state.hasTimedOut:
-            session_id, count, start, end = state.get
+            count, start, end = state.get
             state.remove()
             yield pd.DataFrame(
                 {
-                    "sessionId": [session_id],
+                    "sessionId": [key[0]],
                     "count": [count],
                     "start": [start],
                     "end": [end],
@@ -106,18 +106,20 @@ if __name__ == "__main__":
                 count = count + len(pdf)
             if state.exists:
                 old_session = state.get
-                count = count + old_session[1]
-                start = old_session[2]
-                end = max(end, old_session[3])
-            state.update((key[0], count, start, end))
-            state.setTimeoutDuration(30000)
+                count = count + old_session[0]
+                start = old_session[1]
+                end = max(end, old_session[2])
+            state.update((count, start, end))
+            state.setTimeoutDuration(10000)
             yield pd.DataFrame()
 
     # Group the data by window and word and compute the count of each group
     sessions = events.groupBy(events["sessionId"]).applyInPandasWithState(
         func,
-        session_type,
-        session_type,
+        StructType(session_fields),
+        StructType(
+            session_fields[1:]
+        ),  # omit the session id in the state since it is available as group key
         "Update",
         GroupStateTimeout.ProcessingTimeTimeout,
     )
