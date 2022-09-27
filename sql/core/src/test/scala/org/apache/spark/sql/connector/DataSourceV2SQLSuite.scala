@@ -2030,10 +2030,15 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       sql("USE testcat.ns1.ns2")
       check("tbl")
 
-      val ex = intercept[AnalysisException] {
-        sql(s"SELECT ns1.ns2.ns3.tbl.* from $t")
-      }
-      assert(ex.getMessage.contains("cannot resolve 'ns1.ns2.ns3.tbl.*"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT ns1.ns2.ns3.tbl.* from $t")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1051",
+        parameters = Map(
+          "targetString" -> "ns1.ns2.ns3.tbl",
+          "columns" -> "id, name"),
+        context = ExpectedContext(fragment = "ns1.ns2.ns3.tbl.*", start = 7, stop = 23))
     }
   }
 
@@ -2089,33 +2094,18 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
   }
 
   test("View commands are not supported in v2 catalogs") {
-    def validateViewCommand(
-        sql: String,
-        catalogName: String,
-        viewName: String,
-        cmdName: String): Unit = {
-      assertAnalysisError(
-        sql,
-        s"Cannot specify catalog `$catalogName` for view $viewName because view support " +
-          s"in v2 catalog has not been implemented yet. $cmdName expects a view.")
+    def validateViewCommand(sqlStatement: String): Unit = {
+      val e = intercept[AnalysisException](sql(sqlStatement))
+      checkError(
+        e,
+        errorClass = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
+        parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
     }
 
-    validateViewCommand("DROP VIEW testcat.v", "testcat", "v", "DROP VIEW")
-    validateViewCommand(
-      "ALTER VIEW testcat.v SET TBLPROPERTIES ('key' = 'val')",
-      "testcat",
-      "v",
-      "ALTER VIEW ... SET TBLPROPERTIES")
-    validateViewCommand(
-      "ALTER VIEW testcat.v UNSET TBLPROPERTIES ('key')",
-      "testcat",
-      "v",
-      "ALTER VIEW ... UNSET TBLPROPERTIES")
-    validateViewCommand(
-      "ALTER VIEW testcat.v AS SELECT 1",
-      "testcat",
-      "v",
-      "ALTER VIEW ... AS")
+    validateViewCommand("DROP VIEW testcat.v")
+    validateViewCommand("ALTER VIEW testcat.v SET TBLPROPERTIES ('key' = 'val')")
+    validateViewCommand("ALTER VIEW testcat.v UNSET TBLPROPERTIES ('key')")
+    validateViewCommand("ALTER VIEW testcat.v AS SELECT 1")
   }
 
   test("SPARK-33924: INSERT INTO .. PARTITION preserves the partition location") {
@@ -2353,10 +2343,24 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       )
       assert(e4.message.contains("is not a valid timestamp expression for time travel"))
 
-      val e5 = intercept[AnalysisException](
+    checkError(
+      exception = intercept[AnalysisException] {
         sql("SELECT * FROM t TIMESTAMP AS OF abs(true)").collect()
-      )
-      assert(e5.message.contains("cannot resolve 'abs(true)' due to data type mismatch"))
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"abs(true)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"true\"",
+        "inputType" -> "\"BOOLEAN\"",
+        "requiredType" ->
+          "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")"),
+      context = ExpectedContext(
+        fragment = "abs(true)",
+        start = 32,
+        stop = 40))
 
       val e6 = intercept[AnalysisException](
         sql("SELECT * FROM parquet.`/the/path` VERSION AS OF 1")

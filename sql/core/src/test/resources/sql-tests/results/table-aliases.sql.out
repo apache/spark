@@ -39,7 +39,20 @@ SELECT * FROM testData AS t(col1, col2, col3)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Number of column aliases does not match number of columns. Number of column aliases: 3; number of columns: 2.; line 1 pos 14
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1028",
+  "messageParameters" : {
+    "columnSize" : "3",
+    "outputSize" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 45,
+    "fragment" : "testData AS t(col1, col2, col3)"
+  } ]
+}
 
 
 -- !query
@@ -48,7 +61,20 @@ SELECT * FROM testData AS t(col1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Number of column aliases does not match number of columns. Number of column aliases: 1; number of columns: 2.; line 1 pos 14
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1028",
+  "messageParameters" : {
+    "columnSize" : "1",
+    "outputSize" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 33,
+    "fragment" : "testData AS t(col1)"
+  } ]
+}
 
 
 -- !query

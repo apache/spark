@@ -130,7 +130,7 @@ class CatalogManager(
       _currentNamespace = None
       // Reset the current database of v1 `SessionCatalog` when switching current catalog, so that
       // when we switch back to session catalog, the current namespace definitely is ["default"].
-      v1SessionCatalog.setCurrentDatabase(SessionCatalog.DEFAULT_DATABASE)
+      v1SessionCatalog.setCurrentDatabase(conf.defaultDatabase)
     }
   }
 
@@ -144,7 +144,7 @@ class CatalogManager(
     catalogs.clear()
     _currentNamespace = None
     _currentCatalogName = None
-    v1SessionCatalog.setCurrentDatabase(SessionCatalog.DEFAULT_DATABASE)
+    v1SessionCatalog.setCurrentDatabase(conf.defaultDatabase)
   }
 }
 

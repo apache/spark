@@ -1069,11 +1069,11 @@ abstract class AvroSuite
       df.write.format("avro").option("avroSchema", avroSchema).save(tempSaveDir)
       checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
 
-      val message = intercept[Exception] {
+      val message = intercept[SparkException] {
         spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(2, null))), catalystSchema)
           .write.format("avro").option("avroSchema", avroSchema)
           .save(s"$tempDir/${UUID.randomUUID()}")
-      }.getCause.getMessage
+      }.getMessage
       assert(message.contains("Caused by: java.lang.NullPointerException: "))
       assert(message.contains("null in string in field Name"))
     }
@@ -1167,7 +1167,7 @@ abstract class AvroSuite
       withTempPath { tempDir =>
         val message = intercept[SparkException] {
           df.write.format("avro").option("avroSchema", avroSchema).save(tempDir.getPath)
-        }.getCause.getMessage
+        }.getMessage
         assert(message.contains("Only UNION of a null type and a non-null type is supported"))
       }
     }
@@ -1933,7 +1933,7 @@ abstract class AvroSuite
           val e = intercept[SparkException] {
             df.write.format("avro").option("avroSchema", avroSchema).save(path3_x)
           }
-          assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
+          assert(e.getCause.getCause.isInstanceOf[SparkUpgradeException])
           checkDefaultLegacyRead(oldPath)
 
           withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
@@ -2184,7 +2184,7 @@ abstract class AvroSuite
           val e = intercept[SparkException] {
             df.write.format("avro").option("avroSchema", avroSchema).save(dir.getCanonicalPath)
           }
-          val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+          val errMsg = e.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
           assert(errMsg.contains("You may get a different result due to the upgrading"))
         }
       }
@@ -2194,7 +2194,7 @@ abstract class AvroSuite
         val e = intercept[SparkException] {
           df.write.format("avro").save(dir.getCanonicalPath)
         }
-        val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        val errMsg = e.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
         assert(errMsg.contains("You may get a different result due to the upgrading"))
       }
     }

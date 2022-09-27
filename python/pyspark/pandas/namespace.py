@@ -1191,7 +1191,7 @@ def read_excel(
                 )
 
                 reset_index = pdf.reset_index()
-                for name, col in reset_index.iteritems():
+                for name, col in reset_index.items():
                     dt = col.dtype
                     if is_datetime64_dtype(dt) or is_datetime64tz_dtype(dt):
                         continue

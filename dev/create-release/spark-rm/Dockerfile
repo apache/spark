@@ -42,7 +42,7 @@ ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 #   We should use the latest Sphinx version once this is fixed.
 # TODO(SPARK-35375): Jinja2 3.0.0+ causes error when building with Sphinx.
 #   See also https://issues.apache.org/jira/browse/SPARK-35375.
-ARG PIP_PKGS="sphinx==3.0.4 mkdocs==1.1.2 numpy==1.19.4 pydata_sphinx_theme==0.4.1 ipython==7.19.0 nbsphinx==0.8.0 numpydoc==1.1.0 jinja2==2.11.3 twine==3.4.1 sphinx-plotly-directive==0.1.3 pandas==1.1.5 pyarrow==3.0.0 plotly==5.4.0 markupsafe==2.0.1 docutils<0.17"
+ARG PIP_PKGS="sphinx==3.0.4 mkdocs==1.1.2 numpy==1.19.4 pydata_sphinx_theme==0.4.1 ipython==7.19.0 nbsphinx==0.8.0 numpydoc==1.1.0 jinja2==2.11.3 twine==3.4.1 sphinx-plotly-directive==0.1.3 pandas==1.1.5 pyarrow==3.0.0 plotly==5.4.0 markupsafe==2.0.1 docutils<0.17 grpcio==1.48.1 protobuf==4.21.6"
 ARG GEM_PKGS="bundler:2.2.9"
 
 # Install extra needed repos and refresh.
