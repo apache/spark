@@ -466,28 +466,16 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   // e1 + e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
   // e1 - e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
   def + (that: Decimal): Decimal = {
-    if (_scale == that._scale) {
-      if (_decimalOperation.ne(null) && that._decimalOperation.ne(null)) {
-        Decimal(_decimalOperation.add(that._decimalOperation))
-      } else if (_decimalOperation.eq(null) && that._decimalOperation.eq(null)) {
-        Decimal(longVal + that.longVal, Math.max(precision, that.precision) + 1, scale)
-      } else {
-        Decimal(toJavaBigDecimal.add(that.toJavaBigDecimal))
-      }
+    if (_decimalOperation.eq(null) && that._decimalOperation.eq(null) && scale == that.scale) {
+      Decimal(longVal + that.longVal, Math.max(precision, that.precision) + 1, scale)
     } else {
       Decimal(toJavaBigDecimal.add(that.toJavaBigDecimal))
     }
   }
 
   def - (that: Decimal): Decimal = {
-    if (_scale == that._scale) {
-      if (_decimalOperation.ne(null) && that._decimalOperation.ne(null)) {
-        Decimal(_decimalOperation.subtract(that._decimalOperation))
-      } else if (_decimalOperation.eq(null) && that._decimalOperation.eq(null)) {
-        Decimal(longVal - that.longVal, Math.max(precision, that.precision) + 1, scale)
-      } else {
-        Decimal(toJavaBigDecimal.subtract(that.toJavaBigDecimal))
-      }
+    if (_decimalOperation.eq(null) && that._decimalOperation.eq(null) && scale == that.scale) {
+      Decimal(longVal - that.longVal, Math.max(precision, that.precision) + 1, scale)
     } else {
       Decimal(toJavaBigDecimal.subtract(that.toJavaBigDecimal))
     }
@@ -495,36 +483,19 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   // TypeCoercion will take care of the precision, scale of result
   def * (that: Decimal): Decimal =
-    if (_decimalOperation.ne(null) && that._decimalOperation.ne(null)) {
-      Decimal(_decimalOperation.multiply(that._decimalOperation))
-    } else {
-      Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal, MATH_CONTEXT))
-    }
+    Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal, MATH_CONTEXT))
 
-  def / (that: Decimal): Decimal = if (that.isZero) {
-    null
-  } else if (_decimalOperation.ne(null) && that._decimalOperation.ne(null)) {
-    Decimal(_decimalOperation.divide(that._decimalOperation))
-  } else {
-    Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal,
+  def / (that: Decimal): Decimal =
+    if (that.isZero) null else Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal,
       DecimalType.MAX_SCALE, MATH_CONTEXT.getRoundingMode))
-  }
 
-  def % (that: Decimal): Decimal = if (that.isZero) {
-    null
-  } else if (_decimalOperation.ne(null) && that._decimalOperation.ne(null)) {
-    Decimal(_decimalOperation.remainder(that._decimalOperation))
-  } else {
-    Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal, MATH_CONTEXT))
-  }
+  def % (that: Decimal): Decimal =
+    if (that.isZero) null
+    else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal, MATH_CONTEXT))
 
-  def quot(that: Decimal): Decimal = if (that.isZero) {
-    null
-  } else if (_decimalOperation.ne(null) && that._decimalOperation.ne(null)) {
-    Decimal(_decimalOperation.quot(that._decimalOperation))
-  } else {
-    Decimal(toJavaBigDecimal.divideToIntegralValue(that.toJavaBigDecimal, MATH_CONTEXT))
-  }
+  def quot(that: Decimal): Decimal =
+    if (that.isZero) null
+    else Decimal(toJavaBigDecimal.divideToIntegralValue(that.toJavaBigDecimal, MATH_CONTEXT))
 
   def remainder(that: Decimal): Decimal = this % that
 
