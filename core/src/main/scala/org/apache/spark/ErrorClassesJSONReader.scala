@@ -24,10 +24,11 @@ import scala.collection.immutable.SortedMap
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.core.`type`.TypeReference
+import com.fasterxml.jackson.databind.json.JsonMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.commons.text.StringSubstitutor
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.Utils
 
 /**
  * A reader to load error information from one or more JSON files. Note that, if one error appears
@@ -38,14 +39,8 @@ import org.apache.spark.util.Utils
 class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
   assert(jsonFileURLs.nonEmpty)
 
-  private lazy val mapper = Utils.withScalaModuleMapper
-
-  private def readAsMap(url: URL): SortedMap[String, ErrorInfo] = {
-    mapper.readValue[SortedMap[String, ErrorInfo]](url)
-  }
-
   // Exposed for testing
-  private[spark] val errorInfoMap = jsonFileURLs.map(readAsMap).reduce(_ ++ _)
+  private[spark] val errorInfoMap = jsonFileURLs.map(ErrorClassesJsonReader.readAsMap).reduce(_ ++ _)
 
   def getErrorMessage(errorClass: String, messageParameters: Map[String, String]): String = {
     val messageTemplate = getMessageTemplate(errorClass)
@@ -83,6 +78,15 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
 
   def getSqlState(errorClass: String): String = {
     Option(errorClass).flatMap(errorInfoMap.get).flatMap(_.sqlState).orNull
+  }
+}
+
+private object ErrorClassesJsonReader {
+  private val mapper: JsonMapper = JsonMapper.builder()
+    .addModule(DefaultScalaModule)
+    .build()
+  private def readAsMap(url: URL): SortedMap[String, ErrorInfo] = {
+    mapper.readValue(url, new TypeReference[SortedMap[String, ErrorInfo]]() {})
   }
 }
 
