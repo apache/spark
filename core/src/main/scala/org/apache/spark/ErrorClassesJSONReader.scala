@@ -40,7 +40,8 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
   assert(jsonFileURLs.nonEmpty)
 
   // Exposed for testing
-  private[spark] val errorInfoMap = jsonFileURLs.map(ErrorClassesJsonReader.readAsMap).reduce(_ ++ _)
+  private[spark] val errorInfoMap =
+    jsonFileURLs.map(ErrorClassesJsonReader.readAsMap).reduce(_ ++ _)
 
   def getErrorMessage(errorClass: String, messageParameters: Map[String, String]): String = {
     val messageTemplate = getMessageTemplate(errorClass)
