@@ -48,8 +48,6 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.collect.Interners
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.SystemUtils
@@ -63,7 +61,6 @@ import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.LoggerContext
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
-
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -1967,16 +1964,6 @@ private[spark] object Utils extends Logging {
    */
   def getHadoopFileSystem(path: String, conf: Configuration): FileSystem = {
     getHadoopFileSystem(new URI(path), conf)
-  }
-
-  /**
-   * Return a new `ObjectMapper` with `ClassTagExtensions`.
-   * The mapper registers `DefaultScalaModule` by default.
-   */
-  def withScalaModuleMapper: ObjectMapper with ClassTagExtensions = {
-    val mapper = new ObjectMapper() with ClassTagExtensions
-    mapper.registerModule(DefaultScalaModule)
-    mapper
   }
 
   /**

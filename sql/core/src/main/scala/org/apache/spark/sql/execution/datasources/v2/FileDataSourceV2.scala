@@ -20,6 +20,7 @@ import java.util
 
 import scala.collection.JavaConverters._
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -113,7 +114,7 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
 }
 
 private object FileDataSourceV2 {
-  private lazy val objectMapper = Utils.withScalaModuleMapper
+  private lazy val objectMapper = new ObjectMapper()
   private def readPathsToSeq(paths: String): Seq[String] =
-    objectMapper.readValue[Seq[String]](paths)
+    objectMapper.readValue(paths, classOf[Array[String]]).toSeq
 }

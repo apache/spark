@@ -268,7 +268,11 @@ object RebaseDateTime {
     micros + rebaseInfo.diffs(i)
   }
 
-  private lazy val mapper = Utils.withScalaModuleMapper
+  private lazy val mapper = {
+    val mapper = new ObjectMapper() with ClassTagExtensions
+    mapper.registerModule(DefaultScalaModule)
+    mapper
+  }
 
   // Loads rebasing info from an JSON file. JSON records in the files should conform to
   // `JsonRebaseRecord`. AnyRefMap is used here instead of Scala's immutable map because

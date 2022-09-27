@@ -21,6 +21,8 @@ import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
 
+import com.fasterxml.jackson.databind.ObjectMapper
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.TimeTravelSpec
@@ -32,7 +34,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.Utils
 
 private[sql] object DataSourceV2Utils extends Logging {
 
@@ -149,7 +150,7 @@ private[sql] object DataSourceV2Utils extends Logging {
     }
   }
 
-  private lazy val objectMapper = Utils.withScalaModuleMapper
+  private lazy val objectMapper = new ObjectMapper()
   private def getOptionsWithPaths(
       extraOptions: CaseInsensitiveMap[String],
       paths: String*): CaseInsensitiveMap[String] = {
