@@ -873,14 +873,14 @@ class Analyzer(override val catalogManager: CatalogManager)
       // if only either is given
       case up: Unpivot if up.childrenResolved &&
         up.ids.exists(_.forall(_.resolved)) && up.values.isEmpty =>
-        val values = (AttributeSet(up.child.output) -- AttributeSet(up.ids.get)).toSeq
-        // up.child.output.intersect preserves order of columns
-        up.copy(values = Some(up.child.output.intersect(values).map(Seq(_))))
+        val idAttrs = AttributeSet(up.ids.get)
+        val values = up.child.output.filterNot(idAttrs.contains)
+        up.copy(values = Some(values.map(Seq(_))))
       case up: Unpivot if up.childrenResolved &&
         up.values.exists(_.forall(_.forall(_.resolved))) && up.ids.isEmpty =>
-        val ids = (AttributeSet(up.child.output) -- AttributeSet(up.values.get.flatten)).toSeq
-        // up.child.output.intersect preserves order of columns
-        up.copy(ids = Some(up.child.output.intersect(ids)))
+        val valueAttrs = AttributeSet(up.values.get.flatten)
+        val ids = up.child.output.filterNot(valueAttrs.contains)
+        up.copy(ids = Some(ids))
 
       case up: Unpivot if !up.childrenResolved || !up.ids.exists(_.forall(_.resolved)) ||
         !up.values.exists(_.nonEmpty) || !up.values.exists(_.forall(_.forall(_.resolved))) ||
