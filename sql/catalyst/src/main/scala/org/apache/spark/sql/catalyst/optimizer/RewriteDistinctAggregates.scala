@@ -218,13 +218,6 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     val aggExpressions = collectAggregateExprs(a)
     val distinctAggs = aggExpressions.filter(_.isDistinct)
 
-    val funcChildren = distinctAggs.flatMap { e =>
-      e.aggregateFunction.children.filter(!_.foldable)
-    }
-    val funcChildrenLookup = funcChildren.map { e =>
-      (e, funcChildren.find(fc => e.semanticEquals(fc)).getOrElse(e))
-    }.toMap
-
     // Extract distinct aggregate expressions.
     val distinctAggGroups = aggExpressions.filter(_.isDistinct).groupBy { e =>
         val unfoldableChildren = ExpressionSet(e.aggregateFunction.children.filter(!_.foldable))
@@ -238,7 +231,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           // count(distinct 1) will be explained to count(1) after the rewrite function.
           // Generally, the distinct aggregateFunction should not run
           // foldable TypeCheck for the first child.
-          e.aggregateFunction.children.take(1).toSet
+          ExpressionSet(e.aggregateFunction.children.take(1))
         }
     }
 
@@ -261,7 +254,9 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
       // Setup unique distinct aggregate children.
       val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq.distinct
-      val distinctAggChildAttrMap = distinctAggChildren.map(expressionAttributePair)
+      val distinctAggChildAttrMap = distinctAggChildren.map { e =>
+        ExpressionSet(Seq(e)) -> AttributeReference(e.sql, e.dataType, nullable = true)()
+      }
       val distinctAggChildAttrs = distinctAggChildAttrMap.map(_._2)
       // Setup all the filters in distinct aggregate.
       val (distinctAggFilters, distinctAggFilterAttrs, maxConds) = distinctAggs.collect {
@@ -299,8 +294,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
               af
             } else {
               patchAggregateFunctionChildren(af) { x1 =>
-                val x = funcChildrenLookup.getOrElse(x1, x1)
-                distinctAggChildAttrLookup.get(x)
+                val es = ExpressionSet(Seq(x1))
+                distinctAggChildAttrLookup.get(es)
               }
             }
             val newCondition = if (condition.isDefined) {
@@ -414,6 +409,13 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       // To prevent SparkStrategies from complaining during sanity check, we need to check whether
       // the original list of aggregate expressions had multiple distinct groups and, if so,
       // patch that list so we have only one distinct group.
+      val funcChildren = distinctAggs.flatMap { e =>
+        e.aggregateFunction.children.filter(!_.foldable)
+      }
+      val funcChildrenLookup = funcChildren.map { e =>
+        (e, funcChildren.find(fc => e.semanticEquals(fc)).getOrElse(e))
+      }.toMap
+
       if (funcChildrenLookup.keySet.size > funcChildrenLookup.values.toSet.size) {
         val patchedAggExpressions = a.aggregateExpressions.map { e =>
           e.transformDown {
