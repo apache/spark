@@ -222,8 +222,9 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             #   0        9        0
             #   0        9        0
             #
-            # pandas API on Spark doesn't support mixed type for Index,
-            # so we currently cannot follow the behavior of pandas.
+            # The columns should be `Index([('x', 20), ('y', 20)], dtype='object')`,
+            # but pandas API on Spark doesn't support such a way for creating Index.
+            # So, we currently cannot follow the behavior of pandas.
             expected_result = ps.DataFrame(
                 {("x", 10): [0, 1, 3, 5, 6, 8, 9, 9, 9], ("y", 20): [4, 5, 6, 3, 2, 1, 0, 0, 0]},
                 index=ps.MultiIndex.from_tuples(
