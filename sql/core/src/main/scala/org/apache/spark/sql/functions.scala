@@ -2569,7 +2569,7 @@ object functions {
   /**
    * Calculates the hash code of given columns using the 64-bit
    * variant of the xxHash algorithm, and returns the result as a long
-   * column.
+   * column. The hash computation uses an initial seed of 42.
    *
    * @group misc_funcs
    * @since 3.0.0
