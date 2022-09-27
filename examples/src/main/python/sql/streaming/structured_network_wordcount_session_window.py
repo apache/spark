@@ -30,6 +30,7 @@ r"""
     localhost 9999`
 """
 import sys
+import math
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import explode
@@ -54,28 +55,24 @@ if __name__ == "__main__":
     host = sys.argv[1]
     port = int(sys.argv[2])
 
-    spark = SparkSession\
-        .builder\
-        .appName("StructuredNetworkWordCountSessionWindow")\
-        .getOrCreate()
+    spark = SparkSession.builder.appName("StructuredNetworkWordCountSessionWindow").getOrCreate()
 
     spark.sparkContext.setLogLevel("WARN")
 
     # Create DataFrame representing the stream of input lines from connection to host:port
-    lines = spark\
-        .readStream\
-        .format('socket')\
-        .option('host', host)\
-        .option('port', port)\
-        .option('includeTimestamp', 'true')\
-        .load()
+    lines = (spark.readStream
+        .format('socket')
+        .option('host', host)
+        .option('port', port)
+        .option('includeTimestamp', 'true')
+        .load())
 
     # Split the lines into words, retaining timestamps
     # split() splits each line into an array, and explode() turns the array into multiple rows
-    events = lines.select(
+    events = (lines.select(
         explode(split(lines.value, ' ')).alias('sessionId'),
         lines.timestamp.cast("long")
-    )
+    ))
 
     session_type = StructType(
     [StructField("sessionId", StringType()), StructField("count", LongType()),
@@ -84,14 +81,17 @@ if __name__ == "__main__":
 
     def func(key, pdf_iter, state):
         if state.hasTimedOut:
-            finished_session = state.get
+            session_id, count, start, end = state.get
             state.remove()
-            yield pd.DataFrame({"sessionId": [finished_session[0]], "count": [finished_session[1]], "start": [finished_session[2]], "end": [finished_session[3]]})
+            yield pd.DataFrame({"sessionId": [session_id], "count": [count], "start": [start], "end": [end]})
         else:
-            pdfs = list(pdf_iter)
-            count = sum(len(pdf) for pdf in pdfs)
-            start = min(min(pdf['timestamp']) for pdf in pdfs)
-            end = max(max(pdf['timestamp']) for pdf in pdfs)
+            start = math.inf
+            end = 0
+            count = 0
+            for pdf in pdf_iter:
+                start = min(start, min(pdf['timestamp']))
+                end = max(end, max(pdf['timestamp']))
+                count = count + len(pdf)
             if state.exists:
                 old_session = state.get
                 count = count + old_session[1]
@@ -99,16 +99,16 @@ if __name__ == "__main__":
                 end = max(end, old_session[3])
             state.update((key[0], count, start, end))
             state.setTimeoutDuration(30000)
-            yield pd.DataFrame({"sessionId": [], "count": [], "start": [], "end": []})
+            yield pd.DataFrame()
 
     # Group the data by window and word and compute the count of each group
     sessions = events.groupBy(events["sessionId"]).applyInPandasWithState(func, session_type, session_type, "Update", GroupStateTimeout.ProcessingTimeTimeout)
 
     # Start running the query that prints the windowed word counts to the console
-    query = sessions\
-        .writeStream\
-        .outputMode('update')\
-        .format('console')\
-        .start()
+    query = (sessions
+        .writeStream
+        .outputMode('update')
+        .format('console')
+        .start())
 
     query.awaitTermination()
