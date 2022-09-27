@@ -134,8 +134,8 @@ private[spark] class K8SSparkSubmitOperation extends SparkSubmitOperation
                 kubernetesClient
                   .pods
             }
-            ops.withLabel(SPARK_ROLE_LABEL, SPARK_POD_DRIVER_ROLE)
             val pods = ops
+              .withLabel(SPARK_ROLE_LABEL, SPARK_POD_DRIVER_ROLE)
               .list()
               .getItems
               .asScala

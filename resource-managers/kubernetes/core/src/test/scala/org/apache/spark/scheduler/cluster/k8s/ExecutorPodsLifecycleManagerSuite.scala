@@ -116,7 +116,7 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     verify(schedulerBackend).doRemoveExecutor("1", expectedLossReason)
   }
 
-  test("test executor inactivation function") {
+  test("SPARK-40458: test executor inactivation function") {
     val failedPod = failedExecutorWithoutDeletion(1)
     val inactivated = ExecutorPodsLifecycleManager.executorInactivationFn(failedPod)
     assert(inactivated.getMetadata().getLabels().get(SPARK_EXECUTOR_INACTIVE_LABEL) === "true")
