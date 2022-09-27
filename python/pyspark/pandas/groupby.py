@@ -449,7 +449,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  False  3
         """
         return self._reduce_for_stat_function(
-            F.first, accepted_spark_types=(NumericType, BooleanType) if numeric_only else None
+            lambda col: F.first(col, ignorenulls=True),
+            accepted_spark_types=(NumericType, BooleanType) if numeric_only else None,
         )
 
     def last(self, numeric_only: Optional[bool] = False) -> FrameLike:
