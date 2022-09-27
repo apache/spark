@@ -2060,7 +2060,7 @@
   "_LEGACY_ERROR_TEMP_1176" : {
     "message" : [
       "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>.",
-      "Please try to re-create the view by running: <viewDDL>."
+      "Please try to re-create the view by running: <viewDDL>"
     ]
   },
   "_LEGACY_ERROR_TEMP_1177" : {

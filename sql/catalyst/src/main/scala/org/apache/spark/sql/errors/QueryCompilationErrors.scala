@@ -1962,7 +1962,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "_LEGACY_ERROR_TEMP_1198",
       messageParameters = Map(
         "unbound" -> unbound.name,
-        "args" -> arguments.map(_.dataType.simpleString).mkString(", "),
+        "arguments" -> arguments.map(_.dataType.simpleString).mkString(", "),
         "unsupported" -> unsupported.getMessage),
       cause = Some(unsupported))
   }
