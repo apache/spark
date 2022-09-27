@@ -19,14 +19,15 @@ package org.apache.spark.deploy.k8s
 import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapList, HasMetadata, PersistentVolumeClaim, PersistentVolumeClaimList, Pod, PodList}
 import io.fabric8.kubernetes.api.model.apps.StatefulSet
 import io.fabric8.kubernetes.api.model.apps.StatefulSetList
-import io.fabric8.kubernetes.client.dsl.{AnyNamespaceOperation, FilterWatchListDeletable, MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, NonNamespaceOperation, PodResource, Resource, RollableScalableResource}
+import io.fabric8.kubernetes.client.dsl.{FilterWatchListDeletable, MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, NonNamespaceOperation, PodResource, Resource, RollableScalableResource}
 
 object Fabric8Aliases {
   type PODS = MixedOperation[Pod, PodList, PodResource]
   type PODS_WITH_NAMESPACE = NonNamespaceOperation[Pod, PodList, PodResource]
   type CONFIG_MAPS = MixedOperation[
     ConfigMap, ConfigMapList, Resource[ConfigMap]]
-  type CONFIG_MAPS_OPERATION = AnyNamespaceOperation[ConfigMap, ConfigMapList, Resource[ConfigMap]]
+  type CONFIG_MAPS_WITH_NAMESPACE =
+    NonNamespaceOperation[ConfigMap, ConfigMapList, Resource[ConfigMap]]
   type CONFIG_MAPS_RESOURCE = Resource[ConfigMap]
   type LABELED_PODS = FilterWatchListDeletable[Pod, PodList, PodResource]
   type LABELED_CONFIG_MAPS = FilterWatchListDeletable[ConfigMap, ConfigMapList, Resource[ConfigMap]]
