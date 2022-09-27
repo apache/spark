@@ -65,7 +65,7 @@ INSERT INTO sales_quarterly VALUES
     (2021, 2250, 3200, 4200, 5900),
     (2022, 4200, 3100, null, null);
 
--- column names are used in the name column
+-- column names are used as unpivot columns
 SELECT * FROM sales_quarterly
     UNPIVOT (
         sales FOR quarter IN (q1, q2, q3, q4)
@@ -73,7 +73,6 @@ SELECT * FROM sales_quarterly
 +------+---------+-------+
 | year | quarter | sales |
 +------+---------+-------+
-| 2020 | q1      | NULL  |
 | 2020 | q2      | 1000  |
 | 2020 | q3      | 2000  |
 | 2020 | q4      | 2500  |
@@ -83,19 +82,19 @@ SELECT * FROM sales_quarterly
 | 2021 | q4      | 5900  |
 | 2022 | q1      | 4200  |
 | 2022 | q2      | 3100  |
-| 2022 | q3      | NULL  |
-| 2022 | q4      | NULL  |
 +------+---------+-------+
 
--- NULL values can be excluded
+-- NULL values are excluded by default, they can be included
+-- unpivot columns can be alias
 -- unpivot result can be referenced via its alias
 SELECT up.* FROM sales_quarterly
-    UNPIVOT EXCLUDE NULLS (
+    UNPIVOT INCLUDE NULLS (
         sales FOR quarter IN (q1, q2, q3, q4)
     ) AS up;
 +------+---------+-------+
 | year | quarter | sales |
 +------+---------+-------+
+| 2020 | Q1      | NULL  |
 | 2020 | Q2      | 1000  |
 | 2020 | Q3      | 2000  |
 | 2020 | Q4      | 2500  |
@@ -105,11 +104,13 @@ SELECT up.* FROM sales_quarterly
 | 2021 | Q4      | 5900  |
 | 2022 | Q1      | 4200  |
 | 2022 | Q2      | 3100  |
+| 2022 | Q3      | NULL  |
+| 2022 | Q4      | NULL  |
 +------+---------+-------+
 
 -- multiple value columns can be unpivoted per row
 SELECT * FROM sales_quarterly
-    UNPIVOT EXCLUDE NULLS (
+    UNPIVOT INCLUDE NULLS (
         (first_quarter, second_quarter)
         FOR half_of_the_year IN (
             (q1, q2) AS H1,
@@ -124,6 +125,7 @@ SELECT * FROM sales_quarterly
 | 2021 | H1               | 2250          | 3200           |
 | 2021 | H2               | 4200          | 5900           |
 | 2022 | H1               | 4200          | 3100           |
+| 2022 | H2               | NULL          | NULL           |
 +------+------------------+---------------+----------------+
 ```
 
