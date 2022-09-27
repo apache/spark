@@ -18,9 +18,9 @@ package org.apache.spark.sql.connect.config
 
 import org.apache.spark.internal.config.ConfigBuilder
 
-object Connect {
+private[spark] object Connect {
 
-  private[spark] val CONNECT_GRPC_BINDING_PORT =
+  val CONNECT_GRPC_BINDING_PORT =
     ConfigBuilder("spark.connect.grpc.binding.port")
       .version("3.4.0")
       .intConf
