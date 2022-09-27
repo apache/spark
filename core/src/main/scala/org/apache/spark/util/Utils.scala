@@ -1970,8 +1970,8 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return a new `ObjectMapper` with `ClassTagExtensions`
-   * and registered `DefaultScalaModule`.
+   * Return a new `ObjectMapper` with `ClassTagExtensions`.
+   * The mapper registers `DefaultScalaModule` by default.
    */
   def withScalaModuleMapper: ObjectMapper with ClassTagExtensions = {
     val mapper = new ObjectMapper() with ClassTagExtensions
