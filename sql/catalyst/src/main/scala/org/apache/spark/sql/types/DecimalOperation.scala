@@ -404,9 +404,7 @@ trait DecimalOperation extends Serializable {
 
   def add(that: DecimalOperation): DecimalOperation = {
     if (underlyingIsNull && that.underlyingIsNull && _scale == that._scale) {
-      val newDecimalOperation = newInstance()
-      newDecimalOperation.set(
-        longVal + that.longVal, Math.max(precision, that.precision) + 1, scale)
+      newInstance().set(longVal + that.longVal, Math.max(precision, that.precision) + 1, scale)
     } else {
       addUnderlyingValue(that)
     }
@@ -416,9 +414,7 @@ trait DecimalOperation extends Serializable {
 
   def subtract(that: DecimalOperation): DecimalOperation = {
     if (underlyingIsNull && that.underlyingIsNull && _scale == that._scale) {
-      val newDecimalOperation = newInstance()
-      newDecimalOperation.set(
-        longVal - that.longVal, Math.max(precision, that.precision) + 1, scale)
+      newInstance().set(longVal - that.longVal, Math.max(precision, that.precision) + 1, scale)
     } else {
       subtractUnderlyingValue(that)
     }
@@ -434,14 +430,13 @@ trait DecimalOperation extends Serializable {
 
   def quot(that: DecimalOperation): DecimalOperation
 
-  def negative: DecimalOperation = if (underlyingIsNull) {
-    val newDecimalOperation = newInstance()
-    newDecimalOperation.set(-longVal, precision, scale)
+  def negative(): DecimalOperation = if (underlyingIsNull) {
+    newInstance().set(-longVal, precision, scale)
   } else {
-    doNegative
+    doNegative()
   }
 
-  protected def doNegative: DecimalOperation
+  protected def doNegative(): DecimalOperation
 
   def copy(from: DecimalOperation): DecimalOperation = {
     this.longVal = from.longVal
