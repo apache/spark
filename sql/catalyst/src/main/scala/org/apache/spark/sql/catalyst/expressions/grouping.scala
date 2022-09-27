@@ -154,12 +154,22 @@ case class GroupingSets(
   // Note that, we must put `userGivenGroupByExprs` at the beginning, to preserve the order of
   // grouping columns specified by users. For example, GROUP BY (a, b) GROUPING SETS (b, a), the
   // final grouping columns should be (a, b).
-  override def children: Seq[Expression] = userGivenGroupByExprs ++ flatGroupingSets
+  override def children: Seq[Expression] =
+    if (SQLConf.get.groupingIdWithAppendedUserGroupByEnabled) {
+      flatGroupingSets ++ userGivenGroupByExprs
+    } else {
+      userGivenGroupByExprs ++ flatGroupingSets
+    }
+
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): GroupingSets =
-    copy(
-      userGivenGroupByExprs = newChildren.take(userGivenGroupByExprs.length),
-      flatGroupingSets = newChildren.drop(userGivenGroupByExprs.length))
+    if (SQLConf.get.groupingIdWithAppendedUserGroupByEnabled) {
+      super.legacyWithNewChildren(newChildren).asInstanceOf[GroupingSets]
+    } else {
+      copy(
+        userGivenGroupByExprs = newChildren.take(userGivenGroupByExprs.length),
+        flatGroupingSets = newChildren.drop(userGivenGroupByExprs.length))
+    }
 }
 
 object GroupingSets {
