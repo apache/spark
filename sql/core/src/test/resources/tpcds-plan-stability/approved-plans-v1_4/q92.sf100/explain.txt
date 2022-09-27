@@ -65,7 +65,7 @@ Input [3]: [ws_item_sk#3, ws_ext_discount_amt#4, ws_sold_date_sk#5]
 
 (8) Filter [codegen id : 3]
 Input [3]: [ws_item_sk#3, ws_ext_discount_amt#4, ws_sold_date_sk#5]
-Condition : (isnotnull(ws_item_sk#3) AND might_contain(Subquery scalar-subquery#7, [id=#8], xxhash64(ws_item_sk#3, 42)))
+Condition : (isnotnull(ws_item_sk#3) AND might_contain(Subquery scalar-subquery#7, [id=#8], xxhash64(ws_item_sk#3, 42), true))
 
 (9) ReusedExchange [Reuses operator id: 41]
 Output [1]: [d_date_sk#9]

@@ -40,18 +40,33 @@ TakeOrderedAndProject [s_store_name,s_company_id,s_street_number,s_street_name,s
                                   Exchange [ss_ticket_number,ss_item_sk,ss_customer_sk] #4
                                     WholeStageCodegen (4)
                                       Filter [ss_ticket_number,ss_item_sk,ss_customer_sk,ss_store_sk]
+                                        Subquery #2
+                                          ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(sr_ticket_number, 42), 443806, 3550448, 0, 0),bloomFilter,buf]
+                                            Exchange #5
+                                              ObjectHashAggregate [sr_ticket_number] [buf,buf]
+                                                ReusedExchange [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_returned_date_sk] #2
+                                        Subquery #3
+                                          ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(sr_item_sk, 42), 443806, 3550448, 0, 0),bloomFilter,buf]
+                                            Exchange #6
+                                              ObjectHashAggregate [sr_item_sk] [buf,buf]
+                                                ReusedExchange [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_returned_date_sk] #2
+                                        Subquery #4
+                                          ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(sr_customer_sk, 42), 443806, 3550448, 0, 0),bloomFilter,buf]
+                                            Exchange #7
+                                              ObjectHashAggregate [sr_customer_sk] [buf,buf]
+                                                ReusedExchange [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_returned_date_sk] #2
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_sold_date_sk]
                       InputAdapter
-                        BroadcastExchange #5
+                        BroadcastExchange #8
                           WholeStageCodegen (6)
                             Filter [d_date_sk]
                               ColumnarToRow
                                 InputAdapter
                                   Scan parquet spark_catalog.default.date_dim [d_date_sk]
                   InputAdapter
-                    BroadcastExchange #6
+                    BroadcastExchange #9
                       WholeStageCodegen (7)
                         Filter [s_store_sk]
                           ColumnarToRow

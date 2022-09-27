@@ -43,6 +43,16 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_bra
                                                                                     Project [ss_item_sk,ss_store_sk,ss_sales_price,d_year,d_moy]
                                                                                       BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                                                                         Filter [ss_item_sk,ss_store_sk]
+                                                                                          Subquery #2
+                                                                                            ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 203010, 1624080, 0, 0),bloomFilter,buf]
+                                                                                              Exchange #6
+                                                                                                ObjectHashAggregate [i_item_sk] [buf,buf]
+                                                                                                  Exchange [i_item_sk] #7
+                                                                                                    WholeStageCodegen (1)
+                                                                                                      Filter [i_item_sk,i_category,i_brand]
+                                                                                                        ColumnarToRow
+                                                                                                          InputAdapter
+                                                                                                            Scan parquet spark_catalog.default.item [i_item_sk,i_brand,i_category]
                                                                                           ColumnarToRow
                                                                                             InputAdapter
                                                                                               Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_store_sk,ss_sales_price,ss_sold_date_sk]
@@ -56,7 +66,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_bra
                                                                                         InputAdapter
                                                                                           ReusedExchange [d_date_sk,d_year,d_moy] #5
                                                                                     InputAdapter
-                                                                                      BroadcastExchange #6
+                                                                                      BroadcastExchange #8
                                                                                         WholeStageCodegen (2)
                                                                                           Filter [s_store_sk,s_store_name,s_company_name]
                                                                                             ColumnarToRow
@@ -66,7 +76,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_bra
                                                                       WholeStageCodegen (6)
                                                                         Sort [i_item_sk]
                                                                           InputAdapter
-                                                                            Exchange [i_item_sk] #7
+                                                                            Exchange [i_item_sk] #9
                                                                               WholeStageCodegen (5)
                                                                                 Filter [i_item_sk,i_category,i_brand]
                                                                                   ColumnarToRow
@@ -76,7 +86,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_bra
                   WholeStageCodegen (23)
                     Sort [i_category,i_brand,s_store_name,s_company_name,rn]
                       InputAdapter
-                        Exchange [i_category,i_brand,s_store_name,s_company_name,rn] #8
+                        Exchange [i_category,i_brand,s_store_name,s_company_name,rn] #10
                           WholeStageCodegen (22)
                             Project [i_category,i_brand,s_store_name,s_company_name,sum_sales,rn]
                               InputAdapter
@@ -84,16 +94,59 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_bra
                                   WholeStageCodegen (21)
                                     Sort [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy]
                                       InputAdapter
-                                        Exchange [i_category,i_brand,s_store_name,s_company_name] #9
+                                        Exchange [i_category,i_brand,s_store_name,s_company_name] #11
                                           WholeStageCodegen (20)
                                             HashAggregate [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,sum] [sum(UnscaledValue(ss_sales_price)),sum_sales,sum]
                                               InputAdapter
-                                                ReusedExchange [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,sum] #3
+                                                Exchange [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy] #12
+                                                  WholeStageCodegen (19)
+                                                    HashAggregate [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,ss_sales_price] [sum,sum]
+                                                      Project [i_brand,i_category,ss_sales_price,d_year,d_moy,s_store_name,s_company_name]
+                                                        SortMergeJoin [ss_item_sk,i_item_sk]
+                                                          InputAdapter
+                                                            WholeStageCodegen (16)
+                                                              Sort [ss_item_sk]
+                                                                InputAdapter
+                                                                  Exchange [ss_item_sk] #13
+                                                                    WholeStageCodegen (15)
+                                                                      Project [ss_item_sk,ss_sales_price,d_year,d_moy,s_store_name,s_company_name]
+                                                                        BroadcastHashJoin [ss_store_sk,s_store_sk]
+                                                                          Project [ss_item_sk,ss_store_sk,ss_sales_price,d_year,d_moy]
+                                                                            BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                                              Filter [ss_item_sk,ss_store_sk]
+                                                                                Subquery #3
+                                                                                  ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 203010, 1624080, 0, 0),bloomFilter,buf]
+                                                                                    Exchange #14
+                                                                                      ObjectHashAggregate [i_item_sk] [buf,buf]
+                                                                                        Exchange [i_item_sk] #15
+                                                                                          WholeStageCodegen (1)
+                                                                                            Filter [i_item_sk,i_category,i_brand]
+                                                                                              ColumnarToRow
+                                                                                                InputAdapter
+                                                                                                  Scan parquet spark_catalog.default.item [i_item_sk,i_brand,i_category]
+                                                                                ColumnarToRow
+                                                                                  InputAdapter
+                                                                                    Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_store_sk,ss_sales_price,ss_sold_date_sk]
+                                                                                      ReusedSubquery [d_date_sk] #1
+                                                                              InputAdapter
+                                                                                ReusedExchange [d_date_sk,d_year,d_moy] #5
+                                                                          InputAdapter
+                                                                            BroadcastExchange #16
+                                                                              WholeStageCodegen (14)
+                                                                                Filter [s_store_sk,s_store_name,s_company_name]
+                                                                                  ColumnarToRow
+                                                                                    InputAdapter
+                                                                                      Scan parquet spark_catalog.default.store [s_store_sk,s_store_name,s_company_name]
+                                                          InputAdapter
+                                                            WholeStageCodegen (18)
+                                                              Sort [i_item_sk]
+                                                                InputAdapter
+                                                                  ReusedExchange [i_item_sk,i_brand,i_category] #15
         InputAdapter
           WholeStageCodegen (35)
             Sort [i_category,i_brand,s_store_name,s_company_name,rn]
               InputAdapter
-                Exchange [i_category,i_brand,s_store_name,s_company_name,rn] #10
+                Exchange [i_category,i_brand,s_store_name,s_company_name,rn] #17
                   WholeStageCodegen (34)
                     Project [i_category,i_brand,s_store_name,s_company_name,sum_sales,rn]
                       InputAdapter
@@ -101,4 +154,37 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_bra
                           WholeStageCodegen (33)
                             Sort [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy]
                               InputAdapter
-                                ReusedExchange [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,sum_sales] #9
+                                Exchange [i_category,i_brand,s_store_name,s_company_name] #18
+                                  WholeStageCodegen (32)
+                                    HashAggregate [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,sum] [sum(UnscaledValue(ss_sales_price)),sum_sales,sum]
+                                      InputAdapter
+                                        Exchange [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy] #19
+                                          WholeStageCodegen (31)
+                                            HashAggregate [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,ss_sales_price] [sum,sum]
+                                              Project [i_brand,i_category,ss_sales_price,d_year,d_moy,s_store_name,s_company_name]
+                                                SortMergeJoin [ss_item_sk,i_item_sk]
+                                                  InputAdapter
+                                                    WholeStageCodegen (28)
+                                                      Sort [ss_item_sk]
+                                                        InputAdapter
+                                                          Exchange [ss_item_sk] #20
+                                                            WholeStageCodegen (27)
+                                                              Project [ss_item_sk,ss_sales_price,d_year,d_moy,s_store_name,s_company_name]
+                                                                BroadcastHashJoin [ss_store_sk,s_store_sk]
+                                                                  Project [ss_item_sk,ss_store_sk,ss_sales_price,d_year,d_moy]
+                                                                    BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                                      Filter [ss_item_sk,ss_store_sk]
+                                                                        ReusedSubquery [bloomFilter] #2
+                                                                        ColumnarToRow
+                                                                          InputAdapter
+                                                                            Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_store_sk,ss_sales_price,ss_sold_date_sk]
+                                                                              ReusedSubquery [d_date_sk] #1
+                                                                      InputAdapter
+                                                                        ReusedExchange [d_date_sk,d_year,d_moy] #5
+                                                                  InputAdapter
+                                                                    ReusedExchange [s_store_sk,s_store_name,s_company_name] #16
+                                                  InputAdapter
+                                                    WholeStageCodegen (30)
+                                                      Sort [i_item_sk]
+                                                        InputAdapter
+                                                          ReusedExchange [i_item_sk,i_brand,i_category] #15

@@ -21,6 +21,16 @@ TakeOrderedAndProject [s_store_name,i_item_desc,revenue,i_current_price,i_wholes
                                         Project [ss_item_sk,ss_store_sk,ss_sales_price]
                                           BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                             Filter [ss_store_sk,ss_item_sk]
+                                              Subquery #2
+                                                ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 204000, 1632000, 0, 0),bloomFilter,buf]
+                                                  Exchange #4
+                                                    ObjectHashAggregate [i_item_sk] [buf,buf]
+                                                      Exchange [i_item_sk] #5
+                                                        WholeStageCodegen (1)
+                                                          Filter [i_item_sk]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet spark_catalog.default.item [i_item_sk,i_item_desc,i_current_price,i_wholesale_cost,i_brand]
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_store_sk,ss_sales_price,ss_sold_date_sk]
@@ -35,17 +45,17 @@ TakeOrderedAndProject [s_store_name,i_item_desc,revenue,i_current_price,i_wholes
                                             InputAdapter
                                               ReusedExchange [d_date_sk] #3
                             InputAdapter
-                              BroadcastExchange #4
+                              BroadcastExchange #6
                                 WholeStageCodegen (6)
                                   Filter [ave]
                                     HashAggregate [ss_store_sk,sum,count] [avg(revenue),ave,sum,count]
                                       InputAdapter
-                                        Exchange [ss_store_sk] #5
+                                        Exchange [ss_store_sk] #7
                                           WholeStageCodegen (5)
                                             HashAggregate [ss_store_sk,revenue] [sum,count,sum,count]
                                               HashAggregate [ss_store_sk,ss_item_sk,sum] [sum(UnscaledValue(ss_sales_price)),revenue,sum]
                                                 InputAdapter
-                                                  Exchange [ss_store_sk,ss_item_sk] #6
+                                                  Exchange [ss_store_sk,ss_item_sk] #8
                                                     WholeStageCodegen (4)
                                                       HashAggregate [ss_store_sk,ss_item_sk,ss_sales_price] [sum,sum]
                                                         Project [ss_item_sk,ss_store_sk,ss_sales_price]
@@ -58,7 +68,7 @@ TakeOrderedAndProject [s_store_name,i_item_desc,revenue,i_current_price,i_wholes
                                                             InputAdapter
                                                               ReusedExchange [d_date_sk] #3
                         InputAdapter
-                          BroadcastExchange #7
+                          BroadcastExchange #9
                             WholeStageCodegen (7)
                               Filter [s_store_sk]
                                 ColumnarToRow
@@ -68,9 +78,4 @@ TakeOrderedAndProject [s_store_name,i_item_desc,revenue,i_current_price,i_wholes
           WholeStageCodegen (11)
             Sort [i_item_sk]
               InputAdapter
-                Exchange [i_item_sk] #8
-                  WholeStageCodegen (10)
-                    Filter [i_item_sk]
-                      ColumnarToRow
-                        InputAdapter
-                          Scan parquet spark_catalog.default.item [i_item_sk,i_item_desc,i_current_price,i_wholesale_cost,i_brand]
+                ReusedExchange [i_item_sk,i_item_desc,i_current_price,i_wholesale_cost,i_brand] #5

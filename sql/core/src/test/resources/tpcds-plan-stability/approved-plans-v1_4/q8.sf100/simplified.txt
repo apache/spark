@@ -35,6 +35,56 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                                     BroadcastExchange #4
                                       WholeStageCodegen (2)
                                         Filter [s_store_sk,s_zip]
+                                          Subquery #2
+                                            ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(substr(ca_zip, 1, 2), 42), 1000000, 8388608, 0, 0),bloomFilter,buf]
+                                              Exchange #5
+                                                ObjectHashAggregate [ca_zip] [buf,buf]
+                                                  Exchange [ca_zip] #6
+                                                    WholeStageCodegen (8)
+                                                      HashAggregate [ca_zip]
+                                                        InputAdapter
+                                                          Exchange [ca_zip] #7
+                                                            WholeStageCodegen (7)
+                                                              HashAggregate [ca_zip]
+                                                                Project [ca_zip]
+                                                                  BroadcastHashJoin [ca_zip,ca_zip]
+                                                                    Filter [ca_zip]
+                                                                      ColumnarToRow
+                                                                        InputAdapter
+                                                                          Scan parquet spark_catalog.default.customer_address [ca_zip]
+                                                                    InputAdapter
+                                                                      BroadcastExchange #8
+                                                                        WholeStageCodegen (6)
+                                                                          Project [ca_zip]
+                                                                            Filter [cnt]
+                                                                              HashAggregate [ca_zip,count] [count(1),ca_zip,cnt,count]
+                                                                                InputAdapter
+                                                                                  Exchange [ca_zip] #9
+                                                                                    WholeStageCodegen (5)
+                                                                                      HashAggregate [ca_zip] [count,count]
+                                                                                        Project [ca_zip]
+                                                                                          SortMergeJoin [ca_address_sk,c_current_addr_sk]
+                                                                                            InputAdapter
+                                                                                              WholeStageCodegen (2)
+                                                                                                Sort [ca_address_sk]
+                                                                                                  InputAdapter
+                                                                                                    Exchange [ca_address_sk] #10
+                                                                                                      WholeStageCodegen (1)
+                                                                                                        Filter [ca_address_sk]
+                                                                                                          ColumnarToRow
+                                                                                                            InputAdapter
+                                                                                                              Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_zip]
+                                                                                            InputAdapter
+                                                                                              WholeStageCodegen (4)
+                                                                                                Sort [c_current_addr_sk]
+                                                                                                  InputAdapter
+                                                                                                    Exchange [c_current_addr_sk] #11
+                                                                                                      WholeStageCodegen (3)
+                                                                                                        Project [c_current_addr_sk]
+                                                                                                          Filter [c_preferred_cust_flag,c_current_addr_sk]
+                                                                                                            ColumnarToRow
+                                                                                                              InputAdapter
+                                                                                                                Scan parquet spark_catalog.default.customer [c_current_addr_sk,c_preferred_cust_flag]
                                           ColumnarToRow
                                             InputAdapter
                                               Scan parquet spark_catalog.default.store [s_store_sk,s_store_name,s_zip]
@@ -42,49 +92,4 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                     WholeStageCodegen (13)
                       Sort [ca_zip]
                         InputAdapter
-                          Exchange [ca_zip] #5
-                            WholeStageCodegen (12)
-                              HashAggregate [ca_zip]
-                                InputAdapter
-                                  Exchange [ca_zip] #6
-                                    WholeStageCodegen (11)
-                                      HashAggregate [ca_zip]
-                                        Project [ca_zip]
-                                          BroadcastHashJoin [ca_zip,ca_zip]
-                                            Filter [ca_zip]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet spark_catalog.default.customer_address [ca_zip]
-                                            InputAdapter
-                                              BroadcastExchange #7
-                                                WholeStageCodegen (10)
-                                                  Project [ca_zip]
-                                                    Filter [cnt]
-                                                      HashAggregate [ca_zip,count] [count(1),ca_zip,cnt,count]
-                                                        InputAdapter
-                                                          Exchange [ca_zip] #8
-                                                            WholeStageCodegen (9)
-                                                              HashAggregate [ca_zip] [count,count]
-                                                                Project [ca_zip]
-                                                                  SortMergeJoin [ca_address_sk,c_current_addr_sk]
-                                                                    InputAdapter
-                                                                      WholeStageCodegen (6)
-                                                                        Sort [ca_address_sk]
-                                                                          InputAdapter
-                                                                            Exchange [ca_address_sk] #9
-                                                                              WholeStageCodegen (5)
-                                                                                Filter [ca_address_sk]
-                                                                                  ColumnarToRow
-                                                                                    InputAdapter
-                                                                                      Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_zip]
-                                                                    InputAdapter
-                                                                      WholeStageCodegen (8)
-                                                                        Sort [c_current_addr_sk]
-                                                                          InputAdapter
-                                                                            Exchange [c_current_addr_sk] #10
-                                                                              WholeStageCodegen (7)
-                                                                                Project [c_current_addr_sk]
-                                                                                  Filter [c_preferred_cust_flag,c_current_addr_sk]
-                                                                                    ColumnarToRow
-                                                                                      InputAdapter
-                                                                                        Scan parquet spark_catalog.default.customer [c_current_addr_sk,c_preferred_cust_flag]
+                          ReusedExchange [ca_zip] #6

@@ -1,16 +1,16 @@
 == Physical Plan ==
-TakeOrderedAndProject (54)
-+- * HashAggregate (53)
-   +- Exchange (52)
-      +- * HashAggregate (51)
-         +- * Project (50)
-            +- * BroadcastHashJoin Inner BuildRight (49)
-               :- * Project (44)
-               :  +- * BroadcastHashJoin Inner BuildRight (43)
-               :     :- * Project (41)
-               :     :  +- * BroadcastHashJoin Inner BuildRight (40)
-               :     :     :- * Project (34)
-               :     :     :  +- * SortMergeJoin Inner (33)
+TakeOrderedAndProject (51)
++- * HashAggregate (50)
+   +- Exchange (49)
+      +- * HashAggregate (48)
+         +- * Project (47)
+            +- * BroadcastHashJoin Inner BuildRight (46)
+               :- * Project (41)
+               :  +- * BroadcastHashJoin Inner BuildRight (40)
+               :     :- * Project (38)
+               :     :  +- * BroadcastHashJoin Inner BuildRight (37)
+               :     :     :- * Project (31)
+               :     :     :  +- * SortMergeJoin Inner (30)
                :     :     :     :- * Sort (27)
                :     :     :     :  +- Exchange (26)
                :     :     :     :     +- * Project (25)
@@ -38,21 +38,18 @@ TakeOrderedAndProject (54)
                :     :     :     :              +- * Filter (22)
                :     :     :     :                 +- * ColumnarToRow (21)
                :     :     :     :                    +- Scan parquet spark_catalog.default.customer_demographics (20)
-               :     :     :     +- * Sort (32)
-               :     :     :        +- Exchange (31)
-               :     :     :           +- * Filter (30)
-               :     :     :              +- * ColumnarToRow (29)
-               :     :     :                 +- Scan parquet spark_catalog.default.customer_demographics (28)
-               :     :     +- BroadcastExchange (39)
-               :     :        +- * Project (38)
-               :     :           +- * Filter (37)
-               :     :              +- * ColumnarToRow (36)
-               :     :                 +- Scan parquet spark_catalog.default.customer_address (35)
-               :     +- ReusedExchange (42)
-               +- BroadcastExchange (48)
-                  +- * Filter (47)
-                     +- * ColumnarToRow (46)
-                        +- Scan parquet spark_catalog.default.reason (45)
+               :     :     :     +- * Sort (29)
+               :     :     :        +- ReusedExchange (28)
+               :     :     +- BroadcastExchange (36)
+               :     :        +- * Project (35)
+               :     :           +- * Filter (34)
+               :     :              +- * ColumnarToRow (33)
+               :     :                 +- Scan parquet spark_catalog.default.customer_address (32)
+               :     +- ReusedExchange (39)
+               +- BroadcastExchange (45)
+                  +- * Filter (44)
+                     +- * ColumnarToRow (43)
+                        +- Scan parquet spark_catalog.default.reason (42)
 
 
 (1) Scan parquet spark_catalog.default.web_sales
@@ -118,7 +115,7 @@ Input [9]: [wr_item_sk#10, wr_refunded_cdemo_sk#11, wr_refunded_addr_sk#12, wr_r
 
 (14) Filter [codegen id : 4]
 Input [9]: [wr_item_sk#10, wr_refunded_cdemo_sk#11, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_order_number#15, wr_fee#16, wr_refunded_cash#17, wr_returned_date_sk#18]
-Condition : (((((((isnotnull(wr_item_sk#10) AND isnotnull(wr_order_number#15)) AND isnotnull(wr_refunded_cdemo_sk#11)) AND isnotnull(wr_returning_cdemo_sk#13)) AND isnotnull(wr_refunded_addr_sk#12)) AND isnotnull(wr_reason_sk#14)) AND might_contain(Subquery scalar-subquery#19, [id=#20], xxhash64(wr_refunded_cdemo_sk#11, 42))) AND might_contain(Subquery scalar-subquery#21, [id=#22], xxhash64(wr_refunded_addr_sk#12, 42)))
+Condition : ((((((((isnotnull(wr_item_sk#10) AND isnotnull(wr_order_number#15)) AND isnotnull(wr_refunded_cdemo_sk#11)) AND isnotnull(wr_returning_cdemo_sk#13)) AND isnotnull(wr_refunded_addr_sk#12)) AND isnotnull(wr_reason_sk#14)) AND might_contain(Subquery scalar-subquery#19, [id=#20], xxhash64(wr_refunded_cdemo_sk#11, 42), true)) AND might_contain(Subquery scalar-subquery#21, [id=#22], xxhash64(wr_returning_cdemo_sk#13, 42), false)) AND might_contain(Subquery scalar-subquery#23, [id=#24], xxhash64(wr_refunded_addr_sk#12, 42), true))
 
 (15) Project [codegen id : 4]
 Output [8]: [wr_item_sk#10, wr_refunded_cdemo_sk#11, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_order_number#15, wr_fee#16, wr_refunded_cash#17]
@@ -143,290 +140,377 @@ Output [10]: [ws_quantity#4, ws_sales_price#5, ws_net_profit#6, ws_sold_date_sk#
 Input [14]: [ws_item_sk#1, ws_order_number#3, ws_quantity#4, ws_sales_price#5, ws_net_profit#6, ws_sold_date_sk#7, wr_item_sk#10, wr_refunded_cdemo_sk#11, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_order_number#15, wr_fee#16, wr_refunded_cash#17]
 
 (20) Scan parquet spark_catalog.default.customer_demographics
-Output [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
+Output [3]: [cd_demo_sk#25, cd_marital_status#26, cd_education_status#27]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
 PushedFilters: [IsNotNull(cd_demo_sk), IsNotNull(cd_marital_status), IsNotNull(cd_education_status), Or(Or(And(EqualTo(cd_marital_status,M),EqualTo(cd_education_status,Advanced Degree     )),And(EqualTo(cd_marital_status,S),EqualTo(cd_education_status,College             ))),And(EqualTo(cd_marital_status,W),EqualTo(cd_education_status,2 yr Degree         )))]
 ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string,cd_education_status:string>
 
 (21) ColumnarToRow [codegen id : 6]
-Input [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
+Input [3]: [cd_demo_sk#25, cd_marital_status#26, cd_education_status#27]
 
 (22) Filter [codegen id : 6]
-Input [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
-Condition : (((isnotnull(cd_demo_sk#23) AND isnotnull(cd_marital_status#24)) AND isnotnull(cd_education_status#25)) AND ((((cd_marital_status#24 = M) AND (cd_education_status#25 = Advanced Degree     )) OR ((cd_marital_status#24 = S) AND (cd_education_status#25 = College             ))) OR ((cd_marital_status#24 = W) AND (cd_education_status#25 = 2 yr Degree         ))))
+Input [3]: [cd_demo_sk#25, cd_marital_status#26, cd_education_status#27]
+Condition : (((((isnotnull(cd_demo_sk#25) AND isnotnull(cd_marital_status#26)) AND isnotnull(cd_education_status#27)) AND ((((cd_marital_status#26 = M) AND (cd_education_status#27 = Advanced Degree     )) OR ((cd_marital_status#26 = S) AND (cd_education_status#27 = College             ))) OR ((cd_marital_status#26 = W) AND (cd_education_status#27 = 2 yr Degree         )))) AND might_contain(Subquery scalar-subquery#28, [id=#29], xxhash64(cd_marital_status#26, 42), false)) AND might_contain(Subquery scalar-subquery#30, [id=#31], xxhash64(cd_education_status#27, 42), false))
 
 (23) BroadcastExchange
-Input [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
+Input [3]: [cd_demo_sk#25, cd_marital_status#26, cd_education_status#27]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=4]
 
 (24) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [wr_refunded_cdemo_sk#11]
-Right keys [1]: [cd_demo_sk#23]
+Right keys [1]: [cd_demo_sk#25]
 Join type: Inner
-Join condition: ((((((cd_marital_status#24 = M) AND (cd_education_status#25 = Advanced Degree     )) AND (ws_sales_price#5 >= 100.00)) AND (ws_sales_price#5 <= 150.00)) OR ((((cd_marital_status#24 = S) AND (cd_education_status#25 = College             )) AND (ws_sales_price#5 >= 50.00)) AND (ws_sales_price#5 <= 100.00))) OR ((((cd_marital_status#24 = W) AND (cd_education_status#25 = 2 yr Degree         )) AND (ws_sales_price#5 >= 150.00)) AND (ws_sales_price#5 <= 200.00)))
+Join condition: ((((((cd_marital_status#26 = M) AND (cd_education_status#27 = Advanced Degree     )) AND (ws_sales_price#5 >= 100.00)) AND (ws_sales_price#5 <= 150.00)) OR ((((cd_marital_status#26 = S) AND (cd_education_status#27 = College             )) AND (ws_sales_price#5 >= 50.00)) AND (ws_sales_price#5 <= 100.00))) OR ((((cd_marital_status#26 = W) AND (cd_education_status#27 = 2 yr Degree         )) AND (ws_sales_price#5 >= 150.00)) AND (ws_sales_price#5 <= 200.00)))
 
 (25) Project [codegen id : 7]
-Output [10]: [ws_quantity#4, ws_net_profit#6, ws_sold_date_sk#7, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17, cd_marital_status#24, cd_education_status#25]
-Input [13]: [ws_quantity#4, ws_sales_price#5, ws_net_profit#6, ws_sold_date_sk#7, wr_refunded_cdemo_sk#11, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17, cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
+Output [10]: [ws_quantity#4, ws_net_profit#6, ws_sold_date_sk#7, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17, cd_marital_status#26, cd_education_status#27]
+Input [13]: [ws_quantity#4, ws_sales_price#5, ws_net_profit#6, ws_sold_date_sk#7, wr_refunded_cdemo_sk#11, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17, cd_demo_sk#25, cd_marital_status#26, cd_education_status#27]
 
 (26) Exchange
-Input [10]: [ws_quantity#4, ws_net_profit#6, ws_sold_date_sk#7, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17, cd_marital_status#24, cd_education_status#25]
-Arguments: hashpartitioning(wr_returning_cdemo_sk#13, cd_marital_status#24, cd_education_status#25, 5), ENSURE_REQUIREMENTS, [plan_id=5]
+Input [10]: [ws_quantity#4, ws_net_profit#6, ws_sold_date_sk#7, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17, cd_marital_status#26, cd_education_status#27]
+Arguments: hashpartitioning(wr_returning_cdemo_sk#13, cd_marital_status#26, cd_education_status#27, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (27) Sort [codegen id : 8]
-Input [10]: [ws_quantity#4, ws_net_profit#6, ws_sold_date_sk#7, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17, cd_marital_status#24, cd_education_status#25]
-Arguments: [wr_returning_cdemo_sk#13 ASC NULLS FIRST, cd_marital_status#24 ASC NULLS FIRST, cd_education_status#25 ASC NULLS FIRST], false, 0
+Input [10]: [ws_quantity#4, ws_net_profit#6, ws_sold_date_sk#7, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17, cd_marital_status#26, cd_education_status#27]
+Arguments: [wr_returning_cdemo_sk#13 ASC NULLS FIRST, cd_marital_status#26 ASC NULLS FIRST, cd_education_status#27 ASC NULLS FIRST], false, 0
 
-(28) Scan parquet spark_catalog.default.customer_demographics
-Output [3]: [cd_demo_sk#26, cd_marital_status#27, cd_education_status#28]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/customer_demographics]
-PushedFilters: [IsNotNull(cd_demo_sk), IsNotNull(cd_marital_status), IsNotNull(cd_education_status)]
-ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string,cd_education_status:string>
+(28) ReusedExchange [Reuses operator id: 67]
+Output [3]: [cd_demo_sk#32, cd_marital_status#33, cd_education_status#34]
 
-(29) ColumnarToRow [codegen id : 9]
-Input [3]: [cd_demo_sk#26, cd_marital_status#27, cd_education_status#28]
+(29) Sort [codegen id : 10]
+Input [3]: [cd_demo_sk#32, cd_marital_status#33, cd_education_status#34]
+Arguments: [cd_demo_sk#32 ASC NULLS FIRST, cd_marital_status#33 ASC NULLS FIRST, cd_education_status#34 ASC NULLS FIRST], false, 0
 
-(30) Filter [codegen id : 9]
-Input [3]: [cd_demo_sk#26, cd_marital_status#27, cd_education_status#28]
-Condition : ((isnotnull(cd_demo_sk#26) AND isnotnull(cd_marital_status#27)) AND isnotnull(cd_education_status#28))
-
-(31) Exchange
-Input [3]: [cd_demo_sk#26, cd_marital_status#27, cd_education_status#28]
-Arguments: hashpartitioning(cd_demo_sk#26, cd_marital_status#27, cd_education_status#28, 5), ENSURE_REQUIREMENTS, [plan_id=6]
-
-(32) Sort [codegen id : 10]
-Input [3]: [cd_demo_sk#26, cd_marital_status#27, cd_education_status#28]
-Arguments: [cd_demo_sk#26 ASC NULLS FIRST, cd_marital_status#27 ASC NULLS FIRST, cd_education_status#28 ASC NULLS FIRST], false, 0
-
-(33) SortMergeJoin [codegen id : 14]
-Left keys [3]: [wr_returning_cdemo_sk#13, cd_marital_status#24, cd_education_status#25]
-Right keys [3]: [cd_demo_sk#26, cd_marital_status#27, cd_education_status#28]
+(30) SortMergeJoin [codegen id : 14]
+Left keys [3]: [wr_returning_cdemo_sk#13, cd_marital_status#26, cd_education_status#27]
+Right keys [3]: [cd_demo_sk#32, cd_marital_status#33, cd_education_status#34]
 Join type: Inner
 Join condition: None
 
-(34) Project [codegen id : 14]
+(31) Project [codegen id : 14]
 Output [7]: [ws_quantity#4, ws_net_profit#6, ws_sold_date_sk#7, wr_refunded_addr_sk#12, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17]
-Input [13]: [ws_quantity#4, ws_net_profit#6, ws_sold_date_sk#7, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17, cd_marital_status#24, cd_education_status#25, cd_demo_sk#26, cd_marital_status#27, cd_education_status#28]
+Input [13]: [ws_quantity#4, ws_net_profit#6, ws_sold_date_sk#7, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17, cd_marital_status#26, cd_education_status#27, cd_demo_sk#32, cd_marital_status#33, cd_education_status#34]
 
-(35) Scan parquet spark_catalog.default.customer_address
-Output [3]: [ca_address_sk#29, ca_state#30, ca_country#31]
+(32) Scan parquet spark_catalog.default.customer_address
+Output [3]: [ca_address_sk#35, ca_state#36, ca_country#37]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_country), EqualTo(ca_country,United States), IsNotNull(ca_address_sk), Or(Or(In(ca_state, [IN,NJ,OH]),In(ca_state, [CT,KY,WI])),In(ca_state, [AR,IA,LA]))]
 ReadSchema: struct<ca_address_sk:int,ca_state:string,ca_country:string>
 
-(36) ColumnarToRow [codegen id : 11]
-Input [3]: [ca_address_sk#29, ca_state#30, ca_country#31]
+(33) ColumnarToRow [codegen id : 11]
+Input [3]: [ca_address_sk#35, ca_state#36, ca_country#37]
 
-(37) Filter [codegen id : 11]
-Input [3]: [ca_address_sk#29, ca_state#30, ca_country#31]
-Condition : (((isnotnull(ca_country#31) AND (ca_country#31 = United States)) AND isnotnull(ca_address_sk#29)) AND ((ca_state#30 IN (IN,OH,NJ) OR ca_state#30 IN (WI,CT,KY)) OR ca_state#30 IN (LA,IA,AR)))
+(34) Filter [codegen id : 11]
+Input [3]: [ca_address_sk#35, ca_state#36, ca_country#37]
+Condition : (((isnotnull(ca_country#37) AND (ca_country#37 = United States)) AND isnotnull(ca_address_sk#35)) AND ((ca_state#36 IN (IN,OH,NJ) OR ca_state#36 IN (WI,CT,KY)) OR ca_state#36 IN (LA,IA,AR)))
 
-(38) Project [codegen id : 11]
-Output [2]: [ca_address_sk#29, ca_state#30]
-Input [3]: [ca_address_sk#29, ca_state#30, ca_country#31]
+(35) Project [codegen id : 11]
+Output [2]: [ca_address_sk#35, ca_state#36]
+Input [3]: [ca_address_sk#35, ca_state#36, ca_country#37]
 
-(39) BroadcastExchange
-Input [2]: [ca_address_sk#29, ca_state#30]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=7]
+(36) BroadcastExchange
+Input [2]: [ca_address_sk#35, ca_state#36]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=6]
+
+(37) BroadcastHashJoin [codegen id : 14]
+Left keys [1]: [wr_refunded_addr_sk#12]
+Right keys [1]: [ca_address_sk#35]
+Join type: Inner
+Join condition: ((((ca_state#36 IN (IN,OH,NJ) AND (ws_net_profit#6 >= 100.00)) AND (ws_net_profit#6 <= 200.00)) OR ((ca_state#36 IN (WI,CT,KY) AND (ws_net_profit#6 >= 150.00)) AND (ws_net_profit#6 <= 300.00))) OR ((ca_state#36 IN (LA,IA,AR) AND (ws_net_profit#6 >= 50.00)) AND (ws_net_profit#6 <= 250.00)))
+
+(38) Project [codegen id : 14]
+Output [5]: [ws_quantity#4, ws_sold_date_sk#7, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17]
+Input [9]: [ws_quantity#4, ws_net_profit#6, ws_sold_date_sk#7, wr_refunded_addr_sk#12, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17, ca_address_sk#35, ca_state#36]
+
+(39) ReusedExchange [Reuses operator id: 56]
+Output [1]: [d_date_sk#38]
 
 (40) BroadcastHashJoin [codegen id : 14]
-Left keys [1]: [wr_refunded_addr_sk#12]
-Right keys [1]: [ca_address_sk#29]
-Join type: Inner
-Join condition: ((((ca_state#30 IN (IN,OH,NJ) AND (ws_net_profit#6 >= 100.00)) AND (ws_net_profit#6 <= 200.00)) OR ((ca_state#30 IN (WI,CT,KY) AND (ws_net_profit#6 >= 150.00)) AND (ws_net_profit#6 <= 300.00))) OR ((ca_state#30 IN (LA,IA,AR) AND (ws_net_profit#6 >= 50.00)) AND (ws_net_profit#6 <= 250.00)))
-
-(41) Project [codegen id : 14]
-Output [5]: [ws_quantity#4, ws_sold_date_sk#7, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17]
-Input [9]: [ws_quantity#4, ws_net_profit#6, ws_sold_date_sk#7, wr_refunded_addr_sk#12, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17, ca_address_sk#29, ca_state#30]
-
-(42) ReusedExchange [Reuses operator id: 59]
-Output [1]: [d_date_sk#32]
-
-(43) BroadcastHashJoin [codegen id : 14]
 Left keys [1]: [ws_sold_date_sk#7]
-Right keys [1]: [d_date_sk#32]
+Right keys [1]: [d_date_sk#38]
 Join type: Inner
 Join condition: None
 
-(44) Project [codegen id : 14]
+(41) Project [codegen id : 14]
 Output [4]: [ws_quantity#4, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17]
-Input [6]: [ws_quantity#4, ws_sold_date_sk#7, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17, d_date_sk#32]
+Input [6]: [ws_quantity#4, ws_sold_date_sk#7, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17, d_date_sk#38]
 
-(45) Scan parquet spark_catalog.default.reason
-Output [2]: [r_reason_sk#33, r_reason_desc#34]
+(42) Scan parquet spark_catalog.default.reason
+Output [2]: [r_reason_sk#39, r_reason_desc#40]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/reason]
 PushedFilters: [IsNotNull(r_reason_sk)]
 ReadSchema: struct<r_reason_sk:int,r_reason_desc:string>
 
-(46) ColumnarToRow [codegen id : 13]
-Input [2]: [r_reason_sk#33, r_reason_desc#34]
+(43) ColumnarToRow [codegen id : 13]
+Input [2]: [r_reason_sk#39, r_reason_desc#40]
 
-(47) Filter [codegen id : 13]
-Input [2]: [r_reason_sk#33, r_reason_desc#34]
-Condition : isnotnull(r_reason_sk#33)
+(44) Filter [codegen id : 13]
+Input [2]: [r_reason_sk#39, r_reason_desc#40]
+Condition : isnotnull(r_reason_sk#39)
 
-(48) BroadcastExchange
-Input [2]: [r_reason_sk#33, r_reason_desc#34]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=8]
+(45) BroadcastExchange
+Input [2]: [r_reason_sk#39, r_reason_desc#40]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=7]
 
-(49) BroadcastHashJoin [codegen id : 14]
+(46) BroadcastHashJoin [codegen id : 14]
 Left keys [1]: [wr_reason_sk#14]
-Right keys [1]: [r_reason_sk#33]
+Right keys [1]: [r_reason_sk#39]
 Join type: Inner
 Join condition: None
 
-(50) Project [codegen id : 14]
-Output [4]: [ws_quantity#4, wr_fee#16, wr_refunded_cash#17, r_reason_desc#34]
-Input [6]: [ws_quantity#4, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17, r_reason_sk#33, r_reason_desc#34]
+(47) Project [codegen id : 14]
+Output [4]: [ws_quantity#4, wr_fee#16, wr_refunded_cash#17, r_reason_desc#40]
+Input [6]: [ws_quantity#4, wr_reason_sk#14, wr_fee#16, wr_refunded_cash#17, r_reason_sk#39, r_reason_desc#40]
 
-(51) HashAggregate [codegen id : 14]
-Input [4]: [ws_quantity#4, wr_fee#16, wr_refunded_cash#17, r_reason_desc#34]
-Keys [1]: [r_reason_desc#34]
+(48) HashAggregate [codegen id : 14]
+Input [4]: [ws_quantity#4, wr_fee#16, wr_refunded_cash#17, r_reason_desc#40]
+Keys [1]: [r_reason_desc#40]
 Functions [3]: [partial_avg(ws_quantity#4), partial_avg(UnscaledValue(wr_refunded_cash#17)), partial_avg(UnscaledValue(wr_fee#16))]
-Aggregate Attributes [6]: [sum#35, count#36, sum#37, count#38, sum#39, count#40]
-Results [7]: [r_reason_desc#34, sum#41, count#42, sum#43, count#44, sum#45, count#46]
+Aggregate Attributes [6]: [sum#41, count#42, sum#43, count#44, sum#45, count#46]
+Results [7]: [r_reason_desc#40, sum#47, count#48, sum#49, count#50, sum#51, count#52]
 
-(52) Exchange
-Input [7]: [r_reason_desc#34, sum#41, count#42, sum#43, count#44, sum#45, count#46]
-Arguments: hashpartitioning(r_reason_desc#34, 5), ENSURE_REQUIREMENTS, [plan_id=9]
+(49) Exchange
+Input [7]: [r_reason_desc#40, sum#47, count#48, sum#49, count#50, sum#51, count#52]
+Arguments: hashpartitioning(r_reason_desc#40, 5), ENSURE_REQUIREMENTS, [plan_id=8]
 
-(53) HashAggregate [codegen id : 15]
-Input [7]: [r_reason_desc#34, sum#41, count#42, sum#43, count#44, sum#45, count#46]
-Keys [1]: [r_reason_desc#34]
+(50) HashAggregate [codegen id : 15]
+Input [7]: [r_reason_desc#40, sum#47, count#48, sum#49, count#50, sum#51, count#52]
+Keys [1]: [r_reason_desc#40]
 Functions [3]: [avg(ws_quantity#4), avg(UnscaledValue(wr_refunded_cash#17)), avg(UnscaledValue(wr_fee#16))]
-Aggregate Attributes [3]: [avg(ws_quantity#4)#47, avg(UnscaledValue(wr_refunded_cash#17))#48, avg(UnscaledValue(wr_fee#16))#49]
-Results [4]: [substr(r_reason_desc#34, 1, 20) AS substr(r_reason_desc, 1, 20)#50, avg(ws_quantity#4)#47 AS avg(ws_quantity)#51, cast((avg(UnscaledValue(wr_refunded_cash#17))#48 / 100.0) as decimal(11,6)) AS avg(wr_refunded_cash)#52, cast((avg(UnscaledValue(wr_fee#16))#49 / 100.0) as decimal(11,6)) AS avg(wr_fee)#53]
+Aggregate Attributes [3]: [avg(ws_quantity#4)#53, avg(UnscaledValue(wr_refunded_cash#17))#54, avg(UnscaledValue(wr_fee#16))#55]
+Results [4]: [substr(r_reason_desc#40, 1, 20) AS substr(r_reason_desc, 1, 20)#56, avg(ws_quantity#4)#53 AS avg(ws_quantity)#57, cast((avg(UnscaledValue(wr_refunded_cash#17))#54 / 100.0) as decimal(11,6)) AS avg(wr_refunded_cash)#58, cast((avg(UnscaledValue(wr_fee#16))#55 / 100.0) as decimal(11,6)) AS avg(wr_fee)#59]
 
-(54) TakeOrderedAndProject
-Input [4]: [substr(r_reason_desc, 1, 20)#50, avg(ws_quantity)#51, avg(wr_refunded_cash)#52, avg(wr_fee)#53]
-Arguments: 100, [substr(r_reason_desc, 1, 20)#50 ASC NULLS FIRST, avg(ws_quantity)#51 ASC NULLS FIRST, avg(wr_refunded_cash)#52 ASC NULLS FIRST, avg(wr_fee)#53 ASC NULLS FIRST], [substr(r_reason_desc, 1, 20)#50, avg(ws_quantity)#51, avg(wr_refunded_cash)#52, avg(wr_fee)#53]
+(51) TakeOrderedAndProject
+Input [4]: [substr(r_reason_desc, 1, 20)#56, avg(ws_quantity)#57, avg(wr_refunded_cash)#58, avg(wr_fee)#59]
+Arguments: 100, [substr(r_reason_desc, 1, 20)#56 ASC NULLS FIRST, avg(ws_quantity)#57 ASC NULLS FIRST, avg(wr_refunded_cash)#58 ASC NULLS FIRST, avg(wr_fee)#59 ASC NULLS FIRST], [substr(r_reason_desc, 1, 20)#56, avg(ws_quantity)#57, avg(wr_refunded_cash)#58, avg(wr_fee)#59]
 
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 1 Hosting Expression = ws_sold_date_sk#7 IN dynamicpruning#8
-BroadcastExchange (59)
-+- * Project (58)
-   +- * Filter (57)
-      +- * ColumnarToRow (56)
-         +- Scan parquet spark_catalog.default.date_dim (55)
+BroadcastExchange (56)
++- * Project (55)
+   +- * Filter (54)
+      +- * ColumnarToRow (53)
+         +- Scan parquet spark_catalog.default.date_dim (52)
 
 
-(55) Scan parquet spark_catalog.default.date_dim
-Output [2]: [d_date_sk#32, d_year#54]
+(52) Scan parquet spark_catalog.default.date_dim
+Output [2]: [d_date_sk#38, d_year#60]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
-(56) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#32, d_year#54]
+(53) ColumnarToRow [codegen id : 1]
+Input [2]: [d_date_sk#38, d_year#60]
 
-(57) Filter [codegen id : 1]
-Input [2]: [d_date_sk#32, d_year#54]
-Condition : ((isnotnull(d_year#54) AND (d_year#54 = 2000)) AND isnotnull(d_date_sk#32))
+(54) Filter [codegen id : 1]
+Input [2]: [d_date_sk#38, d_year#60]
+Condition : ((isnotnull(d_year#60) AND (d_year#60 = 2000)) AND isnotnull(d_date_sk#38))
 
-(58) Project [codegen id : 1]
-Output [1]: [d_date_sk#32]
-Input [2]: [d_date_sk#32, d_year#54]
+(55) Project [codegen id : 1]
+Output [1]: [d_date_sk#38]
+Input [2]: [d_date_sk#38, d_year#60]
 
-(59) BroadcastExchange
-Input [1]: [d_date_sk#32]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=10]
+(56) BroadcastExchange
+Input [1]: [d_date_sk#38]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=9]
 
 Subquery:2 Hosting operator id = 14 Hosting Expression = Subquery scalar-subquery#19, [id=#20]
-ObjectHashAggregate (66)
-+- Exchange (65)
-   +- ObjectHashAggregate (64)
-      +- * Project (63)
-         +- * Filter (62)
-            +- * ColumnarToRow (61)
-               +- Scan parquet spark_catalog.default.customer_demographics (60)
+ObjectHashAggregate (63)
++- Exchange (62)
+   +- ObjectHashAggregate (61)
+      +- * Project (60)
+         +- * Filter (59)
+            +- * ColumnarToRow (58)
+               +- Scan parquet spark_catalog.default.customer_demographics (57)
 
 
-(60) Scan parquet spark_catalog.default.customer_demographics
-Output [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
+(57) Scan parquet spark_catalog.default.customer_demographics
+Output [3]: [cd_demo_sk#25, cd_marital_status#26, cd_education_status#27]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
 PushedFilters: [IsNotNull(cd_demo_sk), IsNotNull(cd_marital_status), IsNotNull(cd_education_status), Or(Or(And(EqualTo(cd_marital_status,M),EqualTo(cd_education_status,Advanced Degree     )),And(EqualTo(cd_marital_status,S),EqualTo(cd_education_status,College             ))),And(EqualTo(cd_marital_status,W),EqualTo(cd_education_status,2 yr Degree         )))]
 ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string,cd_education_status:string>
 
-(61) ColumnarToRow [codegen id : 1]
-Input [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
+(58) ColumnarToRow [codegen id : 1]
+Input [3]: [cd_demo_sk#25, cd_marital_status#26, cd_education_status#27]
 
-(62) Filter [codegen id : 1]
-Input [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
-Condition : (((isnotnull(cd_demo_sk#23) AND isnotnull(cd_marital_status#24)) AND isnotnull(cd_education_status#25)) AND ((((cd_marital_status#24 = M) AND (cd_education_status#25 = Advanced Degree     )) OR ((cd_marital_status#24 = S) AND (cd_education_status#25 = College             ))) OR ((cd_marital_status#24 = W) AND (cd_education_status#25 = 2 yr Degree         ))))
+(59) Filter [codegen id : 1]
+Input [3]: [cd_demo_sk#25, cd_marital_status#26, cd_education_status#27]
+Condition : (((isnotnull(cd_demo_sk#25) AND isnotnull(cd_marital_status#26)) AND isnotnull(cd_education_status#27)) AND ((((cd_marital_status#26 = M) AND (cd_education_status#27 = Advanced Degree     )) OR ((cd_marital_status#26 = S) AND (cd_education_status#27 = College             ))) OR ((cd_marital_status#26 = W) AND (cd_education_status#27 = 2 yr Degree         ))))
 
-(63) Project [codegen id : 1]
-Output [1]: [cd_demo_sk#23]
-Input [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
+(60) Project [codegen id : 1]
+Output [1]: [cd_demo_sk#25]
+Input [3]: [cd_demo_sk#25, cd_marital_status#26, cd_education_status#27]
 
-(64) ObjectHashAggregate
-Input [1]: [cd_demo_sk#23]
+(61) ObjectHashAggregate
+Input [1]: [cd_demo_sk#25]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(cd_demo_sk#23, 42), 159981, 1279848, 0, 0)]
-Aggregate Attributes [1]: [buf#55]
-Results [1]: [buf#56]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(cd_demo_sk#25, 42), 159981, 1279848, 0, 0)]
+Aggregate Attributes [1]: [buf#61]
+Results [1]: [buf#62]
 
-(65) Exchange
-Input [1]: [buf#56]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=11]
+(62) Exchange
+Input [1]: [buf#62]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
 
-(66) ObjectHashAggregate
-Input [1]: [buf#56]
+(63) ObjectHashAggregate
+Input [1]: [buf#62]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#23, 42), 159981, 1279848, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#23, 42), 159981, 1279848, 0, 0)#57]
-Results [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#23, 42), 159981, 1279848, 0, 0)#57 AS bloomFilter#58]
+Functions [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#25, 42), 159981, 1279848, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#25, 42), 159981, 1279848, 0, 0)#63]
+Results [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#25, 42), 159981, 1279848, 0, 0)#63 AS bloomFilter#64]
 
 Subquery:3 Hosting operator id = 14 Hosting Expression = Subquery scalar-subquery#21, [id=#22]
-ObjectHashAggregate (73)
-+- Exchange (72)
-   +- ObjectHashAggregate (71)
-      +- * Project (70)
-         +- * Filter (69)
-            +- * ColumnarToRow (68)
-               +- Scan parquet spark_catalog.default.customer_address (67)
+ObjectHashAggregate (70)
++- Exchange (69)
+   +- ObjectHashAggregate (68)
+      +- Exchange (67)
+         +- * Filter (66)
+            +- * ColumnarToRow (65)
+               +- Scan parquet spark_catalog.default.customer_demographics (64)
 
 
-(67) Scan parquet spark_catalog.default.customer_address
-Output [3]: [ca_address_sk#29, ca_state#30, ca_country#31]
+(64) Scan parquet spark_catalog.default.customer_demographics
+Output [3]: [cd_demo_sk#32, cd_marital_status#33, cd_education_status#34]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer_demographics]
+PushedFilters: [IsNotNull(cd_demo_sk), IsNotNull(cd_marital_status), IsNotNull(cd_education_status)]
+ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string,cd_education_status:string>
+
+(65) ColumnarToRow [codegen id : 1]
+Input [3]: [cd_demo_sk#32, cd_marital_status#33, cd_education_status#34]
+
+(66) Filter [codegen id : 1]
+Input [3]: [cd_demo_sk#32, cd_marital_status#33, cd_education_status#34]
+Condition : ((isnotnull(cd_demo_sk#32) AND isnotnull(cd_marital_status#33)) AND isnotnull(cd_education_status#34))
+
+(67) Exchange
+Input [3]: [cd_demo_sk#32, cd_marital_status#33, cd_education_status#34]
+Arguments: hashpartitioning(cd_demo_sk#32, cd_marital_status#33, cd_education_status#34, 5), ENSURE_REQUIREMENTS, [plan_id=11]
+
+(68) ObjectHashAggregate
+Input [3]: [cd_demo_sk#32, cd_marital_status#33, cd_education_status#34]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(cd_demo_sk#32, 42), 1920800, 15366400, 0, 0)]
+Aggregate Attributes [1]: [buf#65]
+Results [1]: [buf#66]
+
+(69) Exchange
+Input [1]: [buf#66]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=12]
+
+(70) ObjectHashAggregate
+Input [1]: [buf#66]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#32, 42), 1920800, 15366400, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#32, 42), 1920800, 15366400, 0, 0)#67]
+Results [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#32, 42), 1920800, 15366400, 0, 0)#67 AS bloomFilter#68]
+
+Subquery:4 Hosting operator id = 14 Hosting Expression = Subquery scalar-subquery#23, [id=#24]
+ObjectHashAggregate (77)
++- Exchange (76)
+   +- ObjectHashAggregate (75)
+      +- * Project (74)
+         +- * Filter (73)
+            +- * ColumnarToRow (72)
+               +- Scan parquet spark_catalog.default.customer_address (71)
+
+
+(71) Scan parquet spark_catalog.default.customer_address
+Output [3]: [ca_address_sk#35, ca_state#36, ca_country#37]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_country), EqualTo(ca_country,United States), IsNotNull(ca_address_sk), Or(Or(In(ca_state, [IN,NJ,OH]),In(ca_state, [CT,KY,WI])),In(ca_state, [AR,IA,LA]))]
 ReadSchema: struct<ca_address_sk:int,ca_state:string,ca_country:string>
 
-(68) ColumnarToRow [codegen id : 1]
-Input [3]: [ca_address_sk#29, ca_state#30, ca_country#31]
+(72) ColumnarToRow [codegen id : 1]
+Input [3]: [ca_address_sk#35, ca_state#36, ca_country#37]
 
-(69) Filter [codegen id : 1]
-Input [3]: [ca_address_sk#29, ca_state#30, ca_country#31]
-Condition : (((isnotnull(ca_country#31) AND (ca_country#31 = United States)) AND isnotnull(ca_address_sk#29)) AND ((ca_state#30 IN (IN,OH,NJ) OR ca_state#30 IN (WI,CT,KY)) OR ca_state#30 IN (LA,IA,AR)))
+(73) Filter [codegen id : 1]
+Input [3]: [ca_address_sk#35, ca_state#36, ca_country#37]
+Condition : (((isnotnull(ca_country#37) AND (ca_country#37 = United States)) AND isnotnull(ca_address_sk#35)) AND ((ca_state#36 IN (IN,OH,NJ) OR ca_state#36 IN (WI,CT,KY)) OR ca_state#36 IN (LA,IA,AR)))
 
-(70) Project [codegen id : 1]
-Output [1]: [ca_address_sk#29]
-Input [3]: [ca_address_sk#29, ca_state#30, ca_country#31]
+(74) Project [codegen id : 1]
+Output [1]: [ca_address_sk#35]
+Input [3]: [ca_address_sk#35, ca_state#36, ca_country#37]
 
-(71) ObjectHashAggregate
-Input [1]: [ca_address_sk#29]
+(75) ObjectHashAggregate
+Input [1]: [ca_address_sk#35]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(ca_address_sk#29, 42), 152837, 1222696, 0, 0)]
-Aggregate Attributes [1]: [buf#59]
-Results [1]: [buf#60]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(ca_address_sk#35, 42), 152837, 1222696, 0, 0)]
+Aggregate Attributes [1]: [buf#69]
+Results [1]: [buf#70]
 
-(72) Exchange
-Input [1]: [buf#60]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=12]
+(76) Exchange
+Input [1]: [buf#70]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=13]
 
-(73) ObjectHashAggregate
-Input [1]: [buf#60]
+(77) ObjectHashAggregate
+Input [1]: [buf#70]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(ca_address_sk#29, 42), 152837, 1222696, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(ca_address_sk#29, 42), 152837, 1222696, 0, 0)#61]
-Results [1]: [bloom_filter_agg(xxhash64(ca_address_sk#29, 42), 152837, 1222696, 0, 0)#61 AS bloomFilter#62]
+Functions [1]: [bloom_filter_agg(xxhash64(ca_address_sk#35, 42), 152837, 1222696, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(ca_address_sk#35, 42), 152837, 1222696, 0, 0)#71]
+Results [1]: [bloom_filter_agg(xxhash64(ca_address_sk#35, 42), 152837, 1222696, 0, 0)#71 AS bloomFilter#72]
+
+Subquery:5 Hosting operator id = 22 Hosting Expression = Subquery scalar-subquery#28, [id=#29]
+ObjectHashAggregate (81)
++- Exchange (80)
+   +- ObjectHashAggregate (79)
+      +- ReusedExchange (78)
+
+
+(78) ReusedExchange [Reuses operator id: 67]
+Output [3]: [cd_demo_sk#32, cd_marital_status#33, cd_education_status#34]
+
+(79) ObjectHashAggregate
+Input [3]: [cd_demo_sk#32, cd_marital_status#33, cd_education_status#34]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(cd_marital_status#33, 42), 1920800, 15366400, 0, 0)]
+Aggregate Attributes [1]: [buf#73]
+Results [1]: [buf#74]
+
+(80) Exchange
+Input [1]: [buf#74]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=14]
+
+(81) ObjectHashAggregate
+Input [1]: [buf#74]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(cd_marital_status#33, 42), 1920800, 15366400, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(cd_marital_status#33, 42), 1920800, 15366400, 0, 0)#75]
+Results [1]: [bloom_filter_agg(xxhash64(cd_marital_status#33, 42), 1920800, 15366400, 0, 0)#75 AS bloomFilter#76]
+
+Subquery:6 Hosting operator id = 22 Hosting Expression = Subquery scalar-subquery#30, [id=#31]
+ObjectHashAggregate (85)
++- Exchange (84)
+   +- ObjectHashAggregate (83)
+      +- ReusedExchange (82)
+
+
+(82) ReusedExchange [Reuses operator id: 67]
+Output [3]: [cd_demo_sk#32, cd_marital_status#33, cd_education_status#34]
+
+(83) ObjectHashAggregate
+Input [3]: [cd_demo_sk#32, cd_marital_status#33, cd_education_status#34]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(cd_education_status#34, 42), 1920800, 15366400, 0, 0)]
+Aggregate Attributes [1]: [buf#77]
+Results [1]: [buf#78]
+
+(84) Exchange
+Input [1]: [buf#78]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=15]
+
+(85) ObjectHashAggregate
+Input [1]: [buf#78]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(cd_education_status#34, 42), 1920800, 15366400, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(cd_education_status#34, 42), 1920800, 15366400, 0, 0)#79]
+Results [1]: [bloom_filter_agg(xxhash64(cd_education_status#34, 42), 1920800, 15366400, 0, 0)#79 AS bloomFilter#80]
 
 

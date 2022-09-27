@@ -34,6 +34,16 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_state,store_sales_quantitycount,s
                                                                   Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_quantity]
                                                                     BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                                                       Filter [ss_customer_sk,ss_item_sk,ss_ticket_number,ss_store_sk]
+                                                                        Subquery #2
+                                                                          ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 204000, 1632000, 0, 0),bloomFilter,buf]
+                                                                            Exchange #6
+                                                                              ObjectHashAggregate [i_item_sk] [buf,buf]
+                                                                                Exchange [i_item_sk] #7
+                                                                                  WholeStageCodegen (1)
+                                                                                    Filter [i_item_sk]
+                                                                                      ColumnarToRow
+                                                                                        InputAdapter
+                                                                                          Scan parquet spark_catalog.default.item [i_item_sk,i_item_id,i_item_desc]
                                                                         ColumnarToRow
                                                                           InputAdapter
                                                                             Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_quantity,ss_sold_date_sk]
@@ -48,7 +58,7 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_state,store_sales_quantitycount,s
                                                                       InputAdapter
                                                                         ReusedExchange [d_date_sk] #5
                                                                   InputAdapter
-                                                                    BroadcastExchange #6
+                                                                    BroadcastExchange #8
                                                                       WholeStageCodegen (2)
                                                                         Filter [s_store_sk]
                                                                           ColumnarToRow
@@ -58,17 +68,12 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_state,store_sales_quantitycount,s
                                                     WholeStageCodegen (6)
                                                       Sort [i_item_sk]
                                                         InputAdapter
-                                                          Exchange [i_item_sk] #7
-                                                            WholeStageCodegen (5)
-                                                              Filter [i_item_sk]
-                                                                ColumnarToRow
-                                                                  InputAdapter
-                                                                    Scan parquet spark_catalog.default.item [i_item_sk,i_item_id,i_item_desc]
+                                                          ReusedExchange [i_item_sk,i_item_id,i_item_desc] #7
                                   InputAdapter
                                     WholeStageCodegen (11)
                                       Sort [sr_customer_sk,sr_item_sk,sr_ticket_number]
                                         InputAdapter
-                                          Exchange [sr_customer_sk,sr_item_sk,sr_ticket_number] #8
+                                          Exchange [sr_customer_sk,sr_item_sk,sr_ticket_number] #9
                                             WholeStageCodegen (10)
                                               Project [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_return_quantity]
                                                 BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
@@ -76,8 +81,8 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_state,store_sales_quantitycount,s
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet spark_catalog.default.store_returns [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_return_quantity,sr_returned_date_sk]
-                                                          SubqueryBroadcast [d_date_sk] #2
-                                                            BroadcastExchange #9
+                                                          SubqueryBroadcast [d_date_sk] #3
+                                                            BroadcastExchange #10
                                                               WholeStageCodegen (1)
                                                                 Project [d_date_sk]
                                                                   Filter [d_quarter_name,d_date_sk]
@@ -85,12 +90,12 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_state,store_sales_quantitycount,s
                                                                       InputAdapter
                                                                         Scan parquet spark_catalog.default.date_dim [d_date_sk,d_quarter_name]
                                                   InputAdapter
-                                                    ReusedExchange [d_date_sk] #9
+                                                    ReusedExchange [d_date_sk] #10
                   InputAdapter
                     WholeStageCodegen (16)
                       Sort [cs_bill_customer_sk,cs_item_sk]
                         InputAdapter
-                          Exchange [cs_bill_customer_sk,cs_item_sk] #10
+                          Exchange [cs_bill_customer_sk,cs_item_sk] #11
                             WholeStageCodegen (15)
                               Project [cs_bill_customer_sk,cs_item_sk,cs_quantity]
                                 BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
@@ -98,6 +103,6 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_state,store_sales_quantitycount,s
                                     ColumnarToRow
                                       InputAdapter
                                         Scan parquet spark_catalog.default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_sold_date_sk]
-                                          ReusedSubquery [d_date_sk] #2
+                                          ReusedSubquery [d_date_sk] #3
                                   InputAdapter
-                                    ReusedExchange [d_date_sk] #9
+                                    ReusedExchange [d_date_sk] #10

@@ -94,7 +94,7 @@ Input [3]: [d_date_sk#9, d_week_seq#10, d_day_name#11]
 
 (10) Filter [codegen id : 3]
 Input [3]: [d_date_sk#9, d_week_seq#10, d_day_name#11]
-Condition : ((isnotnull(d_date_sk#9) AND isnotnull(d_week_seq#10)) AND might_contain(Subquery scalar-subquery#12, [id=#13], xxhash64(d_week_seq#10, 42)))
+Condition : ((isnotnull(d_date_sk#9) AND isnotnull(d_week_seq#10)) AND might_contain(Subquery scalar-subquery#12, [id=#13], xxhash64(d_week_seq#10, 42), true))
 
 (11) BroadcastExchange
 Input [3]: [d_date_sk#9, d_week_seq#10, d_day_name#11]
@@ -202,7 +202,7 @@ Input [3]: [d_date_sk#9, d_week_seq#10, d_day_name#11]
 
 (33) Filter [codegen id : 8]
 Input [3]: [d_date_sk#9, d_week_seq#10, d_day_name#11]
-Condition : ((isnotnull(d_date_sk#9) AND isnotnull(d_week_seq#10)) AND might_contain(Subquery scalar-subquery#52, [id=#53], xxhash64(d_week_seq#10, 42)))
+Condition : ((isnotnull(d_date_sk#9) AND isnotnull(d_week_seq#10)) AND might_contain(Subquery scalar-subquery#52, [id=#53], xxhash64(d_week_seq#10, 42), true))
 
 (34) BroadcastExchange
 Input [3]: [d_date_sk#9, d_week_seq#10, d_day_name#11]

@@ -58,7 +58,7 @@ Input [8]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_wareho
 
 (3) Filter [codegen id : 1]
 Input [8]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_warehouse_sk#4, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7, cs_sold_date_sk#8]
-Condition : (((((isnotnull(cs_ship_date_sk#1) AND isnotnull(cs_ship_addr_sk#2)) AND isnotnull(cs_call_center_sk#3)) AND might_contain(Subquery scalar-subquery#9, [id=#10], xxhash64(cs_ship_addr_sk#2, 42))) AND might_contain(Subquery scalar-subquery#11, [id=#12], xxhash64(cs_call_center_sk#3, 42))) AND might_contain(Subquery scalar-subquery#13, [id=#14], xxhash64(cs_ship_date_sk#1, 42)))
+Condition : (((((isnotnull(cs_ship_date_sk#1) AND isnotnull(cs_ship_addr_sk#2)) AND isnotnull(cs_call_center_sk#3)) AND might_contain(Subquery scalar-subquery#9, [id=#10], xxhash64(cs_ship_addr_sk#2, 42), true)) AND might_contain(Subquery scalar-subquery#11, [id=#12], xxhash64(cs_call_center_sk#3, 42), true)) AND might_contain(Subquery scalar-subquery#13, [id=#14], xxhash64(cs_ship_date_sk#1, 42), true))
 
 (4) Project [codegen id : 1]
 Output [7]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_warehouse_sk#4, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]

@@ -48,17 +48,18 @@ TakeOrderedAndProject [cd_gender,cd_marital_status,cd_education_status,cd_purcha
                                                       WholeStageCodegen (4)
                                                         Project [ss_customer_sk]
                                                           BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet spark_catalog.default.store_sales [ss_customer_sk,ss_sold_date_sk]
-                                                                  SubqueryBroadcast [d_date_sk] #2
-                                                                    BroadcastExchange #6
-                                                                      WholeStageCodegen (1)
-                                                                        Project [d_date_sk]
-                                                                          Filter [d_year,d_moy,d_date_sk]
-                                                                            ColumnarToRow
-                                                                              InputAdapter
-                                                                                Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
+                                                            Filter
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet spark_catalog.default.store_sales [ss_customer_sk,ss_sold_date_sk]
+                                                                    SubqueryBroadcast [d_date_sk] #2
+                                                                      BroadcastExchange #6
+                                                                        WholeStageCodegen (1)
+                                                                          Project [d_date_sk]
+                                                                            Filter [d_year,d_moy,d_date_sk]
+                                                                              ColumnarToRow
+                                                                                InputAdapter
+                                                                                  Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
                                                             InputAdapter
                                                               ReusedExchange [d_date_sk] #6
                                       InputAdapter

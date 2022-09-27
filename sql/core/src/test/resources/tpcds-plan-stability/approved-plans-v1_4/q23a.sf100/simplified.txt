@@ -25,17 +25,18 @@ WholeStageCodegen (36)
                                                 InputAdapter
                                                   Exchange [cs_item_sk] #3
                                                     WholeStageCodegen (1)
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet spark_catalog.default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sold_date_sk]
-                                                            SubqueryBroadcast [d_date_sk] #1
-                                                              BroadcastExchange #4
-                                                                WholeStageCodegen (1)
-                                                                  Project [d_date_sk]
-                                                                    Filter [d_year,d_moy,d_date_sk]
-                                                                      ColumnarToRow
-                                                                        InputAdapter
-                                                                          Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
+                                                      Filter
+                                                        ColumnarToRow
+                                                          InputAdapter
+                                                            Scan parquet spark_catalog.default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sold_date_sk]
+                                                              SubqueryBroadcast [d_date_sk] #1
+                                                                BroadcastExchange #4
+                                                                  WholeStageCodegen (1)
+                                                                    Project [d_date_sk]
+                                                                      Filter [d_year,d_moy,d_date_sk]
+                                                                        ColumnarToRow
+                                                                          InputAdapter
+                                                                            Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
                                           InputAdapter
                                             WholeStageCodegen (8)
                                               Sort [item_sk]
@@ -54,6 +55,16 @@ WholeStageCodegen (36)
                                                                         Project [ss_item_sk,d_date]
                                                                           BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                                                             Filter [ss_item_sk]
+                                                                              Subquery #3
+                                                                                ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 204000, 1632000, 0, 0),bloomFilter,buf]
+                                                                                  Exchange #7
+                                                                                    ObjectHashAggregate [i_item_sk] [buf,buf]
+                                                                                      Exchange [i_item_sk] #8
+                                                                                        WholeStageCodegen (1)
+                                                                                          Filter [i_item_sk]
+                                                                                            ColumnarToRow
+                                                                                              InputAdapter
+                                                                                                Scan parquet spark_catalog.default.item [i_item_sk,i_item_desc]
                                                                               ColumnarToRow
                                                                                 InputAdapter
                                                                                   Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_sold_date_sk]
@@ -71,22 +82,17 @@ WholeStageCodegen (36)
                                                               WholeStageCodegen (7)
                                                                 Sort [i_item_sk]
                                                                   InputAdapter
-                                                                    Exchange [i_item_sk] #7
-                                                                      WholeStageCodegen (6)
-                                                                        Filter [i_item_sk]
-                                                                          ColumnarToRow
-                                                                            InputAdapter
-                                                                              Scan parquet spark_catalog.default.item [i_item_sk,i_item_desc]
+                                                                    ReusedExchange [i_item_sk,i_item_desc] #8
                           InputAdapter
                             WholeStageCodegen (15)
                               Sort [c_customer_sk]
                                 Project [c_customer_sk]
                                   Filter [ssales]
-                                    Subquery #3
+                                    Subquery #5
                                       WholeStageCodegen (7)
                                         HashAggregate [max] [max(csales),tpcds_cmax,max]
                                           InputAdapter
-                                            Exchange #10
+                                            Exchange #12
                                               WholeStageCodegen (6)
                                                 HashAggregate [csales] [max,max]
                                                   HashAggregate [c_customer_sk,sum,isEmpty] [sum((cast(ss_quantity as decimal(10,0)) * ss_sales_price)),csales,sum,isEmpty]
@@ -97,16 +103,26 @@ WholeStageCodegen (36)
                                                             WholeStageCodegen (3)
                                                               Sort [ss_customer_sk]
                                                                 InputAdapter
-                                                                  Exchange [ss_customer_sk] #11
+                                                                  Exchange [ss_customer_sk] #13
                                                                     WholeStageCodegen (2)
                                                                       Project [ss_customer_sk,ss_quantity,ss_sales_price]
                                                                         BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                                                           Filter [ss_customer_sk]
+                                                                            Subquery #7
+                                                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(c_customer_sk, 42), 2000000, 16000000, 0, 0),bloomFilter,buf]
+                                                                                Exchange #15
+                                                                                  ObjectHashAggregate [c_customer_sk] [buf,buf]
+                                                                                    Exchange [c_customer_sk] #16
+                                                                                      WholeStageCodegen (1)
+                                                                                        Filter [c_customer_sk]
+                                                                                          ColumnarToRow
+                                                                                            InputAdapter
+                                                                                              Scan parquet spark_catalog.default.customer [c_customer_sk]
                                                                             ColumnarToRow
                                                                               InputAdapter
                                                                                 Scan parquet spark_catalog.default.store_sales [ss_customer_sk,ss_quantity,ss_sales_price,ss_sold_date_sk]
-                                                                                  SubqueryBroadcast [d_date_sk] #4
-                                                                                    BroadcastExchange #12
+                                                                                  SubqueryBroadcast [d_date_sk] #6
+                                                                                    BroadcastExchange #14
                                                                                       WholeStageCodegen (1)
                                                                                         Project [d_date_sk]
                                                                                           Filter [d_year,d_date_sk]
@@ -114,12 +130,12 @@ WholeStageCodegen (36)
                                                                                               InputAdapter
                                                                                                 Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]
                                                                           InputAdapter
-                                                                            ReusedExchange [d_date_sk] #12
+                                                                            ReusedExchange [d_date_sk] #14
                                                           InputAdapter
                                                             WholeStageCodegen (5)
                                                               Sort [c_customer_sk]
                                                                 InputAdapter
-                                                                  ReusedExchange [c_customer_sk] #9
+                                                                  ReusedExchange [c_customer_sk] #11
                                     HashAggregate [c_customer_sk,sum,isEmpty] [sum((cast(ss_quantity as decimal(10,0)) * ss_sales_price)),ssales,sum,isEmpty]
                                       HashAggregate [c_customer_sk,ss_quantity,ss_sales_price] [sum,isEmpty,sum,isEmpty]
                                         Project [ss_quantity,ss_sales_price,c_customer_sk]
@@ -128,10 +144,20 @@ WholeStageCodegen (36)
                                               WholeStageCodegen (12)
                                                 Sort [ss_customer_sk]
                                                   InputAdapter
-                                                    Exchange [ss_customer_sk] #8
+                                                    Exchange [ss_customer_sk] #9
                                                       WholeStageCodegen (11)
                                                         Project [ss_customer_sk,ss_quantity,ss_sales_price]
                                                           Filter [ss_customer_sk]
+                                                            Subquery #4
+                                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(c_customer_sk, 42), 2000000, 16000000, 0, 0),bloomFilter,buf]
+                                                                Exchange #10
+                                                                  ObjectHashAggregate [c_customer_sk] [buf,buf]
+                                                                    Exchange [c_customer_sk] #11
+                                                                      WholeStageCodegen (1)
+                                                                        Filter [c_customer_sk]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet spark_catalog.default.customer [c_customer_sk]
                                                             ColumnarToRow
                                                               InputAdapter
                                                                 Scan parquet spark_catalog.default.store_sales [ss_customer_sk,ss_quantity,ss_sales_price,ss_sold_date_sk]
@@ -139,12 +165,7 @@ WholeStageCodegen (36)
                                               WholeStageCodegen (14)
                                                 Sort [c_customer_sk]
                                                   InputAdapter
-                                                    Exchange [c_customer_sk] #9
-                                                      WholeStageCodegen (13)
-                                                        Filter [c_customer_sk]
-                                                          ColumnarToRow
-                                                            InputAdapter
-                                                              Scan parquet spark_catalog.default.customer [c_customer_sk]
+                                                    ReusedExchange [c_customer_sk] #11
                       InputAdapter
                         ReusedExchange [d_date_sk] #4
                 WholeStageCodegen (34)
@@ -156,7 +177,7 @@ WholeStageCodegen (36)
                             WholeStageCodegen (27)
                               Sort [ws_bill_customer_sk]
                                 InputAdapter
-                                  Exchange [ws_bill_customer_sk] #13
+                                  Exchange [ws_bill_customer_sk] #17
                                     WholeStageCodegen (26)
                                       Project [ws_bill_customer_sk,ws_quantity,ws_list_price,ws_sold_date_sk]
                                         SortMergeJoin [ws_item_sk,item_sk]
@@ -164,12 +185,13 @@ WholeStageCodegen (36)
                                             WholeStageCodegen (19)
                                               Sort [ws_item_sk]
                                                 InputAdapter
-                                                  Exchange [ws_item_sk] #14
+                                                  Exchange [ws_item_sk] #18
                                                     WholeStageCodegen (18)
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet spark_catalog.default.web_sales [ws_item_sk,ws_bill_customer_sk,ws_quantity,ws_list_price,ws_sold_date_sk]
-                                                            ReusedSubquery [d_date_sk] #1
+                                                      Filter
+                                                        ColumnarToRow
+                                                          InputAdapter
+                                                            Scan parquet spark_catalog.default.web_sales [ws_item_sk,ws_bill_customer_sk,ws_quantity,ws_list_price,ws_sold_date_sk]
+                                                              ReusedSubquery [d_date_sk] #1
                                           InputAdapter
                                             WholeStageCodegen (25)
                                               Sort [item_sk]
@@ -188,13 +210,13 @@ WholeStageCodegen (36)
                                                               WholeStageCodegen (24)
                                                                 Sort [i_item_sk]
                                                                   InputAdapter
-                                                                    ReusedExchange [i_item_sk,i_item_desc] #7
+                                                                    ReusedExchange [i_item_sk,i_item_desc] #8
                           InputAdapter
                             WholeStageCodegen (32)
                               Sort [c_customer_sk]
                                 Project [c_customer_sk]
                                   Filter [ssales]
-                                    ReusedSubquery [tpcds_cmax] #3
+                                    ReusedSubquery [tpcds_cmax] #5
                                     HashAggregate [c_customer_sk,sum,isEmpty] [sum((cast(ss_quantity as decimal(10,0)) * ss_sales_price)),ssales,sum,isEmpty]
                                       HashAggregate [c_customer_sk,ss_quantity,ss_sales_price] [sum,isEmpty,sum,isEmpty]
                                         Project [ss_quantity,ss_sales_price,c_customer_sk]
@@ -203,11 +225,11 @@ WholeStageCodegen (36)
                                               WholeStageCodegen (29)
                                                 Sort [ss_customer_sk]
                                                   InputAdapter
-                                                    ReusedExchange [ss_customer_sk,ss_quantity,ss_sales_price] #8
+                                                    ReusedExchange [ss_customer_sk,ss_quantity,ss_sales_price] #9
                                             InputAdapter
                                               WholeStageCodegen (31)
                                                 Sort [c_customer_sk]
                                                   InputAdapter
-                                                    ReusedExchange [c_customer_sk] #9
+                                                    ReusedExchange [c_customer_sk] #11
                       InputAdapter
                         ReusedExchange [d_date_sk] #4

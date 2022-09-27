@@ -1,10 +1,10 @@
 == Physical Plan ==
-TakeOrderedAndProject (24)
-+- * HashAggregate (23)
-   +- Exchange (22)
-      +- * HashAggregate (21)
-         +- * Project (20)
-            +- * SortMergeJoin Inner (19)
+TakeOrderedAndProject (25)
++- * HashAggregate (24)
+   +- Exchange (23)
+      +- * HashAggregate (22)
+         +- * Project (21)
+            +- * SortMergeJoin Inner (20)
                :- * Sort (13)
                :  +- Exchange (12)
                :     +- * Project (11)
@@ -18,11 +18,12 @@ TakeOrderedAndProject (24)
                :                 +- * Filter (7)
                :                    +- * ColumnarToRow (6)
                :                       +- Scan parquet spark_catalog.default.reason (5)
-               +- * Sort (18)
-                  +- Exchange (17)
-                     +- * Project (16)
-                        +- * ColumnarToRow (15)
-                           +- Scan parquet spark_catalog.default.store_sales (14)
+               +- * Sort (19)
+                  +- Exchange (18)
+                     +- * Project (17)
+                        +- * Filter (16)
+                           +- * ColumnarToRow (15)
+                              +- Scan parquet spark_catalog.default.store_sales (14)
 
 
 (1) Scan parquet spark_catalog.default.store_returns
@@ -92,47 +93,110 @@ ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_ticket_number:int,ss_qua
 (15) ColumnarToRow [codegen id : 4]
 Input [6]: [ss_item_sk#8, ss_customer_sk#9, ss_ticket_number#10, ss_quantity#11, ss_sales_price#12, ss_sold_date_sk#13]
 
-(16) Project [codegen id : 4]
+(16) Filter [codegen id : 4]
+Input [6]: [ss_item_sk#8, ss_customer_sk#9, ss_ticket_number#10, ss_quantity#11, ss_sales_price#12, ss_sold_date_sk#13]
+Condition : (might_contain(Subquery scalar-subquery#14, [id=#15], xxhash64(ss_item_sk#8, 42), false) AND might_contain(Subquery scalar-subquery#16, [id=#17], xxhash64(ss_ticket_number#10, 42), false))
+
+(17) Project [codegen id : 4]
 Output [5]: [ss_item_sk#8, ss_customer_sk#9, ss_ticket_number#10, ss_quantity#11, ss_sales_price#12]
 Input [6]: [ss_item_sk#8, ss_customer_sk#9, ss_ticket_number#10, ss_quantity#11, ss_sales_price#12, ss_sold_date_sk#13]
 
-(17) Exchange
+(18) Exchange
 Input [5]: [ss_item_sk#8, ss_customer_sk#9, ss_ticket_number#10, ss_quantity#11, ss_sales_price#12]
 Arguments: hashpartitioning(ss_item_sk#8, ss_ticket_number#10, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
-(18) Sort [codegen id : 5]
+(19) Sort [codegen id : 5]
 Input [5]: [ss_item_sk#8, ss_customer_sk#9, ss_ticket_number#10, ss_quantity#11, ss_sales_price#12]
 Arguments: [ss_item_sk#8 ASC NULLS FIRST, ss_ticket_number#10 ASC NULLS FIRST], false, 0
 
-(19) SortMergeJoin [codegen id : 6]
+(20) SortMergeJoin [codegen id : 6]
 Left keys [2]: [sr_item_sk#1, sr_ticket_number#3]
 Right keys [2]: [ss_item_sk#8, ss_ticket_number#10]
 Join type: Inner
 Join condition: None
 
-(20) Project [codegen id : 6]
-Output [2]: [ss_customer_sk#9, CASE WHEN isnotnull(sr_return_quantity#4) THEN (cast((ss_quantity#11 - sr_return_quantity#4) as decimal(10,0)) * ss_sales_price#12) ELSE (cast(ss_quantity#11 as decimal(10,0)) * ss_sales_price#12) END AS act_sales#14]
+(21) Project [codegen id : 6]
+Output [2]: [ss_customer_sk#9, CASE WHEN isnotnull(sr_return_quantity#4) THEN (cast((ss_quantity#11 - sr_return_quantity#4) as decimal(10,0)) * ss_sales_price#12) ELSE (cast(ss_quantity#11 as decimal(10,0)) * ss_sales_price#12) END AS act_sales#18]
 Input [8]: [sr_item_sk#1, sr_ticket_number#3, sr_return_quantity#4, ss_item_sk#8, ss_customer_sk#9, ss_ticket_number#10, ss_quantity#11, ss_sales_price#12]
 
-(21) HashAggregate [codegen id : 6]
-Input [2]: [ss_customer_sk#9, act_sales#14]
+(22) HashAggregate [codegen id : 6]
+Input [2]: [ss_customer_sk#9, act_sales#18]
 Keys [1]: [ss_customer_sk#9]
-Functions [1]: [partial_sum(act_sales#14)]
-Aggregate Attributes [2]: [sum#15, isEmpty#16]
-Results [3]: [ss_customer_sk#9, sum#17, isEmpty#18]
+Functions [1]: [partial_sum(act_sales#18)]
+Aggregate Attributes [2]: [sum#19, isEmpty#20]
+Results [3]: [ss_customer_sk#9, sum#21, isEmpty#22]
 
-(22) Exchange
-Input [3]: [ss_customer_sk#9, sum#17, isEmpty#18]
+(23) Exchange
+Input [3]: [ss_customer_sk#9, sum#21, isEmpty#22]
 Arguments: hashpartitioning(ss_customer_sk#9, 5), ENSURE_REQUIREMENTS, [plan_id=4]
 
-(23) HashAggregate [codegen id : 7]
-Input [3]: [ss_customer_sk#9, sum#17, isEmpty#18]
+(24) HashAggregate [codegen id : 7]
+Input [3]: [ss_customer_sk#9, sum#21, isEmpty#22]
 Keys [1]: [ss_customer_sk#9]
-Functions [1]: [sum(act_sales#14)]
-Aggregate Attributes [1]: [sum(act_sales#14)#19]
-Results [2]: [ss_customer_sk#9, sum(act_sales#14)#19 AS sumsales#20]
+Functions [1]: [sum(act_sales#18)]
+Aggregate Attributes [1]: [sum(act_sales#18)#23]
+Results [2]: [ss_customer_sk#9, sum(act_sales#18)#23 AS sumsales#24]
 
-(24) TakeOrderedAndProject
-Input [2]: [ss_customer_sk#9, sumsales#20]
-Arguments: 100, [sumsales#20 ASC NULLS FIRST, ss_customer_sk#9 ASC NULLS FIRST], [ss_customer_sk#9, sumsales#20]
+(25) TakeOrderedAndProject
+Input [2]: [ss_customer_sk#9, sumsales#24]
+Arguments: 100, [sumsales#24 ASC NULLS FIRST, ss_customer_sk#9 ASC NULLS FIRST], [ss_customer_sk#9, sumsales#24]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 16 Hosting Expression = Subquery scalar-subquery#14, [id=#15]
+ObjectHashAggregate (29)
++- Exchange (28)
+   +- ObjectHashAggregate (27)
+      +- ReusedExchange (26)
+
+
+(26) ReusedExchange [Reuses operator id: 12]
+Output [3]: [sr_item_sk#1, sr_ticket_number#3, sr_return_quantity#4]
+
+(27) ObjectHashAggregate
+Input [3]: [sr_item_sk#1, sr_ticket_number#3, sr_return_quantity#4]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(sr_item_sk#1, 42), 496193, 3969544, 0, 0)]
+Aggregate Attributes [1]: [buf#25]
+Results [1]: [buf#26]
+
+(28) Exchange
+Input [1]: [buf#26]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
+
+(29) ObjectHashAggregate
+Input [1]: [buf#26]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(sr_item_sk#1, 42), 496193, 3969544, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(sr_item_sk#1, 42), 496193, 3969544, 0, 0)#27]
+Results [1]: [bloom_filter_agg(xxhash64(sr_item_sk#1, 42), 496193, 3969544, 0, 0)#27 AS bloomFilter#28]
+
+Subquery:2 Hosting operator id = 16 Hosting Expression = Subquery scalar-subquery#16, [id=#17]
+ObjectHashAggregate (33)
++- Exchange (32)
+   +- ObjectHashAggregate (31)
+      +- ReusedExchange (30)
+
+
+(30) ReusedExchange [Reuses operator id: 12]
+Output [3]: [sr_item_sk#1, sr_ticket_number#3, sr_return_quantity#4]
+
+(31) ObjectHashAggregate
+Input [3]: [sr_item_sk#1, sr_ticket_number#3, sr_return_quantity#4]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(sr_ticket_number#3, 42), 496193, 3969544, 0, 0)]
+Aggregate Attributes [1]: [buf#29]
+Results [1]: [buf#30]
+
+(32) Exchange
+Input [1]: [buf#30]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6]
+
+(33) ObjectHashAggregate
+Input [1]: [buf#30]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(sr_ticket_number#3, 42), 496193, 3969544, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(sr_ticket_number#3, 42), 496193, 3969544, 0, 0)#31]
+Results [1]: [bloom_filter_agg(xxhash64(sr_ticket_number#3, 42), 496193, 3969544, 0, 0)#31 AS bloomFilter#32]
+
 
