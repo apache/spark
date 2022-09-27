@@ -15,9 +15,16 @@
 # limitations under the License.
 #
 
+import random
+import shutil
+import sys
+import tempfile
+import time
+
 import unittest
 from typing import cast
 
+from pyspark import SparkConf
 from pyspark.sql.streaming.state import GroupStateTimeout, GroupState
 from pyspark.sql.types import (
     LongType,
@@ -46,8 +53,18 @@ if have_pyarrow:
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
 class GroupedMapInPandasWithStateTests(ReusedSQLTestCase):
+    @classmethod
+    def conf(cls):
+        cfg = SparkConf()
+        cfg.set("spark.sql.shuffle.partitions", "5")
+        return cfg
+
+    def __init__(self, methodName='runTest'):
+        super(GroupedMapInPandasWithStateTests, self).__init__(methodName)
+        self.base_path = "python/test_support/sql/streaming/apply_in_pandas_with_state"
+
     def test_apply_in_pandas_with_state_basic(self):
-        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+        df = self.spark.readStream.format("text").load(self.base_path + "/basic")
 
         for q in self.spark.streams.active:
             q.stop()
@@ -89,6 +106,99 @@ class GroupedMapInPandasWithStateTests(ReusedSQLTestCase):
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+
+    def test_apply_in_pandas_with_state_python_worker_random_failure(self):
+        output_path = tempfile.mkdtemp()
+        checkpoint_loc = tempfile.mkdtemp()
+        shutil.rmtree(output_path)
+        shutil.rmtree(checkpoint_loc)
+
+        def run_query():
+            df = self.spark.readStream.format("text") \
+                .option("maxFilesPerTrigger", "1") \
+                .load(self.base_path + "/random_failure/input")
+
+            for q in self.spark.streams.active:
+                q.stop()
+            self.assertTrue(df.isStreaming)
+
+            output_type = StructType(
+                [StructField("value", StringType()), StructField("count", LongType())]
+            )
+            state_type = StructType([StructField("cnt", LongType())])
+
+            def func(key, pdf_iter, state):
+                assert isinstance(state, GroupState)
+
+                # should be huge enough to not trigger kill in every batches
+                # but should be also reasonable to trigger kill multiple times across batches
+                if random.randrange(300) == 1:
+                    sys.exit(1)
+
+                count = state.getOption
+                if count is None:
+                    count = 0
+                else:
+                    count = count[0]
+
+                for pdf in pdf_iter:
+                    count += len(pdf)
+
+                state.update((count,))
+                yield pd.DataFrame({"value": [key[0]], "count": [count]})
+
+            q = (
+                df.groupBy(df["value"])
+                    .applyInPandasWithState(
+                    func, output_type, state_type, "Append", GroupStateTimeout.NoTimeout
+                )
+                    .writeStream.queryName("this_query")
+                    .format("json")
+                    .outputMode("append")
+                    .option("path", output_path)
+                    .option("checkpointLocation", checkpoint_loc)
+                    .start()
+            )
+
+            return q
+
+        q = run_query()
+
+        self.assertEqual(q.name, "this_query")
+        self.assertTrue(q.isActive)
+
+        # expected_output directory is constucted from below query:
+        # spark.read.format("text").load("./input").groupBy("value").count() \
+        #     .repartition(1).sort("value").write.format("json").save("./output")
+        expected = self.spark.read.schema("value string, count int").format("json") \
+            .load(self.base_path + "/random_failure/expected_output") \
+            .sort("value").collect()
+
+        curr_time = time.time()
+        timeout = curr_time + 120  # 2 minutes
+        while True:
+            self.assertTrue(time.time() < timeout,
+                            "Test Timeout! Haven't matched the desired criteria in time.")
+
+            if not q.isActive:
+                # rerunning query as the query may have been killed by killed python worker
+                q = run_query()
+
+                self.assertEqual(q.name, "this_query")
+                self.assertTrue(q.isActive)
+
+            result = self.spark.read.schema("value string, count int").format("json") \
+                .load(output_path) \
+                .groupBy("value").max("count") \
+                .selectExpr("value", "`max(count)` AS count") \
+                .sort("value").collect()
+
+            if result == expected:
+                q.stop()
+                break
+            else:
+                print("Haven't matched the desired criteria! Next iteration...")
+                time.sleep(5)
 
 
 if __name__ == "__main__":
