@@ -2026,5 +2026,158 @@
       "Requested partitions: <normalizedPartSpec>",
       "Table partitions: <partColNames>"
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1170" : {
+    "message" : [
+      "Hive support is required to <detail>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1171" : {
+    "message" : [
+      "createTableColumnTypes option column <col> not found in schema <schema>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1172" : {
+    "message" : [
+      "Parquet type not yet supported: <parquetType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1173" : {
+    "message" : [
+      "Illegal Parquet type: <parquetType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1174" : {
+    "message" : [
+      "Unrecognized Parquet type: <field>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1175" : {
+    "message" : [
+      "Unsupported data type <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1176" : {
+    "message" : [
+      "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>.",
+      "Please try to re-create the view by running: <viewDDL>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1177" : {
+    "message" : [
+      "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1178" : {
+    "message" : [
+      "The number of partitions can't be specified with unspecified distribution. Invalid writer requirements detected."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1179" : {
+    "message" : [
+      "Table-valued function $name with alternatives: <usage>",
+      "cannot be applied to (<arguments>): <details>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1180" : {
+    "message" : [
+      "Incompatible input data type.",
+      "Expected: <expectedDataType>; Found: <foundDataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1181" : {
+    "message" : [
+      "Stream-stream join without equality predicate is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1182" : {
+    "message" : [
+      "Column <ambiguousAttrs> are ambiguous. It's probably because you joined several Datasets together, and some of these Datasets are the same. This column points to one of the Datasets but Spark is unable to figure out which one. Please alias the Datasets with different names via `Dataset.as` before joining them, and specify the column using qualified name, e.g. `df.as(\"a\").join(df.as(\"b\"), $\"a.id\" > $\"b.id\")`. You can also set <config> to false to disable this check."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1183" : {
+    "message" : [
+      "Cannot use interval type in the table schema."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1184" : {
+    "message" : [
+      "Catalog <plugin> does not support <ability>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1185" : {
+    "message" : [
+      "<quoted> is not a valid <identifier> as it has more than 2 name parts."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1186" : {
+    "message" : [
+      "Multi-part identifier cannot be empty."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1187" : {
+    "message" : [
+      "Hive data source can only be used with tables, you can not <operation> files of Hive data source directly."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1188" : {
+    "message" : [
+      "There is a 'path' option set and <method>() is called with a path parameter. Either remove the path option, or call <method>() without the parameter. To ignore this check, set '<config>' to 'true'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1189" : {
+    "message" : [
+      "User specified schema not supported with `<operation>`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1190" : {
+    "message" : [
+      "Temporary view <viewName> doesn't support streaming write."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1191" : {
+    "message" : [
+      "Streaming into views <viewName> is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1192" : {
+    "message" : [
+      "The input source(<source>) is different from the table <tableName>'s data source provider(<provider>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1193" : {
+    "message" : [
+      "Table <tableName> doesn't support streaming write - <t>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1194" : {
+    "message" : [
+      "queryName must be specified for memory sink."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1195" : {
+    "message" : [
+      "'<source>' is not supported with continuous trigger."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1196" : {
+    "message" : [
+      "<columnType> column <columnName> not found in existing columns (<validColumnNames>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1197" : {
+    "message" : [
+      "'<operation>' does not support partitioning."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1198" : {
+    "message" : [
+      "Function '<unbound>' cannot process input: (<arguments>): <unsupported>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1199" : {
+    "message" : [
+      "Invalid bound function '<bound>: there are <argsLen> arguments but <inputTypesLen> parameters returned from 'inputTypes()'."
+    ]
   }
 }

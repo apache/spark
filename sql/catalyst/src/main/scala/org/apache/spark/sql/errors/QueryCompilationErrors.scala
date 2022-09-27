@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -1707,29 +1708,40 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def ddlWithoutHiveSupportEnabledError(detail: String): Throwable = {
-    new AnalysisException(s"Hive support is required to $detail")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1170",
+      messageParameters = Map("detail" -> detail))
   }
 
   def createTableColumnTypesOptionColumnNotFoundInSchemaError(
       col: String, schema: StructType): Throwable = {
     new AnalysisException(
-      s"createTableColumnTypes option column $col not found in schema ${schema.catalogString}")
+      errorClass = "_LEGACY_ERROR_TEMP_1171",
+      messageParameters = Map("col" -> col, "schema" -> schema.catalogString))
   }
 
   def parquetTypeUnsupportedYetError(parquetType: String): Throwable = {
-    new AnalysisException(s"Parquet type not yet supported: $parquetType")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1172",
+      messageParameters = Map("parquetType" -> parquetType))
   }
 
   def illegalParquetTypeError(parquetType: String): Throwable = {
-    new AnalysisException(s"Illegal Parquet type: $parquetType")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1173",
+      messageParameters = Map("parquetType" -> parquetType))
   }
 
   def unrecognizedParquetTypeError(field: String): Throwable = {
-    new AnalysisException(s"Unrecognized Parquet type: $field")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1174",
+      messageParameters = Map("field" -> field))
   }
 
   def cannotConvertDataTypeToParquetTypeError(field: StructField): Throwable = {
-    new AnalysisException(s"Unsupported data type ${field.dataType.catalogString}")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1175",
+      messageParameters = Map("dataType" -> field.dataType.catalogString))
   }
 
   def incompatibleViewSchemaChange(
@@ -1738,32 +1750,59 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       expectedNum: Int,
       actualCols: Seq[Attribute],
       viewDDL: Option[String]): Throwable = {
-    new AnalysisException(s"The SQL query of view $viewName has an incompatible schema change " +
-      s"and column $colName cannot be resolved. Expected $expectedNum columns named $colName but " +
-      s"got ${actualCols.map(_.name).mkString("[", ",", "]")}" +
-      viewDDL.map(s => s"\nPlease try to re-create the view by running: $s").getOrElse(""))
+    viewDDL.map { v =>
+      new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_1176",
+        messageParameters = Map(
+          "viewName" -> viewName,
+          "colName" -> colName,
+          "expectedNum" -> expectedNum.toString,
+          "actualCols" -> actualCols.map(_.name).mkString("[", ",", "]"),
+          "viewDDL" -> v))
+    }.getOrElse {
+      new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_1177",
+        messageParameters = Map(
+          "viewName" -> viewName,
+          "colName" -> colName,
+          "expectedNum" -> expectedNum.toString,
+          "actualCols" -> actualCols.map(_.name).mkString("[", ",", "]")))
+    }
   }
 
   def numberOfPartitionsNotAllowedWithUnspecifiedDistributionError(): Throwable = {
-    throw new AnalysisException("The number of partitions can't be specified with unspecified" +
-      " distribution. Invalid writer requirements detected.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1178",
+      messageParameters = Map.empty)
   }
 
   def cannotApplyTableValuedFunctionError(
       name: String, arguments: String, usage: String, details: String = ""): Throwable = {
-    new AnalysisException(s"Table-valued function $name with alternatives: $usage\n" +
-      s"cannot be applied to ($arguments): $details")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1179",
+      messageParameters = Map(
+        "name" -> name,
+        "usage" -> usage,
+        "arguments" -> arguments,
+        "details" -> details))
   }
 
   def incompatibleRangeInputDataTypeError(
       expression: Expression, dataType: DataType): Throwable = {
-    new AnalysisException(s"Incompatible input data type. " +
-      s"Expected: ${dataType.typeName}; Found: ${expression.dataType.typeName}")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1180",
+      messageParameters = Map(
+        "expectedDataType" -> dataType.typeName,
+        "foundDataType" -> expression.dataType.typeName))
   }
 
   def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
+    val errorClass = "_LEGACY_ERROR_TEMP_1181"
     new AnalysisException(
-      "Stream-stream join without equality predicate is not supported", plan = Some(plan))
+      SparkThrowableHelper.getMessage(errorClass, null, Map.empty[String, String]),
+      errorClass = Some(errorClass),
+      messageParameters = Map.empty,
+      plan = Some(plan))
   }
 
   def invalidPandasUDFPlacementError(
@@ -1777,15 +1816,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def ambiguousAttributesInSelfJoinError(
       ambiguousAttrs: Seq[AttributeReference]): Throwable = {
     new AnalysisException(
-      s"""
-         |Column ${ambiguousAttrs.mkString(", ")} are ambiguous. It's probably because
-         |you joined several Datasets together, and some of these Datasets are the same.
-         |This column points to one of the Datasets but Spark is unable to figure out
-         |which one. Please alias the Datasets with different names via `Dataset.as`
-         |before joining them, and specify the column using qualified name, e.g.
-         |`df.as("a").join(df.as("b"), $$"a.id" > $$"b.id")`. You can also set
-         |${SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key} to false to disable this check.
-       """.stripMargin.replaceAll("\n", " "))
+      errorClass = "_LEGACY_ERROR_TEMP_1182",
+      messageParameters = Map(
+        "ambiguousAttrs" -> ambiguousAttrs.mkString(", "),
+        "config" -> SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key))
   }
 
   def ambiguousColumnOrFieldError(
@@ -1808,74 +1842,108 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def cannotUseIntervalTypeInTableSchemaError(): Throwable = {
-    new AnalysisException("Cannot use interval type in the table schema.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1183",
+      messageParameters = Map.empty)
   }
 
   def missingCatalogAbilityError(plugin: CatalogPlugin, ability: String): Throwable = {
-    new AnalysisException(s"Catalog ${plugin.name} does not support $ability")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1184",
+      messageParameters = Map(
+        "plugin" -> plugin.name,
+        "ability" -> ability))
   }
 
   def identifierHavingMoreThanTwoNamePartsError(
       quoted: String, identifier: String): Throwable = {
-    new AnalysisException(s"$quoted is not a valid $identifier as it has more than 2 name parts.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1185",
+      messageParameters = Map(
+        "quoted" -> quoted,
+        "identifier" -> identifier))
   }
 
   def emptyMultipartIdentifierError(): Throwable = {
-    new AnalysisException("multi-part identifier cannot be empty.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1186",
+      messageParameters = Map.empty)
   }
 
   def cannotOperateOnHiveDataSourceFilesError(operation: String): Throwable = {
-    new AnalysisException("Hive data source can only be used with tables, you can not " +
-      s"$operation files of Hive data source directly.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1187",
+      messageParameters = Map("operation" -> operation))
   }
 
   def setPathOptionAndCallWithPathParameterError(method: String): Throwable = {
     new AnalysisException(
-      s"""
-         |There is a 'path' option set and $method() is called with a path
-         |parameter. Either remove the path option, or call $method() without the parameter.
-         |To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.
-       """.stripMargin.replaceAll("\n", " "))
+      errorClass = "_LEGACY_ERROR_TEMP_1188",
+      messageParameters = Map(
+        "method" -> method,
+        "config" -> SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key))
   }
 
   def userSpecifiedSchemaUnsupportedError(operation: String): Throwable = {
-    new AnalysisException(s"User specified schema not supported with `$operation`")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1189",
+      messageParameters = Map("operation" -> operation))
   }
 
   def tempViewNotSupportStreamingWriteError(viewName: String): Throwable = {
-    new AnalysisException(s"Temporary view $viewName doesn't support streaming write")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1190",
+      messageParameters = Map("viewName" -> viewName))
   }
 
   def streamingIntoViewNotSupportedError(viewName: String): Throwable = {
-    new AnalysisException(s"Streaming into views $viewName is not supported.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1191",
+      messageParameters = Map("viewName" -> viewName))
   }
 
   def inputSourceDiffersFromDataSourceProviderError(
       source: String, tableName: String, table: CatalogTable): Throwable = {
-    new AnalysisException(s"The input source($source) is different from the table " +
-      s"$tableName's data source provider(${table.provider.get}).")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1192",
+      messageParameters = Map(
+        "source" -> source,
+        "tableName" -> tableName,
+        "provider" -> table.provider.get))
   }
 
   def tableNotSupportStreamingWriteError(tableName: String, t: Table): Throwable = {
-    new AnalysisException(s"Table $tableName doesn't support streaming write - $t")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1193",
+      messageParameters = Map("tableName" -> tableName, "t" -> t.toString))
   }
 
   def queryNameNotSpecifiedForMemorySinkError(): Throwable = {
-    new AnalysisException("queryName must be specified for memory sink")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1194",
+      messageParameters = Map.empty)
   }
 
   def sourceNotSupportedWithContinuousTriggerError(source: String): Throwable = {
-    new AnalysisException(s"'$source' is not supported with continuous trigger")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1195",
+      messageParameters = Map("source" -> source))
   }
 
   def columnNotFoundInExistingColumnsError(
       columnType: String, columnName: String, validColumnNames: Seq[String]): Throwable = {
-    new AnalysisException(s"$columnType column $columnName not found in " +
-      s"existing columns (${validColumnNames.mkString(", ")})")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1196",
+      messageParameters = Map(
+        "columnType" -> columnType,
+        "columnName" -> columnName,
+        "validColumnNames" -> validColumnNames.mkString(", ")))
   }
 
   def operationNotSupportPartitioningError(operation: String): Throwable = {
-    new AnalysisException(s"'$operation' does not support partitioning")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1197",
+      messageParameters = Map("operation" -> operation))
   }
 
   def mixedRefsInAggFunc(funcStr: String, origin: Origin): Throwable = {
@@ -1890,16 +1958,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       unbound: UnboundFunction,
       arguments: Seq[Expression],
       unsupported: UnsupportedOperationException): Throwable = {
-    new AnalysisException(s"Function '${unbound.name}' cannot process " +
-      s"input: (${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
-      unsupported.getMessage, cause = Some(unsupported))
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1198",
+      messageParameters = Map(
+        "unbound" -> unbound.name,
+        "args" -> arguments.map(_.dataType.simpleString).mkString(", "),
+        "unsupported" -> unsupported.getMessage),
+      cause = Some(unsupported))
   }
 
   def v2FunctionInvalidInputTypeLengthError(
       bound: BoundFunction,
       args: Seq[Expression]): Throwable = {
-    new AnalysisException(s"Invalid bound function '${bound.name()}: there are ${args.length} " +
-        s"arguments but ${bound.inputTypes().length} parameters returned from 'inputTypes()'")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1199",
+      messageParameters = Map(
+        "bound" -> bound.name(),
+        "argsLen" -> args.length.toString,
+        "inputTypesLen" -> bound.inputTypes().length.toString))
   }
 
   def ambiguousRelationAliasNameInNestedCTEError(name: String): Throwable = {
