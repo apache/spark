@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.internal.SQLConf
@@ -148,8 +148,8 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
           .write.partitionBy("p").parquet(dir.getCanonicalPath)
         withTempView("tmp") {
           spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp")
-          assertPrunedPartitions("SELECT * FROM tmp WHERE rand() > 0.5", 2, "")
-          assertPrunedPartitions("SELECT * FROM tmp WHERE p > rand()", 2, "")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE rand() > 0.5", 3, "")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE p > rand()", 3, "")
           assertPrunedPartitions("SELECT * FROM tmp WHERE p = 0 AND rand() > 0.5",
             1,
             "(tmp.p = 0)")
@@ -165,7 +165,8 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
   override def getScanExecPartitionSize(plan: SparkPlan): Long = {
     plan.collectFirst {
       case p: FileSourceScanExec => p.selectedPartitions.length
-      case b: BatchScanExec => b.partitions.size
+      case BatchScanExec(_, scan: FileScan, _, _, _, _) =>
+        scan.fileIndex.listFiles(scan.partitionFilters, scan.dataFilters).length
     }.get
   }
 }
