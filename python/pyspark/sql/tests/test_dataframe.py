@@ -664,23 +664,12 @@ class DataFrameTests(ReusedSQLTestCase):
             ):
                 df.unpivot("id", ["int", "str"], "var", "val")
 
-        with self.subTest(desc="with columns"):
-            for id in [df.id, [df.id], (df.id,)]:
-                for values in [[df.int, df.double], (df.int, df.double)]:
-                    with self.subTest(ids=id, values=values):
-                        self.assertEqual(
-                            df.unpivot(id, values, "var", "val").collect(),
-                            df.unpivot("id", ["int", "double"], "var", "val").collect(),
-                        )
-
         with self.subTest(desc="with column names and columns"):
             for ids in [[df.id, "str"], (df.id, "str")]:
                 for values in [[df.int, "double"], (df.int, "double")]:
                     with self.subTest(ids=ids, values=values):
-                        self.assertEqual(
-                            df.unpivot(ids, values, "var", "val").collect(),
-                            df.unpivot(["id", "str"], ["int", "double"], "var", "val").collect(),
-                        )
+                        with self.assertRaisesRegex(AssertionError, "columns names must be strings"):
+                            df.unpivot(ids, values, "var", "val")
 
         with self.subTest(desc="melt alias"):
             self.assertEqual(

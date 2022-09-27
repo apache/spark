@@ -3064,8 +3064,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     def unpivot(
         self,
-        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
-        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        ids: Optional[Union[str, List[str], Tuple[str, ...]]],
+        values: Optional[Union[str, List[str], Tuple[str, ...]]],
         variableColumnName: str,
         valueColumnName: str,
     ) -> "DataFrame":
@@ -3091,12 +3091,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        ids : str, Column, tuple, list, optional
-            Column(s) to use as identifiers. Can be a single column or column name,
-            or a list or tuple for multiple columns.
-        values : str, Column, tuple, list, optional
-            Column(s) to unpivot. Can be a single column or column name, or a list or tuple
-            for multiple columns. If not specified or empty, uses all columns that
+        ids : str, list, tuple, optional
+            Column name(s) to use as identifiers. Can be a single column name,
+            or a list or tuple for multiple column names.
+        values : str, list, tuple, optional
+            Column name(s) to unpivot. Can be a single column name, or a list or tuple
+            for multiple column names. If not specified or empty, uses all columns that
             are not set as `ids`.
         variableColumnName : str
             Name of the variable column.
@@ -3138,7 +3138,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
 
         def to_jcols(
-            cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+            cols: Optional[Union[str, List[str], Tuple[str, ...]]]
         ) -> JavaObject:
             if cols is None:
                 lst = []
@@ -3148,6 +3148,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 lst = cols
             else:
                 lst = [cols]
+
+            assert all([isinstance(col, str) for col in lst]), "columns names must be strings"
             return self._jcols(*lst)
 
         return DataFrame(
@@ -3159,8 +3161,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     def melt(
         self,
-        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
-        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        ids: Optional[Union[str, List[str], Tuple[str, ...]]],
+        values: Optional[Union[str, List[str], Tuple[str, ...]]],
         variableColumnName: str,
         valueColumnName: str,
     ) -> "DataFrame":
@@ -3175,12 +3177,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        ids : str, Column, tuple, list, optional
-            Column(s) to use as identifiers. Can be a single column or column name,
-            or a list or tuple for multiple columns.
-        values : str, Column, tuple, list, optional
-            Column(s) to unpivot. Can be a single column or column name, or a list or tuple
-            for multiple columns. If not specified or empty, uses all columns that
+        ids : str, list, tuple, optional
+            Column name(s) to use as identifiers. Can be a single column name,
+            or a list or tuple for multiple column names.
+        values : str, list, tuple, optional
+            Column name(s) to unpivot. Can be a single column name, or a list or tuple
+            for multiple column names. If not specified or empty, uses all columns that
             are not set as `ids`.
         variableColumnName : str
             Name of the variable column.
