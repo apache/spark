@@ -1978,7 +1978,7 @@
   },
   "_LEGACY_ERROR_TEMP_1161" : {
     "message" : [
-      "The column number of the existing table <tableName> (<existingTableLoc>) doesn't match the data schema (<querySchema>)."
+      "The column number of the existing table <tableName> (<existingTableSchema>) doesn't match the data schema (<querySchema>)."
     ]
   },
   "_LEGACY_ERROR_TEMP_1162" : {
