@@ -14,20 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.connect.config
 
-package org.apache.spark.internal.config
+import org.apache.spark.internal.config.ConfigBuilder
 
-private[spark] object Connect {
-
-  private[spark] val CONNECT_GRPC_DEBUG_MODE =
-    ConfigBuilder("spark.connect.grpc.debug.enabled")
-      .version("3.4.0")
-      .booleanConf
-      .createOptional
+object Connect {
 
   private[spark] val CONNECT_GRPC_BINDING_PORT =
     ConfigBuilder("spark.connect.grpc.binding.port")
       .version("3.4.0")
       .intConf
       .createWithDefault(15002)
+
 }
