@@ -48,11 +48,9 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
 
   lazy val sparkSession = SparkSession.active
 
-  private lazy val objectMapper = Utils.createObjectMapper
-
   protected def getPaths(map: CaseInsensitiveStringMap): Seq[String] = {
     val paths = Option(map.get("paths")).map { pathStr =>
-      objectMapper.readValue[Seq[String]](pathStr)
+      FileDataSourceV2.readPathsToSeq(pathStr)
     }.getOrElse(Seq.empty)
     paths ++ Option(map.get("path")).toSeq
   }
@@ -112,4 +110,10 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
       getTable(new CaseInsensitiveStringMap(properties), schema)
     }
   }
+}
+
+private object FileDataSourceV2 {
+  private lazy val objectMapper = Utils.createObjectMapper
+  def readPathsToSeq(paths: String): Seq[String] =
+    objectMapper.readValue[Seq[String]](paths)
 }
