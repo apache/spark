@@ -3578,8 +3578,8 @@ object SQLConf {
     buildConf("spark.sql.legacy.groupingIdWithAppendedUserGroupBy")
       .internal()
       .doc("When true, grouping_id() returns values based on grouping set columns plus " +
-        "user-given group-by expressions order.")
-      .version("3.2.2")
+        "user-given group-by expressions order like Spark 3.2.0, 3.2.1, 3.2.2, and 3.3.0.")
+      .version("3.2.3")
       .booleanConf
       .createWithDefault(false)
 
