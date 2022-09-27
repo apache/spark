@@ -3111,7 +3111,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
         psdf = ps.from_pandas(pdf)
 
-        for ddof in (0, 1):
+        for ddof in [-1, 0, 1, 2, 3]:
             # std
             self.assert_eq(
                 pdf.groupby("a").std(ddof=ddof).sort_index(),
