@@ -5092,7 +5092,7 @@ def hash(*cols: "ColumnOrName") -> Column:
 
 def xxhash64(*cols: "ColumnOrName") -> Column:
     """Calculates the hash code of given columns using the 64-bit variant of the xxHash algorithm,
-    and returns the result as a long column.
+    and returns the result as a long column. The hash computation uses an initial seed of 42.
 
     .. versionadded:: 3.0.0
 
