@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, toPrettySQL, CharVarcharUtils, StringUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -892,7 +892,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case Unpivot(Some(ids), Some(values), aliases, variableColumnName, valueColumnNames, child) =>
 
         def toString(values: Seq[NamedExpression]): String =
-          "(" + values.map(v => quoteIdentifier(v.name)).mkString(",") + ")"
+          values.map(v => v.name).mkString("_")
 
         // construct unpivot expressions for Expand
         val exprs: Seq[Seq[Expression]] =
