@@ -61,10 +61,6 @@ class GroupedMapInPandasWithStateTests(ReusedSQLTestCase):
         cfg.set("spark.sql.shuffle.partitions", "5")
         return cfg
 
-    def __init__(self, methodName="runTest"):
-        super(GroupedMapInPandasWithStateTests, self).__init__(methodName)
-        self.base_path = "python/test_support/sql/streaming/apply_in_pandas_with_state"
-
     def test_apply_in_pandas_with_state_basic(self):
         input_path = tempfile.mkdtemp()
 
