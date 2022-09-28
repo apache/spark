@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import RemoteSparkSession
 
+
 class DataFrameReader:
     """
     TODO(SPARK-40539) Achieve parity with PySpark.

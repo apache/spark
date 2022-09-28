@@ -75,7 +75,9 @@ class LiteralExpression(Expression):
         return f"Literal({self._value})"
 
 
-def _bin_op(name: str, doc: str = "binary function", reverse: bool=False) -> Callable[["ColumnRef", Any], Expression]:
+def _bin_op(
+    name: str, doc: str = "binary function", reverse: bool = False
+) -> Callable[["ColumnRef", Any], Expression]:
     def _(self: "ColumnRef", other: Any) -> Expression:
         if isinstance(other, get_args(PrimitiveType)):
             other = LiteralExpression(other)
@@ -99,7 +101,7 @@ class ColumnRef(Expression):
 
     def __init__(self, *parts: str) -> None:
         super().__init__()
-        self._parts: List[str] = list(filter(lambda x: x is not None, list(parts)))
+        self._parts: List[str] = list(parts)
 
     def name(self) -> str:
         """Returns the qualified name of the column reference."""
@@ -137,10 +139,10 @@ class ColumnRef(Expression):
         expr.unresolved_attribute.parts.extend(self._parts)
         return expr
 
-    def desc(self) -> SortOrder:
+    def desc(self) -> "SortOrder":
         return SortOrder(self, ascending=False)
 
-    def asc(self) -> SortOrder:
+    def asc(self) -> "SortOrder":
         return SortOrder(self, ascending=True)
 
     def __str__(self) -> str:
@@ -148,7 +150,7 @@ class ColumnRef(Expression):
 
 
 class SortOrder(Expression):
-    def __init__(self, col: ColumnRef, ascending:bool=True, nullsLast:bool=True) -> None:
+    def __init__(self, col: ColumnRef, ascending: bool = True, nullsLast: bool = True) -> None:
         super().__init__()
         self.ref = col
         self.ascending = ascending

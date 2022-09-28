@@ -16,7 +16,7 @@
 #
 
 import functools
-from typing import TYPE_CHECKING, Optional, Callable, List, Any, Iterable, Union
+from typing import TYPE_CHECKING, Optional, Callable, Any, Iterable, Union
 from mypy_extensions import VarArg
 
 import pyspark.sql.types
@@ -53,7 +53,9 @@ def _build(name: str, *args: ExpressionOrString) -> ScalarFunctionExpression:
 class FunctionBuilder:
     """This class is used to build arbitrary functions used in expressions"""
 
-    def __getattr__(self, name: str) -> Callable[[VarArg(ExpressionOrString)], ScalarFunctionExpression]:
+    def __getattr__(
+        self, name: str
+    ) -> Callable[[VarArg(ExpressionOrString)], ScalarFunctionExpression]:
         def _(*args: ExpressionOrString) -> ScalarFunctionExpression:
             return _build(name, *args)
 
@@ -72,7 +74,12 @@ class UserDefinedFunction(Expression):
     the temporary function is set, it is assumed that the registration has already
     happened."""
 
-    def __init__(self, func: Any, return_type:Union[str, pyspark.sql.types.DataType]=pyspark.sql.types.StringType(), args: Optional[Iterable[Any]] = None) -> None:
+    def __init__(
+        self,
+        func: Any,
+        return_type: Union[str, pyspark.sql.types.DataType] = pyspark.sql.types.StringType(),
+        args: Optional[Iterable[Any]] = None,
+    ) -> None:
         super().__init__()
 
         self._func_ref = func
@@ -96,14 +103,18 @@ class UserDefinedFunction(Expression):
         return f"UserDefinedFunction({self._func_name})"
 
 
-def _create_udf(function: Any, return_type: Union[str, pyspark.sql.types.DataType]) -> Callable[[VarArg('ColumnOrString')], UserDefinedFunction]:
+def _create_udf(
+    function: Any, return_type: Union[str, pyspark.sql.types.DataType]
+) -> Callable[[VarArg("ColumnOrString")], UserDefinedFunction]:
     def wrapper(*cols: "ColumnOrString") -> UserDefinedFunction:
         return UserDefinedFunction(func=function, return_type=return_type, args=cols)
 
     return wrapper
 
 
-def udf(function: Any, return_type: pyspark.sql.types.DataType = pyspark.sql.types.StringType()) -> Any:
+def udf(
+    function: Any, return_type: pyspark.sql.types.DataType = pyspark.sql.types.StringType()
+) -> Any:
     """
     Returns a callable that represents the column once arguments are applied
 

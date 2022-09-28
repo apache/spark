@@ -23,7 +23,6 @@ from typing import (
     Sequence,
     Tuple,
     Union,
-    cast,
     TYPE_CHECKING,
 )
 
@@ -107,7 +106,9 @@ class DataFrame(object):
         self._session: Optional["RemoteSparkSession"] = None
 
     @classmethod
-    def withPlan(cls, plan: plan.LogicalPlan, session: Optional["RemoteSparkSession"]=None) -> "DataFrame":
+    def withPlan(
+        cls, plan: plan.LogicalPlan, session: Optional["RemoteSparkSession"] = None
+    ) -> "DataFrame":
         """Main initialization method used to construct a new data frame with a child plan."""
         new_frame = DataFrame()
         new_frame._plan = plan
@@ -120,10 +121,10 @@ class DataFrame(object):
     def agg(self, exprs: Optional[GroupingFrame.MeasuresType]) -> "DataFrame":
         return self.groupBy().agg(exprs)
 
-    def alias(self, alias:str) -> "DataFrame":
+    def alias(self, alias: str) -> "DataFrame":
         return DataFrame.withPlan(plan.Project(self._plan).withAlias(alias), session=self._session)
 
-    def approxQuantile(self, col: ColumnRef, probabilities:Any, relativeError:Any) -> "DataFrame":
+    def approxQuantile(self, col: ColumnRef, probabilities: Any, relativeError: Any) -> "DataFrame":
         ...
 
     def colRegex(self, regex: str) -> "DataFrame":
@@ -168,27 +169,25 @@ class DataFrame(object):
         all_cols = self.columns
         dropped = set([c.name() if isinstance(c, ColumnRef) else self[c].name() for c in cols])
         dropped_cols = filter(lambda x: x in dropped, all_cols)
-        return DataFrame.withPlan(
-            plan.Project(self._plan, *dropped_cols), session=self._session
-        )
+        return DataFrame.withPlan(plan.Project(self._plan, *dropped_cols), session=self._session)
 
     def filter(self, condition: Expression) -> "DataFrame":
         return DataFrame.withPlan(
             plan.Filter(child=self._plan, filter=condition), session=self._session
         )
 
-    def first(self) -> Optional['pandas.DataFrame']:
+    def first(self) -> Optional["pandas.DataFrame"]:
         return self.head(1)
 
     def groupBy(self, *cols: ColumnOrString) -> GroupingFrame:
         return GroupingFrame(self, *cols)
 
-    def head(self, n: int) -> Optional['pandas.DataFrame']:
+    def head(self, n: int) -> Optional["pandas.DataFrame"]:
         self.limit(n)
         return self.collect()
 
-    #TODO(martin.grund) fix mypu
-    def join(self, other: "DataFrame", on:Any, how:Any=None) -> "DataFrame":
+    # TODO(martin.grund) fix mypu
+    def join(self, other: "DataFrame", on: Any, how: Any = None) -> "DataFrame":
         if self._plan is None:
             raise Exception("Cannot join when self._plan is empty.")
         if other._plan is None:
@@ -199,7 +198,7 @@ class DataFrame(object):
             session=self._session,
         )
 
-    def limit(self, n:int) -> "DataFrame":
+    def limit(self, n: int) -> "DataFrame":
         return DataFrame.withPlan(plan.Limit(child=self._plan, limit=n), session=self._session)
 
     def sort(self, *cols: ColumnOrName) -> "DataFrame":
@@ -228,15 +227,16 @@ class DataFrame(object):
             p = p._child
         return None
 
-    def __getattr__(self, name:str) -> "ColumnRef":
+    def __getattr__(self, name: str) -> "ColumnRef":
         return self[name]
 
-    def __getitem__(self, name:str) -> "ColumnRef":
+    def __getitem__(self, name: str) -> "ColumnRef":
         # Check for alias
         alias = self._get_alias()
-        if alias is None:
-            raise Exception("Alias cannot be empty.")
-        return ColumnRef(alias, name)
+        if alias is not None:
+            return ColumnRef(alias)
+        else:
+            return ColumnRef(name)
 
     def _print_plan(self) -> str:
         if self._plan:

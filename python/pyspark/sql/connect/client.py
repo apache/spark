@@ -21,7 +21,7 @@ import logging
 import typing
 import uuid
 
-import grpc # type: ignore
+import grpc  # type: ignore
 import pandas
 import pandas as pd
 import pyarrow as pa
@@ -64,7 +64,7 @@ class MetricValue:
 
 
 class PlanMetrics:
-    def __init__(self, name: str, id: str, parent: str, metrics: typing.List[MetricValue]):
+    def __init__(self, name: str, id: int, parent: int, metrics: typing.List[MetricValue]):
         self._name = name
         self._id = id
         self._parent_id = parent
@@ -78,11 +78,11 @@ class PlanMetrics:
         return self._name
 
     @property
-    def plan_id(self) -> str:
+    def plan_id(self) -> int:
         return self._id
 
     @property
-    def parent_plan_id(self) -> str:
+    def parent_plan_id(self) -> int:
         return self._parent_id
 
     @property
@@ -114,7 +114,9 @@ class RemoteSparkSession(object):
         # Create the reader
         self.read = DataFrameReader(self)
 
-    def register_udf(self, function: Any, return_type: Union[str, pyspark.sql.types.DataType]) -> str:
+    def register_udf(
+        self, function: Any, return_type: Union[str, pyspark.sql.types.DataType]
+    ) -> str:
         """Create a temporary UDF in the session catalog on the other side. We generate a
         temporary name for it."""
         name = f"fun_{uuid.uuid4().hex}"
@@ -157,22 +159,25 @@ class RemoteSparkSession(object):
         resp = self._stub.AnalyzePlan(req)
         return AnalyzeResult.fromProto(resp)
 
-    def _process_batch(self, b: pb2.Response) -> pandas.DataFrame:
+    def _process_batch(self, b: pb2.Response) -> Optional[pandas.DataFrame]:
         if b.batch is not None and len(b.batch.data) > 0:
-            with pa.ipc.open_stream(b.data) as rd:
+            with pa.ipc.open_stream(b.batch.data) as rd:
                 return rd.read_pandas()
         elif b.csv_batch is not None and len(b.csv_batch.data) > 0:
             return pd.read_csv(io.StringIO(b.csv_batch.data), delimiter="|")
-        raise Exception("Cannot handle batch result type.")
+        return None
 
     def _execute_and_fetch(self, req: pb2.Request) -> typing.Optional[pandas.DataFrame]:
-        m : Optional[pb2.Response.Metrics] = None
+        m: Optional[pb2.Response.Metrics] = None
         result_dfs = []
 
         for b in self._stub.ExecutePlan(req):
             if b.metrics is not None:
                 m = b.metrics
-            result_dfs.append(self._process_batch(b))
+
+            pb = self._process_batch(b)
+            if pb is not None:
+                result_dfs.append(pb)
 
         if len(result_dfs) > 0:
             df = pd.concat(result_dfs)
