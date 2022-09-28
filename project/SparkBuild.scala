@@ -433,6 +433,9 @@ object SparkBuild extends PomBuild {
 
   enable(SparkConnect.settings)(connect)
 
+  /* Connector/proto settings */
+  enable(SparkProto.settings)(proto)
+
   // SPARK-14738 - Remove docker tests from main Spark build
   // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
@@ -662,6 +665,48 @@ object SparkConnect {
   )
 }
 
+object SparkProto {
+
+  import BuildCommons.protoVersion
+
+  private val shadePrefix = "org.sparkproject.spark-proto"
+  val shadeJar = taskKey[Unit]("Shade the Jars")
+
+  lazy val settings = Seq(
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
+    PB.protocVersion := BuildCommons.protoVersion,
+
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= Seq(
+      "com.google.protobuf" % "protobuf-java"        % protoVersion % "protobuf"
+    ),
+
+    dependencyOverrides ++= Seq(
+      "com.google.protobuf" % "protobuf-java"        % protoVersion
+    ),
+
+    (Compile / PB.targets) := Seq(
+      PB.gens.java                -> (Compile / sourceManaged).value,
+    ),
+
+    (assembly / test) := false,
+
+    (assembly / logLevel) := Level.Info,
+
+    (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.spark-proto.protobuf.@1").inAll,
+    ),
+
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      // Drop all proto files that are not needed as artifacts of the build.
+      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    },
+  )
+}
 object Unsafe {
   lazy val settings = Seq(
     // This option is needed to suppress warnings from sun.misc.Unsafe usage
@@ -1107,10 +1152,10 @@ object Unidoc {
 
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connect),
+        yarn, tags, streamingKafka010, sqlKafka010, connect, proto),
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connect),
+        yarn, tags, streamingKafka010, sqlKafka010, connect, proto),
 
     (ScalaUnidoc / unidoc / unidocAllClasspaths) := {
       ignoreClasspaths((ScalaUnidoc / unidoc / unidocAllClasspaths).value)
@@ -1196,6 +1241,7 @@ object CopyDependencies {
       // produce the shaded Jar which happens automatically in the case of Maven.
       // Later, when the dependencies are copied, we manually copy the shaded Jar only.
       val fid = (LocalProject("connect")/assembly).value
+      val fidProto = (LocalProject("proto")/assembly).value
 
       (Compile / dependencyClasspath).value.map(_.data)
         .filter { jar => jar.isFile() }
@@ -1207,6 +1253,9 @@ object CopyDependencies {
           }
           if (jar.getName.contains("spark-connect") &&
             !SbtPomKeys.profiles.value.contains("noshade-connect")) {
+            Files.copy(fid.toPath, destJar.toPath)
+          } else if (jar.getName.contains("spark-proto") &&
+            !SbtPomKeys.profiles.value.contains("noshade-proto")) {
             Files.copy(fid.toPath, destJar.toPath)
           } else {
             Files.copy(jar.toPath(), destJar.toPath())

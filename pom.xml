@@ -100,8 +100,8 @@
     <module>connector/kafka-0-10-assembly</module>
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
-    <module>connector/proto</module>
     <module>connect</module>
+    <module>connector/proto</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 

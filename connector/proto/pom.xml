@@ -28,6 +28,7 @@
   <artifactId>spark-proto_2.12</artifactId>
   <properties>
     <sbt.project.name>proto</sbt.project.name>
+    <protobuf.version>3.21.1</protobuf.version>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Proto</name>
@@ -83,12 +84,36 @@
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
-      <version>3.12.2</version>
+      <version>${protobuf.version}</version>
+      <scope>compile</scope>
     </dependency>
 
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <configuration>
+          <shadedArtifactAttached>false</shadedArtifactAttached>
+          <artifactSet>
+            <includes>
+              <include>com.google.protobuf:*</include>
+            </includes>
+          </artifactSet>
+          <relocations>
+            <relocation>
+              <pattern>com.google.protobuf</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark-proto.protobuf</shadedPattern>
+              <includes>
+                <include>com.google.protobuf.**</include>
+              </includes>
+            </relocation>
+          </relocations>
+        </configuration>
+      </plugin>
+    </plugins>
   </build>
 </project>
