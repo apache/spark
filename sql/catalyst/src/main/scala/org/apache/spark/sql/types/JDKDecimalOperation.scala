@@ -34,35 +34,36 @@ class JDKDecimalOperation extends DecimalOperation {
 
   private var decimalVal: BigDecimal = null
 
-  def newInstance(): JDKDecimalOperation = new JDKDecimalOperation()
+  override protected def newInstance(): JDKDecimalOperation = new JDKDecimalOperation()
 
-  def setUnderlyingValue(longVal: Long): Unit = {
+  override protected def setUnderlyingValue(longVal: Long): Unit = {
     this.decimalVal = BigDecimal(longVal)
   }
 
-  def setUnderlyingValue(unscaled: Long, scale: Int): Unit = {
+  override protected def setUnderlyingValue(unscaled: Long, scale: Int): Unit = {
     this.decimalVal = BigDecimal(unscaled, scale)
   }
 
-  def setUnderlyingValue(decimalVal: BigDecimal): Unit = {
+  override protected def setUnderlyingValue(decimalVal: BigDecimal): Unit = {
     this.decimalVal = decimalVal
   }
 
-  def setNullUnderlying(): Unit = {
+  override protected def setNullUnderlying(): Unit = {
     this.decimalVal = null
   }
 
-  def underlyingIsNull: Boolean = decimalVal.eq(null)
+  override protected def underlyingIsNull: Boolean = this.decimalVal.eq(null)
 
-  def underlyingIsNotNull: Boolean = decimalVal.ne(null)
+  override protected def underlyingIsNotNull: Boolean = this.decimalVal.ne(null)
 
-  def getAsBigDecimal(): BigDecimal = this.decimalVal
+  override protected def getAsBigDecimal(): BigDecimal = this.decimalVal
 
-  def getAsJavaBigDecimal(): java.math.BigDecimal = this.decimalVal.underlying()
+  override protected def getAsJavaBigDecimal(): java.math.BigDecimal = this.decimalVal.underlying()
 
-  def getAsJavaBigInteger(): java.math.BigInteger = this.decimalVal.underlying().toBigInteger
+  override protected def getAsJavaBigInteger(): java.math.BigInteger =
+    this.decimalVal.underlying().toBigInteger
 
-  def getAsLongValue: Long = decimalVal.longValue
+  override protected def getAsLongValue: Long = this.decimalVal.longValue
 
   def rescale(precision: Int, scale: Int, roundMode: BigDecimal.RoundingMode.Value): Boolean = {
     val newDecimalVal = this.decimalVal.setScale(scale, roundMode)
@@ -73,44 +74,46 @@ class JDKDecimalOperation extends DecimalOperation {
     true
   }
 
-  def doCompare(other: DecimalOperation): Int = toBigDecimal.compare(other.toBigDecimal)
+  override protected def doCompare(other: DecimalOperation): Int =
+    toBigDecimal.compare(other.toBigDecimal)
 
-  def isEqualsZero(): Boolean = {
+  override protected def isEqualsZero(): Boolean = {
     assert(underlyingIsNotNull)
     this.decimalVal.signum == 0
   }
 
-  def addUnderlyingValue(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
-    (left, right) => left.add(right)
-  }
+  override protected def addUnderlyingValue(that: DecimalOperation): DecimalOperation =
+    withNewInstance(this, that) {
+      (left, right) => left.add(right)
+    }
 
-  def subtractUnderlyingValue(that: DecimalOperation): DecimalOperation =
+  override protected def subtractUnderlyingValue(that: DecimalOperation): DecimalOperation =
     withNewInstance(this, that) {
       (left, right) => left.subtract(right)
     }
 
-  def multiply(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
+  override def multiply(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
     (left, right) => left.multiply(right, MATH_CONTEXT)
   }
 
-  def divide(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
+  override def divide(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
     (left, right) => left.divide(right, DecimalType.MAX_SCALE, MATH_CONTEXT.getRoundingMode)
   }
 
-  def remainder(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
+  override def remainder(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
     (left, right) => left.remainder(right, MATH_CONTEXT)
   }
 
-  def quot(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
+  override def quot(that: DecimalOperation): DecimalOperation = withNewInstance(this, that) {
     (left, right) => left.divideToIntegralValue(right, MATH_CONTEXT)
   }
 
-  def doNegative: DecimalOperation = {
+  override protected def doNegative: DecimalOperation = {
     val jDKDecimalOperation = new JDKDecimalOperation()
     jDKDecimalOperation.set(-this.decimalVal, precision, scale)
   }
 
-  def copyUnderlyingValue(from: DecimalOperation): Unit = {
+  override protected def copyUnderlyingValue(from: DecimalOperation): Unit = {
     assert(from.isInstanceOf[JDKDecimalOperation])
     this.decimalVal = from.asInstanceOf[JDKDecimalOperation].decimalVal
   }

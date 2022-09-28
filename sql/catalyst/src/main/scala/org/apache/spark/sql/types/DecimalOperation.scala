@@ -45,7 +45,7 @@ trait DecimalOperation extends Serializable {
   /**
    * Create a new instance for the subclass of DecimalOperation.
    */
-  def newInstance(): DecimalOperation
+  protected def newInstance(): DecimalOperation
 
   /**
    * Set Long as the underlying value.
@@ -209,7 +209,7 @@ trait DecimalOperation extends Serializable {
   /**
    * Converts the underlying value to scala.BigDecimal.
    */
-  def getAsBigDecimal(): BigDecimal
+  protected def getAsBigDecimal(): BigDecimal
 
   def toJavaBigDecimal: java.math.BigDecimal = if (underlyingIsNull) {
     java.math.BigDecimal.valueOf(longVal, _scale)
