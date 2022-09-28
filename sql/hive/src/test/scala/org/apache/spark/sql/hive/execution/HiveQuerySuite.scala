@@ -1421,7 +1421,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   test("some show commands are not supported") {
     assertUnsupportedFeature { sql("SHOW COMPACTIONS") }
     assertUnsupportedFeature { sql("SHOW TRANSACTIONS") }
-    assertUnsupportedFeature { sql("SHOW INDEXES ON my_table") }
     assertUnsupportedFeature { sql("SHOW LOCKS my_table") }
   }
 
