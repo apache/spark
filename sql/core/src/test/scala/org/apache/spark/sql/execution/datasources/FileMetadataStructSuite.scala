@@ -26,6 +26,7 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Ro
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 
@@ -518,16 +519,19 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     withTempDir { dir =>
       df.coalesce(1).write.format("json").save(dir.getCanonicalPath + "/source/new-streaming-data")
 
-      val stream = spark.readStream.format("json")
+      val streamDf = spark.readStream.format("json")
         .schema(schema)
         .load(dir.getCanonicalPath + "/source/new-streaming-data")
         .select("*", "_metadata")
+
+      val streamQuery0 = streamDf
         .writeStream.format("json")
         .option("checkpointLocation", dir.getCanonicalPath + "/target/checkpoint")
+        .trigger(Trigger.AvailableNow())
         .start(dir.getCanonicalPath + "/target/new-streaming-data")
 
-      stream.processAllAvailable()
-      stream.stop()
+      streamQuery0.awaitTermination()
+      assert(streamQuery0.lastProgress.numInputRows == 2L)
 
       val newDF = spark.read.format("json")
         .load(dir.getCanonicalPath + "/target/new-streaming-data")
@@ -565,6 +569,34 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
             sourceFileMetadata(METADATA_FILE_MODIFICATION_TIME))
         )
       )
+
+      // Verify self-union
+      val streamQuery1 = streamDf.union(streamDf)
+        .writeStream.format("json")
+        .option("checkpointLocation", dir.getCanonicalPath + "/target/checkpoint_union")
+        .trigger(Trigger.AvailableNow())
+        .start(dir.getCanonicalPath + "/target/new-streaming-data-union")
+      streamQuery1.awaitTermination()
+      val df1 = spark.read.format("json")
+        .load(dir.getCanonicalPath + "/target/new-streaming-data-union")
+      // Verify self-union results
+      assert(streamQuery1.lastProgress.numInputRows == 4L)
+      assert(df1.count() == 4L)
+      assert(df1.select("*").columns.toSet == Set("name", "age", "info", "_metadata"))
+
+      // Verify self-join
+      val streamQuery2 = streamDf.join(streamDf, Seq("name", "age", "info", "_metadata"))
+        .writeStream.format("json")
+        .option("checkpointLocation", dir.getCanonicalPath + "/target/checkpoint_join")
+        .trigger(Trigger.AvailableNow())
+        .start(dir.getCanonicalPath + "/target/new-streaming-data-join")
+      streamQuery2.awaitTermination()
+      val df2 = spark.read.format("json")
+        .load(dir.getCanonicalPath + "/target/new-streaming-data-join")
+      // Verify self-join results
+      assert(streamQuery2.lastProgress.numInputRows == 4L)
+      assert(df2.count() == 2L)
+      assert(df2.select("*").columns.toSet == Set("name", "age", "info", "_metadata"))
     }
   }
 

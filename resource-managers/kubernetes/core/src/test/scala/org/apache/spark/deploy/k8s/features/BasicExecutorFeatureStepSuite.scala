@@ -510,6 +510,19 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(mem === s"${expected}Mi")
   }
 
+  test("SPARK-39546: Support ports definition in executor pod template") {
+    val baseDriverPod = SparkPod.initialPod()
+    val ports = new ContainerPortBuilder()
+      .withName("port-from-template")
+      .withContainerPort(1000)
+      .build()
+    baseDriverPod.container.setPorts(Seq(ports).asJava)
+    val step1 = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val podConfigured1 = step1.configurePod(baseDriverPod)
+    // port-from-template should exist after step1
+    assert(podConfigured1.container.getPorts.contains(ports))
+  }
 
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {

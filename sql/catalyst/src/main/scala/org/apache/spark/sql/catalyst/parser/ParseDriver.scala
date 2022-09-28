@@ -21,14 +21,14 @@ import org.antlr.v4.runtime.atn.PredictionMode
 import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
 import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
-import org.apache.spark.SparkThrowableHelper
+import org.apache.spark.{QueryContext, SparkThrowableHelper}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.ParserUtils.withOrigin
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -238,7 +238,8 @@ class ParseException(
     val stop: Origin,
     errorClass: Option[String] = None,
     errorSubClass: Option[String] = None,
-    messageParameters: Array[String] = Array.empty)
+    messageParameters: Map[String, String] = Map.empty,
+    queryContext: Array[QueryContext] = ParseException.getQueryContext())
   extends AnalysisException(
     message,
     start.line,
@@ -249,14 +250,7 @@ class ParseException(
     errorSubClass,
     messageParameters) {
 
-  def this(message: String, ctx: ParserRuleContext) = {
-    this(Option(ParserUtils.command(ctx)),
-      message,
-      ParserUtils.position(ctx.getStart),
-      ParserUtils.position(ctx.getStop))
-  }
-
-  def this(errorClass: String, messageParameters: Array[String], ctx: ParserRuleContext) =
+  def this(errorClass: String, messageParameters: Map[String, String], ctx: ParserRuleContext) =
     this(Option(ParserUtils.command(ctx)),
       SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
       ParserUtils.position(ctx.getStart),
@@ -265,11 +259,15 @@ class ParseException(
       None,
       messageParameters)
 
-  def this(errorClass: String,
-           errorSubClass: String,
-           messageParameters: Array[String],
-           ctx: ParserRuleContext) =
-    this(Option(ParserUtils.command(ctx)),
+  def this(errorClass: String, ctx: ParserRuleContext) = this(errorClass, Map.empty, ctx)
+
+  def this(
+      errorClass: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String],
+      ctx: ParserRuleContext) =
+    this(
+      Option(ParserUtils.command(ctx)),
       SparkThrowableHelper.getMessage(errorClass, errorSubClass, messageParameters),
       ParserUtils.position(ctx.getStart),
       ParserUtils.position(ctx.getStop),
@@ -283,7 +281,7 @@ class ParseException(
       start: Origin,
       stop: Origin,
       errorClass: String,
-      messageParameters: Array[String]) =
+      messageParameters: Map[String, String]) =
     this(
       command,
       SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
@@ -315,12 +313,23 @@ class ParseException(
   }
 
   def withCommand(cmd: String): ParseException = {
-    // PARSE_EMPTY_STATEMENT error class overrides the PARSE_SYNTAX_ERROR when cmd is empty
-    if (cmd.trim().isEmpty && errorClass.isDefined && errorClass.get == "PARSE_SYNTAX_ERROR") {
-      new ParseException(Option(cmd), start, stop, "PARSE_EMPTY_STATEMENT", Array[String]())
-    } else {
-      new ParseException(Option(cmd), message, start, stop, errorClass, None, messageParameters)
-    }
+    val (cls, subCls, params) =
+      if (errorClass == Some("PARSE_SYNTAX_ERROR") && cmd.trim().isEmpty) {
+        // PARSE_EMPTY_STATEMENT error class overrides the PARSE_SYNTAX_ERROR when cmd is empty
+        (Some("PARSE_EMPTY_STATEMENT"), None, Map.empty[String, String])
+      } else {
+        (errorClass, errorSubClass, messageParameters)
+      }
+    new ParseException(Option(cmd), message, start, stop, cls, subCls, params, queryContext)
+  }
+
+  override def getQueryContext: Array[QueryContext] = queryContext
+}
+
+object ParseException {
+  def getQueryContext(): Array[QueryContext] = {
+    val context = CurrentOrigin.get.context
+    if (context.isValid) Array(context) else Array.empty
   }
 }
 

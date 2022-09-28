@@ -184,10 +184,15 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     df.write.jdbc(url, "TEST.APPENDTEST", new Properties())
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val m = intercept[AnalysisException] {
-        df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
-      }.getMessage
-      assert(m.contains("Column \"NAME\" not found"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1156",
+        parameters = Map(
+          "colName" -> "NAME",
+          "tableSchema" ->
+            "Some(StructType(StructField(name,StringType,true),StructField(id,IntegerType,true)))"))
     }
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -211,12 +216,16 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
       assert(1 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
       assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
 
-      val m = intercept[AnalysisException] {
-        df3.write.mode(SaveMode.Overwrite).option("truncate", true)
-          .jdbc(url1, "TEST.TRUNCATETEST", properties)
-      }.getMessage
-      assert(m.contains("Column \"seq\" not found"))
-      assert(0 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
+      checkError(
+        exception = intercept[AnalysisException] {
+          df3.write.mode(SaveMode.Overwrite).option("truncate", true)
+            .jdbc(url1, "TEST.TRUNCATETEST", properties)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1156",
+        parameters = Map(
+          "colName" -> "seq",
+          "tableSchema" ->
+            "Some(StructType(StructField(name,StringType,true),StructField(id,IntegerType,true)))"))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
       JdbcDialects.registerDialect(H2Dialect)
@@ -240,10 +249,15 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
 
     df.write.jdbc(url, "TEST.INCOMPATIBLETEST", new Properties())
-    val m = intercept[AnalysisException] {
-      df2.write.mode(SaveMode.Append).jdbc(url, "TEST.INCOMPATIBLETEST", new Properties())
-    }.getMessage
-    assert(m.contains("Column \"seq\" not found"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.write.mode(SaveMode.Append).jdbc(url, "TEST.INCOMPATIBLETEST", new Properties())
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1156",
+      parameters = Map(
+        "colName" -> "seq",
+        "tableSchema" ->
+          "Some(StructType(StructField(name,StringType,true),StructField(id,IntegerType,true)))"))
   }
 
   test("INSERT to JDBC Datasource") {

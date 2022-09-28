@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.collection.Utils
 
 /**
  * A [[ParentContainerUpdater]] is used by a Parquet converter to set converted values to some
@@ -207,7 +208,7 @@ private[parquet] class ParquetRowConverter(
   private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
     // (SPARK-31116) Use case insensitive map if spark.sql.caseSensitive is false
     // to prevent throwing IllegalArgumentException when searching catalyst type's field index
-    def nameToIndex: Map[String, Int] = catalystType.fieldNames.zipWithIndex.toMap
+    def nameToIndex: Map[String, Int] = Utils.toMapWithIndex(catalystType.fieldNames)
 
     val catalystFieldIdxByName = if (SQLConf.get.caseSensitiveAnalysis) {
       nameToIndex

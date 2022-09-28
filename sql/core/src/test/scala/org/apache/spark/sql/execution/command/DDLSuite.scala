@@ -190,7 +190,13 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE t ALTER COLUMN i FIRST")
       }
-      assert(e.message.contains("ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables"))
+      checkError(
+        exception = e,
+        errorClass = "UNSUPPORTED_FEATURE",
+        errorSubClass = "TABLE_OPERATION",
+        sqlState = "0A000",
+        parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
+          "operation" -> "ALTER COLUMN ... FIRST | ALTER"))
     }
   }
 
@@ -956,7 +962,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       sql("DROP VIEW dbx.tab1")
     }
     assert(e.getMessage.contains(
-      "dbx.tab1 is a table. 'DROP VIEW' expects a view. Please use DROP TABLE instead."))
+      "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead"))
   }
 
   protected def testSetProperties(isDatasourceTable: Boolean): Unit = {
@@ -1872,8 +1878,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
       }
-      assert(e.message.contains(
-        "default.v1 is a view. 'ALTER TABLE ... ADD COLUMNS' expects a table."))
+      assert(e.message.contains(s"${SESSION_CATALOG_NAME}.default.v1 is a view. " +
+        "'ALTER TABLE ... ADD COLUMNS' expects a table."))
     }
   }
 

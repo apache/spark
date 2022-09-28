@@ -26,12 +26,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, when}
-import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
-import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
@@ -42,6 +40,7 @@ import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, DecimalType, LongType, MetadataBuilder, StructType}
 import org.apache.spark.util.Utils
 
@@ -49,9 +48,22 @@ class QueryExecutionErrorsSuite
   extends QueryTest
   with ParquetTest
   with OrcTest
-  with QueryErrorsSuiteBase {
+  with SharedSparkSession {
 
   import testImplicits._
+
+  test("CONVERSION_INVALID_INPUT: to_binary conversion function") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        sql("select to_binary('???', 'base64')").collect()
+      },
+      errorClass = "CONVERSION_INVALID_INPUT",
+      parameters = Map(
+        "str" -> "'???'",
+        "fmt" -> "'BASE64'",
+        "targetType" -> "\"BINARY\"",
+        "suggestion" -> "`try_to_binary`"))
+  }
 
   private def getAesInputs(): (DataFrame, DataFrame) = {
     val encryptedText16 = "4Hv0UKCx6nfUeAoPZo1z+w=="
@@ -247,7 +259,7 @@ class QueryExecutionErrorsSuite
         val df = Seq(java.sql.Date.valueOf("1001-01-01")).toDF("dt")
         val e = intercept[SparkException] {
           df.write.parquet(dir.getCanonicalPath)
-        }.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException]
+        }.getCause.getCause.asInstanceOf[SparkUpgradeException]
 
         val format = "Parquet"
         val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key + "\""
@@ -347,37 +359,6 @@ class QueryExecutionErrorsSuite
       errorClass = "CANNOT_PARSE_DECIMAL",
       parameters = Map[String, String](),
       sqlState = "42000")
-  }
-
-  test("WRITING_JOB_ABORTED: read of input data fails in the middle") {
-    Seq(classOf[SimpleWritableDataSource], classOf[JavaSimpleWritableDataSource]).foreach { cls =>
-      withTempPath { file =>
-        val path = file.getCanonicalPath
-        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
-        // test transaction
-        val failingUdf = org.apache.spark.sql.functions.udf {
-          var count = 0
-          (id: Long) => {
-            if (count > 5) {
-              throw new RuntimeException("testing error")
-            }
-            count += 1
-            id
-          }
-        }
-        val input = spark.range(15).select(failingUdf($"id").as(Symbol("i")))
-          .select($"i", -$"i" as Symbol("j"))
-        checkError(
-          exception = intercept[SparkException] {
-            input.write.format(cls.getName).option("path", path).mode("overwrite").save()
-          },
-          errorClass = "WRITING_JOB_ABORTED",
-          parameters = Map[String, String](),
-          sqlState = "40000")
-        // make sure we don't have partial data.
-        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
-      }
-    }
   }
 
   test("FAILED_EXECUTE_UDF: execute user defined function") {
@@ -636,7 +617,7 @@ class QueryExecutionErrorsSuite
       parameters = Map(
         "message" -> "integer overflow",
         "alternative" -> "",
-        "config" -> SQLConf.ANSI_ENABLED.key))
+        "config" -> s""""${SQLConf.ANSI_ENABLED.key}""""))
   }
 
   test("CAST_OVERFLOW: from long to ANSI intervals") {

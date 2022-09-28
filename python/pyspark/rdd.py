@@ -105,6 +105,7 @@ if TYPE_CHECKING:
         PandasMapIterUDFType,
         PandasCogroupedMapUDFType,
         ArrowMapIterUDFType,
+        PandasGroupedMapUDFWithStateType,
     )
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.types import AtomicType, StructType
@@ -147,6 +148,7 @@ class PythonEvalType:
     SQL_MAP_PANDAS_ITER_UDF: "PandasMapIterUDFType" = 205
     SQL_COGROUPED_MAP_PANDAS_UDF: "PandasCogroupedMapUDFType" = 206
     SQL_MAP_ARROW_ITER_UDF: "ArrowMapIterUDFType" = 207
+    SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE: "PandasGroupedMapUDFWithStateType" = 208
 
 
 def portable_hash(x: Hashable) -> int:
@@ -1039,7 +1041,8 @@ class RDD(Generic[T_co]):
         >>> 6 <= rdd.sample(False, 0.1, 81).count() <= 14
         True
         """
-        assert fraction >= 0.0, "Negative fraction value: %s" % fraction
+        if not fraction >= 0:
+            raise ValueError("Fraction must be nonnegative.")
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
 
     def randomSplit(
@@ -1077,7 +1080,11 @@ class RDD(Generic[T_co]):
         >>> 250 < rdd2.count() < 350
         True
         """
+        if not all(w >= 0 for w in weights):
+            raise ValueError("Weights must be nonnegative")
         s = float(sum(weights))
+        if not s > 0:
+            raise ValueError("Sum of weights must be positive")
         cweights = [0.0]
         for w in weights:
             cweights.append(cweights[-1] + w / s)
@@ -4565,6 +4572,8 @@ class RDD(Generic[T_co]):
         >>> sc.parallelize([1, 2, 3, 4, 5], 3).coalesce(1).glom().collect()
         [[1, 2, 3, 4, 5]]
         """
+        if not numPartitions > 0:
+            raise ValueError("Number of partitions must be positive.")
         if shuffle:
             # Decrease the batch size in order to distribute evenly the elements across output
             # partitions. Otherwise, repartition will possibly produce highly skewed partitions.

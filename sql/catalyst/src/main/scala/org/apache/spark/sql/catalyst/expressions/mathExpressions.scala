@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure,
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{NumberConverter, TypeUtils}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1120,28 +1120,58 @@ case class Hex(child: Expression)
   """,
   since = "1.5.0",
   group = "math_funcs")
-case class Unhex(child: Expression)
+case class Unhex(child: Expression, failOnError: Boolean = false)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  def this(expr: Expression) = this(expr, false)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
   override def nullable: Boolean = true
   override def dataType: DataType = BinaryType
 
-  protected override def nullSafeEval(num: Any): Any =
-    Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
+  protected override def nullSafeEval(num: Any): Any = {
+    val result = Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
+    if (failOnError && result == null) {
+      // The failOnError is set only from `ToBinary` function - hence we might safely set `hint`
+      // parameter to `try_to_binary`.
+      throw QueryExecutionErrors.invalidInputInConversionError(
+        BinaryType,
+        num.asInstanceOf[UTF8String],
+        UTF8String.fromString("HEX"),
+        "try_to_binary")
+    }
+    result
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (c) => {
+    nullSafeCodeGen(ctx, ev, c => {
       val hex = Hex.getClass.getName.stripSuffix("$")
+      val maybeFailOnErrorCode = if (failOnError) {
+        val format = UTF8String.fromString("BASE64");
+        val binaryType = ctx.addReferenceObj("to", BinaryType, BinaryType.getClass.getName)
+        s"""
+           |if (${ev.value} == null) {
+           |  throw QueryExecutionErrors.invalidInputInConversionError(
+           |    $binaryType,
+           |    $c,
+           |    $format,
+           |    "try_to_binary");
+           |}
+           |""".stripMargin
+      } else {
+        s"${ev.isNull} = ${ev.value} == null;"
+      }
+
       s"""
         ${ev.value} = $hex.unhex($c.getBytes());
-        ${ev.isNull} = ${ev.value} == null;
+        $maybeFailOnErrorCode
        """
     })
   }
 
-  override protected def withNewChildInternal(newChild: Expression): Unhex = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Unhex =
+    copy(child = newChild, failOnError)
 }
 
 

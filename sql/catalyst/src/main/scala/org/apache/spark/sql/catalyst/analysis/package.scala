@@ -18,7 +18,10 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.errors.QueryErrorsBase
 
 /**
  * Provides a logical query plan [[Analyzer]] and supporting classes for performing analysis.
@@ -36,21 +39,48 @@ package object analysis {
   val caseInsensitiveResolution = (a: String, b: String) => a.equalsIgnoreCase(b)
   val caseSensitiveResolution = (a: String, b: String) => a == b
 
-  implicit class AnalysisErrorAt(t: TreeNode[_]) {
+  implicit class AnalysisErrorAt(t: TreeNode[_]) extends QueryErrorsBase {
     /** Fails the analysis at the point where a specific tree node was parsed. */
     def failAnalysis(msg: String): Nothing = {
       throw new AnalysisException(msg, t.origin.line, t.origin.startPosition)
     }
 
-    /** Fails the analysis at the point where a specific tree node was parsed. */
+    /** Fails the analysis at the point where a specific tree node was parsed with a given cause. */
     def failAnalysis(msg: String, cause: Throwable): Nothing = {
       throw new AnalysisException(msg, t.origin.line, t.origin.startPosition, cause = Some(cause))
     }
 
-    def failAnalysis(errorClass: String, messageParameters: Array[String]): Nothing = {
+    /**
+     * Fails the analysis at the point where a specific tree node was parsed using a provided
+     * error class and message parameters.
+     */
+    def failAnalysis(errorClass: String, messageParameters: Map[String, String]): Nothing = {
       throw new AnalysisException(
         errorClass = errorClass,
         messageParameters = messageParameters,
+        origin = t.origin)
+    }
+
+    /**
+     * Fails the analysis at the point where a specific tree node was parsed using a provided
+     * error class and subclass and message parameters.
+     */
+    def failAnalysis(
+        errorClass: String,
+        errorSubClass: String,
+        messageParameters: Map[String, String] = Map.empty[String, String]): Nothing = {
+      throw new AnalysisException(
+        errorClass = errorClass,
+        errorSubClass = errorSubClass,
+        messageParameters = messageParameters,
+        origin = t.origin)
+    }
+
+    def dataTypeMismatch(expr: Expression, mismatch: DataTypeMismatch): Nothing = {
+      throw new AnalysisException(
+        errorClass = "DATATYPE_MISMATCH",
+        errorSubClass = mismatch.errorSubClass,
+        messageParameters = mismatch.messageParameters + ("sqlExpr" -> toSQLExpr(expr)),
         origin = t.origin)
     }
   }
@@ -59,7 +89,7 @@ package object analysis {
   def withPosition[A](t: TreeNode[_])(f: => A): A = {
     try f catch {
       case a: AnalysisException =>
-        throw a.withPosition(t.origin.line, t.origin.startPosition)
+        throw a.withPosition(t.origin)
     }
   }
 }

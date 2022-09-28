@@ -23,8 +23,7 @@ import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2Provider, Inse
 class QueryCompilationErrorsDSv2Suite
   extends QueryTest
   with DatasourceV2SQLBase
-  with InsertIntoSQLOnlyTests
-  with QueryErrorsSuiteBase {
+  with InsertIntoSQLOnlyTests {
 
   private val v2Source = classOf[FakeV2Provider].getName
   override protected val v2Format = v2Source

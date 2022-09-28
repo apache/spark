@@ -2646,6 +2646,23 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("SPARK-38717: Handle Hive's bucket spec case preserving behaviour") {
+    withTable("t") {
+      sql(
+        s"""
+           |CREATE TABLE t(
+           |  c STRING,
+           |  B_C STRING
+           |)
+           |PARTITIONED BY (p_c STRING)
+           |CLUSTERED BY (B_C) INTO 4 BUCKETS
+           |STORED AS PARQUET
+           |""".stripMargin)
+      val df = sql("SELECT * FROM t")
+      checkAnswer(df, Seq.empty[Row])
+    }
+  }
 }
 
 @SlowHiveTest

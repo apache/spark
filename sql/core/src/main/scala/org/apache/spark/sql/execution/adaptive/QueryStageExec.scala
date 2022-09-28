@@ -96,7 +96,8 @@ abstract class QueryStageExec extends LeafExecNode {
     val runtimeStats = getRuntimeStatistics
     val dataSize = runtimeStats.sizeInBytes.max(0)
     val numOutputRows = runtimeStats.rowCount.map(_.max(0))
-    Some(Statistics(dataSize, numOutputRows, isRuntime = true))
+    val attributeStats = runtimeStats.attributeStats
+    Some(Statistics(dataSize, numOutputRows, attributeStats, isRuntime = true))
   } else {
     None
   }

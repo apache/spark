@@ -3074,6 +3074,33 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser.backfill(inplace=True)
             self.assert_eq(expected, psser)
 
+    def test_searchsorted(self):
+        pser1 = pd.Series([1, 2, 2, 3])
+
+        index2 = pd.date_range("2018-04-09", periods=4, freq="2D")
+        pser2 = pd.Series([1, 2, 3, 4], index=index2)
+
+        index3 = pd.MultiIndex.from_tuples(
+            [("A", "B"), ("C", "D"), ("E", "F")], names=["index1", "index2"]
+        )
+        pser3 = pd.Series([1.0, 2.0, 3.0], index=index3, name="name")
+
+        pser4 = pd.Series([])
+
+        for pser in [pser1, pser2, pser3, pser4]:
+            psser = ps.from_pandas(pser)
+            for value in [0.5, 1, 2, 3.0, 4, 5]:
+                for side in ["left", "right"]:
+                    self.assert_eq(
+                        pser.searchsorted(value, side=side),
+                        psser.searchsorted(value, side=side),
+                    )
+
+        with self.assertRaisesRegex(ValueError, "Invalid side"):
+            ps.from_pandas(pser1).searchsorted(1.1, side=[1, 2])
+        with self.assertRaisesRegex(ValueError, "Invalid side"):
+            ps.from_pandas(pser1).searchsorted(1.1, side="middle")
+
     def test_align(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
         psdf = ps.from_pandas(pdf)
@@ -3236,6 +3263,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf["s1"].cov(psdf["s2"])
         with self.assertRaisesRegex(TypeError, "unsupported dtype: object"):
             psdf["s2"].cov(psdf["s1"])
+        with self.assertRaisesRegex(TypeError, "ddof must be integer"):
+            psdf["s2"].cov(psdf["s2"], ddof="ddof")
 
         pdf = pd.DataFrame(
             {
@@ -3258,17 +3287,32 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
     def _test_cov(self, pdf):
         psdf = ps.from_pandas(pdf)
 
-        pcov = pdf["s1"].cov(pdf["s2"])
-        pscov = psdf["s1"].cov(psdf["s2"])
-        self.assert_eq(pcov, pscov, almost=True)
+        self.assert_eq(pdf["s1"].cov(pdf["s2"]), psdf["s1"].cov(psdf["s2"]), almost=True)
+        self.assert_eq(
+            pdf["s1"].cov(pdf["s2"], ddof=2), psdf["s1"].cov(psdf["s2"], ddof=2), almost=True
+        )
 
-        pcov = pdf["s1"].cov(pdf["s2"], min_periods=3)
-        pscov = psdf["s1"].cov(psdf["s2"], min_periods=3)
-        self.assert_eq(pcov, pscov, almost=True)
+        self.assert_eq(
+            pdf["s1"].cov(pdf["s2"], min_periods=3),
+            psdf["s1"].cov(psdf["s2"], min_periods=3),
+            almost=True,
+        )
+        self.assert_eq(
+            pdf["s1"].cov(pdf["s2"], min_periods=3, ddof=-1),
+            psdf["s1"].cov(psdf["s2"], min_periods=3, ddof=-1),
+            almost=True,
+        )
 
-        pcov = pdf["s1"].cov(pdf["s2"], min_periods=4)
-        pscov = psdf["s1"].cov(psdf["s2"], min_periods=4)
-        self.assert_eq(pcov, pscov, almost=True)
+        self.assert_eq(
+            pdf["s1"].cov(pdf["s2"], min_periods=4),
+            psdf["s1"].cov(psdf["s2"], min_periods=4),
+            almost=True,
+        )
+        self.assert_eq(
+            pdf["s1"].cov(pdf["s2"], min_periods=4, ddof=3),
+            psdf["s1"].cov(psdf["s2"], min_periods=4, ddof=3),
+            almost=True,
+        )
 
     def test_eq(self):
         pser = pd.Series([1, 2, 3, 4, 5, 6], name="x")
@@ -3326,6 +3370,22 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             NotImplementedError, 'axis should be either 0 or "index" currently.'
         ):
             psser.transform(lambda x: x + 1, axis=1)
+
+    def test_series_stat_fail(self):
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).mean()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).skew()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).kurtosis()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).std()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).var()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).median()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).sem()
 
 
 if __name__ == "__main__":

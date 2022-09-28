@@ -109,22 +109,22 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     >>> [x.name for x in determine_modules_to_test([modules.sql])]
     ... # doctest: +NORMALIZE_WHITESPACE
     ['sql', 'avro', 'docker-integration-tests', 'hive', 'mllib', 'sql-kafka-0-10', 'examples',
-     'hive-thriftserver', 'pyspark-sql', 'repl', 'sparkr',
+     'hive-thriftserver', 'pyspark-sql', 'pyspark-sql-connect', 'repl', 'sparkr',
      'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-slow', 'pyspark-ml']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sparkr, modules.sql], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver', 'mllib',
      'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-slow', 'pyspark-sql',
-     'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
+     'pyspark-sql-connect', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sql, modules.core], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'catalyst', 'core', 'docker-integration-tests', 'examples', 'graphx', 'hive',
      'hive-thriftserver', 'mllib', 'mllib-local', 'pyspark-core', 'pyspark-ml', 'pyspark-mllib',
      'pyspark-pandas', 'pyspark-pandas-slow', 'pyspark-resource', 'pyspark-sql',
-     'pyspark-streaming', 'repl', 'root', 'sparkr', 'sql', 'sql-kafka-0-10', 'streaming',
-     'streaming-kafka-0-10', 'streaming-kinesis-asl']
+     'pyspark-sql-connect', 'pyspark-streaming', 'repl', 'root', 'sparkr', 'sql',
+     'sql-kafka-0-10', 'streaming', 'streaming-kafka-0-10', 'streaming-kinesis-asl']
     """
     modules_to_test = set()
     for module in changed_modules:

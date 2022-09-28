@@ -21,6 +21,7 @@ import java.util.Random
 import java.util.function.Supplier
 
 import scala.concurrent.Future
+import scala.util.hashing
 
 import org.apache.spark._
 import org.apache.spark.internal.config
@@ -299,7 +300,14 @@ object ShuffleExchangeExec {
     def getPartitionKeyExtractor(): InternalRow => Any = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) =>
         // Distributes elements evenly across output partitions, starting from a random partition.
-        var position = new Random(TaskContext.get().partitionId()).nextInt(numPartitions)
+        // nextInt(numPartitions) implementation has a special case when bound is a power of 2,
+        // which is basically taking several highest bits from the initial seed, with only a
+        // minimal scrambling. Due to deterministic seed, using the generator only once,
+        // and lack of scrambling, the position values for power-of-two numPartitions always
+        // end up being almost the same regardless of the index. substantially scrambling the
+        // seed by hashing will help. Refer to SPARK-21782 for more details.
+        val partitionId = TaskContext.get().partitionId()
+        var position = new Random(hashing.byteswap32(partitionId)).nextInt(numPartitions)
         (row: InternalRow) => {
           // The HashPartitioner will handle the `mod` by the number of partitions
           position += 1

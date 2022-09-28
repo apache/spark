@@ -367,6 +367,9 @@ object functions {
    */
   def collect_set(columnName: String): Column = collect_set(Column(columnName))
 
+  private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
+    withAggregateFunction { CollectTopK(e.expr, num, reverse) }
+
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
    *
@@ -2566,7 +2569,7 @@ object functions {
   /**
    * Calculates the hash code of given columns using the 64-bit
    * variant of the xxHash algorithm, and returns the result as a long
-   * column.
+   * column. The hash computation uses an initial seed of 42.
    *
    * @group misc_funcs
    * @since 3.0.0

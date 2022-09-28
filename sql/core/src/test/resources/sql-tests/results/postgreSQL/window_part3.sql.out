@@ -246,7 +246,20 @@ from t1 where f1 = f2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY spark_catalog.default.t1.f1 RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)' due to data type mismatch: A range window frame cannot be used in an unordered window specification.; line 1 pos 24
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "RANGE_FRAME_WITHOUT_ORDER",
+  "messageParameters" : {
+    "sqlExpr" : "\"(PARTITION BY f1 RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 108,
+    "fragment" : "(partition by f1\n                         range between 1 preceding and 1 following)"
+  } ]
+}
 
 
 -- !query
@@ -296,7 +309,12 @@ SELECT * FROM empsalary WHERE row_number() OVER (ORDER BY salary) < 10
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use window functions inside WHERE clause
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "messageParameters" : {
+    "clauseName" : "WHERE"
+  }
+}
 
 
 -- !query
@@ -345,7 +363,12 @@ SELECT * FROM empsalary WHERE (rank() OVER (ORDER BY random())) > 10
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use window functions inside WHERE clause
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "messageParameters" : {
+    "clauseName" : "WHERE"
+  }
+}
 
 
 -- !query
@@ -354,7 +377,12 @@ SELECT * FROM empsalary WHERE rank() OVER (ORDER BY random())
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use window functions inside WHERE clause
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "messageParameters" : {
+    "clauseName" : "WHERE"
+  }
+}
 
 
 -- !query
