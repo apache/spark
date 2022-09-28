@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.collection.mutable
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -25,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanSt
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
 
@@ -183,26 +186,95 @@ trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
  * A logical plan node with single child.
  */
 trait UnaryNode extends LogicalPlan with UnaryLike[LogicalPlan] {
+  val constraintProjectionLimit = conf.getConf(SQLConf.CONSTRAINT_PROJECTION_LIMIT)
+
   /**
-   * Generates all valid constraints including an set of aliased constraints by replacing the
-   * original constraint expressions with the corresponding alias
+   * Generates all valid constraints including a set of aliased constraints by replacing the
+   * original constraint expressions with the corresponding alias.
+   * This method only returns constraints whose referenced attributes are subset of `outputSet`.
    */
   protected def getAllValidConstraints(projectList: Seq[NamedExpression]): ExpressionSet = {
-    var allConstraints = child.constraints
+    val newLiteralConstraints = mutable.ArrayBuffer.empty[EqualNullSafe]
+    val newConstraints = mutable.ArrayBuffer.empty[EqualNullSafe]
+    val aliasMap = mutable.Map[Expression, mutable.ArrayBuffer[Attribute]]()
     projectList.foreach {
+      // These new literal constraints doesn't need any projection, not they can project any other
+      // constraint
       case a @ Alias(l: Literal, _) =>
-        allConstraints += EqualNullSafe(a.toAttribute, l)
-      case a @ Alias(e, _) if e.deterministic =>
-        // For every alias in `projectList`, replace the reference in constraints by its attribute.
-        allConstraints ++= allConstraints.map(_ transform {
-          case expr: Expression if expr.semanticEquals(e) =>
-            a.toAttribute
-        })
-        allConstraints += EqualNullSafe(e, a.toAttribute)
-      case _ => // Don't change.
+        newLiteralConstraints += EqualNullSafe(a.toAttribute, l)
+
+      // We need to add simple attributes to the alias as those attributes can be aliased as well.
+      // Technically, we don't need to add attributes that are not otherwise aliased to the map, but
+      // adding them does no harm.
+      case a: Attribute =>
+        aliasMap.getOrElseUpdate(a.canonicalized, mutable.ArrayBuffer.empty) += a
+
+      // If we have an alias in the projection then we need to:
+      // - add it to the alias map as it can project child's constraints
+      // - and add it to the new constraints and let it be projected or pruned based on other
+      //   aliases and attributes in the project list.
+      //   E.g. `a + b <=> x` constraint can "survive" the projection if
+      //   - `a + b` is aliased (like `a + b AS y` and so the projected constraint is `y <=> x`)
+      //   - or both `a` and `b` are aliased or included in the output set
+      case a @ Alias(child, _) if child.deterministic =>
+        val attr = a.toAttribute
+        aliasMap.getOrElseUpdate(child.canonicalized, mutable.ArrayBuffer.empty) += attr
+        newConstraints += EqualNullSafe(child, attr)
+      case _ =>
     }
 
-    allConstraints
+    def projectConstraint(expr: Expression) = {
+      // The current constraint projection doesn't do a full-blown projection which means that when
+      // - a constraint contain an expression multiple times (E.g. `c + c > 1`)
+      // - and we have a projection where an expression is aliased as multiple different attributes
+      //   (E.g. `c AS c1`, `c AS c2`)
+      // then we return only `c1 + c1 > 1` and `c2 + c2 > 1` but doesn't return `c1 + c2 > 1`.
+      val currentAlias = mutable.Map.empty[Expression, Seq[Expression]]
+      expr.multiTransformDown {
+        // Mapping with aliases
+        case e: Expression if aliasMap.contains(e.canonicalized) =>
+          // When we encounter an expression for the first time in the tree, set up a cache to track
+          // the current attribute alias and return that cached attribute when we encounter the same
+          // expression at other places.
+          currentAlias.getOrElse(e.canonicalized, {
+            // If a parent expression can can be transformed return to original expression too to
+            // let its children transformed too.
+            val alternatives = if (e.containsChild.nonEmpty) {
+              e +: aliasMap(e.canonicalized).toSeq
+            } else {
+              aliasMap(e.canonicalized).toSeq
+            }
+
+            // When iterate through the alternatives for the first encounter we also update the
+            // cache.
+            alternatives.toStream.map { a =>
+              currentAlias += e.canonicalized -> Seq(a)
+              a
+            }.append {
+              currentAlias -= e.canonicalized
+              Seq.empty
+            }
+          })
+
+
+        // Prune if we encounter an attribute that we can't map and it is not in output set.
+        case a: Attribute if !outputSet.contains(a) => Seq.empty
+      }.filter {
+        case EqualNullSafe(a1: Attribute, a2: Attribute) => a1.canonicalized != a2.canonicalized
+        case _ => true
+      }
+    }
+
+    val projectedConstraints =
+      // Transform child's constraints according to alias map
+      child.constraints.toStream.flatMap(projectConstraint) ++
+      // Transform child expressions of new constraints according to alias map
+      newConstraints.toStream.flatMap(projectConstraint)
+
+    ExpressionSet(
+      constraintProjectionLimit.map(l => projectedConstraints.take(l))
+        .getOrElse(projectedConstraints) ++
+      newLiteralConstraints.toSeq)
   }
 
   override protected lazy val validConstraints: ExpressionSet = child.constraints

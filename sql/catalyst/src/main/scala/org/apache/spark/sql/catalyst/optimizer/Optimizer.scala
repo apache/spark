@@ -1420,7 +1420,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       conditionOpt: Option[Expression]): ExpressionSet = {
     val baseConstraints = left.constraints.union(right.constraints)
       .union(ExpressionSet(conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil)))
-    baseConstraints.union(inferAdditionalConstraints(baseConstraints))
+    inferConstraints(baseConstraints)
   }
 
   private def inferNewFilter(plan: LogicalPlan, constraints: ExpressionSet): LogicalPlan = {

@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
-
+import org.apache.spark.sql.internal.SQLConf
 
 trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
 
@@ -31,8 +33,7 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
    */
   lazy val constraints: ExpressionSet = {
     if (conf.constraintPropagationEnabled) {
-      validConstraints
-        .union(inferAdditionalConstraints(validConstraints))
+      inferConstraints(validConstraints)
         .union(constructIsNotNullConstraints(validConstraints, output))
         .filter { c =>
           c.references.nonEmpty && c.references.subsetOf(outputSet) && c.deterministic
@@ -53,37 +54,68 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
   protected lazy val validConstraints: ExpressionSet = ExpressionSet()
 }
 
-trait ConstraintHelper {
+trait ConstraintHelper extends SQLConfHelper {
+
+  lazy val constraintInferenceLimit = conf.getConf(SQLConf.CONSTRAINT_INFERENCE_LIMIT)
 
   /**
    * Infers an additional set of constraints from a given set of equality constraints.
    * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
    * additional constraint of the form `b = 5`.
    */
-  def inferAdditionalConstraints(constraints: ExpressionSet): ExpressionSet = {
-    var inferredConstraints = ExpressionSet()
+  def inferConstraints(constraints: ExpressionSet): ExpressionSet = {
     // IsNotNull should be constructed by `constructIsNotNullConstraints`.
-    val predicates = constraints.filterNot(_.isInstanceOf[IsNotNull])
+    val (notNullConstraints, predicates) = constraints.partition(_.isInstanceOf[IsNotNull])
+
+    val equivalenceMap = mutable.Map.empty[Expression, mutable.ArrayBuffer[Expression]]
     predicates.foreach {
-      case eq @ EqualTo(l: Attribute, r: Attribute) =>
-        val candidateConstraints = predicates - eq
-        inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
-        inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
-      case eq @ EqualTo(l @ Cast(_: Attribute, _, _, _), r: Attribute) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
-      case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _, _)) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
+      case EqualTo(l: Attribute, r: Attribute) =>
+        equivalenceMap.getOrElseUpdate(l.canonicalized, mutable.ArrayBuffer.empty) += r
+        equivalenceMap.getOrElseUpdate(r.canonicalized, mutable.ArrayBuffer.empty) += l
+      case EqualTo(l @ Cast(_: Attribute, _, _, _), r: Attribute) =>
+        equivalenceMap.getOrElseUpdate(r.canonicalized, mutable.ArrayBuffer.empty) += l
+      case EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _, _)) =>
+        equivalenceMap.getOrElseUpdate(l.canonicalized, mutable.ArrayBuffer.empty) += r
       case _ => // No inference
     }
-    inferredConstraints -- constraints
-  }
 
-  private def replaceConstraints(
-      constraints: ExpressionSet,
-      source: Expression,
-      destination: Expression): ExpressionSet = constraints.map(_ transform {
-    case e: Expression if e.semanticEquals(source) => destination
-  })
+    def inferConstraints(expr: Expression) = {
+      // The current constraint inference doesn't do a full-blown inference which means that when
+      // - a constraint contain an attribute multiple times (E.g. `c + c > 1`)
+      // - and we have multiple equivalences for that attribute  (E.g. `c = a`, `c = b`)
+      // then we return only `a + a > 1` and `b + b > 1` besides the original constraint, but
+      // doesn't return `a + b > 1`.
+      val currentMapping = mutable.Map.empty[Expression, Seq[Expression]]
+      expr.multiTransformDown {
+        case e: Expression if equivalenceMap.contains(e.canonicalized) =>
+          // When we encounter an attribute for the first time in the tree, set up a cache to track
+          // the current equivalence and return that cached equivalence when we encounter the same
+          // expression at other places.
+          currentMapping.getOrElse(e.canonicalized, {
+            // Always return the original expression too
+            val alternatives = e +: equivalenceMap(e.canonicalized).toSeq
+
+            // When iterate through the alternatives for the first encounter we also update the
+            // cache.
+            alternatives.toStream.map { a =>
+              currentMapping += e.canonicalized -> Seq(a)
+              a
+            }.append {
+              currentMapping -= e.canonicalized
+              Seq.empty
+            }
+          })
+      }.filter {
+        case EqualTo(e1, e2) => e1.canonicalized != e2.canonicalized
+        case _ => true
+      }
+    }
+
+    val inferredConstraints = predicates.toStream.flatMap(inferConstraints)
+
+    notNullConstraints ++
+      constraintInferenceLimit.map(l => inferredConstraints.take(l)).getOrElse(inferredConstraints)
+  }
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as

@@ -428,4 +428,123 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
       assert(aliasedRelation.analyze.constraints.isEmpty)
     }
   }
+
+  test("constraint projection limit") {
+    val r = LocalRelation($"c".int).where($"c" > 10).select($"c".as("c1"), $"c".as("c2"))
+    val analyzed = r.analyze
+    assert(analyzed.constraints ==
+      ExpressionSet(Seq(
+        IsNotNull(resolveColumn(analyzed, "c1")),
+        IsNotNull(resolveColumn(analyzed, "c2")),
+        resolveColumn(analyzed, "c1") > 10,
+        resolveColumn(analyzed, "c2") > 10,
+        resolveColumn(analyzed, "c2") <=> resolveColumn(analyzed, "c1"))))
+
+    withSQLConf(SQLConf.CONSTRAINT_PROJECTION_LIMIT.key -> "5") {
+      val analyzed = r.analyze
+      assert(analyzed.constraints ==
+        ExpressionSet(Seq(
+          IsNotNull(resolveColumn(analyzed, "c1")),
+          IsNotNull(resolveColumn(analyzed, "c2")),
+          resolveColumn(analyzed, "c1") > 10,
+          resolveColumn(analyzed, "c2") > 10,
+          resolveColumn(analyzed, "c2") <=> resolveColumn(analyzed, "c1"))))
+    }
+
+    withSQLConf(SQLConf.CONSTRAINT_PROJECTION_LIMIT.key -> "3") {
+      val analyzed = r.analyze
+      assert(analyzed.constraints ==
+        ExpressionSet(Seq(
+          IsNotNull(resolveColumn(analyzed, "c1")),
+          resolveColumn(analyzed, "c1") > 10,
+          resolveColumn(analyzed, "c2") > 10,
+
+          // This constraint is not projected but constructed not null constraint
+          IsNotNull(resolveColumn(analyzed, "c2")))))
+    }
+
+    withSQLConf(SQLConf.CONSTRAINT_PROJECTION_LIMIT.key -> "1") {
+      val analyzed = r.analyze
+      assert(analyzed.constraints ==
+        ExpressionSet(Seq(
+          resolveColumn(analyzed, "c1") > 10,
+
+          // This constraint is not projected but constructed not null constraint
+          IsNotNull(resolveColumn(analyzed, "c1")))))
+    }
+
+    withSQLConf(SQLConf.CONSTRAINT_PROJECTION_LIMIT.key -> "0") {
+      val analyzed = r.analyze
+      assert(analyzed.constraints.isEmpty)
+    }
+  }
+
+  test("constraint inference limit") {
+    val r1 = LocalRelation($"c1".int).where($"c1" > 10).as("r1")
+    val r2 = LocalRelation($"c2".int).where($"c2" < 100).as("r2")
+    val r = r1.join(r2, Inner, Some($"r1.c1" === $"r2.c2"))
+
+    val analyzed = r.analyze
+    assert(analyzed.constraints ==
+      ExpressionSet(Seq(
+        IsNotNull(resolveColumn(analyzed, "c1")),
+        IsNotNull(resolveColumn(analyzed, "c2")),
+        resolveColumn(analyzed, "c1") > 10,
+        resolveColumn(analyzed, "c2") > 10,
+        resolveColumn(analyzed, "c1") < 100,
+        resolveColumn(analyzed, "c2") < 100,
+        resolveColumn(analyzed, "c2") === resolveColumn(analyzed, "c1"))))
+
+    withSQLConf(SQLConf.CONSTRAINT_INFERENCE_LIMIT.key -> "5") {
+      val analyzed = r.analyze
+      assert(analyzed.constraints ==
+        ExpressionSet(Seq(
+          resolveColumn(analyzed, "c1") > 10,
+          resolveColumn(analyzed, "c2") > 10,
+          resolveColumn(analyzed, "c1") < 100,
+          resolveColumn(analyzed, "c2") < 100,
+          resolveColumn(analyzed, "c2") === resolveColumn(analyzed, "c1"),
+
+          // These constraints are not inferred but constructed not null constraint
+          IsNotNull(resolveColumn(analyzed, "c1")),
+          IsNotNull(resolveColumn(analyzed, "c2"))))
+      )
+    }
+
+    withSQLConf(SQLConf.CONSTRAINT_INFERENCE_LIMIT.key -> "3") {
+      val analyzed = r.analyze
+      assert(analyzed.constraints ==
+        ExpressionSet(Seq(
+          resolveColumn(analyzed, "c1") > 10,
+          resolveColumn(analyzed, "c2") > 10,
+          resolveColumn(analyzed, "c2") < 100,
+
+          // These constraints are not inferred but constructed not null constraint
+          IsNotNull(resolveColumn(analyzed, "c1")),
+          IsNotNull(resolveColumn(analyzed, "c2"))))
+      )
+    }
+
+    withSQLConf(SQLConf.CONSTRAINT_INFERENCE_LIMIT.key -> "1") {
+      val analyzed = r.analyze
+      assert(analyzed.constraints ==
+        ExpressionSet(Seq(
+          resolveColumn(analyzed, "c1") > 10,
+
+          // These constraints are not inferred but constructed not null constraint
+          IsNotNull(resolveColumn(analyzed, "c1")),
+          IsNotNull(resolveColumn(analyzed, "c2"))))
+      )
+    }
+
+    withSQLConf(SQLConf.CONSTRAINT_INFERENCE_LIMIT.key -> "0") {
+      val analyzed = r.analyze
+      assert(analyzed.constraints ==
+        ExpressionSet(Seq(
+          // These constraints are not inferred but constructed not null constraint
+          IsNotNull(resolveColumn(analyzed, "c1")),
+          IsNotNull(resolveColumn(analyzed, "c2"))))
+      )
+    }
+  }
 }

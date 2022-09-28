@@ -882,6 +882,28 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val CONSTRAINT_PROJECTION_LIMIT =
+    buildConf("spark.sql.constraintPropagation.projectionLimit")
+      .doc("If defined then the maximum number of original and projected constraints during " +
+        "constraint propagation.")
+      .internal()
+      .version("3.5.0")
+      .intConf
+      .checkValue(_ >= 0,
+        "The value of spark.sql.constraintPropagation.projectionLimit must not be negative.")
+      .createOptional
+
+  val CONSTRAINT_INFERENCE_LIMIT =
+    buildConf("spark.sql.constraintPropagation.inferenceLimit")
+      .doc("If defined then the maximum number of inferred constraints during constraint " +
+        "propagation.")
+      .internal()
+      .version("3.5.0")
+      .intConf
+      .checkValue(_ >= 0,
+        "The value of spark.sql.constraintPropagation.inferenceLimit must not be negative.")
+      .createOptional
+
   val PROPAGATE_DISTINCT_KEYS_ENABLED =
     buildConf("spark.sql.optimizer.propagateDistinctKeys.enabled")
       .internal()

@@ -479,7 +479,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  * 4) Unwrap '=', '<=>' if one side is a boolean literal
  */
 object SimplifyBinaryComparison
-  extends Rule[LogicalPlan] with PredicateHelper with ConstraintHelper {
+  extends Rule[LogicalPlan] with PredicateHelper {
 
   private def canSimplifyComparison(
       left: Expression,

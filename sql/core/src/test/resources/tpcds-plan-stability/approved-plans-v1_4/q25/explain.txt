@@ -90,7 +90,7 @@ Output [4]: [cs_bill_customer_sk#14, cs_item_sk#15, cs_net_profit#16, cs_sold_da
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(cs_sold_date_sk#17), dynamicpruningexpression(cs_sold_date_sk#17 IN dynamicpruning#13)]
-PushedFilters: [IsNotNull(cs_bill_customer_sk), IsNotNull(cs_item_sk)]
+PushedFilters: [IsNotNull(cs_item_sk), IsNotNull(cs_bill_customer_sk)]
 ReadSchema: struct<cs_bill_customer_sk:int,cs_item_sk:int,cs_net_profit:decimal(7,2)>
 
 (11) ColumnarToRow [codegen id : 2]
@@ -98,7 +98,7 @@ Input [4]: [cs_bill_customer_sk#14, cs_item_sk#15, cs_net_profit#16, cs_sold_dat
 
 (12) Filter [codegen id : 2]
 Input [4]: [cs_bill_customer_sk#14, cs_item_sk#15, cs_net_profit#16, cs_sold_date_sk#17]
-Condition : (isnotnull(cs_bill_customer_sk#14) AND isnotnull(cs_item_sk#15))
+Condition : (isnotnull(cs_item_sk#15) AND isnotnull(cs_bill_customer_sk#14))
 
 (13) BroadcastExchange
 Input [4]: [cs_bill_customer_sk#14, cs_item_sk#15, cs_net_profit#16, cs_sold_date_sk#17]

@@ -94,7 +94,7 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_store_id,s_store_name,store_sales
                             WholeStageCodegen (15)
                               Project [cs_bill_customer_sk,cs_item_sk,cs_quantity]
                                 BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                                  Filter [cs_bill_customer_sk,cs_item_sk]
+                                  Filter [cs_item_sk,cs_bill_customer_sk]
                                     ColumnarToRow
                                       InputAdapter
                                         Scan parquet spark_catalog.default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_sold_date_sk]
