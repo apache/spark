@@ -156,7 +156,7 @@ message Expression {
     string expression = 1;
   }
 
-  // represent * (e.g. SELECT *)
+  // UnresolvedStar is used to expand all the fields of a relation or struct.
   message UnresolvedStar {
   }
 }

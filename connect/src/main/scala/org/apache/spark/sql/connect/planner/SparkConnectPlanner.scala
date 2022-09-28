@@ -98,7 +98,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     val baseRel = transformRelation(rel.getInput)
     // TODO: support the target field for *.
     val projection =
-      if (rel.getExpressionsCount == 1&& rel.getExpressions(0).hasUnresolvedStar) {
+      if (rel.getExpressionsCount == 1 && rel.getExpressions(0).hasUnresolvedStar) {
       Seq(UnresolvedStar(Option.empty))
     } else {
       rel.getExpressionsList.asScala.map(transformExpression).map(UnresolvedAlias(_))
