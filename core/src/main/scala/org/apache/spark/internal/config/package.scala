@@ -1078,6 +1078,13 @@ package object config {
     .booleanConf
     .createWithDefault(false)
 
+  private[spark] val IGNORE_CORRUPT_FILES_AFTER_RETIES =
+    ConfigBuilder("spark.sql.files.ignoreCorruptFilesAfterRetries")
+      .doc("Max retries before a file is marked as corrupted. This configuration is effective " +
+        s"only when ${IGNORE_CORRUPT_FILES.key} is true")
+      .version("3.4.0")
+      .fallbackConf(TASK_MAX_FAILURES)
+
   private[spark] val IGNORE_MISSING_FILES = ConfigBuilder("spark.files.ignoreMissingFiles")
     .doc("Whether to ignore missing files. If true, the Spark jobs will continue to run when " +
       "encountering missing files and the contents that have been read will still be returned.")

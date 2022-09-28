@@ -92,6 +92,9 @@ class NewHadoopRDD[K, V](
 
   private val ignoreCorruptFiles = sparkContext.conf.get(IGNORE_CORRUPT_FILES)
 
+  private val ignoreCorruptFilesAfterRetries =
+    sparkContext.conf.get(IGNORE_CORRUPT_FILES_AFTER_RETIES)
+
   private val ignoreMissingFiles = sparkContext.conf.get(IGNORE_MISSING_FILES)
 
   private val ignoreEmptySplits = sparkContext.conf.get(HADOOP_RDD_IGNORE_EMPTY_SPLITS)
@@ -178,6 +181,10 @@ class NewHadoopRDD[K, V](
       private val inputMetrics = context.taskMetrics().inputMetrics
       private val existingBytesRead = inputMetrics.bytesRead
 
+      private def shouldSkipCorruptFiles(): Boolean = {
+        ignoreCorruptFiles && context.attemptNumber() + 1 >= ignoreCorruptFilesAfterRetries
+      }
+
       // Sets InputFileBlockHolder for the file block's information
       split.serializableHadoopSplit.value match {
         case fs: FileSplit =>
@@ -227,7 +234,7 @@ class NewHadoopRDD[K, V](
             null
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles => throw e
-          case e: IOException if ignoreCorruptFiles =>
+          case e: IOException if shouldSkipCorruptFiles() =>
             logWarning(
               s"Skipped the rest content in the corrupted file: ${split.serializableHadoopSplit}",
               e)
@@ -255,7 +262,7 @@ class NewHadoopRDD[K, V](
               finished = true
             // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
             case e: FileNotFoundException if !ignoreMissingFiles => throw e
-            case e: IOException if ignoreCorruptFiles =>
+            case e: IOException if shouldSkipCorruptFiles() =>
               logWarning(
                 s"Skipped the rest content in the corrupted file: ${split.serializableHadoopSplit}",
                 e)
