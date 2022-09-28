@@ -1727,12 +1727,8 @@ class SubquerySuite extends QueryTest
             checkAnswer(df, Seq.empty)
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
-              if (excludedRule.nonEmpty) {
-                assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
-                assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
-              } else {
-                assert(joinExec.isInstanceOf[BroadcastNestedLoopJoinExec])
-              }
+              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
+              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
             } else {
               assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
             }
@@ -1755,8 +1751,14 @@ class SubquerySuite extends QueryTest
             checkAnswer(df, Seq.empty)
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
-              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
-              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+              if (excludedRule.nonEmpty) {
+                assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
+                assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+              } else {
+                assert(joinExec.isInstanceOf[BroadcastNestedLoopJoinExec])
+                assert(joinExec.asInstanceOf[BroadcastNestedLoopJoinExec]
+                  .right.isInstanceOf[LocalLimitExec])
+              }
             } else {
               assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
             }
@@ -1772,6 +1774,8 @@ class SubquerySuite extends QueryTest
                 assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
               } else {
                 assert(joinExec.isInstanceOf[BroadcastNestedLoopJoinExec])
+                assert(joinExec.asInstanceOf[BroadcastNestedLoopJoinExec]
+                  .right.isInstanceOf[LocalLimitExec])
               }
             } else {
               assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
