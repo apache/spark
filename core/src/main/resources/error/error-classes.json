@@ -2234,5 +2234,60 @@
     "message" : [
       "Invalid bound function '<bound>: there are <argsLen> arguments but <inputTypesLen> parameters returned from 'inputTypes()'."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1200" : {
+    "message" : [
+      "<name> is not supported for v2 tables."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1201" : {
+    "message" : [
+      "Cannot resolve column name \"<colName>\" among (<fieldNames>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1202" : {
+    "message" : [
+      "Cannot write to '<tableName>', too many data columns:",
+      "Table columns: <tableColumns>",
+      "Data columns: <dataColumns>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1203" : {
+    "message" : [
+      "Cannot write to '$tableName', not enough data columns:",
+      "Table columns: <tableColumns>",
+      "Data columns: <dataColumns>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1204" : {
+    "message" : [
+      "Cannot write incompatible data to table '<tableName>':",
+      "- <errors>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1205" : {
+    "message" : [
+      "Expected only partition pruning predicates: <nonPartitionPruningPredicates>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1206" : {
+    "message" : [
+      "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1207" : {
+    "message" : [
+      "The duration and time inputs to window must be an integer, long or string literal."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1208" : {
+    "message" : [
+      "No such struct field <fieldName> in <fields>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1209" : {
+    "message" : [
+      "Ambiguous reference to fields <fields>."
+    ]
   }
 }

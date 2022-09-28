@@ -1979,43 +1979,54 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def ambiguousRelationAliasNameInNestedCTEError(name: String): Throwable = {
-    new AnalysisException(s"Name $name is ambiguous in nested CTE. " +
-      s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to CORRECTED so that name " +
-      "defined in inner CTE takes precedence. If set it to LEGACY, outer CTE " +
-      "definitions will take precedence. See more details in SPARK-28228.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1200",
+      messageParameters = Map(
+        "name" -> name,
+        "config" -> LEGACY_CTE_PRECEDENCE_POLICY.key))
   }
 
   def commandUnsupportedInV2TableError(name: String): Throwable = {
-    new AnalysisException(s"$name is not supported for v2 tables.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1200",
+      messageParameters = Map("name" -> name))
   }
 
   def cannotResolveColumnNameAmongAttributesError(
       colName: String, fieldNames: String): Throwable = {
-    new AnalysisException(s"""Cannot resolve column name "$colName" among ($fieldNames)""")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1201",
+      messageParameters = Map(
+        "colName" -> colName,
+        "fieldNames" -> fieldNames))
   }
 
   def cannotWriteTooManyColumnsToTableError(
       tableName: String, expected: Seq[Attribute], query: LogicalPlan): Throwable = {
     new AnalysisException(
-      s"""
-         |Cannot write to '$tableName', too many data columns:
-         |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
-         |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1202",
+      messageParameters = Map(
+        "tableName" -> tableName,
+        "tableColumns" -> expected.map(c => s"'${c.name}'").mkString(", "),
+        "dataColumns" -> query.output.map(c => s"'${c.name}'").mkString(", ")))
   }
 
   def cannotWriteNotEnoughColumnsToTableError(
       tableName: String, expected: Seq[Attribute], query: LogicalPlan): Throwable = {
     new AnalysisException(
-      s"""Cannot write to '$tableName', not enough data columns:
-         |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
-         |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}"""
-        .stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1203",
+      messageParameters = Map(
+        "tableName" -> tableName,
+        "tableColumns" -> expected.map(c => s"'${c.name}'").mkString(", "),
+        "dataColumns" -> query.output.map(c => s"'${c.name}'").mkString(", ")))
   }
 
   def cannotWriteIncompatibleDataToTableError(tableName: String, errors: Seq[String]): Throwable = {
     new AnalysisException(
-      s"Cannot write incompatible data to table '$tableName':\n- ${errors.mkString("\n- ")}")
+      errorClass = "_LEGACY_ERROR_TEMP_1204",
+      messageParameters = Map(
+        "tableName" -> tableName,
+        "errors" -> errors.mkString("\n- ")))
   }
 
   def secondArgumentOfFunctionIsNotIntegerError(
@@ -2030,28 +2041,41 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def nonPartitionPruningPredicatesNotExpectedError(
       nonPartitionPruningPredicates: Seq[Expression]): Throwable = {
     new AnalysisException(
-      s"Expected only partition pruning predicates: $nonPartitionPruningPredicates")
+      errorClass = "_LEGACY_ERROR_TEMP_1205",
+      messageParameters = Map(
+        "nonPartitionPruningPredicates" -> nonPartitionPruningPredicates.toString()))
   }
 
   def columnNotDefinedInTableError(
       colType: String, colName: String, tableName: String, tableCols: Seq[String]): Throwable = {
-    new AnalysisException(s"$colType column $colName is not defined in table $tableName, " +
-      s"defined table columns are: ${tableCols.mkString(", ")}")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1206",
+      messageParameters = Map(
+        "colType" -> colType,
+        "colName" -> colName,
+        "tableName" -> tableName,
+        "tableCols" -> tableCols.mkString(", ")))
   }
 
   def invalidLiteralForWindowDurationError(): Throwable = {
-    new AnalysisException("The duration and time inputs to window must be " +
-      "an integer, long or string literal.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1207",
+      messageParameters = Map.empty)
   }
 
   def noSuchStructFieldInGivenFieldsError(
       fieldName: String, fields: Array[StructField]): Throwable = {
     new AnalysisException(
-      s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
+      errorClass = "_LEGACY_ERROR_TEMP_1208",
+      messageParameters = Map(
+        "fieldName" -> fieldName,
+        "fields" -> fields.map(_.name).mkString(", ")))
   }
 
   def ambiguousReferenceToFieldsError(fields: String): Throwable = {
-    new AnalysisException(s"Ambiguous reference to fields $fields")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1209",
+      messageParameters = Map("fields" -> fields))
   }
 
   def secondArgumentInFunctionIsNotBooleanLiteralError(funcName: String): Throwable = {
