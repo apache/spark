@@ -22,12 +22,11 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
+import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
@@ -328,36 +327,20 @@ private[sql] object CatalogV2Util {
   def loadTable(
       catalog: CatalogPlugin,
       ident: Identifier,
-      timeTravelSpec: Option[TimeTravelSpec] = None): Option[Table] =
-    try {
-      if (timeTravelSpec.nonEmpty) {
-        timeTravelSpec.get match {
-          case v: AsOfVersion =>
-            Option(catalog.asTableCatalog.loadTable(ident, v.version))
-          case ts: AsOfTimestamp =>
-            Option(catalog.asTableCatalog.loadTable(ident, ts.timestamp))
-        }
-      } else {
-        Option(catalog.asTableCatalog.loadTable(ident))
+      timeTravelSpec: Option[TimeTravelSpec] = None): Table =
+    if (timeTravelSpec.nonEmpty) {
+      timeTravelSpec.get match {
+        case v: AsOfVersion =>
+          catalog.asTableCatalog.loadTable(ident, v.version)
+        case ts: AsOfTimestamp =>
+          catalog.asTableCatalog.loadTable(ident, ts.timestamp)
       }
-    } catch {
-      case _: NoSuchTableException => None
-      case _: NoSuchDatabaseException => None
-      case _: NoSuchNamespaceException => None
+    } else {
+      catalog.asTableCatalog.loadTable(ident)
     }
 
-  def loadFunction(catalog: CatalogPlugin, ident: Identifier): Option[UnboundFunction] = {
-    try {
-      Option(catalog.asFunctionCatalog.loadFunction(ident))
-    } catch {
-      case _: NoSuchFunctionException => None
-      case _: NoSuchDatabaseException => None
-      case _: NoSuchNamespaceException => None
-    }
-  }
-
-  def loadRelation(catalog: CatalogPlugin, ident: Identifier): Option[NamedRelation] = {
-    loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
+  def loadFunction(catalog: CatalogPlugin, ident: Identifier): UnboundFunction = {
+    catalog.asFunctionCatalog.loadFunction(ident)
   }
 
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {

@@ -259,11 +259,11 @@ object CTESubstitution extends Rule[LogicalPlan] {
       cteRelations: Seq[(String, CTERelationDef)]): LogicalPlan =
     plan.resolveOperatorsUpWithPruning(
         _.containsAnyPattern(RELATION_TIME_TRAVEL, UNRESOLVED_RELATION, PLAN_EXPRESSION)) {
-      case RelationTimeTravel(UnresolvedRelation(Seq(table), _, _), _, _)
+      case RelationTimeTravel(UnresolvedRelation(Seq(table), _, _, _), _, _)
         if cteRelations.exists(r => plan.conf.resolver(r._1, table)) =>
         throw QueryCompilationErrors.timeTravelUnsupportedError("subqueries from WITH clause")
 
-      case u @ UnresolvedRelation(Seq(table), _, _) =>
+      case u @ UnresolvedRelation(Seq(table), _, _, _) =>
         cteRelations.find(r => plan.conf.resolver(r._1, table)).map { case (_, d) =>
           if (alwaysInline) {
             d.child

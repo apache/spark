@@ -106,15 +106,15 @@ object ResolveHints {
 
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
-          case ResolvedHint(u @ UnresolvedRelation(ident, _, _), hint)
-              if matchedIdentifierInHint(ident) =>
+          case ResolvedHint(u: UnresolvedRelation, hint)
+              if matchedIdentifierInHint(u.multipartIdentifier) =>
             ResolvedHint(u, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
           case ResolvedHint(r: SubqueryAlias, hint)
               if matchedIdentifierInHint(extractIdentifier(r)) =>
             ResolvedHint(r, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
-          case UnresolvedRelation(ident, _, _) if matchedIdentifierInHint(ident) =>
+          case u: UnresolvedRelation if matchedIdentifierInHint(u.multipartIdentifier) =>
             ResolvedHint(plan, createHintInfo(hintName))
 
           case r: SubqueryAlias if matchedIdentifierInHint(extractIdentifier(r)) =>

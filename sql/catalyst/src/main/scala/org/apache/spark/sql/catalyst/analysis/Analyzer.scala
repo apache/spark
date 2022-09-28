@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Random, Success, Try}
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
@@ -1040,7 +1041,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case i @ InsertIntoStatement(table, _, _, _, _, _) if i.query.resolved =>
         val relation = table match {
           case u: UnresolvedRelation if !u.isStreaming =>
-            resolveRelation(u).getOrElse(u)
+            resolveRelation(u)
           case other => other
         }
 
@@ -1057,7 +1058,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case write: V2WriteCommand =>
         write.table match {
           case u: UnresolvedRelation if !u.isStreaming =>
-            resolveRelation(u).map(unwrapRelationPlan).map {
+            unwrapRelationPlan(resolveRelation(u)) match {
               case v: View => throw QueryCompilationErrors.writeIntoViewNotAllowedError(
                 v.desc.identifier, write)
               case r: DataSourceV2Relation => write.withNewTable(r)
@@ -1067,19 +1068,19 @@ class Analyzer(override val catalogManager: CatalogManager)
               case other =>
                 throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(
                   u.multipartIdentifier.quoted)
-            }.getOrElse(write)
+            }
           case _ => write
         }
 
       case u: UnresolvedRelation =>
-        resolveRelation(u).map(resolveViews).getOrElse(u)
+        resolveViews(resolveRelation(u))
 
       case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, version)
           if timestamp.forall(ts => ts.resolved && !SubqueryExpression.hasSubquery(ts)) =>
-        resolveRelation(u, TimeTravelSpec.create(timestamp, version, conf)).getOrElse(r)
+        resolveRelation(u, TimeTravelSpec.create(timestamp, version, conf))
 
       case u @ UnresolvedTable(identifier, cmd, relationTypeMismatchHint) =>
-        lookupTableOrView(identifier).map {
+        lookupTableOrView(identifier) match {
           case v: ResolvedPersistentView =>
             val nameParts = v.catalog.name() +: v.identifier.asMultipartIdentifier
             throw QueryCompilationErrors.expectTableNotViewError(
@@ -1088,25 +1089,25 @@ class Analyzer(override val catalogManager: CatalogManager)
             throw QueryCompilationErrors.expectTableNotViewError(
               identifier, isTemp = true, cmd, relationTypeMismatchHint, u)
           case table => table
-        }.getOrElse(u)
+        }
 
       case u @ UnresolvedView(identifier, cmd, allowTemp, relationTypeMismatchHint) =>
-        lookupTableOrView(identifier, viewOnly = true).map {
+        lookupTableOrView(identifier, viewOnly = true) match {
           case _: ResolvedTempView if !allowTemp =>
             throw QueryCompilationErrors.expectViewNotTempViewError(identifier, cmd, u)
           case t: ResolvedTable =>
             throw QueryCompilationErrors.expectViewNotTableError(
               t, cmd, relationTypeMismatchHint, u)
           case other => other
-        }.getOrElse(u)
+        }
 
       case u @ UnresolvedTableOrView(identifier, cmd, allowTempView) =>
-        lookupTableOrView(identifier).map {
+        lookupTableOrView(identifier) match {
           case _: ResolvedTempView if !allowTempView =>
             throw QueryCompilationErrors.expectTableOrPermanentViewNotTempViewError(
               identifier, cmd, u)
           case other => other
-        }.getOrElse(u)
+        }
     }
 
     private def lookupTempView(identifier: Seq[String]): Option[TemporaryViewRelation] = {
@@ -1139,25 +1140,22 @@ class Analyzer(override val catalogManager: CatalogManager)
      */
     private def lookupTableOrView(
         identifier: Seq[String],
-        viewOnly: Boolean = false): Option[LogicalPlan] = {
+        viewOnly: Boolean = false): LogicalPlan = {
       lookupTempView(identifier).map { tempView =>
         ResolvedTempView(identifier.asIdentifier, tempView.tableMeta.schema)
-      }.orElse {
-        expandIdentifier(identifier) match {
-          case CatalogAndIdentifier(catalog, ident) =>
-            if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog)) {
-              throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
-            }
-            CatalogV2Util.loadTable(catalog, ident).map {
-              case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
-                v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-                val v1Ident = v1Table.catalogTable.identifier
-                val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
-                ResolvedPersistentView(catalog, v2Ident, v1Table.catalogTable.schema)
-              case table =>
-                ResolvedTable.create(catalog.asTableCatalog, ident, table)
-            }
-          case _ => None
+      }.getOrElse {
+        val CatalogAndIdentifier(catalog, ident) = expandIdentifier(identifier)
+        if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog)) {
+          throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
+        }
+        CatalogV2Util.loadTable(catalog, ident) match {
+          case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
+            v1Table.v1Table.tableType == CatalogTableType.VIEW =>
+            val v1Ident = v1Table.catalogTable.identifier
+            val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
+            ResolvedPersistentView(catalog, v2Ident, v1Table.catalogTable.schema)
+          case table =>
+            ResolvedTable.create(catalog.asTableCatalog, ident, table)
         }
       }
     }
@@ -1165,10 +1163,10 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def createRelation(
         catalog: CatalogPlugin,
         ident: Identifier,
-        table: Option[Table],
+        table: Table,
         options: CaseInsensitiveStringMap,
-        isStreaming: Boolean): Option[LogicalPlan] = {
-      table.map {
+        isStreaming: Boolean): LogicalPlan = {
+      table match {
         case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) =>
           if (isStreaming) {
             if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
@@ -1207,23 +1205,28 @@ class Analyzer(override val catalogManager: CatalogManager)
      */
     private def resolveRelation(
         u: UnresolvedRelation,
-        timeTravelSpec: Option[TimeTravelSpec] = None): Option[LogicalPlan] = {
-      resolveTempView(u.multipartIdentifier, u.isStreaming, timeTravelSpec.isDefined).orElse {
-        expandIdentifier(u.multipartIdentifier) match {
-          case CatalogAndIdentifier(catalog, ident) =>
-            val key = catalog.name +: ident.namespace :+ ident.name
-            AnalysisContext.get.relationCache.get(key).map(_.transform {
-              case multi: MultiInstanceRelation =>
-                val newRelation = multi.newInstance()
-                newRelation.copyTagsFrom(multi)
-                newRelation
-            }).orElse {
-              val table = CatalogV2Util.loadTable(catalog, ident, timeTravelSpec)
-              val loaded = createRelation(catalog, ident, table, u.options, u.isStreaming)
-              loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
-              loaded
-            }
-          case _ => None
+        timeTravelSpec: Option[TimeTravelSpec] = None): LogicalPlan = {
+      // If we've already tried to look it up and failed, do not try again.
+      if (u.lookupError.isDefined) return u
+
+      resolveTempView(u.multipartIdentifier, u.isStreaming, timeTravelSpec.isDefined).getOrElse {
+        val CatalogAndIdentifier(catalog, ident) = expandIdentifier(u.multipartIdentifier)
+        val key = catalog.name +: ident.namespace :+ ident.name
+        AnalysisContext.get.relationCache.get(key).map(_.transform {
+          case multi: MultiInstanceRelation =>
+            val newRelation = multi.newInstance()
+            newRelation.copyTagsFrom(multi)
+            newRelation
+        }).getOrElse {
+          try {
+            val table = CatalogV2Util.loadTable(catalog, ident, timeTravelSpec)
+            val loaded = createRelation(catalog, ident, table, u.options, u.isStreaming)
+            loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
+            loaded
+          } catch {
+            // Do not fail immediately. Other rules may be able to resolve it.
+            case NonFatal(e) => u.copy(lookupError = Some(e))
+          }
         }
       }
     }
@@ -2107,7 +2110,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
         UNRESOLVED_TABLE_VALUED_FUNCTION), ruleId) {
       // Resolve functions with concrete relations from v2 catalog.
-      case u @ UnresolvedFunc(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
+      case u @ UnresolvedFunc(nameParts, cmd, requirePersistentFunc, mismatchHint) =>
         lookupBuiltinOrTempFunction(nameParts)
           .orElse(lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
           if (requirePersistentFunc) {
@@ -2118,10 +2121,19 @@ class Analyzer(override val catalogManager: CatalogManager)
           }
         }.getOrElse {
           val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
-          val fullName = catalog.name +: ident.namespace :+ ident.name
-          CatalogV2Util.loadFunction(catalog, ident).map { func =>
-            ResolvedPersistentFunc(catalog.asFunctionCatalog, ident, func)
-          }.getOrElse(u.copy(possibleQualifiedName = Some(fullName)))
+          val func = try {
+            CatalogV2Util.loadFunction(catalog, ident)
+          } catch {
+            case NonFatal(e) =>
+              // If the function does not exist, provide a better error message.
+              if (!catalog.asFunctionCatalog.functionExists(ident)) {
+                val fullName = catalog.name +: ident.namespace :+ ident.name
+                throw QueryCompilationErrors.noSuchFunctionError(nameParts, u, Some(fullName))
+              } else {
+                throw e
+              }
+          }
+          ResolvedPersistentFunc(catalog.asFunctionCatalog, ident, func)
         }
 
       // Resolve table-valued function references.

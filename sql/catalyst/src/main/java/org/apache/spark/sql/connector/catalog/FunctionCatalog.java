@@ -37,7 +37,9 @@ public interface FunctionCatalog extends CatalogPlugin {
    *
    * @param namespace a multi-part namespace
    * @return an array of Identifiers for functions
-   * @throws NoSuchNamespaceException If the namespace does not exist (optional).
+   * @throws NoSuchNamespaceException If the namespace does not exist (optional). The error message
+   *                                  should contain the qualified namespace name, including the
+   *                                  catalog name.
    */
   Identifier[] listFunctions(String[] namespace) throws NoSuchNamespaceException;
 
@@ -46,7 +48,8 @@ public interface FunctionCatalog extends CatalogPlugin {
    *
    * @param ident a function identifier
    * @return an unbound function instance
-   * @throws NoSuchFunctionException If the function doesn't exist
+   * @throws NoSuchFunctionException If the function doesn't exist. The error message should contain
+   *                                 the qualified function name, including the catalog name.
    */
   UnboundFunction loadFunction(Identifier ident) throws NoSuchFunctionException;
 

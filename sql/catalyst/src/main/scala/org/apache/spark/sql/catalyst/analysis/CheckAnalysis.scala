@@ -126,26 +126,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         throw new IllegalStateException(
           "[BUG] logical plan should not have output of char/varchar type: " + leaf)
 
-      case u: UnresolvedNamespace =>
-        u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
-
-      case u: UnresolvedTable =>
-        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
-
-      case u: UnresolvedView =>
-        u.failAnalysis(s"View not found: ${u.multipartIdentifier.quoted}")
-
-      case u: UnresolvedTableOrView =>
-        val viewStr = if (u.allowTempView) "view" else "permanent view"
-        u.failAnalysis(
-          s"Table or $viewStr not found: ${u.multipartIdentifier.quoted}")
-
       case u: UnresolvedRelation =>
-        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
-
-      case u: UnresolvedFunc =>
-        throw QueryCompilationErrors.noSuchFunctionError(
-          u.multipartIdentifier, u, u.possibleQualifiedName)
+        // If we hit `UnresolvedRelation` here, it must have been looked up before and keeps the
+        // original error.
+        assert(u.lookupError.isDefined)
+        throw u.lookupError.get
 
       case u: UnresolvedHint =>
         u.failAnalysis(s"Hint not found: ${u.name}")

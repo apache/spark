@@ -125,8 +125,7 @@ case class UnresolvedFunc(
     multipartIdentifier: Seq[String],
     commandName: String,
     requirePersistent: Boolean,
-    funcTypeMismatchHint: Option[String],
-    possibleQualifiedName: Option[Seq[String]] = None) extends LeafNode {
+    funcTypeMismatchHint: Option[String]) extends LeafNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_FUNC)

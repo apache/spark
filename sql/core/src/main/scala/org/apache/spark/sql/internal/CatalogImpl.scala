@@ -149,30 +149,29 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       val plan = UnresolvedIdentifier(nameParts)
       sparkSession.sessionState.executePlan(plan).analyzed match {
         case ResolvedIdentifier(catalog: TableCatalog, ident) =>
-          val tableOpt = try {
+          try {
             loadTable(catalog, ident)
           } catch {
             // Even if the table exits, error may still happen. For example, Spark can't read Hive's
             // index table. We return a Table without description and tableType in this case.
             case NonFatal(_) =>
-              Some(new Table(
+              new Table(
                 name = ident.name(),
                 catalog = catalog.name(),
                 namespace = ident.namespace(),
                 description = null,
                 tableType = null,
-                isTemporary = false))
+                isTemporary = false)
           }
-          tableOpt.getOrElse(throw QueryCompilationErrors.tableOrViewNotFound(nameParts))
 
         case _ => throw QueryCompilationErrors.tableOrViewNotFound(nameParts)
       }
     }
   }
 
-  private def loadTable(catalog: TableCatalog, ident: Identifier): Option[Table] = {
+  private def loadTable(catalog: TableCatalog, ident: Identifier): Table = {
     // TODO: support v2 view when it gets implemented.
-    CatalogV2Util.loadTable(catalog, ident).map {
+    CatalogV2Util.loadTable(catalog, ident) match {
       case v1: V1Table if v1.v1Table.tableType == CatalogTableType.VIEW =>
         new Table(
           name = v1.v1Table.identifier.table,

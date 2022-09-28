@@ -1590,8 +1590,7 @@ class SessionCatalog(
   }
 
   protected[sql] def failFunctionLookup(name: FunctionIdentifier): Nothing = {
-    throw new NoSuchFunctionException(
-      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName)
+    throw QueryCompilationErrors.noSuchFunctionError(name)
   }
 
   /**

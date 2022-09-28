@@ -85,7 +85,9 @@ public interface TableCatalog extends CatalogPlugin {
    *
    * @param namespace a multi-part namespace
    * @return an array of Identifiers for tables
-   * @throws NoSuchNamespaceException If the namespace does not exist (optional).
+   * @throws NoSuchNamespaceException If the namespace does not exist (optional). The error message
+   *                                  should contain the qualified namespace name, including the
+   *                                  catalog name.
    */
   Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException;
 
@@ -97,7 +99,8 @@ public interface TableCatalog extends CatalogPlugin {
    *
    * @param ident a table identifier
    * @return the table's metadata
-   * @throws NoSuchTableException If the table doesn't exist or is a view
+   * @throws NoSuchTableException If the table doesn't exist or is a view. The error message should
+   *                              contain the qualified table name, including the catalog name.
    */
   Table loadTable(Identifier ident) throws NoSuchTableException;
 
@@ -110,7 +113,8 @@ public interface TableCatalog extends CatalogPlugin {
    * @param ident a table identifier
    * @param version version of the table
    * @return the table's metadata
-   * @throws NoSuchTableException If the table doesn't exist or is a view
+   * @throws NoSuchTableException If the table doesn't exist or is a view. The error message should
+   *                              contain the qualified table name, including the catalog name.
    */
   default Table loadTable(Identifier ident, String version) throws NoSuchTableException {
     throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident);
@@ -125,7 +129,8 @@ public interface TableCatalog extends CatalogPlugin {
    * @param ident a table identifier
    * @param timestamp timestamp of the table, which is microseconds since 1970-01-01 00:00:00 UTC
    * @return the table's metadata
-   * @throws NoSuchTableException If the table doesn't exist or is a view
+   * @throws NoSuchTableException If the table doesn't exist or is a view. The error message should
+   *                              contain the qualified table name, including the catalog name.
    */
   default Table loadTable(Identifier ident, long timestamp) throws NoSuchTableException {
     throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident);
@@ -167,9 +172,13 @@ public interface TableCatalog extends CatalogPlugin {
    * @param partitions transforms to use for partitioning data in the table
    * @param properties a string map of table properties
    * @return metadata for the new table
-   * @throws TableAlreadyExistsException If a table or view already exists for the identifier
+   * @throws TableAlreadyExistsException If a table or view already exists for the identifier. The
+   *                                     error message should contain the qualified table name,
+   *                                     including the catalog name.
    * @throws UnsupportedOperationException If a requested partition transform is not supported
-   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
+   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional). The
+   *                                  error message should contain the qualified table name,
+   *                                  including the catalog name.
    */
   Table createTable(
       Identifier ident,
@@ -191,7 +200,8 @@ public interface TableCatalog extends CatalogPlugin {
    * @param ident a table identifier
    * @param changes changes to apply to the table
    * @return updated metadata for the table
-   * @throws NoSuchTableException If the table doesn't exist or is a view
+   * @throws NoSuchTableException If the table doesn't exist or is a view. The error message should
+   *                              contain the qualified table name, including the catalog name.
    * @throws IllegalArgumentException If any change is rejected by the implementation.
    */
   Table alterTable(
@@ -241,10 +251,14 @@ public interface TableCatalog extends CatalogPlugin {
    *
    * @param oldIdent the table identifier of the existing table to rename
    * @param newIdent the new table identifier of the table
-   * @throws NoSuchTableException If the table to rename doesn't exist or is a view
-   * @throws TableAlreadyExistsException If the new table name already exists or is a view
+   * @throws NoSuchTableException If the table to rename doesn't exist or is a view. The error
+   *                              message should contain the qualified table name, including the
+   *                              catalog name.
+   * @throws TableAlreadyExistsException If the new table name already exists or is a view. The
+   *                                     error message should contain the qualified table name,
+   *                                     including the catalog name.
    * @throws UnsupportedOperationException If the namespaces of old and new identifiers do not
-   *                                       match (optional)
+   *                                       match (optional).
    */
   void renameTable(Identifier oldIdent, Identifier newIdent)
       throws NoSuchTableException, TableAlreadyExistsException;
