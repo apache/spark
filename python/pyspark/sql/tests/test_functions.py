@@ -140,14 +140,14 @@ class FunctionsTests(ReusedSQLTestCase):
 
         result = [tuple(x) for x in data.select(explode_outer("mapfield")).collect()]
         self.assertEqual(result, [("a", "b"), (None, None), (None, None)])
-    
+
     def test_inline(self):
         from pyspark.sql.functions import inline, inline_outer
 
         d = [
             Row(structlist=[Row(b=1, c=2), Row(b=3, c=4)]),
             Row(structlist=[Row(b=None, c=5), None]),
-            Row(structlist=[])
+            Row(structlist=[]),
         ]
         data = self.spark.createDataFrame(d)
 
