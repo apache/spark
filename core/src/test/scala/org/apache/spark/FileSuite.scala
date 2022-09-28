@@ -557,7 +557,9 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       assert(e.getCause.getMessage === "Unexpected end of input stream")
       sc.stop()
 
-      val conf = new SparkConf().set(IGNORE_CORRUPT_FILES, true)
+      val conf = new SparkConf()
+        .set(IGNORE_CORRUPT_FILES, true)
+        .set(IGNORE_CORRUPT_FILES_AFTER_RETIES, 1)
       sc = new SparkContext("local", "test", conf)
       // Test HadoopRDD
       assert(sc.textFile(inputFile.toURI.toString).collect().isEmpty)
