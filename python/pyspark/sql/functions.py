@@ -5899,6 +5899,10 @@ def inline(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         generator expression with the inline exploded result.
 
+    See Also
+    --------
+    :meth:`explode`
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -6003,6 +6007,11 @@ def inline_outer(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         generator expression with the inline exploded result.
+
+    See Also
+    --------
+    :meth:`explode_outer`
+    :meth:`inline`
 
     Examples
     --------
