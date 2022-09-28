@@ -2077,7 +2077,7 @@
   },
   "_LEGACY_ERROR_TEMP_1169" : {
     "message" : [
-      "Requested partitioning does not match the table $tableName:",
+      "Requested partitioning does not match the table <tableName>:",
       "Requested partitions: <normalizedPartSpec>",
       "Table partitions: <partColNames>"
     ]
@@ -2130,7 +2130,7 @@
   },
   "_LEGACY_ERROR_TEMP_1179" : {
     "message" : [
-      "Table-valued function $name with alternatives: <usage>",
+      "Table-valued function <name> with alternatives: <usage>",
       "cannot be applied to (<arguments>): <details>."
     ]
   },
@@ -2254,7 +2254,7 @@
   },
   "_LEGACY_ERROR_TEMP_1203" : {
     "message" : [
-      "Cannot write to '$tableName', not enough data columns:",
+      "Cannot write to '<tableName>', not enough data columns:",
       "Table columns: <tableColumns>",
       "Data columns: <dataColumns>"
     ]
