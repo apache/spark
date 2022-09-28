@@ -234,20 +234,16 @@ case class ExpandExec(
     val i = ctx.freshName("i")
     // these column have to declared before the loop.
     val evaluate = evaluateVariables(outputColumns)
-    val margin =
-      s"""
-         |$evaluate
-         |for (int $i = 0; $i < ${projections.length}; $i ++) {
-         |  switch ($i) {
-         |    ${cases.mkString("\n").trim}
-         |  }
-         |  $numOutput.add(1);
-         |  ${consume(ctx, outputColumns)}
-         |}
+    s"""
+       |$evaluate
+       |for (int $i = 0; $i < ${projections.length}; $i ++) {
+       |  switch ($i) {
+       |    ${cases.mkString("\n").trim}
+       |  }
+       |  $numOutput.add(1);
+       |  ${consume(ctx, outputColumns)}
+       |}
      """.stripMargin
-    println("fuck:")
-    println(margin)
-    margin
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): ExpandExec =
