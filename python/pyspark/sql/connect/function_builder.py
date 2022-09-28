@@ -17,7 +17,6 @@
 
 import functools
 from typing import TYPE_CHECKING, Optional, Callable, Any, Iterable, Union
-from mypy_extensions import VarArg
 
 import pyspark.sql.types
 from pyspark.sql.connect.column import (
@@ -32,6 +31,7 @@ import pyspark.sql.connect.proto as proto
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import RemoteSparkSession
+    from mypy_extensions import VarArg
 
 
 def _build(name: str, *args: ExpressionOrString) -> ScalarFunctionExpression:
