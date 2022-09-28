@@ -137,8 +137,6 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
                 (
                     left.groupby("id", "k")
                         .cogroup(right.groupby("id"))
-                        .applyInPandas(lambda l, r: l, "id long, k int, v int")
-                        .collect()
                 )
 
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
