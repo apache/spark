@@ -50,6 +50,8 @@ _all_kinds = PlotAccessor._all_kinds  # type: ignore[attr-defined]
 
 
 class PandasOnSparkBarPlot(PandasBarPlot, TopNPlotBase):
+    _kind = "bar"
+
     def __init__(self, data, **kwargs):
         super().__init__(self.get_top_n(data), **kwargs)
 
@@ -59,6 +61,8 @@ class PandasOnSparkBarPlot(PandasBarPlot, TopNPlotBase):
 
 
 class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
+    _kind = "box"
+
     def boxplot(
         self,
         ax,
@@ -354,6 +358,8 @@ class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
 
 
 class PandasOnSparkHistPlot(PandasHistPlot, HistogramPlotBase):
+    _kind = "hist"
+
     def _args_adjust(self):
         if is_list_like(self.bottom):
             self.bottom = np.array(self.bottom)
@@ -413,6 +419,8 @@ class PandasOnSparkHistPlot(PandasHistPlot, HistogramPlotBase):
 
 
 class PandasOnSparkPiePlot(PandasPiePlot, TopNPlotBase):
+    _kind = "pie"
+
     def __init__(self, data, **kwargs):
         super().__init__(self.get_top_n(data), **kwargs)
 
@@ -422,6 +430,8 @@ class PandasOnSparkPiePlot(PandasPiePlot, TopNPlotBase):
 
 
 class PandasOnSparkAreaPlot(PandasAreaPlot, SampledPlotBase):
+    _kind = "area"
+
     def __init__(self, data, **kwargs):
         super().__init__(self.get_sampled(data), **kwargs)
 
@@ -431,6 +441,8 @@ class PandasOnSparkAreaPlot(PandasAreaPlot, SampledPlotBase):
 
 
 class PandasOnSparkLinePlot(PandasLinePlot, SampledPlotBase):
+    _kind = "line"
+
     def __init__(self, data, **kwargs):
         super().__init__(self.get_sampled(data), **kwargs)
 
@@ -440,6 +452,8 @@ class PandasOnSparkLinePlot(PandasLinePlot, SampledPlotBase):
 
 
 class PandasOnSparkBarhPlot(PandasBarhPlot, TopNPlotBase):
+    _kind = "barh"
+
     def __init__(self, data, **kwargs):
         super().__init__(self.get_top_n(data), **kwargs)
 
@@ -449,6 +463,8 @@ class PandasOnSparkBarhPlot(PandasBarhPlot, TopNPlotBase):
 
 
 class PandasOnSparkScatterPlot(PandasScatterPlot, TopNPlotBase):
+    _kind = "scatter"
+
     def __init__(self, data, x, y, **kwargs):
         super().__init__(self.get_top_n(data), x, y, **kwargs)
 
@@ -458,6 +474,8 @@ class PandasOnSparkScatterPlot(PandasScatterPlot, TopNPlotBase):
 
 
 class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
+    _kind = "kde"
+
     def _compute_plot_data(self):
         self.data = KdePlotBase.prepare_kde_data(self.data)
 
@@ -707,7 +725,7 @@ def plot_frame(
     y=None,
     kind="line",
     ax=None,
-    subplots=None,
+    subplots=False,
     sharex=None,
     sharey=False,
     layout=None,
