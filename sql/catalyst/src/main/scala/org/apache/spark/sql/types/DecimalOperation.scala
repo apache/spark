@@ -28,7 +28,8 @@ import org.apache.spark.sql.internal.SQLConf
  * At present, Java BigDecimal is the only underlying implementation.
  *
  * `DecimalOperation` can hold a Long if values are small enough.
- * _precision and _scale represent the SQL precision and scale we are looking for.
+ * The semantics of the fields are as follows:
+ * - _precision and _scale represent the SQL precision and scale we are looking for.
  * - If the underlying value(e.g. BigDecimal) is set, it represents the whole decimal value
  * - Otherwise, the decimal value is longVal / (10 ** _scale)
  *
