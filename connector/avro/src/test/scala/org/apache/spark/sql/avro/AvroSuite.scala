@@ -384,20 +384,38 @@ abstract class AvroSuite
   }
 
   test("Ignore corrupt Avro file if flag IGNORE_CORRUPT_FILES enabled") {
-    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+    Seq("-1", "0", "1").foreach { retry =>
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true",
+        SQLConf.IGNORE_CORRUPT_FILES_AFTER_RETIES.key -> retry) {
+        withTempPath { dir =>
+          createDummyCorruptFile(dir)
+          val message = intercept[FileNotFoundException] {
+            spark.read.format("avro").load(dir.getAbsolutePath).schema
+          }.getMessage
+          assert(message.contains("No Avro files found."))
+
+          Files.copy(
+            Paths.get(new URL(episodesAvro).toURI),
+            Paths.get(dir.getCanonicalPath, "episodes.avro"))
+
+          val result = spark.read.format("avro").load(episodesAvro).collect()
+          checkAnswer(spark.read.format("avro").load(dir.getAbsolutePath), result)
+        }
+      }
+    }
+  }
+
+  test("SPARK-40591: Error on corrupt Avro file if IGNORE_CORRUPT_FILES enabled" +
+    " but RETIES unreachable") {
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true",
+      SQLConf.IGNORE_CORRUPT_FILES_AFTER_RETIES.key -> "100") {
       withTempPath { dir =>
         createDummyCorruptFile(dir)
-        val message = intercept[FileNotFoundException] {
-          spark.read.format("avro").load(dir.getAbsolutePath).schema
+        val message = intercept[org.apache.spark.SparkException] {
+          // the schema is set to bypass the error in the driver side and verify the execution
+          spark.read.format("avro").schema(new StructType).load(dir.getAbsolutePath).collect()
         }.getMessage
-        assert(message.contains("No Avro files found."))
-
-        Files.copy(
-          Paths.get(new URL(episodesAvro).toURI),
-          Paths.get(dir.getCanonicalPath, "episodes.avro"))
-
-        val result = spark.read.format("avro").load(episodesAvro).collect()
-        checkAnswer(spark.read.format("avro").load(dir.getAbsolutePath), result)
+        assert(message.contains("Not an Avro data file"))
       }
     }
   }

@@ -1079,7 +1079,7 @@ package object config {
     .createWithDefault(false)
 
   private[spark] val IGNORE_CORRUPT_FILES_AFTER_RETIES =
-    ConfigBuilder("spark.sql.files.ignoreCorruptFilesAfterRetries")
+    ConfigBuilder("spark.files.ignoreCorruptFilesAfterRetries")
       .doc("Max retries before a file is marked as corrupted. This configuration is effective " +
         s"only when ${IGNORE_CORRUPT_FILES.key} is true")
       .version("3.4.0")
