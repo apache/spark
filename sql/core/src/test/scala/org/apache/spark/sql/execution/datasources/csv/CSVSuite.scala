@@ -1470,7 +1470,8 @@ abstract class CSVSuite
         assert(e.getCause.getCause.isInstanceOf[EOFException])
         assert(e.getCause.getCause.getMessage === "Unexpected end of input stream")
       }
-      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true",
+        SQLConf.IGNORE_CORRUPT_FILES_AFTER_RETIES.key -> "1") {
         assert(spark.read.csv(inputFile.toURI.toString).collect().isEmpty)
       }
     } finally {
