@@ -2498,5 +2498,105 @@
     "message" : [
       "Operation not allowed: <cmd> only works on partitioned tables: <tableIdentWithDB>."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1250" : {
+    "message" : [
+      "<action> is not allowed on <tableName> since filesource partition management is disabled (spark.sql.hive.manageFilesourcePartitions = false)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1251" : {
+    "message" : [
+      "<action> is not allowed on <tableName> since its partition metadata is not stored in the Hive metastore. To import this information into the metastore, run `msck repair table <tableName>`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1252" : {
+    "message" : [
+      "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1253" : {
+    "message" : [
+      "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1254" : {
+    "message" : [
+      "Cannot overwrite a path that is also being read from."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1255" : {
+    "message" : [
+      "Cannot drop built-in function '<functionName>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1256" : {
+    "message" : [
+      "Cannot refresh built-in function <functionName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1257" : {
+    "message" : [
+      "Cannot refresh temporary function <functionName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1258" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1259" : {
+    "message" : [
+      "ALTER ADD COLUMNS does not support views. You must drop and re-create the views for adding the new columns. Views: <table>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1260" : {
+    "message" : [
+      "ALTER ADD COLUMNS does not support datasource table with type <tableType>. You must drop and re-create the table for adding the new columns. Tables: <table>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1261" : {
+    "message" : [
+      "LOAD DATA is not supported for datasource tables: <tableIdentWithDB>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1262" : {
+    "message" : [
+      "LOAD DATA target table <tableIdentWithDB> is partitioned, but no partition spec is provided."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1263" : {
+    "message" : [
+      "LOAD DATA target table <tableIdentWithDB> is partitioned, but number of columns in provided partition spec (<partitionSize>) do not match number of partitioned columns in table (<targetTableSize>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1264" : {
+    "message" : [
+      "LOAD DATA target table <tableIdentWithDB> is not partitioned, but a partition spec was provided."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1265" : {
+    "message" : [
+      "LOAD DATA input path does not exist: <path>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1266" : {
+    "message" : [
+      "Operation not allowed: TRUNCATE TABLE on external tables: <tableIdentWithDB>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1267" : {
+    "message" : [
+      "Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported for tables that are not partitioned: <tableIdentWithDB>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1268" : {
+    "message" : [
+      "Failed to truncate table <tableIdentWithDB> when removing data of the path: <path>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1269" : {
+    "message" : [
+      "SHOW PARTITIONS is not allowed on a table that is not partitioned: <tableIdentWithDB>."
+    ]
   }
 }

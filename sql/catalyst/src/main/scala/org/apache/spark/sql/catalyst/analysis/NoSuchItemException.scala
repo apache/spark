@@ -86,7 +86,10 @@ case class NoSuchPermanentFunctionException(db: String, func: String)
   extends AnalysisException(s"Function '$func' not found in database '$db'")
 
 case class NoSuchFunctionException(override val message: String)
-  extends AnalysisException(message) {
+  extends AnalysisException(
+    message,
+    errorClass = Some("_LEGACY_ERROR_TEMP_1258"),
+    messageParameters = Map("msg" -> message)) {
 
   def this(db: String, func: String) = {
     this(s"Undefined function: '$func'. " +

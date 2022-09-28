@@ -2416,6 +2416,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def cmdOnlyWorksOnTableWithLocationError(cmd: String, tableIdentWithDB: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1249",
+      messageParameters = Map(
+        "cmd" -> cmd,
+        "tableIdentWithDB" -> tableIdentWithDB))
     new AnalysisException(s"Operation not allowed: $cmd only works on table with " +
       s"location provided: $tableIdentWithDB")
   }
@@ -2424,43 +2429,56 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       action: String,
       tableName: String): Throwable = {
     new AnalysisException(
-      s"$action is not allowed on $tableName since filesource partition management is " +
-        "disabled (spark.sql.hive.manageFilesourcePartitions = false).")
+      errorClass = "_LEGACY_ERROR_TEMP_1250",
+      messageParameters = Map(
+        "action" -> action,
+        "tableName" -> tableName))
   }
 
   def actionNotAllowedOnTableSincePartitionMetadataNotStoredError(
      action: String,
      tableName: String): Throwable = {
     new AnalysisException(
-      s"$action is not allowed on $tableName since its partition metadata is not stored in " +
-        "the Hive metastore. To import this information into the metastore, run " +
-        s"`msck repair table $tableName`")
+      errorClass = "_LEGACY_ERROR_TEMP_1251",
+      messageParameters = Map(
+        "action" -> action,
+        "tableName" -> tableName))
   }
 
   def cannotAlterViewWithAlterTableError(): Throwable = {
     new AnalysisException(
-      "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
+      errorClass = "_LEGACY_ERROR_TEMP_1252",
+      messageParameters = Map.empty)
   }
 
   def cannotAlterTableWithAlterViewError(): Throwable = {
     new AnalysisException(
-      "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
+      errorClass = "_LEGACY_ERROR_TEMP_1253",
+      messageParameters = Map.empty)
   }
 
   def cannotOverwritePathBeingReadFromError(): Throwable = {
-    new AnalysisException("Cannot overwrite a path that is also being read from.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1254",
+      messageParameters = Map.empty)
   }
 
   def cannotDropBuiltinFuncError(functionName: String): Throwable = {
-    new AnalysisException(s"Cannot drop built-in function '$functionName'")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1255",
+      messageParameters = Map("functionName" -> functionName))
   }
 
   def cannotRefreshBuiltInFuncError(functionName: String): Throwable = {
-    new AnalysisException(s"Cannot refresh built-in function $functionName")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1256",
+      messageParameters = Map("functionName" -> functionName))
   }
 
   def cannotRefreshTempFuncError(functionName: String): Throwable = {
-    new AnalysisException(s"Cannot refresh temporary function $functionName")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1257",
+      messageParameters = Map("functionName" -> functionName))
   }
 
   def noSuchFunctionError(identifier: FunctionIdentifier): Throwable = {
@@ -2469,29 +2487,30 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def alterAddColNotSupportViewError(table: TableIdentifier): Throwable = {
     new AnalysisException(
-      s"""
-         |ALTER ADD COLUMNS does not support views.
-         |You must drop and re-create the views for adding the new columns. Views: $table
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1259",
+      messageParameters = Map("table" -> table.toString))
   }
 
   def alterAddColNotSupportDatasourceTableError(
       tableType: Any,
       table: TableIdentifier): Throwable = {
     new AnalysisException(
-      s"""
-         |ALTER ADD COLUMNS does not support datasource table with type $tableType.
-         |You must drop and re-create the table for adding the new columns. Tables: $table
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1260",
+      messageParameters = Map(
+        "tableType" -> tableType.toString,
+        "table" -> table.toString))
   }
 
   def loadDataNotSupportedForDatasourceTablesError(tableIdentWithDB: String): Throwable = {
-    new AnalysisException(s"LOAD DATA is not supported for datasource tables: $tableIdentWithDB")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1261",
+      messageParameters = Map("tableIdentWithDB" -> tableIdentWithDB))
   }
 
   def loadDataWithoutPartitionSpecProvidedError(tableIdentWithDB: String): Throwable = {
-    new AnalysisException(s"LOAD DATA target table $tableIdentWithDB is partitioned, " +
-      s"but no partition spec is provided")
+     new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1262",
+      messageParameters = Map("tableIdentWithDB" -> tableIdentWithDB))
   }
 
   def loadDataPartitionSizeNotMatchNumPartitionColumnsError(
@@ -2499,40 +2518,49 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       partitionSize: Int,
       targetTableSize: Int): Throwable = {
     new AnalysisException(
-      s"""
-         |LOAD DATA target table $tableIdentWithDB is partitioned,
-         |but number of columns in provided partition spec ($partitionSize)
-         |do not match number of partitioned columns in table ($targetTableSize)
-       """.stripMargin.replaceAll("\n", " "))
+      errorClass = "_LEGACY_ERROR_TEMP_1263",
+      messageParameters = Map(
+        "partitionSize" -> partitionSize.toString,
+        "targetTableSize" -> targetTableSize.toString,
+        "tableIdentWithDB" -> tableIdentWithDB))
   }
 
   def loadDataTargetTableNotPartitionedButPartitionSpecWasProvidedError(
       tableIdentWithDB: String): Throwable = {
-    new AnalysisException(s"LOAD DATA target table $tableIdentWithDB is not " +
-      s"partitioned, but a partition spec was provided.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1264",
+      messageParameters = Map("tableIdentWithDB" -> tableIdentWithDB))
   }
 
   def loadDataInputPathNotExistError(path: String): Throwable = {
-    new AnalysisException(s"LOAD DATA input path does not exist: $path")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1265",
+      messageParameters = Map("path" -> path))
   }
 
   def truncateTableOnExternalTablesError(tableIdentWithDB: String): Throwable = {
     new AnalysisException(
-      s"Operation not allowed: TRUNCATE TABLE on external tables: $tableIdentWithDB")
+      errorClass = "_LEGACY_ERROR_TEMP_1266",
+      messageParameters = Map("tableIdentWithDB" -> tableIdentWithDB))
   }
 
   def truncateTablePartitionNotSupportedForNotPartitionedTablesError(
       tableIdentWithDB: String): Throwable = {
-    new AnalysisException(s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported" +
-      s" for tables that are not partitioned: $tableIdentWithDB")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1267",
+      messageParameters = Map("tableIdentWithDB" -> tableIdentWithDB))
   }
 
   def failToTruncateTableWhenRemovingDataError(
       tableIdentWithDB: String,
       path: Path,
       e: Throwable): Throwable = {
-    new AnalysisException(s"Failed to truncate table $tableIdentWithDB when " +
-        s"removing data of the path: $path because of ${e.toString}", cause = Some(e))
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1268",
+      messageParameters = Map(
+        "tableIdentWithDB" -> tableIdentWithDB,
+        "path" -> path.toString),
+      cause = Some(e))
   }
 
   def descPartitionNotAllowedOnTempView(table: String): Throwable = {
@@ -2555,7 +2583,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def showPartitionNotAllowedOnTableNotPartitionedError(tableIdentWithDB: String): Throwable = {
     new AnalysisException(
-      s"SHOW PARTITIONS is not allowed on a table that is not partitioned: $tableIdentWithDB")
+      errorClass = "_LEGACY_ERROR_TEMP_1269",
+      messageParameters = Map("tableIdentWithDB" -> tableIdentWithDB))
   }
 
   def showCreateTableNotSupportedOnTempView(table: String): Throwable = {
