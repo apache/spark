@@ -86,6 +86,11 @@
       "Cannot resolve <sqlExpr> due to data type mismatch:"
     ],
     "subClass" : {
+      "BINARY_ARRAY_DIFF_TYPES" : {
+        "message" : [
+          "Input to function <functionName> should have been two <arrayType> with same element type, but it's [<leftType>, <rightType>]."
+        ]
+      },
       "BINARY_OP_DIFF_TYPES" : {
         "message" : [
           "the left and right operands of the binary operator have incompatible types (<left> and <right>)."
@@ -118,6 +123,11 @@
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
         ]
       },
+      "DATA_DIFF_TYPES" : {
+        "message" : [
+          "Input to <functionName> should all be the same type, but it's <dataType>."
+        ]
+      },
       "FRAME_LESS_OFFSET_WITHOUT_FOLDABLE" : {
         "message" : [
           "Offset expression <offset> must be a literal."
@@ -133,6 +143,31 @@
           "Input schema <schema> must be a struct, an array or a map."
         ]
       },
+      "INVALID_MAP_KEY_TYPE" : {
+        "message" : [
+          "The key of map cannot be/contain <keyType>."
+        ]
+      },
+      "INVALID_ORDERING_TYPE" : {
+        "message" : [
+          "The <functionName> does not support ordering on type <dataType>."
+        ]
+      },
+      "MAP_CONCAT_DIFF_TYPES" : {
+        "message" : [
+          "The <functionName> should all be of type map, but it's <dataType>."
+        ]
+      },
+      "MAP_CONTAINS_KEY_DIFF_TYPES" : {
+        "message" : [
+          "Input to <functionName> should have been <dataType> followed by a value with same key type, but it's [<leftType>, <rightType>]."
+        ]
+      },
+      "MAP_FROM_ENTRIES_WRONG_TYPE" : {
+        "message" : [
+          "The <functionName> accepts only arrays of pair structs, but <childExpr> is of <childType>."
+        ]
+      },
       "NON_FOLDABLE_INPUT" : {
         "message" : [
           "the input should be a foldable string expression and not null; however, got <inputExpr>."
@@ -141,6 +176,11 @@
       "NON_STRING_TYPE" : {
         "message" : [
           "all arguments must be strings."
+        ]
+      },
+      "NULL_TYPE" : {
+        "message" : [
+          "Null typed values cannot be used as arguments of <functionName>."
         ]
       },
       "RANGE_FRAME_INVALID_TYPE" : {
