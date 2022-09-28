@@ -2155,34 +2155,49 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def hiveTableTypeUnsupportedError(tableType: String): Throwable = {
-    new AnalysisException(s"Hive $tableType is not supported.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1220",
+      messageParameters = Map("tableType" -> tableType))
   }
 
   def hiveCreatePermanentFunctionsUnsupportedError(): Throwable = {
-    new AnalysisException("Hive 0.12 doesn't support creating permanent functions. " +
-      "Please use Hive 0.13 or higher.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1221",
+      messageParameters = Map.empty)
   }
 
   def unknownHiveResourceTypeError(resourceType: String): Throwable = {
-    new AnalysisException(s"Unknown resource type: $resourceType")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1222",
+      messageParameters = Map("resourceType" -> resourceType))
   }
 
   def invalidDayTimeField(field: Byte): Throwable = {
     val supportedIds = DayTimeIntervalType.dayTimeFields
       .map(i => s"$i (${DayTimeIntervalType.fieldToString(i)})")
-    new AnalysisException(s"Invalid field id '$field' in day-time interval. " +
-      s"Supported interval fields: ${supportedIds.mkString(", ")}.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1223",
+      messageParameters = Map(
+        "field" -> field.toString,
+        "supportedIds" -> supportedIds.mkString(", ")))
   }
 
   def invalidDayTimeIntervalType(startFieldName: String, endFieldName: String): Throwable = {
-    new AnalysisException(s"'interval $startFieldName to $endFieldName' is invalid.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1224",
+      messageParameters = Map(
+        "startFieldName" -> startFieldName,
+        "endFieldName" -> endFieldName))
   }
 
   def invalidYearMonthField(field: Byte): Throwable = {
     val supportedIds = YearMonthIntervalType.yearMonthFields
       .map(i => s"$i (${YearMonthIntervalType.fieldToString(i)})")
-    new AnalysisException(s"Invalid field id '$field' in year-month interval. " +
-      s"Supported interval fields: ${supportedIds.mkString(", ")}.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1225",
+      messageParameters = Map(
+        "field" -> field.toString,
+        "supportedIds" -> supportedIds.mkString(", ")))
   }
 
   def configRemovedInVersionError(
@@ -2190,31 +2205,50 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       version: String,
       comment: String): Throwable = {
     new AnalysisException(
-      s"The SQL config '$configName' was removed in the version $version. $comment")
+      errorClass = "_LEGACY_ERROR_TEMP_1226",
+      messageParameters = Map(
+        "configName" -> configName,
+        "version" -> version,
+        "comment" -> comment))
   }
 
   def failedFallbackParsingError(msg: String, e1: Throwable, e2: Throwable): Throwable = {
-    new AnalysisException(s"$msg${e1.getMessage}\nFailed fallback parsing: ${e2.getMessage}",
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1227",
+      messageParameters = Map("msg" -> msg, "e1" -> e1.getMessage, "e2" -> e2.getMessage),
       cause = Some(e1.getCause))
   }
 
   def decimalCannotGreaterThanPrecisionError(scale: Int, precision: Int): Throwable = {
-    new AnalysisException(s"Decimal scale ($scale) cannot be greater than precision ($precision).")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1228",
+      messageParameters = Map(
+        "scale" -> scale.toString,
+        "precision" -> precision.toString))
   }
 
   def decimalOnlySupportPrecisionUptoError(decimalType: String, precision: Int): Throwable = {
-    new AnalysisException(s"$decimalType can only support precision up to $precision")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1229",
+      messageParameters = Map(
+        "decimalType" -> decimalType,
+        "precision" -> precision.toString))
   }
 
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
     new AnalysisException(
-      s"""|Negative scale is not allowed: $scale.
-         |You can use ${LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key}=true
-         |to enable legacy mode to allow it.""".stripMargin.replaceAll("\n", " "))
+      errorClass = "_LEGACY_ERROR_TEMP_1230",
+      messageParameters = Map(
+        "scale" -> scale.toString,
+        "config" -> LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key))
   }
 
   def invalidPartitionColumnKeyInTableError(key: String, tblName: String): Throwable = {
-    new AnalysisException(s"$key is not a valid partition column in table $tblName.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1231",
+      messageParameters = Map(
+        "key" -> key,
+        "tblName" -> tblName))
   }
 
   def invalidPartitionSpecError(
@@ -2222,14 +2256,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       partitionColumnNames: Seq[String],
       tableName: String): Throwable = {
     new AnalysisException(
-      s"""|Partition spec is invalid. The spec ($specKeys) must match
-        |the partition spec (${partitionColumnNames.mkString(", ")}) defined in
-        |table '$tableName'""".stripMargin.replaceAll("\n", " "))
+      errorClass = "_LEGACY_ERROR_TEMP_1232",
+      messageParameters = Map(
+        "specKeys" -> specKeys,
+        "partitionColumnNames" -> partitionColumnNames.mkString(", "),
+        "tableName" -> tableName))
   }
 
   def foundDuplicateColumnError(colType: String, duplicateCol: Seq[String]): Throwable = {
     new AnalysisException(
-      s"Found duplicate column(s) $colType: ${duplicateCol.sorted.mkString(", ")}")
+      errorClass = "_LEGACY_ERROR_TEMP_1233",
+      messageParameters = Map(
+        "colType" -> colType,
+        "duplicateCol" -> duplicateCol.sorted.mkString(", ")))
   }
 
   def noSuchTableError(db: String, table: String): Throwable = {
@@ -2237,19 +2276,27 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tempViewNotCachedForAnalyzingColumnsError(tableIdent: TableIdentifier): Throwable = {
-    new AnalysisException(s"Temporary view $tableIdent is not cached for analyzing columns.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1234",
+      messageParameters = Map("tableIdent" -> tableIdent.toString))
   }
 
   def columnTypeNotSupportStatisticsCollectionError(
       name: String,
       tableIdent: TableIdentifier,
       dataType: DataType): Throwable = {
-    new AnalysisException(s"Column $name in table $tableIdent is of type $dataType, " +
-      "and Spark does not support statistics collection on this column type.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1235",
+      messageParameters = Map(
+        "name" -> name,
+        "tableIdent" -> tableIdent.toString,
+        "dataType" -> dataType.toString))
   }
 
   def analyzeTableNotSupportedOnViewsError(): Throwable = {
-    new AnalysisException("ANALYZE TABLE is not supported on views.")
+        new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1236",
+      messageParameters = Map.empty)
   }
 
   def unexpectedPartitionColumnPrefixError(
@@ -2258,13 +2305,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       schemaColumns: String,
       specColumns: String): Throwable = {
     new AnalysisException(
-      s"""
-         |The list of partition columns with values
-         |in partition specification for table '${table}'
-         |in database '${database}' is not a prefix of the list of
-         |partition columns defined in the table schema.
-         |Expected a prefix of [${schemaColumns}], but got [${specColumns}].
-       """.stripMargin.replaceAll("\n", " "))
+      errorClass = "_LEGACY_ERROR_TEMP_1237",
+      messageParameters = Map(
+        "table" -> table,
+        "database" -> database,
+        "schemaColumns" -> schemaColumns,
+        "specColumns" -> specColumns))
   }
 
   def noSuchPartitionError(
@@ -2277,23 +2323,27 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def analyzingColumnStatisticsNotSupportedForColumnTypeError(
       name: String,
       dataType: DataType): Throwable = {
-    new AnalysisException("Analyzing column statistics is not supported for column " +
-      s"$name of data type: $dataType.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1239",
+      messageParameters = Map(
+        "name" -> name,
+        "dataType" -> dataType.toString))
   }
 
   def tableAlreadyExistsError(table: String, guide: String = ""): Throwable = {
-    new AnalysisException(s"Table $table already exists." + guide)
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1240",
+      messageParameters = Map(
+        "table" -> table,
+        "guide" -> guide))
   }
 
   def createTableAsSelectWithNonEmptyDirectoryError(tablePath: String): Throwable = {
     new AnalysisException(
-      s"CREATE-TABLE-AS-SELECT cannot create table with location to a non-empty directory " +
-        s"${tablePath} . To allow overwriting the existing non-empty directory, " +
-        s"set '${SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key}' to true.")
-  }
-
-  def tableOrViewNotFoundError(table: String): Throwable = {
-    new AnalysisException(s"Table or view not found: $table")
+      errorClass = "_LEGACY_ERROR_TEMP_1241",
+      messageParameters = Map(
+        "tablePath" -> tablePath,
+        "config" -> SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key))
   }
 
   def noSuchFunctionError(
@@ -2301,47 +2351,68 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       t: TreeNode[_],
       fullName: Option[Seq[String]] = None): Throwable = {
     if (rawName.length == 1 && fullName.isDefined) {
-      new AnalysisException(s"Undefined function: ${rawName.head}. " +
-        "This function is neither a built-in/temporary function, nor a persistent " +
-        s"function that is qualified as ${fullName.get.quoted}.",
-        t.origin.line, t.origin.startPosition)
+      new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_1242",
+        messageParameters = Map(
+          "rawName" -> rawName.head,
+          "fullName" -> fullName.get.quoted
+        ),
+        origin = t.origin)
     } else {
-      new AnalysisException(s"Undefined function: ${rawName.quoted}",
-        t.origin.line, t.origin.startPosition)
+      new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_1243",
+        messageParameters = Map("rawName" -> rawName.quoted),
+        origin = t.origin)
     }
   }
 
   def unsetNonExistentPropertyError(property: String, table: TableIdentifier): Throwable = {
-    new AnalysisException(s"Attempted to unset non-existent property '$property' in table '$table'")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1244",
+      messageParameters = Map(
+        "property" -> property,
+        "table" -> table.toString))
   }
 
   def alterTableChangeColumnNotSupportedForColumnTypeError(
       originColumn: StructField,
       newColumn: StructField): Throwable = {
-    new AnalysisException("ALTER TABLE CHANGE COLUMN is not supported for changing column " +
-      s"'${originColumn.name}' with type '${originColumn.dataType}' to " +
-      s"'${newColumn.name}' with type '${newColumn.dataType}'")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1245",
+      messageParameters = Map(
+        "originName" -> originColumn.name,
+        "originType" -> originColumn.dataType.toString,
+        "newName" -> newColumn.name,
+        "newType"-> newColumn.dataType.toString))
   }
 
   def cannotFindColumnError(name: String, fieldNames: Array[String]): Throwable = {
-    new AnalysisException(s"Can't find column `$name` given table data columns " +
-      s"${fieldNames.mkString("[`", "`, `", "`]")}")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1246",
+      messageParameters = Map(
+        "name" -> name,
+        "fieldNames" -> fieldNames.mkString("[`", "`, `", "`]")))
+
   }
 
   def alterTableSetSerdeForSpecificPartitionNotSupportedError(): Throwable = {
-    new AnalysisException("Operation not allowed: ALTER TABLE SET " +
-      "[SERDE | SERDEPROPERTIES] for a specific partition is not supported " +
-      "for tables created with the datasource API")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1247",
+      messageParameters = Map.empty)
   }
 
   def alterTableSetSerdeNotSupportedError(): Throwable = {
-    new AnalysisException("Operation not allowed: ALTER TABLE SET SERDE is " +
-      "not supported for tables created with the datasource API")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1248",
+      messageParameters = Map.empty)
   }
 
   def cmdOnlyWorksOnPartitionedTablesError(cmd: String, tableIdentWithDB: String): Throwable = {
     new AnalysisException(
-      s"Operation not allowed: $cmd only works on partitioned tables: $tableIdentWithDB")
+      errorClass = "_LEGACY_ERROR_TEMP_1249",
+      messageParameters = Map(
+        "cmd" -> cmd,
+        "tableIdentWithDB" -> tableIdentWithDB))
   }
 
   def cmdOnlyWorksOnTableWithLocationError(cmd: String, tableIdentWithDB: String): Throwable = {

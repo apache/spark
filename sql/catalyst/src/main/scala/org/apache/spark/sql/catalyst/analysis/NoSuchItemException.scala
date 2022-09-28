@@ -66,7 +66,10 @@ case class NoSuchTableException(
 
 case class NoSuchPartitionException(
     override val message: String)
-  extends AnalysisException(message) {
+  extends AnalysisException(
+    message,
+    errorClass = Some("_LEGACY_ERROR_TEMP_1238"),
+    messageParameters = Map("msg" -> message)) {
 
   def this(db: String, table: String, spec: TablePartitionSpec) = {
     this(s"Partition not found in table '$table' database '$db':\n" + spec.mkString("\n"))

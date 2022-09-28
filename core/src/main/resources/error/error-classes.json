@@ -2347,5 +2347,156 @@
     "message" : [
       "Hive metastore does not support altering database location"
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1220" : {
+    "message" : [
+      "Hive <tableType> is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1221" : {
+    "message" : [
+      "Hive 0.12 doesn't support creating permanent functions. Please use Hive 0.13 or higher."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1222" : {
+    "message" : [
+      "Unknown resource type: <resourceType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1223" : {
+    "message" : [
+      "Invalid field id '<field>' in day-time interval. Supported interval fields: <supportedIds>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1224" : {
+    "message" : [
+      "'interval <startFieldName> to <endFieldName>' is invalid."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1225" : {
+    "message" : [
+      "Invalid field id '<field>' in year-month interval. Supported interval fields: <supportedIds>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1226" : {
+    "message" : [
+      "The SQL config '<configName>' was removed in the version <version>. <comment>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1227" : {
+    "message" : [
+      "<msg><e1>",
+      "Failed fallback parsing: <e2>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1228" : {
+    "message" : [
+      "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1229" : {
+    "message" : [
+      "<decimalType> can only support precision up to <precision>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1230" : {
+    "message" : [
+      "Negative scale is not allowed: <scale>. You can use <config>=true to enable legacy mode to allow it."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1231" : {
+    "message" : [
+      "<key> is not a valid partition column in table <tblName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1232" : {
+    "message" : [
+      "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1233" : {
+    "message" : [
+      "Found duplicate column(s) <colType>: <duplicateCol>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1234" : {
+    "message" : [
+      "Temporary view <tableIdent> is not cached for analyzing columns."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1235" : {
+    "message" : [
+      "Column <name> in table <tableIdent> is of type <dataType>, and Spark does not support statistics collection on this column type."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1236" : {
+    "message" : [
+      "ANALYZE TABLE is not supported on views."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1237" : {
+    "message" : [
+      "The list of partition columns with values in partition specification for table '<table>' in database '<database>' is not a prefix of the list of partition columns defined in the table schema. Expected a prefix of [<schemaColumns>], but got [<specColumns>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1238" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1239" : {
+    "message" : [
+      "Analyzing column statistics is not supported for column <name> of data type: <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1240" : {
+    "message" : [
+      "Table <table> already exists.<guide>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1241" : {
+    "message" : [
+      "CREATE-TABLE-AS-SELECT cannot create table with location to a non-empty directory <tablePath>. To allow overwriting the existing non-empty directory, set '<config>' to true."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1242" : {
+    "message" : [
+      "Undefined function: <rawName>. This function is neither a built-in/temporary function, nor a persistent function that is qualified as <fullName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1243" : {
+    "message" : [
+      "Undefined function: <rawName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1244" : {
+    "message" : [
+      "Attempted to unset non-existent property '<property>' in table '<table>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1245" : {
+    "message" : [
+      "ALTER TABLE CHANGE COLUMN is not supported for changing column '<originName>' with type '<originType>' to '<newName>' with type '<newType>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1246" : {
+    "message" : [
+      "Can't find column `<name>` given table data columns <fieldNames>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1247" : {
+    "message" : [
+      "Operation not allowed: ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition is not supported for tables created with the datasource API."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1248" : {
+    "message" : [
+      "Operation not allowed: ALTER TABLE SET SERDE is not supported for tables created with the datasource API."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1249" : {
+    "message" : [
+      "Operation not allowed: <cmd> only works on partitioned tables: <tableIdentWithDB>."
+    ]
   }
 }
