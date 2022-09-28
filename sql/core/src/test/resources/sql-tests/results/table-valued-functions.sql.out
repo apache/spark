@@ -67,12 +67,22 @@ select * from range(1, 1, 1, 1, 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table-valued function range with alternatives: 
-    range(start: long, end: long, step: long, numSlices: integer)
-    range(start: long, end: long, step: long)
-    range(start: long, end: long)
-    range(end: long)
-cannot be applied to (integer, integer, integer, integer, integer): Invalid number of arguments for function range. Expected: one of 1, 2, 3 and 4; Found: 5.; line 1 pos 14
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1179",
+  "messageParameters" : {
+    "arguments" : "integer, integer, integer, integer, integer",
+    "details" : "Invalid number of arguments for function range. Expected: one of 1, 2, 3 and 4; Found: 5.",
+    "name" : "range",
+    "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 34,
+    "fragment" : "range(1, 1, 1, 1, 1)"
+  } ]
+}
 
 
 -- !query
@@ -81,12 +91,22 @@ select * from range(1, null)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table-valued function range with alternatives: 
-    range(start: long, end: long, step: long, numSlices: integer)
-    range(start: long, end: long, step: long)
-    range(start: long, end: long)
-    range(end: long)
-cannot be applied to (integer, void): Incompatible input data type. Expected: long; Found: void; line 1 pos 14
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1179",
+  "messageParameters" : {
+    "arguments" : "integer, void",
+    "details" : "Incompatible input data type.\nExpected: long; Found: void.",
+    "name" : "range",
+    "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 28,
+    "fragment" : "range(1, null)"
+  } ]
+}
 
 
 -- !query
@@ -95,12 +115,22 @@ select * from range(array(1, 2, 3))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table-valued function range with alternatives: 
-    range(start: long, end: long, step: long, numSlices: integer)
-    range(start: long, end: long, step: long)
-    range(start: long, end: long)
-    range(end: long)
-cannot be applied to (array): Incompatible input data type. Expected: long; Found: array; line 1 pos 14
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1179",
+  "messageParameters" : {
+    "arguments" : "array",
+    "details" : "Incompatible input data type.\nExpected: long; Found: array.",
+    "name" : "range",
+    "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 35,
+    "fragment" : "range(array(1, 2, 3))"
+  } ]
+}
 
 
 -- !query
@@ -109,12 +139,22 @@ select * from range(0, 5, 0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table-valued function range with alternatives: 
-    range(start: long, end: long, step: long, numSlices: integer)
-    range(start: long, end: long, step: long)
-    range(start: long, end: long)
-    range(end: long)
-cannot be applied to (integer, integer, integer): requirement failed: step (0) cannot be 0; line 1 pos 14
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1179",
+  "messageParameters" : {
+    "arguments" : "integer, integer, integer",
+    "details" : "requirement failed: step (0) cannot be 0",
+    "name" : "range",
+    "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 28,
+    "fragment" : "range(0, 5, 0)"
+  } ]
+}
 
 
 -- !query
