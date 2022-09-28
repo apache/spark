@@ -1663,6 +1663,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val IGNORE_CORRUPT_FILES_AFTER_RETIES =
+    buildConf("spark.sql.files.ignoreCorruptFilesAfterRetries")
+      .doc("Max retries before a file is marked as corrupted. This configuration is effective " +
+        s"only when ${IGNORE_CORRUPT_FILES.key} is true and using file-based sources such as " +
+        s"Parquet, JSON and ORC.")
+      .version("3.4.0")
+      .fallbackConf(TASK_MAX_FAILURES)
+
   val IGNORE_MISSING_FILES = buildConf("spark.sql.files.ignoreMissingFiles")
     .doc("Whether to ignore missing files. If true, the Spark jobs will continue to run when " +
       "encountering missing files and the contents that have been read will still be returned. " +
@@ -4130,6 +4138,8 @@ class SQLConf extends Serializable with Logging {
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
 
   def filesMinPartitionNum: Option[Int] = getConf(FILES_MIN_PARTITION_NUM)
+
+  def ignoreCorruptFilesAfterReties: Int = getConf(IGNORE_CORRUPT_FILES_AFTER_RETIES)
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 

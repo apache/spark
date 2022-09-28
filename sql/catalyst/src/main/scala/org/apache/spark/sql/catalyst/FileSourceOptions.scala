@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.catalyst.FileSourceOptions.{IGNORE_CORRUPT_FILES, IGNORE_MISSING_FILES}
+import org.apache.spark.sql.catalyst.FileSourceOptions.{IGNORE_CORRUPT_FILES, IGNORE_CORRUPT_FILES_AFTER_RETRIES, IGNORE_MISSING_FILES}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
 
@@ -32,11 +32,16 @@ class FileSourceOptions(
   val ignoreCorruptFiles: Boolean = parameters.get(IGNORE_CORRUPT_FILES).map(_.toBoolean)
     .getOrElse(SQLConf.get.ignoreCorruptFiles)
 
+  val ignoreCorruptFilesAfterRetries: Int =
+    parameters.get(IGNORE_CORRUPT_FILES_AFTER_RETRIES).map(_.toInt)
+      .getOrElse(SQLConf.get.ignoreCorruptFilesAfterReties)
+
   val ignoreMissingFiles: Boolean = parameters.get(IGNORE_MISSING_FILES).map(_.toBoolean)
     .getOrElse(SQLConf.get.ignoreMissingFiles)
 }
 
 object FileSourceOptions {
   val IGNORE_CORRUPT_FILES = "ignoreCorruptFiles"
+  val IGNORE_CORRUPT_FILES_AFTER_RETRIES = "ignoreCorruptFilesAfterReties"
   val IGNORE_MISSING_FILES = "ignoreMissingFiles"
 }

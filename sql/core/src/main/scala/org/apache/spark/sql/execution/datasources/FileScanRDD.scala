@@ -76,6 +76,7 @@ class FileScanRDD(
 
   private val ignoreCorruptFiles = options.ignoreCorruptFiles
   private val ignoreMissingFiles = options.ignoreMissingFiles
+  private val ignoreCorruptFilesAfterRetries = options.ignoreCorruptFilesAfterRetries
 
   override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {
     val iterator = new Iterator[Object] with AutoCloseable {
@@ -233,6 +234,11 @@ class FileScanRDD(
               // creation of iterator so that we will throw exception in `getNext`.
               private var internalIter: Iterator[InternalRow] = null
 
+              private def shouldSkipCorruptFiles(): Boolean = {
+                ignoreCorruptFiles && (TaskContext.get() == null ||
+                  TaskContext.get().attemptNumber() + 1 >= ignoreCorruptFilesAfterRetries)
+              }
+
               override def getNext(): AnyRef = {
                 try {
                   // Initialize `internalIter` lazily.
@@ -253,7 +259,7 @@ class FileScanRDD(
                     null
                   // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
                   case e: FileNotFoundException if !ignoreMissingFiles => throw e
-                  case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+                  case e @ (_: RuntimeException | _: IOException) if shouldSkipCorruptFiles() =>
                     logWarning(
                       s"Skipped the rest of the content in the corrupted file: $currentFile", e)
                     finished = true

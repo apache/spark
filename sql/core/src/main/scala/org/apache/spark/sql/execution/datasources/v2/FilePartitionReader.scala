@@ -20,7 +20,7 @@ import java.io.{FileNotFoundException, IOException}
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkUpgradeException
+import org.apache.spark.{SparkUpgradeException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.sql.catalyst.FileSourceOptions
@@ -36,8 +36,15 @@ class FilePartitionReader[T](
 
   private def ignoreMissingFiles = options.ignoreMissingFiles
   private def ignoreCorruptFiles = options.ignoreCorruptFiles
+  private def ignoreCorruptFilesAfterRetries = options.ignoreCorruptFilesAfterRetries
 
   override def next(): Boolean = {
+
+    def shouldSkipCorruptFiles(): Boolean = {
+      ignoreCorruptFiles && (TaskContext.get() == null ||
+        TaskContext.get().attemptNumber() + 1 >= ignoreCorruptFilesAfterRetries)
+    }
+
     if (currentReader == null) {
       if (readers.hasNext) {
         try {
@@ -49,7 +56,7 @@ class FilePartitionReader[T](
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles =>
             throw QueryExecutionErrors.fileNotFoundError(e)
-          case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+          case e @ (_: RuntimeException | _: IOException) if shouldSkipCorruptFiles() =>
             logWarning(
               s"Skipped the rest of the content in the corrupted file.", e)
             currentReader = null
@@ -67,7 +74,7 @@ class FilePartitionReader[T](
       case e: SchemaColumnConvertNotSupportedException =>
         throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
           currentReader.file.filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
-      case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+      case e @ (_: RuntimeException | _: IOException) if shouldSkipCorruptFiles() =>
         logWarning(
           s"Skipped the rest of the content in the corrupted file: $currentReader", e)
         false
