@@ -1539,4 +1539,12 @@ select to_binary('abc', 'invalidFormat')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid value for the 'format' parameter of function 'to_binary': invalidformat. The value has to be a case-insensitive string literal of 'hex', 'utf-8', 'utf8', or 'base64'.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1101",
+  "messageParameters" : {
+    "argName" : "format",
+    "endingMsg" : " The value has to be a case-insensitive string literal of 'hex', 'utf-8', 'utf8', or 'base64'.",
+    "funcName" : "to_binary",
+    "invalidValue" : "invalidformat"
+  }
+}
