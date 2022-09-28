@@ -127,9 +127,7 @@ case class LikeJoni(left: Expression, right: Expression, escapeChar: Char)
   override def escape(v: Array[Byte]): Array[Byte] = StringUtils.escapeLikeJoniRegex(v, escapeChar)
 
   override def matches(regex: Regex, input: Array[Byte]): Boolean = {
-    //  ******************** debug 看结果 记得删除 **********
-    val num = regex.matcher(input).`match`(0, input.length, Option.DEFAULT)
-    num == input.size
+    regex.matcher(input).`match`(0, input.length, Option.DEFAULT) == input.size
   }
 
   override def toString: String = escapeChar match {
@@ -154,9 +152,9 @@ case class LikeJoni(left: Expression, right: Expression, escapeChar: Char)
         val pattern = ctx.addMutableState(regexClass, regex,
           v => s"""
                       byte[] pattern = UTF8String.fromString("${tmp}").getBytes();
-                      $regex = new ${regexClass}(pattern, 0, pattern.length, ${optionClass}.NONE,
+                      $v = new ${regexClass}(pattern, 0, pattern.length, ${optionClass}.NONE,
                         ${encodingClass}.INSTANCE, ${syntaxClass}.Java);
-                    """.stripMargin, true, false)
+                    """.stripMargin)
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
@@ -167,7 +165,8 @@ case class LikeJoni(left: Expression, right: Expression, escapeChar: Char)
           if (!${ev.isNull}) {
             byte[] input = ${eval.value}.getBytes();
             ${ev.value} =
-              $regex.matcher(input).match(0, input.length, ${optionClass}.DEFAULT) == input.length;
+              ${pattern}.matcher(input)
+                .match(0, input.length, ${optionClass}.DEFAULT) == input.length;
           }
         """)
       } else {
@@ -238,7 +237,7 @@ case class RLikeJoni(left: Expression, right: Expression) extends StringRegexExp
   override def matches(regex: Regex, input: Array[Byte]): Boolean = {
     regex.matcher(input).search(0, input.length, Option.DEFAULT) > -1
   }
-  override def toString: String = s"$left RLIKE $right"
+  override def toString: String = s"$left RLIKE_JONI $right"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val regexClass = classOf[Regex].getName
@@ -255,9 +254,9 @@ case class RLikeJoni(left: Expression, right: Expression) extends StringRegexExp
         val pattern = ctx.addMutableState(regexClass, regex,
           v => s"""
                     byte[] pattern = UTF8String.fromString("${tmp}").getBytes();
-                    $regex = new ${regexClass}(pattern, 0, pattern.length, ${optionClass}.NONE,
+                    $v = new ${regexClass}(pattern, 0, pattern.length, ${optionClass}.NONE,
                       ${encodingClass}.INSTANCE, ${syntaxClass}.Java);
-                  """.stripMargin, true, false)
+                  """.stripMargin)
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
@@ -268,7 +267,7 @@ case class RLikeJoni(left: Expression, right: Expression) extends StringRegexExp
           if (!${ev.isNull}) {
             byte[] input = ${eval.value}.getBytes();
             ${ev.value} =
-              $regex.matcher(input).search(0, input.length, ${optionClass}.DEFAULT) > -1;
+              $pattern.matcher(input).search(0, input.length, ${optionClass}.DEFAULT) > -1;
           }
         """)
       } else {
@@ -293,8 +292,3 @@ case class RLikeJoni(left: Expression, right: Expression) extends StringRegexExp
     }
   }
 }
-
-
-
-
-

@@ -86,6 +86,43 @@ class RegexpExpressionJoniSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("RLIKE Regular Expression") {
+    checkLiteralRow(Literal.create(null, StringType) jrlike _, "abdef", null)
+    checkEvaluation("abdef" jrlike Literal.create(null, StringType), null)
+    checkEvaluation(Literal.create(null, StringType) jrlike Literal.create(null, StringType), null)
+    checkEvaluation("abdef" jrlike NonFoldableLiteral.create("abdef", StringType), true)
+    checkEvaluation("abdef" jrlike NonFoldableLiteral.create(null, StringType), null)
+    checkEvaluation(
+      Literal.create(null, StringType) jrlike NonFoldableLiteral.create("abdef", StringType), null)
+    checkEvaluation(
+      Literal.create(null, StringType) jrlike NonFoldableLiteral.create(null, StringType), null)
+
+    checkLiteralRow("abdef" jrlike _, "abdef", true)
+    checkLiteralRow("abbbbc" jrlike _, "a.*c", true)
+
+    checkLiteralRow("fofo" jrlike _, "^fo", true)
+    checkLiteralRow("fo\no" jrlike _, "^fo\no$", true)
+    checkLiteralRow("Bn" jrlike _, "^Ba*n", true)
+    checkLiteralRow("afofo" jrlike _, "fo", true)
+    checkLiteralRow("afofo" jrlike _, "^fo", false)
+    checkLiteralRow("Baan" jrlike _, "^Ba?n", false)
+    checkLiteralRow("axe" jrlike _, "pi|apa", false)
+    checkLiteralRow("pip" jrlike _, "^(pi)*$", false)
+
+    checkLiteralRow("abc" jrlike _, "^ab", true)
+    checkLiteralRow("abc" jrlike _, "^bc", false)
+    checkLiteralRow("abc" jrlike _, "^ab", true)
+    checkLiteralRow("abc" jrlike _, "^bc", false)
+
+    intercept[org.joni.exception.SyntaxException] {
+      evaluateWithoutCodegen("abbbbc" jrlike "**")
+    }
+    intercept[org.joni.exception.SyntaxException] {
+      val regex = 'a.string.at(0)
+      evaluateWithoutCodegen("abbbbc" jrlike regex, create_row("**"))
+    }
+  }
+
   test("LIKE Pattern") {
 
     // null handling
@@ -258,18 +295,5 @@ class RegexpExpressionJoniSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkLiteralRow("a€a" jlike _, "_\u20AC_", true)
     checkLiteralRow("a\u20ACa" jlike _, "_€_", true)
   }
-
-  test ("failed escapeChar") {
-    val escapeChar = '/'
-    // checkLiteralRow("aabb" jlike _, s"", false)
-    checkLiteralRow("a" jlike _, s"aa", false)
-    checkLiteralRow("aabb" jlike _, s"%%%%%%abb", true)
-    checkLiteralRow("a_%b" jlike(_, escapeChar), s"a${escapeChar}__b", true)
-    checkLiteralRow("addb" jlike(_, escapeChar), "a_%b", true)
-    checkLiteralRow("addb" jlike(_, escapeChar), s"a${escapeChar}__b", false)
-    checkLiteralRow("addb" jlike(_, escapeChar), s"a%$escapeChar%b", false)
-    checkLiteralRow("a_%b" jlike(_, escapeChar), s"a%$escapeChar%b", true)
-  }
-
 
 }

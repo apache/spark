@@ -38,22 +38,29 @@ object RegexUtils {
   }
 
   def replaceAll(
-                  srcBytes: Array[Byte],
-                  pattern: Array[Byte],
-                  replaceBytes: Array[Byte]): Array[Byte] = {
+      srcBytes: Array[Byte],
+      pattern: Array[Byte],
+      replaceBytes: Array[Byte]): Array[Byte] = {
     replaceAll(srcBytes, 0, srcBytes.length, replaceBytes, 0, replaceBytes.length, pattern)
   }
 
   def replaceAll(
-                  srcBytes: Array[Byte],
-                  srcOffset: Int,
-                  srcLen: Int,
-                  replaceBytes: Array[Byte],
-                  replaceOffset: Int,
-                  replaceLen: Int,
-                  pattern: Array[Byte]): Array[Byte] = {
-    case class PairInt(begin: Int, end: Int)
+      srcBytes: Array[Byte],
+      srcOffset: Int,
+      pattern: Array[Byte],
+      replaceBytes: Array[Byte]): Array[Byte] = {
+    replaceAll(srcBytes, srcOffset, srcBytes.length, replaceBytes, 0, replaceBytes.length, pattern)
+  }
 
+  def replaceAll(
+      srcBytes: Array[Byte],
+      srcOffset: Int,
+      srcLen: Int,
+      replaceBytes: Array[Byte],
+      replaceOffset: Int,
+      replaceLen: Int,
+      pattern: Array[Byte]): Array[Byte] = {
+    case class PairInt(begin: Int, end: Int)
     val srcRange: Int = srcOffset + srcLen
     val regex: Regex = new Regex(pattern, 0, pattern.length, Option.NONE, UTF8Encoding.INSTANCE)
     val matcher: Matcher = regex.matcher(srcBytes, 0, srcRange)
