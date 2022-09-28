@@ -73,12 +73,25 @@ if __name__ == "__main__":
         explode(split(lines.value, " ")).alias("sessionId"),
         lines.timestamp.cast("long"),
     )
-    session_fields = [
-        StructField("sessionId", StringType()),
-        StructField("count", LongType()),
-        StructField("start", LongType()),
-        StructField("end", LongType()),
-    ]
+
+    # Type of output records.
+    session_schema = StructType(
+        [
+            StructField("sessionId", StringType()),
+            StructField("count", LongType()),
+            StructField("start", LongType()),
+            StructField("end", LongType()),
+        ]
+    )
+    # Type of group state.
+    # Omit the session id in the state since it is available as group key
+    session_state_schema = StructType(
+        [
+            StructField("count", LongType()),
+            StructField("start", LongType()),
+            StructField("end", LongType()),
+        ]
+    )
 
     def func(
         key: Any, pdf_iter: Iterable[pd.DataFrame], state: GroupState
@@ -114,10 +127,8 @@ if __name__ == "__main__":
     # Group the data by window and word and compute the count of each group
     sessions = events.groupBy(events["sessionId"]).applyInPandasWithState(
         func,
-        StructType(session_fields),
-        StructType(
-            session_fields[1:]
-        ),  # omit the session id in the state since it is available as group key
+        session_schema,
+        session_state_schema,
         "Update",
         GroupStateTimeout.ProcessingTimeTimeout,
     )
