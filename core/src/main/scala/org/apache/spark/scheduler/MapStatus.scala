@@ -123,7 +123,8 @@ private[spark] object MapStatus {
 private[spark] class CompressedMapStatus(
     private[this] var loc: BlockManagerId,
     private[this] var compressedSizes: Array[Byte],
-    private[this] var _mapTaskId: Long)
+    private[this] var _mapTaskId: Long,
+    private[this] var _checksumVal: Long = 0)
   extends MapStatus with Externalizable {
 
   // For deserialization only

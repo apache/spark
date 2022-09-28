@@ -186,6 +186,8 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     sc.addSparkListener(new SparkListener {
       override def onExecutorRemoved(execRemoved: SparkListenerExecutorRemoved): Unit = {
         executorRemovedSem.release()
+        assert(execRemoved.reason == ExecutorDecommission.msgPrefix + "test msg 0" ||
+          execRemoved.reason == "Command exited with code 0")
       }
 
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
@@ -247,7 +249,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     // Decommission executor and ensure it is not relaunched by setting adjustTargetNumExecutors
     sched.decommissionExecutor(
       execToDecommission,
-      ExecutorDecommissionInfo("", None),
+      ExecutorDecommissionInfo("test msg 0", None),
       adjustTargetNumExecutors = true)
     val decomTime = new SystemClock().getTimeMillis()
 
