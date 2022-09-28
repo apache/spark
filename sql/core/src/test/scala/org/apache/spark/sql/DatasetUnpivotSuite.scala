@@ -251,7 +251,32 @@ class DatasetUnpivotSuite extends QueryTest
     })
   }
 
-  test("unpivot with expressions") {
+  test("unpivot with id expressions") {
+    // ids are expressions (computed)
+    val unpivoted = wideDataDs.select($"id", $"int1", $"long1")
+      .unpivot(
+        Array(($"id" * 10).as("primary"), $"int1".as("secondary")),
+        variableColumnName = "var",
+        valueColumnName = "val")
+
+    assert(unpivoted.schema === StructType(Seq(
+      StructField("primary", IntegerType, nullable = false),
+      StructField("secondary", IntegerType, nullable = true),
+      StructField("var", StringType, nullable = false),
+      StructField("val", LongType, nullable = true))))
+
+    checkAnswer(unpivoted, wideDataDs.collect().flatMap { row =>
+      Seq(
+        Row(
+          row.id * 10,
+          row.int1.orNull,
+          "long1",
+          row.long1.orNull)
+      )
+    })
+  }
+
+  test("unpivot with id and value expressions") {
     // ids and values are all expressions (computed)
     val unpivoted = wideDataDs
       .unpivot(
