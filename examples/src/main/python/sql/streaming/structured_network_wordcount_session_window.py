@@ -16,7 +16,7 @@
 #
 
 r"""
- split lines into words, group by words and use the state per key to track session of each key.
+ Split lines into words, group by words and use the state per key to track session of each key.
 
  Usage: structured_network_wordcount_windowed.py <hostname> <port>
  <hostname> and <port> describe the TCP server that Structured Streaming
@@ -31,6 +31,9 @@ r"""
 """
 import sys
 import math
+from typing import Iterable, Any
+
+import pandas as pd
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import explode
@@ -42,8 +45,6 @@ from pyspark.sql.types import (
     StructField,
 )
 from pyspark.sql.streaming.state import GroupStateTimeout, GroupState
-import pandas as pd
-from typing import Iterable, Any
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
@@ -69,8 +70,7 @@ if __name__ == "__main__":
         .load()
     )
 
-    # Split the lines into words, retaining timestamps
-    # split() splits each line into an array, and explode() turns the array into multiple rows
+    # Split the lines into words, retaining timestamps, each word become a sessionId
     events = lines.select(
         explode(split(lines.value, " ")).alias("sessionId"),
         lines.timestamp.cast("long"),
