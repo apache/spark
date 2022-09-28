@@ -16,7 +16,8 @@
 #
 
 import functools
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Callable, List, Any, Iterable, Union
+from mypy_extensions import VarArg
 
 import pyspark.sql.types
 from pyspark.sql.connect.column import (
@@ -26,6 +27,8 @@ from pyspark.sql.connect.column import (
     ExpressionOrString,
     ScalarFunctionExpression,
 )
+
+import pyspark.sql.connect.proto as proto
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import RemoteSparkSession
@@ -50,7 +53,7 @@ def _build(name: str, *args: ExpressionOrString) -> ScalarFunctionExpression:
 class FunctionBuilder:
     """This class is used to build arbitrary functions used in expressions"""
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Callable[[VarArg(ExpressionOrString)], ScalarFunctionExpression]:
         def _(*args: ExpressionOrString) -> ScalarFunctionExpression:
             return _build(name, *args)
 
@@ -69,33 +72,38 @@ class UserDefinedFunction(Expression):
     the temporary function is set, it is assumed that the registration has already
     happened."""
 
-    def __init__(self, func, return_type=pyspark.sql.types.StringType(), args=None):
+    def __init__(self, func: Any, return_type:Union[str, pyspark.sql.types.DataType]=pyspark.sql.types.StringType(), args: Optional[Iterable[Any]] = None) -> None:
         super().__init__()
 
         self._func_ref = func
         self._return_type = return_type
-        self._args = list(args)
+        if args is not None:
+            self._args = list(args)
+        else:
+            self._args = []
         self._func_name = None
 
-    def to_plan(self, session: "RemoteSparkSession") -> Expression:
+    def to_plan(self, session: Optional["RemoteSparkSession"]) -> proto.Expression:
+        if session is None:
+            raise Exception("CAnnot create UDF without remote Session.")
         # Needs to materialize the UDF to the server
         # Only do this once per session
         func_name = session.register_udf(self._func_ref, self._return_type)
         # Func name is used for the actual reference
         return _build(func_name, *self._args).to_plan(session)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"UserDefinedFunction({self._func_name})"
 
 
-def _create_udf(function, return_type):
-    def wrapper(*cols: "ColumnOrString"):
+def _create_udf(function: Any, return_type: Union[str, pyspark.sql.types.DataType]) -> Callable[[VarArg('ColumnOrString')], UserDefinedFunction]:
+    def wrapper(*cols: "ColumnOrString") -> UserDefinedFunction:
         return UserDefinedFunction(func=function, return_type=return_type, args=cols)
 
     return wrapper
 
 
-def udf(function, return_type=pyspark.sql.types.StringType()):
+def udf(function: Any, return_type: pyspark.sql.types.DataType = pyspark.sql.types.StringType()) -> Any:
     """
     Returns a callable that represents the column once arguments are applied
 
@@ -110,10 +118,10 @@ def udf(function, return_type=pyspark.sql.types.StringType()):
     """
     # This is when @udf / @udf(DataType()) is used
     if function is None or isinstance(function, (str, pyspark.sql.types.DataType)):
-        return_type = function or return_type
+        actual_return_type = function or return_type
         # Overload with
-        if return_type is None:
-            return_type = pyspark.sql.types.StringType()
-        return functools.partial(_create_udf, return_type=return_type)
+        if actual_return_type is None:
+            actual_return_type = pyspark.sql.types.StringType()
+        return functools.partial(_create_udf, return_type=actual_return_type)
     else:
         return _create_udf(function, return_type)

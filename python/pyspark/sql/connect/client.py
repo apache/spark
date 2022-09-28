@@ -21,18 +21,20 @@ import logging
 import typing
 import uuid
 
-import grpc
+import grpc # type: ignore
 import pandas
 import pandas as pd
 import pyarrow as pa
 
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
+import pyspark.sql.types
 from pyspark import cloudpickle
 from pyspark.sql.connect.data_frame import DataFrame
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.plan import SQL
 
+from typing import Optional, Any, Union
 
 NumericType = typing.Union[int, float]
 
@@ -102,7 +104,7 @@ class AnalyzeResult:
 class RemoteSparkSession(object):
     """Conceptually the remote spark session that communicates with the server"""
 
-    def __init__(self, user_id: str, host: str = None, port: int = 15002):
+    def __init__(self, user_id: str, host: Optional[str] = None, port: int = 15002):
         self._host = "localhost" if host is None else host
         self._port = port
         self._user_id = user_id
@@ -112,7 +114,7 @@ class RemoteSparkSession(object):
         # Create the reader
         self.read = DataFrameReader(self)
 
-    def register_udf(self, function, return_type) -> str:
+    def register_udf(self, function: Any, return_type: Union[str, pyspark.sql.types.DataType]) -> str:
         """Create a temporary UDF in the session catalog on the other side. We generate a
         temporary name for it."""
         name = f"fun_{uuid.uuid4().hex}"
@@ -141,7 +143,7 @@ class RemoteSparkSession(object):
     def sql(self, sql_string: str) -> "DataFrame":
         return DataFrame.withPlan(SQL(sql_string), self)
 
-    def _to_pandas(self, plan: pb2.Plan) -> pandas.DataFrame:
+    def _to_pandas(self, plan: pb2.Plan) -> Optional[pandas.DataFrame]:
         req = pb2.Request()
         req.user_context.user_id = self._user_id
         req.plan.CopyFrom(plan)
@@ -155,15 +157,16 @@ class RemoteSparkSession(object):
         resp = self._stub.AnalyzePlan(req)
         return AnalyzeResult.fromProto(resp)
 
-    def _process_batch(self, b) -> pandas.DataFrame:
+    def _process_batch(self, b: pb2.Response) -> pandas.DataFrame:
         if b.batch is not None and len(b.batch.data) > 0:
             with pa.ipc.open_stream(b.data) as rd:
                 return rd.read_pandas()
         elif b.csv_batch is not None and len(b.csv_batch.data) > 0:
             return pd.read_csv(io.StringIO(b.csv_batch.data), delimiter="|")
+        raise Exception("Cannot handle batch result type.")
 
     def _execute_and_fetch(self, req: pb2.Request) -> typing.Optional[pandas.DataFrame]:
-        m = None
+        m : Optional[pb2.Response.Metrics] = None
         result_dfs = []
 
         for b in self._stub.ExecutePlan(req):
@@ -174,7 +177,8 @@ class RemoteSparkSession(object):
         if len(result_dfs) > 0:
             df = pd.concat(result_dfs)
             # Attach the metrics to the DataFrame attributes.
-            df.attrs["metrics"] = self._build_metrics(m)
+            if m is not None:
+                df.attrs["metrics"] = self._build_metrics(m)
             return df
         else:
             return None
