@@ -644,7 +644,7 @@ unpivotOperator
     ;
 
 unpivotSingleValueColumnClause
-    : unpivotValueColumn FOR unpivotNameColumn IN LEFT_PAREN unpivotColumns+=unpivotColumn (COMMA unpivotColumns+=unpivotColumn)* RIGHT_PAREN
+    : unpivotValueColumn FOR unpivotNameColumn IN LEFT_PAREN unpivotColumns+=unpivotColumnAndAlias (COMMA unpivotColumns+=unpivotColumnAndAlias)* RIGHT_PAREN
     ;
 
 unpivotMultiValueColumnClause
@@ -654,7 +654,7 @@ unpivotMultiValueColumnClause
     ;
 
 unpivotColumnSet
-    : LEFT_PAREN unpivotColumns+=unpivotColumn (COMMA unpivotColumns+=unpivotColumn)* RIGHT_PAREN (AS? identifier)?
+    : LEFT_PAREN unpivotColumns+=unpivotColumn (COMMA unpivotColumns+=unpivotColumn)* RIGHT_PAREN unpivotAlias?
     ;
 
 unpivotValueColumn
@@ -665,8 +665,16 @@ unpivotNameColumn
     : identifier
     ;
 
+unpivotColumnAndAlias
+    : unpivotColumn unpivotAlias?
+    ;
+
 unpivotColumn
     : multipartIdentifier
+    ;
+
+unpivotAlias
+    : AS? identifier
     ;
 
 lateralView

@@ -112,17 +112,13 @@ UNPIVOT (
   earningsYear FOR year IN (`2012` as `twenty-twelve`, `2013` as `twenty-thirteen`, `2014` as `twenty-fourteen`)
 )
 -- !query schema
-struct<>
+struct<course:string,year:string,earningsYear:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "error" : "'as'",
-    "hint" : ""
-  }
-}
+Java	twenty-thirteen	30000
+Java	twenty-twelve	20000
+dotNET	twenty-fourteen	22500
+dotNET	twenty-thirteen	48000
+dotNET	twenty-twelve	15000
 
 
 -- !query
@@ -206,6 +202,25 @@ Java	2013	30000	2
 dotNET	2012	15000	2
 dotNET	2013	48000	1
 dotNET	2014	22500	1
+
+
+-- !query
+SELECT * FROM courseEarningsAndSales
+UNPIVOT (
+  (earnings, sales) FOR year IN ((earnings2012 as earnings, sales2012 as sales) as `2012`, (earnings2013 as earnings, sales2013 as sales) as `2013`, (earnings2014 as earnings, sales2014 as sales) as `2014`)
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'as'",
+    "hint" : ""
+  }
+}
 
 
 -- !query

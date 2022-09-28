@@ -1131,12 +1131,13 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val unpivot = if (ctx.unpivotOperator().unpivotSingleValueColumnClause() != null) {
       val unpivotClause = ctx.unpivotOperator().unpivotSingleValueColumnClause()
       val variableColumnName = unpivotClause.unpivotNameColumn().identifier().getText
-      val unpivotColumns = unpivotClause.unpivotColumns.asScala.map(visitUnpivotColumn).toSeq
+      val (unpivotColumns, unpivotAliases) =
+        unpivotClause.unpivotColumns.asScala.map(visitUnpivotColumnAndAlias).toSeq.unzip
 
       Unpivot(
         None,
         Some(unpivotColumns.map(Seq(_))),
-        None,
+        Some(unpivotAliases),
         variableColumnName,
         valueColumnNames,
         query
@@ -1181,6 +1182,15 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   }
 
   /**
+   * Create an Unpivot column as Attribute.
+   */
+  override def visitUnpivotColumnAndAlias(ctx: UnpivotColumnAndAliasContext): (Attribute, Option[String]) = withOrigin(ctx) {
+    val attr = visitUnpivotColumn(ctx.unpivotColumn())
+    val alias = Option(ctx.unpivotAlias()).map(_.identifier().getText)
+    (attr, alias)
+  }
+
+  /**
    * Create an Unpivot struct column with or without an alias.
    * Each struct field is renamed to the respective value column name.
    */
@@ -1188,7 +1198,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   (Seq[Attribute], Option[String]) =
     withOrigin(ctx) {
       val exprs = ctx.unpivotColumns.asScala.map(visitUnpivotColumn).toSeq
-      val alias = Option(ctx.identifier).map(_.getText)
+      val alias = Option(ctx.unpivotAlias()).map(_.identifier().getText)
       (exprs, alias)
     }
 

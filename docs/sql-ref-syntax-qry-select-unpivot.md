@@ -34,7 +34,7 @@ UNPIVOT [ { INCLUDE | EXCLUDE } NULLS ] (
 single_value_column_unpivot:
     values_column
     FOR name_column
-    IN (unpivot_column [, ...])
+    IN (unpivot_column [[AS] alias] [, ...])
 
 multi_value_column_unpivot:
     (values_column [, ...])
@@ -89,7 +89,7 @@ SELECT * FROM sales_quarterly
 -- unpivot result can be referenced via its alias
 SELECT up.* FROM sales_quarterly
     UNPIVOT INCLUDE NULLS (
-        sales FOR quarter IN (q1, q2, q3, q4)
+        sales FOR quarter IN (q1 AS Q1, q2 AS Q2, q3 AS Q3, q4 AS Q4)
     ) AS up;
 +------+---------+-------+
 | year | quarter | sales |
