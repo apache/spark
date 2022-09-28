@@ -59,8 +59,6 @@ if __name__ == "__main__":
         "StructuredNetworkWordCountSessionWindow"
     ).getOrCreate()
 
-    spark.sparkContext.setLogLevel("WARN")
-
     # Create DataFrame representing the stream of input lines from connection to host:port
     lines = (
         spark.readStream.format("socket")
