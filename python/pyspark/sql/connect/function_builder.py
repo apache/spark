@@ -55,7 +55,7 @@ class FunctionBuilder:
 
     def __getattr__(
         self, name: str
-    ) -> Callable[[VarArg(ExpressionOrString)], ScalarFunctionExpression]:
+    ) -> "Callable[[VarArg(ExpressionOrString)], ScalarFunctionExpression]":
         def _(*args: ExpressionOrString) -> ScalarFunctionExpression:
             return _build(name, *args)
 
@@ -105,7 +105,7 @@ class UserDefinedFunction(Expression):
 
 def _create_udf(
     function: Any, return_type: Union[str, pyspark.sql.types.DataType]
-) -> Callable[[VarArg("ColumnOrString")], UserDefinedFunction]:
+) -> 'Callable[[VarArg("ColumnOrString")], UserDefinedFunction]':
     def wrapper(*cols: "ColumnOrString") -> UserDefinedFunction:
         return UserDefinedFunction(func=function, return_type=return_type, args=cols)
 
