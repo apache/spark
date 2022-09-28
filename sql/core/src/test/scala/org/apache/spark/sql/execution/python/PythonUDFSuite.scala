@@ -73,7 +73,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-39962: Global aggregation of Pandas UDF should respect the column order") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val df = Seq[(java.lang.Integer, java.lang.Integer)]((1, null)).toDF("a", "b")
 
     val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
