@@ -81,6 +81,13 @@ object GenericData {
   type IntData = GenericData[Int]
 }
 
+case class NestedGeneric[T](
+  generic: GenericData[T])
+
+case class SeqNestedGeneric[T](
+  generic: Seq[T])
+
+
 case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
@@ -292,6 +299,40 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(schema === Schema(
       StructType(Seq(
         StructField("genericField", IntegerType, nullable = false))),
+      nullable = true))
+  }
+
+  test("SPARK-38681: Nested generic data") {
+    val schema = schemaFor[NestedGeneric[Int]]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField(
+          "generic",
+          StructType(Seq(
+            StructField("genericField", IntegerType, nullable = false))),
+          nullable = true))),
+      nullable = true))
+  }
+
+  test("SPARK-38681: List nested generic") {
+    val schema = schemaFor[SeqNestedGeneric[Int]]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField(
+          "generic",
+          ArrayType(IntegerType, false),
+          nullable = true))),
+      nullable = true))
+  }
+
+  test("SPARK-38681: List nested generic with value class") {
+    val schema = schemaFor[SeqNestedGeneric[IntWrapper]]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField(
+          "generic",
+          ArrayType(StructType(Seq(StructField("i", IntegerType, false))), true),
+          nullable = true))),
       nullable = true))
   }
 

@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.hive.service.cli.{HiveSQLException, OperationHandle}
 
-import org.apache.spark.TaskKilled
+import org.apache.spark.{ErrorMessageFormat, TaskKilled}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -126,20 +126,85 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
       exec(s"set ${SQLConf.ANSI_ENABLED.key}=false")
 
-      val opHandle1 = exec("select current_user(), current_user")
-      val rowSet1 = client.fetchResults(opHandle1)
-      rowSet1.toTRowSet.getColumns.forEach { col =>
-        assert(col.getStringVal.getValues.get(0) === clientUser)
+      val userFuncs = Seq("user", "current_user")
+      userFuncs.foreach { func =>
+        val opHandle1 = exec(s"select $func(), $func")
+        val rowSet1 = client.fetchResults(opHandle1)
+        rowSet1.getColumns.forEach { col =>
+          assert(col.getStringVal.getValues.get(0) === clientUser)
+        }
       }
 
       exec(s"set ${SQLConf.ANSI_ENABLED.key}=true")
       exec(s"set ${SQLConf.ENFORCE_RESERVED_KEYWORDS.key}=true")
-      val opHandle2 = exec("select current_user")
-      assert(client.fetchResults(opHandle2).toTRowSet.getColumns.get(0)
-        .getStringVal.getValues.get(0) === clientUser)
+      userFuncs.foreach { func =>
+        val opHandle2 = exec(s"select $func")
+        assert(client.fetchResults(opHandle2)
+          .getColumns.get(0).getStringVal.getValues.get(0) === clientUser)
+      }
 
-      val e = intercept[HiveSQLException](exec("select current_user()"))
-      assert(e.getMessage.contains("current_user"))
+      userFuncs.foreach { func =>
+        val e = intercept[HiveSQLException](exec(s"select $func()"))
+        assert(e.getMessage.contains(func))
+      }
+    }
+  }
+
+  test("formats of error messages") {
+    val sql = "select 1 / 0"
+    withCLIServiceClient() { client =>
+      val sessionHandle = client.openSession(user, "")
+      val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+      val exec: String => OperationHandle = client.executeStatement(sessionHandle, _, confOverlay)
+
+      exec(s"set ${SQLConf.ANSI_ENABLED.key}=true")
+      exec(s"set ${SQLConf.ERROR_MESSAGE_FORMAT.key}=${ErrorMessageFormat.PRETTY}")
+      val e1 = intercept[HiveSQLException](exec(sql))
+      // scalastyle:off line.size.limit
+      assert(e1.getMessage ===
+        """Error running query: [DIVIDE_BY_ZERO] org.apache.spark.SparkArithmeticException: [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+          |== SQL(line 1, position 8) ==
+          |select 1 / 0
+          |       ^^^^^
+          |""".stripMargin)
+
+      exec(s"set ${SQLConf.ERROR_MESSAGE_FORMAT.key}=${ErrorMessageFormat.MINIMAL}")
+      val e2 = intercept[HiveSQLException](exec(sql))
+      assert(e2.getMessage ===
+        """{
+          |  "errorClass" : "DIVIDE_BY_ZERO",
+          |  "sqlState" : "22012",
+          |  "messageParameters" : {
+          |    "config" : "\"spark.sql.ansi.enabled\""
+          |  },
+          |  "queryContext" : [ {
+          |    "objectType" : "",
+          |    "objectName" : "",
+          |    "startIndex" : 8,
+          |    "stopIndex" : 12,
+          |    "fragment" : "1 / 0"
+          |  } ]
+          |}""".stripMargin)
+
+      exec(s"set ${SQLConf.ERROR_MESSAGE_FORMAT.key}=${ErrorMessageFormat.STANDARD}")
+      val e3 = intercept[HiveSQLException](exec(sql))
+      assert(e3.getMessage ===
+        """{
+          |  "errorClass" : "DIVIDE_BY_ZERO",
+          |  "messageTemplate" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
+          |  "sqlState" : "22012",
+          |  "messageParameters" : {
+          |    "config" : "\"spark.sql.ansi.enabled\""
+          |  },
+          |  "queryContext" : [ {
+          |    "objectType" : "",
+          |    "objectName" : "",
+          |    "startIndex" : 8,
+          |    "stopIndex" : 12,
+          |    "fragment" : "1 / 0"
+          |  } ]
+          |}""".stripMargin)
+      // scalastyle:on line.size.limit
     }
   }
 }

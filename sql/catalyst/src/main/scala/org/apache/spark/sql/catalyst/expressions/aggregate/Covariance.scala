@@ -34,10 +34,10 @@ abstract class Covariance(val left: Expression, val right: Expression, nullOnDiv
   override def dataType: DataType = DoubleType
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
 
-  protected val n = AttributeReference("n", DoubleType, nullable = false)()
-  protected val xAvg = AttributeReference("xAvg", DoubleType, nullable = false)()
-  protected val yAvg = AttributeReference("yAvg", DoubleType, nullable = false)()
-  protected val ck = AttributeReference("ck", DoubleType, nullable = false)()
+  protected[sql] val n = AttributeReference("n", DoubleType, nullable = false)()
+  protected[sql] val xAvg = AttributeReference("xAvg", DoubleType, nullable = false)()
+  protected[sql] val yAvg = AttributeReference("yAvg", DoubleType, nullable = false)()
+  protected[sql] val ck = AttributeReference("ck", DoubleType, nullable = false)()
 
   protected def divideByZeroEvalResult: Expression = {
     if (nullOnDivideByZero) Literal.create(null, DoubleType) else Double.NaN
@@ -142,4 +142,26 @@ case class CovSample(
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): CovSample = copy(left = newLeft, right = newRight)
+}
+
+/**
+ * Covariance in Pandas' fashion. This expression is dedicated only for Pandas API on Spark.
+ * Refer to numpy.cov.
+ */
+case class PandasCovar(
+    override val left: Expression,
+    override val right: Expression,
+    ddof: Int)
+  extends Covariance(left, right, true) {
+
+  override val evaluateExpression: Expression = {
+    If(n === 0.0, Literal.create(null, DoubleType),
+      If(n === ddof, divideByZeroEvalResult, ck / (n - ddof)))
+  }
+  override def prettyName: String = "pandas_covar"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): PandasCovar =
+    copy(left = newLeft, right = newRight)
 }

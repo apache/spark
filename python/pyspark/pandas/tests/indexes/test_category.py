@@ -67,6 +67,13 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(psidx.codes, pd.Index(pidx.codes))
         self.assert_eq(psidx.ordered, pidx.ordered)
 
+        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+            ps.CategoricalIndex([1, 2, 3], name=[(1, 2, 3)])
+        with self.assertRaisesRegexp(
+            TypeError, "Cannot perform 'all' with this index type: CategoricalIndex"
+        ):
+            ps.CategoricalIndex([1, 2, 3]).all()
+
     def test_categories_setter(self):
         pdf = pd.DataFrame(
             {
@@ -82,7 +89,11 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
 
         pidx.categories = ["z", "y", "x"]
         psidx.categories = ["z", "y", "x"]
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
+        # Pandas deprecated all the in-place category-setting behaviors, dtypes also not be
+        # refreshed in categories.setter since Pandas 1.4+, we should also consider to clean up
+        # this test when in-place category-setting removed:
+        # https://github.com/pandas-dev/pandas/issues/46820
+        if LooseVersion("1.4") >= LooseVersion(pd.__version__) >= LooseVersion("1.1"):
             self.assert_eq(pidx, psidx)
             self.assert_eq(pdf, psdf)
         else:

@@ -29,22 +29,18 @@ def _unsupported_property(property_name, deprecated=False, reason=""):
     )
 
 
-class _MissingPandasLikeDataFrame:
+class MissingPandasLikeDataFrame:
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
+    # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Functions
     asfreq = _unsupported_function("asfreq")
     asof = _unsupported_function("asof")
-    boxplot = _unsupported_function("boxplot")
     combine = _unsupported_function("combine")
     compare = _unsupported_function("compare")
     convert_dtypes = _unsupported_function("convert_dtypes")
-    corrwith = _unsupported_function("corrwith")
-    ewm = _unsupported_function("ewm")
     infer_objects = _unsupported_function("infer_objects")
-    interpolate = _unsupported_function("interpolate")
-    mode = _unsupported_function("mode")
     reorder_levels = _unsupported_function("reorder_levels")
-    resample = _unsupported_function("resample")
     set_axis = _unsupported_function("set_axis")
     to_feather = _unsupported_function("to_feather")
     to_gbq = _unsupported_function("to_gbq")

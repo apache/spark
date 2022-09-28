@@ -838,9 +838,11 @@ private[spark] class BlockStatusPerBlockId {
   }
 
   def remove(blockId: BlockId): Unit = {
-    blocks.remove(blockId)
-    if (blocks.isEmpty) {
-      blocks = null
+    if (blocks != null) {
+      blocks.remove(blockId)
+      if (blocks.isEmpty) {
+        blocks = null
+      }
     }
   }
 

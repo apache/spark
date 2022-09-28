@@ -37,15 +37,33 @@ trait LimitExec extends UnaryExecNode {
 }
 
 /**
- * Take the first `limit` elements and collect them to a single partition.
+ * Take the first `limit` elements, collect them to a single partition and then to drop the
+ * first `offset` elements.
  *
- * This operator will be used when a logical `Limit` operation is the final operator in an
- * logical plan, which happens when the user is collecting results back to the driver.
+ * This operator will be used when a logical `Limit` and/or `Offset` operation is the final operator
+ * in an logical plan, which happens when the user is collecting results back to the driver.
  */
-case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
+case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) extends LimitExec {
+  assert(limit >= 0 || (limit == -1 && offset > 0))
+
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
-  override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
+  override def executeCollect(): Array[InternalRow] = {
+    // Because CollectLimitExec collect all the output of child to a single partition, so we need
+    // collect the first `limit` + `offset` elements and then to drop the first `offset` elements.
+    // For example: limit is 1 and offset is 2 and the child output two partition.
+    // The first partition output [1, 2] and the Second partition output [3, 4, 5].
+    // Then [1, 2, 3] will be taken and output [3].
+    if (limit >= 0) {
+      if (offset > 0) {
+        child.executeTake(limit).drop(offset)
+      } else {
+        child.executeTake(limit)
+      }
+    } else {
+      child.executeCollect().drop(offset)
+    }
+  }
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
@@ -60,7 +78,11 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
       val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
         childRDD
       } else {
-        val locallyLimited = childRDD.mapPartitionsInternal(_.take(limit))
+        val locallyLimited = if (limit >= 0) {
+          childRDD.mapPartitionsInternal(_.take(limit))
+        } else {
+          childRDD
+        }
         new ShuffledRowRDD(
           ShuffleExchangeExec.prepareShuffleDependency(
             locallyLimited,
@@ -70,8 +92,23 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
             writeMetrics),
           readMetrics)
       }
-      singlePartitionRDD.mapPartitionsInternal(_.take(limit))
+      if (limit >= 0) {
+        if (offset > 0) {
+          singlePartitionRDD.mapPartitionsInternal(_.slice(offset, limit))
+        } else {
+          singlePartitionRDD.mapPartitionsInternal(_.take(limit))
+        }
+      } else {
+        singlePartitionRDD.mapPartitionsInternal(_.drop(offset))
+      }
     }
+  }
+
+  override def stringArgs: Iterator[Any] = {
+    super.stringArgs.zipWithIndex.filter {
+      case (0, 2) => false
+      case _ => true
+    }.map(_._1)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
@@ -123,8 +160,8 @@ trait BaseLimitExec extends LimitExec with CodegenSupport {
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    iter.take(limit)
+  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitionsInternal {
+    iter => iter.take(limit)
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -135,10 +172,12 @@ trait BaseLimitExec extends LimitExec with CodegenSupport {
   // to the parent operator.
   override def usedInputs: AttributeSet = AttributeSet.empty
 
-  private lazy val countTerm = BaseLimitExec.newLimitCountTerm()
+  protected lazy val countTerm = BaseLimitExec.newLimitCountTerm()
 
-  override lazy val limitNotReachedChecks: Seq[String] = {
+  override lazy val limitNotReachedChecks: Seq[String] = if (limit >= 0) {
     s"$countTerm < $limit" +: super.limitNotReachedChecks
+  } else {
+    super.limitNotReachedChecks
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
@@ -172,20 +211,63 @@ case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
 }
 
 /**
- * Take the first `limit` elements of the child's single output partition.
+ * Take the first `limit` elements and then drop the first `offset` elements in the child's single
+ * output partition.
  */
-case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
+case class GlobalLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0)
+  extends BaseLimitExec {
+  assert(limit >= 0 || (limit == -1 && offset > 0))
 
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
+
+  override def doExecute(): RDD[InternalRow] = {
+    if (offset > 0) {
+      if (limit >= 0) {
+        child.execute().mapPartitionsInternal(iter => iter.slice(offset, limit))
+      } else {
+        child.execute().mapPartitionsInternal(iter => iter.drop(offset))
+      }
+    } else {
+      super.doExecute()
+    }
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    if (offset > 0) {
+      val skipTerm = ctx.addMutableState(CodeGenerator.JAVA_INT, "rowsSkipped", forceInline = true)
+      if (limit > 0) {
+        // In codegen, we skip the first `offset` rows, then take the first `limit - offset` rows.
+        val finalLimit = limit - offset
+        s"""
+           | if ($skipTerm < $offset) {
+           |   $skipTerm += 1;
+           | } else if ($countTerm < $finalLimit) {
+           |   $countTerm += 1;
+           |   ${consume(ctx, input)}
+           | }
+         """.stripMargin
+      } else {
+        s"""
+           | if ($skipTerm < $offset) {
+           |   $skipTerm += 1;
+           | } else {
+           |   ${consume(ctx, input)}
+           | }
+         """.stripMargin
+      }
+    } else {
+      super.doConsume(ctx, input, row)
+    }
+  }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 }
 
 /**
- * Take the first limit elements as defined by the sortOrder, and do projection if needed.
- * This is logically equivalent to having a Limit operator after a [[SortExec]] operator,
- * or having a [[ProjectExec]] operator between them.
+ * Take the first `limit` elements as defined by the sortOrder, then drop the first `offset`
+ * elements, and do projection if needed. This is logically equivalent to having a Limit and/or
+ * Offset operator after a [[SortExec]] operator, or having a [[ProjectExec]] operator between them.
  * This could have been named TopK, but Spark's top operator does the opposite in ordering
  * so we name it TakeOrdered to avoid confusion.
  */
@@ -193,15 +275,22 @@ case class TakeOrderedAndProjectExec(
     limit: Int,
     sortOrder: Seq[SortOrder],
     projectList: Seq[NamedExpression],
-    child: SparkPlan) extends UnaryExecNode {
+    child: SparkPlan,
+    offset: Int = 0) extends AliasAwareOutputOrdering {
 
   override def output: Seq[Attribute] = {
     projectList.map(_.toAttribute)
   }
 
   override def executeCollect(): Array[InternalRow] = {
+    val orderingSatisfies = SortOrder.orderingSatisfies(child.outputOrdering, sortOrder)
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
-    val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
+    val limited = if (orderingSatisfies) {
+      child.execute().mapPartitionsInternal(_.map(_.copy()).take(limit)).takeOrdered(limit)(ord)
+    } else {
+      child.execute().mapPartitionsInternal(_.map(_.copy())).takeOrdered(limit)(ord)
+    }
+    val data = if (offset > 0) limited.drop(offset) else limited
     if (projectList != child.output) {
       val proj = UnsafeProjection.create(projectList, child.output)
       data.map(r => proj(r).copy())
@@ -219,6 +308,7 @@ case class TakeOrderedAndProjectExec(
   override lazy val metrics = readMetrics ++ writeMetrics
 
   protected override def doExecute(): RDD[InternalRow] = {
+    val orderingSatisfies = SortOrder.orderingSatisfies(child.outputOrdering, sortOrder)
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val childRDD = child.execute()
     if (childRDD.getNumPartitions == 0) {
@@ -227,9 +317,14 @@ case class TakeOrderedAndProjectExec(
       val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
         childRDD
       } else {
-        val localTopK = childRDD.mapPartitions { iter =>
-          Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
+        val localTopK = if (orderingSatisfies) {
+          childRDD.mapPartitionsInternal(_.map(_.copy()).take(limit))
+        } else {
+          childRDD.mapPartitionsInternal { iter =>
+            Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
+          }
         }
+
         new ShuffledRowRDD(
           ShuffleExchangeExec.prepareShuffleDependency(
             localTopK,
@@ -239,8 +334,9 @@ case class TakeOrderedAndProjectExec(
             writeMetrics),
           readMetrics)
       }
-      singlePartitionRDD.mapPartitions { iter =>
-        val topK = Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
+      singlePartitionRDD.mapPartitionsInternal { iter =>
+        val limited = Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
+        val topK = if (offset > 0) limited.drop(offset) else limited
         if (projectList != child.output) {
           val proj = UnsafeProjection.create(projectList, child.output)
           topK.map(r => proj(r))
@@ -251,7 +347,9 @@ case class TakeOrderedAndProjectExec(
     }
   }
 
-  override def outputOrdering: Seq[SortOrder] = sortOrder
+  override protected def outputExpressions: Seq[NamedExpression] = projectList
+
+  override protected def orderingExpressions: Seq[SortOrder] = sortOrder
 
   override def outputPartitioning: Partitioning = SinglePartition
 
@@ -260,6 +358,13 @@ case class TakeOrderedAndProjectExec(
     val outputString = truncatedString(output, "[", ",", "]", maxFields)
 
     s"TakeOrderedAndProject(limit=$limit, orderBy=$orderByString, output=$outputString)"
+  }
+
+  override def stringArgs: Iterator[Any] = {
+    super.stringArgs.zipWithIndex.filter {
+      case (0, 4) => false
+      case _ => true
+    }.map(_._1)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =

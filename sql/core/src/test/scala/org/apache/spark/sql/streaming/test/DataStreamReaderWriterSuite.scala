@@ -554,8 +554,8 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         for (i <- 1 to length.toInt) yield i.toString
       }
       spark.range(4)
-        .select(createArray(Symbol("id") + 1) as Symbol("ex"), Symbol("id"),
-          Symbol("id") % 4 as Symbol("part"))
+        .select(createArray($"id" + 1) as Symbol("ex"), $"id",
+          $"id" % 4 as Symbol("part"))
         .coalesce(1).write
         .partitionBy("part", "id")
         .mode("overwrite")
@@ -608,7 +608,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
             .stop()
           assert(checkpointPath.listFiles().isEmpty,
             "SQLConf path is used even if user specified checkpointLoc: " +
-              s"${checkpointPath.listFiles()} is not empty")
+              s"${checkpointPath.listFiles().mkString("Locations(", ", ", ")")} is not empty")
           assert(userCheckpointPath.exists(),
             s"The user specified checkpointLoc (userCheckpointPath) is not created")
         }

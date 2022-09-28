@@ -857,52 +857,65 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   }
 
   test("SPARK-35531: Insert data with different cases of bucket column") {
-    withTable("test1") {
-      Seq(true, false).foreach { isHiveTable =>
-        val createSpark = if (isHiveTable) {
-          """
-            |CREATE TABLE TEST1(
-            |v1 BIGINT,
-            |s1 INT)
-            |PARTITIONED BY (pk BIGINT)
-            |CLUSTERED BY (v1)
-            |SORTED BY (s1)
-            |INTO 200 BUCKETS
-            |STORED AS PARQUET
-        """.stripMargin
-        } else {
-          """
-            |CREATE TABLE test1(
-            |v1 BIGINT,
-            |s1 INT)
-            |USING PARQUET
-            |PARTITIONED BY (pk BIGINT)
-            |CLUSTERED BY (v1)
-            |SORTED BY (s1)
-            |INTO 200 BUCKETS
-        """.stripMargin
+    def testDefaultColumn: Unit = {
+      withTable("test1") {
+        Seq(true, false).foreach { isHiveTable =>
+          val createSpark = if (isHiveTable) {
+            """
+              |CREATE TABLE TEST1(
+              |v1 BIGINT,
+              |s1 INT)
+              |PARTITIONED BY (pk BIGINT)
+              |CLUSTERED BY (v1)
+              |SORTED BY (s1)
+              |INTO 200 BUCKETS
+              |STORED AS PARQUET
+          """.stripMargin
+          } else {
+            """
+              |CREATE TABLE test1(
+              |v1 BIGINT,
+              |s1 INT)
+              |USING PARQUET
+              |PARTITIONED BY (pk BIGINT)
+              |CLUSTERED BY (v1)
+              |SORTED BY (s1)
+              |INTO 200 BUCKETS
+          """.stripMargin
+          }
+
+          val insertString =
+            """
+              |INSERT INTO test1
+              |SELECT * FROM VALUES(1,1,1)
+          """.stripMargin
+
+          val dropString = "DROP TABLE IF EXISTS test1"
+
+          sql(dropString)
+          sql(createSpark.toLowerCase(Locale.ROOT))
+
+          sql(insertString.toLowerCase(Locale.ROOT))
+          sql(insertString.toUpperCase(Locale.ROOT))
+
+          sql(dropString)
+          sql(createSpark.toUpperCase(Locale.ROOT))
+
+          sql(insertString.toLowerCase(Locale.ROOT))
+          sql(insertString.toUpperCase(Locale.ROOT))
         }
-
-        val insertString =
-          """
-            |INSERT INTO test1
-            |SELECT * FROM VALUES(1,1,1)
-        """.stripMargin
-
-        val dropString = "DROP TABLE IF EXISTS test1"
-
-        sql(dropString)
-        sql(createSpark.toLowerCase(Locale.ROOT))
-
-        sql(insertString.toLowerCase(Locale.ROOT))
-        sql(insertString.toUpperCase(Locale.ROOT))
-
-        sql(dropString)
-        sql(createSpark.toUpperCase(Locale.ROOT))
-
-        sql(insertString.toLowerCase(Locale.ROOT))
-        sql(insertString.toUpperCase(Locale.ROOT))
       }
+    }
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+      testDefaultColumn
+    }
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true",
+      SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      testDefaultColumn
+    }
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true",
+      SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
+      testDefaultColumn
     }
   }
 }

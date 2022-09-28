@@ -30,18 +30,15 @@ def _unsupported_property(property_name, deprecated=False, reason=""):
 
 
 class MissingPandasLikeSeries:
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
+    # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Functions
     asfreq = _unsupported_function("asfreq")
-    autocorr = _unsupported_function("autocorr")
     combine = _unsupported_function("combine")
     convert_dtypes = _unsupported_function("convert_dtypes")
-    ewm = _unsupported_function("ewm")
     infer_objects = _unsupported_function("infer_objects")
-    interpolate = _unsupported_function("interpolate")
     reorder_levels = _unsupported_function("reorder_levels")
-    resample = _unsupported_function("resample")
-    searchsorted = _unsupported_function("searchsorted")
     set_axis = _unsupported_function("set_axis")
     to_hdf = _unsupported_function("to_hdf")
     to_period = _unsupported_function("to_period")
@@ -59,7 +56,6 @@ class MissingPandasLikeSeries:
 
     # Properties we won't support.
     array = common.array(_unsupported_property)
-    duplicated = common.duplicated(_unsupported_property)
     nbytes = _unsupported_property(
         "nbytes",
         reason="'nbytes' requires to compute whole dataset. You can calculate manually it, "

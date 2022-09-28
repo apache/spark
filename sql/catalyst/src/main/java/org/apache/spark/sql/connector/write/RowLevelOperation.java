@@ -34,6 +34,8 @@ public interface RowLevelOperation {
 
   /**
    * A row-level SQL command.
+   *
+   * @since 3.3.0
    */
   enum Command {
     DELETE, UPDATE, MERGE

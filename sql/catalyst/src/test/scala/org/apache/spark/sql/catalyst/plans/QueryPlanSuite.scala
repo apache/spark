@@ -97,7 +97,7 @@ class QueryPlanSuite extends SparkFunSuite {
       }
     }
 
-    val t = LocalRelation('a.int, 'b.int)
+    val t = LocalRelation($"a".int, $"b".int)
     val plan = t.select($"a", $"b").select($"a", $"b").select($"a", $"b").analyze
     assert(testRule(plan).resolved)
   }
@@ -147,10 +147,10 @@ class QueryPlanSuite extends SparkFunSuite {
     // Test a Left Outer Join plan in which right-hand-side input attributes are not nullable.
     // Those attributes should be nullable after join even with a `transformUpWithNewOutput`
     // started below the Left Outer join.
-    val t1 = LocalRelation('a.int.withNullability(false),
-      'b.int.withNullability(false), 'c.int.withNullability(false))
-    val t2 = LocalRelation('c.int.withNullability(false),
-      'd.int.withNullability(false), 'e.int.withNullability(false))
+    val t1 = LocalRelation($"a".int.withNullability(false),
+      $"b".int.withNullability(false), $"c".int.withNullability(false))
+    val t2 = LocalRelation($"c".int.withNullability(false),
+      $"d".int.withNullability(false), $"e".int.withNullability(false))
     val plan = t1.select($"a", $"b")
       .join(t2.select($"c", $"d"), LeftOuter, Some($"a" === $"c"))
       .select($"a" + $"d").analyze

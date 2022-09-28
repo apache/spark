@@ -606,6 +606,8 @@ private[spark] object SparkConf extends Logging {
         "Please use the new excludedOnFailure options, spark.excludeOnFailure.*"),
       DeprecatedConfig("spark.yarn.am.port", "2.0.0", "Not used anymore"),
       DeprecatedConfig("spark.executor.port", "2.0.0", "Not used anymore"),
+      DeprecatedConfig("spark.rpc.numRetries", "2.2.0", "Not used anymore"),
+      DeprecatedConfig("spark.rpc.retry.wait", "2.2.0", "Not used anymore"),
       DeprecatedConfig("spark.shuffle.service.index.cache.entries", "2.3.0",
         "Not used anymore. Please use spark.shuffle.service.index.cache.size"),
       DeprecatedConfig("spark.yarn.credentials.file.retention.count", "2.4.0", "Not used anymore."),
@@ -636,9 +638,7 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.blacklist.killBlacklistedExecutors", "3.1.0",
         "Please use spark.excludeOnFailure.killExcludedExecutors"),
       DeprecatedConfig("spark.yarn.blacklist.executor.launch.blacklisting.enabled", "3.1.0",
-        "Please use spark.yarn.executor.launch.excludeOnFailure.enabled"),
-      DeprecatedConfig("spark.kubernetes.memoryOverheadFactor", "3.3.0",
-        "Please use spark.driver.memoryOverheadFactor and spark.executor.memoryOverheadFactor")
+        "Please use spark.yarn.executor.launch.excludeOnFailure.enabled")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -682,22 +682,12 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.io.compression.snappy.block.size", "1.4")),
     IO_COMPRESSION_LZ4_BLOCKSIZE.key -> Seq(
       AlternateConfig("spark.io.compression.lz4.block.size", "1.4")),
-    RPC_NUM_RETRIES.key -> Seq(
-      AlternateConfig("spark.akka.num.retries", "1.4")),
-    RPC_RETRY_WAIT.key -> Seq(
-      AlternateConfig("spark.akka.retry.wait", "1.4")),
-    RPC_ASK_TIMEOUT.key -> Seq(
-      AlternateConfig("spark.akka.askTimeout", "1.4")),
-    RPC_LOOKUP_TIMEOUT.key -> Seq(
-      AlternateConfig("spark.akka.lookupTimeout", "1.4")),
     "spark.streaming.fileStream.minRememberDuration" -> Seq(
       AlternateConfig("spark.streaming.minRememberDuration", "1.5")),
     "spark.yarn.max.executor.failures" -> Seq(
       AlternateConfig("spark.yarn.max.worker.failures", "1.5")),
     MEMORY_OFFHEAP_ENABLED.key -> Seq(
       AlternateConfig("spark.unsafe.offHeap", "1.6")),
-    RPC_MESSAGE_MAX_SIZE.key -> Seq(
-      AlternateConfig("spark.akka.frameSize", "1.6")),
     "spark.yarn.jars" -> Seq(
       AlternateConfig("spark.yarn.jar", "2.0")),
     MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key -> Seq(
@@ -783,11 +773,6 @@ private[spark] object SparkConf extends Logging {
         s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
         s"may be removed in the future. Please use the new key '$newKey' instead.")
       return
-    }
-    if (key.startsWith("spark.akka") || key.startsWith("spark.ssl.akka")) {
-      logWarning(
-        s"The configuration key $key is not supported anymore " +
-          s"because Spark doesn't use Akka since 2.0")
     }
   }
 

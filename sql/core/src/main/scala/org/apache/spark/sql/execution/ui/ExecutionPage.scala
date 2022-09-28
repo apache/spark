@@ -171,7 +171,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       <span class="collapse-sql-properties collapse-table"
             onClick="collapseTable('collapse-sql-properties', 'sql-properties')">
         <span class="collapse-table-arrow arrow-closed"></span>
-        <a>SQL Properties</a>
+        <a>SQL / DataFrame Properties</a>
       </span>
       <div class="sql-properties collapsible-table collapsed">
         {configs}

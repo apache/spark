@@ -45,16 +45,16 @@ import org.apache.spark.tags.DockerTest
  * A sequence of commands to build the Oracle XE database container image:
  *  $ git clone https://github.com/oracle/docker-images.git
  *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles
- *  $ ./buildContainerImage.sh -v 18.4.0 -x
- *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:18.4.0-xe
+ *  $ ./buildContainerImage.sh -v 21.3.0 -x
+ *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:21.3.0-xe
  *
- * This procedure has been validated with Oracle 18.4.0 Express Edition.
+ * This procedure has been validated with Oracle 18.4.0 and 21.3.0 Express Edition.
  */
 @DockerTest
 class OracleNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceTest {
   override val db = new DatabaseOnDocker {
     lazy override val imageName =
-      sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-xe:18.4.0")
+      sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-xe:21.3.0")
     val oracle_password = "Th1s1sThe0racle#Pass"
     override val env = Map(
       "ORACLE_PWD" -> oracle_password,      // oracle images uses this

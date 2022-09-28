@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.IOException
 import java.lang.reflect.InvocationTargetException
+import java.net.URI
 import java.util
 import java.util.Locale
 
@@ -283,7 +284,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // about not case preserving and make Hive serde table and view support mixed-case column
         // names.
         properties = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition))
-      client.createTable(tableWithDataSourceProps, ignoreIfExists)
+      try {
+        client.createTable(tableWithDataSourceProps, ignoreIfExists)
+      } catch {
+        case NonFatal(e) if (tableDefinition.tableType == CatalogTableType.VIEW) =>
+          // If for some reason we fail to store the schema we store it as empty there
+          // since we already store the real schema in the table properties. This try-catch
+          // should only be necessary for Spark views which are incompatible with Hive
+          client.createTable(
+            tableWithDataSourceProps.copy(schema = EMPTY_DATA_SCHEMA),
+            ignoreIfExists)
+      }
     }
   }
 
@@ -842,10 +853,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // source tables. Here we set the table location to `locationUri` field and filter out the
     // path option in storage properties, to avoid exposing this concept externally.
     val storageWithLocation = {
-      val tableLocation = getLocationFromStorageProps(table)
+      val tableLocation = getLocationFromStorageProps(table).map { path =>
+        // Before SPARK-19257, created data source table does not use absolute uri.
+        // This makes Spark can't read these tables across HDFS clusters.
+        // Rewrite table path to absolute uri based on location uri (The location uri has been
+        // rewritten by HiveClientImpl.convertHiveTableToCatalogTable) to fix this issue.
+        toAbsoluteURI(CatalogUtils.stringToURI(path), table.storage.locationUri)
+      }
       // We pass None as `newPath` here, to remove the path option in storage properties.
-      updateLocationInStorageProps(table, newPath = None).copy(
-        locationUri = tableLocation.map(CatalogUtils.stringToURI(_)))
+      updateLocationInStorageProps(table, newPath = None).copy(locationUri = tableLocation)
     }
     val storageWithoutHiveGeneratedProperties = storageWithLocation.copy(properties =
       storageWithLocation.properties.filterKeys(!HIVE_GENERATED_STORAGE_PROPERTIES(_)).toMap)
@@ -1280,11 +1296,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       predicates: Seq[Expression],
       defaultTimeZoneId: String): Seq[CatalogTablePartition] = withClient {
-    val rawTable = getRawTable(db, table)
-    val catalogTable = restoreTableMetadata(rawTable)
+    val rawHiveTable = client.getRawHiveTable(db, table)
+    val catalogTable = restoreTableMetadata(rawHiveTable.toCatalogTable)
     val partColNameMap = buildLowerCasePartColNameMap(catalogTable)
     val clientPrunedPartitions =
-      client.getPartitionsByFilter(rawTable, predicates).map { part =>
+      client.getPartitionsByFilter(rawHiveTable, predicates).map { part =>
         part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
       }
     prunePartitionsByFilter(catalogTable, clientPrunedPartitions, predicates, defaultTimeZoneId)
@@ -1431,5 +1447,20 @@ object HiveExternalCatalog {
     case m: MapType =>
       isHiveCompatibleDataType(m.keyType) && isHiveCompatibleDataType(m.valueType)
     case _ => true
+  }
+
+  /** Rewrite uri to absolute location. For example:
+   *    uri: /user/hive/warehouse/test_table
+   *    absoluteUri: viewfs://clusterA/user/hive/warehouse/
+   *    The result is: viewfs://clusterA/user/hive/warehouse/test_table
+   */
+  private[spark] def toAbsoluteURI(uri: URI, absoluteUri: Option[URI]): URI = {
+    if (!uri.isAbsolute && absoluteUri.isDefined) {
+      val aUri = absoluteUri.get
+      new URI(aUri.getScheme, aUri.getUserInfo, aUri.getHost, aUri.getPort,
+        uri.getPath, uri.getQuery, uri.getFragment)
+    } else {
+      uri
+    }
   }
 }

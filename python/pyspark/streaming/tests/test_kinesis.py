@@ -18,7 +18,7 @@ import time
 import unittest
 
 from pyspark import StorageLevel
-from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
+from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream, MetricsLevel
 from pyspark.testing.streamingutils import (
     should_test_kinesis,
     kinesis_requirement_message,
@@ -38,6 +38,7 @@ class KinesisStreamTests(PySparkStreamingTestCase):
             "us-west-2",
             InitialPositionInStream.LATEST,
             2,
+            MetricsLevel.DETAILED,
             StorageLevel.MEMORY_AND_DISK_2,
         )
         KinesisUtils.createStream(
@@ -48,6 +49,7 @@ class KinesisStreamTests(PySparkStreamingTestCase):
             "us-west-2",
             InitialPositionInStream.LATEST,
             2,
+            MetricsLevel.DETAILED,
             StorageLevel.MEMORY_AND_DISK_2,
             "awsAccessKey",
             "awsSecretKey",
@@ -69,6 +71,7 @@ class KinesisStreamTests(PySparkStreamingTestCase):
                 kinesisTestUtils.regionName(),
                 InitialPositionInStream.LATEST,
                 10,
+                MetricsLevel.DETAILED,
                 StorageLevel.MEMORY_ONLY,
                 aWSCredentials.getAWSAccessKeyId(),
                 aWSCredentials.getAWSSecretKey(),

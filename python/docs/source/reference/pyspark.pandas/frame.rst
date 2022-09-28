@@ -147,9 +147,11 @@ Computations / Descriptive Stats
    DataFrame.any
    DataFrame.clip
    DataFrame.corr
+   DataFrame.corrwith
    DataFrame.count
    DataFrame.cov
    DataFrame.describe
+   DataFrame.ewm
    DataFrame.kurt
    DataFrame.kurtosis
    DataFrame.mad
@@ -157,6 +159,7 @@ Computations / Descriptive Stats
    DataFrame.mean
    DataFrame.min
    DataFrame.median
+   DataFrame.mode
    DataFrame.pct_change
    DataFrame.prod
    DataFrame.product
@@ -218,6 +221,7 @@ Missing data handling
    DataFrame.replace
    DataFrame.bfill
    DataFrame.ffill
+   DataFrame.interpolate
 
 Reshaping, sorting, transposing
 -------------------------------
@@ -258,6 +262,7 @@ Time series-related
 .. autosummary::
    :toctree: api/
 
+   DataFrame.resample
    DataFrame.shift
    DataFrame.first_valid_index
    DataFrame.last_valid_index
@@ -321,11 +326,13 @@ specific plotting methods of the form ``DataFrame.plot.<kind>``.
    DataFrame.plot.barh
    DataFrame.plot.bar
    DataFrame.plot.hist
+   DataFrame.plot.box
    DataFrame.plot.line
    DataFrame.plot.pie
    DataFrame.plot.scatter
    DataFrame.plot.density
    DataFrame.hist
+   DataFrame.boxplot
    DataFrame.kde
 
 Pandas-on-Spark specific

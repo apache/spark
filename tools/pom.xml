@@ -30,7 +30,7 @@
   </properties>
   <packaging>jar</packaging>
   <name>Spark Project Tools</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
 
   <dependencies>
     <dependency>

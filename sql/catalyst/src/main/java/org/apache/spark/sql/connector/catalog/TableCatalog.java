@@ -48,6 +48,12 @@ public interface TableCatalog extends CatalogPlugin {
   String PROP_LOCATION = "location";
 
   /**
+   * A reserved property to indicate that the table location is managed, not user-specified.
+   * If this property is "true", SHOW CREATE TABLE will not generate the LOCATION clause.
+   */
+  String PROP_IS_MANAGED_LOCATION = "is_managed_location";
+
+  /**
    * A reserved property to specify a table was created with EXTERNAL.
    */
   String PROP_EXTERNAL = "external";

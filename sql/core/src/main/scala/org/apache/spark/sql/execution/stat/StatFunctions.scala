@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GenericInternalRow, GetArrayItem, Literal, TryCast}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EvalMode, Expression, GenericInternalRow, GetArrayItem, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, QuantileSummaries}
@@ -30,6 +30,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.collection.Utils
 
 object StatFunctions extends Logging {
 
@@ -198,7 +199,7 @@ object StatFunctions extends Logging {
     }
     // get the distinct sorted values of column 2, so that we can make them the column names
     val distinctCol2: Map[Any, Int] =
-      counts.map(e => cleanElement(e.get(1))).distinct.sorted.zipWithIndex.toMap
+      Utils.toMapWithIndex(counts.map(e => cleanElement(e.get(1))).distinct.sorted)
     val columnSize = distinctCol2.size
     require(columnSize < 1e4, s"The number of distinct values for $col2, can't " +
       s"exceed 1e4. Currently $columnSize")
@@ -247,7 +248,7 @@ object StatFunctions extends Logging {
     require(percentiles.forall(p => p >= 0 && p <= 1), "Percentiles must be in the range [0, 1]")
 
     def castAsDoubleIfNecessary(e: Expression): Expression = if (e.dataType == StringType) {
-      TryCast(e, DoubleType)
+      Cast(e, DoubleType, evalMode = EvalMode.TRY)
     } else {
       e
     }

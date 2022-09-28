@@ -70,7 +70,6 @@ class WorkerTests(ReusedPySparkTestCase):
                 try:
                     daemon_pid, worker_pid = map(int, data)
                 except ValueError:
-                    pass
                     # In case the value is not written yet.
                     cnt += 1
                     if cnt == 10:

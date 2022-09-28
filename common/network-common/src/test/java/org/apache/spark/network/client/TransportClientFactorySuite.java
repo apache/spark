@@ -218,11 +218,12 @@ public class TransportClientFactorySuite {
     }
   }
 
-  @Test(expected = IOException.class)
-  public void closeFactoryBeforeCreateClient() throws IOException, InterruptedException {
+  @Test
+  public void closeFactoryBeforeCreateClient() {
     TransportClientFactory factory = context.createClientFactory();
     factory.close();
-    factory.createClient(TestUtils.getLocalHost(), server1.getPort());
+    Assert.assertThrows(IOException.class,
+      () -> factory.createClient(TestUtils.getLocalHost(), server1.getPort()));
   }
 
   @Test

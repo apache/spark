@@ -515,7 +515,12 @@ object StateStore extends Logging {
           val checker = new StateSchemaCompatibilityChecker(storeProviderId, hadoopConf)
           // regardless of configuration, we check compatibility to at least write schema file
           // if necessary
-          val ret = Try(checker.check(keySchema, valueSchema)).toEither.fold(Some(_), _ => None)
+          // if the format validation for value schema is disabled, we also disable the schema
+          // compatibility checker for value schema as well.
+          val ret = Try(
+            checker.check(keySchema, valueSchema,
+              ignoreValueSchema = !storeConf.formatValidationCheckValue)
+          ).toEither.fold(Some(_), _ => None)
           if (storeConf.stateSchemaCheckEnabled) {
             ret
           } else {
@@ -596,9 +601,8 @@ object StateStore extends Logging {
     }
     loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
       try {
-        if (verifyIfStoreInstanceActive(id)) {
-          provider.doMaintenance()
-        } else {
+        provider.doMaintenance()
+        if (!verifyIfStoreInstanceActive(id)) {
           unload(id)
           logInfo(s"Unloaded $provider")
         }

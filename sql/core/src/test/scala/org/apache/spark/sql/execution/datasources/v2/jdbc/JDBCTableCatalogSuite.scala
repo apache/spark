@@ -35,7 +35,6 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
   val defaultMetadata = new MetadataBuilder().putLong("scale", 0).build()
-  var conn: java.sql.Connection = null
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.h2", classOf[JDBCTableCatalog].getName)
@@ -83,9 +82,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people", false)))
     Seq(
       "h2.test.not_existing_table" ->
-        "Table or view not found: h2.test.not_existing_table",
+        "Table h2.test.not_existing_table not found",
       "h2.bad_test.not_existing_table" ->
-        "Table or view not found: h2.bad_test.not_existing_table"
+        "Table h2.bad_test.not_existing_table not found"
     ).foreach { case (table, expectedMsg) =>
       val msg = intercept[AnalysisException] {
         sql(s"DROP TABLE $table")

@@ -29,19 +29,17 @@ import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
 import org.scalactic.source.Position
-import org.scalatest.{BeforeAndAfterAll, Tag}
+import org.scalatest.Tag
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher._
 import org.apache.spark.util.Utils
 
-abstract class BaseYarnClusterSuite
-  extends SparkFunSuite with BeforeAndAfterAll with Matchers with Logging {
+abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
   private var isBindSuccessful = true
 
   // log4j configuration for the YARN containers, so that their output is collected
@@ -53,7 +51,7 @@ abstract class BaseYarnClusterSuite
     |appender.console.name = console
     |appender.console.target = SYSTEM_ERR
     |appender.console.layout.type = PatternLayout
-    |appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+    |appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n%ex
     |logger.jetty.name = org.sparkproject.jetty
     |logger.jetty.level = warn
     |logger.eclipse.name = org.eclipse.jetty
@@ -87,7 +85,7 @@ abstract class BaseYarnClusterSuite
     logConfDir = new File(tempDir, "log4j")
     logConfDir.mkdir()
 
-    val logConfFile = new File(logConfDir, "log4j.properties")
+    val logConfFile = new File(logConfDir, "log4j2.properties")
     Files.write(LOG4J_CONF, logConfFile, StandardCharsets.UTF_8)
 
     // Disable the disk utilization check to avoid the test hanging when people's disks are
@@ -105,6 +103,9 @@ abstract class BaseYarnClusterSuite
     yarnConf.set("yarn.scheduler.capacity.root.default.acl_submit_applications", "*")
     yarnConf.set("yarn.scheduler.capacity.root.default.acl_administer_queue", "*")
     yarnConf.setInt("yarn.scheduler.capacity.node-locality-delay", -1)
+
+    // Support both IPv4 and IPv6
+    yarnConf.set("yarn.resourcemanager.hostname", Utils.localHostNameForURI())
 
     try {
       yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
@@ -133,7 +134,7 @@ abstract class BaseYarnClusterSuite
     // done so in a timely manner (defined to be 10 seconds).
     val config = yarnCluster.getConfig()
     val startTimeNs = System.nanoTime()
-    while (config.get(YarnConfiguration.RM_ADDRESS).split(":")(1) == "0") {
+    while (config.get(YarnConfiguration.RM_ADDRESS).split(":").last == "0") {
       if (System.nanoTime() - startTimeNs > TimeUnit.SECONDS.toNanos(10)) {
         throw new IllegalStateException("Timed out waiting for RM to come up.")
       }
@@ -169,7 +170,9 @@ abstract class BaseYarnClusterSuite
       outFile: Option[File] = None): SparkAppHandle.State = {
     val deployMode = if (clientMode) "client" else "cluster"
     val propsFile = createConfFile(extraClassPath = extraClassPath, extraConf = extraConf)
-    val env = Map("YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath()) ++ extraEnv
+    val env = Map(
+      "YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath(),
+      "SPARK_PREFER_IPV6" -> Utils.preferIPv6.toString) ++ extraEnv
 
     val launcher = new SparkLauncher(env.asJava)
     if (klass.endsWith(".py")) {
@@ -182,6 +185,8 @@ abstract class BaseYarnClusterSuite
       .setMaster("yarn")
       .setDeployMode(deployMode)
       .setConf(EXECUTOR_INSTANCES.key, "1")
+      .setConf(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS,
+        s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}")
       .setPropertiesFile(propsFile)
       .addAppArgs(appArgs.toArray: _*)
 

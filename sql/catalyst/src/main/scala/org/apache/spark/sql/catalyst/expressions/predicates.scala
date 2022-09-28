@@ -328,8 +328,8 @@ case class Not(child: Expression)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(NOT)
 
-  override lazy val preCanonicalized: Expression = {
-    withNewChildren(Seq(child.preCanonicalized)) match {
+  override lazy val canonicalized: Expression = {
+    withNewChildren(Seq(child.canonicalized)) match {
       case Not(GreaterThan(l, r)) => LessThanOrEqual(l, r)
       case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
       case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
@@ -466,8 +466,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(IN)
 
-  override lazy val preCanonicalized: Expression = {
-    val basic = withNewChildren(children.map(_.preCanonicalized)).asInstanceOf[In]
+  override lazy val canonicalized: Expression = {
+    val basic = withNewChildren(children.map(_.canonicalized)).asInstanceOf[In]
     if (list.size > 1) {
       basic.copy(list = basic.list.sortBy(_.hashCode()))
     } else {
@@ -736,7 +736,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   """,
   since = "1.0.0",
   group = "predicate_funcs")
-case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
+case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate
+  with CommutativeExpression {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -807,6 +808,10 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): And =
     copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    orderCommutative({ case And(l, r) => Seq(l, r) }).reduce(And)
+  }
 }
 
 @ExpressionDescription(
@@ -824,7 +829,8 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
   """,
   since = "1.0.0",
   group = "predicate_funcs")
-case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
+case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate
+  with CommutativeExpression {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -896,6 +902,10 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Or =
     copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    orderCommutative({ case Or(l, r) => Seq(l, r) }).reduce(Or)
+  }
 }
 
 
@@ -907,8 +917,8 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_COMPARISON)
 
-  override lazy val preCanonicalized: Expression = {
-    withNewChildren(children.map(_.preCanonicalized)) match {
+  override lazy val canonicalized: Expression = {
+    withNewChildren(children.map(_.canonicalized)) match {
       case EqualTo(l, r) if l.hashCode() > r.hashCode() => EqualTo(r, l)
       case EqualNullSafe(l, r) if l.hashCode() > r.hashCode() => EqualNullSafe(r, l)
 
@@ -1066,6 +1076,44 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): EqualNullSafe =
     copy(left = newLeft, right = newRight)
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr1, expr2) - Returns same result as the EQUAL(=) operator for non-null operands,
+      but returns true if both are null, false if one of the them is null.
+  """,
+  arguments = """
+    Arguments:
+      * expr1, expr2 - the two expressions must be same type or can be casted to a common type,
+          and must be a type that can be used in equality comparison. Map type is not supported.
+          For complex types such array/struct, the data types of fields must be orderable.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(3, 3);
+       true
+      > SELECT _FUNC_(1, '11');
+       false
+      > SELECT _FUNC_(true, NULL);
+       false
+      > SELECT _FUNC_(NULL, 'abc');
+       false
+      > SELECT _FUNC_(NULL, NULL);
+       true
+  """,
+  since = "3.4.0",
+  group = "misc_funcs")
+case class EqualNull(left: Expression, right: Expression, replacement: Expression)
+    extends RuntimeReplaceable with InheritAnalysisRules {
+  def this(left: Expression, right: Expression) = this(left, right, EqualNullSafe(left, right))
+
+  override def prettyName: String = "equal_null"
+
+  override def parameters: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): EqualNull =
+    this.copy(replacement = newChild)
 }
 
 @ExpressionDescription(

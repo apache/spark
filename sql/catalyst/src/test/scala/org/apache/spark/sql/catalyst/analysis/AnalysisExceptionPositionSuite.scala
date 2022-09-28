@@ -34,14 +34,12 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
   }
 
   test("SPARK-33918: UnresolvedView should retain sql text position") {
-    verifyViewPosition("DROP VIEW unknown", "unknown")
     verifyViewPosition("ALTER VIEW unknown SET TBLPROPERTIES ('k'='v')", "unknown")
     verifyViewPosition("ALTER VIEW unknown UNSET TBLPROPERTIES ('k')", "unknown")
     verifyViewPosition("ALTER VIEW unknown AS SELECT 1", "unknown")
   }
 
   test("SPARK-34057: UnresolvedTableOrView should retain sql text position") {
-    verifyTableOrViewPosition("DROP TABLE unknown", "unknown")
     verifyTableOrViewPosition("DESCRIBE TABLE unknown", "unknown")
     verifyTableOrPermanentViewPosition("ANALYZE TABLE unknown COMPUTE STATISTICS", "unknown")
     verifyTableOrViewPosition("ANALYZE TABLE unknown COMPUTE STATISTICS FOR COLUMNS col", "unknown")

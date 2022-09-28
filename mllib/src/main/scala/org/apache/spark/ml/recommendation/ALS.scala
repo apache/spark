@@ -39,11 +39,12 @@ import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -86,22 +87,25 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
    * Attempts to safely cast a user/item id to an Int. Throws an exception if the value is
    * out of integer range or contains a fractional part.
    */
-  protected[recommendation] val checkedCast = udf { (n: Any) =>
-    n match {
-      case v: Int => v // Avoid unnecessary casting
-      case v: Number =>
-        val intV = v.intValue
+  protected[recommendation] def checkIntegers(dataset: Dataset[_], colName: String): Column = {
+    dataset.schema(colName).dataType match {
+      case IntegerType =>
+        val column = dataset(colName)
+        when(column.isNull, raise_error(lit(s"$colName Ids MUST NOT be Null")))
+          .otherwise(column)
+
+      case _: NumericType =>
+        val column = dataset(colName)
+        val casted = column.cast(IntegerType)
         // Checks if number within Int range and has no fractional part.
-        if (v.doubleValue == intV) {
-          intV
-        } else {
-          throw new IllegalArgumentException(s"ALS only supports values in Integer range " +
-            s"and without fractional part for columns ${$(userCol)} and ${$(itemCol)}. " +
-            s"Value $n was either out of Integer range or contained a fractional part that " +
-            s"could not be converted.")
-        }
-      case _ => throw new IllegalArgumentException(s"ALS only supports values in Integer range " +
-        s"for columns ${$(userCol)} and ${$(itemCol)}. Value $n was not numeric.")
+        when(column.isNull || column =!= casted,
+          raise_error(concat(
+            lit(s"ALS only supports non-Null values in Integer range and " +
+              s"without fractional part for column $colName, but got "), column)))
+          .otherwise(casted)
+
+      case other => throw new IllegalArgumentException(s"ALS only supports values in " +
+        s"Integer range for column $colName, but got type $other.")
     }
   }
 
@@ -318,11 +322,13 @@ class ALSModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
     // create a new column named map(predictionCol) by running the predict UDF.
+    val validatedUsers = checkIntegers(dataset, $(userCol))
+    val validatedItems = checkIntegers(dataset, $(itemCol))
     val predictions = dataset
       .join(userFactors,
-        checkedCast(dataset($(userCol))) === userFactors("id"), "left")
+        validatedUsers === userFactors("id"), "left")
       .join(itemFactors,
-        checkedCast(dataset($(itemCol))) === itemFactors("id"), "left")
+        validatedItems === itemFactors("id"), "left")
       .select(dataset("*"),
         predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
     getColdStartStrategy match {
@@ -459,6 +465,8 @@ class ALSModel private[ml] (
     import srcFactors.sparkSession.implicits._
     import scala.collection.JavaConverters._
 
+    val ratingColumn = "rating"
+    val recommendColumn = "recommendations"
     val srcFactorsBlocked = blockify(srcFactors.as[(Int, Array[Float])], blockSize)
     val dstFactorsBlocked = blockify(dstFactors.as[(Int, Array[Float])], blockSize)
     val ratings = srcFactorsBlocked.crossJoin(dstFactorsBlocked)
@@ -490,18 +498,20 @@ class ALSModel private[ml] (
               .iterator.map { j => (srcId, dstIds(j), scores(j)) }
           }
         }
-      }
-    // We'll force the IDs to be Int. Unfortunately this converts IDs to Int in the output.
-    val topKAggregator = new TopByKeyAggregator[Int, Int, Float](num, Ordering.by(_._2))
-    val recs = ratings.as[(Int, Int, Float)].groupByKey(_._1).agg(topKAggregator.toColumn)
-      .toDF("id", "recommendations")
+      }.toDF(srcOutputColumn, dstOutputColumn, ratingColumn)
 
     val arrayType = ArrayType(
       new StructType()
         .add(dstOutputColumn, IntegerType)
-        .add("rating", FloatType)
+        .add(ratingColumn, FloatType)
     )
-    recs.select($"id".as(srcOutputColumn), $"recommendations".cast(arrayType))
+
+    ratings.groupBy(srcOutputColumn)
+      .agg(collect_top_k(struct(ratingColumn, dstOutputColumn), num, false))
+      .as[(Int, Seq[(Float, Int)])]
+      .map(t => (t._1, t._2.map(p => (p._2, p._1))))
+      .toDF(srcOutputColumn, recommendColumn)
+      .withColumn(recommendColumn, col(recommendColumn).cast(arrayType))
   }
 
   /**
@@ -705,13 +715,18 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
     transformSchema(dataset.schema)
     import dataset.sparkSession.implicits._
 
-    val r = if ($(ratingCol) != "") col($(ratingCol)).cast(FloatType) else lit(1.0f)
+    val validatedUsers = checkIntegers(dataset, $(userCol))
+    val validatedItems = checkIntegers(dataset, $(itemCol))
+    val validatedRatings = if ($(ratingCol).nonEmpty) {
+      checkNonNanValues($(ratingCol), "Ratings").cast(FloatType)
+    } else {
+      lit(1.0f)
+    }
+
     val ratings = dataset
-      .select(checkedCast(col($(userCol))), checkedCast(col($(itemCol))), r)
+      .select(validatedUsers, validatedItems, validatedRatings)
       .rdd
-      .map { row =>
-        Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
-      }
+      .map { case Row(u: Int, i: Int, r: Float) => Rating(u, i, r) }
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
@@ -1268,9 +1283,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       inBlocks: RDD[(Int, InBlock[ID])],
       rank: Int,
       seed: Long): RDD[(Int, FactorBlock)] = {
-    // Choose a unit vector uniformly at random from the unit sphere, but from the
-    // "first quadrant" where all elements are nonnegative. This can be done by choosing
-    // elements distributed as Normal(0,1) and taking the absolute value, and then normalizing.
+    // Choose a unit vector uniformly at random from the unit sphere. This can be done by choosing
+    // elements distributed as Normal(0,1), and then normalizing.
     // This appears to create factorizations that have a slightly better reconstruction
     // (<1%) compared picking elements uniformly at random in [0,1].
     inBlocks.mapPartitions({ iter =>

@@ -63,14 +63,14 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
         if (indexFile.exists()) {
           val hash = JavaUtils.nonNegativeHash(indexFile.getName)
           fallbackFileSystem.copyFromLocalFile(
-            new Path(indexFile.getAbsolutePath),
+            new Path(Utils.resolveURI(indexFile.getAbsolutePath)),
             new Path(fallbackPath, s"$appId/$shuffleId/$hash/${indexFile.getName}"))
 
           val dataFile = r.getDataFile(shuffleId, mapId)
           if (dataFile.exists()) {
             val hash = JavaUtils.nonNegativeHash(dataFile.getName)
             fallbackFileSystem.copyFromLocalFile(
-              new Path(dataFile.getAbsolutePath),
+              new Path(Utils.resolveURI(dataFile.getAbsolutePath)),
               new Path(fallbackPath, s"$appId/$shuffleId/$hash/${dataFile.getName}"))
           }
 
@@ -193,7 +193,7 @@ private[spark] object FallbackStorage extends Logging {
         val array = new Array[Byte](size.toInt)
         val startTimeNs = System.nanoTime()
         f.seek(offset)
-        f.read(array)
+        f.readFully(array)
         logDebug(s"Took ${(System.nanoTime() - startTimeNs) / (1000 * 1000)}ms")
         f.close()
         new NioManagedBuffer(ByteBuffer.wrap(array))

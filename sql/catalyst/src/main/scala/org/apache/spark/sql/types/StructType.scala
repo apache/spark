@@ -29,9 +29,11 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.util.{truncatedString, StringUtils}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.collection.Utils
 
 /**
  * A [[StructType]] object can be constructed by
@@ -116,7 +118,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
-  private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap
+  private lazy val nameToIndex: Map[String, Int] = Utils.toMapWithIndex(fieldNames)
 
   override def equals(that: Any): Boolean = {
     that match {
@@ -334,7 +336,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       val searchName = searchPath.head
       val found = struct.fields.filter(f => resolver(searchName, f.name))
       if (found.length > 1) {
-        throw QueryCompilationErrors.ambiguousFieldNameError(fieldNames, found.length, context)
+        throw QueryCompilationErrors.ambiguousColumnOrFieldError(fieldNames, found.length, context)
       } else if (found.isEmpty) {
         None
       } else {
@@ -511,6 +513,13 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   @transient
   private[sql] lazy val interpretedOrdering =
     InterpretedOrdering.forSchema(this.fields.map(_.dataType))
+
+  /**
+   * These define and cache existence default values for the struct fields for efficiency purposes.
+   */
+  private[sql] lazy val existenceDefaultValues: Array[Any] = getExistenceDefaultValues(this)
+  private[sql] lazy val existenceDefaultsBitmask: Array[Boolean] = getExistenceDefaultsBitmask(this)
+  private[sql] lazy val hasExistenceDefaultValues = existenceDefaultValues.exists(_ != null)
 }
 
 /**

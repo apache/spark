@@ -34,24 +34,14 @@ public class InMemoryStoreSuite {
     t.id = "id";
     t.name = "name";
 
-    try {
-      store.read(CustomType1.class, t.key);
-      fail("Expected exception for non-existent object.");
-    } catch (NoSuchElementException nsee) {
-      // Expected.
-    }
+    assertThrows(NoSuchElementException.class, () -> store.read(CustomType1.class, t.key));
 
     store.write(t);
     assertEquals(t, store.read(t.getClass(), t.key));
     assertEquals(1L, store.count(t.getClass()));
 
     store.delete(t.getClass(), t.key);
-    try {
-      store.read(t.getClass(), t.key);
-      fail("Expected exception for deleted object.");
-    } catch (NoSuchElementException nsee) {
-      // Expected.
-    }
+    assertThrows(NoSuchElementException.class, () -> store.read(t.getClass(), t.key));
   }
 
   @Test
@@ -78,12 +68,7 @@ public class InMemoryStoreSuite {
     store.delete(t1.getClass(), t1.key);
     assertEquals(t2, store.read(t2.getClass(), t2.key));
     store.delete(t2.getClass(), t2.key);
-    try {
-      store.read(t2.getClass(), t2.key);
-      fail("Expected exception for deleted object.");
-    } catch (NoSuchElementException nsee) {
-      // Expected.
-    }
+    assertThrows(NoSuchElementException.class, () -> store.read(t2.getClass(), t2.key));
   }
 
   @Test

@@ -208,7 +208,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
       }
   }
 
-  override lazy val preCanonicalized: Expression = {
+  override lazy val canonicalized: Expression = {
     var currExprId = -1
     val argumentMap = functions.flatMap(_.collect {
       case l: NamedLambdaVariable =>
@@ -221,7 +221,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
         val newExprId = argumentMap(l.exprId)
         NamedLambdaVariable("none", l.dataType, l.nullable, exprId = ExprId(newExprId), null)
     }
-    val canonicalizedChildren = cleaned.children.map(_.preCanonicalized)
+    val canonicalizedChildren = cleaned.children.map(_.canonicalized)
     withNewChildren(canonicalizedChildren)
   }
 }
@@ -357,9 +357,9 @@ case class ArrayTransform(
     Since 3.0.0 this function also sorts and returns the array based on the
     given comparator function. The comparator will take two arguments representing
     two elements of the array.
-    It returns -1, 0, or 1 as the first element is less than, equal to, or greater
-    than the second element. If the comparator function returns other
-    values (including null), the function will fail and raise an error.
+    It returns a negative integer, 0, or a positive integer as the first element is less than,
+    equal to, or greater than the second element. If the comparator function returns null,
+    the function will fail and raise an error.
     """,
   examples = """
     Examples:
@@ -375,8 +375,16 @@ case class ArrayTransform(
 // scalastyle:on line.size.limit
 case class ArraySort(
     argument: Expression,
-    function: Expression)
+    function: Expression,
+    allowNullComparisonResult: Boolean)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+
+  def this(argument: Expression, function: Expression) = {
+    this(
+      argument,
+      function,
+      SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_NULL_COMPARISON_RESULT_IN_ARRAY_SORT))
+  }
 
   def this(argument: Expression) = this(argument, ArraySort.defaultComparator)
 
@@ -416,7 +424,11 @@ case class ArraySort(
     (o1: Any, o2: Any) => {
       firstElemVar.value.set(o1)
       secondElemVar.value.set(o2)
-      f.eval(inputRow).asInstanceOf[Int]
+      val cmp = f.eval(inputRow)
+      if (!allowNullComparisonResult && cmp == null) {
+        throw QueryExecutionErrors.nullComparisonResultError()
+      }
+      cmp.asInstanceOf[Int]
     }
   }
 
@@ -436,6 +448,10 @@ case class ArraySort(
 }
 
 object ArraySort {
+
+  def apply(argument: Expression, function: Expression): ArraySort = {
+    new ArraySort(argument, function)
+  }
 
   def comparator(left: Expression, right: Expression): Expression = {
     val lit0 = Literal(0)
@@ -604,7 +620,7 @@ case class ArrayExists(
     argument: Expression,
     function: Expression,
     followThreeValuedLogic: Boolean)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback with Predicate {
 
   def this(argument: Expression, function: Expression) = {
     this(
@@ -621,8 +637,6 @@ case class ArrayExists(
     } else {
       super.nullable
     }
-
-  override def dataType: DataType = BooleanType
 
   override def functionType: AbstractDataType = BooleanType
 
@@ -692,12 +706,10 @@ object ArrayExists {
 case class ArrayForAll(
     argument: Expression,
     function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback with Predicate {
 
   override def nullable: Boolean =
       super.nullable || function.nullable
-
-  override def dataType: DataType = BooleanType
 
   override def functionType: AbstractDataType = BooleanType
 
@@ -826,7 +838,7 @@ case class ArrayAggregate(
       var i = 0
       while (i < arr.numElements()) {
         elementVar.value.set(arr.get(i, elementVar.dataType))
-        accForMergeVar.value.set(mergeForEval.eval(input))
+        accForMergeVar.value.set(InternalRow.copyValue(mergeForEval.eval(input)))
         i += 1
       }
       accForFinishVar.value.set(accForMergeVar.value.get)
@@ -960,6 +972,7 @@ case class TransformValues(
  * Merges two given maps into a single map by applying function to the pair of values with
  * the same key.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage =
     """
@@ -972,6 +985,8 @@ case class TransformValues(
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(1, 'x', 2, 'y'), (k, v1, v2) -> concat(v1, v2));
        {1:"ax",2:"by"}
+      > SELECT _FUNC_(map('a', 1, 'b', 2), map('b', 3, 'c', 4), (k, v1, v2) -> coalesce(v1, 0) + coalesce(v2, 0));
+       {"a":1,"b":5,"c":4}
   """,
   since = "3.0.0",
   group = "lambda_funcs")
@@ -1123,8 +1138,8 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     val valueData2 = mapData2.valueArray()
     var i = 0
     for ((key, Array(index1, index2)) <- keysWithIndexes) {
-      val v1 = index1.map(valueData1.get(_, leftValueType)).getOrElse(null)
-      val v2 = index2.map(valueData2.get(_, rightValueType)).getOrElse(null)
+      val v1 = index1.map(valueData1.get(_, leftValueType)).orNull
+      val v2 = index2.map(valueData2.get(_, rightValueType)).orNull
       keyVar.value.set(key)
       value1Var.value.set(v1)
       value2Var.value.set(v2)

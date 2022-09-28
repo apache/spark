@@ -55,7 +55,7 @@ pushd pkg/html
 
 
 # Determine Spark(R) version
-SPARK_VERSION=$(grep -oP "(?<=Version:\ ).*" ../DESCRIPTION)
+SPARK_VERSION=$(grep Version "../DESCRIPTION" | awk '{print $NF}')
 
 # Update url
 sed "s/{SPARK_VERSION}/$SPARK_VERSION/" ../pkgdown/_pkgdown_template.yml > ../_pkgdown.yml

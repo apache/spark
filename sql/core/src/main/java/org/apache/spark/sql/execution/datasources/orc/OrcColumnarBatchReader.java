@@ -34,6 +34,7 @@ import org.apache.orc.mapred.OrcInputFormat;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.execution.datasources.orc.OrcShimUtils.VectorizedRowBatchWrap;
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils;
+import org.apache.spark.sql.execution.vectorized.ConstantColumnVector;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
@@ -164,19 +165,28 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
     // Just wrap the ORC column vector instead of copying it to Spark column vector.
     orcVectorWrappers = new org.apache.spark.sql.vectorized.ColumnVector[resultSchema.length()];
 
+    StructType requiredSchema = new StructType(requiredFields);
     for (int i = 0; i < requiredFields.length; i++) {
       DataType dt = requiredFields[i].dataType();
       if (requestedPartitionColIds[i] != -1) {
-        OnHeapColumnVector partitionCol = new OnHeapColumnVector(capacity, dt);
+        ConstantColumnVector partitionCol = new ConstantColumnVector(capacity, dt);
         ColumnVectorUtils.populate(partitionCol, partitionValues, requestedPartitionColIds[i]);
-        partitionCol.setIsConstant();
         orcVectorWrappers[i] = partitionCol;
       } else {
         int colId = requestedDataColIds[i];
         // Initialize the missing columns once.
         if (colId == -1) {
           OnHeapColumnVector missingCol = new OnHeapColumnVector(capacity, dt);
-          missingCol.putNulls(0, capacity);
+          // Check if the missing column has an associated default value in the schema metadata.
+          // If so, fill the corresponding column vector with the value.
+          Object defaultValue = requiredSchema.existenceDefaultValues()[i];
+          if (defaultValue == null) {
+            missingCol.putNulls(0, capacity);
+          } else if (!missingCol.appendObjects(capacity, defaultValue).isPresent()) {
+            throw new IllegalArgumentException("Cannot assign default column value to result " +
+              "column batch in vectorized Orc reader because the data type is not supported: " +
+              defaultValue);
+          }
           missingCol.setIsConstant();
           orcVectorWrappers[i] = missingCol;
         } else {

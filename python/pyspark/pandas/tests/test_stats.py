@@ -180,7 +180,9 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(psdf.min(axis=1), pdf.min(axis=1))
             self.assert_eq(psdf.sum(axis=1), pdf.sum(axis=1))
             self.assert_eq(psdf.product(axis=1), pdf.product(axis=1))
+            self.assert_eq(psdf.kurtosis(axis=0), pdf.kurtosis(axis=0), almost=True)
             self.assert_eq(psdf.kurtosis(axis=1), pdf.kurtosis(axis=1))
+            self.assert_eq(psdf.skew(axis=0), pdf.skew(axis=0), almost=True)
             self.assert_eq(psdf.skew(axis=1), pdf.skew(axis=1))
             self.assert_eq(psdf.mean(axis=1), pdf.mean(axis=1))
             self.assert_eq(psdf.sem(axis=1), pdf.sem(axis=1))
@@ -216,7 +218,17 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
                 pdf.product(axis=1, numeric_only=True).astype(float),
             )
             self.assert_eq(
+                psdf.kurtosis(axis=0, numeric_only=True),
+                pdf.kurtosis(axis=0, numeric_only=True),
+                almost=True,
+            )
+            self.assert_eq(
                 psdf.kurtosis(axis=1, numeric_only=True), pdf.kurtosis(axis=1, numeric_only=True)
+            )
+            self.assert_eq(
+                psdf.skew(axis=0, numeric_only=True),
+                pdf.skew(axis=0, numeric_only=True),
+                almost=True,
             )
             self.assert_eq(
                 psdf.skew(axis=1, numeric_only=True), pdf.skew(axis=1, numeric_only=True)
@@ -230,39 +242,159 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
                 pdf.sem(axis=1, ddof=0, numeric_only=True),
             )
 
-    def test_corr(self):
-        # Disable arrow execution since corr() is using UDT internally which is not supported.
-        with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
-            # DataFrame
-            # we do not handle NaNs for now
-            pdf = makeMissingDataframe(0.3, 42).fillna(0)
-            psdf = ps.from_pandas(pdf)
+    def test_skew_kurt_numerical_stability(self):
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 1, 1, 1, 1],
+                "B": [1.0, np.nan, 4, 2, 5],
+                "C": [-6.0, -7, np.nan, np.nan, 10],
+                "D": [1.2, np.nan, np.nan, 9.8, np.nan],
+                "E": [1, np.nan, np.nan, np.nan, np.nan],
+                "F": [np.nan, np.nan, np.nan, np.nan, np.nan],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.skew(), pdf.skew(), almost=True)
+        self.assert_eq(psdf.kurt(), pdf.kurt(), almost=True)
 
-            self.assert_eq(psdf.corr(), pdf.corr(), check_exact=False)
+    def test_dataframe_corr(self):
+        pdf = makeMissingDataframe(0.3, 42)
+        psdf = ps.from_pandas(pdf)
 
-            # Series
-            pser_a = pdf.A
-            pser_b = pdf.B
-            psser_a = psdf.A
-            psser_b = psdf.B
+        with self.assertRaisesRegex(ValueError, "Invalid method"):
+            psdf.corr("std")
+        with self.assertRaisesRegex(TypeError, "Invalid min_periods type"):
+            psdf.corr(min_periods="3")
 
-            self.assertAlmostEqual(psser_a.corr(psser_b), pser_a.corr(pser_b))
-            self.assertRaises(TypeError, lambda: psser_a.corr(psdf))
+        for method in ["pearson", "spearman", "kendall"]:
+            self.assert_eq(psdf.corr(method=method), pdf.corr(method=method), check_exact=False)
+            self.assert_eq(
+                psdf.corr(method=method, min_periods=1),
+                pdf.corr(method=method, min_periods=1),
+                check_exact=False,
+            )
+            self.assert_eq(
+                psdf.corr(method=method, min_periods=3),
+                pdf.corr(method=method, min_periods=3),
+                check_exact=False,
+            )
+            self.assert_eq(
+                (psdf + 1).corr(method=method, min_periods=2),
+                (pdf + 1).corr(method=method, min_periods=2),
+                check_exact=False,
+            )
 
-            # multi-index columns
-            columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B"), ("Y", "C"), ("Z", "D")])
-            pdf.columns = columns
-            psdf.columns = columns
+        # multi-index columns
+        columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B"), ("Y", "C"), ("Z", "D")])
+        pdf.columns = columns
+        psdf.columns = columns
 
-            self.assert_eq(psdf.corr(), pdf.corr(), check_exact=False)
+        for method in ["pearson", "spearman", "kendall"]:
+            self.assert_eq(psdf.corr(method=method), pdf.corr(method=method), check_exact=False)
+            self.assert_eq(
+                psdf.corr(method=method, min_periods=1),
+                pdf.corr(method=method, min_periods=1),
+                check_exact=False,
+            )
+            self.assert_eq(
+                psdf.corr(method=method, min_periods=3),
+                pdf.corr(method=method, min_periods=3),
+                check_exact=False,
+            )
+            self.assert_eq(
+                (psdf + 1).corr(method=method, min_periods=2),
+                (pdf + 1).corr(method=method, min_periods=2),
+                check_exact=False,
+            )
 
-            # Series
-            pser_xa = pdf[("X", "A")]
-            pser_xb = pdf[("X", "B")]
-            psser_xa = psdf[("X", "A")]
-            psser_xb = psdf[("X", "B")]
+        # test with identical values
+        pdf = pd.DataFrame(
+            {
+                "a": [0, 1, 1, 1, 0],
+                "b": [2, 2, -1, 1, np.nan],
+                "c": [3, 3, 3, 3, 3],
+                "d": [np.nan, np.nan, np.nan, np.nan, np.nan],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
 
-            self.assert_eq(psser_xa.corr(psser_xb), pser_xa.corr(pser_xb), almost=True)
+        for method in ["pearson", "spearman", "kendall"]:
+            self.assert_eq(psdf.corr(method=method), pdf.corr(method=method), check_exact=False)
+            self.assert_eq(
+                psdf.corr(method=method, min_periods=1),
+                pdf.corr(method=method, min_periods=1),
+                check_exact=False,
+            )
+            self.assert_eq(
+                psdf.corr(method=method, min_periods=3),
+                pdf.corr(method=method, min_periods=3),
+                check_exact=False,
+            )
+
+    def test_series_corr(self):
+        pdf = makeMissingDataframe(0.3, 42)
+        pser1 = pdf.A
+        pser2 = pdf.B
+        psdf = ps.from_pandas(pdf)
+        psser1 = psdf.A
+        psser2 = psdf.B
+
+        with self.assertRaisesRegex(ValueError, "Invalid method"):
+            psser1.corr(psser2, method="std")
+        with self.assertRaisesRegex(TypeError, "Invalid min_periods type"):
+            psser1.corr(psser2, min_periods="3")
+
+        for method in ["pearson", "spearman", "kendall"]:
+            self.assert_eq(
+                psser1.corr(psser2, method=method),
+                pser1.corr(pser2, method=method),
+                almost=True,
+            )
+            self.assert_eq(
+                psser1.corr(psser2, method=method, min_periods=1),
+                pser1.corr(pser2, method=method, min_periods=1),
+                almost=True,
+            )
+            self.assert_eq(
+                psser1.corr(psser2, method=method, min_periods=3),
+                pser1.corr(pser2, method=method, min_periods=3),
+                almost=True,
+            )
+            self.assert_eq(
+                (psser1 + 1).corr(psser2 - 2, method=method, min_periods=2),
+                (pser1 + 1).corr(pser2 - 2, method=method, min_periods=2),
+                almost=True,
+            )
+
+        # different anchors
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
+
+        with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
+            psser1.corr(psser2)
+
+        for method in ["pearson", "spearman", "kendall"]:
+            with ps.option_context("compute.ops_on_diff_frames", True):
+                self.assert_eq(
+                    psser1.corr(psser2, method=method),
+                    pser1.corr(pser2, method=method),
+                    almost=True,
+                )
+                self.assert_eq(
+                    psser1.corr(psser2, method=method, min_periods=1),
+                    pser1.corr(pser2, method=method, min_periods=1),
+                    almost=True,
+                )
+                self.assert_eq(
+                    psser1.corr(psser2, method=method, min_periods=3),
+                    pser1.corr(pser2, method=method, min_periods=3),
+                    almost=True,
+                )
+                self.assert_eq(
+                    (psser1 + 1).corr(psser2 - 2, method=method, min_periods=2),
+                    (pser1 + 1).corr(pser2 - 2, method=method, min_periods=2),
+                    almost=True,
+                )
 
     def test_cov_corr_meta(self):
         # Disable arrow execution since corr() is using UDT internally which is not supported.
@@ -316,10 +448,13 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(psser.var(), pser.var(), almost=True)
         self.assert_eq(psser.var(ddof=0), pser.var(ddof=0), almost=True)
+        self.assert_eq(psser.var(ddof=2), pser.var(ddof=2), almost=True)
         self.assert_eq(psser.std(), pser.std(), almost=True)
         self.assert_eq(psser.std(ddof=0), pser.std(ddof=0), almost=True)
+        self.assert_eq(psser.std(ddof=2), pser.std(ddof=2), almost=True)
         self.assert_eq(psser.sem(), pser.sem(), almost=True)
         self.assert_eq(psser.sem(ddof=0), pser.sem(ddof=0), almost=True)
+        self.assert_eq(psser.sem(ddof=2), pser.sem(ddof=2), almost=True)
 
     def test_stats_on_non_numeric_columns_should_be_discarded_if_numeric_only_is_true(self):
         pdf = pd.DataFrame({"i": [0, 1, 2], "b": [False, False, True], "s": ["x", "y", "z"]})
@@ -350,16 +485,31 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
             pdf.var(ddof=0, numeric_only=True),
             check_exact=False,
         )
+        self.assert_eq(
+            psdf.var(ddof=2, numeric_only=True),
+            pdf.var(ddof=2, numeric_only=True),
+            check_exact=False,
+        )
         self.assert_eq(psdf.std(numeric_only=True), pdf.std(numeric_only=True), check_exact=False)
         self.assert_eq(
             psdf.std(ddof=0, numeric_only=True),
             pdf.std(ddof=0, numeric_only=True),
             check_exact=False,
         )
+        self.assert_eq(
+            psdf.std(ddof=2, numeric_only=True),
+            pdf.std(ddof=2, numeric_only=True),
+            check_exact=False,
+        )
         self.assert_eq(psdf.sem(numeric_only=True), pdf.sem(numeric_only=True), check_exact=False)
         self.assert_eq(
             psdf.sem(ddof=0, numeric_only=True),
             pdf.sem(ddof=0, numeric_only=True),
+            check_exact=False,
+        )
+        self.assert_eq(
+            psdf.sem(ddof=2, numeric_only=True),
+            pdf.sem(ddof=2, numeric_only=True),
             check_exact=False,
         )
 

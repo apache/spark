@@ -1556,7 +1556,8 @@ object SimpleApplicationTest {
         .collect()
         .distinct
       if (executorValues.size != 1) {
-        throw new SparkException(s"Inconsistent values for $config: $executorValues")
+        throw new SparkException(s"Inconsistent values for $config: " +
+          s"${executorValues.mkString("values(", ", ", ")")}")
       }
       val executorValue = executorValues(0)
       if (executorValue != masterValue) {

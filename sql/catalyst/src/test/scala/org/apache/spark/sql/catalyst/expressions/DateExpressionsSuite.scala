@@ -18,9 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.text.{ParseException, SimpleDateFormat}
+import java.text.SimpleDateFormat
 import java.time.{DateTimeException, Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
-import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
@@ -29,8 +28,8 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.{SparkDateTimeException, SparkFunSuite, SparkUpgradeException}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -754,6 +753,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       TruncDate(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
       expected)
+    // SPARK-38990: ensure that evaluation with input rows also works
+    val catalystInput = CatalystTypeConverters.convertToCatalyst(input)
+    val inputRow = InternalRow(catalystInput, UTF8String.fromString(fmt))
+    checkEvaluation(
+      TruncDate(
+        BoundReference(ordinal = 0, dataType = DateType, nullable = true),
+        BoundReference(ordinal = 1, dataType = StringType, nullable = true)),
+      expected,
+      inputRow)
   }
 
   test("TruncDate") {
@@ -780,6 +788,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       TruncTimestamp(
         NonFoldableLiteral.create(fmt, StringType), Literal.create(input, TimestampType)),
       expected)
+    // SPARK-38990: ensure that evaluation with input rows also works
+    val catalystInput = CatalystTypeConverters.convertToCatalyst(input)
+    val inputRow = InternalRow(UTF8String.fromString(fmt), catalystInput)
+    checkEvaluation(
+      TruncTimestamp(
+        BoundReference(ordinal = 0, dataType = StringType, nullable = true),
+        BoundReference(ordinal = 1, dataType = TimestampType, nullable = true)),
+      expected,
+      inputRow)
   }
 
   test("TruncTimestamp") {
@@ -1715,10 +1732,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           if (!ansiEnabled) {
             exprSeq.foreach(checkEvaluation(_, null))
           } else if (policy == "LEGACY") {
-            exprSeq.foreach(checkExceptionInExpression[ParseException](_, "Unparseable"))
+            exprSeq.foreach(checkExceptionInExpression[SparkDateTimeException](_, "Unparseable"))
           } else {
             exprSeq.foreach(
-              checkExceptionInExpression[DateTimeParseException](_, "could not be parsed"))
+              checkExceptionInExpression[SparkDateTimeException](_, "could not be parsed"))
           }
 
           // LEGACY works, CORRECTED failed, EXCEPTION with SparkUpgradeException
@@ -1741,7 +1758,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           } else {
             if (ansiEnabled) {
               exprSeq2.foreach(pair =>
-                checkExceptionInExpression[DateTimeParseException](pair._1, "could not be parsed"))
+                checkExceptionInExpression[SparkDateTimeException](pair._1, "could not be parsed"))
             } else {
               exprSeq2.foreach(pair => checkEvaluation(pair._1, null))
             }

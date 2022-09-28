@@ -18,17 +18,52 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeSet}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeSet, Literal}
 
 class AggregateExpressionSuite extends SparkFunSuite {
 
   test("test references from unresolved aggregate functions") {
     val x = UnresolvedAttribute("x")
     val y = UnresolvedAttribute("y")
-    val actual = AggregateExpression(Sum(Add(x, y)), mode = Complete, isDistinct = false).references
+    val actual = Sum(Add(x, y)).toAggregateExpression().references
     val expected = AttributeSet(x :: y :: Nil)
     assert(expected == actual, s"Expected: $expected. Actual: $actual")
   }
 
+  test("test regr_r2 input types") {
+    Seq(
+      RegrR2(Literal("a"), Literal(1d)),
+      RegrR2(Literal(3.0D), Literal('b')),
+      RegrR2(Literal(3.0D), Literal(Array(0)))
+    ).foreach { expr =>
+      assert(expr.checkInputDataTypes().isFailure)
+    }
+    assert(RegrR2(Literal(3.0D), Literal(1d)).checkInputDataTypes() ===
+      TypeCheckResult.TypeCheckSuccess)
+  }
+
+  test("test regr_slope input types") {
+    Seq(
+      RegrSlope(Literal("a"), Literal(1)),
+      RegrSlope(Literal(3.0D), Literal('b')),
+      RegrSlope(Literal(3.0D), Literal(Array(0)))
+    ).foreach { expr =>
+      assert(expr.checkInputDataTypes().isFailure)
+    }
+    assert(RegrSlope(Literal(3.0D), Literal(1D)).checkInputDataTypes() ===
+      TypeCheckResult.TypeCheckSuccess)
+  }
+
+  test("test regr_intercept input types") {
+    Seq(
+      RegrIntercept(Literal("a"), Literal(1)),
+      RegrIntercept(Literal(3.0D), Literal('b')),
+      RegrIntercept(Literal(3.0D), Literal(Array(0)))
+    ).foreach { expr =>
+      assert(expr.checkInputDataTypes().isFailure)
+    }
+    assert(RegrIntercept(Literal(3.0D), Literal(1D)).checkInputDataTypes() ===
+      TypeCheckResult.TypeCheckSuccess)
+  }
 }

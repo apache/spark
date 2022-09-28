@@ -36,11 +36,13 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.collection.Utils
 
 /**
  * A [[ParentContainerUpdater]] is used by a Parquet converter to set converted values to some
@@ -172,7 +174,7 @@ private[parquet] class ParquetRowConverter(
    * Updater used together with field converters within a [[ParquetRowConverter]].  It propagates
    * converted filed values to the `ordinal`-th cell in `currentRow`.
    */
-  private final class RowUpdater(row: InternalRow, ordinal: Int) extends ParentContainerUpdater {
+  private class RowUpdater(row: InternalRow, ordinal: Int) extends ParentContainerUpdater {
     override def set(value: Any): Unit = row(ordinal) = value
     override def setBoolean(value: Boolean): Unit = row.setBoolean(ordinal, value)
     override def setByte(value: Byte): Unit = row.setByte(ordinal, value)
@@ -188,7 +190,10 @@ private[parquet] class ParquetRowConverter(
   /**
    * The [[InternalRow]] converted from an entire Parquet record.
    */
-  def currentRecord: InternalRow = currentRow
+  def currentRecord: InternalRow = {
+    applyExistenceDefaultValuesToRow(catalystType, currentRow)
+    currentRow
+  }
 
   private val dateRebaseFunc = DataSourceUtils.createDateRebaseFuncInRead(
     datetimeRebaseSpec.mode, "Parquet")
@@ -203,7 +208,7 @@ private[parquet] class ParquetRowConverter(
   private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
     // (SPARK-31116) Use case insensitive map if spark.sql.caseSensitive is false
     // to prevent throwing IllegalArgumentException when searching catalyst type's field index
-    def nameToIndex: Map[String, Int] = catalystType.fieldNames.zipWithIndex.toMap
+    def nameToIndex: Map[String, Int] = Utils.toMapWithIndex(catalystType.fieldNames)
 
     val catalystFieldIdxByName = if (SQLConf.get.caseSensitiveAnalysis) {
       nameToIndex
@@ -222,7 +227,22 @@ private[parquet] class ParquetRowConverter(
       } else {
         Map.empty[Int, Int]
       }
-
+    // If any fields in the Catalyst result schema have associated existence default values,
+    // maintain a boolean array to track which fields have been explicitly assigned for each row.
+    if (catalystType.hasExistenceDefaultValues) {
+      for (i <- 0 until catalystType.existenceDefaultValues.size) {
+        catalystType.existenceDefaultsBitmask(i) =
+          // Assume the schema for a Parquet file-based table contains N fields. Then if we later
+          // run a command "ALTER TABLE t ADD COLUMN c DEFAULT <value>" on the Parquet table, this
+          // adds one field to the Catalyst schema. Then if we query the old files with the new
+          // Catalyst schema, we should only apply the existence default value to all columns >= N.
+          if (i < parquetType.getFieldCount) {
+            false
+          } else {
+            catalystType.existenceDefaultValues(i) != null
+          }
+      }
+    }
     parquetType.getFields.asScala.map { parquetField =>
       val catalystFieldIndex = Option(parquetField.getId).flatMap { fieldId =>
         // field has id, try to match by id first before falling back to match by name
@@ -232,9 +252,10 @@ private[parquet] class ParquetRowConverter(
         catalystFieldIdxByName(parquetField.getName)
       }
       val catalystField = catalystType(catalystFieldIndex)
+      // Create a RowUpdater instance for converting Parquet objects to Catalyst rows.
+      val rowUpdater: RowUpdater = new RowUpdater(currentRow, catalystFieldIndex)
       // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
-      newConverter(parquetField,
-        catalystField.dataType, new RowUpdater(currentRow, catalystFieldIndex))
+      newConverter(parquetField, catalystField.dataType, rowUpdater)
     }.toArray
   }
 
@@ -484,7 +505,8 @@ private[parquet] class ParquetRowConverter(
   // can be read as Spark's TimestampNTZ type. This is to avoid mistakes in reading the timestamp
   // values.
   private def canReadAsTimestampNTZ(parquetType: Type): Boolean =
-    parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 &&
+    schemaConverter.isTimestampNTZEnabled() &&
+      parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 &&
       parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
       !parquetType.getLogicalTypeAnnotation
         .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC

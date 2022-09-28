@@ -29,10 +29,11 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.TestUncaughtExceptionHandler
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.command.{InsertIntoDataSourceDirCommand, LoadDataCommand}
@@ -195,56 +196,6 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("show functions") {
-    val allBuiltinFunctions = FunctionRegistry.builtin.listFunction().map(_.unquotedString)
-    val allFunctions = sql("SHOW functions").collect().map(r => r(0))
-    allBuiltinFunctions.foreach { f =>
-      assert(allFunctions.contains(f))
-    }
-
-    FunctionRegistry.builtinOperators.keys.foreach { f =>
-      assert(allFunctions.contains(f))
-    }
-
-    withTempDatabase { db =>
-      def createFunction(names: Seq[String]): Unit = {
-        names.foreach { name =>
-          sql(
-            s"""
-              |CREATE TEMPORARY FUNCTION $name
-              |AS '${classOf[PairUDF].getName}'
-            """.stripMargin)
-        }
-      }
-      def dropFunction(names: Seq[String]): Unit = {
-        names.foreach { name =>
-          sql(s"DROP TEMPORARY FUNCTION $name")
-        }
-      }
-      createFunction(Seq("temp_abs", "temp_weekofyear", "temp_sha", "temp_sha1", "temp_sha2"))
-
-      checkAnswer(sql("SHOW functions temp_abs"), Row("temp_abs"))
-      checkAnswer(sql("SHOW functions 'temp_abs'"), Row("temp_abs"))
-      checkAnswer(sql(s"SHOW functions $db.temp_abs"), Row("temp_abs"))
-      checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
-      checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
-      checkAnswer(sql("SHOW functions `a function doesn't exist`"), Nil)
-      checkAnswer(sql("SHOW functions `temp_weekofyea*`"), Row("temp_weekofyear"))
-
-      // this probably will failed if we add more function with `sha` prefixing.
-      checkAnswer(
-        sql("SHOW functions `temp_sha*`"),
-        List(Row("temp_sha"), Row("temp_sha1"), Row("temp_sha2")))
-
-      // Test '|' for alternation.
-      checkAnswer(
-        sql("SHOW functions 'temp_sha*|temp_weekofyea*'"),
-        List(Row("temp_sha"), Row("temp_sha1"), Row("temp_sha2"), Row("temp_weekofyear")))
-
-      dropFunction(Seq("temp_abs", "temp_weekofyear", "temp_sha", "temp_sha1", "temp_sha2"))
-    }
-  }
-
   test("describe functions - built-in functions") {
     checkKeywordsExist(sql("describe function extended upper"),
       "Function: upper",
@@ -303,7 +254,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         """.stripMargin)
 
       checkKeywordsExist(sql("describe function udtf_count"),
-        "Function: default.udtf_count",
+        s"Function: $SESSION_CATALOG_NAME.default.udtf_count",
         "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
         "Usage: N/A")
 
@@ -312,7 +263,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         Row(3) :: Row(3) :: Nil)
 
       checkKeywordsExist(sql("describe function udtf_count"),
-        "Function: default.udtf_count",
+        s"Function: $SESSION_CATALOG_NAME.default.udtf_count",
         "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
         "Usage: N/A")
     }
@@ -2155,7 +2106,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   test("Auto alias construction of get_json_object") {
     val df = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")
     val expectedMsg = "Cannot create a table having a column whose name contains commas " +
-      "in Hive metastore. Table: `default`.`t`; Column: get_json_object(jstring, $.f1)"
+      s"in Hive metastore. Table: `$SESSION_CATALOG_NAME`.`default`.`t`; Column: " +
+      "get_json_object(jstring, $.f1)"
 
     withTable("t") {
       val e = intercept[AnalysisException] {
@@ -2692,6 +2644,23 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           }
         }
       }
+    }
+  }
+
+  test("SPARK-38717: Handle Hive's bucket spec case preserving behaviour") {
+    withTable("t") {
+      sql(
+        s"""
+           |CREATE TABLE t(
+           |  c STRING,
+           |  B_C STRING
+           |)
+           |PARTITIONED BY (p_c STRING)
+           |CLUSTERED BY (B_C) INTO 4 BUCKETS
+           |STORED AS PARQUET
+           |""".stripMargin)
+      val df = sql("SELECT * FROM t")
+      checkAnswer(df, Seq.empty[Row])
     }
   }
 }

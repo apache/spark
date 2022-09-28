@@ -41,7 +41,7 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
       val user = "andrew"
       val status = "new"
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
-        s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
+        s"TBLPROPERTIES ('user'='$user', 'status'='$status', 'password' = 'password')")
       val properties = sql(s"SHOW TBLPROPERTIES $tbl")
         .filter("key != 'transient_lastDdlTime'")
         .filter("key != 'option.serialization.format'")
@@ -49,6 +49,7 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
         .add("key", StringType, nullable = false)
         .add("value", StringType, nullable = false)
       val expected = Seq(
+        Row("password", "*********(redacted)"),
         Row("status", status),
         Row("user", user))
 

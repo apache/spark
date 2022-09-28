@@ -282,7 +282,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
   }
 
   test("class ApproximatePercentile, automatically add type casting for parameters") {
-    val testRelation = LocalRelation('a.int)
+    val testRelation = LocalRelation($"a".int)
 
     // accuracy types must be integral, no type casting
     val accuracyExpressions = Seq(
@@ -330,13 +330,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
           AttributeReference("a", DoubleType)(),
           percentageExpression = percentageExpression,
           accuracyExpression = Literal(100))
-        assert(
-          wrongPercentage.checkInputDataTypes() match {
-            case TypeCheckFailure(msg)
-                if msg.contains("argument 2 requires (double or array<double>) type") =>
-              true
-            case _ => false
-          })
+        assert(wrongPercentage.checkInputDataTypes().isFailure)
     }
   }
 
@@ -347,10 +341,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         AttributeReference("a", DoubleType)(),
         percentageExpression = Literal(0.5),
         accuracyExpression = Literal(acc))
-      assert(wrongPercentage.checkInputDataTypes() match {
-        case TypeCheckFailure(msg) if msg.contains("argument 3 requires integral type") => true
-        case _ => false
-      })
+      assert(wrongPercentage.checkInputDataTypes().isFailure)
     }
   }
 

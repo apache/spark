@@ -30,9 +30,11 @@ import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{NumericType, StructType}
 
 /**
@@ -343,6 +345,9 @@ class RelationalGroupedDataset protected[sql](
    *   df.groupBy("year").pivot("course").sum("earnings")
    * }}}
    *
+   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
+   *      except for the aggregation.
+   *
    * @param pivotColumn Name of the column to pivot.
    * @since 1.6.0
    */
@@ -371,6 +376,9 @@ class RelationalGroupedDataset protected[sql](
    *     .agg(sum($"earnings"))
    * }}}
    *
+   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
+   *      except for the aggregation.
+   *
    * @param pivotColumn Name of the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.
    * @since 1.6.0
@@ -395,6 +403,9 @@ class RelationalGroupedDataset protected[sql](
    *   df.groupBy("year").pivot("course").sum("earnings");
    * }}}
    *
+   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
+   *      except for the aggregation.
+   *
    * @param pivotColumn Name of the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.
    * @since 1.6.0
@@ -411,6 +422,9 @@ class RelationalGroupedDataset protected[sql](
    *   // Or without specifying column values (less efficient)
    *   df.groupBy($"year").pivot($"course").sum($"earnings");
    * }}}
+   *
+   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
+   *      except for the aggregation.
    *
    * @param pivotColumn he column to pivot.
    * @since 2.4.0
@@ -444,6 +458,9 @@ class RelationalGroupedDataset protected[sql](
    *   df.groupBy($"year").pivot($"course", Seq("dotNET", "Java")).sum($"earnings")
    * }}}
    *
+   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
+   *      except for the aggregation.
+   *
    * @param pivotColumn the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.
    * @since 2.4.0
@@ -476,6 +493,9 @@ class RelationalGroupedDataset protected[sql](
    * (Java-specific) Pivots a column of the current `DataFrame` and performs the specified
    * aggregation. This is an overloaded version of the `pivot` method with `pivotColumn` of
    * the `String` type.
+   *
+   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
+   *      except for the aggregation.
    *
    * @param pivotColumn the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.
@@ -599,6 +619,49 @@ class RelationalGroupedDataset protected[sql](
     val plan = FlatMapCoGroupsInPandas(
       leftGroupingNamedExpressions.length, rightGroupingNamedExpressions.length,
       expr, output, left, right)
+    Dataset.ofRows(df.sparkSession, plan)
+  }
+
+  /**
+   * Applies a grouped vectorized python user-defined function to each group of data.
+   * The user-defined function defines a transformation: iterator of `pandas.DataFrame` ->
+   * iterator of `pandas.DataFrame`.
+   * For each group, all elements in the group are passed as an iterator of `pandas.DataFrame`
+   * along with corresponding state, and the results for all groups are combined into a new
+   * [[DataFrame]].
+   *
+   * This function does not support partial aggregation, and requires shuffling all the data in
+   * the [[DataFrame]].
+   *
+   * This function uses Apache Arrow as serialization format between Java executors and Python
+   * workers.
+   */
+  private[sql] def applyInPandasWithState(
+      func: PythonUDF,
+      outputStructType: StructType,
+      stateStructType: StructType,
+      outputModeStr: String,
+      timeoutConfStr: String): DataFrame = {
+    val timeoutConf = org.apache.spark.sql.execution.streaming
+      .GroupStateImpl.groupStateTimeoutFromString(timeoutConfStr)
+    val outputMode = InternalOutputModes(outputModeStr)
+    if (outputMode != OutputMode.Append && outputMode != OutputMode.Update) {
+      throw new IllegalArgumentException("The output mode of function should be append or update")
+    }
+    val groupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+    val groupingAttrs = groupingNamedExpressions.map(_.toAttribute)
+    val outputAttrs = outputStructType.toAttributes
+    val plan = FlatMapGroupsInPandasWithState(
+      func,
+      groupingAttrs,
+      outputAttrs,
+      stateStructType,
+      outputMode,
+      timeoutConf,
+      child = df.logicalPlan)
     Dataset.ofRows(df.sparkSession, plan)
   }
 

@@ -21,11 +21,10 @@ import java.sql.Timestamp
 import java.time.{Duration, Period}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.dsl.expressions.{DslString, DslSymbol}
+import org.apache.spark.sql.catalyst.dsl.expressions.{DslAttr, DslString, StringToAttributeConversionHelper}
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference, Cast, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -35,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.NumericHistogram
 
-class HistogramNumericSuite extends SparkFunSuite with SQLHelper with Logging {
+class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
 
   private val random = new java.util.Random()
 
@@ -114,11 +113,11 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper with Logging {
   test("class HistogramNumeric, automatically add type casting for parameters") {
     // These are the types of input relations under test. We exercise the unit test with several
     // input column types to inspect the behavior of query analysis for the aggregate function.
-    val relations = Seq(LocalRelation('a.double),
-      LocalRelation('a.int),
-      LocalRelation('a.timestamp),
-      LocalRelation('a.dayTimeInterval()),
-      LocalRelation('a.yearMonthInterval()))
+    val relations = Seq(LocalRelation($"a".double),
+      LocalRelation($"a".int),
+      LocalRelation($"a".timestamp),
+      LocalRelation($"a".dayTimeInterval()),
+      LocalRelation($"a".yearMonthInterval()))
 
     // These are the types of the second 'nbins' argument to the aggregate function.
     // These accuracy types must be integral, no type casting is allowed.

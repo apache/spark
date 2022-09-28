@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
+import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
 
@@ -31,7 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
 class ParquetOptions(
     @transient private val parameters: CaseInsensitiveMap[String],
     @transient private val sqlConf: SQLConf)
-  extends Serializable {
+  extends FileSourceOptions(parameters) {
 
   import ParquetOptions._
 

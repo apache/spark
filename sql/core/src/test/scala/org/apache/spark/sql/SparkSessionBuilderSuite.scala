@@ -21,7 +21,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.Level
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
@@ -36,7 +35,7 @@ import org.apache.spark.util.ThreadUtils
 /**
  * Test cases for the builder pattern of [[SparkSession]].
  */
-class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach with Eventually {
+class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
 
   override def afterEach(): Unit = {
     // This suite should not interfere with the other test suites.
@@ -199,11 +198,11 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
       .config("spark.app.name", "test-app-SPARK-31234")
       .getOrCreate()
 
-    assert(session.sessionState.conf.getConfString("spark.app.name") === "test-app-SPARK-31234")
-    assert(session.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
+    assert(session.conf.get("spark.app.name") === "test-app-SPARK-31234")
+    assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
     session.sql("RESET")
-    assert(session.sessionState.conf.getConfString("spark.app.name") === "test-app-SPARK-31234")
-    assert(session.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
+    assert(session.conf.get("spark.app.name") === "test-app-SPARK-31234")
+    assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
   }
 
   test("SPARK-31354: SparkContext only register one SparkSession ApplicationEnd listener") {
@@ -569,5 +568,23 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
     assert(
       !logs.exists(_.contains("spark.sql.ansi.enabled\"")),
       s"'spark.sql.ansi.enabled' existed in:\n${logs.mkString("\n")}")
+  }
+
+  test("SPARK-40163: SparkSession.config(Map)") {
+    val map: Map[String, Any] = Map(
+      "string" -> "",
+      "boolean" -> true,
+      "double" -> 0.0,
+      "long" -> 0L
+    )
+
+    val session = SparkSession.builder()
+      .master("local")
+      .config(map)
+      .getOrCreate()
+
+    for (e <- map) {
+      assert(session.conf.get(e._1) == e._2.toString)
+    }
   }
 }

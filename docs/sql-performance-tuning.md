@@ -222,17 +222,19 @@ parameter. The "REPARTITION" hint has a partition number, columns, or both/neith
 The "REPARTITION_BY_RANGE" hint must have column names and a partition number is optional. The "REBALANCE"
 hint has an initial partition number, columns, or both/neither of them as parameters.
 
-    SELECT /*+ COALESCE(3) */ * FROM t
-    SELECT /*+ REPARTITION(3) */ * FROM t
-    SELECT /*+ REPARTITION(c) */ * FROM t
-    SELECT /*+ REPARTITION(3, c) */ * FROM t
-    SELECT /*+ REPARTITION */ * FROM t
-    SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t
-    SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t
-    SELECT /*+ REBALANCE */ * FROM t
-    SELECT /*+ REBALANCE(3) */ * FROM t
-    SELECT /*+ REBALANCE(c) */ * FROM t
-    SELECT /*+ REBALANCE(3, c) */ * FROM t
+```sql
+SELECT /*+ COALESCE(3) */ * FROM t;
+SELECT /*+ REPARTITION(3) */ * FROM t;
+SELECT /*+ REPARTITION(c) */ * FROM t;
+SELECT /*+ REPARTITION(3, c) */ * FROM t;
+SELECT /*+ REPARTITION */ * FROM t;
+SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t;
+SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t;
+SELECT /*+ REBALANCE */ * FROM t;
+SELECT /*+ REBALANCE(3) */ * FROM t;
+SELECT /*+ REBALANCE(c) */ * FROM t;
+SELECT /*+ REBALANCE(3, c) */ * FROM t;
+```
 
 For more details please refer to the documentation of [Partitioning Hints](sql-ref-syntax-qry-select-hints.html#partitioning-hints).
 

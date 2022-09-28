@@ -31,17 +31,17 @@ class InferFiltersFromGenerateSuite extends PlanTest {
     val batches = Batch("Infer Filters", Once, InferFiltersFromGenerate) :: Nil
   }
 
-  val testRelation = LocalRelation('a.array(StructType(Seq(
+  val testRelation = LocalRelation($"a".array(StructType(Seq(
     StructField("x", IntegerType),
     StructField("y", IntegerType)
-  ))), 'c1.string, 'c2.string, 'c3.int)
+  ))), $"c1".string, $"c2".string, $"c3".int)
 
   Seq(Explode(_), PosExplode(_), Inline(_)).foreach { f =>
-    val generator = f('a)
+    val generator = f($"a")
     test("Infer filters from " + generator) {
       val originalQuery = testRelation.generate(generator).analyze
       val correctAnswer = testRelation
-        .where(IsNotNull('a) && Size('a) > 0)
+        .where(IsNotNull($"a") && Size($"a") > 0)
         .generate(generator)
         .analyze
       val optimized = Optimize.execute(originalQuery)
@@ -50,7 +50,7 @@ class InferFiltersFromGenerateSuite extends PlanTest {
 
     test("Don't infer duplicate filters from " + generator) {
       val originalQuery = testRelation
-        .where(IsNotNull('a) && Size('a) > 0)
+        .where(IsNotNull($"a") && Size($"a") > 0)
         .generate(generator)
         .analyze
       val optimized = Optimize.execute(originalQuery)
@@ -76,7 +76,7 @@ class InferFiltersFromGenerateSuite extends PlanTest {
     val generatorWithFromJson = f(JsonToStructs(
       ArrayType(new StructType().add("s", "string")),
       Map.empty,
-      'c1))
+      $"c1"))
     test("SPARK-37392: Don't infer filters from " + generatorWithFromJson) {
       val originalQuery = testRelation.generate(generatorWithFromJson).analyze
       val optimized = Optimize.execute(originalQuery)
@@ -89,7 +89,7 @@ class InferFiltersFromGenerateSuite extends PlanTest {
     )))
     val fakeUDF = ScalaUDF(
       (i: Int) => Array(Row.fromSeq(Seq(1, "a")), Row.fromSeq(Seq(2, "b"))),
-      returnSchema, 'c3 :: Nil, Nil)
+      returnSchema, $"c3" :: Nil, Nil)
     val generatorWithUDF = f(fakeUDF)
     test("SPARK-36715: Don't infer filters from " + generatorWithUDF) {
       val originalQuery = testRelation.generate(generatorWithUDF).analyze
@@ -99,13 +99,13 @@ class InferFiltersFromGenerateSuite extends PlanTest {
   }
 
   Seq(Explode(_), PosExplode(_)).foreach { f =>
-    val createArrayExplode = f(CreateArray(Seq('c1)))
+    val createArrayExplode = f(CreateArray(Seq($"c1")))
     test("SPARK-33544: Don't infer filters from " + createArrayExplode) {
       val originalQuery = testRelation.generate(createArrayExplode).analyze
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
     }
-    val createMapExplode = f(CreateMap(Seq('c1, 'c2)))
+    val createMapExplode = f(CreateMap(Seq($"c1", $"c2")))
     test("SPARK-33544: Don't infer filters from " + createMapExplode) {
       val originalQuery = testRelation.generate(createMapExplode).analyze
       val optimized = Optimize.execute(originalQuery)
@@ -114,7 +114,7 @@ class InferFiltersFromGenerateSuite extends PlanTest {
   }
 
   Seq(Inline(_)).foreach { f =>
-    val createArrayStructExplode = f(CreateArray(Seq(CreateStruct(Seq('c1)))))
+    val createArrayStructExplode = f(CreateArray(Seq(CreateStruct(Seq($"c1")))))
     test("SPARK-33544: Don't infer filters from " + createArrayStructExplode) {
       val originalQuery = testRelation.generate(createArrayStructExplode).analyze
       val optimized = Optimize.execute(originalQuery)

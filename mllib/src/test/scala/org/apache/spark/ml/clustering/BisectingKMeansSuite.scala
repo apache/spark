@@ -56,6 +56,11 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     assert(copiedModel.hasSummary)
   }
 
+  test("BisectingKMeans validate input dataset") {
+    testInvalidWeights(new BisectingKMeans().setWeightCol("weight").fit(_))
+    testInvalidVectors(new BisectingKMeans().fit(_))
+  }
+
   test("SPARK-16473: Verify Bisecting K-Means does not fail in edge case where" +
     "one cluster is empty after split") {
     val bkm = new BisectingKMeans()

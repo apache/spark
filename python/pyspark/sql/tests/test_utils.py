@@ -36,7 +36,7 @@ class UtilsTests(ReusedSQLTestCase):
         try:
             self.spark.sql("select `中文字段`")
         except AnalysisException as e:
-            self.assertRegex(str(e), "Column '`中文字段`' does not exist")
+            self.assertRegex(str(e), ".*UNRESOLVED_COLUMN.*`中文字段`.*")
 
     def test_spark_upgrade_exception(self):
         # SPARK-32161 : Test case to Handle SparkUpgradeException in pythonic way
@@ -72,7 +72,7 @@ class UtilsTests(ReusedSQLTestCase):
         try:
             self.spark.sql("""SELECT a""")
         except AnalysisException as e:
-            self.assertEquals(e.getErrorClass(), "MISSING_COLUMN")
+            self.assertEquals(e.getErrorClass(), "UNRESOLVED_COLUMN")
             self.assertEquals(e.getSqlState(), "42000")
 
 

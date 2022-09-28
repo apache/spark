@@ -20,7 +20,7 @@ addSbtPlugin("com.etsy" % "sbt-checkstyle-plugin" % "3.1.1")
 // sbt-checkstyle-plugin uses an old version of checkstyle. Match it to Maven's.
 // If you are changing the dependency setting for checkstyle plugin,
 // please check pom.xml in the root of the source tree too.
-libraryDependencies += "com.puppycrawl.tools" % "checkstyle" % "8.43"
+libraryDependencies += "com.puppycrawl.tools" % "checkstyle" % "9.3"
 
 // checkstyle uses guava 23.0.
 libraryDependencies += "com.google.guava" % "guava" % "23.0"
@@ -31,16 +31,18 @@ addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "5.2.4")
 
 addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "1.0.0")
 
-addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.9.2")
+addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "1.1.0")
 
 addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.4.3")
 
 addSbtPlugin("io.spray" % "sbt-revolver" % "0.9.1")
 
-libraryDependencies += "org.ow2.asm"  % "asm" % "9.1"
+libraryDependencies += "org.ow2.asm"  % "asm" % "9.3"
 
-libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.1"
+libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.3"
 
 addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.3")
 
 addSbtPlugin("com.typesafe.sbt" % "sbt-pom-reader" % "2.2.0")
+
+addSbtPlugin("com.thesamet" % "sbt-protoc" % "1.0.1")

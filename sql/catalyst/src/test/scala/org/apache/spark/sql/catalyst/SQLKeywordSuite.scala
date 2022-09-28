@@ -111,7 +111,7 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
     keywords.toMap
   }
 
-  // All the SQL keywords defined in `SqlBase.g4`
+  // All the SQL keywords defined in `SqlBaseLexer.g4`
   val allCandidateKeywords: Set[String] = {
     val kwDef = """([A-Z_]+):.+;""".r
     parseAntlrGrammars(

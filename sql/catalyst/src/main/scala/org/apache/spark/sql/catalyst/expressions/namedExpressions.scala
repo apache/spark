@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, METADATA_COL_ATTR_KEY}
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.collection.ImmutableBitSet
@@ -160,7 +159,7 @@ case class Alias(child: Expression, name: String)(
   /** Just a simple passthrough for code generation. */
   override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    throw QueryExecutionErrors.doGenCodeOfAliasShouldNotBeCalledError
+    throw new IllegalStateException("Alias.doGenCode should not be called.")
   }
 
   override def dataType: DataType = child.dataType
@@ -193,7 +192,7 @@ case class Alias(child: Expression, name: String)(
     if (resolved) {
       AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifier)
     } else {
-      UnresolvedAttribute(name)
+      UnresolvedAttribute.quoted(name)
     }
   }
 
@@ -296,7 +295,7 @@ case class AttributeReference(
     h
   }
 
-  override lazy val preCanonicalized: Expression = {
+  override lazy val canonicalized: Expression = {
     AttributeReference("none", dataType)(exprId)
   }
 

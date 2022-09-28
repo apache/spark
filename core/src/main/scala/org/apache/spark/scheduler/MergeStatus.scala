@@ -59,15 +59,6 @@ private[spark] class MergeStatus(
   def tracker: RoaringBitmap = mapTracker
 
   /**
-   * Get the list of mapper IDs for missing mapper partition blocks that are not merged.
-   * The reducer will use this information to decide which shuffle partition blocks to
-   * fetch in the original way.
-   */
-  def getMissingMaps(numMaps: Int): Seq[Int] = {
-    (0 until numMaps).filter(i => !mapTracker.contains(i))
-  }
-
-  /**
    * Get the number of missing map outputs for missing mapper partition blocks that are not merged.
    */
   def getNumMissingMapOutputs(numMaps: Int): Int = {

@@ -36,8 +36,8 @@
 
       # run the example
       $ bin/spark-submit --jars \
-        'external/kinesis-asl-assembly/target/spark-streaming-kinesis-asl-assembly_*.jar' \
-        external/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py \
+        'connector/kinesis-asl-assembly/target/spark-streaming-kinesis-asl-assembly_*.jar' \
+        connector/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py \
         myAppName mySparkStream https://kinesis.us-east-1.amazonaws.com us-east-1
 
   There is a companion helper class called KinesisWordProducerASL which puts dummy data
@@ -50,9 +50,9 @@
       Credential profiles file - default location (~/.aws/credentials) shared by all AWS SDKs
       Instance profile credentials - delivered through the Amazon EC2 metadata service
   For more information, see
-      http://docs.aws.amazon.com/AWSSdkDocsJava/latest/DeveloperGuide/credentials.html
+      https://docs.aws.amazon.com/AWSSdkDocsJava/latest/DeveloperGuide/credentials.html
 
-  See http://spark.apache.org/docs/latest/streaming-kinesis-integration.html for more details on
+  See https://spark.apache.org/docs/latest/streaming-kinesis-integration.html for more details on
   the Kinesis Spark Streaming integration.
 """
 import sys

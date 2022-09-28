@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
+import scala.collection.JavaConverters._
+
+import org.apache.spark.{QueryContext, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
@@ -36,29 +38,98 @@ class AnalysisException protected[sql] (
     @transient val plan: Option[LogicalPlan] = None,
     val cause: Option[Throwable] = None,
     val errorClass: Option[String] = None,
-    val messageParameters: Array[String] = Array.empty)
+    val errorSubClass: Option[String] = None,
+    val messageParameters: Map[String, String] = Map.empty,
+    val context: Array[QueryContext] = Array.empty)
   extends Exception(message, cause.orNull) with SparkThrowable with Serializable {
 
-  def this(errorClass: String, messageParameters: Array[String], cause: Option[Throwable]) =
+    // Needed for binary compatibility
+    protected[sql] def this(
+        message: String,
+        line: Option[Int],
+        startPosition: Option[Int],
+        plan: Option[LogicalPlan],
+        cause: Option[Throwable],
+        errorClass: Option[String],
+        messageParameters: Map[String, String]) =
     this(
-      SparkThrowableHelper.getMessage(errorClass, messageParameters),
-      errorClass = Some(errorClass),
-      messageParameters = messageParameters,
-      cause = cause)
-
-  def this(errorClass: String, messageParameters: Array[String]) =
-    this(errorClass = errorClass, messageParameters = messageParameters, cause = None)
+      message = message,
+      line = line,
+      startPosition = startPosition,
+      plan = plan,
+      cause = cause,
+      errorClass,
+      errorSubClass = None,
+      messageParameters = messageParameters)
 
   def this(
       errorClass: String,
-      messageParameters: Array[String],
+      messageParameters: Map[String, String],
+      cause: Option[Throwable]) =
+    this(
+      SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
+      errorClass = Some(errorClass),
+      errorSubClass = None,
+      messageParameters = messageParameters,
+      cause = cause)
+
+  def this(
+      errorClass: String,
+      messageParameters: Map[String, String],
+      context: Array[QueryContext],
+      summary: String) =
+    this(
+      SparkThrowableHelper.getMessage(errorClass, null, messageParameters, summary),
+      errorClass = Some(errorClass),
+      errorSubClass = None,
+      messageParameters = messageParameters,
+      cause = null,
+      context = context)
+
+  def this(
+      errorClass: String,
+      messageParameters: Map[String, String]) =
+    this(
+      errorClass = errorClass,
+      messageParameters = messageParameters,
+      cause = None)
+
+  def this(
+      errorClass: String,
+      messageParameters: Map[String, String],
       origin: Origin) =
     this(
-      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
       line = origin.line,
       startPosition = origin.startPosition,
       errorClass = Some(errorClass),
+      errorSubClass = None,
+      messageParameters = messageParameters,
+      context = origin.getQueryContext)
+
+  def this(
+      errorClass: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String]) =
+    this(
+      SparkThrowableHelper.getMessage(errorClass, errorSubClass, messageParameters),
+      errorClass = Some(errorClass),
+      errorSubClass = Some(errorSubClass),
       messageParameters = messageParameters)
+
+  def this(
+      errorClass: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String],
+      origin: Origin) =
+    this(
+      SparkThrowableHelper.getMessage(errorClass, errorSubClass, messageParameters),
+      line = origin.line,
+      startPosition = origin.startPosition,
+      errorClass = Some(errorClass),
+      errorSubClass = Option(errorSubClass),
+      messageParameters = messageParameters,
+      context = origin.getQueryContext)
 
   def copy(
       message: String = this.message,
@@ -67,11 +138,16 @@ class AnalysisException protected[sql] (
       plan: Option[LogicalPlan] = this.plan,
       cause: Option[Throwable] = this.cause,
       errorClass: Option[String] = this.errorClass,
-      messageParameters: Array[String] = this.messageParameters): AnalysisException =
-    new AnalysisException(message, line, startPosition, plan, cause, errorClass, messageParameters)
+      messageParameters: Map[String, String] = this.messageParameters,
+      context: Array[QueryContext] = this.context): AnalysisException =
+    new AnalysisException(message, line, startPosition, plan, cause, errorClass, errorSubClass,
+      messageParameters, context)
 
-  def withPosition(line: Option[Int], startPosition: Option[Int]): AnalysisException = {
-    val newException = this.copy(line = line, startPosition = startPosition)
+  def withPosition(origin: Origin): AnalysisException = {
+    val newException = this.copy(
+      line = origin.line,
+      startPosition = origin.startPosition,
+      context = origin.getQueryContext)
     newException.setStackTrace(getStackTrace)
     newException
   }
@@ -91,5 +167,9 @@ class AnalysisException protected[sql] (
     message
   }
 
+  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+
   override def getErrorClass: String = errorClass.orNull
+  override def getErrorSubClass: String = errorSubClass.orNull
+  override def getQueryContext: Array[QueryContext] = context
 }

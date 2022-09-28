@@ -64,7 +64,7 @@ private[ui] class RecordRateUIData(val data: Seq[(Long, Double)]) {
 
   val avg: Option[Double] = if (data.isEmpty) None else Some(data.map(_._2).sum / data.size)
 
-  val formattedAvg: String = avg.map(_.formatted("%.2f")).getOrElse("-")
+  val formattedAvg: String = avg.map("%.2f".format(_)).getOrElse("-")
 
   val max: Option[Double] = if (data.isEmpty) None else Some(data.map(_._2).max)
 }

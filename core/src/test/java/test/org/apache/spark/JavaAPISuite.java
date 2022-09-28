@@ -39,6 +39,7 @@ import org.apache.spark.Partitioner;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
+import org.apache.spark.network.util.JavaUtils;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -90,9 +91,9 @@ public class JavaAPISuite implements Serializable {
   private transient File tempDir;
 
   @Before
-  public void setUp() {
+  public void setUp() throws IOException {
     sc = new JavaSparkContext("local", "JavaAPISuite");
-    tempDir = Files.createTempDir();
+    tempDir = JavaUtils.createTempDir();
     tempDir.deleteOnExit();
   }
 
@@ -1494,12 +1495,7 @@ public class JavaAPISuite implements Serializable {
     future.cancel(true);
     assertTrue(future.isCancelled());
     assertTrue(future.isDone());
-    try {
-      future.get(2000, TimeUnit.MILLISECONDS);
-      fail("Expected future.get() for cancelled job to throw CancellationException");
-    } catch (CancellationException ignored) {
-      // pass
-    }
+    assertThrows(CancellationException.class, () -> future.get(2000, TimeUnit.MILLISECONDS));
   }
 
   @Test
@@ -1507,12 +1503,9 @@ public class JavaAPISuite implements Serializable {
     List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
     JavaRDD<Integer> rdd = sc.parallelize(data, 1);
     JavaFutureAction<Long> future = rdd.map(new BuggyMapFunction<>()).countAsync();
-    try {
-      future.get(2, TimeUnit.SECONDS);
-      fail("Expected future.get() for failed job to throw ExecutionException");
-    } catch (ExecutionException ee) {
-      assertTrue(Throwables.getStackTraceAsString(ee).contains("Custom exception!"));
-    }
+    ExecutionException ee = assertThrows(ExecutionException.class,
+      () -> future.get(2, TimeUnit.SECONDS));
+    assertTrue(Throwables.getStackTraceAsString(ee).contains("Custom exception!"));
     assertTrue(future.isDone());
   }
 

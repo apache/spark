@@ -156,7 +156,7 @@ object SizeEstimator extends Logging {
         val guess = Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
         val guessInWords = if (guess) "yes" else "not"
         logWarning("Failed to check whether UseCompressedOops is set; assuming " + guessInWords)
-        return guess
+        guess
     }
   }
 

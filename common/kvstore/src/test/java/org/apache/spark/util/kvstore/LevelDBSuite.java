@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Spliterators;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -71,36 +72,21 @@ public class LevelDBSuite {
     db.close();
     db = null;
 
-    try {
-      db = new LevelDB(dbpath);
-      fail("Should have failed version check.");
-    } catch (UnsupportedStoreVersionException e) {
-      // Expected.
-    }
+    assertThrows(UnsupportedStoreVersionException.class, () -> db = new LevelDB(dbpath));
   }
 
   @Test
   public void testObjectWriteReadDelete() throws Exception {
     CustomType1 t = createCustomType1(1);
 
-    try {
-      db.read(CustomType1.class, t.key);
-      fail("Expected exception for non-existent object.");
-    } catch (NoSuchElementException nsee) {
-      // Expected.
-    }
+    assertThrows(NoSuchElementException.class, () -> db.read(CustomType1.class, t.key));
 
     db.write(t);
     assertEquals(t, db.read(t.getClass(), t.key));
     assertEquals(1L, db.count(t.getClass()));
 
     db.delete(t.getClass(), t.key);
-    try {
-      db.read(t.getClass(), t.key);
-      fail("Expected exception for deleted object.");
-    } catch (NoSuchElementException nsee) {
-      // Expected.
-    }
+    assertThrows(NoSuchElementException.class, () -> db.read(t.getClass(), t.key));
 
     // Look into the actual DB and make sure that all the keys related to the type have been
     // removed.
@@ -251,13 +237,14 @@ public class LevelDBSuite {
       db.write(createCustomType1(i));
     }
 
-    KVStoreIterator<CustomType1> it = db.view(CustomType1.class).closeableIterator();
-    assertTrue(it.hasNext());
-    assertTrue(it.skip(5));
-    assertEquals("key5", it.next().key);
-    assertTrue(it.skip(3));
-    assertEquals("key9", it.next().key);
-    assertFalse(it.hasNext());
+    try (KVStoreIterator<CustomType1> it = db.view(CustomType1.class).closeableIterator()) {
+      assertTrue(it.hasNext());
+      assertTrue(it.skip(5));
+      assertEquals("key5", it.next().key);
+      assertTrue(it.skip(3));
+      assertEquals("key9", it.next().key);
+      assertFalse(it.hasNext());
+    }
   }
 
   @Test
@@ -272,12 +259,15 @@ public class LevelDBSuite {
       }
     });
 
-    List<Integer> results = StreamSupport
-      .stream(db.view(CustomType1.class).index("int").spliterator(), false)
-      .map(e -> e.num)
-      .collect(Collectors.toList());
+    try (KVStoreIterator<CustomType1> iterator =
+      db.view(CustomType1.class).index("int").closeableIterator()) {
+      List<Integer> results = StreamSupport
+        .stream(Spliterators.spliteratorUnknownSize(iterator, 0), false)
+        .map(e -> e.num)
+        .collect(Collectors.toList());
 
-    assertEquals(expected, results);
+      assertEquals(expected, results);
+    }
   }
 
   @Test
@@ -313,6 +303,84 @@ public class LevelDBSuite {
     assertTrue(dbPathForCloseTest.exists());
     FileUtils.deleteQuietly(dbPathForCloseTest);
     assertTrue(!dbPathForCloseTest.exists());
+  }
+
+  @Test
+  public void testHasNextAfterIteratorClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close iter
+    iter.close();
+    // iter.hasNext should be false after iter close
+    assertFalse(iter.hasNext());
+  }
+
+  @Test
+  public void testHasNextAfterDBClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close db
+    db.close();
+    // iter.hasNext should be false after db close
+    assertFalse(iter.hasNext());
+  }
+
+  @Test
+  public void testNextAfterIteratorClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close iter
+    iter.close();
+    // iter.next should throw NoSuchElementException after iter close
+    assertThrows(NoSuchElementException.class, iter::next);
+  }
+
+  @Test
+  public void testNextAfterDBClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close db
+    iter.close();
+    // iter.next should throw NoSuchElementException after db close
+    assertThrows(NoSuchElementException.class, iter::next);
+  }
+
+  @Test
+  public void testSkipAfterIteratorClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // close iter
+    iter.close();
+    // skip should always return false after iter close
+    assertFalse(iter.skip(0));
+    assertFalse(iter.skip(1));
+  }
+
+  @Test
+  public void testSkipAfterDBClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close db
+    db.close();
+    // skip should always return false after db close
+    assertFalse(iter.skip(0));
+    assertFalse(iter.skip(1));
   }
 
   private CustomType1 createCustomType1(int i) {

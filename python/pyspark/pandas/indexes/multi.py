@@ -38,6 +38,7 @@ from pyspark.pandas.utils import (
     name_like_string,
     scol_for,
     verify_temp_column_name,
+    validate_index_loc,
 )
 from pyspark.pandas.internal import (
     InternalField,
@@ -45,7 +46,6 @@ from pyspark.pandas.internal import (
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_INDEX_NAME_FORMAT,
 )
-from pyspark.pandas.spark import functions as SF
 
 
 class MultiIndex(Index):
@@ -509,8 +509,8 @@ class MultiIndex(Index):
     def _is_monotonic_increasing(self) -> Series:
         window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(-1, -1)
 
-        cond = SF.lit(True)
-        has_not_null = SF.lit(True)
+        cond = F.lit(True)
+        has_not_null = F.lit(True)
         for scol in self._internal.index_spark_columns[::-1]:
             data_type = self._internal.spark_type_for(scol)
             prev = F.lag(scol, 1).over(window)
@@ -551,8 +551,8 @@ class MultiIndex(Index):
     def _is_monotonic_decreasing(self) -> Series:
         window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(-1, -1)
 
-        cond = SF.lit(True)
-        has_not_null = SF.lit(True)
+        cond = F.lit(True)
+        has_not_null = F.lit(True)
         for scol in self._internal.index_spark_columns[::-1]:
             data_type = self._internal.spark_type_for(scol)
             prev = F.lag(scol, 1).over(window)
@@ -893,6 +893,70 @@ class MultiIndex(Index):
         )
         return cast(MultiIndex, DataFrame(internal).index)
 
+    def drop_duplicates(self, keep: Union[bool, str] = "first") -> "MultiIndex":
+        """
+        Return MultiIndex with duplicate values removed.
+
+        Parameters
+        ----------
+        keep : {'first', 'last', ``False``}, default 'first'
+            Method to handle dropping duplicates:
+            - 'first' : Drop duplicates except for the first occurrence.
+            - 'last' : Drop duplicates except for the last occurrence.
+            - ``False`` : Drop all duplicates.
+
+        Returns
+        -------
+        deduplicated : MultiIndex
+
+        See Also
+        --------
+        Series.drop_duplicates : Equivalent method on Series.
+        DataFrame.drop_duplicates : Equivalent method on DataFrame.
+
+        Examples
+        --------
+        Generate a MultiIndex with duplicate values.
+
+        >>> arrays = [[1, 2, 3, 1, 2], ["red", "blue", "black", "red", "blue"]]
+        >>> midx = ps.MultiIndex.from_arrays(arrays, names=("number", "color"))
+        >>> midx
+        MultiIndex([(1,   'red'),
+                    (2,  'blue'),
+                    (3, 'black'),
+                    (1,   'red'),
+                    (2,  'blue')],
+                   names=['number', 'color'])
+
+        >>> midx.drop_duplicates()
+        MultiIndex([(1,   'red'),
+                    (2,  'blue'),
+                    (3, 'black')],
+                   names=['number', 'color'])
+
+        >>> midx.drop_duplicates(keep='first')
+        MultiIndex([(1,   'red'),
+                    (2,  'blue'),
+                    (3, 'black')],
+                   names=['number', 'color'])
+
+        >>> midx.drop_duplicates(keep='last')
+        MultiIndex([(3, 'black'),
+                    (1,   'red'),
+                    (2,  'blue')],
+                   names=['number', 'color'])
+
+        >>> midx.drop_duplicates(keep=False)
+        MultiIndex([(3, 'black')],
+                   names=['number', 'color'])
+        """
+        with ps.option_context("compute.default_index_type", "distributed"):
+            # The attached index caused by `reset_index` below is used for sorting only,
+            # and it will be dropped soon,
+            # so we enforce “distributed” default index type
+            psdf = self.to_frame().reset_index(drop=True)
+        return ps.MultiIndex.from_frame(psdf.drop_duplicates(keep=keep).sort_index())
+
     def argmax(self) -> None:
         raise TypeError("reduction operation 'argmax' not allowed for this dtype")
 
@@ -1016,6 +1080,9 @@ class MultiIndex(Index):
 
         Follows Python list.append semantics for negative values.
 
+        .. versionchanged:: 3.4.0
+           Raise IndexError when loc is out of bounds to follow Pandas 1.4+ behavior
+
         Parameters
         ----------
         loc : int
@@ -1044,20 +1111,8 @@ class MultiIndex(Index):
                     ('c', 'z')],
                    )
         """
-        length = len(self)
-        if loc < 0:
-            loc = loc + length
-            if loc < 0:
-                raise IndexError(
-                    "index {} is out of bounds for axis 0 with size {}".format(
-                        (loc - length), length
-                    )
-                )
-        else:
-            if loc > length:
-                raise IndexError(
-                    "index {} is out of bounds for axis 0 with size {}".format(loc, length)
-                )
+        validate_index_loc(self, loc)
+        loc = loc + len(self) if loc < 0 else loc
 
         index_name: List[Label] = [(name,) for name in self._internal.index_spark_column_names]
         sdf_before = self.to_frame(name=index_name)[:loc]._to_spark()

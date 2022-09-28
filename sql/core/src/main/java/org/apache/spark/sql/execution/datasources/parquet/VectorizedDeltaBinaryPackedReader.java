@@ -90,11 +90,17 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
     Preconditions.checkArgument(miniSize % 8 == 0,
         "miniBlockSize must be multiple of 8, but it's " + miniSize);
     this.miniBlockSizeInValues = (int) miniSize;
+    // True value count. May be less than valueCount because of nulls
     this.totalValueCount = BytesUtils.readUnsignedVarInt(in);
     this.bitWidths = new int[miniBlockNumInABlock];
     this.unpackedValuesBuffer = new long[miniBlockSizeInValues];
     // read the first value
     firstValue = BytesUtils.readZigZagVarLong(in);
+  }
+
+  // True value count. May be less than valueCount because of nulls
+  int getTotalValueCount() {
+    return totalValueCount;
   }
 
   @Override
@@ -294,7 +300,12 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
         bitWidths[currentMiniBlock]);
     for (int j = 0; j < miniBlockSizeInValues; j += 8) {
       ByteBuffer buffer = in.slice(packer.getBitWidth());
-      packer.unpack8Values(buffer, buffer.position(), unpackedValuesBuffer, j);
+      if (buffer.hasArray()) {
+        packer.unpack8Values(buffer.array(),
+          buffer.arrayOffset() + buffer.position(), unpackedValuesBuffer, j);
+      } else {
+        packer.unpack8Values(buffer, buffer.position(), unpackedValuesBuffer, j);
+      }
     }
     remainingInMiniBlock = miniBlockSizeInValues;
     currentMiniBlock++;

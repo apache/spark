@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.Utils
 
 /**
  * Holds common logic for window operators
@@ -69,7 +70,7 @@ trait WindowExecBase extends UnaryExecNode {
       // Results of window expressions will be on the right side of child's output
       BoundReference(child.output.size + i, e.dataType, e.nullable)
     }
-    val unboundToRefMap = expressions.zip(references).toMap
+    val unboundToRefMap = Utils.toMap(expressions, references)
     val patchedWindowExpression = windowExpression.map(_.transform(unboundToRefMap))
     UnsafeProjection.create(
       child.output ++ patchedWindowExpression,
@@ -97,7 +98,7 @@ trait WindowExecBase extends UnaryExecNode {
         RowBoundOrdering(offset)
 
       case (RowFrame, _) =>
-        sys.error(s"Unhandled bound in windows expressions: $bound")
+        throw new IllegalStateException(s"Unhandled bound in windows expressions: $bound")
 
       case (RangeFrame, CurrentRow) =>
         val ordering = RowOrdering.create(orderSpec, child.output)
@@ -139,7 +140,7 @@ trait WindowExecBase extends UnaryExecNode {
         RangeBoundOrdering(ordering, current, bound)
 
       case (RangeFrame, _) =>
-        sys.error("Non-Zero range offsets are not supported for windows " +
+        throw new IllegalStateException("Non-Zero range offsets are not supported for windows " +
           "with multiple order expressions.")
     }
   }
@@ -189,7 +190,7 @@ trait WindowExecBase extends UnaryExecNode {
               }
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
             case f: PythonUDF => collect("AGGREGATE", frame, e, f)
-            case f => sys.error(s"Unsupported window function: $f")
+            case f => throw new IllegalStateException(s"Unsupported window function: $f")
           }
         case _ =>
       }
@@ -296,7 +297,7 @@ trait WindowExecBase extends UnaryExecNode {
             }
 
           case _ =>
-            sys.error(s"Unsupported factory: $key")
+            throw new IllegalStateException(s"Unsupported factory: $key")
         }
 
         // Keep track of the number of expressions. This is a side-effect in a map...

@@ -39,8 +39,8 @@ class NullDownPropagationSuite extends PlanTest with ExpressionEvalHelper {
         PruneFilters) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string,
-    'e.boolean, 'f.boolean, 'g.boolean, 'h.boolean)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int, $"d".string,
+    $"e".boolean, $"f".boolean, $"g".boolean, $"h".boolean)
 
   private def checkCondition(input: Expression, expected: Expression): Unit = {
     val plan = testRelation.where(input).analyze
@@ -50,9 +50,9 @@ class NullDownPropagationSuite extends PlanTest with ExpressionEvalHelper {
   }
 
   test("Using IsNull(e(inputs)) == IsNull(input1) or IsNull(input2) ... rules") {
-    checkCondition(IsNull(Not('e)), IsNull('e))
-    checkCondition(IsNotNull(Not('e)), IsNotNull('e))
-    checkCondition(IsNull('a > 'b), Or(IsNull('a), IsNull('b)))
-    checkCondition(IsNotNull('a > 'b), And(IsNotNull('a), IsNotNull('b)))
+    checkCondition(IsNull(Not($"e")), IsNull($"e"))
+    checkCondition(IsNotNull(Not($"e")), IsNotNull($"e"))
+    checkCondition(IsNull($"a" > $"b"), Or(IsNull($"a"), IsNull($"b")))
+    checkCondition(IsNotNull($"a" > $"b"), And(IsNotNull($"a"), IsNotNull($"b")))
   }
 }

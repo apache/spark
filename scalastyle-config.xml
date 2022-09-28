@@ -430,4 +430,11 @@ This file is divided into 3 sections:
     <parameters><parameter name="regex">Objects.toStringHelper</parameter></parameters>
     <customMessage>Avoid using Object.toStringHelper. Use ToStringBuilder instead.</customMessage>
   </check>
+
+  <check customId="GuavaFilesCreateTempDir" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">Files\.createTempDir\(</parameter></parameters>
+    <customMessage>Avoid using com.google.common.io.Files.createTempDir due to CVE-2020-8908.
+      Use org.apache.spark.util.Utils.createTempDir instead.
+    </customMessage>
+  </check>
 </scalastyle>

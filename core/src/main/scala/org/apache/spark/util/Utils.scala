@@ -74,6 +74,7 @@ import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer, SerializerInstance}
 import org.apache.spark.status.api.v1.{StackTrace, ThreadStackTrace}
+import org.apache.spark.util.collection.{Utils => CUtils}
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
@@ -308,28 +309,7 @@ private[spark] object Utils extends Logging {
    * newly created, and is not marked for automatic deletion.
    */
   def createDirectory(root: String, namePrefix: String = "spark"): File = {
-    var attempts = 0
-    val maxAttempts = MAX_DIR_CREATION_ATTEMPTS
-    var dir: File = null
-    while (dir == null) {
-      attempts += 1
-      if (attempts > maxAttempts) {
-        throw new IOException("Failed to create a temp directory (under " + root + ") after " +
-          maxAttempts + " attempts!")
-      }
-      try {
-        dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
-        // SPARK-35907:
-        // This could throw more meaningful exception information if directory creation failed.
-        Files.createDirectories(dir.toPath)
-      } catch {
-        case e @ (_ : IOException | _ : SecurityException) =>
-          logError(s"Failed to create directory $dir", e)
-          dir = null
-      }
-    }
-
-    dir.getCanonicalFile
+    JavaUtils.createDirectory(root, namePrefix)
   }
 
   /**
@@ -339,9 +319,7 @@ private[spark] object Utils extends Logging {
   def createTempDir(
       root: String = System.getProperty("java.io.tmpdir"),
       namePrefix: String = "spark"): File = {
-    val dir = createDirectory(root, namePrefix)
-    ShutdownHookManager.registerShutdownDeleteDir(dir)
-    dir
+    JavaUtils.createTempDir(root, namePrefix)
   }
 
   /**
@@ -1094,21 +1072,30 @@ private[spark] object Utils extends Logging {
    * Get the local machine's FQDN.
    */
   def localCanonicalHostName(): String = {
-    customHostname.getOrElse(localIpAddress.getCanonicalHostName)
+    addBracketsIfNeeded(customHostname.getOrElse(localIpAddress.getCanonicalHostName))
   }
 
   /**
    * Get the local machine's hostname.
+   * In case of IPv6, getHostAddress may return '0:0:0:0:0:0:0:1'.
    */
   def localHostName(): String = {
-    customHostname.getOrElse(localIpAddress.getHostAddress)
+    addBracketsIfNeeded(customHostname.getOrElse(localIpAddress.getHostAddress))
   }
 
   /**
    * Get the local machine's URI.
    */
   def localHostNameForURI(): String = {
-    customHostname.getOrElse(InetAddresses.toUriString(localIpAddress))
+    addBracketsIfNeeded(customHostname.getOrElse(InetAddresses.toUriString(localIpAddress)))
+  }
+
+  private[spark] def addBracketsIfNeeded(addr: String): String = {
+    if (addr.contains(":") && !addr.contains("[")) {
+      "[" + addr + "]"
+    } else {
+      addr
+    }
   }
 
   /**
@@ -1732,7 +1719,8 @@ private[spark] object Utils extends Logging {
     assert(files.length == fileLengths.length)
     val startIndex = math.max(start, 0)
     val endIndex = math.min(end, fileLengths.sum)
-    val fileToLength = files.zip(fileLengths).toMap
+    val fileToLength = CUtils.toMap(files, fileLengths)
+
     logDebug("Log files: \n" + fileToLength.mkString("\n"))
 
     val stringBuffer = new StringBuffer((endIndex - startIndex).toInt)
@@ -1922,18 +1910,9 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Counts the number of elements of an iterator using a while loop rather than calling
-   * [[scala.collection.Iterator#size]] because it uses a for loop, which is slightly slower
-   * in the current version of Scala.
+   * Counts the number of elements of an iterator.
    */
-  def getIteratorSize(iterator: Iterator[_]): Long = {
-    var count = 0L
-    while (iterator.hasNext) {
-      count += 1L
-      iterator.next()
-    }
-    count
-  }
+  def getIteratorSize(iterator: Iterator[_]): Long = Iterators.size(iterator)
 
   /**
    * Generate a zipWithIndex iterator, avoid index value overflowing problem
@@ -2001,6 +1980,11 @@ private[spark] object Utils extends Logging {
    * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
    */
   val isMacOnAppleSilicon = SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64")
+
+  /**
+   * Whether the underlying JVM prefer IPv6 addresses.
+   */
+  val preferIPv6 = "true".equals(System.getProperty("java.net.preferIPv6Addresses"))
 
   /**
    * Pattern for matching a Windows drive, which contains only a single alphabet character.
@@ -3069,7 +3053,7 @@ private[spark] object Utils extends Logging {
    * and return the trailing part after the last dollar sign in the middle
    */
   @scala.annotation.tailrec
-  private def stripDollars(s: String): String = {
+  def stripDollars(s: String): String = {
     val lastDollarIndex = s.lastIndexOf('$')
     if (lastDollarIndex < s.length - 1) {
       // The last char is not a dollar sign

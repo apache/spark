@@ -860,6 +860,31 @@ object SparkSession extends Logging {
     }
 
     /**
+     * Sets a config option. Options set using this method are automatically propagated to
+     * both `SparkConf` and SparkSession's own configuration.
+     *
+     * @since 3.4.0
+     */
+    def config(map: Map[String, Any]): Builder = synchronized {
+      map.foreach {
+        kv: (String, Any) => {
+          options += kv._1 -> kv._2.toString
+        }
+      }
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to
+     * both `SparkConf` and SparkSession's own configuration.
+     *
+     * @since 3.4.0
+     */
+    def config(map: java.util.Map[String, Any]): Builder = synchronized {
+      config(map.asScala.toMap)
+    }
+
+    /**
      * Sets a list of config options based on the given `SparkConf`.
      *
      * @since 2.0.0
@@ -1104,13 +1129,13 @@ object SparkSession extends Logging {
   private[sql] def getOrCloneSessionWithConfigsOff(
       session: SparkSession,
       configurations: Seq[ConfigEntry[Boolean]]): SparkSession = {
-    val configsEnabled = configurations.filter(session.sessionState.conf.getConf(_))
+    val configsEnabled = configurations.filter(session.conf.get[Boolean])
     if (configsEnabled.isEmpty) {
       session
     } else {
       val newSession = session.cloneSession()
       configsEnabled.foreach(conf => {
-        newSession.sessionState.conf.setConf(conf, false)
+        newSession.conf.set(conf, false)
       })
       newSession
     }

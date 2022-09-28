@@ -21,7 +21,7 @@ name: Cancelling Duplicates
 on:
   workflow_run:
     workflows: 
-      - 'Build and test'
+      - 'Build'
     types: ['requested']
 
 jobs:

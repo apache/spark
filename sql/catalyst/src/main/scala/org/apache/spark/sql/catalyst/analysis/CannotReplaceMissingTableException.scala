@@ -25,5 +25,6 @@ class CannotReplaceMissingTableException(
     tableIdentifier: Identifier,
     cause: Option[Throwable] = None)
   extends AnalysisException(
-    s"Table $tableIdentifier cannot be replaced as it did not exist." +
-      s" Use CREATE OR REPLACE TABLE to create the table.", cause = cause)
+    errorClass = "_LEGACY_ERROR_TEMP_1112",
+    messageParameters = Map("table" -> tableIdentifier.toString),
+    cause = cause)

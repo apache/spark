@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.UUID
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
@@ -284,6 +283,21 @@ case class OverwritePartitionsDynamicExec(
     copy(query = newChild)
 }
 
+/**
+ * Physical plan node to replace data in existing tables.
+ */
+case class ReplaceDataExec(
+    query: SparkPlan,
+    refreshCache: () => Unit,
+    write: Write) extends V2ExistingTableWriteExec {
+
+  override val stringArgs: Iterator[Any] = Iterator(query, write)
+
+  override protected def withNewChildInternal(newChild: SparkPlan): ReplaceDataExec = {
+    copy(query = newChild)
+  }
+}
+
 case class WriteToDataSourceV2Exec(
     batchWrite: BatchWrite,
     refreshCache: () => Unit,
@@ -389,11 +403,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
             throw QueryExecutionErrors.writingJobFailedError(cause)
         }
         logError(s"Data source write support $batchWrite aborted.")
-        cause match {
-          // Only wrap non fatal exceptions.
-          case NonFatal(e) => throw QueryExecutionErrors.writingJobAbortedError(e)
-          case _ => throw cause
-        }
+        throw cause
     }
 
     Nil

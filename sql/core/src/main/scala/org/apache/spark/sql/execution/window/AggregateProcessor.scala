@@ -90,7 +90,7 @@ private[window] object AggregateProcessor {
         updateExpressions ++= noOps
         evaluateExpressions += imperative
       case other =>
-        sys.error(s"Unsupported aggregate function: $other")
+        throw new IllegalStateException(s"Unsupported aggregate function: $other")
     }
 
     // Create the projections.

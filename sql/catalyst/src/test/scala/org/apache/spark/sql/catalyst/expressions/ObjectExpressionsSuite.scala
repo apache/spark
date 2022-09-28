@@ -423,7 +423,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       inputTypes = Nil,
       propagateNull = false,
       dataType = ObjectType(classOf[ScroogeLikeExample]),
-      outerPointer = Some(() => outerObj))
+      outerPointer = None)
     checkObjectExprEvaluation(newInst3, ScroogeLikeExample(1))
   }
 
@@ -467,7 +467,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // with dummy input, resolve the plan by the analyzer, and replace the dummy input
     // with a literal for tests.
     val unresolvedDeser = UnresolvedDeserializer(encoderFor[Map[Int, String]].deserializer)
-    val dummyInputPlan = LocalRelation('value.map(MapType(IntegerType, StringType)))
+    val dummyInputPlan = LocalRelation(Symbol("value").map(MapType(IntegerType, StringType)))
     val plan = Project(Alias(unresolvedDeser, "none")() :: Nil, dummyInputPlan)
 
     val analyzedPlan = SimpleAnalyzer.execute(plan)

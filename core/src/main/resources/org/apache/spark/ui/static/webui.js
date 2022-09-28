@@ -73,6 +73,7 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-sparkProperties','aggregated-sparkProperties');
   collapseTablePageLoad('collapse-aggregated-hadoopProperties','aggregated-hadoopProperties');
   collapseTablePageLoad('collapse-aggregated-systemProperties','aggregated-systemProperties');
+  collapseTablePageLoad('collapse-aggregated-metricsProperties','aggregated-metricsProperties');
   collapseTablePageLoad('collapse-aggregated-classpathEntries','aggregated-classpathEntries');
   collapseTablePageLoad('collapse-aggregated-activeJobs','aggregated-activeJobs');
   collapseTablePageLoad('collapse-aggregated-completedJobs','aggregated-completedJobs');

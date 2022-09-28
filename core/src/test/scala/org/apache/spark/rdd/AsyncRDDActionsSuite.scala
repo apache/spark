@@ -25,14 +25,13 @@ import scala.concurrent.ExecutionContext.Implicits.global
 // scalastyle:on executioncontextglobal
 import scala.concurrent.duration.Duration
 
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.util.ThreadUtils
 
-class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with TimeLimits {
+class AsyncRDDActionsSuite extends SparkFunSuite with TimeLimits {
 
   @transient private var sc: SparkContext = _
 

@@ -111,6 +111,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
     val confWithRddFetchEnabled = conf.clone
       .set(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, true)
       .set(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
+      .set(config.EXECUTOR_REMOVE_DELAY.key, "0s")
     sc = new SparkContext("local-cluster[1,1,1024]", "test", confWithRddFetchEnabled)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
     sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
@@ -183,6 +184,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
       val confWithLocalDiskReading = conf.clone
         .set(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, true)
         .set(config.SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED, enabled)
+        .set(config.EXECUTOR_REMOVE_DELAY.key, "0s")
       sc = new SparkContext("local-cluster[1,1,1024]", "test", confWithLocalDiskReading)
       sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
       sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
@@ -249,6 +251,28 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
         } else {
           assert(filesToCheck.forall(_.exists()))
         }
+      } finally {
+        rpcHandler.applicationRemoved(sc.conf.getAppId, true)
+        sc.stop()
+      }
+    }
+  }
+
+  test("SPARK-38640: memory only blocks can unpersist using shuffle service cache fetching") {
+    for (enabled <- Seq(true, false)) {
+      val confWithRddFetch =
+        conf.clone.set(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, enabled)
+      sc = new SparkContext("local-cluster[1,1,1024]", "test", confWithRddFetch)
+      sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
+      sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
+      try {
+        val rdd = sc.parallelize(0 until 100, 2)
+          .map { i => (i, 1) }
+          .persist(StorageLevel.MEMORY_ONLY)
+
+        rdd.count()
+        rdd.unpersist(true)
+        assert(sc.persistentRdds.isEmpty)
       } finally {
         rpcHandler.applicationRemoved(sc.conf.getAppId, true)
         sc.stop()

@@ -79,14 +79,12 @@ public class JavaColumnExpressionSuite {
       createStructField("a", IntegerType, false),
       createStructField("b", createArrayType(IntegerType, false), false)));
     Dataset<Row> df = spark.createDataFrame(rows, schema);
-    try {
-      df.filter(df.col("a").isInCollection(Arrays.asList(new Column("b"))));
-      Assert.fail("Expected org.apache.spark.sql.AnalysisException");
-    } catch (Exception e) {
-      Arrays.asList("cannot resolve",
-        "due to data type mismatch: Arguments must be same type but were")
-        .forEach(s -> Assert.assertTrue(
-          e.getMessage().toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT))));
-    }
+    Exception e = Assert.assertThrows(Exception.class,
+      () -> df.filter(df.col("a").isInCollection(Arrays.asList(new Column("b")))));
+    Arrays.asList("cannot resolve",
+      "due to data type mismatch: Arguments must be same type but were")
+        .forEach(s ->
+          Assert.assertTrue(e.getMessage().toLowerCase(Locale.ROOT)
+            .contains(s.toLowerCase(Locale.ROOT))));
   }
 }

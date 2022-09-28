@@ -133,11 +133,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         """.stripMargin)
 
       checkAnswer(query, identity, df.select(
-        Symbol("a").cast("string"),
-        Symbol("b").cast("string"),
-        'c.cast("string"),
-        'd.cast("string"),
-        'e.cast("string")).collect())
+        $"a".cast("string"),
+        $"b".cast("string"),
+        $"c".cast("string"),
+        $"d".cast("string"),
+        $"e".cast("string")).collect())
     }
   }
 
@@ -160,11 +160,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           ioschema = defaultIOSchema.copy(schemaLess = true)
         ),
         df.select(
-          'a.cast("string").as("key"),
-          'b.cast("string").as("value")).collect())
+          $"a".cast("string").as("key"),
+          $"b".cast("string").as("value")).collect())
 
       checkAnswer(
-        df.select(Symbol("a"), Symbol("b")),
+        df.select($"a", $"b"),
         (child: SparkPlan) => createScriptTransformationExec(
           script = "cat",
           output = Seq(
@@ -174,11 +174,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           ioschema = defaultIOSchema.copy(schemaLess = true)
         ),
         df.select(
-          'a.cast("string").as("key"),
-          'b.cast("string").as("value")).collect())
+          $"a".cast("string").as("key"),
+          $"b".cast("string").as("value")).collect())
 
       checkAnswer(
-        df.select(Symbol("a")),
+        df.select($"a"),
         (child: SparkPlan) => createScriptTransformationExec(
           script = "cat",
           output = Seq(
@@ -188,7 +188,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           ioschema = defaultIOSchema.copy(schemaLess = true)
         ),
         df.select(
-          'a.cast("string").as("key"),
+          $"a".cast("string").as("key"),
           lit(null)).collect())
     }
   }
@@ -242,8 +242,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             child = child,
             ioschema = serde
           ),
-          df.select(Symbol("a"), Symbol("b"), Symbol("c"), Symbol("d"), Symbol("e"),
-            Symbol("f"), Symbol("g"), Symbol("h"), Symbol("i"), Symbol("j")).collect())
+          df.select($"a", $"b", $"c", $"d", $"e",
+            $"f", $"g", $"h", $"i", $"j").collect())
       }
     }
   }
@@ -283,7 +283,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           child = child,
           ioschema = defaultIOSchema
         ),
-        df.select(Symbol("a"), Symbol("b"), Symbol("c"), Symbol("d"), Symbol("e")).collect())
+        df.select($"a", $"b", $"c", $"d", $"e").collect())
     }
   }
 
@@ -305,7 +305,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
               |USING 'cat' AS (a timestamp, b date)
               |FROM v
             """.stripMargin)
-          checkAnswer(query, identity, df.select(Symbol("a"), Symbol("b")).collect())
+          checkAnswer(query, identity, df.select($"a", $"b").collect())
         }
       }
     }
@@ -340,11 +340,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  NULL DEFINED AS 'NULL'
              |FROM v
         """.stripMargin), identity, df.select(
-          'a.cast("string"),
-          'b.cast("string"),
-          'c.cast("string"),
-          'd.cast("string"),
-          'e.cast("string")).collect())
+          $"a".cast("string"),
+          $"b".cast("string"),
+          $"c".cast("string"),
+          $"d".cast("string"),
+          $"e".cast("string")).collect())
 
       // input/output with different delimit and show result
       checkAnswer(
@@ -363,11 +363,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |FROM v
         """.stripMargin), identity, df.select(
           concat_ws(",",
-            'a.cast("string"),
-            'b.cast("string"),
-            'c.cast("string"),
-            'd.cast("string"),
-            'e.cast("string"))).collect())
+            $"a".cast("string"),
+            $"b".cast("string"),
+            $"c".cast("string"),
+            $"d".cast("string"),
+            $"e".cast("string"))).collect())
     }
   }
 
@@ -380,7 +380,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
 
     checkAnswer(
-      df.select(Symbol("a"), Symbol("b")),
+      df.select($"a", $"b"),
       (child: SparkPlan) => createScriptTransformationExec(
         script = "cat",
         output = Seq(
@@ -392,8 +392,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         ioschema = defaultIOSchema
       ),
       df.select(
-        'a.cast("string").as("a"),
-        'b.cast("string").as("b"),
+        $"a".cast("string").as("a"),
+        $"b".cast("string").as("b"),
         lit(null), lit(null)).collect())
   }
 
@@ -453,10 +453,10 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         (Array(6, 7, 8), Array(Array(6, 7), Array(8)),
           Map("c" -> 3), Map("d" -> Array("e", "f")))
       ).toDF("a", "b", "c", "d")
-        .select(Symbol("a"), Symbol("b"), Symbol("c"), Symbol("d"),
-          struct(Symbol("a"), Symbol("b")).as("e"),
-          struct(Symbol("a"), Symbol("d")).as("f"),
-          struct(struct(Symbol("a"), Symbol("b")), struct(Symbol("a"), Symbol("d"))).as("g")
+        .select($"a", $"b", $"c", $"d",
+          struct($"a", $"b").as("e"),
+          struct($"a", $"d").as("f"),
+          struct(struct($"a", $"b"), struct($"a", $"d")).as("g")
         )
 
       checkAnswer(
@@ -484,8 +484,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           child = child,
           ioschema = defaultIOSchema
         ),
-        df.select(Symbol("a"), Symbol("b"), Symbol("c"), Symbol("d"), Symbol("e"),
-          Symbol("f"), Symbol("g")).collect())
+        df.select($"a", $"b", $"c", $"d", $"e",
+          $"f", $"g").collect())
     }
   }
 
@@ -513,11 +513,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  FIELDS TERMINATED BY '\t'
              |FROM v
         """.stripMargin), identity, df.select(
-          'a.cast("string"),
-          'b.cast("string"),
-          'c.cast("string"),
-          'd.cast("string"),
-          'e.cast("string")).collect())
+          $"a".cast("string"),
+          $"b".cast("string"),
+          $"c".cast("string"),
+          $"d".cast("string"),
+          $"e".cast("string")).collect())
 
       // test '/path/to/script.py' with script not executable
       val e1 = intercept[TestFailedException] {
@@ -533,11 +533,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
                |  FIELDS TERMINATED BY '\t'
                |FROM v
         """.stripMargin), identity, df.select(
-            'a.cast("string"),
-            'b.cast("string"),
-            'c.cast("string"),
-            'd.cast("string"),
-            'e.cast("string")).collect())
+            $"a".cast("string"),
+            $"b".cast("string"),
+            $"c".cast("string"),
+            $"d".cast("string"),
+            $"e".cast("string")).collect())
       }.getMessage
       // Check with status exit code since in GA test, it may lose detail failed root cause.
       // Different root cause's exitcode is not same.
@@ -558,11 +558,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  FIELDS TERMINATED BY '\t'
              |FROM v
         """.stripMargin), identity, df.select(
-          'a.cast("string"),
-          'b.cast("string"),
-          'c.cast("string"),
-          'd.cast("string"),
-          'e.cast("string")).collect())
+          $"a".cast("string"),
+          $"b".cast("string"),
+          $"c".cast("string"),
+          $"d".cast("string"),
+          $"e".cast("string")).collect())
 
       scriptFilePath.setExecutable(false)
       sql(s"ADD FILE ${scriptFilePath.getAbsolutePath}")
@@ -579,11 +579,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  FIELDS TERMINATED BY '\t'
              |FROM v
         """.stripMargin), identity, df.select(
-          'a.cast("string"),
-          'b.cast("string"),
-          'c.cast("string"),
-          'd.cast("string"),
-          'e.cast("string")).collect())
+          $"a".cast("string"),
+          $"b".cast("string"),
+          $"c".cast("string"),
+          $"d".cast("string"),
+          $"e".cast("string")).collect())
 
       // test `python3 script.py` when file added
       checkAnswer(
@@ -597,11 +597,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  FIELDS TERMINATED BY '\t'
              |FROM v
         """.stripMargin), identity, df.select(
-          'a.cast("string"),
-          'b.cast("string"),
-          'c.cast("string"),
-          'd.cast("string"),
-          'e.cast("string")).collect())
+          $"a".cast("string"),
+          $"b".cast("string"),
+          $"c".cast("string"),
+          $"d".cast("string"),
+          $"e".cast("string")).collect())
     }
   }
 

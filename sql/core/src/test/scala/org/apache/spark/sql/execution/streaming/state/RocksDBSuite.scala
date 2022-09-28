@@ -168,6 +168,25 @@ class RocksDBSuite extends SparkFunSuite {
     }
   }
 
+  test("RocksDBFileManager: create init dfs directory with unknown number of keys") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    try {
+      val verificationDir = Utils.createTempDir().getAbsolutePath
+      val fileManager = new RocksDBFileManager(
+        dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+      // Save a version of empty checkpoint files
+      val cpFiles = Seq()
+      generateFiles(verificationDir, cpFiles)
+      assert(!dfsRootDir.exists())
+      saveCheckpointFiles(fileManager, cpFiles, version = 1, numKeys = -1)
+      // The dfs root dir is created even with unknown number of keys
+      assert(dfsRootDir.exists())
+      loadAndVerifyCheckpointFiles(fileManager, verificationDir, version = 1, Nil, -1)
+    } finally {
+      Utils.deleteRecursively(dfsRootDir)
+    }
+  }
+
   test("RocksDBFileManager: upload only new immutable files") {
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
@@ -449,6 +468,55 @@ class RocksDBSuite extends SparkFunSuite {
         assert(metrics.nativeOpsHistograms("compaction").count > 0)
         assert(metrics.nativeOpsMetrics("totalBytesReadByCompaction") > 0)
         assert(metrics.nativeOpsMetrics("totalBytesWrittenByCompaction") > 0)
+      }
+    }
+  }
+
+  // Add tests to check valid and invalid values for max_open_files passed to the underlying
+  // RocksDB instance.
+  Seq("-1", "100", "1000").foreach { maxOpenFiles =>
+    test(s"SPARK-39781: adding valid max_open_files=$maxOpenFiles config property " +
+      "for RocksDB state store instance should succeed") {
+      withTempDir { dir =>
+        val sqlConf = SQLConf.get
+        sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.maxOpenFiles", maxOpenFiles)
+        val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+        assert(dbConf.maxOpenFiles === maxOpenFiles.toInt)
+
+        val remoteDir = dir.getCanonicalPath
+        withDB(remoteDir, conf = dbConf) { db =>
+          // Do some DB ops
+          db.load(0)
+          db.put("a", "1")
+          db.commit()
+          assert(toStr(db.get("a")) === "1")
+        }
+      }
+    }
+  }
+
+  Seq("test", "true").foreach { maxOpenFiles =>
+    test(s"SPARK-39781: adding invalid max_open_files=$maxOpenFiles config property " +
+      "for RocksDB state store instance should fail") {
+      withTempDir { dir =>
+        val ex = intercept[IllegalArgumentException] {
+          val sqlConf = SQLConf.get
+          sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.maxOpenFiles",
+            maxOpenFiles)
+          val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+          assert(dbConf.maxOpenFiles === maxOpenFiles.toInt)
+
+          val remoteDir = dir.getCanonicalPath
+          withDB(remoteDir, conf = dbConf) { db =>
+            // Do some DB ops
+            db.load(0)
+            db.put("a", "1")
+            db.commit()
+            assert(toStr(db.get("a")) === "1")
+          }
+        }
+        assert(ex.getMessage.contains("Invalid value for"))
+        assert(ex.getMessage.contains("must be an integer"))
       }
     }
   }

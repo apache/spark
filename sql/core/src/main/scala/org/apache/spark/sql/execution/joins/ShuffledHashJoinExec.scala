@@ -49,8 +49,7 @@ case class ShuffledHashJoinExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "buildDataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size of build side"),
-    "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build hash map"),
-    "avgHashProbe" -> SQLMetrics.createAverageMetric(sparkContext, "avg hash probes per key"))
+    "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build hash map"))
 
   override def output: Seq[Attribute] = super[ShuffledJoin].output
 
@@ -78,7 +77,6 @@ case class ShuffledHashJoinExec(
   def buildHashedRelation(iter: Iterator[InternalRow]): HashedRelation = {
     val buildDataSize = longMetric("buildDataSize")
     val buildTime = longMetric("buildTime")
-    val avgHashProbe = longMetric("avgHashProbe")
     val start = System.nanoTime()
     val context = TaskContext.get()
     val relation = HashedRelation(
@@ -91,11 +89,7 @@ case class ShuffledHashJoinExec(
     buildTime += NANOSECONDS.toMillis(System.nanoTime() - start)
     buildDataSize += relation.estimatedSize
     // This relation is usually used until the end of task.
-    context.addTaskCompletionListener[Unit](_ => {
-      // Update average hashmap probe
-      avgHashProbe.set(relation.getAvgHashProbesPerKey())
-      relation.close()
-    })
+    context.addTaskCompletionListener[Unit](_ => relation.close())
     relation
   }
 

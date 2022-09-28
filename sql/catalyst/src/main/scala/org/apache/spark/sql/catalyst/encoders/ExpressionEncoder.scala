@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaRefle
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.{Deserializer, Serializer}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, InitializeJavaBean, Invoke, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.{ReassignLambdaVariableID, SimplifyCasts}
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LeafNode, LocalRelation}
@@ -201,7 +200,7 @@ object ExpressionEncoder {
     override def apply(t: T): InternalRow = try {
       if (extractProjection == null) {
         inputRow = new GenericInternalRow(1)
-        extractProjection = GenerateUnsafeProjection.generate(expressions)
+        extractProjection = UnsafeProjection.create(expressions)
       }
       inputRow(0) = t
       extractProjection(inputRow)

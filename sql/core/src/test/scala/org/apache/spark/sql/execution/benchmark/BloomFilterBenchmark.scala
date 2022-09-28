@@ -30,8 +30,8 @@ import org.apache.spark.benchmark.Benchmark
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class>
  *     --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/BloomFilterBenchmark-results.txt".
  * }}}
  */
@@ -61,21 +61,27 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
   }
 
   private def readORCBenchmark(): Unit = {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
+    val blockSizes = Seq(2 * 1024 * 1024, 4 * 1024 * 1024, 6 * 1024 * 1024, 8 * 1024 * 1024,
+      12 * 1024 * 1024, 16 * 1024 * 1024, 32 * 1024 * 1024)
+    for (blocksize <- blockSizes) {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
 
-      df.write.orc(path + "/withoutBF")
-      df.write.option("orc.bloom.filter.columns", "value").orc(path + "/withBF")
+        df.write.option("orc.block.size", blocksize).orc(path + "/withoutBF")
+        df.write
+          .option("orc.block.size", blocksize)
+          .option("orc.bloom.filter.columns", "value").orc(path + "/withBF")
 
-      runBenchmark(s"ORC Read") {
-        val benchmark = new Benchmark(s"Read a row from ${scaleFactor}M rows", N, output = output)
-        benchmark.addCase("Without bloom filter") { _ =>
-          spark.read.orc(path + "/withoutBF").where("value = 0").noop()
+        runBenchmark(s"ORC Read") {
+          val benchmark = new Benchmark(s"Read a row from ${scaleFactor}M rows", N, output = output)
+          benchmark.addCase("Without bloom filter, blocksize: " + blocksize) { _ =>
+            spark.read.orc(path + "/withoutBF").where("value = 0").noop()
+          }
+          benchmark.addCase("With bloom filter, blocksize: " + blocksize) { _ =>
+            spark.read.orc(path + "/withBF").where("value = 0").noop()
+          }
+          benchmark.run()
         }
-        benchmark.addCase("With bloom filter") { _ =>
-          spark.read.orc(path + "/withBF").where("value = 0").noop()
-        }
-        benchmark.run()
       }
     }
   }

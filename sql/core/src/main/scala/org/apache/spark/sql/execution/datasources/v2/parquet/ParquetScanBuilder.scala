@@ -38,20 +38,26 @@ case class ParquetScanBuilder(
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema)
-    with SupportsPushDownAggregates{
+    with SupportsPushDownAggregates {
   lazy val hadoopConf = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
     sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
   }
 
-  lazy val pushedParquetFilters = {
+  private var finalSchema = new StructType()
+
+  private var pushedAggregations = Option.empty[Aggregation]
+
+  override protected val supportsNestedSchemaPruning: Boolean = true
+
+  override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
     val sqlConf = sparkSession.sessionState.conf
     if (sqlConf.parquetFilterPushDown) {
       val pushDownDate = sqlConf.parquetFilterPushDownDate
       val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
       val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
-      val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
+      val pushDownStringPredicate = sqlConf.parquetFilterPushDownStringPredicate
       val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
       val isCaseSensitive = sqlConf.caseSensitiveAnalysis
       val parquetSchema =
@@ -61,30 +67,17 @@ case class ParquetScanBuilder(
         pushDownDate,
         pushDownTimestamp,
         pushDownDecimal,
-        pushDownStringStartWith,
+        pushDownStringPredicate,
         pushDownInFilterThreshold,
         isCaseSensitive,
         // The rebase mode doesn't matter here because the filters are used to determine
         // whether they is convertible.
         RebaseSpec(LegacyBehaviorPolicy.CORRECTED))
-      parquetFilters.convertibleFilters(pushedDataFilters).toArray
+      parquetFilters.convertibleFilters(dataFilters).toArray
     } else {
       Array.empty[Filter]
     }
   }
-
-  private var finalSchema = new StructType()
-
-  private var pushedAggregations = Option.empty[Aggregation]
-
-  override protected val supportsNestedSchemaPruning: Boolean = true
-
-  override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = dataFilters
-
-  // Note: for Parquet, the actual filter push down happens in [[ParquetPartitionReaderFactory]].
-  // It requires the Parquet physical schema to determine whether a filter is convertible.
-  // All filters that can be converted to Parquet are pushed down.
-  override def pushedFilters(): Array[Filter] = pushedParquetFilters
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!sparkSession.sessionState.conf.parquetAggregatePushDown) {
@@ -113,7 +106,7 @@ case class ParquetScanBuilder(
       finalSchema = readDataSchema()
     }
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, finalSchema,
-      readPartitionSchema(), pushedParquetFilters, options, pushedAggregations,
+      readPartitionSchema(), pushedDataFilters, options, pushedAggregations,
       partitionFilters, dataFilters)
   }
 }

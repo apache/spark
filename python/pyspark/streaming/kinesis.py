@@ -23,7 +23,16 @@ from pyspark.streaming.context import StreamingContext
 from pyspark.util import _print_missing_jar
 
 
-__all__ = ["KinesisUtils", "InitialPositionInStream", "utf8_decoder"]
+__all__ = ["KinesisUtils", "InitialPositionInStream", "MetricsLevel", "utf8_decoder"]
+
+
+class InitialPositionInStream:
+    LATEST, TRIM_HORIZON = (0, 1)
+
+
+class MetricsLevel:
+    DETAILED, SUMMARY, NONE = (0, 1, 2)
+
 
 T = TypeVar("T")
 
@@ -46,6 +55,7 @@ class KinesisUtils:
         regionName: str,
         initialPositionInStream: str,
         checkpointInterval: int,
+        metricsLevel: int = MetricsLevel.DETAILED,
         storageLevel: StorageLevel = ...,
         awsAccessKeyId: Optional[str] = ...,
         awsSecretKey: Optional[str] = ...,
@@ -66,6 +76,7 @@ class KinesisUtils:
         regionName: str,
         initialPositionInStream: str,
         checkpointInterval: int,
+        metricsLevel: int = MetricsLevel.DETAILED,
         storageLevel: StorageLevel = ...,
         awsAccessKeyId: Optional[str] = ...,
         awsSecretKey: Optional[str] = ...,
@@ -85,6 +96,7 @@ class KinesisUtils:
         regionName: str,
         initialPositionInStream: str,
         checkpointInterval: int,
+        metricsLevel: int = MetricsLevel.DETAILED,
         storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_2,
         awsAccessKeyId: Optional[str] = None,
         awsSecretKey: Optional[str] = None,
@@ -123,6 +135,9 @@ class KinesisUtils:
             Checkpoint interval(in seconds) for Kinesis checkpointing. See the Kinesis
             Spark Streaming documentation for more details on the different
             types of checkpoints.
+        metricsLevel : int
+            Level of CloudWatch PutMetrics.
+            Can be set to either DETAILED, SUMMARY, or NONE. (default is DETAILED)
         storageLevel : :class:`pyspark.StorageLevel`, optional
             Storage level to use for storing the received objects (default is
             StorageLevel.MEMORY_AND_DISK_2)
@@ -153,10 +168,11 @@ class KinesisUtils:
         The given AWS credentials will get saved in DStream checkpoints if checkpointing
         is enabled. Make sure that your checkpoint directory is secure.
         """
-        jlevel = ssc._sc._getJavaStorageLevel(storageLevel)  # type: ignore[attr-defined]
-        jduration = ssc._jduration(checkpointInterval)  # type: ignore[attr-defined]
+        jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
+        jduration = ssc._jduration(checkpointInterval)
 
-        jvm = ssc._jvm  # type: ignore[attr-defined]
+        jvm = ssc._jvm
+        assert jvm is not None
 
         try:
             helper = jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()
@@ -170,13 +186,14 @@ class KinesisUtils:
                 )
             raise
         jstream = helper.createStream(
-            ssc._jssc,  # type: ignore[attr-defined]
+            ssc._jssc,
             kinesisAppName,
             streamName,
             endpointUrl,
             regionName,
             initialPositionInStream,
             jduration,
+            metricsLevel,
             jlevel,
             awsAccessKeyId,
             awsSecretKey,
@@ -186,7 +203,3 @@ class KinesisUtils:
         )
         stream: DStream = DStream(jstream, ssc, NoOpSerializer())
         return stream.map(lambda v: decoder(v))
-
-
-class InitialPositionInStream:
-    LATEST, TRIM_HORIZON = (0, 1)

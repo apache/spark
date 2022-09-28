@@ -102,8 +102,8 @@ class LogicalPlanSuite extends SparkFunSuite {
   test("SPARK-35231: logical.Range override maxRowsPerPartition") {
     assert(Range(0, 100, 1, 3).maxRowsPerPartition === Some(34))
     assert(Range(0, 100, 1, 4).maxRowsPerPartition === Some(25))
-    assert(Range(0, 100, 1, 3).select('id).maxRowsPerPartition === Some(34))
-    assert(Range(0, 100, 1, 3).where('id % 2 === 1).maxRowsPerPartition === Some(34))
+    assert(Range(0, 100, 1, 3).select($"id").maxRowsPerPartition === Some(34))
+    assert(Range(0, 100, 1, 3).where($"id" % 2 === 1).maxRowsPerPartition === Some(34))
   }
 
   test("SPARK-38286: Union's maxRows and maxRowsPerPartition may overflow") {
@@ -112,5 +112,31 @@ class LogicalPlanSuite extends SparkFunSuite {
     val query = query1.union(query2)
     assert(query.maxRows.isEmpty)
     assert(query.maxRowsPerPartition.isEmpty)
+  }
+
+  test("SPARK-37961: add maxRows/maxRowsPerPartition for some logical nodes") {
+    val range = Range(0, 100, 1, 3)
+    assert(range.maxRows === Some(100))
+    assert(range.maxRowsPerPartition === Some(34))
+
+    val sort = Sort(Seq('id.asc), false, range)
+    assert(sort.maxRows === Some(100))
+    assert(sort.maxRowsPerPartition === Some(34))
+    val sort2 = Sort(Seq('id.asc), true, range)
+    assert(sort2.maxRows === Some(100))
+    assert(sort2.maxRowsPerPartition === Some(100))
+
+    val c1 = Literal(1).as('a).toAttribute.newInstance().withNullability(true)
+    val c2 = Literal(2).as('b).toAttribute.newInstance().withNullability(true)
+    val expand = Expand(
+      Seq(Seq(Literal(null), 'b), Seq('a, Literal(null))),
+      Seq(c1, c2),
+      sort.select('id as 'a, 'id + 1 as 'b))
+    assert(expand.maxRows === Some(200))
+    assert(expand.maxRowsPerPartition === Some(68))
+
+    val sample = Sample(0.1, 0.9, false, 42, expand)
+    assert(sample.maxRows === Some(200))
+    assert(sample.maxRowsPerPartition === Some(68))
   }
 }

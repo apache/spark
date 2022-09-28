@@ -414,13 +414,13 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       inputDataOne.toDF()
         .groupBy($"value")
         .agg(count("*"))
-        .where(Symbol("value") >= current_timestamp().cast("long") - 10L)
+        .where($"value" >= current_timestamp().cast("long") - 10L)
     val inputDataTwo = MemoryStream[Long]
     val aggregatedTwo =
       inputDataTwo.toDF()
         .groupBy($"value")
         .agg(count("*"))
-        .where(Symbol("value") >= localtimestamp().cast(TimestampType).cast("long") - 10L)
+        .where($"value" >= localtimestamp().cast(TimestampType).cast("long") - 10L)
 
     Seq((inputDataOne, aggregatedOne), (inputDataTwo, aggregatedTwo)).foreach { x =>
       val inputData = x._1
@@ -476,7 +476,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     val inputData = MemoryStream[Long]
     val aggregated =
       inputData.toDF()
-        .select(to_utc_timestamp(from_unixtime(Symbol("value") * SECONDS_PER_DAY), tz))
+        .select(to_utc_timestamp(from_unixtime($"value" * SECONDS_PER_DAY), tz))
         .toDF("value")
         .groupBy($"value")
         .agg(count("*"))
@@ -523,12 +523,12 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     val streamInput = MemoryStream[Int]
     val batchDF = Seq(1, 2, 3, 4, 5)
         .toDF("value")
-        .withColumn("parity", Symbol("value") % 2)
-        .groupBy(Symbol("parity"))
+        .withColumn("parity", $"value" % 2)
+        .groupBy($"parity")
         .agg(count("*") as Symbol("joinValue"))
     val joinDF = streamInput
         .toDF()
-        .join(batchDF, Symbol("value") === Symbol("parity"))
+        .join(batchDF, $"value" === $"parity")
 
     // make sure we're planning an aggregate in the first place
     assert(batchDF.queryExecution.optimizedPlan match { case _: Aggregate => true })
@@ -644,7 +644,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         def createDf(partitions: Int): Dataset[(Long, Long)] = {
           spark.readStream
             .format((new MockSourceProvider).getClass.getCanonicalName)
-            .load().coalesce(partitions).groupBy(Symbol("a") % 1).count().as[(Long, Long)]
+            .load().coalesce(partitions).groupBy($"a" % 1).count().as[(Long, Long)]
         }
 
         testStream(createDf(1), Complete())(
@@ -676,7 +676,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   testWithAllStateVersions("SPARK-22230: last should change with new batches") {
     val input = MemoryStream[Int]
 
-    val aggregated = input.toDF().agg(last(Symbol("value")))
+    val aggregated = input.toDF().agg(last($"value"))
     testStream(aggregated, OutputMode.Complete())(
       AddData(input, 1, 2, 3),
       CheckLastBatch(3),

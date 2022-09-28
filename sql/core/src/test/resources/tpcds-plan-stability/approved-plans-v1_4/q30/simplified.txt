@@ -19,7 +19,7 @@ TakeOrderedAndProject [c_customer_id,c_salutation,c_first_name,c_last_name,c_pre
                                     Filter [wr_returning_addr_sk,wr_returning_customer_sk]
                                       ColumnarToRow
                                         InputAdapter
-                                          Scan parquet default.web_returns [wr_returning_customer_sk,wr_returning_addr_sk,wr_return_amt,wr_returned_date_sk]
+                                          Scan parquet spark_catalog.default.web_returns [wr_returning_customer_sk,wr_returning_addr_sk,wr_return_amt,wr_returned_date_sk]
                                             SubqueryBroadcast [d_date_sk] #1
                                               BroadcastExchange #2
                                                 WholeStageCodegen (1)
@@ -27,7 +27,7 @@ TakeOrderedAndProject [c_customer_id,c_salutation,c_first_name,c_last_name,c_pre
                                                     Filter [d_year,d_date_sk]
                                                       ColumnarToRow
                                                         InputAdapter
-                                                          Scan parquet default.date_dim [d_date_sk,d_year]
+                                                          Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]
                                     InputAdapter
                                       ReusedExchange [d_date_sk] #2
                                 InputAdapter
@@ -36,7 +36,7 @@ TakeOrderedAndProject [c_customer_id,c_salutation,c_first_name,c_last_name,c_pre
                                       Filter [ca_address_sk,ca_state]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.customer_address [ca_address_sk,ca_state]
+                                            Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state]
                 InputAdapter
                   BroadcastExchange #4
                     WholeStageCodegen (8)
@@ -58,7 +58,7 @@ TakeOrderedAndProject [c_customer_id,c_salutation,c_first_name,c_last_name,c_pre
                                                     Filter [wr_returning_addr_sk]
                                                       ColumnarToRow
                                                         InputAdapter
-                                                          Scan parquet default.web_returns [wr_returning_customer_sk,wr_returning_addr_sk,wr_return_amt,wr_returned_date_sk]
+                                                          Scan parquet spark_catalog.default.web_returns [wr_returning_customer_sk,wr_returning_addr_sk,wr_return_amt,wr_returned_date_sk]
                                                             ReusedSubquery [d_date_sk] #1
                                                     InputAdapter
                                                       ReusedExchange [d_date_sk] #2
@@ -70,7 +70,7 @@ TakeOrderedAndProject [c_customer_id,c_salutation,c_first_name,c_last_name,c_pre
                   Filter [c_customer_sk,c_current_addr_sk]
                     ColumnarToRow
                       InputAdapter
-                        Scan parquet default.customer [c_customer_sk,c_customer_id,c_current_addr_sk,c_salutation,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_day,c_birth_month,c_birth_year,c_birth_country,c_login,c_email_address,c_last_review_date]
+                        Scan parquet spark_catalog.default.customer [c_customer_sk,c_customer_id,c_current_addr_sk,c_salutation,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_day,c_birth_month,c_birth_year,c_birth_country,c_login,c_email_address,c_last_review_date]
         InputAdapter
           BroadcastExchange #8
             WholeStageCodegen (10)
@@ -78,4 +78,4 @@ TakeOrderedAndProject [c_customer_id,c_salutation,c_first_name,c_last_name,c_pre
                 Filter [ca_state,ca_address_sk]
                   ColumnarToRow
                     InputAdapter
-                      Scan parquet default.customer_address [ca_address_sk,ca_state]
+                      Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state]

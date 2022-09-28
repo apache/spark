@@ -37,7 +37,7 @@ import org.apache.spark.sql.types._
  */
 class DataFrameWindowFunctionsSuite extends QueryTest
   with SharedSparkSession
-  with AdaptiveSparkPlanHelper{
+  with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -404,8 +404,13 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     val df = Seq((1, "1")).toDF("key", "value")
     val e = intercept[AnalysisException](
       df.select($"key", count("invalid").over()))
-    assert(e.getErrorClass == "MISSING_COLUMN")
-    assert(e.messageParameters.sameElements(Array("invalid", "value, key")))
+    checkError(
+      exception = e,
+      errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
+      parameters = Map(
+        "objectName" -> "`invalid`",
+        "proposal" -> "`value`, `key`"))
   }
 
   test("numerical aggregate functions on string column") {
@@ -1187,6 +1192,32 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row(7, 3.5),
         Row(5, 5),
         Row(11, 5.5)
+      )
+    )
+  }
+
+  test("SPARK-38614: percent_rank should apply before limit") {
+    val df = Seq.tabulate(101)(identity).toDF("id")
+    val w = Window.orderBy("id")
+    checkAnswer(
+      df.select($"id", percent_rank().over(w)).limit(3),
+      Seq(
+        Row(0, 0.0d),
+        Row(1, 0.01d),
+        Row(2, 0.02d)
+      )
+    )
+  }
+
+  test("SPARK-40002: ntile should apply before limit") {
+    val df = Seq.tabulate(101)(identity).toDF("id")
+    val w = Window.orderBy("id")
+    checkAnswer(
+      df.select($"id", ntile(10).over(w)).limit(3),
+      Seq(
+        Row(0, 1),
+        Row(1, 1),
+        Row(2, 1)
       )
     )
   }

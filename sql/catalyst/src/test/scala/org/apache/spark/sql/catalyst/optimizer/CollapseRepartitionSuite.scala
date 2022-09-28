@@ -30,7 +30,7 @@ class CollapseRepartitionSuite extends PlanTest {
         CollapseRepartition) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int)
+  val testRelation = LocalRelation($"a".int, $"b".int)
 
 
   test("collapse two adjacent coalesces into one") {
@@ -110,14 +110,14 @@ class CollapseRepartitionSuite extends PlanTest {
     // Always respects the top distribute and removes useless repartition
     val query1 = testRelation
       .repartition(10)
-      .distribute('a)(20)
+      .distribute($"a")(20)
     val query2 = testRelation
       .repartition(30)
-      .distribute('a)(20)
+      .distribute($"a")(20)
 
     val optimized1 = Optimize.execute(query1.analyze)
     val optimized2 = Optimize.execute(query2.analyze)
-    val correctAnswer = testRelation.distribute('a)(20).analyze
+    val correctAnswer = testRelation.distribute($"a")(20).analyze
 
     comparePlans(optimized1, correctAnswer)
     comparePlans(optimized2, correctAnswer)
@@ -127,14 +127,14 @@ class CollapseRepartitionSuite extends PlanTest {
     // Always respects the top distribute and removes useless coalesce below repartition
     val query1 = testRelation
       .coalesce(10)
-      .distribute('a)(20)
+      .distribute($"a")(20)
     val query2 = testRelation
       .coalesce(30)
-      .distribute('a)(20)
+      .distribute($"a")(20)
 
     val optimized1 = Optimize.execute(query1.analyze)
     val optimized2 = Optimize.execute(query2.analyze)
-    val correctAnswer = testRelation.distribute('a)(20).analyze
+    val correctAnswer = testRelation.distribute($"a")(20).analyze
 
     comparePlans(optimized1, correctAnswer)
     comparePlans(optimized2, correctAnswer)
@@ -143,10 +143,10 @@ class CollapseRepartitionSuite extends PlanTest {
   test("repartition above distribute") {
     // Always respects the top repartition and removes useless distribute below repartition
     val query1 = testRelation
-      .distribute('a)(10)
+      .distribute($"a")(10)
       .repartition(20)
     val query2 = testRelation
-      .distribute('a)(30)
+      .distribute($"a")(30)
       .repartition(20)
 
     val optimized1 = Optimize.execute(query1.analyze)
@@ -160,17 +160,17 @@ class CollapseRepartitionSuite extends PlanTest {
   test("coalesce above distribute") {
     // Remove useless coalesce above distribute
     val query1 = testRelation
-      .distribute('a)(10)
+      .distribute($"a")(10)
       .coalesce(20)
 
     val optimized1 = Optimize.execute(query1.analyze)
-    val correctAnswer1 = testRelation.distribute('a)(10).analyze
+    val correctAnswer1 = testRelation.distribute($"a")(10).analyze
 
     comparePlans(optimized1, correctAnswer1)
 
     // No change in this case
     val query2 = testRelation
-      .distribute('a)(30)
+      .distribute($"a")(30)
       .coalesce(20)
 
     val optimized2 = Optimize.execute(query2.analyze)
@@ -182,15 +182,15 @@ class CollapseRepartitionSuite extends PlanTest {
   test("collapse two adjacent distributes into one") {
     // Always respects the top distribute
     val query1 = testRelation
-      .distribute('b)(10)
-      .distribute('a)(20)
+      .distribute($"b")(10)
+      .distribute($"a")(20)
     val query2 = testRelation
-      .distribute('b)(30)
-      .distribute('a)(20)
+      .distribute($"b")(30)
+      .distribute($"a")(20)
 
     val optimized1 = Optimize.execute(query1.analyze)
     val optimized2 = Optimize.execute(query2.analyze)
-    val correctAnswer = testRelation.distribute('a)(20).analyze
+    val correctAnswer = testRelation.distribute($"a")(20).analyze
 
     comparePlans(optimized1, correctAnswer)
     comparePlans(optimized2, correctAnswer)
@@ -198,13 +198,14 @@ class CollapseRepartitionSuite extends PlanTest {
 
   test("SPARK-36703: Remove the global Sort if it is the child of RepartitionByExpression") {
     val originalQuery1 = testRelation
-      .orderBy('a.asc, 'b.asc)
-      .distribute('a)(20)
-    comparePlans(Optimize.execute(originalQuery1.analyze), testRelation.distribute('a)(20).analyze)
+      .orderBy($"a".asc, $"b".asc)
+      .distribute($"a")(20)
+    comparePlans(Optimize.execute(originalQuery1.analyze), testRelation.distribute($"a")(20)
+      .analyze)
 
-    val originalQuery2 = testRelation.distribute('a)(10)
-      .sortBy('a.asc, 'b.asc)
-      .distribute('a)(20)
+    val originalQuery2 = testRelation.distribute($"a")(10)
+      .sortBy($"a".asc, $"b".asc)
+      .distribute($"a")(20)
     comparePlans(Optimize.execute(originalQuery2.analyze), originalQuery2.analyze)
   }
 

@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.catalyst.expressions.{Cast, EmptyRow, ExprUtils, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
@@ -67,9 +68,16 @@ class UnivocityParser(
   private val tokenIndexArr =
     requiredSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f))).toArray
 
+  // True if we should inform the Univocity CSV parser to select which fields to read by their
+  // positions. Generally assigned by input configuration options, except when input column(s) have
+  // default values, in which case we omit the explicit indexes in order to know how many tokens
+  // were present in each line instead.
+  private def columnPruning: Boolean = options.columnPruning &&
+    !requiredSchema.exists(_.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
+
   // When column pruning is enabled, the parser only parses the required columns based on
   // their positions in the data schema.
-  private val parsedSchema = if (options.columnPruning) requiredSchema else dataSchema
+  private val parsedSchema = if (columnPruning) requiredSchema else dataSchema
 
   val tokenizer: CsvParser = {
     val parserSetting = options.asParserSettings
@@ -110,6 +118,24 @@ class UnivocityParser(
   } else {
     new NoopFilters
   }
+
+  // Flags to signal if we need to fall back to the backward compatible behavior of parsing
+  // dates and timestamps.
+  // For more information, see comments for "enableDateTimeParsingFallback" option in CSVOptions.
+  private val enableParsingFallbackForTimestampType =
+    options.enableDateTimeParsingFallback
+      .orElse(SQLConf.get.csvEnableDateTimeParsingFallback)
+      .getOrElse {
+        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+          options.timestampFormatInRead.isEmpty
+      }
+  private val enableParsingFallbackForDateType =
+    options.enableDateTimeParsingFallback
+      .orElse(SQLConf.get.csvEnableDateTimeParsingFallback)
+      .getOrElse {
+        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+          options.dateFormatOption.isEmpty
+      }
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -189,24 +215,6 @@ class UnivocityParser(
         Decimal(decimalParser(datum), dt.precision, dt.scale)
       }
 
-    case _: TimestampType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options) { datum =>
-        try {
-          timestampFormatter.parse(datum)
-        } catch {
-          case NonFatal(e) =>
-            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility.
-            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
-        }
-      }
-
-    case _: TimestampNTZType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options) { datum =>
-        timestampNTZFormatter.parseWithoutTimeZone(datum, false)
-      }
-
     case _: DateType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
         try {
@@ -214,10 +222,34 @@ class UnivocityParser(
         } catch {
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility.
+            // compatibility if enabled.
+            if (!enableParsingFallbackForDateType) {
+              throw e
+            }
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
             DateTimeUtils.stringToDate(str).getOrElse(throw e)
         }
+      }
+
+    case _: TimestampType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        try {
+          timestampFormatter.parse(datum)
+        } catch {
+          case NonFatal(e) =>
+            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+            // compatibility if enabled.
+            if (!enableParsingFallbackForTimestampType) {
+              throw e
+            }
+            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
+            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw(e))
+        }
+      }
+
+    case _: TimestampNTZType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        timestampNTZFormatter.parseWithoutTimeZone(datum, false)
       }
 
     case _: StringType => (d: String) =>
@@ -266,7 +298,7 @@ class UnivocityParser(
    */
   val parse: String => Option[InternalRow] = {
     // This is intentionally a val to create a function once and reuse.
-    if (options.columnPruning && requiredSchema.isEmpty) {
+    if (columnPruning && requiredSchema.isEmpty) {
       // If `columnPruning` enabled and partition attributes scanned only,
       // `schema` gets empty.
       (_: String) => Some(InternalRow.empty)
@@ -276,7 +308,7 @@ class UnivocityParser(
     }
   }
 
-  private val getToken = if (options.columnPruning) {
+  private val getToken = if (columnPruning) {
     (tokens: Array[String], index: Int) => tokens(index)
   } else {
     (tokens: Array[String], index: Int) => tokens(tokenIndexArr(index))
@@ -318,7 +350,8 @@ class UnivocityParser(
         case e: SparkUpgradeException => throw e
         case NonFatal(e) =>
           badRecordException = badRecordException.orElse(Some(e))
-          row.setNullAt(i)
+          // Use the corresponding DEFAULT value associated with the column, if any.
+          row.update(i, requiredSchema.existenceDefaultValues(i))
       }
       i += 1
     }

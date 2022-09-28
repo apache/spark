@@ -29,7 +29,7 @@
   <artifactId>spark-catalyst_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Catalyst</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>catalyst</sbt.project.name>
   </properties>

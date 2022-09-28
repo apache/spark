@@ -345,7 +345,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
 
   test("Bernoulli: check vectors") {
     val df1 = sc.parallelize(Seq(
-      (1.0, 1.0, Vectors.dense(1.0, 2.0)),
+      (1.0, 1.0, Vectors.dense(1.0)),
       (0.0, 1.0, null)
     )).toDF("label", "weight", "features")
     val e1 = intercept[Exception] {
@@ -585,7 +585,7 @@ object NaiveBayesSuite {
 
   private def calcLabel(p: Double, pi: Array[Double]): Int = {
     var sum = 0.0
-    for (j <- 0 until pi.length) {
+    for (j <- pi.indices) {
       sum += pi(j)
       if (p < sum) return j
     }

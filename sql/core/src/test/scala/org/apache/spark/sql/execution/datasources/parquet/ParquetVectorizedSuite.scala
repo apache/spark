@@ -195,6 +195,290 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     }
   }
 
+  test("nested type - single page, no column index") {
+    (1 to 4).foreach { batchSize =>
+      Seq(true, false).foreach { dictionaryEnabled =>
+        testNestedStringArrayOneLevel(None, None, Seq(4),
+          Seq(Seq("a", "b", "c", "d")),
+          Seq(0, 1, 1, 1), Seq(3, 3, 3, 3), Seq("a", "b", "c", "d"), batchSize,
+          dictionaryEnabled = dictionaryEnabled)
+
+        testNestedStringArrayOneLevel(None, None, Seq(4),
+          Seq(Seq("a", "b"), Seq("c", "d")),
+          Seq(0, 1, 0, 1), Seq(3, 3, 3, 3), Seq("a", "b", "c", "d"), batchSize,
+          dictionaryEnabled = dictionaryEnabled)
+
+        testNestedStringArrayOneLevel(None, None, Seq(4),
+          Seq(Seq("a"), Seq("b"), Seq("c"), Seq("d")),
+          Seq(0, 0, 0, 0), Seq(3, 3, 3, 3), Seq("a", "b", "c", "d"), batchSize,
+          dictionaryEnabled = dictionaryEnabled)
+
+        testNestedStringArrayOneLevel(None, None, Seq(4),
+          Seq(Seq("a"), Seq(null), Seq("c"), Seq(null)),
+          Seq(0, 0, 0, 0), Seq(3, 2, 3, 2), Seq("a", null, "c", null), batchSize,
+          dictionaryEnabled = dictionaryEnabled)
+
+        testNestedStringArrayOneLevel(None, None, Seq(4),
+          Seq(Seq("a"), Seq(null, null, null)),
+          Seq(0, 0, 1, 1), Seq(3, 2, 2, 2), Seq("a", null, null, null), batchSize,
+          dictionaryEnabled = dictionaryEnabled)
+
+        testNestedStringArrayOneLevel(None, None, Seq(6),
+          Seq(Seq("a"), Seq(null, null, null), null, Seq()),
+          Seq(0, 0, 1, 1, 0, 0), Seq(3, 2, 2, 2, 0, 1), Seq("a", null, null, null, null, null),
+          batchSize, dictionaryEnabled = dictionaryEnabled)
+
+        testNestedStringArrayOneLevel(None, None, Seq(8),
+          Seq(Seq("a"), Seq(), Seq(), null, Seq("b", null, "c"), null),
+          Seq(0, 0, 0, 0, 0, 1, 1, 0), Seq(3, 1, 1, 0, 3, 2, 3, 0),
+          Seq("a", null, null, null, "b", null, "c", null), batchSize,
+          dictionaryEnabled = dictionaryEnabled)
+      }
+    }
+  }
+
+  test("nested type - multiple page, no column index") {
+    BATCH_SIZE_CONFIGS.foreach { batchSize =>
+      Seq(Seq(2, 3, 2, 3)).foreach { pageSizes =>
+        Seq(true, false).foreach { dictionaryEnabled =>
+          testNestedStringArrayOneLevel(None, None, pageSizes,
+            Seq(Seq("a"), Seq(), Seq("b", null, "c"), Seq("d", "e"), Seq(null), Seq(), null),
+            Seq(0, 0, 0, 1, 1, 0, 1, 0, 0, 0), Seq(3, 1, 3, 2, 3, 3, 3, 2, 1, 0),
+            Seq("a", null, "b", null, "c", "d", "e", null, null, null), batchSize,
+            dictionaryEnabled = dictionaryEnabled)
+        }
+      }
+    }
+  }
+
+  test("nested type - multiple page, no column index, batch span multiple pages") {
+    (1 to 6).foreach { batchSize =>
+      Seq(true, false).foreach { dictionaryEnabled =>
+        // a list across multiple pages
+        testNestedStringArrayOneLevel(None, None, Seq(1, 5),
+          Seq(Seq("a"), Seq("b", "c", "d", "e", "f")),
+          Seq(0, 0, 1, 1, 1, 1), Seq.fill(6)(3), Seq("a", "b", "c", "d", "e", "f"), batchSize,
+          dictionaryEnabled = dictionaryEnabled)
+
+        testNestedStringArrayOneLevel(None, None, Seq(1, 3, 2),
+          Seq(Seq("a"), Seq("b", "c", "d"), Seq("e", "f")),
+          Seq(0, 0, 1, 1, 0, 1), Seq.fill(6)(3), Seq("a", "b", "c", "d", "e", "f"), batchSize,
+          dictionaryEnabled = dictionaryEnabled)
+
+        testNestedStringArrayOneLevel(None, None, Seq(2, 2, 2),
+          Seq(Seq("a", "b"), Seq("c", "d"), Seq("e", "f")),
+          Seq(0, 1, 0, 1, 0, 1), Seq.fill(6)(3), Seq("a", "b", "c", "d", "e", "f"), batchSize,
+          dictionaryEnabled = dictionaryEnabled)
+      }
+    }
+  }
+
+  test("nested type - RLE encoding") {
+    (1 to 8).foreach { batchSize =>
+      Seq(Seq(26), Seq(4, 3, 11, 4, 4), Seq(18, 8)).foreach { pageSizes =>
+        Seq(true, false).foreach { dictionaryEnabled =>
+          testNestedStringArrayOneLevel(None, None, pageSizes,
+            (0 to 6).map(i => Seq(('a' + i).toChar.toString)) ++
+                Seq((7 to 17).map(i => ('a' + i).toChar.toString)) ++
+                (18 to 25).map(i => Seq(('a' + i).toChar.toString)),
+            Seq.fill(8)(0) ++ Seq.fill(10)(1) ++ Seq.fill(8)(0), Seq.fill(26)(3),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+        }
+      }
+    }
+  }
+
+  test("nested type - column index with ranges") {
+    (1 to 8).foreach { batchSize =>
+      Seq(Seq(8), Seq(6, 2), Seq(1, 5, 2)).foreach { pageSizes =>
+        Seq(true, false).foreach { dictionaryEnabled =>
+          var ranges = Seq((1L, 2L))
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
+            Seq(Seq("b", "c", "d", "e", "f"), Seq("g", "h")),
+            Seq(0, 0, 1, 1, 1, 1, 0, 1), Seq.fill(8)(3),
+            Seq("a", "b", "c", "d", "e", "f", "g", "h"),
+            batchSize, dictionaryEnabled = dictionaryEnabled)
+
+          ranges = Seq((3L, 5L))
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
+            Seq(),
+            Seq(0, 0, 1, 1, 1, 1, 0, 1), Seq.fill(8)(3),
+            Seq("a", "b", "c", "d", "e", "f", "g", "h"),
+            batchSize, dictionaryEnabled = dictionaryEnabled)
+
+          ranges = Seq((0L, 0L))
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
+            Seq(Seq("a")),
+            Seq(0, 0, 1, 1, 1, 1, 0, 1), Seq.fill(8)(3),
+            Seq("a", "b", "c", "d", "e", "f", "g", "h"),
+            batchSize, dictionaryEnabled = dictionaryEnabled)
+        }
+      }
+    }
+  }
+
+  test("nested type - column index with ranges and RLE encoding") {
+    BATCH_SIZE_CONFIGS.foreach { batchSize =>
+      Seq(Seq(26), Seq(4, 3, 11, 4, 4), Seq(18, 8)).foreach { pageSizes =>
+        Seq(true, false).foreach { dictionaryEnabled =>
+          var ranges = Seq((0L, 2L))
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
+            Seq(Seq("a"), Seq("b"), Seq("c")),
+            Seq.fill(8)(0) ++ Seq.fill(10)(1) ++ Seq.fill(8)(0), Seq.fill(26)(3),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+
+          ranges = Seq((4L, 6L))
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
+            Seq(Seq("e"), Seq("f"), Seq("g")),
+            Seq.fill(8)(0) ++ Seq.fill(10)(1) ++ Seq.fill(8)(0), Seq.fill(26)(3),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+
+          ranges = Seq((6L, 9L))
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
+            Seq(Seq("g")) ++ Seq((7 to 17).map(i => ('a' + i).toChar.toString)) ++
+                Seq(Seq("s"), Seq("t")),
+            Seq.fill(8)(0) ++ Seq.fill(10)(1) ++ Seq.fill(8)(0), Seq.fill(26)(3),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+
+          ranges = Seq((4L, 6L), (14L, 20L))
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
+            Seq(Seq("e"), Seq("f"), Seq("g"), Seq("y"), Seq("z")),
+            Seq.fill(8)(0) ++ Seq.fill(10)(1) ++ Seq.fill(8)(0), Seq.fill(26)(3),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+        }
+      }
+    }
+  }
+
+  test("nested type - column index with ranges and nulls") {
+    BATCH_SIZE_CONFIGS.foreach { batchSize =>
+      Seq(Seq(16), Seq(8, 8), Seq(4, 4, 4, 4), Seq(2, 6, 4, 4)).foreach { pageSizes =>
+        Seq(true, false).foreach { dictionaryEnabled =>
+          testNestedStringArrayOneLevel(None, None, pageSizes,
+            Seq(Seq("a", null), Seq("c", "d"), Seq(), Seq("f", null, "h"),
+              Seq("i", "j", "k", null), Seq(), null, null, Seq()),
+            Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
+            Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
+            (0 to 15),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+
+          var ranges = Seq((0L, 15L))
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
+            Seq(Seq("a", null), Seq("c", "d"), Seq(), Seq("f", null, "h"),
+              Seq("i", "j", "k", null), Seq(), null, null, Seq()),
+            Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
+            Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
+            (0 to 15),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+
+          ranges = Seq((0L, 2L))
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
+            Seq(Seq("a", null), Seq("c", "d"), Seq()),
+            Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
+            Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
+            (0 to 15),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+
+          ranges = Seq((3L, 7L))
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
+            Seq(Seq("f", null, "h"), Seq("i", "j", "k", null), Seq(), null, null),
+            Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
+            Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
+            (0 to 15),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+
+          ranges = Seq((5, 12L))
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
+            Seq(Seq(), null, null, Seq()),
+            Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
+            Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
+            (0 to 15),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+
+          ranges = Seq((5, 12L))
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
+            Seq(Seq(), null, null, Seq()),
+            Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
+            Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
+            (0 to 15),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+
+          ranges = Seq((0L, 0L), (2, 3), (5, 7), (8, 10))
+          testNestedStringArrayOneLevel(None, Some(ranges), pageSizes,
+            Seq(Seq("a", null), Seq(), Seq("f", null, "h"), Seq(), null, null, Seq()),
+            Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
+            Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
+            (0 to 15),
+            batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+        }
+      }
+    }
+  }
+
+  test("nested type - column index with ranges, nulls and first row indexes") {
+    BATCH_SIZE_CONFIGS.foreach { batchSize =>
+      Seq(true, false).foreach { dictionaryEnabled =>
+        val pageSizes = Seq(4, 4, 4, 4)
+        var firstRowIndexes = Seq(10L, 20, 30, 40)
+        var ranges = Seq((0L, 5L))
+        testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
+          Seq(),
+          Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
+          Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
+          (0 to 15),
+          batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+
+        ranges = Seq((5L, 15))
+        testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
+          Seq(Seq("a", null), Seq("c", "d")),
+          Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
+          Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
+          (0 to 15),
+          batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+
+        ranges = Seq((25, 28))
+        testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
+          Seq(),
+          Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
+          Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
+          (0 to 15),
+          batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+
+        ranges = Seq((35, 45))
+        testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
+          Seq(Seq(), null, null, Seq()),
+          Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
+          Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
+          (0 to 15),
+          batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+
+        ranges = Seq((45, 55))
+        testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
+          Seq(),
+          Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
+          Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
+          (0 to 15),
+          batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+
+        ranges = Seq((45, 55))
+        testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
+          Seq(),
+          Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
+          Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
+          (0 to 15),
+          batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+
+        ranges = Seq((15, 29), (31, 35))
+        testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
+          Seq(Seq(), Seq("f", null, "h")),
+          Seq(0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0),
+          Seq(3, 2, 3, 3, 1, 3, 2, 3, 3, 3, 3, 2, 1, 0, 0, 1),
+          (0 to 15),
+          batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
+      }
+    }
+  }
+
   private def testPrimitiveString(
       firstRowIndexesOpt: Option[Seq[Long]],
       rangesOpt: Option[Seq[(Long, Long)]],
@@ -234,6 +518,52 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     checkAnswer(expectedValues.length, parquetSchema,
       TestPageReadStore(memPageStore, firstRowIndexesOpt.getOrElse(pageFirstRowIndexes).toSeq,
         rangesOpt), expectedValues.map(i => Row(i)), batchSize)
+  }
+
+  private def testNestedStringArrayOneLevel(
+      firstRowIndexesOpt: Option[Seq[Long]],
+      rangesOpt: Option[Seq[(Long, Long)]],
+      pageSizes: Seq[Int],
+      expected: Seq[Seq[String]],
+      rls: Seq[Int],
+      dls: Seq[Int],
+      values: Seq[String] = VALUES,
+      batchSize: Int,
+      dictionaryEnabled: Boolean = false): Unit = {
+    assert(pageSizes.sum == rls.length && rls.length == dls.length)
+    firstRowIndexesOpt.foreach(a => assert(pageSizes.length == a.length))
+
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      s"""message root {
+         |  optional group _1 (LIST) {
+         |    repeated group list {
+         |      optional binary a(UTF8);
+         |    }
+         |  }
+         |}
+         |""".stripMargin
+    )
+
+    val maxRepLevel = 1
+    val maxDefLevel = 3
+    val ty = parquetSchema.getType("_1", "list", "a").asPrimitiveType()
+    val cd = new ColumnDescriptor(Seq("_1", "list", "a").toArray, ty, maxRepLevel, maxDefLevel)
+
+    var i = 0
+    var numRows = 0
+    val memPageStore = new MemPageStore(expected.length)
+    val pageFirstRowIndexes = ArrayBuffer.empty[Long]
+    pageSizes.foreach { size =>
+      pageFirstRowIndexes += numRows
+      numRows += rls.slice(i, i + size).count(_ == 0)
+      writeDataPage(cd, memPageStore, rls.slice(i, i + size), dls.slice(i, i + size),
+        values.slice(i, i + size), maxDefLevel, dictionaryEnabled)
+      i += size
+    }
+
+    checkAnswer(expected.length, parquetSchema,
+      TestPageReadStore(memPageStore, firstRowIndexesOpt.getOrElse(pageFirstRowIndexes).toSeq,
+        rangesOpt), expected.map(i => Row(i)), batchSize)
   }
 
   /**

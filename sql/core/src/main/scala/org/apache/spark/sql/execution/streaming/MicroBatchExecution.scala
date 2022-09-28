@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import scala.collection.mutable.{Map => MutableMap}
+import scala.collection.mutable
 
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
@@ -32,7 +33,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSource
+import org.apache.spark.sql.execution.streaming.sources.{WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, Utils}
@@ -86,10 +87,11 @@ class MicroBatchExecution(
           val source = dataSourceV1.createSource(metadataPath)
           nextSourceId += 1
           logInfo(s"Using Source [$source] from DataSourceV1 named '$sourceName' [$dataSourceV1]")
-          StreamingExecutionRelation(source, output)(sparkSession)
+          StreamingExecutionRelation(source, output, dataSourceV1.catalogTable)(sparkSession)
         })
 
-      case s @ StreamingRelationV2(src, srcName, table: SupportsRead, options, output, _, _, v1) =>
+      case s @ StreamingRelationV2(src, srcName, table: SupportsRead, options, output,
+        catalog, identifier, v1) =>
         val dsStr = if (src.nonEmpty) s"[${src.get}]" else ""
         val v2Disabled = disabledSources.contains(src.getOrElse(None).getClass.getCanonicalName)
         if (!v2Disabled && table.supports(TableCapability.MICRO_BATCH_READ)) {
@@ -101,10 +103,11 @@ class MicroBatchExecution(
             // TODO: operator pushdown.
             val scan = table.newScanBuilder(options).build()
             val stream = scan.toMicroBatchStream(metadataPath)
-            StreamingDataSourceV2Relation(output, scan, stream)
+            StreamingDataSourceV2Relation(output, scan, stream, catalog, identifier)
           })
         } else if (v1.isEmpty) {
-          throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(srcName)
+          throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
+            srcName, sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders, table)
         } else {
           v2ToExecutionRelationMap.getOrElseUpdate(s, {
             // Materialize source to avoid creating it in every batch
@@ -113,7 +116,9 @@ class MicroBatchExecution(
               v1.get.asInstanceOf[StreamingRelation].dataSource.createSource(metadataPath)
             nextSourceId += 1
             logInfo(s"Using Source [$source] from DataSourceV2 named '$srcName' $dsStr")
-            StreamingExecutionRelation(source, output)(sparkSession)
+            // We don't have a catalog table but may have a table identifier. Given this is about
+            // v1 fallback path, we just give up and set the catalog table as None.
+            StreamingExecutionRelation(source, output, None)(sparkSession)
           })
         }
     }
@@ -168,7 +173,17 @@ class MicroBatchExecution(
           extraOptions,
           outputMode)
 
-      case _ => _logicalPlan
+      case s: Sink =>
+        WriteToMicroBatchDataSourceV1(
+          plan.catalogTable,
+          sink = s,
+          query = _logicalPlan,
+          queryId = id.toString,
+          extraOptions,
+          outputMode)
+
+      case _ =>
+        throw new IllegalArgumentException(s"unknown sink type for $sink")
     }
   }
 
@@ -540,7 +555,7 @@ class MicroBatchExecution(
     logDebug(s"Running batch $currentBatchId")
 
     // Request unprocessed data from all sources.
-    newData = reportTimeTaken("getBatch") {
+    val mutableNewData = mutable.Map.empty ++ reportTimeTaken("getBatch") {
       availableOffsets.flatMap {
         case (source: Source, available: Offset)
           if committedOffsets.get(source).map(_ != available).getOrElse(true) =>
@@ -576,16 +591,30 @@ class MicroBatchExecution(
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val newBatchesPlan = logicalPlan transform {
       // For v1 sources.
-      case StreamingExecutionRelation(source, output) =>
-        newData.get(source).map { dataPlan =>
+      case StreamingExecutionRelation(source, output, catalogTable) =>
+        mutableNewData.get(source).map { dataPlan =>
           val hasFileMetadata = output.exists {
             case FileSourceMetadataAttribute(_) => true
             case _ => false
           }
-          val finalDataPlan = dataPlan match {
-            case l: LogicalRelation if hasFileMetadata => l.withMetadataColumns()
-            case _ => dataPlan
+          val finalDataPlan = dataPlan transformUp {
+            case l: LogicalRelation =>
+              var newRelation = l
+              if (hasFileMetadata) {
+                newRelation = newRelation.withMetadataColumns()
+              }
+              catalogTable.foreach { table =>
+                assert(newRelation.catalogTable.isEmpty,
+                  s"Source $source should not produce the information of catalog table by its own.")
+                newRelation = newRelation.copy(catalogTable = Some(table))
+              }
+              newRelation
           }
+          // SPARK-40460: overwrite the entry with the new logicalPlan
+          // because it might contain the _metadata column. It is a necessary change,
+          // in the ProgressReporter, we use the following mapping to get correct streaming metrics:
+          // streaming logical plan (with sources) <==> trigger's logical plan <==> executed plan
+          mutableNewData.put(source, finalDataPlan)
           val maxFields = SQLConf.get.maxToStringFields
           assert(output.size == finalDataPlan.output.size,
             s"Invalid batch: ${truncatedString(output, ",", maxFields)} != " +
@@ -601,14 +630,14 @@ class MicroBatchExecution(
 
       // For v2 sources.
       case r: StreamingDataSourceV2Relation =>
-        newData.get(r.stream).map {
+        mutableNewData.get(r.stream).map {
           case OffsetHolder(start, end) =>
             r.copy(startOffset = Some(start), endOffset = Some(end))
         }.getOrElse {
           LocalRelation(r.output, isStreaming = true)
         }
     }
-
+    newData = mutableNewData.toMap
     // Rewire the plan to use the new attributes that were returned by the source.
     val newAttributePlan = newBatchesPlan.transformAllExpressionsWithPruning(
       _.containsPattern(CURRENT_LIKE)) {
@@ -627,7 +656,8 @@ class MicroBatchExecution(
     }
 
     val triggerLogicalPlan = sink match {
-      case _: Sink => newAttributePlan
+      case _: Sink =>
+        newAttributePlan.asInstanceOf[WriteToMicroBatchDataSourceV1].withNewBatchId(currentBatchId)
       case _: SupportsWrite =>
         newAttributePlan.asInstanceOf[WriteToMicroBatchDataSource].withNewBatchId(currentBatchId)
       case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
@@ -657,7 +687,14 @@ class MicroBatchExecution(
     val batchSinkProgress: Option[StreamWriterCommitProgress] = reportTimeTaken("addBatch") {
       SQLExecution.withNewExecutionId(lastExecution) {
         sink match {
-          case s: Sink => s.addBatch(currentBatchId, nextBatch)
+          case s: Sink =>
+            s.addBatch(currentBatchId, nextBatch)
+            // DSv2 write node has a mechanism to invalidate DSv2 relation, but there is no
+            // corresponding one for DSv1. Given we have an information of catalog table for sink,
+            // we can refresh the catalog table once the write has succeeded.
+            plan.catalogTable.foreach { tbl =>
+              sparkSession.catalog.refreshTable(tbl.identifier.quotedString)
+            }
           case _: SupportsWrite =>
             // This doesn't accumulate any data - it just forces execution of the microbatch writer.
             nextBatch.collect()
@@ -672,9 +709,11 @@ class MicroBatchExecution(
     withProgressLocked {
       sinkCommitProgress = batchSinkProgress
       watermarkTracker.updateWatermark(lastExecution.executedPlan)
-      assert(commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark)),
-        "Concurrent update to the commit log. Multiple streaming jobs detected for " +
-          s"$currentBatchId")
+      reportTimeTaken("commitOffsets") {
+        assert(commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark)),
+          "Concurrent update to the commit log. Multiple streaming jobs detected for " +
+            s"$currentBatchId")
+      }
       committedOffsets ++= availableOffsets
     }
     logDebug(s"Completed batch ${currentBatchId}")

@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.errors.QueryCompilationErrors
 
 
 /**
@@ -158,7 +157,7 @@ object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
  * This has the limitation that the input to the Python UDF is not allowed include attributes from
  * multiple child operators.
  */
-object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
+object ExtractPythonUDFs extends Rule[LogicalPlan] {
 
   private type EvalType = Int
   private type EvalTypeChecker = EvalType => Boolean
@@ -264,7 +263,9 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
 
           val evalTypes = validUdfs.map(_.evalType).toSet
           if (evalTypes.size != 1) {
-            throw QueryCompilationErrors.unexpectedEvalTypesForUDFsError(evalTypes)
+            throw new IllegalStateException(
+              "Expected udfs have the same evalType but got different evalTypes: " +
+              evalTypes.mkString(","))
           }
           val evalType = evalTypes.head
           val evaluation = evalType match {
@@ -284,8 +285,9 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
       }
       // Other cases are disallowed as they are ambiguous or would require a cartesian
       // product.
-      udfs.map(canonicalizeDeterministic).filterNot(attributeMap.contains).foreach {
-        udf => sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
+      udfs.map(canonicalizeDeterministic).filterNot(attributeMap.contains).foreach { udf =>
+        throw new IllegalStateException(
+          s"Invalid PythonUDF $udf, requires attributes from more than one child.")
       }
 
       val rewritten = plan.withNewChildren(newChildren).transformExpressions {

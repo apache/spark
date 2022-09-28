@@ -29,7 +29,7 @@
   <artifactId>spark-docker-integration-tests_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Docker Integration Tests</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>docker-integration-tests</sbt.project.name>
   </properties>

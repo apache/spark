@@ -20,6 +20,7 @@ from typing import cast
 
 from pyspark.sql.functions import array, explode, col, lit, udf, pandas_udf
 from pyspark.sql.types import DoubleType, StructType, StructField, Row
+from pyspark.sql.utils import PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -123,6 +124,102 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         expected = pd.merge(left, right, on=["id", "k"]).sort_values(by=["id", "k"])
 
         assert_frame_equal(expected, result)
+
+    def test_apply_in_pandas_not_returning_pandas_dataframe(self):
+        left = self.data1
+        right = self.data2
+
+        def merge_pandas(lft, rgt):
+            return lft.size + rgt.size
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                PythonException,
+                "Return type of the user-defined function should be pandas.DataFrame, "
+                "but is <class 'numpy.int64'>",
+            ):
+                (
+                    left.groupby("id")
+                    .cogroup(right.groupby("id"))
+                    .applyInPandas(merge_pandas, "id long, k int, v int, v2 int")
+                    .collect()
+                )
+
+    def test_apply_in_pandas_returning_wrong_number_of_columns(self):
+        left = self.data1
+        right = self.data2
+
+        def merge_pandas(lft, rgt):
+            if 0 in lft["id"] and lft["id"][0] % 2 == 0:
+                lft["add"] = 0
+            if 0 in rgt["id"] and rgt["id"][0] % 3 == 0:
+                rgt["more"] = 1
+            return pd.merge(lft, rgt, on=["id", "k"])
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                PythonException,
+                "Number of columns of the returned pandas.DataFrame "
+                "doesn't match specified schema. Expected: 4 Actual: 6",
+            ):
+                (
+                    # merge_pandas returns two columns for even keys while we set schema to four
+                    left.groupby("id")
+                    .cogroup(right.groupby("id"))
+                    .applyInPandas(merge_pandas, "id long, k int, v int, v2 int")
+                    .collect()
+                )
+
+    def test_apply_in_pandas_returning_empty_dataframe(self):
+        left = self.data1
+        right = self.data2
+
+        def merge_pandas(lft, rgt):
+            if 0 in lft["id"] and lft["id"][0] % 2 == 0:
+                return pd.DataFrame([])
+            if 0 in rgt["id"] and rgt["id"][0] % 3 == 0:
+                return pd.DataFrame([])
+            return pd.merge(lft, rgt, on=["id", "k"])
+
+        result = (
+            left.groupby("id")
+            .cogroup(right.groupby("id"))
+            .applyInPandas(merge_pandas, "id long, k int, v int, v2 int")
+            .sort(["id", "k"])
+            .toPandas()
+        )
+
+        left = left.toPandas()
+        right = right.toPandas()
+
+        expected = pd.merge(
+            left[left["id"] % 2 != 0], right[right["id"] % 3 != 0], on=["id", "k"]
+        ).sort_values(by=["id", "k"])
+
+        assert_frame_equal(expected, result)
+
+    def test_apply_in_pandas_returning_empty_dataframe_and_wrong_number_of_columns(self):
+        left = self.data1
+        right = self.data2
+
+        def merge_pandas(lft, rgt):
+            if 0 in lft["id"] and lft["id"][0] % 2 == 0:
+                return pd.DataFrame([], columns=["id", "k"])
+            return pd.merge(lft, rgt, on=["id", "k"])
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                PythonException,
+                "Number of columns of the returned pandas.DataFrame doesn't "
+                "match specified schema. Expected: 4 Actual: 2",
+            ):
+                (
+                    # merge_pandas returns two columns for even keys while we set schema to four
+                    left.groupby("id")
+                    .cogroup(right.groupby("id"))
+                    .applyInPandas(merge_pandas, "id long, k int, v int, v2 int")
+                    .collect()
+                )
 
     def test_mixed_scalar_udfs_followed_by_cogrouby_apply(self):
         df = self.spark.range(0, 10).toDF("v1")

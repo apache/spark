@@ -42,7 +42,7 @@ ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 #   We should use the latest Sphinx version once this is fixed.
 # TODO(SPARK-35375): Jinja2 3.0.0+ causes error when building with Sphinx.
 #   See also https://issues.apache.org/jira/browse/SPARK-35375.
-ARG PIP_PKGS="sphinx==3.0.4 mkdocs==1.1.2 numpy==1.19.4 pydata_sphinx_theme==0.4.1 ipython==7.19.0 nbsphinx==0.8.0 numpydoc==1.1.0 jinja2==2.11.3 twine==3.4.1 sphinx-plotly-directive==0.1.3 pandas==1.1.5 pyarrow==3.0.0 plotly==5.4.0"
+ARG PIP_PKGS="sphinx==3.0.4 mkdocs==1.1.2 numpy==1.19.4 pydata_sphinx_theme==0.4.1 ipython==7.19.0 nbsphinx==0.8.0 numpydoc==1.1.0 jinja2==2.11.3 twine==3.4.1 sphinx-plotly-directive==0.1.3 pandas==1.1.5 pyarrow==3.0.0 plotly==5.4.0 markupsafe==2.0.1 docutils<0.17 grpcio==1.48.1 protobuf==4.21.6"
 ARG GEM_PKGS="bundler:2.2.9"
 
 # Install extra needed repos and refresh.
@@ -53,7 +53,7 @@ ARG GEM_PKGS="bundler:2.2.9"
 # the most current package versions (instead of potentially using old versions cached by docker).
 RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list && \
-  gpg --keyserver keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9 && \
+  gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9 && \
   gpg -a --export E084DAB9 | apt-key add - && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/* && \
@@ -79,9 +79,9 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   # Note that PySpark doc generation also needs pandoc due to nbsphinx
   $APT_INSTALL r-base r-base-dev && \
   $APT_INSTALL libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev && \
-  $APT_INSTALL texlive-latex-base texlive texlive-fonts-extra texinfo qpdf && \
+  $APT_INSTALL texlive-latex-base texlive texlive-fonts-extra texinfo qpdf texlive-latex-extra && \
   $APT_INSTALL libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev && \
-  Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='https://cloud.r-project.org/')" && \
+  Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'markdown', 'roxygen2', 'e1071', 'survival'), repos='https://cloud.r-project.org/')" && \
   Rscript -e "devtools::install_github('jimhester/lintr')" && \
   Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')" && \
   Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')" && \

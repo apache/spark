@@ -80,6 +80,11 @@ class NumPyCompatTest(ComparisonTestBase, SQLTestUtils):
         with self.assertRaisesRegex(NotImplementedError, "on-Spark.*not.*support.*sqrt.*"):
             np.sqrt(psdf, psdf)
 
+        psdf1 = ps.DataFrame({"A": [1, 2, 3]})
+        psdf2 = ps.DataFrame({("A", "B"): [4, 5, 6]})
+        with self.assertRaisesRegex(ValueError, "cannot join with no overlapping index names"):
+            np.left_shift(psdf1, psdf2)
+
     def test_np_spark_compat_series(self):
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(

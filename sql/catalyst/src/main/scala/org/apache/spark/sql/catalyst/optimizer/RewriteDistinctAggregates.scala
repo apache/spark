@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPl
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.util.collection.Utils
 
 /**
  * This rule rewrites an aggregate query with distinct aggregations into an expanded double
@@ -265,7 +266,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
       // Setup expand & aggregate operators for distinct aggregate expressions.
       val distinctAggChildAttrLookup = distinctAggChildAttrMap.toMap
-      val distinctAggFilterAttrLookup = distinctAggFilters.zip(maxConds.map(_.toAttribute)).toMap
+      val distinctAggFilterAttrLookup = Utils.toMap(distinctAggFilters, maxConds.map(_.toAttribute))
       val distinctAggOperatorMap = distinctAggGroups.toSeq.zipWithIndex.map {
         case ((group, expressions), i) =>
           val id = Literal(i + 1)
@@ -330,11 +331,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         val operator = Alias(e.copy(aggregateFunction = af, filter = filterOpt), e.sql)()
 
         // Select the result of the first aggregate in the last aggregate.
-        val result = AggregateExpression(
-          aggregate.First(operator.toAttribute, ignoreNulls = true),
-          mode = Complete,
-          isDistinct = false,
-          filter = Some(EqualTo(gid, regularGroupId)))
+        val result = aggregate.First(operator.toAttribute, ignoreNulls = true)
+          .toAggregateExpression(isDistinct = false, filter = Some(EqualTo(gid, regularGroupId)))
 
         // Some aggregate functions (COUNT) have the special property that they can return a
         // non-null result without any input. We need to make sure we return a result in this case.

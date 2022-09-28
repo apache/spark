@@ -32,10 +32,10 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
   val analyzer = new Analyzer(catalog)
 
   val testRelation = LocalRelation.fromExternalRows(
-    Seq('a.int, 'b.int, 'c.int),
+    Seq($"a".int, $"b".int, $"c".int),
     Seq(Row(1, 2, 3), Row(4, 5, 6)))
   val anotherTestRelation = LocalRelation.fromExternalRows(
-    Seq('d.int, 'e.int),
+    Seq($"d".int, $"e".int),
     Seq(Row(1, 2), Row(3, 4)))
 
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -52,87 +52,87 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
   def repartition(plan: LogicalPlan): LogicalPlan = plan.repartition(10)
 
   test("sortBy") {
-    val plan = testRelation.select('a, 'b).sortBy('a.asc, 'b.desc)
-    val optimizedPlan = testRelation.select('a, 'b)
+    val plan = testRelation.select($"a", $"b").sortBy($"a".asc, $"b".desc)
+    val optimizedPlan = testRelation.select($"a", $"b")
     checkRepartitionCases(plan, optimizedPlan)
   }
 
   test("sortBy with projection") {
-    val plan = testRelation.sortBy('a.asc, 'b.asc).select('a + 1 as "a", 'b + 2 as "b")
-    val optimizedPlan = testRelation.select('a + 1 as "a", 'b + 2 as "b")
+    val plan = testRelation.sortBy($"a".asc, $"b".asc).select($"a" + 1 as "a", $"b" + 2 as "b")
+    val optimizedPlan = testRelation.select($"a" + 1 as "a", $"b" + 2 as "b")
     checkRepartitionCases(plan, optimizedPlan)
   }
 
   test("sortBy with projection and filter") {
-    val plan = testRelation.sortBy('a.asc, 'b.asc).select('a, 'b).where('a === 10)
-    val optimizedPlan = testRelation.select('a, 'b).where('a === 10)
+    val plan = testRelation.sortBy($"a".asc, $"b".asc).select($"a", $"b").where($"a" === 10)
+    val optimizedPlan = testRelation.select($"a", $"b").where($"a" === 10)
     checkRepartitionCases(plan, optimizedPlan)
   }
 
   test("sortBy with limit") {
-    val plan = testRelation.sortBy('a.asc, 'b.asc).limit(10)
-    val optimizedPlan = testRelation.sortBy('a.asc, 'b.asc).limit(10)
+    val plan = testRelation.sortBy($"a".asc, $"b".asc).limit(10)
+    val optimizedPlan = testRelation.sortBy($"a".asc, $"b".asc).limit(10)
     checkRepartitionCases(plan, optimizedPlan)
   }
 
   test("sortBy with non-deterministic projection") {
-    val plan = testRelation.sortBy('a.asc, 'b.asc).select(rand(1), 'a, 'b)
-    val optimizedPlan = testRelation.sortBy('a.asc, 'b.asc).select(rand(1), 'a, 'b)
+    val plan = testRelation.sortBy($"a".asc, $"b".asc).select(rand(1), $"a", $"b")
+    val optimizedPlan = testRelation.sortBy($"a".asc, $"b".asc).select(rand(1), $"a", $"b")
     checkRepartitionCases(plan, optimizedPlan)
   }
 
   test("orderBy") {
-    val plan = testRelation.select('a, 'b).orderBy('a.asc, 'b.asc)
-    val optimizedPlan = testRelation.select('a, 'b)
+    val plan = testRelation.select($"a", $"b").orderBy($"a".asc, $"b".asc)
+    val optimizedPlan = testRelation.select($"a", $"b")
     checkRepartitionCases(plan, optimizedPlan)
   }
 
   test("orderBy with projection") {
-    val plan = testRelation.orderBy('a.asc, 'b.asc).select('a + 1 as "a", 'b + 2 as "b")
-    val optimizedPlan = testRelation.select('a + 1 as "a", 'b + 2 as "b")
+    val plan = testRelation.orderBy($"a".asc, $"b".asc).select($"a" + 1 as "a", $"b" + 2 as "b")
+    val optimizedPlan = testRelation.select($"a" + 1 as "a", $"b" + 2 as "b")
     checkRepartitionCases(plan, optimizedPlan)
   }
 
   test("orderBy with projection and filter") {
-    val plan = testRelation.orderBy('a.asc, 'b.asc).select('a, 'b).where('a === 10)
-    val optimizedPlan = testRelation.select('a, 'b).where('a === 10)
+    val plan = testRelation.orderBy($"a".asc, $"b".asc).select($"a", $"b").where($"a" === 10)
+    val optimizedPlan = testRelation.select($"a", $"b").where($"a" === 10)
     checkRepartitionCases(plan, optimizedPlan)
   }
 
   test("orderBy with limit") {
-    val plan = testRelation.orderBy('a.asc, 'b.asc).limit(10)
-    val optimizedPlan = testRelation.orderBy('a.asc, 'b.asc).limit(10)
+    val plan = testRelation.orderBy($"a".asc, $"b".asc).limit(10)
+    val optimizedPlan = testRelation.orderBy($"a".asc, $"b".asc).limit(10)
     checkRepartitionCases(plan, optimizedPlan)
   }
 
   test("orderBy with non-deterministic projection") {
-    val plan = testRelation.orderBy('a.asc, 'b.asc).select(rand(1), 'a, 'b)
-    val optimizedPlan = testRelation.orderBy('a.asc, 'b.asc).select(rand(1), 'a, 'b)
+    val plan = testRelation.orderBy($"a".asc, $"b".asc).select(rand(1), $"a", $"b")
+    val optimizedPlan = testRelation.orderBy($"a".asc, $"b".asc).select(rand(1), $"a", $"b")
     checkRepartitionCases(plan, optimizedPlan)
   }
 
   test("additional coalesce and sortBy") {
-    val plan = testRelation.sortBy('a.asc, 'b.asc).coalesce(1)
+    val plan = testRelation.sortBy($"a".asc, $"b".asc).coalesce(1)
     val optimizedPlan = testRelation.coalesce(1)
     checkRepartitionCases(plan, optimizedPlan)
   }
 
   test("additional projection, repartition and sortBy") {
-    val plan = testRelation.sortBy('a.asc, 'b.asc).repartition(100).select('a + 1 as "a")
-    val optimizedPlan = testRelation.repartition(100).select('a + 1 as "a")
+    val plan = testRelation.sortBy($"a".asc, $"b".asc).repartition(100).select($"a" + 1 as "a")
+    val optimizedPlan = testRelation.repartition(100).select($"a" + 1 as "a")
     checkRepartitionCases(plan, optimizedPlan)
   }
 
   test("additional filter, distribute and sortBy") {
-    val plan = testRelation.sortBy('a.asc, 'b.asc).distribute('a)(2).where('a === 10)
-    val optimizedPlan = testRelation.distribute('a)(2).where('a === 10)
+    val plan = testRelation.sortBy($"a".asc, $"b".asc).distribute($"a")(2).where($"a" === 10)
+    val optimizedPlan = testRelation.distribute($"a")(2).where($"a" === 10)
     checkRepartitionCases(plan, optimizedPlan)
   }
 
   test("join") {
-    val plan = testRelation.sortBy('a.asc, 'b.asc).distribute('a)(2).where('a === 10)
-    val optimizedPlan = testRelation.distribute('a)(2).where('a === 10)
-    val anotherPlan = anotherTestRelation.select('d)
+    val plan = testRelation.sortBy($"a".asc, $"b".asc).distribute($"a")(2).where($"a" === 10)
+    val optimizedPlan = testRelation.distribute($"a")(2).where($"a" === 10)
+    val anotherPlan = anotherTestRelation.select($"d")
     val joinPlan = plan.join(anotherPlan)
     val optimizedJoinPlan = optimize(joinPlan)
     val correctJoinPlan = analyze(optimizedPlan.join(anotherPlan))
@@ -140,11 +140,11 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
   }
 
   test("aggregate") {
-    val plan = testRelation.sortBy('a.asc, 'b.asc).distribute('a)(2).where('a === 10)
-    val optimizedPlan = testRelation.distribute('a)(2).where('a === 10)
-    val aggPlan = plan.groupBy('a)(sum('b))
+    val plan = testRelation.sortBy($"a".asc, $"b".asc).distribute($"a")(2).where($"a" === 10)
+    val optimizedPlan = testRelation.distribute($"a")(2).where($"a" === 10)
+    val aggPlan = plan.groupBy($"a")(sum($"b"))
     val optimizedAggPlan = optimize(aggPlan)
-    val correctAggPlan = analyze(optimizedPlan.groupBy('a)(sum('b)))
+    val correctAggPlan = analyze(optimizedPlan.groupBy($"a")(sum($"b")))
     comparePlans(optimizedAggPlan, correctAggPlan)
   }
 
@@ -156,15 +156,15 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
     comparePlans(optimizedPlanWithRepartition, correctPlanWithRepartition)
 
     // can remove sortBy before repartition with sortBy
-    val planWithRepartitionAndSortBy = planWithRepartition.sortBy('a.asc)
+    val planWithRepartitionAndSortBy = planWithRepartition.sortBy($"a".asc)
     val optimizedPlanWithRepartitionAndSortBy = optimize(planWithRepartitionAndSortBy)
-    val correctPlanWithRepartitionAndSortBy = analyze(repartition(optimizedPlan).sortBy('a.asc))
+    val correctPlanWithRepartitionAndSortBy = analyze(repartition(optimizedPlan).sortBy($"a".asc))
     comparePlans(optimizedPlanWithRepartitionAndSortBy, correctPlanWithRepartitionAndSortBy)
 
     // can remove sortBy before repartition with orderBy
-    val planWithRepartitionAndOrderBy = planWithRepartition.orderBy('a.asc)
+    val planWithRepartitionAndOrderBy = planWithRepartition.orderBy($"a".asc)
     val optimizedPlanWithRepartitionAndOrderBy = optimize(planWithRepartitionAndOrderBy)
-    val correctPlanWithRepartitionAndOrderBy = analyze(repartition(optimizedPlan).orderBy('a.asc))
+    val correctPlanWithRepartitionAndOrderBy = analyze(repartition(optimizedPlan).orderBy($"a".asc))
     comparePlans(optimizedPlanWithRepartitionAndOrderBy, correctPlanWithRepartitionAndOrderBy)
   }
 
@@ -178,17 +178,17 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
 }
 
 class EliminateSortsBeforeRepartitionByExprsSuite extends EliminateSortsBeforeRepartitionSuite {
-  override def repartition(plan: LogicalPlan): LogicalPlan = plan.distribute('a)(10)
+  override def repartition(plan: LogicalPlan): LogicalPlan = plan.distribute($"a")(10)
 
   test("sortBy before repartition with non-deterministic expressions") {
-    val plan = testRelation.sortBy('a.asc, 'b.asc).limit(10)
-    val planWithRepartition = plan.distribute(rand(1).asc, 'a.asc)(20)
+    val plan = testRelation.sortBy($"a".asc, $"b".asc).limit(10)
+    val planWithRepartition = plan.distribute(rand(1).asc, $"a".asc)(20)
     checkRepartitionCases(plan = planWithRepartition, optimizedPlan = planWithRepartition)
   }
 
   test("orderBy before repartition with non-deterministic expressions") {
-    val plan = testRelation.orderBy('a.asc, 'b.asc).limit(10)
-    val planWithRepartition = plan.distribute(rand(1).asc, 'a.asc)(20)
+    val plan = testRelation.orderBy($"a".asc, $"b".asc).limit(10)
+    val planWithRepartition = plan.distribute(rand(1).asc, $"a".asc)(20)
     checkRepartitionCases(plan = planWithRepartition, optimizedPlan = planWithRepartition)
   }
 }

@@ -20,10 +20,12 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.{Utils => CUtils}
 
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
@@ -73,7 +75,7 @@ object AggUtils {
       initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
-    val useHash = HashAggregateExec.supportsAggregate(
+    val useHash = Aggregate.supportsHashAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
     val forceSortAggregate = forceApplySortAggregate(child.conf)
 
@@ -90,7 +92,7 @@ object AggUtils {
         child = child)
     } else {
       val objectHashEnabled = child.conf.useObjectHashAggregation
-      val useObjectHash = ObjectHashAggregateExec.supportsAggregate(aggregateExpressions)
+      val useObjectHash = Aggregate.supportsObjectHashAggregate(aggregateExpressions)
 
       if (objectHashEnabled && useObjectHash && !forceSortAggregate) {
         ObjectHashAggregateExec(
@@ -217,7 +219,7 @@ object AggUtils {
     }
 
     // 3. Create an Aggregate operator for partial aggregation (for distinct)
-    val distinctColumnAttributeLookup = distinctExpressions.zip(distinctAttributes).toMap
+    val distinctColumnAttributeLookup = CUtils.toMap(distinctExpressions, distinctAttributes)
     val rewrittenDistinctFunctions = functionsWithDistinct.map {
       // Children of an AggregateFunction with DISTINCT keyword has already
       // been evaluated. At here, we need to replace original children

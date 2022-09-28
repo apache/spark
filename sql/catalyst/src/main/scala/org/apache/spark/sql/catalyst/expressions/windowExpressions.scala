@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_WINDOW_EXPRESSION, WINDOW_EXPRESSION}
@@ -65,24 +66,27 @@ case class WindowSpecDefinition(
   override def checkInputDataTypes(): TypeCheckResult = {
     frameSpecification match {
       case UnspecifiedFrame =>
-        TypeCheckFailure(
-          "Cannot use an UnspecifiedFrame. This should have been converted during analysis. " +
-            "Please file a bug report.")
+        DataTypeMismatch(errorSubClass = "UNSPECIFIED_FRAME")
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && !f.isUnbounded &&
           orderSpec.isEmpty =>
-        TypeCheckFailure(
-          "A range window frame cannot be used in an unordered window specification.")
+        DataTypeMismatch(errorSubClass = "RANGE_FRAME_WITHOUT_ORDER")
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
           orderSpec.size > 1 =>
-        TypeCheckFailure(
-          s"A range window frame with value boundaries cannot be used in a window specification " +
-            s"with multiple order by expressions: ${orderSpec.mkString(",")}")
+        DataTypeMismatch(
+          errorSubClass = "RANGE_FRAME_MULTI_ORDER",
+          messageParameters = Map(
+            "orderSpec" -> orderSpec.mkString(",")
+          )
+        )
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
           !isValidFrameType(f.valueBoundary.head.dataType) =>
-        TypeCheckFailure(
-          s"The data type '${orderSpec.head.dataType.catalogString}' used in the order " +
-            "specification does not match the data type " +
-            s"'${f.valueBoundary.head.dataType.catalogString}' which is used in the range frame.")
+        DataTypeMismatch(
+          errorSubClass = "RANGE_FRAME_INVALID_TYPE",
+          messageParameters = Map(
+            "orderSpecType" -> toSQLType(orderSpec.head.dataType),
+            "valueBoundaryType" -> toSQLType(f.valueBoundary.head.dataType)
+          )
+        )
       case _ => TypeCheckSuccess
     }
   }
@@ -215,17 +219,32 @@ case class SpecifiedWindowFrame(
     // Check combination (of expressions).
     (lower, upper) match {
       case (l: Expression, u: Expression) if !isValidFrameBoundary(l, u) =>
-        TypeCheckFailure(s"Window frame upper bound '$upper' does not follow the lower bound " +
-          s"'$lower'.")
+        DataTypeMismatch(
+          errorSubClass = "SPECIFIED_WINDOW_FRAME_INVALID_BOUND",
+          messageParameters = Map(
+            "upper" -> toSQLExpr(upper),
+            "lower" -> toSQLExpr(lower)
+          )
+        )
       case (l: SpecialFrameBoundary, _) => TypeCheckSuccess
       case (_, u: SpecialFrameBoundary) => TypeCheckSuccess
       case (l: Expression, u: Expression) if l.dataType != u.dataType =>
-        TypeCheckFailure(
-          s"Window frame bounds '$lower' and '$upper' do no not have the same data type: " +
-            s"'${l.dataType.catalogString}' <> '${u.dataType.catalogString}'")
+        DataTypeMismatch(
+          errorSubClass = "SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
+          messageParameters = Map(
+            "lower" -> toSQLExpr(lower),
+            "upper" -> toSQLExpr(upper),
+            "lowerType" -> toSQLType(l.dataType),
+            "upperType" -> toSQLType(u.dataType)
+          )
+        )
       case (l: Expression, u: Expression) if isGreaterThan(l, u) =>
-        TypeCheckFailure(
-          "The lower bound of a window frame must be less than or equal to the upper bound")
+        DataTypeMismatch(
+          errorSubClass = "SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON",
+          messageParameters = Map(
+            "comparison" -> "less than or equal"
+          )
+        )
       case _ => TypeCheckSuccess
     }
   }
@@ -262,11 +281,22 @@ case class SpecifiedWindowFrame(
   private def checkBoundary(b: Expression, location: String): TypeCheckResult = b match {
     case _: SpecialFrameBoundary => TypeCheckSuccess
     case e: Expression if !e.foldable =>
-      TypeCheckFailure(s"Window frame $location bound '$e' is not a literal.")
+      DataTypeMismatch(
+        errorSubClass = "SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
+        messageParameters = Map(
+          "location" -> location,
+          "expression" -> toSQLExpr(e)
+        )
+      )
     case e: Expression if !frameType.inputType.acceptsType(e.dataType) =>
-      TypeCheckFailure(
-        s"The data type of the $location bound '${e.dataType.catalogString}' does not match " +
-          s"the expected data type '${frameType.inputType.simpleString}'.")
+      DataTypeMismatch(
+        errorSubClass = "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+        messageParameters = Map(
+          "location" -> location,
+          "exprType" -> toSQLType(e.dataType),
+          "expectedType" -> toSQLType(frameType.inputType)
+        )
+      )
     case _ => TypeCheckSuccess
   }
 
@@ -421,7 +451,12 @@ sealed abstract class FrameLessOffsetWindowFunction
     if (check.isFailure) {
       check
     } else if (!offset.foldable) {
-      TypeCheckFailure(s"Offset expression '$offset' must be a literal.")
+      DataTypeMismatch(
+        errorSubClass = "FRAME_LESS_OFFSET_WITHOUT_FOLDABLE",
+        messageParameters = Map(
+          "offset" -> toSQLExpr(offset)
+        )
+      )
     } else {
       TypeCheckSuccess
     }
@@ -1013,4 +1048,133 @@ case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBase
   override def prettyName: String = "percent_rank"
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PercentRank =
     copy(children = newChildren)
+}
+
+/**
+ * Exponential Weighted Moment. This expression is dedicated only for Pandas API on Spark.
+ * An exponentially weighted window is similar to an expanding window but with each prior point
+ * being exponentially weighted down relative to the current point.
+ * See https://pandas.pydata.org/docs/user_guide/window.html#exponentially-weighted-window
+ * for details.
+ * Currently, only weighted moving average is supported. In general, it is calculated as
+ *    y_t = \frac{\sum_{i=0}^t w_i x_{t-i}}{\sum_{i=0}^t w_i},
+ * where x_t is the input, y_t is the result and the w_i are the weights.
+ */
+case class EWM(input: Expression, alpha: Double, ignoreNA: Boolean)
+  extends AggregateWindowFunction with UnaryLike[Expression] {
+  assert(0 < alpha && alpha <= 1)
+
+  override def dataType: DataType = DoubleType
+
+  private val numerator = AttributeReference("numerator", DoubleType, nullable = false)()
+  private val denominator = AttributeReference("denominator", DoubleType, nullable = false)()
+  private val result = AttributeReference("result", DoubleType, nullable = true)()
+
+  override def aggBufferAttributes: Seq[AttributeReference] =
+    numerator :: denominator :: result :: Nil
+
+  override val initialValues: Seq[Expression] =
+    Literal(0.0) :: Literal(0.0) :: Literal.create(null, DoubleType) :: Nil
+
+  override val updateExpressions: Seq[Expression] = {
+    val beta = Literal(1.0 - alpha)
+    val casted = input.cast(DoubleType)
+    val isNA = IsNull(casted)
+    val newNumerator = numerator * beta + casted
+    val newDenominator = denominator * beta + Literal(1.0)
+
+    if (ignoreNA) {
+      /* numerator = */ If(isNA, numerator, newNumerator) ::
+      /* denominator = */ If(isNA, denominator, newDenominator) ::
+      /* result = */ If(isNA, result, newNumerator / newDenominator) :: Nil
+    } else {
+      /* numerator = */ If(isNA, numerator * beta, newNumerator) ::
+      /* denominator = */ If(isNA, denominator * beta, newDenominator) ::
+      /* result = */ If(isNA, result, newNumerator / newDenominator) :: Nil
+    }
+  }
+
+  override val evaluateExpression: Expression = result
+
+  override def prettyName: String = "ewm"
+
+  override def sql: String = s"$prettyName(${input.sql}, $alpha, $ignoreNA)"
+
+  override def child: Expression = input
+
+  override protected def withNewChildInternal(newChild: Expression): EWM = copy(input = newChild)
+}
+
+
+/**
+ * Keep the last non-null value seen if any. This expression is dedicated only for
+ * Pandas API on Spark.
+ * For example,
+ *  Input: null, 1, 2, 3, null, 4, 5, null
+ *  Output: null, 1, 2, 3, 3, 4, 5, 5
+ */
+case class LastNonNull(input: Expression)
+  extends AggregateWindowFunction with UnaryLike[Expression] {
+
+  override def dataType: DataType = input.dataType
+
+  private val last = AttributeReference("last", dataType, nullable = true)()
+
+  override def aggBufferAttributes: Seq[AttributeReference] = last :: Nil
+
+  override val initialValues: Seq[Expression] = Seq(Literal.create(null, dataType))
+
+  override val updateExpressions: Seq[Expression] = {
+    Seq(
+      /* last = */ If(IsNull(input), last, input)
+    )
+  }
+
+  override val evaluateExpression: Expression = last
+
+  override def prettyName: String = "last_non_null"
+
+  override def sql: String = s"$prettyName(${input.sql})"
+
+  override def child: Expression = input
+
+  override protected def withNewChildInternal(newChild: Expression): LastNonNull =
+    copy(input = newChild)
+}
+
+
+/**
+ * Return the indices for consecutive null values, for non-null values, it returns 0.
+ * This expression is dedicated only for Pandas API on Spark.
+ * For example,
+ *  Input: null, 1, 2, 3, null, null, null, 5, null, null
+ *  Output: 1, 0, 0, 0, 1, 2, 3, 0, 1, 2
+ */
+case class NullIndex(input: Expression)
+  extends AggregateWindowFunction with UnaryLike[Expression] {
+
+  override def dataType: DataType = IntegerType
+
+  private val index = AttributeReference("index", IntegerType, nullable = false)()
+
+  override def aggBufferAttributes: Seq[AttributeReference] = index :: Nil
+
+  override val initialValues: Seq[Expression] = Seq(Literal(0))
+
+  override val updateExpressions: Seq[Expression] = {
+    Seq(
+      /* index = */ If(IsNull(input), index + Literal(1), Literal(0))
+    )
+  }
+
+  override val evaluateExpression: Expression = index
+
+  override def prettyName: String = "null_index"
+
+  override def sql: String = s"$prettyName(${input.sql})"
+
+  override def child: Expression = input
+
+  override protected def withNewChildInternal(newChild: Expression): NullIndex =
+    copy(input = newChild)
 }

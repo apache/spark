@@ -504,7 +504,7 @@ private[spark] class MemoryStore(
         try {
           logInfo(s"${selectedBlocks.size} blocks selected for dropping " +
             s"(${Utils.bytesToString(freedMemory)} bytes)")
-          (0 until selectedBlocks.size).foreach { idx =>
+          selectedBlocks.indices.foreach { idx =>
             val blockId = selectedBlocks(idx)
             val entry = entries.synchronized {
               entries.get(blockId)

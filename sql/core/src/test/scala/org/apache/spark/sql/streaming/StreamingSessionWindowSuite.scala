@@ -428,7 +428,7 @@ class StreamingSessionWindowSuite extends StreamTest
       .selectExpr("explode(split(value, ' ')) AS sessionId", "eventTime")
 
     events
-      .groupBy(sessionWindow as Symbol("session"), Symbol("sessionId"))
+      .groupBy(sessionWindow as Symbol("session"), $"sessionId")
       .agg(count("*").as("numEvents"))
       .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
         "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",

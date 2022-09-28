@@ -77,7 +77,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     }
     catch {
       case e: SparkException =>
-        logWarning("Exception when trying to compute process tree." +
+        logDebug("Exception when trying to compute process tree." +
           " As a result reporting of ProcessTree metrics is stopped", e)
         isAvailable = false
         -1
@@ -94,7 +94,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       Integer.parseInt(out.split("\n")(0))
     } catch {
       case e: Exception =>
-        logWarning("Exception when trying to compute pagesize, as a" +
+        logDebug("Exception when trying to compute pagesize, as a" +
           " result reporting of ProcessTree metrics is stopped")
         isAvailable = false
         0
@@ -153,7 +153,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       childPidsInInt
     } catch {
       case e: Exception =>
-        logWarning("Exception when trying to compute process tree." +
+        logDebug("Exception when trying to compute process tree." +
           " As a result reporting of ProcessTree metrics is stopped.", e)
         isAvailable = false
         mutable.ArrayBuffer.empty[Int]
@@ -199,7 +199,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       }
     } catch {
       case f: IOException =>
-        logWarning("There was a problem with reading" +
+        logDebug("There was a problem with reading" +
           " the stat file of the process. ", f)
         throw f
     }

@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.apache.orc.OrcConf.COMPRESS
 
+import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
 
@@ -30,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 class OrcOptions(
     @transient private val parameters: CaseInsensitiveMap[String],
     @transient private val sqlConf: SQLConf)
-  extends Serializable {
+  extends FileSourceOptions(parameters) {
 
   import OrcOptions._
 

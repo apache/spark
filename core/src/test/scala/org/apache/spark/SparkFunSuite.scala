@@ -18,10 +18,12 @@
 package org.apache.spark
 
 import java.io.File
-import java.nio.file.Path
+import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.{Files, Path}
 import java.util.{Locale, TimeZone}
 
 import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.io.FileUtils
@@ -81,6 +83,8 @@ abstract class SparkFunSuite
   Locale.setDefault(Locale.US)
 
   protected val enableAutoThreadAudit = true
+
+  protected val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
   protected override def beforeAll(): Unit = {
     System.setProperty(IS_TESTING.key, "true")
@@ -224,6 +228,19 @@ abstract class SparkFunSuite
   }
 
   /**
+   * Creates a temporary directory containing a secret file, which is then passed to `f` and
+   * will be deleted after `f` returns.
+   */
+  protected def withSecretFile(contents: String = "test-secret")(f: File => Unit): Unit = {
+    val secretDir = Utils.createTempDir("temp-secrets")
+    val secretFile = new File(secretDir, "temp-secret.txt")
+    Files.write(secretFile.toPath, contents.getBytes(UTF_8))
+    try f(secretFile) finally {
+      Utils.deleteRecursively(secretDir)
+    }
+  }
+
+  /**
    * Adds a log appender and optionally sets a log level to the root logger or the logger with
    * the specified name, then executes the specified function, and in the end removes the log
    * appender and restores the log level if necessary.
@@ -261,6 +278,143 @@ abstract class SparkFunSuite
           logger.asInstanceOf[Logger].get().setLevel(restoreLevels(i))
         }
       }
+    }
+  }
+
+  /**
+   * Checks an exception with an error class against expected results.
+   * @param exception     The exception to check
+   * @param errorClass    The expected error class identifying the error
+   * @param errorSubClass Optional the expected subclass, None if not given
+   * @param sqlState      Optional the expected SQLSTATE, not verified if not supplied
+   * @param parameters    A map of parameter names and values. The names are as defined
+   *                      in the error-classes file.
+   * @param matchPVals    Optionally treat the parameters value as regular expression pattern.
+   *                      false if not supplied.
+   */
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      errorSubClass: Option[String] = None,
+      sqlState: Option[String] = None,
+      parameters: Map[String, String] = Map.empty,
+      matchPVals: Boolean = false,
+      queryContext: Array[QueryContext] = Array.empty): Unit = {
+    val mainErrorClass :: tail = errorClass.split("\\.").toList
+    assert(tail.isEmpty || tail.length == 1)
+    // TODO: remove the `errorSubClass` parameter.
+    assert(tail.isEmpty || errorSubClass.isEmpty)
+    assert(exception.getErrorClass === mainErrorClass)
+    if (exception.getErrorSubClass != null) {
+      val subClass = errorSubClass.orElse(tail.headOption)
+      assert(subClass.isDefined)
+      assert(exception.getErrorSubClass === subClass.get)
+    }
+    sqlState.foreach(state => assert(exception.getSqlState === state))
+    val expectedParameters = exception.getMessageParameters.asScala
+    if (matchPVals == true) {
+      assert(expectedParameters.size === parameters.size)
+      expectedParameters.foreach(
+        exp => {
+          val parm = parameters.getOrElse(exp._1,
+            throw new IllegalArgumentException("Missing parameter" + exp._1))
+          if (!exp._2.matches(parm)) {
+            throw new IllegalArgumentException("(" + exp._1 + ", " + exp._2 +
+              ") does not match: " + parm)
+          }
+        }
+      )
+    } else {
+      assert(expectedParameters === parameters)
+    }
+    val actualQueryContext = exception.getQueryContext()
+    assert(actualQueryContext.length === queryContext.length, "Invalid length of the query context")
+    actualQueryContext.zip(queryContext).foreach { case (actual, expected) =>
+      assert(actual.objectType() === expected.objectType(), "Invalid objectType of a query context")
+      assert(actual.objectName() === expected.objectName(), "Invalid objectName of a query context")
+      assert(actual.startIndex() === expected.startIndex(), "Invalid startIndex of a query context")
+      assert(actual.stopIndex() === expected.stopIndex(), "Invalid stopIndex of a query context")
+      assert(actual.fragment() === expected.fragment(), "Invalid fragment of a query context")
+    }
+  }
+
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      errorSubClass: String,
+      sqlState: String,
+      parameters: Map[String, String]): Unit =
+    checkError(exception, errorClass, Some(errorSubClass), Some(sqlState), parameters)
+
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      sqlState: String,
+      parameters: Map[String, String]): Unit =
+    checkError(exception, errorClass, None, Some(sqlState), parameters)
+
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      sqlState: String,
+      parameters: Map[String, String],
+      context: QueryContext): Unit =
+    checkError(exception, errorClass, None, Some(sqlState), parameters, false, Array(context))
+
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      parameters: Map[String, String],
+      context: QueryContext): Unit =
+    checkError(exception, errorClass, None, None, parameters, false, Array(context))
+
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      errorSubClass: String,
+      sqlState: String,
+      context: QueryContext): Unit =
+    checkError(exception, errorClass, Some(errorSubClass), None, Map.empty, false, Array(context))
+
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      errorSubClass: String,
+      sqlState: Option[String],
+      parameters: Map[String, String],
+      context: QueryContext): Unit =
+    checkError(exception, errorClass, Some(errorSubClass), sqlState, parameters,
+      false, Array(context))
+
+  protected def checkErrorMatchPVals(
+      exception: SparkThrowable,
+      errorClass: String,
+      errorSubClass: String,
+      sqlState: Option[String],
+      parameters: Map[String, String],
+      context: QueryContext): Unit =
+    checkError(exception, errorClass, Some(errorSubClass), sqlState, parameters,
+      matchPVals = true, Array(context))
+
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      errorSubClass: String,
+      sqlState: String,
+      parameters: Map[String, String],
+      context: QueryContext): Unit =
+    checkError(exception, errorClass, Some(errorSubClass), None, parameters, false, Array(context))
+
+  case class ExpectedContext(
+      objectType: String,
+      objectName: String,
+      startIndex: Int,
+      stopIndex: Int,
+      fragment: String) extends QueryContext
+
+  object ExpectedContext {
+    def apply(fragment: String, start: Int, stop: Int): ExpectedContext = {
+      ExpectedContext("", "", start, stop, fragment)
     }
   }
 

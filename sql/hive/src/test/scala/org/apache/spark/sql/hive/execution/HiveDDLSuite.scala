@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFooterReader
@@ -134,24 +135,12 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     )
   }
 
-  test("alter table: set location") {
-    testSetLocation(isDatasourceTable = false)
-  }
-
   test("alter table: set properties") {
     testSetProperties(isDatasourceTable = false)
   }
 
   test("alter table: unset properties") {
     testUnsetProperties(isDatasourceTable = false)
-  }
-
-  test("alter table: set serde") {
-    testSetSerde(isDatasourceTable = false)
-  }
-
-  test("alter table: set serde partition") {
-    testSetSerdePartition(isDatasourceTable = false)
   }
 
   test("alter table: change column") {
@@ -169,8 +158,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
   test("SPARK-22431: illegal nested type") {
     val queries = Seq(
       "CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q",
-      "CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive",
-      "CREATE VIEW t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
+      "CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive")
 
     queries.foreach(query => {
       val err = intercept[SparkException] {
@@ -378,17 +366,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       catalog.reset()
     }
   }
-
-  test("Table Ownership") {
-    val catalog = spark.sessionState.catalog
-    try {
-      sql(s"CREATE TABLE spark_30019(k int)")
-      assert(sql(s"DESCRIBE TABLE EXTENDED spark_30019").where("col_name='Owner'")
-        .collect().head.getString(1) === Utils.getCurrentUserName())
-    } finally {
-      catalog.reset()
-    }
-  }
 }
 
 @SlowHiveTest
@@ -445,12 +422,12 @@ class HiveDDLSuite
         assertAnalysisError(
           "CREATE TABLE tab1 USING hive",
           "Unable to infer the schema. The schema specification is required to " +
-            "create the table `default`.`tab1`")
+            s"create the table `$SESSION_CATALOG_NAME`.`default`.`tab1`")
 
         assertAnalysisError(
           s"CREATE TABLE tab2 USING hive location '${tempDir.getCanonicalPath}'",
           "Unable to infer the schema. The schema specification is required to " +
-            "create the table `default`.`tab2`")
+            s"create the table `$SESSION_CATALOG_NAME`.`default`.`tab2`")
       }
     }
   }
@@ -574,7 +551,8 @@ class HiveDDLSuite
   test("create table: partition column names exist in table definition") {
     assertAnalysisError(
       "CREATE TABLE tbl(a int) PARTITIONED BY (a string)",
-      "Found duplicate column(s) in the table definition of `default`.`tbl`: `a`")
+      "Found duplicate column(s) in the table definition of " +
+        s"`$SESSION_CATALOG_NAME`.`default`.`tbl`: `a`")
   }
 
   test("create partitioned table without specifying data type for the partition columns") {
@@ -683,7 +661,7 @@ class HiveDDLSuite
         assertAnalysisError(
           s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-09', unknownCol='12')",
           "unknownCol is not a valid partition column in table " +
-            "`default`.`exttable_with_partitions`")
+            s"`$SESSION_CATALOG_NAME`.`default`.`exttable_with_partitions`")
 
         sql(
           s"""
@@ -787,7 +765,8 @@ class HiveDDLSuite
 
         assertAnalysisError(
           s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')",
-          "Attempted to unset non-existent property 'p' in table '`default`.`view1`'")
+          "Attempted to unset non-existent property 'p' in table " +
+            s"'`$SESSION_CATALOG_NAME`.`default`.`view1`'")
       }
     }
   }
@@ -1068,7 +1047,7 @@ class HiveDDLSuite
       sql("CREATE TABLE tab1(c1 int)")
       assertAnalysisError(
         "DROP VIEW tab1",
-        "tab1 is a table. 'DROP VIEW' expects a view. Please use DROP TABLE instead.")
+        "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
     }
   }
 
@@ -1650,8 +1629,8 @@ class HiveDDLSuite
         // Even if index tables exist, listTables and getTable APIs should still work
         checkAnswer(
           spark.catalog.listTables().toDF(),
-          Row(indexTabName, "default", null, null, false) ::
-            Row(tabName, "default", null, "MANAGED", false) :: Nil)
+          Row(indexTabName, "spark_catalog", Array("default"), null, null, false) ::
+            Row(tabName, "spark_catalog", Array("default"), null, "MANAGED", false) :: Nil)
         assert(spark.catalog.getTable("default", indexTabName).name === indexTabName)
 
         intercept[TableAlreadyExistsException] {
@@ -1848,7 +1827,8 @@ class HiveDDLSuite
       val e3 = intercept[AnalysisException] {
         spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")
       }
-      assert(e3.message.contains("Cannot overwrite table default.t that is also being read from"))
+      assert(e3.message.contains(s"Cannot overwrite table $SESSION_CATALOG_NAME.default.t " +
+        "that is also being read from"))
     }
   }
 
@@ -2008,7 +1988,8 @@ class HiveDDLSuite
         Seq(5 -> "e").toDF("i", "j")
           .write.format("hive").mode("append").saveAsTable("t1")
       }
-      assert(e.message.contains("The format of the existing table default.t1 is "))
+      assert(e.message.contains(
+        s"The format of the existing table $SESSION_CATALOG_NAME.default.t1 is "))
       assert(e.message.contains("It doesn't match the specified format `HiveFileFormat`."))
     }
   }
@@ -2398,7 +2379,7 @@ class HiveDDLSuite
     withTable("t1", "t2", "t3") {
       assertAnalysisError(
         "CREATE TABLE t1 USING PARQUET AS SELECT NULL AS null_col",
-        "Parquet data source does not support void data type")
+        "Column `null_col` has a data type of void, which is not supported by Parquet.")
 
       assertAnalysisError(
         "CREATE TABLE t2 STORED AS PARQUET AS SELECT null as null_col",
@@ -2412,7 +2393,7 @@ class HiveDDLSuite
     withTable("t1", "t2", "t3", "t4") {
       assertAnalysisError(
         "CREATE TABLE t1 (v VOID) USING PARQUET",
-        "Parquet data source does not support void data type")
+        "Column `v` has a data type of void, which is not supported by Parquet.")
 
       assertAnalysisError(
         "CREATE TABLE t2 (v VOID) STORED AS PARQUET",
@@ -3004,7 +2985,8 @@ class HiveDDLSuite
         val errMsg = intercept[UnsupportedOperationException] {
           sql(sqlCmd)
         }.getMessage
-        assert(errMsg.contains(s"Hive table `default`.`$tbl` with ANSI intervals is not supported"))
+        assert(errMsg.contains(s"Hive table `$SESSION_CATALOG_NAME`.`default`.`$tbl` with " +
+          "ANSI intervals is not supported"))
       }
     }
   }

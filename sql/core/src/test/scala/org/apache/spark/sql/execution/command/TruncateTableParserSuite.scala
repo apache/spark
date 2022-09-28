@@ -21,9 +21,8 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartition
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{TruncatePartition, TruncateTable}
-import org.apache.spark.sql.test.SharedSparkSession
 
-class TruncateTableParserSuite extends AnalysisTest with SharedSparkSession {
+class TruncateTableParserSuite extends AnalysisTest {
   test("truncate table") {
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c"),
@@ -47,9 +46,16 @@ class TruncateTableParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("empty values in non-optional partition specs") {
-    val errMsg = intercept[ParseException] {
-      parsePlan("TRUNCATE TABLE dbx.tab1 PARTITION (a='1', b)")
-    }.getMessage
-    assert(errMsg.contains("Found an empty partition key 'b'"))
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan("TRUNCATE TABLE dbx.tab1 PARTITION (a='1', b)")
+      },
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      parameters = Map("inputString" -> "Partition key `b` must set value (can't be empty)."),
+      context = ExpectedContext(
+        fragment = "PARTITION (a='1', b)",
+        start = 24,
+        stop = 43))
   }
 }

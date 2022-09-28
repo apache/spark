@@ -25,6 +25,7 @@ import com.fasterxml.jackson.core.{JsonFactory, JsonFactoryBuilder}
 import com.fasterxml.jackson.core.json.JsonReadFeature
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -38,7 +39,7 @@ private[sql] class JSONOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
-  extends Logging with Serializable  {
+  extends FileSourceOptions(parameters) with Logging  {
 
   def this(
     parameters: Map[String, String],
@@ -83,6 +84,12 @@ private[sql] class JSONOptions(
   val ignoreNullFields = parameters.get("ignoreNullFields").map(_.toBoolean)
     .getOrElse(SQLConf.get.jsonGeneratorIgnoreNullFields)
 
+  // If this is true, when writing NULL values to columns of JSON tables with explicit DEFAULT
+  // values, never skip writing the NULL values to storage, overriding 'ignoreNullFields' above.
+  // This can be useful to enforce that inserted NULL values are present in storage to differentiate
+  // from missing data.
+  val writeNullIfWithDefaultValue = SQLConf.get.jsonWriteNullIfWithDefaultValue
+
   // A language tag in IETF BCP 47 format
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
 
@@ -109,6 +116,17 @@ private[sql] class JSONOptions(
   val timestampNTZFormatInRead: Option[String] = parameters.get("timestampNTZFormat")
   val timestampNTZFormatInWrite: String =
     parameters.getOrElse("timestampNTZFormat", s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
+
+  // SPARK-39731: Enables the backward compatible parsing behavior.
+  // Generally, this config should be set to false to avoid producing potentially incorrect results
+  // which is the current default (see JacksonParser).
+  //
+  // If enabled and the date cannot be parsed, we will fall back to `DateTimeUtils.stringToDate`.
+  // If enabled and the timestamp cannot be parsed, `DateTimeUtils.stringToTimestamp` will be used.
+  // Otherwise, depending on the parser policy and a custom pattern, an exception may be thrown and
+  // the value will be parsed as null.
+  val enableDateTimeParsingFallback: Option[Boolean] =
+    parameters.get("enableDateTimeParsingFallback").map(_.toBoolean)
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 

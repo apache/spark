@@ -79,6 +79,11 @@ private[spark] object UI {
       "reach your proxy.")
     .version("2.1.0")
     .stringConf
+    .checkValue ({ s =>
+      val words = s.split("/")
+      !words.contains("proxy") && !words.contains("history") },
+      "Cannot use the keyword 'proxy' or 'history' in reverse proxy URL. Spark UI relies on both " +
+        "keywords for getting REST API endpoints from URIs.")
     .createOptional
 
   val UI_KILL_ENABLED = ConfigBuilder("spark.ui.killEnabled")
@@ -123,6 +128,12 @@ private[spark] object UI {
     .version("2.2.3")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("8k")
+
+  val UI_TIMELINE_ENABLED = ConfigBuilder("spark.ui.timelineEnabled")
+    .doc("Whether to display event timeline data on UI pages.")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(true)
 
   val UI_TIMELINE_TASKS_MAXIMUM = ConfigBuilder("spark.ui.timeline.tasks.maximum")
     .version("1.4.0")

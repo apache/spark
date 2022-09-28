@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.util.LinkedHashMap
+import java.util.Map.Entry
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
@@ -26,6 +28,7 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -41,8 +44,7 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RetrieveLastAllocatedExecutorId
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{DecommissionExecutorsOnHost, RemoveExecutor, RetrieveLastAllocatedExecutorId}
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 
@@ -178,6 +180,24 @@ private[yarn] class YarnAllocator(
   // A container placement strategy based on pending tasks' locality preference
   private[yarn] val containerPlacementStrategy =
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resolver)
+
+  private val isYarnExecutorDecommissionEnabled: Boolean = {
+    (sparkConf.get(DECOMMISSION_ENABLED),
+      sparkConf.get(SHUFFLE_SERVICE_ENABLED)) match {
+      case (true, false) => true
+      case (true, true) =>
+        logWarning(s"Yarn Executor Decommissioning is supported only " +
+          s"when ${SHUFFLE_SERVICE_ENABLED.key} is set to false. See: SPARK-39018.")
+        false
+      case (false, _) => false
+    }
+  }
+
+  private val decommissioningNodesCache = new LinkedHashMap[String, Boolean]() {
+    override def removeEldestEntry(entry: Entry[String, Boolean]): Boolean = {
+      size() > DECOMMISSIONING_NODES_CACHE_SIZE
+    }
+  }
 
   // The default profile is always present so we need to initialize the datastructures keyed by
   // ResourceProfile id to ensure its present if things start running before a request for
@@ -322,8 +342,10 @@ private[yarn] class YarnAllocator(
       } else {
         customSparkResources
       }
-      val resource =
-        Resource.newInstance(resourcesWithDefaults.totalMemMiB.toInt, resourcesWithDefaults.cores)
+
+      assert(resourcesWithDefaults.cores.nonEmpty)
+      val resource = Resource.newInstance(
+        resourcesWithDefaults.totalMemMiB.toInt, resourcesWithDefaults.cores.get)
       ResourceRequestHelper.setResourceRequests(customResources, resource)
       logDebug(s"Created resource capability: $resource")
       rpIdToYarnResource.putIfAbsent(rp.id, resource)
@@ -401,6 +423,10 @@ private[yarn] class YarnAllocator(
     val allocatedContainers = allocateResponse.getAllocatedContainers()
     allocatorNodeHealthTracker.setNumClusterNodes(allocateResponse.getNumClusterNodes)
 
+    if (isYarnExecutorDecommissionEnabled) {
+      handleNodesInDecommissioningState(allocateResponse)
+    }
+
     if (allocatedContainers.size > 0) {
       logDebug(("Allocated containers: %d. Current executor count: %d. " +
         "Launching executor count: %d. Cluster resources: %s.")
@@ -421,6 +447,26 @@ private[yarn] class YarnAllocator(
         .format(completedContainers.size, getNumExecutorsRunning))
     }
   }
+
+  private def handleNodesInDecommissioningState(allocateResponse: AllocateResponse): Unit = {
+    // Some of the nodes are put in decommissioning state where RM did allocate
+    // resources on those nodes for earlier allocateResource calls, so notifying driver
+    // to put those executors in decommissioning state
+    allocateResponse.getUpdatedNodes.asScala.filter (node =>
+      // SPARK-39491: Hadoop 2.7 does not support `NodeState.DECOMMISSIONING`,
+      // there change to use string comparison instead for compilation.
+      // Should revert to `node.getNodeState == NodeState.DECOMMISSIONING` when
+      // Hadoop 2.7 is no longer supported.
+      node.getNodeState.toString.equals("DECOMMISSIONING") &&
+        !decommissioningNodesCache.containsKey(getHostAddress(node)))
+      .foreach { node =>
+        val host = getHostAddress(node)
+        driverRef.send(DecommissionExecutorsOnHost(host))
+        decommissioningNodesCache.put(host, true)
+      }
+  }
+
+  private def getHostAddress(nodeReport: NodeReport): String = nodeReport.getNodeId.getHost
 
   /**
    * Update the set of container requests that we will sync with the RM based on the number of
@@ -709,7 +755,11 @@ private[yarn] class YarnAllocator(
       val defaultResources = ResourceProfile.getDefaultProfileExecutorResources(sparkConf)
       val containerMem = rp.executorResources.get(ResourceProfile.MEMORY).
         map(_.amount).getOrElse(defaultResources.executorMemoryMiB).toInt
-      val containerCores = rp.getExecutorCores.getOrElse(defaultResources.cores)
+
+      assert(defaultResources.cores.nonEmpty)
+      val defaultCores = defaultResources.cores.get
+      val containerCores = rp.getExecutorCores.getOrElse(defaultCores)
+
       val rpRunningExecs = getOrUpdateRunningExecutorForRPId(rpId).size
       if (rpRunningExecs < getOrUpdateTargetNumExecutorsForRPId(rpId)) {
         getOrUpdateNumExecutorsStartingForRPId(rpId).incrementAndGet()
@@ -954,6 +1004,7 @@ private object YarnAllocator {
   val MEM_REGEX = "[0-9.]+ [KMG]B"
   val VMEM_EXCEEDED_EXIT_CODE = -103
   val PMEM_EXCEEDED_EXIT_CODE = -104
+  val DECOMMISSIONING_NODES_CACHE_SIZE = 200
 
   val NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS = Set(
     ContainerExitStatus.KILLED_BY_RESOURCEMANAGER,

@@ -163,7 +163,14 @@ def _attach(
         for name, func in inspect.getmembers(target_class, inspect.isfunction):
             if name.startswith("_") and name not in special_functions:
                 continue
-            setattr(target_class, name, _wrap_function(target_class.__name__, name, func, logger))
+            try:
+                isstatic = isinstance(inspect.getattr_static(target_class, name), staticmethod)
+            except AttributeError:
+                isstatic = False
+            wrapped_function = _wrap_function(target_class.__name__, name, func, logger)
+            setattr(
+                target_class, name, staticmethod(wrapped_function) if isstatic else wrapped_function
+            )
 
         for name, prop in inspect.getmembers(target_class, lambda o: isinstance(o, property)):
             if name.startswith("_"):

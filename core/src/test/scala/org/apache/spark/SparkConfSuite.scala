@@ -20,7 +20,6 @@ package org.apache.spark
 import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.collection.JavaConverters._
-import scala.concurrent.duration._
 import scala.util.{Random, Try}
 
 import com.esotericsoftware.kryo.Kryo
@@ -34,7 +33,7 @@ import org.apache.spark.resource.ResourceID
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
-import org.apache.spark.util.{ResetSystemProperties, RpcUtils, Utils}
+import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
   test("Test byteString conversion") {
@@ -279,27 +278,6 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     conf.set("spark.yarn.access.hadoopFileSystems", "testNode")
     assert(conf.get(KERBEROS_FILESYSTEMS_TO_ACCESS) === Array("testNode"))
-  }
-
-  test("akka deprecated configs") {
-    val conf = new SparkConf()
-
-    assert(!conf.contains(RPC_NUM_RETRIES))
-    assert(!conf.contains(RPC_RETRY_WAIT))
-    assert(!conf.contains(RPC_ASK_TIMEOUT))
-    assert(!conf.contains(RPC_LOOKUP_TIMEOUT))
-
-    conf.set("spark.akka.num.retries", "1")
-    assert(RpcUtils.numRetries(conf) === 1)
-
-    conf.set("spark.akka.retry.wait", "2")
-    assert(RpcUtils.retryWaitMs(conf) === 2L)
-
-    conf.set("spark.akka.askTimeout", "3")
-    assert(RpcUtils.askRpcTimeout(conf).duration === 3.seconds)
-
-    conf.set("spark.akka.lookupTimeout", "4")
-    assert(RpcUtils.lookupRpcTimeout(conf).duration === 4.seconds)
   }
 
   test("SPARK-13727") {

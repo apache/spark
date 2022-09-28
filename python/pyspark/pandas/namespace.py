@@ -90,7 +90,6 @@ from pyspark.pandas.internal import (
     SPARK_INDEX_NAME_FORMAT,
 )
 from pyspark.pandas.series import Series, first_series
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.indexes import Index, DatetimeIndex, TimedeltaIndex
 from pyspark.pandas.indexes.multi import MultiIndex
@@ -238,7 +237,7 @@ def read_csv(
     path : str
         The path string storing the CSV file to be read.
     sep : str, default ‘,’
-        Delimiter to use. Must be a single character.
+        Delimiter to use. Non empty string.
     header : int, default ‘infer’
         Whether to to use as the column names, and the start of the data.
         Default behavior is to infer the column names: if no names are passed
@@ -278,7 +277,7 @@ def read_csv(
         The character used to denote the start and end of a quoted item. Quoted items can include
         the delimiter and it will be ignored.
     escapechar : str (length 1), default None
-        One-character string used to escape delimiter
+        One-character string used to escape other characters.
     comment: str, optional
         Indicates the line should not be parsed.
     encoding: str, optional
@@ -1192,7 +1191,7 @@ def read_excel(
                 )
 
                 reset_index = pdf.reset_index()
-                for name, col in reset_index.iteritems():
+                for name, col in reset_index.items():
                     dt = col.dtype
                     if is_datetime64_dtype(dt) or is_datetime64tz_dtype(dt):
                         continue
@@ -2608,9 +2607,8 @@ def concat(
                 label for label in column_labels_of_psdfs[0] if label in interested_columns
             ]
 
-            # When multi-index column, although pandas is flaky if `join="inner" and sort=False`,
-            # always sort to follow the `join="outer"` case behavior.
-            if (len(merged_columns) > 0 and len(merged_columns[0]) > 1) or sort:
+            # If sort is True, sort to follow pandas 1.4+ behavior.
+            if sort:
                 # FIXME: better ordering
                 merged_columns = sorted(merged_columns, key=name_like_string)
 
@@ -2622,10 +2620,7 @@ def concat(
 
             assert len(merged_columns) > 0
 
-            # Always sort when multi-index columns or there are more than two Series,
-            # and if there is only one Series, never sort.
-            sort = len(merged_columns[0]) > 1 or num_series > 1 or (num_series != 1 and sort)
-
+            # If sort is True, always sort
             if sort:
                 # FIXME: better ordering
                 merged_columns = sorted(merged_columns, key=name_like_string)
@@ -2637,7 +2632,7 @@ def concat(
                 # TODO: NaN and None difference for missing values. pandas seems filling NaN.
                 sdf = psdf._internal.resolved_copy.spark_frame
                 for label in columns_to_add:
-                    sdf = sdf.withColumn(name_like_string(label), SF.lit(None))
+                    sdf = sdf.withColumn(name_like_string(label), F.lit(None))
 
                 data_columns = psdf._internal.data_spark_column_names + [
                     name_like_string(label) for label in columns_to_add
@@ -3409,7 +3404,7 @@ def merge_asof(
         on = None
 
     if tolerance is not None and not isinstance(tolerance, Column):
-        tolerance = SF.lit(tolerance)
+        tolerance = F.lit(tolerance)
 
     as_of_joined_table = left_table._joinAsOf(
         right_table,

@@ -22,6 +22,7 @@ import scala.collection.mutable
 
 import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, TaskLocation}
 import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.util.collection.Utils
 
 /**
  * A class that tries to schedule receivers with evenly distributed. There are two phases for
@@ -92,7 +93,7 @@ private[streaming] class ReceiverSchedulingPolicy {
 
     // Firstly, we need to respect "preferredLocation". So if a receiver has "preferredLocation",
     // we need to make sure the "preferredLocation" is in the candidate scheduled executor list.
-    for (i <- 0 until receivers.length) {
+    for (i <- receivers.indices) {
       // Note: preferredLocation is host but executors are host_executorId
       receivers(i).preferredLocation.foreach { host =>
         hostToExecutors.get(host) match {
@@ -135,7 +136,7 @@ private[streaming] class ReceiverSchedulingPolicy {
       leastScheduledExecutors += executor
     }
 
-    receivers.map(_.streamId).zip(scheduledLocations.map(_.toSeq)).toMap
+    Utils.toMap(receivers.map(_.streamId), scheduledLocations.map(_.toSeq))
   }
 
   /**

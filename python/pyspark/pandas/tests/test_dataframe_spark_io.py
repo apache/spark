@@ -131,6 +131,28 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
                 expected.sort_values(by="f").to_spark().toPandas(),
             )
 
+            # Set `compression` with string
+            expected.to_parquet(tmp, mode="overwrite", partition_cols="i32", compression="none")
+            actual = ps.read_parquet(tmp)
+            self.assertFalse((actual.columns == self.test_column_order).all())
+            actual = actual[self.test_column_order]
+            self.assert_eq(
+                actual.sort_values(by="f").to_spark().toPandas(),
+                expected.sort_values(by="f").to_spark().toPandas(),
+            )
+
+            # Test `options` parameter
+            expected.to_parquet(
+                tmp, mode="overwrite", partition_cols="i32", options={"compression": "none"}
+            )
+            actual = ps.read_parquet(tmp)
+            self.assertFalse((actual.columns == self.test_column_order).all())
+            actual = actual[self.test_column_order]
+            self.assert_eq(
+                actual.sort_values(by="f").to_spark().toPandas(),
+                expected.sort_values(by="f").to_spark().toPandas(),
+            )
+
     def test_table(self):
         with self.table("test_table"):
             pdf = self.test_pdf
@@ -225,6 +247,7 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
                 expected_idx.sort_values(by="f").to_spark().toPandas(),
             )
 
+    # TODO(SPARK-40353): re-enabling the `test_read_excel`.
     @unittest.skip("openpyxl")
     def test_read_excel(self):
         with self.temp_dir() as tmp:
@@ -415,6 +438,20 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
 
             # Write out partitioned by two columns
             expected.to_orc(tmp, mode="overwrite", partition_cols=["i32", "bhello"])
+            # Reset column order, as once the data is written out, Spark rearranges partition
+            # columns to appear first.
+            actual = ps.read_orc(tmp)
+            self.assertFalse((actual.columns == self.test_column_order).all())
+            actual = actual[self.test_column_order]
+            self.assert_eq(
+                actual.sort_values(by="f").to_spark().toPandas(),
+                expected.sort_values(by="f").to_spark().toPandas(),
+            )
+
+            # Test `options` parameter
+            expected.to_orc(
+                tmp, mode="overwrite", partition_cols="i32", options={"compression": "none"}
+            )
             # Reset column order, as once the data is written out, Spark rearranges partition
             # columns to appear first.
             actual = ps.read_orc(tmp)

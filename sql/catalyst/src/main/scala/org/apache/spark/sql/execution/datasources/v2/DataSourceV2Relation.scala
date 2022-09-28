@@ -18,10 +18,10 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -48,6 +48,10 @@ case class DataSourceV2Relation(
 
   import DataSourceV2Implicits._
 
+  lazy val funCatalog: Option[FunctionCatalog] = catalog.collect {
+    case c: FunctionCatalog => c
+  }
+
   override lazy val metadataOutput: Seq[AttributeReference] = table match {
     case hasMeta: SupportsMetadataColumns =>
       val resolve = conf.resolver
@@ -68,7 +72,11 @@ case class DataSourceV2Relation(
   override def skipSchemaResolution: Boolean = table.supports(TableCapability.ACCEPT_ANY_SCHEMA)
 
   override def simpleString(maxFields: Int): String = {
-    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
+    val qualifiedTableName = (catalog, identifier) match {
+      case (Some(cat), Some(ident)) => s"${cat.name()}.${ident.toString}"
+      case _ => ""
+    }
+    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $qualifiedTableName $name"
   }
 
   override def computeStats(): Statistics = {
@@ -80,7 +88,7 @@ case class DataSourceV2Relation(
         s"BUG: computeStats called before pushdown on DSv2 relation: $name")
     } else {
       // when not testing, return stats because bad stats are better than failing a query
-      table.asReadable.newScanBuilder(options) match {
+      table.asReadable.newScanBuilder(options).build() match {
         case r: SupportsReportStatistics =>
           val statistics = r.estimateStatistics()
           DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
@@ -113,11 +121,16 @@ case class DataSourceV2Relation(
  * @param relation a [[DataSourceV2Relation]]
  * @param scan a DSv2 [[Scan]]
  * @param output the output attributes of this relation
+ * @param keyGroupedPartitioning if set, the partitioning expressions that are used to split the
+ *                               rows in the scan across different partitions
+ * @param ordering if set, the ordering provided by the scan
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
     scan: Scan,
-    output: Seq[AttributeReference]) extends LeafNode with NamedRelation {
+    output: Seq[AttributeReference],
+    keyGroupedPartitioning: Option[Seq[Expression]] = None,
+    ordering: Option[Seq[SortOrder]] = None) extends LeafNode with NamedRelation {
 
   override def name: String = relation.table.name()
 
@@ -147,6 +160,8 @@ case class StreamingDataSourceV2Relation(
     output: Seq[Attribute],
     scan: Scan,
     stream: SparkDataStream,
+    catalog: Option[CatalogPlugin],
+    identifier: Option[Identifier],
     startOffset: Option[Offset] = None,
     endOffset: Option[Offset] = None)
   extends LeafNode with MultiInstanceRelation {
@@ -162,6 +177,17 @@ case class StreamingDataSourceV2Relation(
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
+
+  private val stringArgsVal: Seq[Any] = {
+    val qualifiedTableName = (catalog, identifier) match {
+      case (Some(cat), Some(ident)) => Some(s"${cat.name()}.${ident.toString}")
+      case _ => None
+    }
+
+    Seq(output, qualifiedTableName, scan, stream, startOffset, endOffset)
+  }
+
+  override protected def stringArgs: Iterator[Any] = stringArgsVal.iterator
 }
 
 object DataSourceV2Relation {

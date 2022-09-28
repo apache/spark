@@ -236,7 +236,6 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
   }
 
   test("SPARK-38056: test writing StreamingQueryData to a RocksDB store") {
-    assume(!Utils.isMacOnAppleSilicon)
     val conf = new SparkConf()
       .set(HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend.ROCKSDB.toString)
     val testDir = Utils.createTempDir()

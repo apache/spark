@@ -454,7 +454,7 @@ private[spark] object HadoopRDD extends Logging {
        infos: Array[SplitLocationInfo]): Option[Seq[String]] = {
     Option(infos).map(_.flatMap { loc =>
       val locationStr = loc.getLocation
-      if (locationStr != "localhost") {
+      if (locationStr != null && locationStr != "localhost") {
         if (loc.isInMemory) {
           logDebug(s"Partition $locationStr is cached by Hadoop.")
           Some(HDFSCacheTaskLocation(locationStr).toString)

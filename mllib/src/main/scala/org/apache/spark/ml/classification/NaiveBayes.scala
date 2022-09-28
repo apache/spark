@@ -502,7 +502,7 @@ class NaiveBayesModel private[ml] (
 
     j = 0
     while (j < probArray.length) {
-      probArray(j) = probArray(j) - logSumExp
+      probArray(j) -= logSumExp
       j += 1
     }
     Vectors.dense(probArray)
