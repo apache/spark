@@ -86,9 +86,14 @@ private[spark] class TaskSchedulerImpl(
 
   import TaskSchedulerImpl._
 
+  def this(sc: SparkContext, isLocal: Boolean) = {
+    this(sc, sc.conf.get(config.TASK_MAX_FAILURES), isLocal)
+  }
+
   def this(sc: SparkContext) = {
     this(sc, sc.conf.get(config.TASK_MAX_FAILURES))
   }
+
 
   // Lazily initializing healthTrackerOpt to avoid getting empty ExecutorAllocationClient,
   // because ExecutorAllocationClient is created after this TaskSchedulerImpl.

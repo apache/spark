@@ -93,7 +93,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val conf = new SparkConf().setMaster(master).setAppName("TaskSchedulerImplSuite")
     confs.foreach { case (k, v) => conf.set(k, v) }
     sc = new SparkContext(conf)
-    taskScheduler = new TaskSchedulerImpl(sc, sc.conf.get(config.TASK_MAX_FAILURES))
+    taskScheduler = new TaskSchedulerImpl(sc)
     setupHelper()
   }
 
