@@ -554,8 +554,8 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       right = DummySparkPlan())
     var expected = PartitioningCollection(Seq(
       HashPartitioning(Seq(l1, l2, l3), 1),
-      HashPartitioning(Seq(l1, l2, r2), 1),
       HashPartitioning(Seq(l1, r1, l3), 1),
+      HashPartitioning(Seq(l1, l2, r2), 1),
       HashPartitioning(Seq(l1, r1, r2), 1)))
     assert(bhj.outputPartitioning === expected)
 
@@ -571,8 +571,8 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       right = DummySparkPlan())
     expected = PartitioningCollection(Seq(
       HashPartitioning(Seq(l1, l2), 1),
-      HashPartitioning(Seq(l1, r2), 1),
       HashPartitioning(Seq(r1, l2), 1),
+      HashPartitioning(Seq(l1, r2), 1),
       HashPartitioning(Seq(r1, r2), 1),
       HashPartitioning(Seq(l3), 1),
       HashPartitioning(Seq(r3), 1)))
@@ -623,8 +623,8 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
 
     val expected = Seq(
       HashPartitioning(Seq(l1, l2), 1),
-      HashPartitioning(Seq(l1, r2), 1),
       HashPartitioning(Seq(r1, l2), 1),
+      HashPartitioning(Seq(l1, r2), 1),
       HashPartitioning(Seq(r1, r2), 1))
 
     Seq(1, 2, 3, 4).foreach { limit =>
