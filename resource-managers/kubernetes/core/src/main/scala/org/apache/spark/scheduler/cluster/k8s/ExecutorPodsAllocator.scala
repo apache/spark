@@ -367,6 +367,7 @@ class ExecutorPodsAllocator(
       try {
         val createdPVCs = kubernetesClient
           .persistentVolumeClaims
+          .inNamespace(namespace)
           .withLabel("spark-app-selector", applicationId)
           .list()
           .getItems
@@ -423,7 +424,7 @@ class ExecutorPodsAllocator(
             val pvc = resource.asInstanceOf[PersistentVolumeClaim]
             logInfo(s"Trying to create PersistentVolumeClaim ${pvc.getMetadata.getName} with " +
               s"StorageClass ${pvc.getSpec.getStorageClassName}")
-            kubernetesClient.persistentVolumeClaims().resource(pvc).create()
+            kubernetesClient.persistentVolumeClaims().inNamespace(namespace).resource(pvc).create()
           }
         newlyCreatedExecutors(newExecutorId) = (resourceProfileId, clock.getTimeMillis())
         logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")

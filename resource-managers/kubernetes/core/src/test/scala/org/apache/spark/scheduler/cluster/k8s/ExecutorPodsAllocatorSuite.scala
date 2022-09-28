@@ -87,6 +87,9 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private var persistentVolumeClaims: PERSISTENT_VOLUME_CLAIMS = _
 
   @Mock
+  private var pvcWithNamespace: PVC_WITH_NAMESPACE = _
+
+  @Mock
   private var labeledPersistentVolumeClaims: LABELED_PERSISTENT_VOLUME_CLAIMS = _
 
   @Mock
@@ -133,7 +136,8 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(schedulerBackend.getExecutorIds).thenReturn(Seq.empty)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
     when(kubernetesClient.persistentVolumeClaims()).thenReturn(persistentVolumeClaims)
-    when(persistentVolumeClaims.withLabel(any(), any())).thenReturn(labeledPersistentVolumeClaims)
+    when(persistentVolumeClaims.inNamespace("default")).thenReturn(pvcWithNamespace)
+    when(pvcWithNamespace.withLabel(any(), any())).thenReturn(labeledPersistentVolumeClaims)
     when(labeledPersistentVolumeClaims.list()).thenReturn(persistentVolumeClaimList)
     when(persistentVolumeClaimList.getItems).thenReturn(Seq.empty[PersistentVolumeClaim].asJava)
   }
@@ -766,7 +770,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     snapshotsStore.notifySubscribers()
     assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
     verify(podsWithNamespace).resource(podWithAttachedContainerForIdAndVolume(2))
-    verify(persistentVolumeClaims, never()).resource(any())
+    verify(pvcWithNamespace, never()).resource(any())
   }
 
   test("print the pod name instead of Some(name) if pod is absent") {

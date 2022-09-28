@@ -40,6 +40,8 @@ object Fabric8Aliases {
     NonNamespaceOperation[StatefulSet, StatefulSetList, STATEFUL_SET_RES]
   type PERSISTENT_VOLUME_CLAIMS = MixedOperation[PersistentVolumeClaim, PersistentVolumeClaimList,
     Resource[PersistentVolumeClaim]]
+  type PVC_WITH_NAMESPACE = NonNamespaceOperation[PersistentVolumeClaim, PersistentVolumeClaimList,
+    Resource[PersistentVolumeClaim]]
   type LABELED_PERSISTENT_VOLUME_CLAIMS = FilterWatchListDeletable[PersistentVolumeClaim,
     PersistentVolumeClaimList, Resource[PersistentVolumeClaim]]
 }
