@@ -29,6 +29,8 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * `DecimalOperation` can hold a Long if values are small enough.
  * _precision and _scale represent the SQL precision and scale we are looking for.
+ * - If the underlying value(e.g. BigDecimal) is set, it represents the whole decimal value
+ * - Otherwise, the decimal value is longVal / (10 ** _scale)
  *
  * Note, for values between -1.0 and 1.0, precision digits are only counted after dot.
  */
