@@ -6076,7 +6076,13 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
     def _test_corrwith(self, psdf, psobj):
         pdf = psdf.to_pandas()
         pobj = psobj.to_pandas()
-        for method in ["pearson", "spearman", "kendall"]:
+        # Regression in pandas 1.5.0 when other is Series and method is "pearson" or "spearman"
+        # See https://github.com/pandas-dev/pandas/issues/48826
+        if LooseVersion(pd.__version__) >= LooseVersion("1.5.0") and isinstance(pobj, pd.Series):
+            methods = ["kendall"]
+        else:
+            methods = ["pearson", "spearman", "kendall"]
+        for method in methods:
             for drop in [True, False]:
                 p_corr = pdf.corrwith(pobj, drop=drop, method=method)
                 ps_corr = psdf.corrwith(psobj, drop=drop, method=method)
