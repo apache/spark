@@ -619,6 +619,165 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   /**
+   * Returns alternative copies of this node where `rule` has been recursively applied to the tree.
+   *
+   * Users should not expect a specific directionality. If a specific directionality is needed,
+   * multiTransformDown or multiTransformUp should be used.
+   *
+   * @param rule a function used to generate transformed alternatives for a node
+   * @return     the stream of alternatives
+   */
+  def multiTransform(rule: PartialFunction[BaseType, Seq[BaseType]]): Stream[BaseType] = {
+    multiTransformDown(rule)
+  }
+
+  /**
+   * Returns alternative copies of this node where `rule` has been recursively applied to the tree.
+   *
+   * Users should not expect a specific directionality. If a specific directionality is needed,
+   * multiTransformDownWithPruning or multiTransformUpWithPruning should be used.
+   *
+   * @param rule   a function used to generate transformed alternatives for a node
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on a TreeNode T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   * @return       the stream of alternatives
+   */
+  def multiTransformWithPruning(
+      cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId
+    )(rule: PartialFunction[BaseType, Seq[BaseType]]): Stream[BaseType] = {
+    multiTransformDownWithPruning(cond, ruleId)(rule).map(_._1)
+  }
+
+  /**
+   * Returns alternative copies of this node where `rule` has been recursively applied to it and all
+   * of its children (pre-order).
+   *
+   * @param rule the function used to generate transformed alternatives for a node
+   * @return     the stream of alternatives
+   */
+  def multiTransformDown(rule: PartialFunction[BaseType, Seq[BaseType]]): Stream[BaseType] = {
+    multiTransformDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule).map(_._1)
+  }
+
+  /**
+   * Returns alternative copies of this node where `rule` has been recursively applied to it and all
+   * of its children (pre-order).
+   *
+   * As it is very easy to generate enormous number of alternatives when the input tree is huge or
+   * when the rule returns large number of alternatives, this function returns the alternatives as a
+   * lazy `Stream` to be able to limit the number of alternatives generated at the caller side as
+   * needed.
+   *
+   * To indicate that the original node without any transformation is a valid alternative the rule
+   * can either:
+   * - not apply or
+   * - return an empty `Seq` or
+   * - a `Seq` that contains a node that is equal to the original node.
+   *
+   * Please note that this function always consider the original node as a valid alternative (even
+   * if the original node is not included in the returned `Seq`) if the rule can transform any of
+   * the descendants of the node. E.g. consider a simple expression:
+   *   `Add(a, b)`
+   * and a rule that returns:
+   *   `Seq(1, 2)` for `a` and
+   *   `Seq(10, 20)` for `b` and
+   *   `Seq(11, 12, 21, 22)` for `Add(a, b)` (note that the original `Add(a, b)` is not returned)
+   * then the result of `multiTransform` is:
+   *   `Seq(11, 12, 21, 22, Add(1, 10), Add(2, 10), Add(1, 20), Add(2, 20))`.
+   * This feature makes the usage of `multiTransform` easier as a non-leaf transforming rule doesn't
+   * need to take into account that it can transform a descendant node of the non-leaf node as well
+   * and so it doesn't need return the non-leaf node itself in the list of alternatives to not stop
+   * generating alternatives.
+   *
+   * @param rule   a function used to generate transformed alternatives for a node
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on a TreeNode T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   * @return       the stream of alternatives with a flag if any transformation was done
+   */
+  def multiTransformDownWithPruning(
+      cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId
+    )(rule: PartialFunction[BaseType, Seq[BaseType]]): Stream[(BaseType, Boolean)] = {
+    if (!cond.apply(this) || isRuleIneffective(ruleId)) {
+      return Stream(this -> false)
+    }
+
+    val afterRules = CurrentOrigin.withOrigin(origin) {
+      rule.applyOrElse(this, (_: BaseType) => Seq.empty)
+    }
+    // A stream of a tuple that contains:
+    // - a node that is either the transformed alternative of the current node or the current node,
+    // - a boolean flag if the node was actually transformed,
+    // - a boolean flag if a node's children needs to be transformed to add the node to the valid
+    // alternatives
+    val afterRulesStream = if (afterRules.isEmpty) {
+      // If the rule is not applied or returns with empty alternatives keep the original node
+      Stream((this, false, false))
+    } else {
+      // If the rule is applied then use the returned alternatives. The alternatives can include the
+      // current node and we need to keep track of that
+      var foundEqual = false
+      afterRules.toStream.map { afterRule =>
+        (if (this fastEquals afterRule) {
+          foundEqual = true
+          this
+        } else {
+          afterRule.copyTagsFrom(this)
+          afterRule
+        }, true, false)
+      }.append(
+        // If the current node is not a leaf node and the alternatives returned by the rule doesn't
+        // contain it then we need to add the current node to the stream, but require any of its
+        // child nodes to be transformed to keep it as a valid alternative
+        if (containsChild.nonEmpty && !foundEqual) {
+          Stream((this, false, true))
+        } else {
+          Stream.empty
+        }
+      )
+    }
+
+    def generateChildrenSeq(children: Seq[BaseType]): Stream[(Seq[BaseType], Boolean)] = {
+      children.foldRight(Stream((Seq.empty[BaseType], false)))((child, childrenSeqStream) =>
+        for {
+          (childrenSeq, childrenSeqChanged) <- childrenSeqStream
+          (newChild, childChanged) <- child.multiTransformDownWithPruning(cond, ruleId)(rule)
+        } yield (newChild +: childrenSeq) -> (childChanged || childrenSeqChanged)
+      )
+    }
+
+    afterRulesStream.flatMap { case (afterRule, transformed, childrenTransformRequired) =>
+      if (afterRule.containsChild.nonEmpty) {
+        generateChildrenSeq(afterRule.children).collect {
+          case (newChildren, childrenTransformed)
+            if !childrenTransformRequired || childrenTransformed =>
+            afterRule.withNewChildren(newChildren) -> (transformed || childrenTransformed)
+        }
+      } else {
+        Seq(afterRule -> transformed)
+      }.map { rewritten_plan =>
+        if (this eq rewritten_plan) {
+          markRuleAsIneffective(ruleId)
+        }
+        rewritten_plan
+      }
+    }
+  }
+
+  /**
    * Returns a copy of this node where `f` has been applied to all the nodes in `children`.
    */
   def mapChildren(f: BaseType => BaseType): BaseType = {
