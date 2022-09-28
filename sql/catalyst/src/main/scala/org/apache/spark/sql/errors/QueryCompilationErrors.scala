@@ -2079,21 +2079,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def secondArgumentInFunctionIsNotBooleanLiteralError(funcName: String): Throwable = {
-    new AnalysisException(s"The second argument in $funcName should be a boolean literal.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1210",
+      messageParameters = Map("funcName" -> funcName))
   }
 
   def joinConditionMissingOrTrivialError(
       join: Join, left: LogicalPlan, right: LogicalPlan): Throwable = {
     new AnalysisException(
-      s"""Detected implicit cartesian product for ${join.joinType.sql} join between logical plans
-         |${left.treeString(false).trim}
-         |and
-         |${right.treeString(false).trim}
-         |Join condition is missing or trivial.
-         |Either: use the CROSS JOIN syntax to allow cartesian products between these
-         |relations, or: enable implicit cartesian products by setting the configuration
-         |variable spark.sql.crossJoin.enabled=true"""
-        .stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1211",
+      messageParameters = Map(
+        "joinType" -> join.joinType.sql,
+        "leftPlan" -> left.treeString(false).trim,
+        "rightPlan" -> right.treeString(false).trim))
   }
 
   def usePythonUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
@@ -2105,42 +2103,55 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def conflictingAttributesInJoinConditionError(
       conflictingAttrs: AttributeSet, outerPlan: LogicalPlan, subplan: LogicalPlan): Throwable = {
-    new AnalysisException("Found conflicting attributes " +
-      s"${conflictingAttrs.mkString(",")} in the condition joining outer plan:\n  " +
-      s"$outerPlan\nand subplan:\n  $subplan")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1212",
+      messageParameters = Map(
+        "conflictingAttrs" -> conflictingAttrs.mkString(","),
+        "outerPlan" -> outerPlan.toString,
+        "subplan" -> subplan.toString))
   }
 
   def emptyWindowExpressionError(expr: Window): Throwable = {
-    new AnalysisException(s"Window expression is empty in $expr")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1213",
+      messageParameters = Map("expr" -> expr.toString))
   }
 
   def foundDifferentWindowFunctionTypeError(windowExpressions: Seq[NamedExpression]): Throwable = {
     new AnalysisException(
-      s"Found different window function type in $windowExpressions")
+      errorClass = "_LEGACY_ERROR_TEMP_1214",
+      messageParameters = Map("windowExpressions" -> windowExpressions.toString()))
   }
 
   def charOrVarcharTypeAsStringUnsupportedError(): Throwable = {
-    new AnalysisException("char/varchar type can only be used in the table schema. " +
-      s"You can set ${SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key} to true, so that Spark" +
-      s" treat them as string type as same as Spark 3.0 and earlier")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1215",
+      messageParameters = Map("config" -> SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key))
   }
 
   def invalidPatternError(pattern: String, message: String): Throwable = {
     new AnalysisException(
-      s"the pattern '$pattern' is invalid, $message")
+      errorClass = "_LEGACY_ERROR_TEMP_1216",
+      messageParameters = Map("pattern" -> pattern, "message" -> message))
   }
 
   def tableIdentifierExistsError(tableIdentifier: TableIdentifier): Throwable = {
-    new AnalysisException(s"$tableIdentifier already exists.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1217",
+      messageParameters = Map("tableIdentifier" -> tableIdentifier.toString))
   }
 
   def tableIdentifierNotConvertedToHadoopFsRelationError(
       tableIdentifier: TableIdentifier): Throwable = {
-    new AnalysisException(s"$tableIdentifier should be converted to HadoopFsRelation.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1218",
+      messageParameters = Map("tableIdentifier" -> tableIdentifier.toString))
   }
 
   def alterDatabaseLocationUnsupportedError(): Throwable = {
-    new AnalysisException("Hive metastore does not support altering database location")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1219",
+      messageParameters = Map.empty)
   }
 
   def hiveTableTypeUnsupportedError(tableType: String): Throwable = {
