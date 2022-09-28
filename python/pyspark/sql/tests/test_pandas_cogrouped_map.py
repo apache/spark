@@ -125,6 +125,22 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
         assert_frame_equal(expected, result)
 
+    def test_different_group_key_cardinality(self):
+        left = self.data1
+        right = self.data2
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                    AssertionError,
+                    "group keys must have same size: 2 != 1",
+            ):
+                (
+                    left.groupby("id", "k")
+                        .cogroup(right.groupby("id"))
+                        .applyInPandas(lambda l, r: l, "id long, k int, v int")
+                        .collect()
+                )
+
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
         left = self.data1
         right = self.data2
