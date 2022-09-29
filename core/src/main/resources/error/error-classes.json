@@ -888,6 +888,11 @@
         "message" : [
           "IN/EXISTS predicate subqueries can only be used in filters, joins, aggregations, window functions, projections, and UPDATE/MERGE/DELETE commands<treeNode>"
         ]
+      },
+      "UNSUPPORTED_OUTER_REFERENCE_DATA_TYPE" : {
+        "message" : [
+          "Correlated column references do not support data type <dataType>: <expr>"
+        ]
       }
     }
   },

@@ -1944,6 +1944,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("function" -> funcStr))
   }
 
+  def unsupportedOuterReferenceDataTypeError(
+      expr: Expression,
+      dataType: DataType,
+      origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+      errorSubClass = "UNSUPPORTED_OUTER_REFERENCE_DATA_TYPE",
+      origin = origin,
+      messageParameters = Map("expr" -> expr.sql, "dataType" -> dataType.simpleString))
+  }
+
   def functionCannotProcessInputError(
       unbound: UnboundFunction,
       arguments: Seq[Expression],

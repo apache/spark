@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -360,7 +360,20 @@ object DecorrelateInnerQuery extends PredicateHelper {
           //                        +- Aggregate [a1] [a1 AS a']
           //                           +- OuterQuery
           val conditions = outerReferenceMap.map {
-            case (o, a) => EqualNullSafe(a, OuterReference(o))
+            case (o, a) =>
+              val cond = EqualNullSafe(a, OuterReference(o))
+              // SPARK-40615: Certain data types (e.g. MapType) do not support ordering, so
+              // the EqualNullSafe join condition can become unresolved.
+              if (!cond.resolved) {
+                if (!RowOrdering.isOrderable(a.dataType)) {
+                  throw QueryCompilationErrors.unsupportedOuterReferenceDataTypeError(
+                    o, a.dataType, plan.origin)
+                } else {
+                  throw new IllegalStateException(s"Unable to decorrelate subquery: " +
+                    s"join condition '${cond.sql}' cannot be resolved.")
+                }
+              }
+              cond
           }
           (domainJoin, conditions.toSeq, AttributeMap(outerReferenceMap))
         }
