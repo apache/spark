@@ -192,8 +192,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       }
       checkError(
         exception = e,
-        errorClass = "UNSUPPORTED_FEATURE",
-        errorSubClass = "TABLE_OPERATION",
+        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         sqlState = "0A000",
         parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
           "operation" -> "ALTER COLUMN ... FIRST | ALTER"))
