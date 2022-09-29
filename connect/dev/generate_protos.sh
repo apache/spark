@@ -77,3 +77,6 @@ black --config $SPARK_HOME/dev/pyproject.toml gen/proto/python
 for f in `find gen/proto/python -name "*.py*"`; do
   cp $f $SPARK_HOME/python/pyspark/sql/connect/proto
 done
+
+# Clean up everything.
+rm -Rf gen
