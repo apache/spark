@@ -153,9 +153,11 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
 
   // First traversal builds up the cache and inserts `ScalarSubqueryReference`s to the plan.
   private def insertReferences(plan: LogicalPlan, cache: ArrayBuffer[Header]): LogicalPlan = {
-    plan.transformUpWithSubqueries {
-      case n => n.transformExpressionsUpWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY)) {
-        case s: ScalarSubquery if !s.isCorrelated && s.deterministic =>
+    plan.transformDownWithSubqueries {
+      case n => n.transformExpressionsDownWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY)) {
+        case s: ScalarSubquery if !s.isCorrelated && s.deterministic
+          // Subquery expressions with nested subquery expressions within are not supported for now.
+          && !s.plan.containsAnyPattern(SCALAR_SUBQUERY) =>
           val (subqueryIndex, headerIndex) = cacheSubquery(s.plan, cache)
           ScalarSubqueryReference(subqueryIndex, headerIndex, s.dataType, s.exprId)
       }

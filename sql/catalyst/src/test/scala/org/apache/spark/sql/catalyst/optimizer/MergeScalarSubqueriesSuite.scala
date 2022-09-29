@@ -534,20 +534,10 @@ class MergeScalarSubqueriesSuite extends PlanTest {
 
   test("Merging subqueries from different places") {
     val subquery1 = ScalarSubquery(testRelation.select(('a + 1).as("a_plus1")))
-    val subquery2 = ScalarSubquery(testRelation.select(('a + 2).as("a_plus2")))
-    val subquery3 = ScalarSubquery(testRelation.select('b))
-    val subquery4 = ScalarSubquery(testRelation.select(('a + 1).as("a_plus1_2")))
-    val subquery5 = ScalarSubquery(testRelation.select(('a + 2).as("a_plus2_2")))
-    val subquery6 = ScalarSubquery(testRelation.select('b.as("b_2")))
+    val subquery2 = ScalarSubquery(testRelation.select('b.as("b_2")))
     val originalQuery = testRelation
-      .select(
-        subquery1,
-        subquery2,
-        subquery3)
-      .where(
-        subquery4 +
-        subquery5 +
-        subquery6 === 0)
+      .select(subquery1)
+      .where(subquery2 === 0)
 
     val mergedSubquery = testRelation
       .select(
@@ -560,19 +550,20 @@ class MergeScalarSubqueriesSuite extends PlanTest {
           Literal("a_plus2"), 'a_plus2,
           Literal("b"), 'b
         )).as("mergedValue"))
-    val analyzedMergedSubquery = mergedSubquery.analyze
-    val correctAnswer = WithCTE(
-      testRelation
-        .select(
-          extractorExpression(0, analyzedMergedSubquery.output, 0),
-          extractorExpression(0, analyzedMergedSubquery.output, 1),
-          extractorExpression(0, analyzedMergedSubquery.output, 2))
-        .where(
-          extractorExpression(0, analyzedMergedSubquery.output, 0) +
-          extractorExpression(0, analyzedMergedSubquery.output, 1) +
-          extractorExpression(0, analyzedMergedSubquery.output, 2) === 0),
-      Seq(definitionNode(analyzedMergedSubquery, 0)))
+    val correctAnswer =
+      """WithCTE
+        |:- CTERelationDef 0, true
+        |:  +- Project [named_struct(b_2, b_2#x, a_plus1, a_plus1#x) AS mergedValue#x]
+        |:     +- Project [b#x AS b_2#x, (a#x + 1) AS a_plus1#x]
+        |:        +- LocalRelation <empty>, [a#x, b#x, c#x]
+        |+- Filter (scalar-subquery#x [].b_2 = 0)
+        |   :  +- CTERelationRef 0, true, [mergedValue#x]
+        |   +- Project [scalar-subquery#x [].a_plus1 AS scalarsubquery()#x]
+        |      :  +- CTERelationRef 0, true, [mergedValue#x]
+        |      +- LocalRelation <empty>, [a#x, b#x, c#x]
+        |""".stripMargin
 
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    val expected = Optimize.execute(originalQuery.analyze).toString.replaceAll("#\\d+", "#x")
+    assert(expected == correctAnswer)
   }
 }
