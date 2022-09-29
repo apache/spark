@@ -5277,7 +5277,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Parameters
         ----------
         path : str
-            Path to write to. It's required in pandas API on Spark whereas optional in pandas.
+            Path to write to.
         mode : str
             Python write mode, default 'w'.
 
