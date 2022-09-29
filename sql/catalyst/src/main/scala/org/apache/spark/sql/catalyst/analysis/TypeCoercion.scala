@@ -762,12 +762,13 @@ abstract class TypeCoercionBase {
       exprs.map(_.dataType).forall {
         case _: IntegralType => true
         case DecimalType.Fixed(_, 0) => true
+        case _ => false
       }
     }
 
     override val transform: PartialFunction[Expression, Expression] = {
       case b @ Equality(left: Attribute, right: Attribute)
-          if left.dataType != right.dataType && isIntegralTypes(b.children) =>
+          if b.childrenResolved && left.dataType != right.dataType && isIntegralTypes(b.children) =>
         // The result type is:
         // 1. The attribute data type with larger bucket number.
         // 2. The attribute data type with larger default size if it is not bucketed attribute.
