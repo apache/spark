@@ -365,8 +365,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "datetime" : "'02-29'"
@@ -384,8 +383,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "datetime" : "'02-29'"
@@ -432,8 +430,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "NON_FOLDABLE_INPUT",
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "messageParameters" : {
     "inputExpr" : "\"NULL\"",
     "sqlExpr" : "\"schema_of_json(NULL)\""
@@ -463,8 +460,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "NON_FOLDABLE_INPUT",
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "messageParameters" : {
     "inputExpr" : "\"jsonField\"",
     "sqlExpr" : "\"schema_of_json(jsonField)\""
@@ -494,8 +490,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
     "inputSql" : "\"2\"",
     "inputType" : "\"INT\"",
@@ -638,8 +633,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
     "inputSql" : "\"200\"",
     "inputType" : "\"INT\"",

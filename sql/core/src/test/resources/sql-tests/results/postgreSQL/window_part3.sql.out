@@ -247,8 +247,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "RANGE_FRAME_WITHOUT_ORDER",
+  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
   "messageParameters" : {
     "sqlExpr" : "\"(PARTITION BY f1 RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)\""
   },

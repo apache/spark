@@ -230,9 +230,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "messageParameters" : {
     "objectName" : "`nt2`.`k`",
     "proposal" : "`__auto_generated_subquery_name`.`k`, `__auto_generated_subquery_name`.`v1`, `__auto_generated_subquery_name`.`v2`"

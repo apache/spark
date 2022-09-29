@@ -240,9 +240,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "messageParameters" : {
     "objectName" : "`year`",
     "proposal" : "`__auto_generated_subquery_name`.`course`, `__auto_generated_subquery_name`.`earnings`"
@@ -357,9 +355,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "messageParameters" : {
     "objectName" : "`s`",
     "proposal" : "`coursesales`.`year`, `coursesales`.`course`, `coursesales`.`earnings`"

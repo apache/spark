@@ -110,8 +110,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "NON_FOLDABLE_INPUT",
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "messageParameters" : {
     "inputExpr" : "\"NULL\"",
     "sqlExpr" : "\"schema_of_csv(NULL)\""
@@ -141,8 +140,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "NON_FOLDABLE_INPUT",
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "messageParameters" : {
     "inputExpr" : "\"csvField\"",
     "sqlExpr" : "\"schema_of_csv(csvField)\""
