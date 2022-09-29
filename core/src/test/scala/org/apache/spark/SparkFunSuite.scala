@@ -305,11 +305,6 @@ abstract class SparkFunSuite
     // TODO: remove the `errorSubClass` parameter.
     assert(tail.isEmpty || errorSubClass.isEmpty)
     assert(exception.getErrorClass === mainErrorClass)
-    if (exception.getErrorSubClass != null) {
-      val subClass = errorSubClass.orElse(tail.headOption)
-      assert(subClass.isDefined)
-      assert(exception.getErrorSubClass === subClass.get)
-    }
     sqlState.foreach(state => assert(exception.getSqlState === state))
     val expectedParameters = exception.getMessageParameters.asScala
     if (matchPVals == true) {

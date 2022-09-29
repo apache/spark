@@ -196,19 +196,12 @@ trait AnalysisTest extends PlanTest {
       }
 
       if (e.getErrorClass != expectedErrorClass ||
-        !e.messageParameters.sameElements(expectedMessageParameters) ||
-        e.getErrorSubClass != expectedErrorSubClass) {
+        !e.messageParameters.sameElements(expectedMessageParameters)) {
         var failMsg = ""
         if (e.getErrorClass != expectedErrorClass) {
           failMsg +=
             s"""Error class should be: ${expectedErrorClass}
                |Actual error class: ${e.getErrorClass}
-             """.stripMargin
-        }
-        if (e.getErrorSubClass != expectedErrorSubClass) {
-          failMsg +=
-            s"""Error sub class should be: $expectedErrorSubClass
-               |Actual error sub class: ${e.getErrorSubClass}
              """.stripMargin
         }
         if (!e.messageParameters.sameElements(expectedMessageParameters)) {

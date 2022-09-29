@@ -123,8 +123,6 @@ class AnalysisException protected[sql] (
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass.orNull
-  override def getErrorSubClass: String = {
-    errorClass.map(SparkThrowableHelper.getErrorSubClass).orNull
-  }
+
   override def getQueryContext: Array[QueryContext] = context
 }

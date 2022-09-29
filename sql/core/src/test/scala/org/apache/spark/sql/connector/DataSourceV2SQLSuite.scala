@@ -2440,7 +2440,6 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       sql(sqlStatement)
     }
     assert(ex.getErrorClass == expectedErrorClass)
-    assert(ex.getErrorSubClass == expectedErrorSubClass)
     assert(ex.messageParameters.sameElements(expectedErrorMessageParameters))
   }
 

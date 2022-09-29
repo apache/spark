@@ -63,9 +63,6 @@ class SparkException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass.orNull
-  override def getErrorSubClass: String = {
-    errorClass.map(SparkThrowableHelper.getErrorSubClass).orNull
-  }
 
   override def getQueryContext: Array[QueryContext] = context
 }
@@ -121,7 +118,6 @@ private[spark] class SparkUpgradeException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = SparkThrowableHelper.getErrorSubClass(errorClass)
 }
 
 /**
@@ -139,7 +135,6 @@ private[spark] class SparkArithmeticException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = SparkThrowableHelper.getErrorSubClass(errorClass)
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -156,7 +151,6 @@ private[spark] class SparkUnsupportedOperationException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = SparkThrowableHelper.getErrorSubClass(errorClass)
 }
 
 /**
@@ -173,7 +167,6 @@ private[spark] class SparkClassNotFoundException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = SparkThrowableHelper.getErrorSubClass(errorClass)
 }
 
 /**
@@ -190,7 +183,6 @@ private[spark] class SparkConcurrentModificationException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = SparkThrowableHelper.getErrorSubClass(errorClass)
 }
 
 /**
@@ -208,7 +200,6 @@ private[spark] class SparkDateTimeException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = SparkThrowableHelper.getErrorSubClass(errorClass)
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -225,7 +216,6 @@ private[spark] class SparkFileAlreadyExistsException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = SparkThrowableHelper.getErrorSubClass(errorClass)
 }
 
 /**
@@ -241,7 +231,6 @@ private[spark] class SparkFileNotFoundException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = SparkThrowableHelper.getErrorSubClass(errorClass)
 }
 
 /**
@@ -259,7 +248,6 @@ private[spark] class SparkNumberFormatException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = SparkThrowableHelper.getErrorSubClass(errorClass)
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -278,7 +266,6 @@ private[spark] class SparkIllegalArgumentException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = SparkThrowableHelper.getErrorSubClass(errorClass)
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -296,7 +283,6 @@ private[spark] class SparkRuntimeException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = SparkThrowableHelper.getErrorSubClass(errorClass)
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -313,7 +299,6 @@ private[spark] class SparkSecurityException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = SparkThrowableHelper.getErrorSubClass(errorClass)
 }
 
 /**
@@ -331,7 +316,6 @@ private[spark] class SparkArrayIndexOutOfBoundsException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = SparkThrowableHelper.getErrorSubClass(errorClass)
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -348,7 +332,6 @@ private[spark] class SparkSQLException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = SparkThrowableHelper.getErrorSubClass(errorClass)
 }
 
 /**
@@ -364,5 +347,4 @@ private[spark] class SparkSQLFeatureNotSupportedException(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = SparkThrowableHelper.getErrorSubClass(errorClass)
 }
