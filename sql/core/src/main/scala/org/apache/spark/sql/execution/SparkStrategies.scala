@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, CollapseProject, ColumnPruning, JoinSelectionHelper, NormalizeFloatingNumbers}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -794,7 +794,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.PythonMapInArrow(func, output, child) =>
         execution.python.PythonMapInArrowExec(func, output, planLater(child)) :: Nil
       case logical.AttachDistributedSequence(attr, child) =>
-        execution.python.AttachDistributedSequenceExec(attr, planLater(child)) :: Nil
+        val right = Project(Seq(Alias(Literal(true), "__attach_distributed_seq_right__")()), child)
+        execution.python.AttachDistributedSequenceExec(
+          attr,
+          planLater(child),
+          planLater(CollapseProject(ColumnPruning(right)))) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>
         execution.MapElementsExec(f, objAttr, planLater(child)) :: Nil
       case logical.AppendColumns(f, _, _, in, out, child) =>

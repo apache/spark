@@ -22,53 +22,83 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
+import org.apache.spark.util.Utils
 
 /**
  * A physical plan that adds a new long column with `sequenceAttr` that
  * increases one by one. This is for 'distributed-sequence' default index
  * in pandas API on Spark.
+ * Right child is only to compute the partition sizes.
  */
 case class AttachDistributedSequenceExec(
     sequenceAttr: Attribute,
-    child: SparkPlan)
-  extends UnaryExecNode {
+    left: SparkPlan,
+    right: SparkPlan)
+  extends BinaryExecNode {
 
   override def producedAttributes: AttributeSet = AttributeSet(sequenceAttr)
 
-  override val output: Seq[Attribute] = sequenceAttr +: child.output
+  override val output: Seq[Attribute] = sequenceAttr +: left.output
 
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def outputPartitioning: Partitioning = left.outputPartitioning
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val childRDD = child.execute().map(_.copy())
-    val checkpointed = if (childRDD.getNumPartitions > 1) {
-      // to avoid execute multiple jobs. zipWithIndex launches a Spark job.
-      childRDD.localCheckpoint()
-    } else {
-      childRDD
-    }
-    checkpointed.zipWithIndex().mapPartitions { iter =>
-      val unsafeProj = UnsafeProjection.create(output, output)
-      val joinedRow = new JoinedRow
-      val unsafeRowWriter =
-        new org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter(1)
+    val leftRDD = left.execute()
+    val rightRDD = right.execute()
+    val n = leftRDD.getNumPartitions
+    assert(rightRDD.getNumPartitions == n)
 
-      iter.map { case (row, id) =>
-        // Writes to an UnsafeRow directly
-        unsafeRowWriter.reset()
-        unsafeRowWriter.write(0, id)
-        joinedRow(unsafeRowWriter.getRow, row)
-      }.map(unsafeProj)
+    if (n > 1) {
+      val sc = rightRDD.sparkContext
+      val startIndices: Array[Long] = sc.runJob(
+        rightRDD,
+        Utils.getIteratorSize _,
+        0 until n - 1 // do not need to count the last partition
+      ).scanLeft(0L)(_ + _)
+
+      leftRDD.mapPartitionsWithIndex { case (partId, iter) =>
+        val unsafeProj = UnsafeProjection.create(output, output)
+        val joinedRow = new JoinedRow
+        val unsafeRowWriter =
+          new org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter(1)
+
+        var id = startIndices(partId)
+        iter.map { row =>
+          // Writes to an UnsafeRow directly
+          unsafeRowWriter.reset()
+          id += 1
+          unsafeRowWriter.write(0, id)
+          joinedRow(unsafeRowWriter.getRow, row)
+        }.map(unsafeProj)
+      }
+    } else {
+      leftRDD.mapPartitions { iter =>
+        val unsafeProj = UnsafeProjection.create(output, output)
+        val joinedRow = new JoinedRow
+        val unsafeRowWriter =
+          new org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter(1)
+
+        var id = 0L
+        iter.map { row =>
+          // Writes to an UnsafeRow directly
+          unsafeRowWriter.reset()
+          id += 1
+          unsafeRowWriter.write(0, id)
+          joinedRow(unsafeRowWriter.getRow, row)
+        }.map(unsafeProj)
+      }
     }
   }
-
-  override protected def withNewChildInternal(newChild: SparkPlan): AttachDistributedSequenceExec =
-    copy(child = newChild)
 
   override def simpleString(maxFields: Int): String = {
     val truncatedOutputString = truncatedString(output, "[", ", ", "]", maxFields)
     val indexColumn = s"Index: $sequenceAttr"
     s"$nodeName$truncatedOutputString $indexColumn"
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan,
+      newRight: SparkPlan): AttachDistributedSequenceExec =
+    copy(left = newLeft, right = newRight)
 }
