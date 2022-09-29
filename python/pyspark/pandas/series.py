@@ -3315,15 +3315,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if not isinstance(periods, int):
             raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
 
+        sdf = self._internal.spark_frame
         scol = self.spark.column
         if periods == 0:
-            corr = self._internal.spark_frame.select(F.corr(scol, scol)).head()[0]
+            corr = sdf.select(F.corr(scol, scol)).head()[0]
         else:
             lag_scol = F.lag(scol, periods).over(Window.orderBy(NATURAL_ORDER_COLUMN_NAME))
-            tmp_lag_col = "__tmp_lag_col__"
+            lag_col_name = verify_temp_column_name(sdf, "__autocorr_lag_tmp_col__")
             corr = (
-                self._internal.spark_frame.withColumn(tmp_lag_col, lag_scol)
-                .select(F.corr(scol, F.col(tmp_lag_col)))
+                sdf.withColumn(lag_col_name, lag_scol)
+                .select(F.corr(scol, F.col(lag_col_name)))
                 .head()[0]
             )
         return np.nan if corr is None else corr
