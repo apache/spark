@@ -5240,6 +5240,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     '%s/to_parquet/foo.parquet' % path,
         ...     mode = 'overwrite',
         ...     partition_cols=['date', 'country'])
+
+        Notes
+        -----
+        pandas API on Spark writes Parquet files into the directory, `path`, and writes
+        multiple part files in the directory unlike pandas.
+        pandas API on Spark respects HDFS's property such as 'fs.default.name'.
         """
         if index_col is None:
             log_advice(
@@ -5270,7 +5276,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Parameters
         ----------
-        path : str, required
+        path : str
             Path to write to. It's required in pandas API on Spark whereas optional in pandas.
         mode : str
             Python write mode, default 'w'.
@@ -5320,9 +5326,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Notes
         -----
-        pandas-on-Spark writes ORC files into the directory, `path`, and writes
-        multiple `part-...` files in the directory unlike pandas.
-        pandas-on-Spark respects HDFS's property such as 'fs.default.name'.
+        pandas API on Spark writes ORC files into the directory, `path`, and writes
+        multiple part files in the directory unlike pandas.
+        pandas API on Spark respects HDFS's property such as 'fs.default.name'.
         """
         if index_col is None:
             log_advice(
