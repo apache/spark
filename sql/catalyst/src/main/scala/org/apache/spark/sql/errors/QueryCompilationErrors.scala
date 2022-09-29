@@ -2588,198 +2588,227 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def showCreateTableNotSupportedOnTempView(table: String): Throwable = {
-    new AnalysisException(s"SHOW CREATE TABLE is not supported on a temporary view: $table")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1270",
+      messageParameters = Map("table" -> table))
   }
 
   def showCreateTableFailToExecuteUnsupportedFeatureError(table: CatalogTable): Throwable = {
-    new AnalysisException("Failed to execute SHOW CREATE TABLE against table " +
-      s"${table.identifier}, which is created by Hive and uses the " +
-      s"following unsupported feature(s)\n" +
-      table.unsupportedFeatures.map(" - " + _).mkString("\n") + ". " +
-      s"Please use `SHOW CREATE TABLE ${table.identifier} AS SERDE` to show Hive DDL instead.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1271",
+      messageParameters = Map(
+        "unsupportedFeatures" -> table.unsupportedFeatures.map(" - " + _).mkString("\n"),
+        "table" -> table.identifier.toString))
   }
 
   def showCreateTableNotSupportTransactionalHiveTableError(table: CatalogTable): Throwable = {
-    new AnalysisException("SHOW CREATE TABLE doesn't support transactional Hive table. " +
-      s"Please use `SHOW CREATE TABLE ${table.identifier} AS SERDE` " +
-      "to show Hive DDL instead.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1272",
+      messageParameters = Map("table" -> table.identifier.toString))
   }
 
   def showCreateTableFailToExecuteUnsupportedConfError(
       table: TableIdentifier,
       builder: mutable.StringBuilder): Throwable = {
-    new AnalysisException("Failed to execute SHOW CREATE TABLE against table " +
-        s"${table.identifier}, which is created by Hive and uses the " +
-        "following unsupported serde configuration\n" +
-        builder.toString() + "\n" +
-        s"Please use `SHOW CREATE TABLE ${table.identifier} AS SERDE` to show Hive DDL instead."
-    )
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1273",
+      messageParameters = Map(
+        "table" -> table.identifier,
+        "configs" -> builder.toString()))
   }
 
   def showCreateTableAsSerdeNotAllowedOnSparkDataSourceTableError(
       table: TableIdentifier): Throwable = {
     new AnalysisException(
-      s"$table is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead.")
+      errorClass = "_LEGACY_ERROR_TEMP_1274",
+      messageParameters = Map("table" -> table.toString))
   }
 
   def showCreateTableOrViewFailToExecuteUnsupportedFeatureError(
       table: CatalogTable,
       features: Seq[String]): Throwable = {
     new AnalysisException(
-      s"Failed to execute SHOW CREATE TABLE against table/view ${table.identifier}, " +
-        "which is created by Hive and uses the following unsupported feature(s)\n" +
-        features.map(" - " + _).mkString("\n"))
+      errorClass = "_LEGACY_ERROR_TEMP_1275",
+      messageParameters = Map(
+        "table" -> table.identifier.toString,
+        "features" -> features.map(" - " + _).mkString("\n")))
   }
 
   def logicalPlanForViewNotAnalyzedError(): Throwable = {
-    new AnalysisException("The logical plan that represents the view is not analyzed.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1276",
+      messageParameters = Map.empty)
   }
 
   def createViewNumColumnsMismatchUserSpecifiedColumnLengthError(
       analyzedPlanLength: Int,
       userSpecifiedColumnsLength: Int): Throwable = {
-    new AnalysisException(s"The number of columns produced by the SELECT clause " +
-      s"(num: `$analyzedPlanLength`) does not match the number of column names " +
-      s"specified by CREATE VIEW (num: `$userSpecifiedColumnsLength`).")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1277",
+      messageParameters = Map(
+        "analyzedPlanLength" -> analyzedPlanLength.toString,
+        "userSpecifiedColumnsLength" -> userSpecifiedColumnsLength.toString))
   }
 
   def tableIsNotViewError(name: TableIdentifier): Throwable = {
-    new AnalysisException(s"$name is not a view")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1278",
+      messageParameters = Map("name" -> name.toString))
   }
 
   def viewAlreadyExistsError(name: TableIdentifier): Throwable = {
     new AnalysisException(
-      s"View $name already exists. If you want to update the view definition, " +
-        "please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS")
+      errorClass = "_LEGACY_ERROR_TEMP_1279",
+      messageParameters = Map("name" -> name.toString))
   }
 
   def createPersistedViewFromDatasetAPINotAllowedError(): Throwable = {
-    new AnalysisException("It is not allowed to create a persisted view from the Dataset API")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1280",
+      messageParameters = Map.empty)
   }
 
   def recursiveViewDetectedError(
       viewIdent: TableIdentifier,
       newPath: Seq[TableIdentifier]): Throwable = {
-    new AnalysisException(s"Recursive view $viewIdent detected " +
-      s"(cycle: ${newPath.mkString(" -> ")})")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1281",
+      messageParameters = Map(
+        "viewIdent" -> viewIdent.toString,
+        "newPath" -> newPath.mkString(" -> ")))
   }
 
   def notAllowedToCreatePermanentViewWithoutAssigningAliasForExpressionError(
       name: TableIdentifier,
       attrName: String): Throwable = {
-    new AnalysisException(s"Not allowed to create a permanent view $name without " +
-      s"explicitly assigning an alias for expression $attrName")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1282",
+      messageParameters = Map(
+        "name" -> name.toString,
+        "attrName" -> attrName))
   }
 
   def notAllowedToCreatePermanentViewByReferencingTempViewError(
       name: TableIdentifier,
       nameParts: String): Throwable = {
-    new AnalysisException(s"Not allowed to create a permanent view $name by " +
-      s"referencing a temporary view $nameParts. " +
-      "Please create a temp view instead by CREATE TEMP VIEW")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1283",
+      messageParameters = Map(
+        "name" -> name.toString,
+        "nameParts" -> nameParts))
   }
 
   def notAllowedToCreatePermanentViewByReferencingTempFuncError(
       name: TableIdentifier,
       funcName: String): Throwable = {
-    new AnalysisException(s"Not allowed to create a permanent view $name by " +
-      s"referencing a temporary function `$funcName`")
+     new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1284",
+      messageParameters = Map(
+        "name" -> name.toString,
+        "funcName" -> funcName))
   }
 
   def queryFromRawFilesIncludeCorruptRecordColumnError(): Throwable = {
     new AnalysisException(
-      """
-        |Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the
-        |referenced columns only include the internal corrupt record column
-        |(named _corrupt_record by default). For example:
-        |spark.read.schema(schema).csv(file).filter($"_corrupt_record".isNotNull).count()
-        |and spark.read.schema(schema).csv(file).select("_corrupt_record").show().
-        |Instead, you can cache or save the parsed results and then send the same query.
-        |For example, val df = spark.read.schema(schema).csv(file).cache() and then
-        |df.filter($"_corrupt_record".isNotNull).count().
-      """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_1285",
+      messageParameters = Map.empty)
   }
 
   def userDefinedPartitionNotFoundInJDBCRelationError(
       columnName: String, schema: String): Throwable = {
-    new AnalysisException(s"User-defined partition column $columnName not " +
-      s"found in the JDBC relation: $schema")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1286",
+      messageParameters = Map(
+        "columnName" -> columnName,
+        "schema" -> schema))
   }
 
   def invalidPartitionColumnTypeError(column: StructField): Throwable = {
     new AnalysisException(
-      s"""
-         |Partition column type should be ${NumericType.simpleString},
-         |${DateType.catalogString}, or ${TimestampType.catalogString}, but
-         |${column.dataType.catalogString} found.
-       """.stripMargin.replaceAll("\n", " "))
+      errorClass = "_LEGACY_ERROR_TEMP_1287",
+      messageParameters = Map(
+        "numericType" -> NumericType.simpleString,
+        "dateType" -> DateType.catalogString,
+        "timestampType" -> TimestampType.catalogString,
+        "dataType" -> column.dataType.catalogString))
   }
 
   def tableOrViewAlreadyExistsError(name: String): Throwable = {
     new AnalysisException(
-      s"Table or view '$name' already exists. SaveMode: ErrorIfExists.")
+      errorClass = "_LEGACY_ERROR_TEMP_1288",
+      messageParameters = Map("name" -> name))
   }
 
   def columnNameContainsInvalidCharactersError(name: String): Throwable = {
     new AnalysisException(
-      s"""
-         |Column name "$name" contains invalid character(s).
-         |Please use alias to rename it.
-       """.stripMargin.replaceAll("\n", " "))
+      errorClass = "_LEGACY_ERROR_TEMP_1289",
+      messageParameters = Map("name" -> name))
   }
 
   def textDataSourceWithMultiColumnsError(schema: StructType): Throwable = {
     new AnalysisException(
-      s"Text data source supports only a single column, and you have ${schema.size} columns.")
+      errorClass = "_LEGACY_ERROR_TEMP_1290",
+      messageParameters = Map("schemaSize" -> schema.size.toString))
   }
 
   def cannotFindPartitionColumnInPartitionSchemaError(
       readField: StructField, partitionSchema: StructType): Throwable = {
-    new AnalysisException(s"Can't find required partition column ${readField.name} " +
-      s"in partition schema $partitionSchema")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1291",
+      messageParameters = Map(
+        "readField" -> readField.name,
+        "partitionSchema" -> partitionSchema.toString()))
   }
 
   def cannotSpecifyDatabaseForTempViewError(tableIdent: TableIdentifier): Throwable = {
     new AnalysisException(
-      s"Temporary view '$tableIdent' should not have specified a database")
+      errorClass = "_LEGACY_ERROR_TEMP_1292",
+      messageParameters = Map("tableIdent" -> tableIdent.toString))
   }
 
   def cannotCreateTempViewUsingHiveDataSourceError(): Throwable = {
-    new AnalysisException("Hive data source can only be used with tables, " +
-      "you can't use it with CREATE TEMP VIEW USING")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1293",
+      messageParameters = Map.empty)
   }
 
   def invalidTimestampProvidedForStrategyError(
       strategy: String, timeString: String): Throwable = {
     new AnalysisException(
-      s"The timestamp provided for the '$strategy' option is invalid. The expected format " +
-        s"is 'YYYY-MM-DDTHH:mm:ss', but the provided timestamp: $timeString")
+      errorClass = "_LEGACY_ERROR_TEMP_1294",
+      messageParameters = Map(
+        "strategy" -> strategy,
+        "timeString" -> timeString))
   }
 
   def hostOptionNotSetError(): Throwable = {
-    new AnalysisException("Set a host to read from with option(\"host\", ...).")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1295",
+      messageParameters = Map.empty)
   }
 
   def portOptionNotSetError(): Throwable = {
-    new AnalysisException("Set a port to read from with option(\"port\", ...).")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1296",
+      messageParameters = Map.empty)
   }
 
   def invalidIncludeTimestampValueError(): Throwable = {
-    new AnalysisException("includeTimestamp must be set to either \"true\" or \"false\"")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1297",
+      messageParameters = Map.empty)
   }
 
   def checkpointLocationNotSpecifiedError(): Throwable = {
     new AnalysisException(
-      s"""
-         |checkpointLocation must be specified either
-         |through option("checkpointLocation", ...) or
-         |SparkSession.conf.set("${SQLConf.CHECKPOINT_LOCATION.key}", ...)
-       """.stripMargin.replaceAll("\n", " "))
+      errorClass = "_LEGACY_ERROR_TEMP_1298",
+      messageParameters = Map("config" -> SQLConf.CHECKPOINT_LOCATION.key))
   }
 
   def recoverQueryFromCheckpointUnsupportedError(checkpointPath: Path): Throwable = {
-    new AnalysisException("This query does not support recovering from checkpoint location. " +
-      s"Delete $checkpointPath to start over.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1299",
+      messageParameters = Map("checkpointPath" -> checkpointPath.toString))
   }
 
   def cannotFindColumnInRelationOutputError(

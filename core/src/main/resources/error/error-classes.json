@@ -2598,5 +2598,167 @@
     "message" : [
       "SHOW PARTITIONS is not allowed on a table that is not partitioned: <tableIdentWithDB>."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1270" : {
+    "message" : [
+      "SHOW CREATE TABLE is not supported on a temporary view: <table>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1271" : {
+    "message" : [
+      "Failed to execute SHOW CREATE TABLE against table <table>, which is created by Hive and uses the following unsupported feature(s)",
+      "<unsupportedFeatures>",
+      "Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1272" : {
+    "message" : [
+      "SHOW CREATE TABLE doesn't support transactional Hive table. Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1273" : {
+    "message" : [
+      "Failed to execute SHOW CREATE TABLE against table <table>, which is created by Hive and uses the following unsupported serde configuration",
+      "<configs>",
+      "Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1274" : {
+    "message" : [
+      "<table> is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1275" : {
+    "message" : [
+      "Failed to execute SHOW CREATE TABLE against table/view <table>, which is created by Hive and uses the following unsupported feature(s)",
+      "<features>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1276" : {
+    "message" : [
+      "The logical plan that represents the view is not analyzed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1277" : {
+    "message" : [
+      "The number of columns produced by the SELECT clause (num: `<analyzedPlanLength>`) does not match the number of column names specified by CREATE VIEW (num: `<userSpecifiedColumnsLength>`)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1278" : {
+    "message" : [
+      "<name> is not a view."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1279" : {
+    "message" : [
+      "View <name> already exists. If you want to update the view definition, please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1280" : {
+    "message" : [
+      "It is not allowed to create a persisted view from the Dataset API."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1281" : {
+    "message" : [
+      "Recursive view <viewIdent> detected (cycle: <newPath>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1282" : {
+    "message" : [
+      "Not allowed to create a permanent view <name> without explicitly assigning an alias for expression <attrName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1283" : {
+    "message" : [
+      "Not allowed to create a permanent view <name> by referencing a temporary view <nameParts>. Please create a temp view instead by CREATE TEMP VIEW."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1284" : {
+    "message" : [
+      "Not allowed to create a permanent view <name> by referencing a temporary function `<funcName>`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1285" : {
+    "message" : [
+      "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the",
+      "referenced columns only include the internal corrupt record column",
+      "(named _corrupt_record by default). For example:",
+      "spark.read.schema(schema).csv(file).filter($\"_corrupt_record\".isNotNull).count()",
+      "and spark.read.schema(schema).csv(file).select(\"_corrupt_record\").show().",
+      "Instead, you can cache or save the parsed results and then send the same query.",
+      "For example, val df = spark.read.schema(schema).csv(file).cache() and then",
+      "df.filter($\"_corrupt_record\".isNotNull).count()."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1286" : {
+    "message" : [
+      "User-defined partition column <columnName> not found in the JDBC relation: <schema>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1287" : {
+    "message" : [
+      "Partition column type should be <numericType>, <dateType>, or <timestampType>, but <dataType> found."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1288" : {
+    "message" : [
+      "Table or view '<name>' already exists. SaveMode: ErrorIfExists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1289" : {
+    "message" : [
+      "Column name \"<name>\" contains invalid character(s). Please use alias to rename it."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1290" : {
+    "message" : [
+      "Text data source supports only a single column, and you have <schemaSize> columns."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1291" : {
+    "message" : [
+      "Can't find required partition column <readField> in partition schema <partitionSchema>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1292" : {
+    "message" : [
+      "Temporary view '<tableIdent>' should not have specified a database."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1293" : {
+    "message" : [
+      "Hive data source can only be used with tables, you can't use it with CREATE TEMP VIEW USING."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1294" : {
+    "message" : [
+      "The timestamp provided for the '<strategy>' option is invalid. The expected format is 'YYYY-MM-DDTHH:mm:ss', but the provided timestamp: <timeString>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1295" : {
+    "message" : [
+      "Set a host to read from with option(\"host\", ...)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1296" : {
+    "message" : [
+      "Set a port to read from with option(\"port\", ...)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1297" : {
+    "message" : [
+      "IncludeTimestamp must be set to either \"true\" or \"false\"."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1298" : {
+    "message" : [
+      "checkpointLocation must be specified either through option(\"checkpointLocation\", ...) or SparkSession.conf.set(\"<config>\", ...)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1299" : {
+    "message" : [
+      "This query does not support recovering from checkpoint location. Delete <checkpointPath> to start over."
+    ]
   }
 }
