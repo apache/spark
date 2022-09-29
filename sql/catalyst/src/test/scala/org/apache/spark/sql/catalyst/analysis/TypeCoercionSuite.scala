@@ -22,9 +22,11 @@ import java.time.{Duration, LocalDateTime, Period}
 
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.EvalMode.TRY
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.internal.SQLConf
@@ -1739,6 +1741,55 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
         }
       }
     }
+  }
+
+  test("SPARK-40609: Casts types according to bucket info for Equality expression") {
+    def metadata(bucketNum: Int): Metadata = {
+      new MetadataBuilder()
+        .putLong(BucketSpec.toString(), bucketNum).build()
+    }
+    // Bucket exist
+    ruleTest(TypeCoercion.EqualityTypeCasts,
+      EqualTo(
+        AttributeReference("l", IntegerType, metadata = metadata(100))(),
+        AttributeReference("r", LongType, metadata = metadata(50))()),
+      EqualTo(
+        AttributeReference("l", IntegerType, metadata = metadata(100))(),
+        Cast(AttributeReference("r", LongType, metadata = metadata(50))(), IntegerType,
+          evalMode = TRY)))
+
+    ruleTest(TypeCoercion.EqualityTypeCasts,
+      EqualNullSafe(
+        AttributeReference("l", DecimalType(18, 0), metadata = metadata(100))(),
+        AttributeReference("r", LongType, metadata = metadata(50))()),
+      EqualNullSafe(
+        AttributeReference("l", DecimalType(18, 0), metadata = metadata(100))(),
+        Cast(AttributeReference("r", LongType, metadata = metadata(50))(), DecimalType(18, 0),
+          evalMode = TRY)))
+
+    ruleTest(TypeCoercion.EqualityTypeCasts,
+      EqualTo(
+        AttributeReference("l", IntegerType, metadata = metadata(100))(),
+        AttributeReference("r", LongType)()),
+      EqualTo(
+        AttributeReference("l", IntegerType, metadata = metadata(100))(),
+        Cast(AttributeReference("r", LongType)(), IntegerType, evalMode = TRY)))
+
+    // Bucket does not exist
+    ruleTest(TypeCoercion.EqualityTypeCasts,
+      EqualTo(AttributeReference("l", IntegerType)(),
+        AttributeReference("r", LongType)()),
+      EqualTo(
+        Cast(AttributeReference("l", IntegerType)(), LongType, evalMode = TRY),
+        AttributeReference("r", LongType)()))
+
+
+    ruleTest(TypeCoercion.EqualityTypeCasts,
+      EqualTo(AttributeReference("l", DecimalType(10, 0))(),
+        AttributeReference("r", DecimalType(20, 0))()),
+      EqualTo(
+        Cast(AttributeReference("l", DecimalType(10, 0))(), DecimalType(20, 0), evalMode = TRY),
+      AttributeReference("r", DecimalType(20, 0))()))
   }
 }
 

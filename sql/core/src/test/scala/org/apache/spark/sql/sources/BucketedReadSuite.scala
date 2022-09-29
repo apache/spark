@@ -1050,4 +1050,19 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
       }
     }
   }
+
+  test("SPARK-40609: Casts types according to bucket info for Equality expression") {
+    withTable("t1", "t2") {
+      df1.selectExpr("CAST(i AS bigint) AS i", "j").write.bucketBy(8, "i").saveAsTable("t1")
+      df2.selectExpr("CAST(i AS decimal(18, 0)) AS i", "j").write.bucketBy(8, "i").saveAsTable("t2")
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+        val plan = sql("SELECT * FROM t1 JOIN t2 ON t1.i = t2.i").queryExecution.executedPlan
+        val shuffles = collect(plan) {
+          case s: ShuffleExchangeExec => s
+        }
+        assert(shuffles.length === 1)
+      }
+    }
+  }
 }

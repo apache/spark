@@ -23,7 +23,9 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.EvalMode.TRY
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -752,6 +754,42 @@ abstract class TypeCoercionBase {
   }
 
   /**
+   * Casts types according to bucket info for Equality expression.
+   */
+  object EqualityTypeCasts extends TypeCoercionRule {
+
+    private def isIntegralTypes(exprs: Seq[Expression]): Boolean = {
+      exprs.map(_.dataType).forall {
+        case _: IntegralType => true
+        case DecimalType.Fixed(_, 0) => true
+      }
+    }
+
+    override val transform: PartialFunction[Expression, Expression] = {
+      case b @ Equality(left: Attribute, right: Attribute)
+          if left.dataType != right.dataType && isIntegralTypes(b.children) =>
+        // The result type is:
+        // 1. The attribute data type with larger bucket number.
+        // 2. The attribute data type with larger default size if it is not bucketed attribute.
+        val resultType = Seq(left, right).maxBy { a =>
+          if (a.metadata.contains(BucketSpec.toString())) {
+            a.metadata.getLong(BucketSpec.toString()).toDouble
+          } else {
+            // We assume that the number of rows corresponding to a type with a small defaultSize is
+            // also less.
+            a.dataType.defaultSize / DecimalType.MAX_PRECISION.toDouble
+          }
+        }.dataType
+
+        val newLeft =
+          if (left.dataType == resultType) left else Cast(left, resultType, evalMode = TRY)
+        val newRight =
+          if (right.dataType == resultType) right else Cast(right, resultType, evalMode = TRY)
+        b.makeCopy(Array(newLeft, newRight))
+    }
+  }
+
+  /**
    * Cast WindowFrame boundaries to the type they operate upon.
    */
   object WindowFrameCoercion extends TypeCoercionRule {
@@ -826,6 +864,7 @@ object TypeCoercion extends TypeCoercionBase {
     new CombinedTypeCoercionRule(
       InConversion ::
       PromoteStrings ::
+      EqualityTypeCasts ::
       DecimalPrecision ::
       BooleanEquality ::
       FunctionArgumentConversion ::

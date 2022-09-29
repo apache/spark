@@ -79,6 +79,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     new AnsiCombinedTypeCoercionRule(
       InConversion ::
       PromoteStrings ::
+      EqualityTypeCasts ::
       DecimalPrecision ::
       FunctionArgumentConversion ::
       ConcatCoercion ::

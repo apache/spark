@@ -17,12 +17,13 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.types.MetadataBuilder
 
 /**
  * Used to link a [[BaseRelation]] in to a logical query plan.
@@ -103,6 +104,23 @@ object LogicalRelation {
     // The v1 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(relation.schema)
-    LogicalRelation(relation, schema.toAttributes, Some(table), false)
+    val attributes = if (table.bucketSpec.nonEmpty) {
+      val resolver = relation.sqlContext.sessionState.analyzer.resolver
+      val bucketSpec = table.bucketSpec.get
+      schema.toAttributes.map { a =>
+        if (bucketSpec.bucketColumnNames.exists(resolver(_, a.name))) {
+          val metadata = new MetadataBuilder()
+            .withMetadata(a.metadata)
+            .putLong(BucketSpec.toString(), bucketSpec.numBuckets).build()
+          a.withMetadata(metadata)
+        } else {
+          a
+        }
+      }
+    } else {
+      schema.toAttributes
+    }
+
+    LogicalRelation(relation, attributes, Some(table), false)
   }
 }

@@ -175,6 +175,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$ConcatCoercion" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$Division" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$EltCoercion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$EqualityTypeCasts" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$FunctionArgumentConversion" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$IfCoercion" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$ImplicitTypeCasts" ::
