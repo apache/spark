@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CTERelationDef, CTERelationRef, Filter, Join, LogicalPlan, Project, Subquery, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{SCALAR_SUBQUERY, SCALAR_SUBQUERY_REFERENCE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
@@ -157,7 +157,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
       case n => n.transformExpressionsDownWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY)) {
         case s: ScalarSubquery if !s.isCorrelated && s.deterministic
           // Subquery expressions with nested subquery expressions within are not supported for now.
-          && !s.plan.containsAnyPattern(SCALAR_SUBQUERY) =>
+          && !s.plan.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY, SCALAR_SUBQUERY) =>
           val (subqueryIndex, headerIndex) = cacheSubquery(s.plan, cache)
           ScalarSubqueryReference(subqueryIndex, headerIndex, s.dataType, s.exprId)
       }
