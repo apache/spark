@@ -82,7 +82,7 @@ case class ExecutorProcessLost(
 private [spark] case class ExecutorDecommission(
     workerHost: Option[String] = None,
     _message: String = "")
-  extends ExecutorLossReason("Executor decommission.")
+  extends ExecutorLossReason(ExecutorDecommission.msgPrefix + _message)
 
 private[spark] object ExecutorDecommission {
   val msgPrefix = "Executor decommission: "
