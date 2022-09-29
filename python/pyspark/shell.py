@@ -63,10 +63,32 @@ print(
 """
     % sc.version
 )
-print(
-    "Using Python version %s (%s, %s)"
-    % (platform.python_version(), platform.python_build()[0], platform.python_build()[1])
-)
+
+
+def _create_version_string() -> str:
+    version_str = "Using Python version %s (%s, %s)" % (
+        platform.python_version(),
+        platform.python_build()[0],
+        platform.python_build()[1],
+    )
+
+    try:
+        from importlib.metadata import version
+
+        versions = []
+        for pkg in ["py4j", "pandas", "numpy", "scipy", "pyarrow", "grpcio", "protobuf"]:
+            try:
+                versions.append("%s=%s" % (pkg, version(pkg)))
+            except Exception:
+                versions.append("%s=NotFound" % pkg)
+        version_str += " with packages [%s]" % (", ".join(versions))
+    except Exception:
+        pass
+
+    return version_str
+
+
+print(_create_version_string())
 print("Spark context Web UI available at %s" % (sc.uiWebUrl))
 print("Spark context available as 'sc' (master = %s, app id = %s)." % (sc.master, sc.applicationId))
 print("SparkSession available as 'spark'.")
