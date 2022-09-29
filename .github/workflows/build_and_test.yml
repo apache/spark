@@ -146,7 +146,7 @@ jobs:
           - >-
             core, unsafe, kvstore, avro,
             network-common, network-shuffle, repl, launcher,
-            examples, sketch, graphx, proto
+            examples, sketch, graphx
           - >-
             catalyst, hive-thriftserver
           - >-

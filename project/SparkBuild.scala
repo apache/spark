@@ -45,8 +45,8 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, tokenProviderKafka010, sqlKafka010, avro, proto) = Seq(
-    "catalyst", "sql", "hive", "hive-thriftserver", "token-provider-kafka-0-10", "sql-kafka-0-10", "avro", "proto"
+  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, tokenProviderKafka010, sqlKafka010, avro, protobuf) = Seq(
+    "catalyst", "sql", "hive", "hive-thriftserver", "token-provider-kafka-0-10", "sql-kafka-0-10", "avro", "protobuf"
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(streaming, streamingKafka010) =
@@ -59,7 +59,7 @@ object BuildCommons {
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "tags", "sketch", "kvstore"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connect)
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connect) ++ Seq(protobuf)
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
@@ -390,7 +390,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connect
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, connect, protobuf
     ).contains(x)
   }
 
@@ -434,7 +434,7 @@ object SparkBuild extends PomBuild {
   enable(SparkConnect.settings)(connect)
 
   /* Connector/proto settings */
-  enable(SparkProto.settings)(proto)
+  enable(SparkProtobuf.settings)(protobuf)
 
   // SPARK-14738 - Remove docker tests from main Spark build
   // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
@@ -665,11 +665,11 @@ object SparkConnect {
   )
 }
 
-object SparkProto {
+object SparkProtobuf {
 
   import BuildCommons.protoVersion
 
-  private val shadePrefix = "org.sparkproject.spark-proto"
+  private val shadePrefix = "org.sparkproject.spark-protobuf"
   val shadeJar = taskKey[Unit]("Shade the Jars")
 
   lazy val settings = Seq(
@@ -1152,10 +1152,10 @@ object Unidoc {
 
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connect, proto),
+        yarn, tags, streamingKafka010, sqlKafka010, connect, protobuf),
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connect, proto),
+        yarn, tags, streamingKafka010, sqlKafka010, connect, protobuf),
 
     (ScalaUnidoc / unidoc / unidocAllClasspaths) := {
       ignoreClasspaths((ScalaUnidoc / unidoc / unidocAllClasspaths).value)
@@ -1241,7 +1241,7 @@ object CopyDependencies {
       // produce the shaded Jar which happens automatically in the case of Maven.
       // Later, when the dependencies are copied, we manually copy the shaded Jar only.
       val fid = (LocalProject("connect")/assembly).value
-      val fidProto = (LocalProject("proto")/assembly).value
+      val fidProtobuf = (LocalProject("protobuf")/assembly).value
 
       (Compile / dependencyClasspath).value.map(_.data)
         .filter { jar => jar.isFile() }
@@ -1254,8 +1254,8 @@ object CopyDependencies {
           if (jar.getName.contains("spark-connect") &&
             !SbtPomKeys.profiles.value.contains("noshade-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
-          } else if (jar.getName.contains("spark-proto") &&
-            !SbtPomKeys.profiles.value.contains("noshade-proto")) {
+          } else if (jar.getName.contains("spark-protobuf") &&
+            !SbtPomKeys.profiles.value.contains("noshade-protobuf")) {
             Files.copy(fid.toPath, destJar.toPath)
           } else {
             Files.copy(jar.toPath(), destJar.toPath())
