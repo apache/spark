@@ -39,15 +39,9 @@ import org.apache.spark.annotation.DeveloperApi
 class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
   assert(jsonFileURLs.nonEmpty)
 
-  private def readAsMap(url: URL): SortedMap[String, ErrorInfo] = {
-    val mapper: JsonMapper = JsonMapper.builder()
-      .addModule(DefaultScalaModule)
-      .build()
-    mapper.readValue(url, new TypeReference[SortedMap[String, ErrorInfo]]() {})
-  }
-
   // Exposed for testing
-  private[spark] val errorInfoMap = jsonFileURLs.map(readAsMap).reduce(_ ++ _)
+  private[spark] val errorInfoMap =
+    jsonFileURLs.map(ErrorClassesJsonReader.readAsMap).reduce(_ ++ _)
 
   def getErrorMessage(errorClass: String, messageParameters: Map[String, String]): String = {
     val messageTemplate = getMessageTemplate(errorClass)
@@ -85,6 +79,15 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
 
   def getSqlState(errorClass: String): String = {
     Option(errorClass).flatMap(errorInfoMap.get).flatMap(_.sqlState).orNull
+  }
+}
+
+private object ErrorClassesJsonReader {
+  private val mapper: JsonMapper = JsonMapper.builder()
+    .addModule(DefaultScalaModule)
+    .build()
+  private def readAsMap(url: URL): SortedMap[String, ErrorInfo] = {
+    mapper.readValue(url, new TypeReference[SortedMap[String, ErrorInfo]]() {})
   }
 }
 
