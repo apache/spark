@@ -25,6 +25,7 @@ import java.nio.ByteBuffer
 import java.util.{Locale, Properties}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantLock
 import javax.annotation.concurrent.GuardedBy
 import javax.ws.rs.core.UriBuilder
 
@@ -84,6 +85,11 @@ private[spark] class Executor(
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
   private[executor] val conf = env.conf
+
+  // SPARK-40235: updateDependencies() uses a ReentrantLock instead of the `synchronized` keyword
+  // so that tasks can exit quickly if they are interrupted while waiting on another task to
+  // finish downloading dependencies.
+  private val updateDependenciesLock = new ReentrantLock()
 
   // No ip or host:port - just hostname
   Utils.checkHost(executorHostname)
@@ -772,6 +778,7 @@ private[spark] class Executor(
             uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
           }
       } finally {
+        cleanMDCForTask(taskName, mdcProperties)
         runningTasks.remove(taskId)
         if (taskStarted) {
           // This means the task was successfully deserialized, its stageId and stageAttemptId
@@ -788,11 +795,18 @@ private[spark] class Executor(
 
   private def setMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
     try {
-      // make sure we run the task with the user-specified mdc properties only
-      MDC.clear()
       mdc.foreach { case (key, value) => MDC.put(key, value) }
       // avoid overriding the takName by the user
       MDC.put("mdc.taskName", taskName)
+    } catch {
+      case _: NoSuchFieldError => logInfo("MDC is not supported.")
+    }
+  }
+
+  private def cleanMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
+    try {
+      mdc.foreach { case (key, _) => MDC.remove(key) }
+      MDC.remove("mdc.taskName")
     } catch {
       case _: NoSuchFieldError => logInfo("MDC is not supported.")
     }
@@ -897,6 +911,7 @@ private[spark] class Executor(
           }
         }
       } finally {
+        cleanMDCForTask(taskRunner.taskName, taskRunner.mdcProperties)
         // Clean up entries in the taskReaperForTask map.
         taskReaperForTask.synchronized {
           taskReaperForTask.get(taskId).foreach { taskReaperInMap =>
@@ -969,13 +984,19 @@ private[spark] class Executor(
   /**
    * Download any missing dependencies if we receive a new set of files and JARs from the
    * SparkContext. Also adds any new JARs we fetched to the class loader.
+   * Visible for testing.
    */
-  private def updateDependencies(
+  private[executor] def updateDependencies(
       newFiles: Map[String, Long],
       newJars: Map[String, Long],
-      newArchives: Map[String, Long]): Unit = {
+      newArchives: Map[String, Long],
+      testStartLatch: Option[CountDownLatch] = None,
+      testEndLatch: Option[CountDownLatch] = None): Unit = {
     lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-    synchronized {
+    updateDependenciesLock.lockInterruptibly()
+    try {
+      // For testing, so we can simulate a slow file download:
+      testStartLatch.foreach(_.countDown())
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
         logInfo(s"Fetching $name with timestamp $timestamp")
@@ -1018,6 +1039,10 @@ private[spark] class Executor(
           }
         }
       }
+      // For testing, so we can simulate a slow file download:
+      testEndLatch.foreach(_.await())
+    } finally {
+      updateDependenciesLock.unlock()
     }
   }
 

@@ -1789,8 +1789,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           nestedStructData.select($"record.r1.*"))
 
         // Try resolving something not there.
-        assert(intercept[AnalysisException](sql("SELECT abc.* FROM nestedStructTable"))
-          .getMessage.contains("cannot resolve"))
+        checkError(
+          exception = intercept[AnalysisException]{
+            sql("SELECT abc.* FROM nestedStructTable")
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1051",
+          parameters = Map("targetString" -> "abc", "columns" -> "record"),
+          context = ExpectedContext(fragment = "abc.*", start = 7, stop = 11))
       }
 
       // Create paths with unusual characters
@@ -1819,8 +1824,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
 
       // Try star expanding a scalar. This should fail.
-      assert(intercept[AnalysisException](sql("select a.* from testData2")).getMessage.contains(
-        "Can only star expand struct data types."))
+      checkError(
+        exception = intercept[AnalysisException]{
+          sql("select a.* from testData2")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1050",
+        parameters = Map("attributes" -> "ArrayBuffer(a)"),
+        context = ExpectedContext(fragment = "a.*", start = 7, stop = 9))
     }
   }
 
@@ -1866,15 +1876,20 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         dfNoCols,
         dfNoCols.select($"*"))
 
-      var e = intercept[AnalysisException] {
-        sql("SELECT a.* FROM temp_table_no_cols a")
-      }.getMessage
-      assert(e.contains("cannot resolve 'a.*' given input columns ''"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT a.* FROM temp_table_no_cols a")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1051",
+        parameters = Map("targetString" -> "a", "columns" -> ""),
+        context = ExpectedContext(fragment = "a.*", start = 7, stop = 9))
 
-      e = intercept[AnalysisException] {
-        dfNoCols.select($"b.*")
-      }.getMessage
-      assert(e.contains("cannot resolve 'b.*' given input columns ''"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          dfNoCols.select($"b.*")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1051",
+        parameters = Map("targetString" -> "b", "columns" -> ""))
     }
   }
 
@@ -1923,7 +1938,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         x
       })
       verifyCallCount(
-        df.groupBy().agg(sum(testUdf($"b") + testUdf($"b") + testUdf($"b"))), Row(3.0), 1)
+        df.agg(sum(testUdf($"b") + testUdf($"b") + testUdf($"b"))), Row(3.0), 1)
 
       verifyCallCount(
         df.selectExpr("testUdf(a + 1) + testUdf(1 + a)", "testUdf(a + 1)"), Row(4, 2), 1)
@@ -2663,13 +2678,23 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         sql("CREATE TABLE t(c struct<f:int>) USING parquet")
         sql("CREATE TABLE S(C struct<F:int>) USING parquet")
         checkAnswer(sql("SELECT * FROM t, S WHERE t.c.f = S.C.F"), Seq.empty)
-        val m = intercept[AnalysisException] {
-          sql("SELECT * FROM t, S WHERE c = C")
-        }.message
-        assert(
-          m.contains(
-            "cannot resolve '(spark_catalog.default.t.c = " +
-            "spark_catalog.default.S.C)' due to data type mismatch"))
+        val query = "SELECT * FROM t, S WHERE c = C"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query)
+          },
+          errorClass = "DATATYPE_MISMATCH",
+          errorSubClass = "BINARY_OP_DIFF_TYPES",
+          sqlState = None,
+          parameters = Map(
+            "sqlExpr" -> "\"(c = C)\"",
+            "left" -> "\"STRUCT<f: INT>\"",
+            "right" -> "\"STRUCT<F: INT>\""),
+          context = ExpectedContext(
+            fragment = "c = C",
+            start = 25,
+            stop = 29
+          ))
       }
     }
   }
@@ -4003,6 +4028,61 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-40247: Fix BitSet equals") {
+    withTable("td") {
+      testData
+        .withColumn("bucket", $"key" % 3)
+        .write
+        .mode(SaveMode.Overwrite)
+        .bucketBy(2, "bucket")
+        .format("parquet")
+        .saveAsTable("td")
+      val df = sql(
+        """
+          |SELECT t1.key, t2.key, t3.key
+          |FROM td AS t1
+          |JOIN td AS t2 ON t2.key = t1.key
+          |JOIN td AS t3 ON t3.key = t2.key
+          |WHERE t1.bucket = 1 AND t2.bucket = 1 AND t3.bucket = 1
+          |""".stripMargin)
+      df.collect()
+      val reusedExchanges = collect(df.queryExecution.executedPlan) {
+        case r: ReusedExchangeExec => r
+      }
+      assert(reusedExchanges.size == 1)
+    }
+  }
+
+  test("SPARK-40245: Fix FileScan canonicalization when partition or data filter columns are not " +
+    "read") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTempPath { path =>
+        spark.range(5)
+          .withColumn("p", $"id" % 2)
+          .write
+          .mode("overwrite")
+          .partitionBy("p")
+          .parquet(path.toString)
+        withTempView("t") {
+          spark.read.parquet(path.toString).createOrReplaceTempView("t")
+          val df = sql(
+            """
+              |SELECT t1.id, t2.id, t3.id
+              |FROM t AS t1
+              |JOIN t AS t2 ON t2.id = t1.id
+              |JOIN t AS t3 ON t3.id = t2.id
+              |WHERE t1.p = 1 AND t2.p = 1 AND t3.p = 1
+              |""".stripMargin)
+          df.collect()
+          val reusedExchanges = collect(df.queryExecution.executedPlan) {
+            case r: ReusedExchangeExec => r
+          }
+          assert(reusedExchanges.size == 1)
+        }
+      }
+    }
+  }
+
   test("SPARK-35331: Fix resolving original expression in RepartitionByExpression after aliased") {
     Seq("CLUSTER", "DISTRIBUTE").foreach { keyword =>
       Seq("a", "substr(a, 0, 3)").foreach { expr =>
@@ -4417,6 +4497,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(
       sql("select * from test_temp_view"),
       Row(1, 2, 3, 1, 2, 3, 1, 1))
+  }
+
+  test("SPARK-40389: Don't eliminate a cast which can cause overflow") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("dt") {
+        sql("create table dt using parquet as select 9000000000BD as d")
+        val msg = intercept[SparkException] {
+          sql("select cast(cast(d as int) as long) from dt").collect()
+        }.getCause.getMessage
+        assert(msg.contains("[CAST_OVERFLOW]"))
+      }
+    }
   }
 }
 

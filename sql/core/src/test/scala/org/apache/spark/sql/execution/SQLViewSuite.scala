@@ -886,9 +886,18 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             }
             checkError(e,
               errorClass = "UNRESOLVED_COLUMN",
+              errorSubClass = "WITH_SUGGESTION",
+              sqlState = None,
               parameters = Map(
                 "objectName" -> "`C1`",
-                "objectList" -> "`spark_catalog`.`default`.`t`.`c1`"))
+                "proposal" -> "`spark_catalog`.`default`.`t`.`c1`"),
+              context = ExpectedContext(
+                objectType = "VIEW",
+                objectName = "spark_catalog.default.v1",
+                startIndex = 7,
+                stopIndex = 8,
+                fragment = "C1"
+              ))
           }
           withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
             checkAnswer(sql("SELECT * FROM v2"), Seq(Row(3), Row(2), Row(1)))
@@ -896,11 +905,11 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           withSQLConf(GROUP_BY_ORDINAL.key -> "false") {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v3")
-            }.getMessage
-            assert(e.contains(
-              "expression 'spark_catalog.default.t.c1' is neither present " +
-              "in the group by, nor is it an aggregate function. Add to group by or wrap in " +
-              "first() (or first_value) if you don't care which value you get."))
+            }
+            checkError(e,
+              errorClass = "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+              parameters = Map(
+                "expression" -> "\"c1\""))
           }
           withSQLConf(GROUP_BY_ALIASES.key -> "false") {
             val e = intercept[AnalysisException] {
@@ -908,9 +917,18 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             }
             checkError(e,
               errorClass = "UNRESOLVED_COLUMN",
+              errorSubClass = "WITH_SUGGESTION",
+              sqlState = None,
               parameters = Map(
                 "objectName" -> "`a`",
-                "objectList" -> "`spark_catalog`.`default`.`t`.`c1`"))
+                "proposal" -> "`spark_catalog`.`default`.`t`.`c1`"),
+              context = ExpectedContext(
+                objectType = "VIEW",
+                objectName = "spark_catalog.default.v4",
+                startIndex = 49,
+                stopIndex = 49,
+                fragment = "a"
+            ))
           }
           withSQLConf(ANSI_ENABLED.key -> "true") {
             val e = intercept[ArithmeticException] {

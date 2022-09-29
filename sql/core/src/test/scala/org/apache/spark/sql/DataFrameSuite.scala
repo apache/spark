@@ -483,7 +483,7 @@ class DataFrameSuite extends QueryTest
       testData.select("key").coalesce(1).select("key"),
       testData.select("key").collect().toSeq)
 
-    assert(spark.emptyDataFrame.coalesce(1).rdd.partitions.size === 0)
+    assert(spark.emptyDataFrame.coalesce(1).rdd.partitions.size === 1)
   }
 
   test("convert $\"attribute name\" into unresolved attribute") {
@@ -1622,17 +1622,19 @@ class DataFrameSuite extends QueryTest
         Row(1)
       )
 
-      def checkError(testFun: => Unit): Unit = {
-        val e = intercept[org.apache.spark.sql.AnalysisException] {
-          testFun
-        }
-        assert(e.getMessage.contains("syntax error in attribute name:"))
+      def checkSyntaxError(name: String): Unit = {
+        checkError(
+          exception = intercept[org.apache.spark.sql.AnalysisException] {
+            df(name)
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1049",
+          parameters = Map("name" -> name))
       }
 
-      checkError(df("`abc.`c`"))
-      checkError(df("`abc`..d"))
-      checkError(df("`a`.b."))
-      checkError(df("`a.b`.c.`d"))
+      checkSyntaxError("`abc.`c`")
+      checkSyntaxError("`abc`..d")
+      checkSyntaxError("`a`.b.")
+      checkSyntaxError("`a.b`.c.`d")
     }
   }
 
@@ -2784,11 +2786,13 @@ class DataFrameSuite extends QueryTest
 
     implicit val valueEncoder = RowEncoder(df.schema)
 
-    val err = intercept[AnalysisException] {
-      df.groupBy($"d", $"b").as[GroupByKey, Row]
-    }
-    assert(err.getErrorClass == "UNRESOLVED_COLUMN")
-    assert(err.messageParameters.head == "`d`")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.groupBy($"d", $"b").as[GroupByKey, Row]
+      },
+      errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
+      parameters = Map("objectName" -> "`d`", "proposal" -> "`a`, `b`, `c`"))
   }
 
   test("emptyDataFrame should be foldable") {
@@ -3418,6 +3422,13 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df,
       Row(java.sql.Date.valueOf("2020-02-01"), java.sql.Date.valueOf("2020-02-01")) ::
         Row(java.sql.Date.valueOf("2020-01-01"), java.sql.Date.valueOf("2020-01-02")) :: Nil)
+  }
+
+  test("SPARK-39915: Dataset.repartition(N) may not create N partitions") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = spark.sql("select * from values(1) where 1 < rand()").repartition(2)
+      assert(df.queryExecution.executedPlan.execute().getNumPartitions == 2)
+    }
   }
 }
 

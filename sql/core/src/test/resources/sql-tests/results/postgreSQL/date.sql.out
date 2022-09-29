@@ -198,12 +198,20 @@ SELECT date '1999 Jan 08'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 Jan 08(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 Jan 08'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "1999 Jan 08",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "date '1999 Jan 08'"
+  } ]
+}
 
 
 -- !query
@@ -212,12 +220,20 @@ SELECT date '1999 08 Jan'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 08 Jan(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 08 Jan'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "1999 08 Jan",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "date '1999 08 Jan'"
+  } ]
+}
 
 
 -- !query
@@ -242,12 +258,20 @@ SELECT date '1999 01 08'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 01 08(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 01 08'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "1999 01 08",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "date '1999 01 08'"
+  } ]
+}
 
 
 -- !query
@@ -256,12 +280,20 @@ SELECT date '1999 08 01'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 08 01(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 08 01'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "1999 08 01",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "date '1999 08 01'"
+  } ]
+}
 
 
 -- !query
@@ -278,12 +310,20 @@ SELECT date '1999 Jan 08'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 Jan 08(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 Jan 08'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "1999 Jan 08",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "date '1999 Jan 08'"
+  } ]
+}
 
 
 -- !query
@@ -292,12 +332,20 @@ SELECT date '1999 08 Jan'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 08 Jan(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 08 Jan'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "1999 08 Jan",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "date '1999 08 Jan'"
+  } ]
+}
 
 
 -- !query
@@ -322,12 +370,20 @@ SELECT date '1999 01 08'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 01 08(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 01 08'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "1999 01 08",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "date '1999 01 08'"
+  } ]
+}
 
 
 -- !query
@@ -336,12 +392,20 @@ SELECT date '1999 08 01'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 08 01(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 08 01'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "1999 08 01",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "date '1999 08 01'"
+  } ]
+}
 
 
 -- !query
@@ -366,12 +430,20 @@ SELECT date '1999 Jan 08'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 Jan 08(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 Jan 08'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "1999 Jan 08",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "date '1999 Jan 08'"
+  } ]
+}
 
 
 -- !query
@@ -380,12 +452,20 @@ SELECT date '1999 08 Jan'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 08 Jan(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 08 Jan'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "1999 08 Jan",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "date '1999 08 Jan'"
+  } ]
+}
 
 
 -- !query
@@ -410,12 +490,20 @@ SELECT date '1999 01 08'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 01 08(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 01 08'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "1999 01 08",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "date '1999 01 08'"
+  } ]
+}
 
 
 -- !query
@@ -424,12 +512,20 @@ SELECT date '1999 08 01'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 08 01(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 08 01'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "1999 08 01",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "date '1999 08 01'"
+  } ]
+}
 
 
 -- !query

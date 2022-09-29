@@ -791,9 +791,13 @@ private[spark] object ApiHelper {
     stageData.accumulatorUpdates.exists { acc => acc.name != null && acc.value != null }
   }
 
-  def hasInput(stageData: StageData): Boolean = stageData.inputBytes > 0
+  def hasInput(stageData: StageData): Boolean = {
+    stageData.inputBytes > 0 || stageData.inputRecords > 0
+  }
 
-  def hasOutput(stageData: StageData): Boolean = stageData.outputBytes > 0
+  def hasOutput(stageData: StageData): Boolean = {
+    stageData.outputBytes > 0 || stageData.outputRecords > 0
+  }
 
   def hasShuffleRead(stageData: StageData): Boolean = stageData.shuffleReadBytes > 0
 

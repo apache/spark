@@ -29,6 +29,7 @@ from pyspark import TaskContext
 from pyspark.rdd import PythonEvalType
 from pyspark.sql import Column
 from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, pandas_udf, PandasUDFType
+from pyspark.sql.pandas.utils import pyarrow_version_less_than_minimum
 from pyspark.sql.types import (
     IntegerType,
     ByteType,
@@ -133,6 +134,34 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame([("hi boo",), ("bye boo",)], ["vals"])
         result = df.select(tokenize("vals").alias("hi"))
         self.assertEqual([Row(hi=[["hi", "boo"]]), Row(hi=[["bye", "boo"]])], result.collect())
+
+    @unittest.skipIf(
+        pyarrow_version_less_than_minimum("2.0.0"),
+        "Pyarrow version must be 2.0.0 or higher",
+    )
+    def test_pandas_array_struct(self):
+        # SPARK-38098: Support Array of Struct for Pandas UDFs and toPandas
+        import numpy as np
+
+        @pandas_udf("Array<struct<col1:string, col2:long, col3:double>>")
+        def return_cols(cols):
+            assert type(cols) == pd.Series
+            assert type(cols[0]) == np.ndarray
+            assert type(cols[0][0]) == dict
+            return cols
+
+        df = self.spark.createDataFrame(
+            [[[("a", 2, 3.0), ("a", 2, 3.0)]], [[("b", 5, 6.0), ("b", 5, 6.0)]]],
+            "array_struct_col Array<struct<col1:string, col2:long, col3:double>>",
+        )
+        result = df.select(return_cols("array_struct_col"))
+        self.assertEqual(
+            [
+                Row(output=[Row(col1="a", col2=2, col3=3.0), Row(col1="a", col2=2, col3=3.0)]),
+                Row(output=[Row(col1="b", col2=5, col3=6.0), Row(col1="b", col2=5, col3=6.0)]),
+            ],
+            result.collect(),
+        )
 
     def test_vectorized_udf_basic(self):
         df = self.spark.range(10).select(
@@ -655,15 +684,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                     "Invalid return type.*scalar Pandas UDF.*ArrayType.*TimestampType",
                 ):
                     pandas_udf(lambda x: x, ArrayType(TimestampType()), udf_type)
-                with self.assertRaisesRegex(
-                    NotImplementedError,
-                    "Invalid return type.*scalar Pandas UDF.*ArrayType.StructType",
-                ):
-                    pandas_udf(
-                        lambda x: x,
-                        ArrayType(StructType([StructField("a", IntegerType())])),
-                        udf_type,
-                    )
 
     def test_vectorized_udf_dates(self):
         schema = StructType().add("idx", LongType()).add("date", DateType())

@@ -270,6 +270,9 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
         case (u: UnresolvedAttribute, _) => Literal(u.nameParts.last)
         case (e: NamedExpression, _) if e.resolved => Literal(e.name)
         case (e: NamedExpression, _) => NamePlaceholder
+        case (g: GetStructField, _) => Literal(g.extractFieldName)
+        case (g: GetArrayStructFields, _) => Literal(g.field.name)
+        case (g: GetMapValue, _) => Literal(g.key)
         case (_, idx) => Literal(idx.toString)
       })
   }
@@ -2228,7 +2231,7 @@ case class ElementAt(
           }
         } else {
           val idx = if (index == 0) {
-            throw QueryExecutionErrors.elementAtByIndexZeroError()
+            throw QueryExecutionErrors.elementAtByIndexZeroError(getContextOrNull())
           } else if (index > 0) {
             index - 1
           } else {
@@ -2259,9 +2262,8 @@ case class ElementAt(
           } else {
             ""
           }
-
+          val errorContext = getContextOrNullCode(ctx)
           val indexOutOfBoundBranch = if (failOnError) {
-            val errorContext = getContextOrNullCode(ctx)
             // scalastyle:off line.size.limit
             s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements(), $errorContext);"
             // scalastyle:on line.size.limit
@@ -2284,7 +2286,7 @@ case class ElementAt(
              |  $indexOutOfBoundBranch
              |} else {
              |  if ($index == 0) {
-             |    throw QueryExecutionErrors.elementAtByIndexZeroError();
+             |    throw QueryExecutionErrors.elementAtByIndexZeroError($errorContext);
              |  } else if ($index > 0) {
              |    $index--;
              |  } else {
@@ -3640,7 +3642,7 @@ case class ArrayDistinct(child: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
-      case f: TypeCheckResult.TypeCheckFailure => f
+      case f if f.isFailure => f
       case TypeCheckResult.TypeCheckSuccess =>
         TypeUtils.checkForOrderingExpr(elementType, s"function $prettyName")
     }

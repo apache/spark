@@ -408,6 +408,7 @@ org.datanucleus:javax.jdo
 com.tdunning:json
 org.apache.velocity:velocity
 org.apache.yetus:audience-annotations
+com.google.cloud.bigdataoss:gcs-connector
 
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*

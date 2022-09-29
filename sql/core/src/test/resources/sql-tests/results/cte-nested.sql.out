@@ -240,3 +240,82 @@ SELECT * FROM t2
 struct<1:int>
 -- !query output
 1
+
+
+-- !query
+WITH cte_outer AS (
+  SELECT 1
+)
+SELECT * FROM (
+  WITH cte_inner AS (
+    SELECT * FROM cte_outer
+  )
+  SELECT * FROM cte_inner
+)
+-- !query schema
+struct<1:int>
+-- !query output
+1
+
+
+-- !query
+WITH cte_outer AS (
+  SELECT 1
+)
+SELECT * FROM (
+  WITH cte_inner AS (
+    SELECT * FROM (
+      WITH cte_inner_inner AS (
+        SELECT * FROM cte_outer
+      )
+      SELECT * FROM cte_inner_inner
+    )
+  )
+  SELECT * FROM cte_inner
+)
+-- !query schema
+struct<1:int>
+-- !query output
+1
+
+
+-- !query
+WITH cte_outer AS (
+  WITH cte_invisible_inner AS (
+    SELECT 1
+  )
+  SELECT * FROM cte_invisible_inner
+)
+SELECT * FROM (
+  WITH cte_inner AS (
+    SELECT * FROM cte_invisible_inner
+  )
+  SELECT * FROM cte_inner
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+Table or view not found: cte_invisible_inner; line 9 pos 18
+
+
+-- !query
+WITH cte_outer AS (
+  SELECT * FROM (
+    WITH cte_invisible_inner AS (
+      SELECT 1
+    )
+    SELECT * FROM cte_invisible_inner
+  )
+)
+SELECT * FROM (
+  WITH cte_inner AS (
+    SELECT * FROM cte_invisible_inner
+  )
+  SELECT * FROM cte_inner
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+Table or view not found: cte_invisible_inner; line 11 pos 18

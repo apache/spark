@@ -56,7 +56,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       case _ => false
     }
     val cteDefs = ArrayBuffer.empty[CTERelationDef]
-    val (substituted, lastSubstituted) =
+    val (substituted, firstSubstituted) =
       LegacyBehaviorPolicy.withName(conf.getConf(LEGACY_CTE_PRECEDENCE_POLICY)) match {
         case LegacyBehaviorPolicy.EXCEPTION =>
           assertNoNameConflictsInCTE(plan)
@@ -68,12 +68,17 @@ object CTESubstitution extends Rule[LogicalPlan] {
     }
     if (cteDefs.isEmpty) {
       substituted
-    } else if (substituted eq lastSubstituted.get) {
+    } else if (substituted eq firstSubstituted.get) {
       WithCTE(substituted, cteDefs.toSeq)
     } else {
       var done = false
       substituted.resolveOperatorsWithPruning(_ => !done) {
-        case p if p eq lastSubstituted.get =>
+        case p if p eq firstSubstituted.get =>
+          // `firstSubstituted` is the parent of all other CTEs (if any).
+          done = true
+          WithCTE(p, cteDefs.toSeq)
+        case p if p.children.count(_.containsPattern(CTE)) > 1 =>
+          // This is the first common parent of all CTEs.
           done = true
           WithCTE(p, cteDefs.toSeq)
       }
@@ -181,21 +186,28 @@ object CTESubstitution extends Rule[LogicalPlan] {
       isCommand: Boolean,
       outerCTEDefs: Seq[(String, CTERelationDef)],
       cteDefs: ArrayBuffer[CTERelationDef]): (LogicalPlan, Option[LogicalPlan]) = {
-    var lastSubstituted: Option[LogicalPlan] = None
-    val newPlan = plan.resolveOperatorsUpWithPruning(
+    var firstSubstituted: Option[LogicalPlan] = None
+    val newPlan = plan.resolveOperatorsDownWithPruning(
         _.containsAnyPattern(UNRESOLVED_WITH, PLAN_EXPRESSION)) {
       case UnresolvedWith(child: LogicalPlan, relations) =>
         val resolvedCTERelations =
-          resolveCTERelations(relations, isLegacy = false, isCommand, outerCTEDefs, cteDefs)
-        lastSubstituted = Some(substituteCTE(child, isCommand, resolvedCTERelations))
-        lastSubstituted.get
+          resolveCTERelations(relations, isLegacy = false, isCommand, outerCTEDefs, cteDefs) ++
+            outerCTEDefs
+        val substituted = substituteCTE(
+          traverseAndSubstituteCTE(child, isCommand, resolvedCTERelations, cteDefs)._1,
+          isCommand,
+          resolvedCTERelations)
+        if (firstSubstituted.isEmpty) {
+          firstSubstituted = Some(substituted)
+        }
+        substituted
 
       case other =>
         other.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
           case e: SubqueryExpression => e.withNewPlan(apply(e.plan))
         }
     }
-    (newPlan, lastSubstituted)
+    (newPlan, firstSubstituted)
   }
 
   private def resolveCTERelations(

@@ -121,11 +121,19 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`b`",
-    "objectList" : "`count(1)`"
-  }
+    "proposal" : "`count(1)`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 62,
+    "stopIndex" : 62,
+    "fragment" : "b"
+  } ]
 }
 
 
@@ -207,7 +215,21 @@ SELECT c, count(*) FROM test_missing_target GROUP BY 3
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-GROUP BY position 3 is not in select list (valid range is [1, 2]); line 1 pos 53
+{
+  "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "index" : "3",
+    "size" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 54,
+    "stopIndex" : 54,
+    "fragment" : "3"
+  } ]
+}
 
 
 -- !query
@@ -333,11 +355,19 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`b`",
-    "objectList" : "`count(a)`"
-  }
+    "proposal" : "`count(a)`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 62,
+    "stopIndex" : 62,
+    "fragment" : "b"
+  } ]
 }
 
 

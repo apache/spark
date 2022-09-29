@@ -50,6 +50,7 @@ abstract class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
       classOf[YarnShuffleService].getCanonicalName)
     yarnConfig.set(SHUFFLE_SERVICE_PORT.key, "0")
     yarnConfig.set(SHUFFLE_SERVICE_DB_BACKEND.key, dbBackend.name())
+    yarnConfig.set(YarnTestAccessor.shuffleServiceIntegrationTestingKey, "true")
     yarnConfig
   }
 
@@ -71,23 +72,18 @@ abstract class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     val shuffleService = YarnTestAccessor.getShuffleServiceInstance
 
     val registeredExecFile = YarnTestAccessor.getRegisteredExecutorFile(shuffleService)
+    assert(registeredExecFile != null)
 
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(
       false,
       mainClassName(YarnExternalShuffleDriver.getClass),
-      appArgs = if (registeredExecFile != null) {
-        Seq(result.getAbsolutePath, registeredExecFile.getAbsolutePath)
-      } else {
-        Seq(result.getAbsolutePath)
-      },
+      appArgs = Seq(result.getAbsolutePath, registeredExecFile.getAbsolutePath),
       extraConf = extraSparkConf()
     )
     checkResult(finalState, result)
 
-    if (registeredExecFile != null) {
-      assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
-    }
+    assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
   }
 }
 
@@ -95,6 +91,12 @@ abstract class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
 class YarnShuffleIntegrationWithLevelDBBackendSuite
   extends YarnShuffleIntegrationSuite {
   override protected def dbBackend: DBBackend = DBBackend.LEVELDB
+}
+
+@ExtendedYarnTest
+class YarnShuffleIntegrationWithRocksDBBackendSuite
+  extends YarnShuffleIntegrationSuite {
+  override protected def dbBackend: DBBackend = DBBackend.ROCKSDB
 }
 
 /**
@@ -119,6 +121,11 @@ abstract class YarnShuffleAuthSuite extends YarnShuffleIntegrationSuite {
 @ExtendedYarnTest
 class YarnShuffleAuthWithLevelDBBackendSuite extends YarnShuffleAuthSuite {
   override protected def dbBackend: DBBackend = DBBackend.LEVELDB
+}
+
+@ExtendedYarnTest
+class YarnShuffleAuthWithRocksDBBackendSuite extends YarnShuffleAuthSuite {
+  override protected def dbBackend: DBBackend = DBBackend.ROCKSDB
 }
 
 private object YarnExternalShuffleDriver extends Logging with Matchers {
@@ -162,8 +169,8 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
       if (registeredExecFile != null && execStateCopy != null) {
         val dbBackendName = conf.get(SHUFFLE_SERVICE_DB_BACKEND.key)
         val dbBackend = DBBackend.byName(dbBackendName)
-        logWarning(s"Configured ${SHUFFLE_SERVICE_DB_BACKEND.key} as $dbBackendName " +
-          s"and actually used value ${dbBackend.name()}")
+        logWarning(s"Use ${dbBackend.name()} as the implementation of " +
+          s"${SHUFFLE_SERVICE_DB_BACKEND.key}")
         FileUtils.copyDirectory(registeredExecFile, execStateCopy)
         assert(!ShuffleTestAccessor
           .reloadRegisteredExecutors(dbBackend, execStateCopy).isEmpty)

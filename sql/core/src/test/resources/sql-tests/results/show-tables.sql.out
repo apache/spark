@@ -209,7 +209,12 @@ SHOW TABLE EXTENDED LIKE 'show_t*' PARTITION(c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-Table or view 'show_t*' not found in database 'showdb'
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1115",
+  "messageParameters" : {
+    "msg" : "Table or view 'show_t*' not found in database 'showdb'"
+  }
+}
 
 
 -- !query

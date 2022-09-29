@@ -31,7 +31,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -69,7 +68,8 @@ class SessionCatalog(
     functionResourceLoader: FunctionResourceLoader,
     functionExpressionBuilder: FunctionExpressionBuilder,
     cacheSize: Int = SQLConf.get.tableRelationCacheSize,
-    cacheTTL: Long = SQLConf.get.metadataCacheTTL) extends SQLConfHelper with Logging {
+    cacheTTL: Long = SQLConf.get.metadataCacheTTL,
+    defaultDatabase: String = SQLConf.get.defaultDatabase) extends SQLConfHelper with Logging {
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
@@ -89,7 +89,8 @@ class SessionCatalog(
       DummyFunctionResourceLoader,
       DummyFunctionExpressionBuilder,
       conf.tableRelationCacheSize,
-      conf.metadataCacheTTL)
+      conf.metadataCacheTTL,
+      conf.defaultDatabase)
   }
 
   // For testing only.
@@ -130,7 +131,7 @@ class SessionCatalog(
   // check whether the temporary view or function exists, then, if not, operate on
   // the corresponding item in the current database.
   @GuardedBy("this")
-  protected var currentDb: String = format(DEFAULT_DATABASE)
+  protected var currentDb: String = format(defaultDatabase)
 
   private val validNameFormat = "([\\w_]+)".r
 
@@ -697,6 +698,24 @@ class SessionCatalog(
   }
 
   /**
+   * Generate a [[View]] operator from the local or global temporary view stored.
+   */
+  def getLocalOrGlobalTempView(name: TableIdentifier): Option[View] = {
+    getRawLocalOrGlobalTempView(toNameParts(name)).map(getTempViewPlan)
+  }
+
+  /**
+   * Return the raw logical plan of a temporary local or global view for the given name.
+   */
+  def getRawLocalOrGlobalTempView(name: Seq[String]): Option[TemporaryViewRelation] = {
+    name match {
+      case Seq(v) => getRawTempView(v)
+      case Seq(db, v) if isGlobalTempViewDB(db) => getRawGlobalTempView(v)
+      case _ => None
+    }
+  }
+
+  /**
    * Drop a local temporary view.
    *
    * Returns true if this view is dropped successfully, false otherwise.
@@ -712,6 +731,22 @@ class SessionCatalog(
    */
   def dropGlobalTempView(name: String): Boolean = {
     globalTempViewManager.remove(format(name))
+  }
+
+  private def toNameParts(ident: TableIdentifier): Seq[String] = {
+    ident.database.toSeq :+ ident.table
+  }
+
+  private def getTempViewPlan(viewInfo: TemporaryViewRelation): View = viewInfo.plan match {
+    case Some(p) => View(desc = viewInfo.tableMeta, isTempView = true, child = p)
+    case None => fromCatalogTable(viewInfo.tableMeta, isTempView = true)
+  }
+
+  /**
+   * Generates a [[SubqueryAlias]] operator from the stored temporary view.
+   */
+  def getTempViewRelation(viewInfo: TemporaryViewRelation): SubqueryAlias = {
+    SubqueryAlias(toNameParts(viewInfo.tableMeta.identifier).map(format), getTempViewPlan(viewInfo))
   }
 
   // -------------------------------------------------------------
@@ -868,11 +903,6 @@ class SessionCatalog(
     }
   }
 
-  private def getTempViewPlan(viewInfo: TemporaryViewRelation): View = viewInfo.plan match {
-    case Some(p) => View(desc = viewInfo.tableMeta, isTempView = true, child = p)
-    case None => fromCatalogTable(viewInfo.tableMeta, isTempView = true)
-  }
-
   private def buildViewDDL(metadata: CatalogTable, isTempView: Boolean): Option[String] = {
     if (isTempView) {
       None
@@ -965,61 +995,22 @@ class SessionCatalog(
     View(desc = metadata, isTempView = isTempView, child = Project(projectList, parsedPlan))
   }
 
-  def lookupTempView(table: String): Option[SubqueryAlias] = {
-    val formattedTable = format(table)
-    getTempView(formattedTable).map { view =>
-      SubqueryAlias(formattedTable, view)
-    }
-  }
-
-  def lookupGlobalTempView(db: String, table: String): Option[SubqueryAlias] = {
-    val formattedDB = format(db)
-    if (formattedDB == globalTempViewManager.database) {
-      val formattedTable = format(table)
-      getGlobalTempView(formattedTable).map { view =>
-        SubqueryAlias(formattedTable, formattedDB, view)
-      }
-    } else {
-      None
-    }
+  def isGlobalTempViewDB(dbName: String): Boolean = {
+    globalTempViewManager.database.equalsIgnoreCase(dbName)
   }
 
   /**
    * Return whether the given name parts belong to a temporary or global temporary view.
    */
   def isTempView(nameParts: Seq[String]): Boolean = {
-    if (nameParts.length > 2) return false
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    isTempView(nameParts.asTableIdentifier)
-  }
-
-  def isGlobalTempViewDB(dbName: String): Boolean = {
-    globalTempViewManager.database.equalsIgnoreCase(dbName)
-  }
-
-  def lookupTempView(name: TableIdentifier): Option[View] = {
-    lookupLocalOrGlobalRawTempView(name.database.toSeq :+ name.table).map(getTempViewPlan)
-  }
-
-  /**
-   * Return the raw logical plan of a temporary local or global view for the given name.
-   */
-  def lookupLocalOrGlobalRawTempView(name: Seq[String]): Option[TemporaryViewRelation] = {
-    name match {
-      case Seq(v) => getRawTempView(v)
-      case Seq(db, v) if isGlobalTempViewDB(db) => getRawGlobalTempView(v)
-      case _ => None
-    }
+    getRawLocalOrGlobalTempView(nameParts).isDefined
   }
 
   /**
    * Return whether a table with the specified name is a temporary view.
-   *
-   * Note: The temporary view cache is checked only when database is not
-   * explicitly specified.
    */
   def isTempView(name: TableIdentifier): Boolean = synchronized {
-    lookupTempView(name).isDefined
+    isTempView(toNameParts(name))
   }
 
   def isView(nameParts: Seq[String]): Boolean = {
@@ -1135,7 +1126,7 @@ class SessionCatalog(
    *      updated.
    */
   def refreshTable(name: TableIdentifier): Unit = synchronized {
-    lookupTempView(name).map(_.refresh).getOrElse {
+    getLocalOrGlobalTempView(name).map(_.refresh).getOrElse {
       val qualifiedIdent = qualifyIdentifier(name)
       val qualifiedTableName = QualifiedTableName(qualifiedIdent.database.get, qualifiedIdent.table)
       tableRelationCache.invalidate(qualifiedTableName)
@@ -1598,10 +1589,9 @@ class SessionCatalog(
       TableFunctionRegistry.builtin.functionExists(name)
   }
 
-  protected[sql] def failFunctionLookup(
-      name: FunctionIdentifier, cause: Option[Throwable] = None): Nothing = {
+  protected[sql] def failFunctionLookup(name: FunctionIdentifier): Nothing = {
     throw new NoSuchFunctionException(
-      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName, cause)
+      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName)
   }
 
   /**
@@ -1742,11 +1732,7 @@ class SessionCatalog(
       // The function has not been loaded to the function registry, which means
       // that the function is a persistent function (if it actually has been registered
       // in the metastore). We need to first put the function in the function registry.
-      val catalogFunction = try {
-        externalCatalog.getFunction(db, funcName)
-      } catch {
-        case _: AnalysisException => failFunctionLookup(qualifiedIdent)
-      }
+      val catalogFunction = externalCatalog.getFunction(db, funcName)
       loadFunctionResources(catalogFunction.resources)
       // Please note that qualifiedName is provided by the user. However,
       // catalogFunction.identifier.unquotedString is returned by the underlying

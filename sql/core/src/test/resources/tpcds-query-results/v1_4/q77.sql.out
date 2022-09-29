@@ -4,8 +4,8 @@
 struct<channel:string,id:int,sales:decimal(27,2),returns:decimal(27,2),profit:decimal(28,2)>
 -- !query output
 NULL	NULL	238379361.39	11949589.80	-69066318.65
-catalog channel	NULL	116209.49	1989207.49	-1103184.43
 catalog channel	NULL	81893158.01	7956829.96	-13266843.17
+catalog channel	NULL	116209.49	1989207.49	-1103184.43
 catalog channel	1	26819348.55	1989207.49	-4169636.96
 catalog channel	2	27454600.50	1989207.49	-3825432.73
 catalog channel	5	27502999.47	1989207.49	-4168589.05

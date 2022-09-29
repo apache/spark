@@ -170,7 +170,7 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       val errMsg = intercept[AnalysisException] {
         sql(s"DESCRIBE TABLE $tbl col.x")
       }.getMessage
-      assert(errMsg === "DESC TABLE COLUMN does not support nested column: col.x")
+      assert(errMsg === "DESC TABLE COLUMN does not support nested column: col.x.")
     }
   }
 }
