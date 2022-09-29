@@ -732,7 +732,7 @@ class BooleanExtensionOpsTest(OpsTestBase):
         data = [True, True, False, None]
         pser = pd.Series(data, dtype="boolean")
         psser = ps.Series(data, dtype="boolean")
-        self.check_extension(pser, psser.to_pandas())
+        self.check_extension(pser, psser._to_pandas())
         self.check_extension(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
