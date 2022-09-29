@@ -1175,16 +1175,17 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   }
 
   /**
-   * Create an Unpivot column as Attribute.
+   * Create an Unpivot column.
    */
-  override def visitUnpivotColumn(ctx: UnpivotColumnContext): Attribute = withOrigin(ctx) {
-    UnresolvedAttribute(visitMultipartIdentifier(ctx.multipartIdentifier))
+  override def visitUnpivotColumn(ctx: UnpivotColumnContext): NamedExpression = withOrigin(ctx) {
+    UnresolvedAlias(UnresolvedAttribute(visitMultipartIdentifier(ctx.multipartIdentifier)))
   }
 
   /**
-   * Create an Unpivot column as Attribute.
+   * Create an Unpivot column.
    */
-  override def visitUnpivotColumnAndAlias(ctx: UnpivotColumnAndAliasContext): (Attribute, Option[String]) = withOrigin(ctx) {
+  override def visitUnpivotColumnAndAlias(ctx: UnpivotColumnAndAliasContext):
+  (NamedExpression, Option[String]) = withOrigin(ctx) {
     val attr = visitUnpivotColumn(ctx.unpivotColumn())
     val alias = Option(ctx.unpivotAlias()).map(_.identifier().getText)
     (attr, alias)
@@ -1195,7 +1196,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Each struct field is renamed to the respective value column name.
    */
   override def visitUnpivotColumnSet(ctx: UnpivotColumnSetContext):
-  (Seq[Attribute], Option[String]) =
+  (Seq[NamedExpression], Option[String]) =
     withOrigin(ctx) {
       val exprs = ctx.unpivotColumns.asScala.map(visitUnpivotColumn).toSeq
       val alias = Option(ctx.unpivotAlias()).map(_.identifier().getText)

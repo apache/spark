@@ -58,11 +58,13 @@ dotNET	2014	22500
 
 -- !query
 SELECT * FROM (
-  SELECT course, struct(`2012`, `2013`, `2014`) AS `the.earnings`
-  FROM courseEarnings
+  SELECT course, `the.earnings`.* FROM (
+    SELECT course, struct(`2012`, `2013`, `2014`) AS `the.earnings`
+    FROM courseEarnings
+  )
 )
 UNPIVOT (
-  earningsYear FOR year IN (`the.earnings`.`2012`, `the.earnings`.`2013`, `the.earnings`.`2014`)
+  earningsYear FOR year IN (`2012`, `2013`, `2014`)
 )
 -- !query schema
 struct<course:string,year:string,earningsYear:int>
@@ -72,6 +74,29 @@ Java	2013	30000
 dotNET	2012	15000
 dotNET	2013	48000
 dotNET	2014	22500
+
+
+-- !query
+SELECT * FROM (
+  SELECT course, struct(`2012`, `2013`, `2014`) AS `the.earnings`
+  FROM courseEarnings
+)
+UNPIVOT (
+  earningsYear FOR year IN (`the.earnings`.`2012`, `the.earnings`.`2013`, `the.earnings`.`2014`)
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNPIVOT_REQUIRES_ATTRIBUTES",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "empty" : "ids",
+    "given" : "values",
+    "types" : "Alias (the.earnings.2012 AS the.earnings.2012, the.earnings.2013 AS the.earnings.2013, the.earnings.2014 AS the.earnings.2014)"
+  }
+}
 
 
 -- !query
@@ -268,13 +293,18 @@ UNPIVOT (
   )
 )
 -- !query schema
-struct<course:string,year:string,earnings:int,sales:int>
+struct<>
 -- !query output
-Java	2012	20000	1
-Java	2013	30000	2
-dotNET	2012	15000	2
-dotNET	2013	48000	1
-dotNET	2014	22500	1
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNPIVOT_REQUIRES_ATTRIBUTES",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "empty" : "ids",
+    "given" : "values",
+    "types" : "Alias (the.earnings.2012 AS 2012, the.earnings.2013 AS 2013, the.earnings.2014 AS 2014, ...)"
+  }
+}
 
 
 -- !query

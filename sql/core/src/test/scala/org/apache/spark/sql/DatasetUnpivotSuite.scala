@@ -151,44 +151,38 @@ class DatasetUnpivotSuite extends QueryTest
       errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
       parameters = Map())
 
-    val unpivotedRows = Seq(
-      Row(1, "int1", 1L),
-      Row(1, "long1", 1L),
-      Row(2, "int1", null),
-      Row(2, "long1", 2L),
-      Row(3, "int1", 3L),
-      Row(3, "long1", null),
-      Row(4, "int1", null),
-      Row(4, "long1", null)
+    // ids expressions are not allowed when no values are given
+    val e2 = intercept[AnalysisException] {
+      wideDataDs.select($"id", $"int1", $"long1")
+        .unpivot(
+          Array($"id" * 2),
+          variableColumnName = "var",
+          valueColumnName = "val")
+    }
+    checkError(
+      exception = e2,
+      errorClass = "UNPIVOT_REQUIRES_ATTRIBUTES",
+      parameters = Map(
+        "given" -> "ids",
+        "empty" -> "values",
+        "types" -> "Alias ((id * 2) AS (id * 2))")
     )
 
-    val unpivoted3 = wideDataDs.select($"id", $"int1", $"long1")
-      .unpivot(
-        Array($"id" * 2),
-        variableColumnName = "var",
-        valueColumnName = "val")
-    assert(unpivoted3.schema === StructType(Seq(
-      StructField("(id * 2)", IntegerType, nullable = false),
-      StructField("var", StringType, nullable = false),
-      StructField("val", LongType, nullable = true)
-    )))
-    checkAnswer(
-      unpivoted3,
-      unpivotedRows
-        .map(row => Row(row.getInt(0) * 2, row.get(1), row.get(2)))
+    val e3 = intercept[AnalysisException] {
+      wideDataDs.select($"id", $"int1", $"long1")
+        .unpivot(
+          Array($"id".as("uid")),
+          variableColumnName = "var",
+          valueColumnName = "val")
+    }
+    checkError(
+      exception = e3,
+      errorClass = "UNPIVOT_REQUIRES_ATTRIBUTES",
+      parameters = Map(
+        "given" -> "ids",
+        "empty" -> "values",
+        "types" -> "Alias (id AS uid)")
     )
-
-    val unpivoted4 = wideDataDs.select($"id", $"int1", $"long1")
-      .unpivot(
-        Array($"id".as("uid")),
-        variableColumnName = "var",
-        valueColumnName = "val")
-    assert(unpivoted4.schema === StructType(Seq(
-      StructField("uid", IntegerType, nullable = false),
-      StructField("var", StringType, nullable = false),
-      StructField("val", LongType, nullable = true)
-    )))
-    checkAnswer(unpivoted4, unpivotedRows)
   }
 
   test("unpivot without ids or values") {
@@ -247,31 +241,6 @@ class DatasetUnpivotSuite extends QueryTest
         Row(row.id, "id", row.id),
         Row(row.id, "int1", row.int1.orNull),
         Row(row.id, "long1", row.long1.orNull)
-      )
-    })
-  }
-
-  test("unpivot with id expressions") {
-    // ids are expressions (computed)
-    val unpivoted = wideDataDs.select($"id", $"int1", $"long1")
-      .unpivot(
-        Array(($"id" * 10).as("primary"), $"int1".as("secondary")),
-        variableColumnName = "var",
-        valueColumnName = "val")
-
-    assert(unpivoted.schema === StructType(Seq(
-      StructField("primary", IntegerType, nullable = false),
-      StructField("secondary", IntegerType, nullable = true),
-      StructField("var", StringType, nullable = false),
-      StructField("val", LongType, nullable = true))))
-
-    checkAnswer(unpivoted, wideDataDs.collect().flatMap { row =>
-      Seq(
-        Row(
-          row.id * 10,
-          row.int1.orNull,
-          "long1",
-          row.long1.orNull)
       )
     })
   }

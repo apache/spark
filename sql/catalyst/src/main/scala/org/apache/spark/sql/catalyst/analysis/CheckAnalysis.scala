@@ -428,14 +428,24 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             metrics.foreach(m => checkMetric(m, m))
 
           // see Analyzer.ResolveUnpivot
-          case up: Unpivot
-            if up.childrenResolved && up.ids.exists(_.forall(_.resolved)) &&
-              up.values.exists(_.isEmpty) =>
+          // given ids must be AttributeReference when no values given
+          case up @Unpivot(Some(ids), None, _, _, _, _)
+            if up.childrenResolved && ids.forall(_.resolved) &&
+              ids.exists(! _.isInstanceOf[AttributeReference]) =>
+            throw QueryCompilationErrors.unpivotRequiresAttributes("ids", "values", up.ids.get)
+          // given values must be AttributeReference when no ids given
+          case up @Unpivot(None, Some(values), _, _, _, _)
+            if up.childrenResolved && values.forall(_.forall(_.resolved)) &&
+              values.exists(_.exists(! _.isInstanceOf[AttributeReference])) =>
+            throw QueryCompilationErrors.unpivotRequiresAttributes("values", "ids", values.flatten)
+          // given values must not be empty seq
+          case up @Unpivot(Some(ids), Some(Seq()), _, _, _, _)
+            if up.childrenResolved && ids.forall(_.resolved) =>
             throw QueryCompilationErrors.unpivotRequiresValueColumns()
           // all values must have same length as there are value column names
-          case up: Unpivot
-            if up.childrenResolved && up.ids.exists(_.forall(_.resolved)) &&
-              up.values.exists(values => values.exists(_.length != up.valueColumnNames.length)) =>
+          case up @Unpivot(Some(ids), Some(values), _, _, _, _)
+            if up.childrenResolved && ids.forall(_.resolved) &&
+              values.exists(_.length != up.valueColumnNames.length) =>
             throw QueryCompilationErrors.unpivotValueSizeMismatchError(
               up.valueColumnNames.length, up.values.get.map(_.length))
           // see TypeCoercionBase.UnpivotCoercion

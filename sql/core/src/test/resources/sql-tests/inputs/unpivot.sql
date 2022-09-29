@@ -18,7 +18,18 @@ UNPIVOT EXCLUDE NULLS (
   earningsYear FOR year IN (`2012`, `2013`, `2014`)
 );
 
--- work with dots in column names and struct fields
+-- work with dots in column names and struct fields accessed in FROM clause
+SELECT * FROM (
+  SELECT course, `the.earnings`.* FROM (
+    SELECT course, struct(`2012`, `2013`, `2014`) AS `the.earnings`
+    FROM courseEarnings
+  )
+)
+UNPIVOT (
+  earningsYear FOR year IN (`2012`, `2013`, `2014`)
+);
+
+-- struct fields not accessible in UNPIVOT
 SELECT * FROM (
   SELECT course, struct(`2012`, `2013`, `2014`) AS `the.earnings`
   FROM courseEarnings

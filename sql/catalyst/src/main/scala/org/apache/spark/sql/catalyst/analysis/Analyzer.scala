@@ -870,14 +870,16 @@ class Analyzer(override val catalogManager: CatalogManager)
       _.containsPattern(UNPIVOT), ruleId) {
 
       // once children are resolved, we can determine values from ids and vice versa
-      // if only either is given
-      case up: Unpivot if up.childrenResolved &&
-        up.ids.exists(_.forall(_.resolved)) && up.values.isEmpty =>
+      // if only either is given, and only AttributeReference are given
+      case up @Unpivot(Some(ids), None, _, _, _, _) if up.childrenResolved &&
+        ids.forall(_.resolved) &&
+        ids.forall(_.isInstanceOf[AttributeReference]) =>
         val idAttrs = AttributeSet(up.ids.get)
         val values = up.child.output.filterNot(idAttrs.contains)
         up.copy(values = Some(values.map(Seq(_))))
-      case up: Unpivot if up.childrenResolved &&
-        up.values.exists(_.forall(_.forall(_.resolved))) && up.ids.isEmpty =>
+      case up @Unpivot(None, Some(values), _, _, _, _) if up.childrenResolved &&
+        values.forall(_.forall(_.resolved)) &&
+        values.forall(_.forall(_.isInstanceOf[AttributeReference])) =>
         val valueAttrs = AttributeSet(up.values.get.flatten)
         val ids = up.child.output.filterNot(valueAttrs.contains)
         up.copy(ids = Some(ids))
@@ -3927,12 +3929,12 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       val cleanedMetrics = metrics.map(trimNonTopLevelAliases)
       CollectMetrics(name, cleanedMetrics, child)
 
-    case Unpivot(Some(ids), Some(values), aliases, variableColumnName, valueColumnNames, child) =>
-      val cleanedIds = ids.map(trimNonTopLevelAliases)
-      val cleanedValues = values.map(_.map(trimNonTopLevelAliases))
+    case Unpivot(ids, values, aliases, variableColumnName, valueColumnNames, child) =>
+      val cleanedIds = ids.map(_.map(trimNonTopLevelAliases))
+      val cleanedValues = values.map(_.map(_.map(trimNonTopLevelAliases)))
       Unpivot(
-        Some(cleanedIds),
-        Some(cleanedValues),
+        cleanedIds,
+        cleanedValues,
         aliases,
         variableColumnName,
         valueColumnNames,

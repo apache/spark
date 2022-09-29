@@ -101,6 +101,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "pivotType" -> pivotCol.dataType.catalogString))
   }
 
+  def unpivotRequiresAttributes(given: String,
+                                empty: String,
+                                expressions: Seq[NamedExpression]): Throwable = {
+    val types = expressions.groupBy(_.getClass.getSimpleName)
+      .mapValues(exprs => exprs.map(expr => expr.toString.replaceAll("#\\d+", "")).sorted)
+      .mapValues(exprs => if (exprs.length > 3) exprs.take(3) :+ "..." else exprs)
+      .toList.sortBy(_._1)
+      .map { case (className, exprs) => s"$className (${exprs.mkString(", ")})" }
+
+    new AnalysisException(
+      errorClass = "UNPIVOT_REQUIRES_ATTRIBUTES",
+      messageParameters = Map(
+        "given" -> given,
+        "empty" -> empty,
+        "types" -> types.mkString(", ")))
+  }
+
   def unpivotRequiresValueColumns(): Throwable = {
     new AnalysisException(
       errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",

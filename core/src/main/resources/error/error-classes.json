@@ -552,6 +552,12 @@
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"
     ]
   },
+  "UNPIVOT_REQUIRES_ATTRIBUTES" : {
+    "message" : [
+      "UNPIVOT requires given {given} to be Attributes when no {empty} are given: [<types>]"
+    ],
+    "sqlState" : "42000"
+  },
   "UNPIVOT_REQUIRES_VALUE_COLUMNS" : {
     "message" : [
       "At least one value column needs to be specified for UNPIVOT, all columns specified as ids"
