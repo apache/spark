@@ -623,6 +623,76 @@ class StreamingSessionWindowSuite extends StreamTest
     }
   }
 
+  // Test that session window works with mean, median, std dev, variance, UDAFs
+  // and first, last on nested tuple keys
+  testWithAllOptions("session window - with more aggregation functions and UDAFs") {
+    // create a trivial summation UDAF for test
+    // input type is a single Long
+    object MySum extends Aggregator[Long, Long, Long] {
+
+      def zero: Long = 0L
+
+      def reduce(buffer: Long, data: Long): Long = {
+        buffer + data
+      }
+
+      def merge(b1: Long, b2: Long): Long = {
+        b1 + b2
+      }
+
+      def finish(reduction: Long): Long = reduction
+
+      def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+
+      def outputEncoder: Encoder[Long] = Encoders.scalaLong
+    }
+    val mySum = spark.udf.register("mySum", udaf(MySum))
+
+    val inputData = MemoryStream[(String, Long)]
+    val sessionWithAgg = {
+      // Split the lines into words, treat words as sessionId of events
+      val events = inputData.toDF()
+        .select($"_1".as("value"), $"_2".as("timestamp"))
+        .withColumn("eventTime", $"timestamp".cast("timestamp"))
+        .withColumn("single", $"timestamp")
+        .withColumn("double", struct($"single", $"single"))
+        .withColumn("triple", struct($"double", $"single"))
+        .withWatermark("eventTime", "30 seconds")
+        .selectExpr("explode(split(value, ' ')) AS sessionId",
+          "eventTime", "single", "triple")
+
+      val sessionWindow = session_window($"eventTime", "10 seconds")
+      events
+        .groupBy(sessionWindow.as("session"), $"sessionId")
+        .agg(
+          mean($"single").as("meanTime"),
+          median($"single").as("medianTime"),
+          stddev($"single").as("stdDevTime"),
+          variance($"single").as("varTime"),
+          first($"triple").as("firstTimeTriple"),
+          last($"triple").as("lastTimeTriple"),
+          mySum($"single").as("mySumSingle")
+        )
+        .selectExpr(
+          "sessionId", "CAST(session.start AS LONG)",
+          "CAST(session.end AS LONG)",
+          // "firstTimeTriple", "lastTimeTriple",  // Non deterministic
+          "CAST(meanTime AS LONG)", "CAST(medianTime AS LONG)",
+          "CAST(stdDevTime AS LONG)", "CAST(varTime AS LONG)",
+          "mySumSingle")
+    }
+
+    testStream(sessionWithAgg, OutputMode.Append())(
+      AddData(inputData, ("a", 41L)),
+      AddData(inputData, ("a", 42L)),
+      AddData(inputData, ("a", 40L)),
+      CheckAnswer(),
+      AddData(inputData, ("b", 100L)), // Move the watermark past the end of the session.
+      AddData(inputData, ("b", 101L)), // Trigger the session production.
+      CheckAnswer(("a", 40, 52, 41, 41, 1, 1, 123))
+    )
+  }
+
   private def assertNumRowsDroppedByWatermark(
       numRowsDroppedByWatermark: Long): AssertOnQuery = AssertOnQuery { q =>
     q.processAllAvailable()
