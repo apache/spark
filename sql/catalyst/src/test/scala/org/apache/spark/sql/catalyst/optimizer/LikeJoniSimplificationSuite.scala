@@ -37,11 +37,11 @@ class LikeJoniSimplificationSuite extends PlanTest {
   test("simplify Like into StartsWith") {
     val originalQuery =
       testRelation
-        .where(('a jlike "abc%") || ('a jlike "abc\\%"))
+        .where(('a jLike "abc%") || ('a jLike "abc\\%"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where(StartsWith('a, "abc") || ('a jlike "abc\\%"))
+      .where(StartsWith('a, "abc") || ('a jLike "abc\\%"))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -50,7 +50,7 @@ class LikeJoniSimplificationSuite extends PlanTest {
   test("simplify Like into EndsWith") {
     val originalQuery =
       testRelation
-        .where('a jlike "%xyz")
+        .where('a jLike "%xyz")
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
@@ -63,11 +63,11 @@ class LikeJoniSimplificationSuite extends PlanTest {
   test("simplify Like into startsWith and EndsWith") {
     val originalQuery =
       testRelation
-        .where(('a jlike "abc\\%def") || ('a jlike "abc%def"))
+        .where(('a jLike "abc\\%def") || ('a jLike "abc%def"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where(('a jlike "abc\\%def") ||
+      .where(('a jLike "abc\\%def") ||
         (Length('a) >= 6 && (StartsWith('a, "abc") && EndsWith('a, "def"))))
       .analyze
 
@@ -77,11 +77,11 @@ class LikeJoniSimplificationSuite extends PlanTest {
   test("simplify Like into Contains") {
     val originalQuery =
       testRelation
-        .where(('a jlike "%mn%") || ('a jlike "%mn\\%"))
+        .where(('a jLike "%mn%") || ('a jLike "%mn\\%"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where(Contains('a, "mn") || ('a jlike "%mn\\%"))
+      .where(Contains('a, "mn") || ('a jLike "%mn\\%"))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -90,7 +90,7 @@ class LikeJoniSimplificationSuite extends PlanTest {
   test("simplify Like into EqualTo") {
     val originalQuery =
       testRelation
-        .where(('a jlike "") || ('a jlike "abc"))
+        .where(('a jLike "") || ('a jLike "abc"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
@@ -101,17 +101,17 @@ class LikeJoniSimplificationSuite extends PlanTest {
   }
 
   test("null pattern") {
-    val originalQuery = testRelation.where('a jlike Literal(null, StringType)).analyze
+    val originalQuery = testRelation.where('a jLike Literal(null, StringType)).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, testRelation.where(Literal(null, BooleanType)).analyze)
   }
 
   test("test like escape syntax") {
-    val originalQuery1 = testRelation.where('a.jlike("abc#%", '#'))
+    val originalQuery1 = testRelation.where('a.jLike("abc#%", '#'))
     val optimized1 = Optimize.execute(originalQuery1.analyze)
     comparePlans(optimized1, originalQuery1.analyze)
 
-    val originalQuery2 = testRelation.where('a.jlike("abc#%abc", '#'))
+    val originalQuery2 = testRelation.where('a.jLike("abc#%abc", '#'))
     val optimized2 = Optimize.execute(originalQuery2.analyze)
     comparePlans(optimized2, originalQuery2.analyze)
   }
@@ -119,49 +119,117 @@ class LikeJoniSimplificationSuite extends PlanTest {
   test("SPARK-33677: LikeSimplification should be skipped if pattern contains any escapeChar") {
     val originalQuery1 =
       testRelation
-        .where(('a jlike "abc%") || ('a jlike "\\abc%"))
+        .where(('a jLike "abc%") || ('a jLike "\\abc%"))
     val optimized1 = Optimize.execute(originalQuery1.analyze)
     val correctAnswer1 = testRelation
-      .where(StartsWith('a, "abc") || ('a jlike "\\abc%"))
+      .where(StartsWith('a, "abc") || ('a jLike "\\abc%"))
       .analyze
     comparePlans(optimized1, correctAnswer1)
 
     val originalQuery2 =
       testRelation
-        .where(('a jlike "%xyz") || ('a jlike "%xyz\\"))
+        .where(('a jLike "%xyz") || ('a jLike "%xyz\\"))
     val optimized2 = Optimize.execute(originalQuery2.analyze)
     val correctAnswer2 = testRelation
-      .where(EndsWith('a, "xyz") || ('a jlike "%xyz\\"))
+      .where(EndsWith('a, "xyz") || ('a jLike "%xyz\\"))
       .analyze
     comparePlans(optimized2, correctAnswer2)
 
     val originalQuery3 =
       testRelation
-        .where(('a jlike("@bc%def", '@')) || ('a jlike "abc%def"))
+        .where(('a jLike("@bc%def", '@')) || ('a jLike "abc%def"))
     val optimized3 = Optimize.execute(originalQuery3.analyze)
     val correctAnswer3 = testRelation
-      .where(('a jlike("@bc%def", '@')) ||
+      .where(('a jLike("@bc%def", '@')) ||
         (Length('a) >= 6 && (StartsWith('a, "abc") && EndsWith('a, "def"))))
       .analyze
     comparePlans(optimized3, correctAnswer3)
 
     val originalQuery4 =
       testRelation
-        .where(('a jlike "%mn%") || ('a jlike("%mn%", '%')))
+        .where(('a jLike "%mn%") || ('a jLike("%mn%", '%')))
     val optimized4 = Optimize.execute(originalQuery4.analyze)
     val correctAnswer4 = testRelation
-      .where(Contains('a, "mn") || ('a jlike("%mn%", '%')))
+      .where(Contains('a, "mn") || ('a jLike("%mn%", '%')))
       .analyze
     comparePlans(optimized4, correctAnswer4)
 
     val originalQuery5 =
       testRelation
-        .where(('a jlike "abc") || ('a jlike("abbc", 'b')))
+        .where(('a jLike "abc") || ('a jLike("abbc", 'b')))
     val optimized5 = Optimize.execute(originalQuery5.analyze)
     val correctAnswer5 = testRelation
-      .where(('a === "abc") || ('a jlike("abbc", 'b')))
+      .where(('a === "abc") || ('a jLike("abbc", 'b')))
       .analyze
     comparePlans(optimized5, correctAnswer5)
+  }
+
+  test("simplify LikeAllJoni") {
+    val originalQuery =
+      testRelation
+        .where(('a jLikeAll(
+          "abc%", "abc\\%", "%xyz", "abc\\%def", "abc%def", "%mn%", "%mn\\%", "", "abc")))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .where((((((StartsWith('a, "abc") && EndsWith('a, "xyz")) &&
+        (Length('a) >= 6 && (StartsWith('a, "abc") && EndsWith('a, "def")))) &&
+        Contains('a, "mn")) && ('a === "")) && ('a === "abc")) &&
+        ('a jLikeAll("abc\\%", "abc\\%def", "%mn\\%")))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("simplify NotLikeAllJoni") {
+    val originalQuery =
+      testRelation
+        .where(('a jNotLikeAll(
+          "abc%", "abc\\%", "%xyz", "abc\\%def", "abc%def", "%mn%", "%mn\\%", "", "abc")))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .where((((((Not(StartsWith('a, "abc")) && Not(EndsWith('a, "xyz"))) &&
+        Not(Length('a) >= 6 && (StartsWith('a, "abc") && EndsWith('a, "def")))) &&
+        Not(Contains('a, "mn"))) && Not('a === "")) && Not('a === "abc")) &&
+        ('a jNotLikeAll("abc\\%", "abc\\%def", "%mn\\%")))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("simplify LikeAnyJoni") {
+    val originalQuery =
+      testRelation
+        .where(('a jLikeAny(
+          "abc%", "abc\\%", "%xyz", "abc\\%def", "abc%def", "%mn%", "%mn\\%", "", "abc")))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .where((((((StartsWith('a, "abc") || EndsWith('a, "xyz")) ||
+        (Length('a) >= 6 && (StartsWith('a, "abc") && EndsWith('a, "def")))) ||
+        Contains('a, "mn")) || ('a === "")) || ('a === "abc")) ||
+        ('a jLikeAny("abc\\%", "abc\\%def", "%mn\\%")))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("simplify NotLikeAnyJoni") {
+    val originalQuery =
+      testRelation
+        .where(('a jNotLikeAny(
+          "abc%", "abc\\%", "%xyz", "abc\\%def", "abc%def", "%mn%", "%mn\\%", "", "abc")))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .where((((((Not(StartsWith('a, "abc")) || Not(EndsWith('a, "xyz"))) ||
+        Not(Length('a) >= 6 && (StartsWith('a, "abc") && EndsWith('a, "def")))) ||
+        Not(Contains('a, "mn"))) || Not('a === "")) || Not('a === "abc")) ||
+        ('a jNotLikeAny("abc\\%", "abc\\%def", "%mn\\%")))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 
 }

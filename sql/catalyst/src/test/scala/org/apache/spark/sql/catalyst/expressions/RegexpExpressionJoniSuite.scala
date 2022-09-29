@@ -32,244 +32,294 @@ class RegexpExpressionJoniSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(mkExpr(regex), expected, create_row(input)) // check row input
   }
 
+  test("LIKE ALL") {
+    checkEvaluation(Literal.create(null, StringType).jLikeAll("%foo%", "%oo"), null)
+    checkEvaluation(Literal.create("foo", StringType).jLikeAll("%foo%", "%oo"), true)
+    checkEvaluation(Literal.create("foo", StringType).jLikeAll("%foo%", "%bar%"), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .jLikeAll("%foo%", Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .jLikeAll(Literal.create(null, StringType), "%foo%"), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .jLikeAll("%feo%", Literal.create(null, StringType)), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .jLikeAll(Literal.create(null, StringType), "%feo%"), false)
+    checkEvaluation(Literal.create("foo", StringType).jNotLikeAll("tee", "%yoo%"), true)
+    checkEvaluation(Literal.create("foo", StringType).jNotLikeAll("%oo%", "%yoo%"), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .jNotLikeAll("%foo%", Literal.create(null, StringType)), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .jNotLikeAll(Literal.create(null, StringType), "%foo%"), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .jNotLikeAll("%yoo%", Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .jNotLikeAll(Literal.create(null, StringType), "%yoo%"), null)
+  }
+
+  test("LIKE ANY") {
+    checkEvaluation(Literal.create(null, StringType).jLikeAny("%foo%", "%oo"), null)
+    checkEvaluation(Literal.create("foo", StringType).jLikeAny("%foo%", "%oo"), true)
+    checkEvaluation(Literal.create("foo", StringType).jLikeAny("%foo%", "%bar%"), true)
+    checkEvaluation(Literal.create("foo", StringType).jLikeAny("%fee%", "%bar%"), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .jLikeAny("%foo%", Literal.create(null, StringType)), true)
+    checkEvaluation(Literal.create("foo", StringType)
+      .jLikeAny(Literal.create(null, StringType), "%foo%"), true)
+    checkEvaluation(Literal.create("foo", StringType)
+      .jLikeAny("%feo%", Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .jLikeAny(Literal.create(null, StringType), "%feo%"), null)
+    checkEvaluation(Literal.create("foo", StringType).jNotLikeAny("tee", "%yoo%"), true)
+    checkEvaluation(Literal.create("foo", StringType).jNotLikeAny("%oo%", "%yoo%"), true)
+    checkEvaluation(Literal.create("foo", StringType).jNotLikeAny("%foo%", "%oo"), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .jNotLikeAny("%foo%", Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .jNotLikeAny(Literal.create(null, StringType), "%foo%"), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .jNotLikeAny("%yoo%", Literal.create(null, StringType)), true)
+    checkEvaluation(Literal.create("foo", StringType)
+      .jNotLikeAny(Literal.create(null, StringType), "%yoo%"), true)
+  }
+
   test("RLIKE literal Regular Expression") {
-    checkLiteralRow(Literal.create(null, StringType) jrlike _, "abdef", null)
-    checkEvaluation("abdef" jrlike Literal.create(null, StringType), null)
-    checkEvaluation(Literal.create(null, StringType) jrlike Literal.create(null, StringType), null)
-    checkEvaluation("abdef" jrlike NonFoldableLiteral.create("abdef", StringType), true)
-    checkEvaluation("abdef" jrlike NonFoldableLiteral.create(null, StringType), null)
+    checkLiteralRow(Literal.create(null, StringType) jRlike _, "abdef", null)
+    checkEvaluation("abdef" jRlike Literal.create(null, StringType), null)
+    checkEvaluation(Literal.create(null, StringType) jRlike Literal.create(null, StringType), null)
+    checkEvaluation("abdef" jRlike NonFoldableLiteral.create("abdef", StringType), true)
+    checkEvaluation("abdef" jRlike NonFoldableLiteral.create(null, StringType), null)
     checkEvaluation(
-      Literal.create(null, StringType) jrlike NonFoldableLiteral.create("abdef", StringType), null)
+      Literal.create(null, StringType) jRlike NonFoldableLiteral.create("abdef", StringType), null)
     checkEvaluation(
-      Literal.create(null, StringType) jrlike NonFoldableLiteral.create(null, StringType), null)
+      Literal.create(null, StringType) jRlike NonFoldableLiteral.create(null, StringType), null)
 
-    checkLiteralRow("abdef" jrlike _, "abdef", true)
-    checkLiteralRow("abbbbc" jrlike _, "a.*c", true)
+    checkLiteralRow("abdef" jRlike _, "abdef", true)
+    checkLiteralRow("abbbbc" jRlike _, "a.*c", true)
 
-    checkLiteralRow("fofo" jrlike _, "^fo", true)
-    checkLiteralRow("fo\no" jrlike _, "^fo\no$", true)
-    checkLiteralRow("Bn" jrlike _, "^Ba*n", true)
-    checkLiteralRow("afofo" jrlike _, "fo", true)
-    checkLiteralRow("afofo" jrlike _, "^fo", false)
-    checkLiteralRow("Baan" jrlike _, "^Ba?n", false)
-    checkLiteralRow("axe" jrlike _, "pi|apa", false)
-    checkLiteralRow("pip" jrlike _, "^(pi)*$", false)
+    checkLiteralRow("fofo" jRlike _, "^fo", true)
+    checkLiteralRow("fo\no" jRlike _, "^fo\no$", true)
+    checkLiteralRow("Bn" jRlike _, "^Ba*n", true)
+    checkLiteralRow("afofo" jRlike _, "fo", true)
+    checkLiteralRow("afofo" jRlike _, "^fo", false)
+    checkLiteralRow("Baan" jRlike _, "^Ba?n", false)
+    checkLiteralRow("axe" jRlike _, "pi|apa", false)
+    checkLiteralRow("pip" jRlike _, "^(pi)*$", false)
 
-    checkLiteralRow("abc" jrlike _, "^ab", true)
-    checkLiteralRow("abc" jrlike _, "^bc", false)
-    checkLiteralRow("abc" jrlike _, "^ab", true)
-    checkLiteralRow("abc" jrlike _, "^bc", false)
+    checkLiteralRow("abc" jRlike _, "^ab", true)
+    checkLiteralRow("abc" jRlike _, "^bc", false)
+    checkLiteralRow("abc" jRlike _, "^ab", true)
+    checkLiteralRow("abc" jRlike _, "^bc", false)
 
     intercept[org.joni.exception.SyntaxException] {
-      evaluateWithoutCodegen("abbbbc" jrlike "**")
+      evaluateWithoutCodegen("abbbbc" jRlike "**")
     }
     intercept[org.joni.exception.SyntaxException] {
       val regex = 'a.string.at(0)
-      evaluateWithoutCodegen("abbbbc" jrlike regex, create_row("**"))
+      evaluateWithoutCodegen("abbbbc" jRlike regex, create_row("**"))
     }
 
     intercept[org.joni.exception.SyntaxException] {
-      evaluateWithoutCodegen("abbbbc" jrlike "**")
+      evaluateWithoutCodegen("abbbbc" jRlike "**")
     }
   }
 
   test("RLIKE Non-literal Regular Expression") {
     val regEx = 'a.string.at(0)
-    checkEvaluation("abdef" jrlike regEx, true, create_row("abdef"))
-    checkEvaluation("abbbbc" jrlike regEx, true, create_row("a.*c"))
-    checkEvaluation("fofo" jrlike regEx, true, create_row("^fo"))
-    checkEvaluation("fo\no" jrlike regEx, true, create_row("^fo\no$"))
-    checkEvaluation("Bn" jrlike regEx, true, create_row("^Ba*n"))
+    checkEvaluation("abdef" jRlike regEx, true, create_row("abdef"))
+    checkEvaluation("abbbbc" jRlike regEx, true, create_row("a.*c"))
+    checkEvaluation("fofo" jRlike regEx, true, create_row("^fo"))
+    checkEvaluation("fo\no" jRlike regEx, true, create_row("^fo\no$"))
+    checkEvaluation("Bn" jRlike regEx, true, create_row("^Ba*n"))
 
     intercept[org.joni.exception.SyntaxException] {
-      evaluateWithoutCodegen("abbbbc" jrlike regEx, create_row("**"))
+      evaluateWithoutCodegen("abbbbc" jRlike regEx, create_row("**"))
     }
   }
 
   test("RLIKE Regular Expression") {
-    checkLiteralRow(Literal.create(null, StringType) jrlike _, "abdef", null)
-    checkEvaluation("abdef" jrlike Literal.create(null, StringType), null)
-    checkEvaluation(Literal.create(null, StringType) jrlike Literal.create(null, StringType), null)
-    checkEvaluation("abdef" jrlike NonFoldableLiteral.create("abdef", StringType), true)
-    checkEvaluation("abdef" jrlike NonFoldableLiteral.create(null, StringType), null)
+    checkLiteralRow(Literal.create(null, StringType) jRlike _, "abdef", null)
+    checkEvaluation("abdef" jRlike Literal.create(null, StringType), null)
+    checkEvaluation(Literal.create(null, StringType) jRlike Literal.create(null, StringType), null)
+    checkEvaluation("abdef" jRlike NonFoldableLiteral.create("abdef", StringType), true)
+    checkEvaluation("abdef" jRlike NonFoldableLiteral.create(null, StringType), null)
     checkEvaluation(
-      Literal.create(null, StringType) jrlike NonFoldableLiteral.create("abdef", StringType), null)
+      Literal.create(null, StringType) jRlike NonFoldableLiteral.create("abdef", StringType), null)
     checkEvaluation(
-      Literal.create(null, StringType) jrlike NonFoldableLiteral.create(null, StringType), null)
+      Literal.create(null, StringType) jRlike NonFoldableLiteral.create(null, StringType), null)
 
-    checkLiteralRow("abdef" jrlike _, "abdef", true)
-    checkLiteralRow("abbbbc" jrlike _, "a.*c", true)
+    checkLiteralRow("abdef" jRlike _, "abdef", true)
+    checkLiteralRow("abbbbc" jRlike _, "a.*c", true)
 
-    checkLiteralRow("fofo" jrlike _, "^fo", true)
-    checkLiteralRow("fo\no" jrlike _, "^fo\no$", true)
-    checkLiteralRow("Bn" jrlike _, "^Ba*n", true)
-    checkLiteralRow("afofo" jrlike _, "fo", true)
-    checkLiteralRow("afofo" jrlike _, "^fo", false)
-    checkLiteralRow("Baan" jrlike _, "^Ba?n", false)
-    checkLiteralRow("axe" jrlike _, "pi|apa", false)
-    checkLiteralRow("pip" jrlike _, "^(pi)*$", false)
+    checkLiteralRow("fofo" jRlike _, "^fo", true)
+    checkLiteralRow("fo\no" jRlike _, "^fo\no$", true)
+    checkLiteralRow("Bn" jRlike _, "^Ba*n", true)
+    checkLiteralRow("afofo" jRlike _, "fo", true)
+    checkLiteralRow("afofo" jRlike _, "^fo", false)
+    checkLiteralRow("Baan" jRlike _, "^Ba?n", false)
+    checkLiteralRow("axe" jRlike _, "pi|apa", false)
+    checkLiteralRow("pip" jRlike _, "^(pi)*$", false)
 
-    checkLiteralRow("abc" jrlike _, "^ab", true)
-    checkLiteralRow("abc" jrlike _, "^bc", false)
-    checkLiteralRow("abc" jrlike _, "^ab", true)
-    checkLiteralRow("abc" jrlike _, "^bc", false)
+    checkLiteralRow("abc" jRlike _, "^ab", true)
+    checkLiteralRow("abc" jRlike _, "^bc", false)
+    checkLiteralRow("abc" jRlike _, "^ab", true)
+    checkLiteralRow("abc" jRlike _, "^bc", false)
 
     intercept[org.joni.exception.SyntaxException] {
-      evaluateWithoutCodegen("abbbbc" jrlike "**")
+      evaluateWithoutCodegen("abbbbc" jRlike "**")
     }
     intercept[org.joni.exception.SyntaxException] {
       val regex = 'a.string.at(0)
-      evaluateWithoutCodegen("abbbbc" jrlike regex, create_row("**"))
+      evaluateWithoutCodegen("abbbbc" jRlike regex, create_row("**"))
     }
   }
 
   test("LIKE Pattern") {
 
     // null handling
-    checkLiteralRow("a" jlike _, "", false)
-    checkLiteralRow(Literal.create(null, StringType).jlike(_), "a", null)
-    checkEvaluation(Literal.create("a", StringType).jlike(Literal.create(null, StringType)), null)
-    checkEvaluation(Literal.create(null, StringType).jlike(Literal.create(null, StringType)), null)
+    checkLiteralRow("a" jLike _, "", false)
+    checkLiteralRow(Literal.create(null, StringType).jLike(_), "a", null)
+    checkEvaluation(Literal.create("a", StringType).jLike(Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create(null, StringType).jLike(Literal.create(null, StringType)), null)
     checkEvaluation(
-      Literal.create("a", StringType).jlike(NonFoldableLiteral.create("a", StringType)), true)
+      Literal.create("a", StringType).jLike(NonFoldableLiteral.create("a", StringType)), true)
     checkEvaluation(
-      Literal.create("a", StringType).jlike(NonFoldableLiteral.create(null, StringType)), null)
+      Literal.create("a", StringType).jLike(NonFoldableLiteral.create(null, StringType)), null)
     checkEvaluation(
-      Literal.create(null, StringType).jlike(NonFoldableLiteral.create("a", StringType)), null)
+      Literal.create(null, StringType).jLike(NonFoldableLiteral.create("a", StringType)), null)
     checkEvaluation(
-      Literal.create(null, StringType).jlike(NonFoldableLiteral.create(null, StringType)), null)
+      Literal.create(null, StringType).jLike(NonFoldableLiteral.create(null, StringType)), null)
 
     // simple patterns
-    checkLiteralRow("abdef" jlike _, "abdef", true)
-    checkLiteralRow("a_%b" jlike _, "a\\__b", true)
-    checkLiteralRow("addb" jlike _, "a_%b", true)
-    checkLiteralRow("addb" jlike _, "a\\__b", false)
-    checkLiteralRow("addb" jlike _, "a%\\%b", false)
-    checkLiteralRow("a_%b" jlike _, "a%\\%b", true)
-    checkLiteralRow("addb" jlike _, "a%", true)
-    checkLiteralRow("addb" jlike _, "**", false)
-    checkLiteralRow("abc" jlike _, "a%", true)
-    checkLiteralRow("abc" jlike _, "b%", false)
-    checkLiteralRow("abc" jlike _, "bc%", false)
-    checkLiteralRow("a\nb" jlike _, "a_b", true)
-    checkLiteralRow("ab" jlike _, "a%b", true)
-    checkLiteralRow("a\nb" jlike _, "a%b", true)
-    checkLiteralRow("" jlike _, "", true)
+    checkLiteralRow("abdef" jLike _, "abdef", true)
+    checkLiteralRow("a_%b" jLike _, "a\\__b", true)
+    checkLiteralRow("addb" jLike _, "a_%b", true)
+    checkLiteralRow("addb" jLike _, "a\\__b", false)
+    checkLiteralRow("addb" jLike _, "a%\\%b", false)
+    checkLiteralRow("a_%b" jLike _, "a%\\%b", true)
+    checkLiteralRow("addb" jLike _, "a%", true)
+    checkLiteralRow("addb" jLike _, "**", false)
+    checkLiteralRow("abc" jLike _, "a%", true)
+    checkLiteralRow("abc" jLike _, "b%", false)
+    checkLiteralRow("abc" jLike _, "bc%", false)
+    checkLiteralRow("a\nb" jLike _, "a_b", true)
+    checkLiteralRow("ab" jLike _, "a%b", true)
+    checkLiteralRow("a\nb" jLike _, "a%b", true)
+    checkLiteralRow("" jLike _, "", true)
 
     // empty input
-    checkLiteralRow("" jlike _, "", true)
-    checkLiteralRow("a" jlike _, "", false)
-    checkLiteralRow("" jlike _, "a", false)
+    checkLiteralRow("" jLike _, "", true)
+    checkLiteralRow("a" jLike _, "", false)
+    checkLiteralRow("" jLike _, "a", false)
 
     // SI-17647 double-escaping backslash
-    checkLiteralRow("""\\\\""" jlike _, """%\\%""", true)
-    checkLiteralRow("""%%""" jlike _, """%%""", true)
-    checkLiteralRow("""\__""" jlike _, """\\\__""", true)
-    checkLiteralRow("""\\\__""" jlike _, """%\\%\%""", false)
-    checkLiteralRow("""_\\\%""" jlike _, """%\\""", false)
+    checkLiteralRow("""\\\\""" jLike _, """%\\%""", true)
+    checkLiteralRow("""%%""" jLike _, """%%""", true)
+    checkLiteralRow("""\__""" jLike _, """\\\__""", true)
+    checkLiteralRow("""\\\__""" jLike _, """%\\%\%""", false)
+    checkLiteralRow("""_\\\%""" jLike _, """%\\""", false)
 
     // unicode
     // scalastyle:off nonascii
-    checkLiteralRow("a\u20ACa" jlike _, "_\u20AC_", true)
-    checkLiteralRow("a€a" jlike _, "_€_", true)
-    checkLiteralRow("a€a" jlike _, "_\u20AC_", true)
-    checkLiteralRow("a\u20ACa" jlike _, "_€_", true)
+    checkLiteralRow("a\u20ACa" jLike _, "_\u20AC_", true)
+    checkLiteralRow("a€a" jLike _, "_€_", true)
+    checkLiteralRow("a€a" jLike _, "_\u20AC_", true)
+    checkLiteralRow("a\u20ACa" jLike _, "_€_", true)
     // scalastyle:on nonascii
 
     // invalid escaping
     val invalidEscape = intercept[AnalysisException] {
-      evaluateWithoutCodegen("""a""" jlike """\a""")
+      evaluateWithoutCodegen("""a""" jLike """\a""")
     }
     assert(invalidEscape.getMessage.contains("pattern"))
 
     val endEscape = intercept[AnalysisException] {
-      evaluateWithoutCodegen("""a""" jlike """a\""")
+      evaluateWithoutCodegen("""a""" jLike """a\""")
     }
     assert(endEscape.getMessage.contains("pattern"))
 
     // case
-    checkLiteralRow("A" jlike _, "a%", false)
-    checkLiteralRow("a" jlike _, "A%", false)
-    checkLiteralRow("AaA" jlike _, "_a_", true)
+    checkLiteralRow("A" jLike _, "a%", false)
+    checkLiteralRow("a" jLike _, "A%", false)
+    checkLiteralRow("AaA" jLike _, "_a_", true)
 
     // example
-    checkLiteralRow("""%SystemDrive%\Users\John""" jlike _, """\%SystemDrive\%\\Users%""", true)
+    checkLiteralRow("""%SystemDrive%\Users\John""" jLike _, """\%SystemDrive\%\\Users%""", true)
   }
 
   Seq('/', '#', '\"').foreach { escapeChar =>
     test(s"LIKE Pattern ESCAPE '$escapeChar'") {
       // null handling
-      checkLiteralRow(Literal.create(null, StringType).jlike(_, escapeChar), "a", null)
+      checkLiteralRow(Literal.create(null, StringType).jLike(_, escapeChar), "a", null)
       checkEvaluation(
-        Literal.create("a", StringType).jlike(Literal.create(null, StringType), escapeChar), null)
+        Literal.create("a", StringType).jLike(Literal.create(null, StringType), escapeChar), null)
       checkEvaluation(
-        Literal.create(null, StringType).jlike(Literal.create(null, StringType), escapeChar), null)
-      checkEvaluation(Literal.create("a", StringType).jlike(
+        Literal.create(null, StringType).jLike(Literal.create(null, StringType), escapeChar), null)
+      checkEvaluation(Literal.create("a", StringType).jLike(
         NonFoldableLiteral.create("a", StringType), escapeChar), true)
-      checkEvaluation(Literal.create("a", StringType).jlike(
+      checkEvaluation(Literal.create("a", StringType).jLike(
         NonFoldableLiteral.create(null, StringType), escapeChar), null)
-      checkEvaluation(Literal.create(null, StringType).jlike(
+      checkEvaluation(Literal.create(null, StringType).jLike(
         NonFoldableLiteral.create("a", StringType), escapeChar), null)
-      checkEvaluation(Literal.create(null, StringType).jlike(
+      checkEvaluation(Literal.create(null, StringType).jLike(
         NonFoldableLiteral.create(null, StringType), escapeChar), null)
 
       // simple patterns
-      checkLiteralRow("abdef" jlike(_, escapeChar), "abdef", true)
-      checkLiteralRow("a_%b" jlike(_, escapeChar), s"a${escapeChar}__b", true)
-      checkLiteralRow("addb" jlike(_, escapeChar), "a_%b", true)
-      checkLiteralRow("addb" jlike(_, escapeChar), s"a${escapeChar}__b", false)
-      checkLiteralRow("addb" jlike(_, escapeChar), s"a%$escapeChar%b", false)
-      checkLiteralRow("a_%b" jlike(_, escapeChar), s"a%$escapeChar%b", true)
-      checkLiteralRow("addb" jlike(_, escapeChar), "a%", true)
-      checkLiteralRow("addb" jlike(_, escapeChar), "**", false)
-      checkLiteralRow("abc" jlike(_, escapeChar), "a%", true)
-      checkLiteralRow("abc" jlike(_, escapeChar), "b%", false)
-      checkLiteralRow("abc" jlike(_, escapeChar), "bc%", false)
-      checkLiteralRow("a\nb" jlike(_, escapeChar), "a_b", true)
-      checkLiteralRow("ab" jlike(_, escapeChar), "a%b", true)
-      checkLiteralRow("a\nb" jlike(_, escapeChar), "a%b", true)
+      checkLiteralRow("abdef" jLike(_, escapeChar), "abdef", true)
+      checkLiteralRow("a_%b" jLike(_, escapeChar), s"a${escapeChar}__b", true)
+      checkLiteralRow("addb" jLike(_, escapeChar), "a_%b", true)
+      checkLiteralRow("addb" jLike(_, escapeChar), s"a${escapeChar}__b", false)
+      checkLiteralRow("addb" jLike(_, escapeChar), s"a%$escapeChar%b", false)
+      checkLiteralRow("a_%b" jLike(_, escapeChar), s"a%$escapeChar%b", true)
+      checkLiteralRow("addb" jLike(_, escapeChar), "a%", true)
+      checkLiteralRow("addb" jLike(_, escapeChar), "**", false)
+      checkLiteralRow("abc" jLike(_, escapeChar), "a%", true)
+      checkLiteralRow("abc" jLike(_, escapeChar), "b%", false)
+      checkLiteralRow("abc" jLike(_, escapeChar), "bc%", false)
+      checkLiteralRow("a\nb" jLike(_, escapeChar), "a_b", true)
+      checkLiteralRow("ab" jLike(_, escapeChar), "a%b", true)
+      checkLiteralRow("a\nb" jLike(_, escapeChar), "a%b", true)
 
       // empty input
-      checkLiteralRow("" jlike(_, escapeChar), "", true)
-      checkLiteralRow("a" jlike(_, escapeChar), "", false)
-      checkLiteralRow("" jlike(_, escapeChar), "a", false)
+      checkLiteralRow("" jLike(_, escapeChar), "", true)
+      checkLiteralRow("a" jLike(_, escapeChar), "", false)
+      checkLiteralRow("" jLike(_, escapeChar), "a", false)
 
       // SI-17647 double-escaping backslash
-      checkLiteralRow(s"""$escapeChar$escapeChar$escapeChar$escapeChar""" jlike(_, escapeChar),
+      checkLiteralRow(s"""$escapeChar$escapeChar$escapeChar$escapeChar""" jLike(_, escapeChar),
         s"""%$escapeChar$escapeChar%""", true)
-      checkLiteralRow("""%%""" jlike(_, escapeChar), """%%""", true)
-      checkLiteralRow(s"""${escapeChar}__""" jlike(_, escapeChar),
+      checkLiteralRow("""%%""" jLike(_, escapeChar), """%%""", true)
+      checkLiteralRow(s"""${escapeChar}__""" jLike(_, escapeChar),
         s"""$escapeChar$escapeChar${escapeChar}__""", true)
-      checkLiteralRow(s"""$escapeChar$escapeChar${escapeChar}__""" jlike(_, escapeChar),
+      checkLiteralRow(s"""$escapeChar$escapeChar${escapeChar}__""" jLike(_, escapeChar),
         s"""%$escapeChar$escapeChar%$escapeChar%""", false)
-      checkLiteralRow(s"""_$escapeChar$escapeChar$escapeChar%""" jlike(_, escapeChar),
+      checkLiteralRow(s"""_$escapeChar$escapeChar$escapeChar%""" jLike(_, escapeChar),
         s"""%$escapeChar${escapeChar}""", false)
 
       // unicode
       // scalastyle:off nonascii
-      checkLiteralRow("a\u20ACa" jlike(_, escapeChar), "_\u20AC_", true)
-      checkLiteralRow("a€a" jlike(_, escapeChar), "_€_", true)
-      checkLiteralRow("a€a" jlike(_, escapeChar), "_\u20AC_", true)
-      checkLiteralRow("a\u20ACa" jlike(_, escapeChar), "_€_", true)
+      checkLiteralRow("a\u20ACa" jLike(_, escapeChar), "_\u20AC_", true)
+      checkLiteralRow("a€a" jLike(_, escapeChar), "_€_", true)
+      checkLiteralRow("a€a" jLike(_, escapeChar), "_\u20AC_", true)
+      checkLiteralRow("a\u20ACa" jLike(_, escapeChar), "_€_", true)
       // scalastyle:on nonascii
 
       // invalid escaping
       val invalidEscape = intercept[AnalysisException] {
-        evaluateWithoutCodegen("""a""" jlike(s"""${escapeChar}a""", escapeChar))
+        evaluateWithoutCodegen("""a""" jLike(s"""${escapeChar}a""", escapeChar))
       }
       assert(invalidEscape.getMessage.contains("pattern"))
       val endEscape = intercept[AnalysisException] {
-        evaluateWithoutCodegen("""a""" jlike(s"""a$escapeChar""", escapeChar))
+        evaluateWithoutCodegen("""a""" jLike(s"""a$escapeChar""", escapeChar))
       }
       assert(endEscape.getMessage.contains("pattern"))
 
       // case
-      checkLiteralRow("A" jlike(_, escapeChar), "a%", false)
-      checkLiteralRow("a" jlike(_, escapeChar), "A%", false)
-      checkLiteralRow("AaA" jlike(_, escapeChar), "_a_", true)
+      checkLiteralRow("A" jLike(_, escapeChar), "a%", false)
+      checkLiteralRow("a" jLike(_, escapeChar), "A%", false)
+      checkLiteralRow("AaA" jLike(_, escapeChar), "_a_", true)
 
       // example
-      checkLiteralRow(s"""%SystemDrive%${escapeChar}Users${escapeChar}John""" jlike(_, escapeChar),
+      checkLiteralRow(s"""%SystemDrive%${escapeChar}Users${escapeChar}John""" jLike(_, escapeChar),
         s"""$escapeChar%SystemDrive$escapeChar%$escapeChar${escapeChar}Users%""", true)
     }
   }
@@ -277,23 +327,23 @@ class RegexpExpressionJoniSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   test("failed") {
 
-    checkLiteralRow("a" jlike _, "", false)
-    checkLiteralRow("""aa""" jlike _, """""", false)
-    checkLiteralRow("""bbaa""" jlike _, """""", false)
-    checkLiteralRow("""bbaa""" jlike _, """aa""", false)
+    checkLiteralRow("a" jLike _, "", false)
+    checkLiteralRow("""aa""" jLike _, """""", false)
+    checkLiteralRow("""bbaa""" jLike _, """""", false)
+    checkLiteralRow("""bbaa""" jLike _, """aa""", false)
 
 
     // checkLiteralRow("a" jlike _, "", false)
 
-    checkLiteralRow("""bbaa""" jlike _, """bba""", false)
-    checkLiteralRow("""_\\\%aaa""" jlike _, """%\\""", false)
+    checkLiteralRow("""bbaa""" jLike _, """bba""", false)
+    checkLiteralRow("""_\\\%aaa""" jLike _, """%\\""", false)
 
     // unicode
     // scalastyle:off nonascii
-    checkLiteralRow("a\u20ACa" jlike _, "_\u20AC_", true)
-    checkLiteralRow("a€a" jlike _, "_€_", true)
-    checkLiteralRow("a€a" jlike _, "_\u20AC_", true)
-    checkLiteralRow("a\u20ACa" jlike _, "_€_", true)
+    checkLiteralRow("a\u20ACa" jLike _, "_\u20AC_", true)
+    checkLiteralRow("a€a" jLike _, "_€_", true)
+    checkLiteralRow("a€a" jLike _, "_\u20AC_", true)
+    checkLiteralRow("a\u20ACa" jLike _, "_€_", true)
   }
 
 }

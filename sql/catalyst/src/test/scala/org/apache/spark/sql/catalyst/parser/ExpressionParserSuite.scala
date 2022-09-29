@@ -229,6 +229,24 @@ class ExpressionParserSuite extends AnalysisTest {
     }
   }
 
+  test("(NOT) LIKE (ANY | SOME | ALL) expressions with Joni") {
+    withSQLConf(SQLConf.REGEX_ENGINE.key -> "Joni") {
+      Seq("any", "some").foreach { quantifier =>
+        assertEqual(s"a like $quantifier ('foo%', 'b%')", 'a jLikeAny("foo%", "b%"))
+        assertEqual(s"a not like $quantifier ('foo%', 'b%')", 'a jNotLikeAny("foo%", "b%"))
+        assertEqual(s"not (a like $quantifier ('foo%', 'b%'))", !('a jLikeAny("foo%", "b%")))
+      }
+      assertEqual("a like all ('foo%', 'b%')", 'a jLikeAll("foo%", "b%"))
+      assertEqual("a not like all ('foo%', 'b%')", 'a jNotLikeAll("foo%", "b%"))
+      assertEqual("not (a like all ('foo%', 'b%'))", !('a jLikeAll("foo%", "b%")))
+
+      Seq("any", "some", "all").foreach { quantifier =>
+        intercept(s"a like $quantifier()", "Expected something between '(' and ')'")
+      }
+    }
+
+  }
+
   test("is null expressions") {
     assertEqual("a is null", $"a".isNull)
     assertEqual("a is not null", $"a".isNotNull)

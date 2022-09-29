@@ -4416,5 +4416,13 @@ object RegexSubstitution extends Rule[LogicalPlan] {
       LikeJoni(left, right, escapeChar)
     case RLike(left, right) if (conf.regexEngine == "joni") =>
       RLikeJoni(left, right)
+    case LikeAll(child, patterns) if (conf.regexEngine == "joni") =>
+      LikeAllJoni(child, patterns)
+    case NotLikeAll(child, patterns) if (conf.regexEngine == "joni") =>
+      NotLikeAllJoni(child, patterns)
+    case LikeAny(child, patterns) if (conf.regexEngine == "joni") =>
+      LikeAnyJoni(child, patterns)
+    case NotLikeAny(child, patterns) if (conf.regexEngine == "joni") =>
+      NotLikeAnyJoni(child, patterns)
   }
 }

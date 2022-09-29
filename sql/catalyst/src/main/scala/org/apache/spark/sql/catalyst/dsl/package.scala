@@ -119,6 +119,18 @@ package object dsl {
     def contains(other: Expression): Predicate = Contains(expr, other)
     def startsWith(other: Expression): Predicate = StartsWith(expr, other)
     def endsWith(other: Expression): Predicate = EndsWith(expr, other)
+
+    def jLike(other: Expression, escapeChar: Char = '\\'): Expression =
+      LikeJoni(expr, other, escapeChar) // just for test
+    def jRlike(other: Expression): Expression = RLikeJoni(expr, other) // just for test
+    def jLikeAll(others: Expression*): Expression =
+      LikeAllJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String])) // just for test
+    def jNotLikeAll(others: Expression*): Expression =
+      NotLikeAllJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String])) // just for test
+    def jLikeAny(others: Expression*): Expression =
+      LikeAnyJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String])) // just for test
+    def jNotLikeAny(others: Expression*): Expression =
+      NotLikeAnyJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String])) // just for test
     def substr(pos: Expression, len: Expression = Literal(Int.MaxValue)): Expression =
       Substring(expr, pos, len)
     def substring(pos: Expression, len: Expression = Literal(Int.MaxValue)): Expression =

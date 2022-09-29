@@ -771,6 +771,29 @@ object LikeSimplification extends Rule[LogicalPlan] {
     }
   }
 
+  private def simplifyMultiLikeJoni(
+      child: Expression, patterns: Seq[UTF8String], multi: MultiLikeJoniBase): Expression = {
+    val (remainPatternMap, replacementMap) =
+      patterns.map { p =>
+        p -> Option(p).flatMap(p => simplifyLike(child, p.toString))
+      }.partition(_._2.isEmpty)
+    val remainPatterns = remainPatternMap.map(_._1)
+    val replacements = replacementMap.map(_._2.get)
+    if (replacements.isEmpty) {
+      multi
+    } else {
+      multi match {
+        case l: LikeAllJoni => And(replacements.reduceLeft(And), l.copy(patterns = remainPatterns))
+        case l: NotLikeAllJoni =>
+          And(replacements.map(Not(_)).reduceLeft(And), l.copy(patterns = remainPatterns))
+        case l: LikeAnyJoni => Or(replacements.reduceLeft(Or), l.copy(patterns = remainPatterns))
+        case l: NotLikeAnyJoni =>
+          Or(replacements.map(Not(_)).reduceLeft(Or), l.copy(patterns = remainPatterns))
+      }
+    }
+  }
+
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
     _.containsPattern(LIKE_FAMLIY), ruleId) {
     case l @ Like(input, Literal(pattern, StringType), escapeChar) =>
@@ -794,6 +817,15 @@ object LikeSimplification extends Rule[LogicalPlan] {
       } else {
         simplifyLike(input, utf.toString, escapeChar).getOrElse(l)
       }
+
+    case l @ LikeAllJoni(child, patterns) if CollapseProject.isCheap(child) =>
+      simplifyMultiLikeJoni(child, patterns, l)
+    case l @ NotLikeAllJoni(child, patterns) if CollapseProject.isCheap(child) =>
+      simplifyMultiLikeJoni(child, patterns, l)
+    case l @ LikeAnyJoni(child, patterns) if CollapseProject.isCheap(child) =>
+      simplifyMultiLikeJoni(child, patterns, l)
+    case l @ NotLikeAnyJoni(child, patterns) if CollapseProject.isCheap(child) =>
+      simplifyMultiLikeJoni(child, patterns, l)
   }
 }
 

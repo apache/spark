@@ -19,13 +19,16 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
+import scala.collection.JavaConverters._
+
 import org.apache.commons.text.StringEscapeUtils
 import org.jcodings.specific.UTF8Encoding
 import org.joni.{Option, Regex, Syntax}
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{StringUtils}
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -198,6 +201,166 @@ case class LikeJoni(left: Expression, right: Expression, escapeChar: Char)
 /**
  * Optimized version of LIKE ALL, when all pattern values are literal.
  */
+sealed abstract class MultiLikeJoniBase
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  protected def patterns: Seq[UTF8String]
+
+  protected def isNotSpecified: Boolean
+
+  override def inputTypes: Seq[DataType] = StringType :: Nil
+
+  override def dataType: DataType = BooleanType
+
+  override def nullable: Boolean = true
+
+  protected lazy val hasNull: Boolean = patterns.contains(null)
+
+  protected lazy val cache: Seq[Regex] = patterns.filterNot(_ == null)
+    .map(s => {
+      val escapedPattern = StringUtils.escapeLikeJoniRegex(s.getBytes, '\\')
+      new Regex(escapedPattern, 0, escapedPattern.length,
+        Option.NONE, UTF8Encoding.INSTANCE, Syntax.Java)
+    })
+
+  protected lazy val matchFunc = if (isNotSpecified) {
+    (p: Regex, inputValue: Array[Byte]) =>
+      p.matcher(inputValue).`match`(0, inputValue.length, Option.DEFAULT) != inputValue.length
+  } else {
+    (p: Regex, inputValue: Array[Byte]) =>
+      p.matcher(inputValue).`match`(0, inputValue.length, Option.DEFAULT) == inputValue.length
+  }
+
+  protected def matches(exprValue: Array[Byte]): Any
+
+  override def eval(input: InternalRow): Any = {
+    val exprValue = child.eval(input)
+    if (exprValue == null) {
+      null
+    } else {
+      matches(exprValue.toString.getBytes())
+    }
+  }
+}
+
+/**
+ * Optimized version of LIKE ALL, when all pattern values are literal.
+ */
+sealed abstract class LikeAllJoniBase extends MultiLikeJoniBase {
+
+  override def matches(exprValue: Array[Byte]): Any = {
+    if (cache.forall(matchFunc(_, exprValue))) {
+      if (hasNull) null else true
+    } else {
+      false
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+    val patternClass = classOf[Regex].getName
+    val optionClass = classOf[Option].getName
+    val javaDataType = CodeGenerator.javaType(child.dataType)
+    val pattern = ctx.freshName("pattern")
+    val valueArg = ctx.freshName("valueArg")
+    val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
+
+    val checkNotMatchCode = if (isNotSpecified) {
+      s"$pattern.matcher($valueArg).match(0, ${valueArg}.length, ${optionClass}.DEFAULT)" +
+        s" == ${valueArg}.length"
+    } else {
+      s"$pattern.matcher($valueArg).match(0, ${valueArg}.length, ${optionClass}.DEFAULT)" +
+        s" != ${valueArg}.length"
+    }
+
+    ev.copy(code =
+      code"""
+            |${eval.code}
+            |boolean ${ev.isNull} = false;
+            |boolean ${ev.value} = true;
+            |if (${eval.isNull}) {
+            |  ${ev.isNull} = true;
+            |} else {
+            |  byte[] $valueArg = ${eval.value}.getBytes();
+            |  for ($patternClass $pattern: $patternCache) {
+            |    if ($checkNotMatchCode) {
+            |      ${ev.value} = false;
+            |      break;
+            |    }
+            |  }
+            |  if (${ev.value} && $hasNull) ${ev.isNull} = true;
+            |}
+      """.stripMargin)
+  }
+}
+
+case class LikeAllJoni(child: Expression, patterns: Seq[UTF8String]) extends LikeAllJoniBase {
+  override def isNotSpecified: Boolean = false
+}
+
+case class NotLikeAllJoni(child: Expression, patterns: Seq[UTF8String]) extends LikeAllJoniBase {
+  override def isNotSpecified: Boolean = true
+}
+
+/**
+ * Optimized version of LIKE ANY, when all pattern values are literal.
+ */
+sealed abstract class LikeAnyJoniBase extends MultiLikeJoniBase {
+
+  override def matches(exprValue: Array[Byte]): Any = {
+    if (cache.exists(matchFunc(_, exprValue))) {
+      true
+    } else {
+      if (hasNull) null else false
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+    val patternClass = classOf[Regex].getName
+    val optionClass = classOf[Option].getName
+    val javaDataType = CodeGenerator.javaType(child.dataType)
+    val pattern = ctx.freshName("pattern")
+    val valueArg = ctx.freshName("valueArg")
+    val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
+
+    val checkMatchCode = if (isNotSpecified) {
+      s"$pattern.matcher($valueArg).match(0, ${valueArg}.length, ${optionClass}.DEFAULT)" +
+        s" != ${valueArg}.length"
+    } else {
+      s"$pattern.matcher($valueArg).match(0, ${valueArg}.length, ${optionClass}.DEFAULT)" +
+        s" == ${valueArg}.length"
+    }
+
+    ev.copy(code =
+      code"""
+            |${eval.code}
+            |boolean ${ev.isNull} = false;
+            |boolean ${ev.value} = false;
+            |if (${eval.isNull}) {
+            |  ${ev.isNull} = true;
+            |} else {
+            |  byte[] $valueArg = ${eval.value}.getBytes();
+            |  for ($patternClass $pattern: $patternCache) {
+            |    if ($checkMatchCode) {
+            |      ${ev.value} = true;
+            |      break;
+            |    }
+            |  }
+            |  if (!${ev.value} && $hasNull) ${ev.isNull} = true;
+            |}
+      """.stripMargin)
+  }
+}
+
+case class LikeAnyJoni(child: Expression, patterns: Seq[UTF8String]) extends LikeAnyJoniBase {
+  override def isNotSpecified: Boolean = false
+}
+
+case class NotLikeAnyJoni(child: Expression, patterns: Seq[UTF8String]) extends LikeAnyJoniBase {
+  override def isNotSpecified: Boolean = true
+}
+
 
 // scalastyle:off line.contains.tab
 @ExpressionDescription(
@@ -233,6 +396,7 @@ case class LikeJoni(left: Expression, right: Expression, escapeChar: Char)
 // scalastyle:on line.contains.tab
 case class RLikeJoni(left: Expression, right: Expression) extends StringRegexExpressionJoni {
 
+  override def escape(v: Array[Byte]): Array[Byte] = v
   override def escape(v: Array[Byte]): Array[Byte] = v
   override def matches(regex: Regex, input: Array[Byte]): Boolean = {
     regex.matcher(input).search(0, input.length, Option.DEFAULT) > -1
