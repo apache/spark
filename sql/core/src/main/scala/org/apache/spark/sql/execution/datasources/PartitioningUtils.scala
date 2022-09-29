@@ -148,7 +148,19 @@ object PartitioningUtils extends SQLConfHelper {
 
     // We create pairs of (path -> path's partition value) here
     // If the corresponding partition value is None, the pair will be skipped
-    val pathsWithPartitionValues = paths.zip(partitionValues).flatMap(x => x._2.map(x._1 -> _))
+    val pathsWithPartitionValues = (partitionValues, optDiscoveredBasePaths, paths).zipped.flatMap {
+      case (Some(partitionValue), optDiscoveredBasePath, path) =>
+        val partitionPath = optDiscoveredBasePath.map(basePath => {
+          var tmpPartitionPath = basePath
+          partitionValue.columnNames.zip(partitionValue.typedValues).foreach {
+            case (column, TypedPartValue(value, _)) => tmpPartitionPath =
+              new Path(tmpPartitionPath, s"$column=$value")
+          }
+          tmpPartitionPath
+        })
+        Some(partitionPath.getOrElse(path), partitionValue)
+      case _ => None
+    }.distinct
 
     if (pathsWithPartitionValues.isEmpty) {
       // This dataset is not partitioned.

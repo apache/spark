@@ -67,6 +67,10 @@ abstract class PartitioningAwareFileIndex(
     caseInsensitiveMap.getOrElse("recursiveFileLookup", "false").toBoolean
   }
 
+  protected lazy val inferRecursivePartition: Boolean = {
+    caseInsensitiveMap.getOrElse("inferRecursivePartition", "false").toBoolean
+  }
+
   override def listFiles(
       partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
     def isNonEmptyFile(f: FileStatus): Boolean = {
@@ -106,13 +110,36 @@ abstract class PartitioningAwareFileIndex(
       PartitionDirectory(InternalRow.empty, allFiles()
         .filter(f => isNonEmptyFile(f) && matchFileMetadataPredicate(f))) :: Nil
     } else {
-      if (recursiveFileLookup) {
-        throw new IllegalArgumentException(
-          "Datasource with partition do not allow recursive file loading.")
+      val prunePartitionPaths = prunePartitions(partitionFilters, partitionSpec())
+
+      val partitionDirToChildrenFiles = if (recursiveFileLookup) {
+        // For partitioned table, we need to group by partition path
+        // when recursiveFileLookup is true.
+
+        val partitionDirs = prunePartitionPaths.map(_.path).toSet
+
+        def matchedPartitionDir(path: Path): Option[Path] = {
+          if (partitionDirs.contains(path)) {
+            Some(path)
+          } else if (path.getParent != null) {
+            matchedPartitionDir(path.getParent)
+          } else {
+            None
+          }
+        }
+
+        leafDirToChildrenFiles.toSeq.flatMap {
+          case (path, statuses) => matchedPartitionDir(path).map((_, statuses))
+        }.groupBy(_._1).map {
+          case (path, pathToStatuses) => (path, pathToStatuses.flatMap(_._2).toArray)
+        }
+      } else {
+        leafDirToChildrenFiles
       }
-      prunePartitions(partitionFilters, partitionSpec()).map {
+
+      prunePartitionPaths.map {
         case PartitionPath(values, path) =>
-          val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
+          val files: Seq[FileStatus] = partitionDirToChildrenFiles.get(path) match {
             case Some(existingDir) =>
               // Directory has children files in it, return them
               existingDir.filter(f => matchPathPattern(f) && isNonEmptyFile(f) &&
@@ -169,7 +196,7 @@ abstract class PartitioningAwareFileIndex(
   }
 
   protected def inferPartitioning(): PartitionSpec = {
-    if (recursiveFileLookup) {
+    if (recursiveFileLookup && !inferRecursivePartition) {
       PartitionSpec.emptySpec
     } else {
       // We use leaf dirs containing data files to discover the schema.

@@ -83,7 +83,7 @@ class CatalogFileIndex(
       val timeNs = System.nanoTime() - startTime
       new InMemoryFileIndex(sparkSession,
         rootPathsSpecified = partitionSpec.partitions.map(_.path),
-        parameters = Map.empty,
+        parameters = table.storage.properties,
         userSpecifiedSchema = Some(partitionSpec.partitionColumns),
         fileStatusCache = fileStatusCache,
         userSpecifiedPartitionSpec = Some(partitionSpec),

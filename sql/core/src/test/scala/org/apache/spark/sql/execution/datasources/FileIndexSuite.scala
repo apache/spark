@@ -539,6 +539,111 @@ class FileIndexSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-40600: Support recursiveFileLookup for partitioned datasource") {
+    def createPartitionDirWithSubDir(basePath: File,
+        partitionDirs: Seq[String], subDir: String,
+        expectedFileList: mutable.ListBuffer[String]): Unit = {
+      var partitionDirectory: File = basePath
+      partitionDirs.foreach { dir =>
+        partitionDirectory = new File(partitionDirectory, dir)
+        partitionDirectory.mkdir()
+      }
+      val file = new File(partitionDirectory, "text.txt")
+      stringToFile(file, "text")
+      expectedFileList.append(file.getCanonicalPath)
+
+      val subDirectory = new File(partitionDirectory, subDir)
+      subDirectory.mkdir()
+      val subFile = new File(subDirectory, "subtext.txt")
+      stringToFile(subFile, "text")
+      expectedFileList.append(subFile.getCanonicalPath)
+    }
+
+    def checkPartitions(fileIndex: InMemoryFileIndex,
+        expectedPartitions: Seq[(Seq[String], String)]): Unit = {
+      assertResult(expectedPartitions.sortBy(_._2)) {
+        fileIndex.partitionSpec().partitions
+          .map { p =>
+            val values = (0 until p.values.numFields).map(p.values.getString(_))
+            (values, new File(p.path.toUri).getCanonicalPath)
+          }.sortBy(_._2)
+      }
+    }
+
+    def checkListFiles(fileIndex: InMemoryFileIndex, expectedFiles: Seq[String]): Unit = {
+      assertResult(expectedFiles.sorted) {
+        fileIndex.listFiles(Nil, Nil).flatMap(_.files)
+          .map(f => new File(f.getPath.toUri).getCanonicalPath).sorted
+      }
+    }
+
+    // one partition path,
+    // dirs: dir/a=a1/text.text
+    //       dir/a=a1/subdir01/subtext.text
+    // if inferRecursivePartition is false, expected partitions: ()
+    // if inferRecursivePartition is true, expected partitions: (a=a1, dir/a=a1)
+    withTempDir { dir =>
+      val expectedFileList = mutable.ListBuffer[String]()
+      createPartitionDirWithSubDir(dir, Seq("a=a1"), "subdir01", expectedFileList)
+
+      val fileIndex = new InMemoryFileIndex(spark,
+        Seq(new Path(dir.getCanonicalPath)), Map("recursiveFileLookup" -> "false"), None)
+      checkPartitions(fileIndex, Seq((Seq("a1"), new File(dir, "a=a1").getCanonicalPath)))
+      checkListFiles(fileIndex, expectedFileList.filter(!_.contains("subdir")).toSeq)
+
+      val recursiveFileIndex1 = new InMemoryFileIndex(spark,
+        Seq(new Path(dir.getCanonicalPath)), Map("recursiveFileLookup" -> "true"), None)
+      checkPartitions(recursiveFileIndex1, Seq.empty)
+      checkListFiles(recursiveFileIndex1, expectedFileList.toSeq)
+
+      val recursiveFileIndex2 = new InMemoryFileIndex(spark,
+        Seq(new Path(dir.getCanonicalPath)),
+        Map("recursiveFileLookup" -> "true", "inferRecursivePartition" -> "true"),
+        None)
+      checkPartitions(recursiveFileIndex2, Seq((Seq("a1"), new File(dir, "a=a1").getCanonicalPath)))
+      checkListFiles(recursiveFileIndex2, expectedFileList.toSeq)
+    }
+
+    // two partition path,
+    // dirs: dir/a=a2/b=b1/text.text
+    //       dir/a=a2/b=b1/subdir01/subtext.text
+    //       dir/a=a2/b=b2/text.text
+    //       dir/a=a2/b=b2/subdir02/subtext.text
+    // if inferRecursivePartition is false, expected partitions:
+    //     ()
+    // if inferRecursivePartition is true, expected partitions:
+    //     (a=a2/b=b1, dir/a=a2/b=b1)
+    //     (a=a2/b=b2, dir/a=a2/b=b2)
+    withTempDir { dir =>
+      val expectedFileList = mutable.ListBuffer[String]()
+      createPartitionDirWithSubDir(dir, Seq("a=a2", "b=b1"), "subdir01", expectedFileList)
+      createPartitionDirWithSubDir(dir, Seq("a=a2", "b=b2"), "subdir02", expectedFileList)
+
+      val fileIndex = new InMemoryFileIndex(spark,
+        Seq(new Path(dir.getCanonicalPath)), Map("recursiveFileLookup" -> "false"), None)
+      checkPartitions(fileIndex, Seq(
+        (Seq("a2", "b1"), new File(new File(dir, "a=a2"), "b=b1").getCanonicalPath),
+        (Seq("a2", "b2"), new File(new File(dir, "a=a2"), "b=b2").getCanonicalPath)
+      ))
+      checkListFiles(fileIndex, expectedFileList.filter(!_.contains("subdir")).toSeq)
+
+      val recursiveFileIndex1 = new InMemoryFileIndex(spark,
+        Seq(new Path(dir.getCanonicalPath)), Map("recursiveFileLookup" -> "true"), None)
+      checkPartitions(recursiveFileIndex1, Seq.empty)
+      checkListFiles(recursiveFileIndex1, expectedFileList.toSeq)
+
+      val recursiveFileIndex2 = new InMemoryFileIndex(spark,
+        Seq(new Path(dir.getCanonicalPath)),
+        Map("recursiveFileLookup" -> "true", "inferRecursivePartition" -> "true"),
+        None)
+      checkPartitions(recursiveFileIndex2, Seq(
+        (Seq("a2", "b1"), new File(new File(dir, "a=a2"), "b=b1").getCanonicalPath),
+        (Seq("a2", "b2"), new File(new File(dir, "a=a2"), "b=b2").getCanonicalPath)
+      ))
+      checkListFiles(recursiveFileIndex2, expectedFileList.toSeq)
+    }
+  }
 }
 
 object DeletionRaceFileSystem {
