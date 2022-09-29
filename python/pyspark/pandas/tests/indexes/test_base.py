@@ -203,9 +203,36 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         # non-string names
         self.assert_eq(psidx.to_frame(name=[10, 20]), pidx.to_frame(name=[10, 20]))
         self.assert_eq(psidx.to_frame(name=("x", 10)), pidx.to_frame(name=("x", 10)))
-        self.assert_eq(
-            psidx.to_frame(name=[("x", 10), ("y", 20)]), pidx.to_frame(name=[("x", 10), ("y", 20)])
-        )
+        if LooseVersion(pd.__version__) < LooseVersion("1.5.0"):
+            self.assert_eq(
+                psidx.to_frame(name=[("x", 10), ("y", 20)]),
+                pidx.to_frame(name=[("x", 10), ("y", 20)]),
+            )
+        else:
+            # Since pandas 1.5.0, the result is changed as below:
+            #      (x, 10)  (y, 20)
+            #   b
+            # 0 4        0        4
+            # 1 5        1        5
+            # 3 6        3        6
+            # 5 3        5        3
+            # 6 2        6        2
+            # 8 1        8        1
+            # 9 0        9        0
+            #   0        9        0
+            #   0        9        0
+            #
+            # The columns should be `Index([('x', 20), ('y', 20)], dtype='object')`,
+            # but pandas API on Spark doesn't support such a way for creating Index.
+            # So, we currently cannot follow the behavior of pandas.
+            expected_result = ps.DataFrame(
+                {("x", 10): [0, 1, 3, 5, 6, 8, 9, 9, 9], ("y", 20): [4, 5, 6, 3, 2, 1, 0, 0, 0]},
+                index=ps.MultiIndex.from_tuples(
+                    [(0, 4), (1, 5), (3, 6), (5, 3), (6, 2), (8, 1), (9, 0), (9, 0), (9, 0)],
+                    names=[None, "b"],
+                ),
+            )
+            self.assert_eq(psidx.to_frame(name=[("x", 10), ("y", 20)]), expected_result)
 
     def test_index_names(self):
         psdf = self.psdf

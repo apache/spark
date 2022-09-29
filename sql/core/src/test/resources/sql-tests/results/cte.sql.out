@@ -164,6 +164,16 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+WITH t AS (SELECT 1 FROM non_existing_table)
+SELECT 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+Table or view not found: non_existing_table; line 1 pos 25
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query schema
 struct<>

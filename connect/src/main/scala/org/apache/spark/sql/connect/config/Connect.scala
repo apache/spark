@@ -14,17 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.connect.config
 
+import org.apache.spark.internal.config.ConfigBuilder
 
-package org.apache.spark.sql.catalyst.analysis
+private[spark] object Connect {
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.Identifier
+  val CONNECT_GRPC_BINDING_PORT =
+    ConfigBuilder("spark.connect.grpc.binding.port")
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(15002)
 
-class CannotReplaceMissingTableException(
-    tableIdentifier: Identifier,
-    cause: Option[Throwable] = None)
-  extends AnalysisException(
-    errorClass = "_LEGACY_ERROR_TEMP_1112",
-    messageParameters = Map("table" -> tableIdentifier.toString),
-    cause = cause)
+}

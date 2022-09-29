@@ -34,6 +34,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AnalyzeResponse, Request, Response, SparkConnectServiceGrpc}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_BINDING_PORT
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.ExtendedMode
 
@@ -185,11 +186,10 @@ object SparkConnectService {
   /**
    * Starts the GRPC Serivce.
    *
-   * TODO(SPARK-40536) Make port number configurable.
    */
   def startGRPCService(): Unit = {
     val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", true)
-    val port = 15002
+    val port = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_PORT)
     val sb = NettyServerBuilder
       .forPort(port)
       .addService(new SparkConnectService(debugMode))

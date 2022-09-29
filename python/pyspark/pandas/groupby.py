@@ -449,7 +449,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  False  3
         """
         return self._reduce_for_stat_function(
-            F.first, accepted_spark_types=(NumericType, BooleanType) if numeric_only else None
+            lambda col: F.first(col, ignorenulls=True),
+            accepted_spark_types=(NumericType, BooleanType) if numeric_only else None,
         )
 
     def last(self, numeric_only: Optional[bool] = False) -> FrameLike:
@@ -499,15 +500,22 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             accepted_spark_types=(NumericType, BooleanType) if numeric_only else None,
         )
 
-    def max(self, numeric_only: Optional[bool] = False) -> FrameLike:
+    def max(self, numeric_only: Optional[bool] = False, min_count: int = -1) -> FrameLike:
         """
         Compute max of group values.
+
+        .. versionadded:: 3.3.0
 
         Parameters
         ----------
         numeric_only : bool, default False
             Include only float, int, boolean columns. If None, will attempt to use
             everything, then use only numeric data.
+
+            .. versionadded:: 3.4.0
+        min_count : bool, default -1
+            The required number of valid values to perform the operation. If fewer
+            than min_count non-NA values are present the result will be NA.
 
             .. versionadded:: 3.4.0
 
@@ -519,13 +527,13 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Examples
         --------
         >>> df = ps.DataFrame({"A": [1, 2, 1, 2], "B": [True, False, False, True],
-        ...                    "C": [3, 4, 3, 4], "D": ["a", "b", "b", "a"]})
+        ...                    "C": [3, 4, 3, 4], "D": ["a", "a", "b", "a"]})
 
         >>> df.groupby("A").max().sort_index()
               B  C  D
         A
         1  True  3  b
-        2  True  4  b
+        2  True  4  a
 
         Include only float, int, boolean columns when set numeric_only True.
 
@@ -534,9 +542,36 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         A
         1  True  3
         2  True  4
+
+        >>> df.groupby("D").max().sort_index()
+           A      B  C
+        D
+        a  2   True  4
+        b  1  False  3
+
+        >>> df.groupby("D").max(min_count=3).sort_index()
+             A     B    C
+        D
+        a  2.0  True  4.0
+        b  NaN  None  NaN
         """
+        if not isinstance(min_count, int):
+            raise TypeError("min_count must be integer")
+
+        if min_count > 0:
+
+            def max(col: Column) -> Column:
+                return F.when(
+                    F.count(F.when(~F.isnull(col), F.lit(0))) < min_count, F.lit(None)
+                ).otherwise(F.max(col))
+
+        else:
+
+            def max(col: Column) -> Column:
+                return F.max(col)
+
         return self._reduce_for_stat_function(
-            F.max, accepted_spark_types=(NumericType, BooleanType) if numeric_only else None
+            max, accepted_spark_types=(NumericType, BooleanType) if numeric_only else None
         )
 
     def mean(self, numeric_only: Optional[bool] = True) -> FrameLike:

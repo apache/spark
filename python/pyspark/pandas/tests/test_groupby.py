@@ -1408,8 +1408,10 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
     def test_max(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.max())
+        self._test_stat_func(lambda groupby_obj: groupby_obj.max(min_count=2))
         self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=None))
         self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=True))
+        self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=True, min_count=2))
 
     def test_mad(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.mad())
@@ -1418,6 +1420,17 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         self._test_stat_func(lambda groupby_obj: groupby_obj.first())
         self._test_stat_func(lambda groupby_obj: groupby_obj.first(numeric_only=None))
         self._test_stat_func(lambda groupby_obj: groupby_obj.first(numeric_only=True))
+
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 2, 1, 2],
+                "B": [-1.5, np.nan, -3.2, 0.1],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            pdf.groupby("A").first().sort_index(), psdf.groupby("A").first().sort_index()
+        )
 
     def test_last(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.last())
