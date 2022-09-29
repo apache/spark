@@ -199,7 +199,12 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Aggregate expression required for pivot, but 'coursesales.earnings' did not appear in any aggregate function.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1006",
+  "messageParameters" : {
+    "sql" : "coursesales.earnings"
+  }
+}
 
 
 -- !query
@@ -214,7 +219,12 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Aggregate expression required for pivot, but '__auto_generated_subquery_name.year' did not appear in any aggregate function.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1006",
+  "messageParameters" : {
+    "sql" : "__auto_generated_subquery_name.year"
+  }
+}
 
 
 -- !query

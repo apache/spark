@@ -75,7 +75,20 @@ HAVING EXISTS (SELECT t2a
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Found an aggregate function in a correlated predicate that has both outer and local references, which is not supported: min((outer(t1.t1a) + t2.t2a))
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+  "errorSubClass" : "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
+  "messageParameters" : {
+    "function" : "min((outer(t1.t1a) + t2.t2a))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 139,
+    "stopIndex" : 152,
+    "fragment" : "min(t1a + t2a)"
+  } ]
+}
 
 
 -- !query
@@ -91,7 +104,20 @@ WHERE  t1a IN (SELECT t2a
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Found an aggregate function in a correlated predicate that has both outer and local references, which is not supported: min((outer(t2.t2a) + t3.t3a))
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+  "errorSubClass" : "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
+  "messageParameters" : {
+    "function" : "min((outer(t2.t2a) + t3.t3a))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 233,
+    "stopIndex" : 246,
+    "fragment" : "min(t2a + t3a)"
+  } ]
+}
 
 
 -- !query
@@ -105,14 +131,20 @@ WHERE  t1a IN (SELECT t2a
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses:
-Aggregate [min(outer(t2a#x)) AS min(outer(t2.t2a))#x]
-+- SubqueryAlias t3
-   +- View (`t3`, [t3a#x,t3b#x,t3c#x])
-      +- Project [cast(t3a#x as int) AS t3a#x, cast(t3b#x as int) AS t3b#x, cast(t3c#x as int) AS t3c#x]
-         +- Project [t3a#x, t3b#x, t3c#x]
-            +- SubqueryAlias t3
-               +- LocalRelation [t3a#x, t3b#x, t3c#x]
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+  "errorSubClass" : "UNSUPPORTED_CORRELATED_REFERENCE",
+  "messageParameters" : {
+    "treeNode" : "Aggregate [min(outer(t2a#x)) AS min(outer(t2.t2a))#x]\n+- SubqueryAlias t3\n   +- View (`t3`, [t3a#x,t3b#x,t3c#x])\n      +- Project [cast(t3a#x as int) AS t3a#x, cast(t3b#x as int) AS t3b#x, cast(t3c#x as int) AS t3c#x]\n         +- Project [t3a#x, t3b#x, t3c#x]\n            +- SubqueryAlias t3\n               +- LocalRelation [t3a#x, t3b#x, t3c#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 105,
+    "stopIndex" : 160,
+    "fragment" : "SELECT min(t2a) \n                              FROM   t3"
+  } ]
+}
 
 
 -- !query

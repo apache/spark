@@ -26,7 +26,7 @@ class DropTableSuite extends v1.DropTableSuiteBase with CommandSuiteBase {
   test("hive client calls") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int) $defaultUsing")
-      checkHiveClientCalls(expected = 15) {
+      checkHiveClientCalls(expected = 11) {
         sql(s"DROP TABLE $t")
       }
     }

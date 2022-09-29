@@ -236,7 +236,7 @@ object FileFormatWriter extends Logging {
     } catch { case cause: Throwable =>
       logError(s"Aborting job ${description.uuid}.", cause)
       committer.abortJob(job)
-      throw QueryExecutionErrors.jobAbortedError(cause)
+      throw cause
     }
   }
   // scalastyle:on argcount

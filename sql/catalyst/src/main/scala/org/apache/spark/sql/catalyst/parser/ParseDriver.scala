@@ -250,13 +250,6 @@ class ParseException(
     errorSubClass,
     messageParameters) {
 
-  def this(message: String, ctx: ParserRuleContext) = {
-    this(Option(ParserUtils.command(ctx)),
-      message,
-      ParserUtils.position(ctx.getStart),
-      ParserUtils.position(ctx.getStop))
-  }
-
   def this(errorClass: String, messageParameters: Map[String, String], ctx: ParserRuleContext) =
     this(Option(ParserUtils.command(ctx)),
       SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
@@ -265,6 +258,8 @@ class ParseException(
       Some(errorClass),
       None,
       messageParameters)
+
+  def this(errorClass: String, ctx: ParserRuleContext) = this(errorClass, Map.empty, ctx)
 
   def this(
       errorClass: String,

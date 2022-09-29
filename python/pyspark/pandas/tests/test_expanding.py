@@ -82,6 +82,9 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
     def test_expanding_mean(self):
         self._test_expanding_func("mean")
 
+    def test_expanding_quantile(self):
+        self._test_expanding_func(lambda x: x.quantile(0.5), lambda x: x.quantile(0.5, "lower"))
+
     def test_expanding_sum(self):
         self._test_expanding_func("sum")
 
@@ -211,6 +214,11 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
 
     def test_groupby_expanding_mean(self):
         self._test_groupby_expanding_func("mean")
+
+    def test_groupby_expanding_quantile(self):
+        self._test_groupby_expanding_func(
+            lambda x: x.quantile(0.5), lambda x: x.quantile(0.5, "lower")
+        )
 
     def test_groupby_expanding_sum(self):
         self._test_groupby_expanding_func("sum")

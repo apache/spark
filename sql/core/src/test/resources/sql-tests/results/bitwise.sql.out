@@ -149,7 +149,24 @@ select bit_count("bit count")
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'bit_count('bit count')' due to data type mismatch: argument 1 requires (integral or boolean) type, however, ''bit count'' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"bit count\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"INTEGRAL\" or \"BOOLEAN\")",
+    "sqlExpr" : "\"bit_count(bit count)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 29,
+    "fragment" : "bit_count(\"bit count\")"
+  } ]
+}
 
 
 -- !query
@@ -158,7 +175,24 @@ select bit_count('a')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'bit_count('a')' due to data type mismatch: argument 1 requires (integral or boolean) type, however, ''a'' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"a\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"INTEGRAL\" or \"BOOLEAN\")",
+    "sqlExpr" : "\"bit_count(a)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "bit_count('a')"
+  } ]
+}
 
 
 -- !query
