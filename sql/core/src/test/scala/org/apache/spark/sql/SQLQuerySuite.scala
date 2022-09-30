@@ -1829,7 +1829,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           sql("select a.* from testData2")
         },
         errorClass = "_LEGACY_ERROR_TEMP_1050",
-        errorSubClass = None,
         sqlState = None,
         parameters = Map("attributes" -> "(ArrayBuffer|List)\\(a\\)"),
         matchPVals = true,
