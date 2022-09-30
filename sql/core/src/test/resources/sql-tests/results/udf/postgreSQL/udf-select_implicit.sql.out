@@ -124,6 +124,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`b`",
     "proposal" : "`udf(count(1))`"
@@ -356,6 +357,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`b`",
     "proposal" : "`udf(count(udf(a)))`"

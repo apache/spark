@@ -56,12 +56,17 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     }
   }
 
-  def getMessageTemplate(errorClass: String): String = {
+  private def getErrorClasses(errorClass: String): (String, Option[String]) = {
     val errorClasses = errorClass.split("\\.")
     assert(errorClasses.length == 1 || errorClasses.length == 2)
 
     val mainErrorClass = errorClasses.head
     val subErrorClass = errorClasses.tail.headOption
+    (mainErrorClass, subErrorClass)
+  }
+
+  def getMessageTemplate(errorClass: String): String = {
+    val (mainErrorClass, subErrorClass) = getErrorClasses(errorClass)
     val errorInfo = errorInfoMap.getOrElse(
       mainErrorClass,
       throw SparkException.internalError(s"Cannot find main error class '$errorClass'"))
@@ -78,7 +83,12 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
   }
 
   def getSqlState(errorClass: String): String = {
-    Option(errorClass).flatMap(errorInfoMap.get).flatMap(_.sqlState).orNull
+    val (mainErrorClass, _) = getErrorClasses(errorClass)
+    Option(errorClass)
+      .flatMap(errorInfoMap.get)
+      .orElse(Option(mainErrorClass).flatMap(errorInfoMap.get))
+      .flatMap(_.sqlState)
+      .orNull
   }
 }
 

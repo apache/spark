@@ -56,6 +56,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "RENAME COLUMN",
     "tableName" : "`spark_catalog`.`default`.`test_change`"
@@ -108,6 +109,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "ALTER COLUMN ... FIRST | ALTER",
     "tableName" : "`spark_catalog`.`default`.`test_change`"
@@ -123,6 +125,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "ALTER COLUMN ... FIRST | ALTER",
     "tableName" : "`spark_catalog`.`default`.`test_change`"

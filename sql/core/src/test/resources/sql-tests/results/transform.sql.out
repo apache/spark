@@ -700,6 +700,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "UNSUPPORTED_FEATURE.TRANSFORM_DISTINCT_ALL",
+  "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -721,6 +722,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "UNSUPPORTED_FEATURE.TRANSFORM_DISTINCT_ALL",
+  "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

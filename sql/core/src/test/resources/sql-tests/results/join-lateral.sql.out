@@ -164,6 +164,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "UNSUPPORTED_FEATURE.LATERAL_NATURAL_JOIN",
+  "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -182,6 +183,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "UNSUPPORTED_FEATURE.LATERAL_JOIN_USING",
+  "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -289,6 +291,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t2`.`c1`"
   },
@@ -444,6 +447,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t1`.`c1`"
   },
@@ -465,6 +469,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`c2`"
   },
@@ -504,6 +509,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t1`.`c1`",
     "proposal" : "`spark_catalog`.`default`.`t2`.`c1`, `spark_catalog`.`default`.`t2`.`c2`"
