@@ -2813,104 +2813,137 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotFindColumnInRelationOutputError(
       colName: String, relation: LogicalPlan): Throwable = {
-    new AnalysisException(s"Unable to find the column `$colName` " +
-      s"given [${relation.output.map(_.name).mkString(", ")}]")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1300",
+      messageParameters = Map(
+        "colName" -> colName,
+        "actualColumns" -> relation.output.map(_.name).mkString(", ")))
   }
 
   def invalidBoundaryStartError(start: Long): Throwable = {
-    new AnalysisException(s"Boundary start is not a valid integer: $start")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1301",
+      messageParameters = Map("start" -> start.toString))
   }
 
   def invalidBoundaryEndError(end: Long): Throwable = {
-    new AnalysisException(s"Boundary end is not a valid integer: $end")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1302",
+      messageParameters = Map("end" -> end.toString))
   }
 
   def tableOrViewNotFound(ident: Seq[String]): Throwable = {
-    new AnalysisException(s"Table or view '${ident.quoted}' not found")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1303",
+      messageParameters = Map("ident" -> ident.quoted))
   }
 
   def unexpectedTypeOfRelationError(relation: LogicalPlan, tableName: String): Throwable = {
     new AnalysisException(
-      s"Unexpected type ${relation.getClass.getCanonicalName} of the relation $tableName")
+      errorClass = "_LEGACY_ERROR_TEMP_1304",
+      messageParameters = Map(
+        "className" -> relation.getClass.getCanonicalName,
+        "tableName" -> tableName))
   }
 
   def unsupportedTableChangeInJDBCCatalogError(change: TableChange): Throwable = {
-    new AnalysisException(s"Unsupported TableChange $change in JDBC catalog.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1305",
+      messageParameters = Map("change" -> change.toString))
   }
 
   def pathOptionNotSetCorrectlyWhenReadingError(): Throwable = {
     new AnalysisException(
-      s"""
-         |There is a 'path' or 'paths' option set and load() is called
-         |with path parameters. Either remove the path option if it's the same as the path
-         |parameter, or add it to the load() parameter if you do want to read multiple paths.
-         |To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.
-       """.stripMargin.replaceAll("\n", " "))
+      errorClass = "_LEGACY_ERROR_TEMP_1306",
+      messageParameters = Map(
+        "config" -> SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key))
   }
 
   def pathOptionNotSetCorrectlyWhenWritingError(): Throwable = {
     new AnalysisException(
-      s"""
-         |There is a 'path' option set and save() is called with a path
-         |parameter. Either remove the path option, or call save() without the parameter.
-         |To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.
-       """.stripMargin.replaceAll("\n", " "))
+      errorClass = "_LEGACY_ERROR_TEMP_1307",
+      messageParameters = Map(
+        "config" -> SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key))
   }
 
   def writeWithSaveModeUnsupportedBySourceError(source: String, createMode: String): Throwable = {
-    new AnalysisException(s"TableProvider implementation $source cannot be " +
-      s"written with $createMode mode, please use Append or Overwrite modes instead.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1308",
+      messageParameters = Map(
+        "source" -> source,
+        "createMode" -> createMode))
   }
 
   def partitionByDoesNotAllowedWhenUsingInsertIntoError(): Throwable = {
     new AnalysisException(
-      """
-        |insertInto() can't be used together with partitionBy().
-        |Partition columns have already been defined for the table.
-        |It is not necessary to use partitionBy().
-      """.stripMargin.replaceAll("\n", " "))
+      errorClass = "_LEGACY_ERROR_TEMP_1309",
+      messageParameters = Map.empty)
   }
 
   def cannotFindCatalogToHandleIdentifierError(quote: String): Throwable = {
-    new AnalysisException(s"Couldn't find a catalog to handle the identifier $quote.")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1310",
+      messageParameters = Map("quote" -> quote))
   }
 
   def sortByNotUsedWithBucketByError(): Throwable = {
-    new AnalysisException("sortBy must be used together with bucketBy")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1311",
+      messageParameters = Map.empty)
   }
 
   def bucketByUnsupportedByOperationError(operation: String): Throwable = {
-    new AnalysisException(s"'$operation' does not support bucketBy right now")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1312",
+      messageParameters = Map("operation" -> operation))
   }
 
   def bucketByAndSortByUnsupportedByOperationError(operation: String): Throwable = {
-    new AnalysisException(s"'$operation' does not support bucketBy and sortBy right now")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1313",
+      messageParameters = Map("operation" -> operation))
   }
 
   def tableAlreadyExistsError(tableIdent: TableIdentifier): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1314",
+      messageParameters = Map("tableIdent" -> tableIdent.toString))
     new AnalysisException(s"Table $tableIdent already exists.")
   }
 
   def cannotOverwriteTableThatIsBeingReadFromError(tableName: String): Throwable = {
-    new AnalysisException(s"Cannot overwrite table $tableName that is also being read from")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1315",
+      messageParameters = Map("tableName" -> tableName))
   }
 
   def invalidPartitionTransformationError(expr: Expression): Throwable = {
-    new AnalysisException(s"Invalid partition transformation: ${expr.sql}")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1316",
+      messageParameters = Map("expr" -> expr.sql))
   }
 
   def cannotResolveColumnNameAmongFieldsError(
       colName: String, fieldsStr: String, extraMsg: String): AnalysisException = {
     new AnalysisException(
-      s"""Cannot resolve column name "$colName" among (${fieldsStr})${extraMsg}""")
+      errorClass = "_LEGACY_ERROR_TEMP_1317",
+      messageParameters = Map(
+        "colName" -> colName,
+        "fieldsStr" -> fieldsStr,
+        "extraMsg" -> extraMsg))
   }
 
   def cannotParseIntervalError(delayThreshold: String, e: Throwable): Throwable = {
-    new AnalysisException(s"Unable to parse '$delayThreshold'", cause = Some(e))
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1318",
+      messageParameters = Map("delayThreshold" -> delayThreshold),
+      cause = Some(e))
   }
 
   def invalidJoinTypeInJoinWithError(joinType: JoinType): Throwable = {
-    new AnalysisException(s"Invalid join type in joinWith: ${joinType.sql}")
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1319",
+      messageParameters = Map("joinType" -> joinType.sql))
   }
 
   def cannotPassTypedColumnInUntypedSelectError(typedCol: String): Throwable = {

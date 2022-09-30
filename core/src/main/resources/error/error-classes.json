@@ -2760,5 +2760,105 @@
     "message" : [
       "This query does not support recovering from checkpoint location. Delete <checkpointPath> to start over."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1300" : {
+    "message" : [
+      "Unable to find the column `<colName>` given [<actualColumns>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1301" : {
+    "message" : [
+      "Boundary start is not a valid integer: <start>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1302" : {
+    "message" : [
+      "Boundary end is not a valid integer: <end>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1303" : {
+    "message" : [
+      "Table or view '<ident>' not found."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1304" : {
+    "message" : [
+      "Unexpected type <className> of the relation <tableName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1305" : {
+    "message" : [
+      "Unsupported TableChange <change> in JDBC catalog."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1306" : {
+    "message" : [
+      "There is a 'path' or 'paths' option set and load() is called with path parameters. Either remove the path option if it's the same as the path parameter, or add it to the load() parameter if you do want to read multiple paths. To ignore this check, set '<config>' to 'true'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1307" : {
+    "message" : [
+      "There is a 'path' option set and save() is called with a path parameter. Either remove the path option, or call save() without the parameter. To ignore this check, set '<config>' to 'true'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1308" : {
+    "message" : [
+      "TableProvider implementation <source> cannot be written with <createMode> mode, please use Append or Overwrite modes instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1309" : {
+    "message" : [
+      "insertInto() can't be used together with partitionBy(). Partition columns have already been defined for the table. It is not necessary to use partitionBy()."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1310" : {
+    "message" : [
+      "Couldn't find a catalog to handle the identifier <quote>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1311" : {
+    "message" : [
+      "sortBy must be used together with bucketBy."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1312" : {
+    "message" : [
+      "'<operation>' does not support bucketBy right now."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1313" : {
+    "message" : [
+      "'<operation>' does not support bucketBy and sortBy right now."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1314" : {
+    "message" : [
+      "Table <tableIdent> already exists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1315" : {
+    "message" : [
+      "Cannot overwrite table <tableName> that is also being read from."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1316" : {
+    "message" : [
+      "Invalid partition transformation: <expr>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1317" : {
+    "message" : [
+      "Cannot resolve column name \"<colName>\" among (<fieldsStr>)<extraMsg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1318" : {
+    "message" : [
+      "Unable to parse '<delayThreshold>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1319" : {
+    "message" : [
+      "Invalid join type in joinWith: <joinType>."
+    ]
   }
 }
