@@ -48,10 +48,8 @@ import org.apache.spark.sql.execution.ExtendedMode
  */
 @Unstable
 @Since("3.4.0")
-class SparkConnectService(
-    debug: Boolean)
-  extends SparkConnectServiceGrpc.SparkConnectServiceImplBase
-  with Logging {
+class SparkConnectService(debug: Boolean)
+  extends SparkConnectServiceGrpc.SparkConnectServiceImplBase with Logging {
 
   /**
    * This is the main entry method for Spark Connect and all calls to execute a plan.

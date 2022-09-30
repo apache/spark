@@ -54,8 +54,8 @@ message Expression {
       int32 date = 16;
       // Time in units of microseconds past midnight
       int64 time = 17;
-      IntervalYearToMonth interval_year_to_month = 19;
-      IntervalDayToSecond interval_day_to_second = 20;
+      YearMonthInterval year_month_interval = 19;
+      DayTimeInterval day_time_interval = 20;
       string fixed_char = 21;
       VarChar var_char = 22;
       bytes fixed_binary = 23;
@@ -63,7 +63,7 @@ message Expression {
       Struct struct = 25;
       Map map = 26;
       // Timestamp in units of microseconds since the UNIX epoch.
-      int64 timestamp_tz = 27;
+      int64 timestamp_ntz = 27;
       bytes uuid = 28;
       Type null = 29; // a typed null literal
       List list = 30;
@@ -107,12 +107,12 @@ message Expression {
       repeated KeyValue key_values = 1;
     }
 
-    message IntervalYearToMonth {
+    message YearMonthInterval {
       int32 years = 1;
       int32 months = 2;
     }
 
-    message IntervalDayToSecond {
+    message DayTimeInterval {
       int32 days = 1;
       int32 seconds = 2;
       int32 microseconds = 3;

@@ -40,7 +40,7 @@ message Type {
     Time time = 17;
     IntervalYear interval_year = 19;
     IntervalDay interval_day = 20;
-    TimestampTZ timestamp_tz = 29;
+    TimestampNTZ timestamp_ntz = 29;
     UUID uuid = 32;
 
     FixedChar fixed_char = 21;
@@ -121,7 +121,7 @@ message Type {
     Nullability nullability = 2;
   }
 
-  message TimestampTZ {
+  message TimestampNTZ {
     uint32 type_variation_reference = 1;
     Nullability nullability = 2;
   }
