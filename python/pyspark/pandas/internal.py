@@ -914,13 +914,11 @@ class InternalFrame:
         """
         if len(sdf.columns) > 0:
             original_columns = sdf.columns
+            numPartitions = sdf.rdd.getNumPartitions()
 
-            if sdf.rdd.getNumPartitions() > 1:
+            if numPartitions > 1:
                 partition_id_col_name = verify_temp_column_name(
                     sdf, "__attach_distributed_seq_partition_id_column__"
-                )
-                partition_id2_col_name = verify_temp_column_name(
-                    sdf, "__attach_distributed_seq_partition_id_2_column__"
                 )
                 partition_size_col_name = verify_temp_column_name(
                     sdf, "__attach_distributed_seq_partition_size_column__"
@@ -930,42 +928,46 @@ class InternalFrame:
                     sdf.select(F.spark_partition_id().alias(partition_id_col_name))
                     .groupBy(partition_id_col_name)
                     .agg(F.count(F.lit(1)).alias(partition_size_col_name))
-                    .persist()
+                )
+
+                partition_id_2_col_name = verify_temp_column_name(
+                    sdf, "__attach_distributed_seq_partition_id_2_column__"
                 )
 
                 partition_start_index_sdf = (
-                    partition_size_sdf.select(partition_id_col_name)
-                    .join(
-                        F.broadcast(
-                            partition_size_sdf.select(
-                                F.col(partition_id_col_name).alias(partition_id2_col_name),
-                                F.col(partition_size_col_name),
-                            )
-                        )
+                    partition_size_sdf.withColumn(
+                        partition_id_2_col_name, F.explode(F.lit(list(range(0, numPartitions))))
                     )
-                    .groupBy(partition_id_col_name)
+                    .groupBy(partition_id_2_col_name)
                     .agg(
                         F.sum(
                             F.when(
-                                F.col(partition_id_col_name) > F.col(partition_id2_col_name),
+                                F.col(partition_id_col_name) < F.col(partition_id_2_col_name),
                                 F.col(partition_size_col_name),
-                            ).otherwise(F.lit(0).cast("long"))
-                        ).alias(column_name)
+                            ).otherwise(F.lit(0))
+                        ).alias(partition_size_col_name)
+                    )
+                    .select(
+                        F.col(partition_id_2_col_name).alias(partition_id_col_name),
+                        F.col(partition_size_col_name),
                     )
                 )
 
-                sdf = (
+                return (
                     sdf.withColumn(partition_id_col_name, F.spark_partition_id())
                     .join(F.broadcast(partition_start_index_sdf), on=partition_id_col_name)
-                    .withColumn(
-                        column_name, F.col(column_name) + SF.within_partition_increasing_id()
+                    .select(
+                        [
+                            (
+                                F.col(partition_size_col_name) + SF.within_partition_increasing_id()
+                            ).alias(column_name)
+                        ]
+                        + [F.col(col) for col in original_columns]
                     )
-                    .select([column_name] + original_columns)
                 )
-                return sdf
 
             else:
-                sdf.select(
+                return sdf.select(
                     [SF.within_partition_increasing_id().alias(column_name)]
                     + [F.col(col) for col in original_columns]
                 )
