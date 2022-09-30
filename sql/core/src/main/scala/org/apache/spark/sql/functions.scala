@@ -4345,6 +4345,23 @@ object functions {
    */
   def posexplode_outer(e: Column): Column = withExpr { GeneratorOuter(PosExplode(e.expr)) }
 
+   /**
+   * Creates a new row for each element in the given array of structs.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def inline(e: Column): Column = withExpr { Inline(e.expr) }
+
+  /**
+   * Creates a new row for each element in the given array of structs.
+   * Unlike inline, if the array is null or empty then null is produced for each nested column.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def inline_outer(e: Column): Column = withExpr { GeneratorOuter(Inline(e.expr)) }
+
   /**
    * Extracts json object from a json string based on json path specified, and returns json string
    * of the extracted json object. It will return null if the input json string is invalid.
