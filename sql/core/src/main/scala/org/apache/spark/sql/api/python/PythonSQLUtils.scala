@@ -151,6 +151,8 @@ private[sql] object PythonSQLUtils extends Logging {
     }
   }
 
+  def within_partition_increasing_id(): Column = Column(WithinPartitionIncreasingID())
+
   def timestampDiff(unit: String, start: Column, end: Column): Column = {
     Column(TimestampDiff(unit, start.expr, end.expr))
   }

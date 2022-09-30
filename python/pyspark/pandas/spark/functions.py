@@ -57,6 +57,11 @@ def covar(col1: Column, col2: Column, ddof: int) -> Column:
     return Column(sc._jvm.PythonSQLUtils.pandasCovar(col1._jc, col2._jc, ddof))
 
 
+def within_partition_increasing_id() -> Column:
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.PythonSQLUtils.within_partition_increasing_id())
+
+
 def repeat(col: Column, n: Union[int, Column]) -> Column:
     """
     Repeats a string column n times, and returns it as a new string column.

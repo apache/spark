@@ -43,6 +43,7 @@ from pyspark.pandas._typing import Label
 if TYPE_CHECKING:
     # This is required in old Python 3.5 to prevent circular reference.
     from pyspark.pandas.series import Series
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.typedef import (
@@ -61,6 +62,7 @@ from pyspark.pandas.utils import (
     name_like_string,
     scol_for,
     spark_column_equals,
+    verify_temp_column_name,
 )
 
 
@@ -911,10 +913,58 @@ class InternalFrame:
         +--------+---+
         """
         if len(sdf.columns) > 0:
-            return SparkDataFrame(
-                sdf._jdf.toDF().withSequenceColumn(column_name),
-                sdf.sparkSession,
-            )
+
+            if sdf.rdd.getNumPartitions() > 1:
+                partition_id_col_name = verify_temp_column_name(
+                    sdf, "__attach_distributed_seq_partition_id_column__"
+                )
+                partition_id2_col_name = verify_temp_column_name(
+                    sdf, "__attach_distributed_seq_partition_id_2_column__"
+                )
+                partition_size_col_name = verify_temp_column_name(
+                    sdf, "__attach_distributed_seq_partition_size_column__"
+                )
+
+                partition_size_sdf = (
+                    sdf.select(F.spark_partition_id().alias(partition_id_col_name))
+                    .groupBy(partition_id_col_name)
+                    .agg(F.count(F.lit(1)).alias(partition_size_col_name))
+                    .persist()
+                )
+
+                partition_start_index_sdf = (
+                    partition_size_sdf.select(partition_id_col_name)
+                    .join(
+                        F.broadcast(
+                            partition_size_sdf.select(
+                                F.col(partition_id_col_name).alias(partition_id2_col_name),
+                                F.col(partition_size_col_name),
+                            )
+                        )
+                    )
+                    .groupBy(partition_id_col_name)
+                    .agg(
+                        F.sum(
+                            F.when(
+                                F.col(partition_id_col_name) > F.col(partition_id2_col_name),
+                                F.col(partition_size_col_name),
+                            ).otherwise(F.lit(0).cast("long"))
+                        ).alias(column_name)
+                    )
+                )
+
+                sdf = (
+                    sdf.withColumn(partition_id_col_name, F.spark_partition_id())
+                    .join(F.broadcast(partition_start_index_sdf), on=partition_id_col_name)
+                    .withColumn(
+                        column_name, F.col(column_name) + SF.within_partition_increasing_id()
+                    )
+                    .drop(partition_id_col_name)
+                )
+                return sdf
+
+            else:
+                return sdf.withColumn(column_name, SF.within_partition_increasing_id())
         else:
             cnt = sdf.count()
             if cnt > 0:
