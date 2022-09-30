@@ -2157,7 +2157,7 @@ class SubquerySuite extends QueryTest
     }
   }
 
-  test("Merge non-correlated scalar subqueries from different parent plans") {
+  test("SPARK-40618: Do not merge scalar subqueries with nested subqueries inside") {
     Seq(false, true).foreach { enableAQE =>
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
@@ -2189,12 +2189,12 @@ class SubquerySuite extends QueryTest
         }
 
         if (enableAQE) {
-          assert(subqueryIds.size == 3, "Missing or unexpected SubqueryExec in the plan")
-          assert(reusedSubqueryIds.size == 3,
+          assert(subqueryIds.size == 4, "Missing or unexpected SubqueryExec in the plan")
+          assert(reusedSubqueryIds.size == 2,
             "Missing or unexpected reused ReusedSubqueryExec in the plan")
         } else {
-          assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
-          assert(reusedSubqueryIds.size == 4,
+          assert(subqueryIds.size == 3, "Missing or unexpected SubqueryExec in the plan")
+          assert(reusedSubqueryIds.size == 3,
             "Missing or unexpected reused ReusedSubqueryExec in the plan")
         }
       }
