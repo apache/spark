@@ -173,10 +173,13 @@ select 1234567890123456789012345678901234567890
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-decimal can only support precision up to 38
-== SQL ==
-select 1234567890123456789012345678901234567890
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1229",
+  "messageParameters" : {
+    "decimalType" : "decimal",
+    "precision" : "38"
+  }
+}
 
 
 -- !query
@@ -185,10 +188,13 @@ select 1234567890123456789012345678901234567890.0
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-decimal can only support precision up to 38
-== SQL ==
-select 1234567890123456789012345678901234567890.0
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1229",
+  "messageParameters" : {
+    "decimalType" : "decimal",
+    "precision" : "38"
+  }
+}
 
 
 -- !query
@@ -467,7 +473,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "_LEGACY_ERROR_TEMP_0061",
   "messageParameters" : {
-    "msg" : "decimal can only support precision up to 38"
+    "msg" : "decimal can only support precision up to 38."
   },
   "queryContext" : [ {
     "objectType" : "",

@@ -57,7 +57,7 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
             def check(columns):
                 expected = pd.read_parquet(tmp, columns=columns)
                 actual = ps.read_parquet(tmp, columns=columns)
-                self.assertPandasEqual(expected, actual.to_pandas())
+                self.assertPandasEqual(expected, actual._to_pandas())
 
             check(None)
             check(["i32", "i64"])
@@ -66,7 +66,7 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
             # check with pyspark patch.
             expected = pd.read_parquet(tmp)
             actual = ps.read_parquet(tmp)
-            self.assertPandasEqual(expected, actual.to_pandas())
+            self.assertPandasEqual(expected, actual._to_pandas())
 
             # When index columns are known
             pdf = self.test_pdf
@@ -386,13 +386,13 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
 
             expected = data.reset_index()[data.columns]
             actual = ps.read_orc(path)
-            self.assertPandasEqual(expected, actual.to_pandas())
+            self.assertPandasEqual(expected, actual._to_pandas())
 
             # columns
             columns = ["i32", "i64"]
             expected = data.reset_index()[columns]
             actual = ps.read_orc(path, columns=columns)
-            self.assertPandasEqual(expected, actual.to_pandas())
+            self.assertPandasEqual(expected, actual._to_pandas())
 
             # index_col
             expected = data.set_index("i32")

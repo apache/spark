@@ -81,7 +81,15 @@ ALTER TABLE test_change CHANGE a TYPE STRING
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ALTER TABLE CHANGE COLUMN is not supported for changing column 'a' with type 'IntegerType' to 'a' with type 'StringType'
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1245",
+  "messageParameters" : {
+    "newName" : "a",
+    "newType" : "StringType",
+    "originName" : "a",
+    "originType" : "IntegerType"
+  }
+}
 
 
 -- !query
