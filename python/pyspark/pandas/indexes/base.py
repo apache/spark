@@ -1896,6 +1896,7 @@ class Index(IndexOpsMixin):
                    )
         """
         from pyspark.pandas.indexes.multi import MultiIndex
+        from pyspark.pandas.indexes.category import CategoricalIndex
 
         if isinstance(self, MultiIndex) != isinstance(other, MultiIndex):
             raise NotImplementedError(
@@ -1907,6 +1908,9 @@ class Index(IndexOpsMixin):
             )
 
         index_fields = self._index_fields_for_union_like(other, func_name="append")
+        # Since pandas 1.5.0, the order of category matters.
+        if isinstance(other, CategoricalIndex):
+            other = other.reorder_categories(self.categories.to_list())
 
         sdf_self = self._internal.spark_frame.select(self._internal.index_spark_columns)
         sdf_other = other._internal.spark_frame.select(other._internal.index_spark_columns)
