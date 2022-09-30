@@ -72,7 +72,7 @@ class UtilsTests(ReusedSQLTestCase):
         try:
             self.spark.sql("""SELECT a""")
         except AnalysisException as e:
-            self.assertEquals(e.getErrorClass(), "UNRESOLVED_COLUMN")
+            self.assertEquals(e.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
             self.assertEquals(e.getSqlState(), "42000")
 
 
