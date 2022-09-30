@@ -16,7 +16,7 @@
 #
 
 import functools
-from typing import TYPE_CHECKING, Optional, Callable, Any, Iterable, Union
+from typing import TYPE_CHECKING, Optional, Any, Iterable, Union
 
 import pyspark.sql.types
 from pyspark.sql.connect.column import (
@@ -31,7 +31,7 @@ import pyspark.sql.connect.proto as proto
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import RemoteSparkSession
-    from mypy_extensions import VarArg
+    from pyspark.sql.connect.typing import FunctionBuilderCallables, UserDefinedFunctionCallables
 
 
 def _build(name: str, *args: ExpressionOrString) -> ScalarFunctionExpression:
@@ -53,9 +53,7 @@ def _build(name: str, *args: ExpressionOrString) -> ScalarFunctionExpression:
 class FunctionBuilder:
     """This class is used to build arbitrary functions used in expressions"""
 
-    def __getattr__(
-        self, name: str
-    ) -> "Callable[[VarArg(ExpressionOrString)], ScalarFunctionExpression]":
+    def __getattr__(self, name: str) -> "FunctionBuilderCallables":
         def _(*args: ExpressionOrString) -> ScalarFunctionExpression:
             return _build(name, *args)
 
@@ -105,7 +103,7 @@ class UserDefinedFunction(Expression):
 
 def _create_udf(
     function: Any, return_type: Union[str, pyspark.sql.types.DataType]
-) -> 'Callable[[VarArg("ColumnOrString")], UserDefinedFunction]':
+) -> "UserDefinedFunctionCallables":
     def wrapper(*cols: "ColumnOrString") -> UserDefinedFunction:
         return UserDefinedFunction(func=function, return_type=return_type, args=cols)
 
