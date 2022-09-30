@@ -1567,7 +1567,20 @@ select interval (-30) day
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: interval. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.interval.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "messageParameters" : {
+    "fullName" : "spark_catalog.default.interval",
+    "rawName" : "interval"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "interval (-30)"
+  } ]
+}
 
 
 -- !query
@@ -1576,7 +1589,20 @@ select interval (a + 1) day
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: interval. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.interval.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "messageParameters" : {
+    "fullName" : "spark_catalog.default.interval",
+    "rawName" : "interval"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "interval (a + 1)"
+  } ]
+}
 
 
 -- !query
@@ -1601,7 +1627,20 @@ select interval (-30) days
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: interval. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.interval.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "messageParameters" : {
+    "fullName" : "spark_catalog.default.interval",
+    "rawName" : "interval"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "interval (-30)"
+  } ]
+}
 
 
 -- !query
@@ -1610,7 +1649,20 @@ select interval (a + 1) days
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: interval. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.interval.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "messageParameters" : {
+    "fullName" : "spark_catalog.default.interval",
+    "rawName" : "interval"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "interval (a + 1)"
+  } ]
+}
 
 
 -- !query

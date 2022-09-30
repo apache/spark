@@ -1080,7 +1080,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             with self.subTest(pdf=pdf):
                 psdf = ps.from_pandas(pdf)
 
-                actual = psdf.groupby("a")["b"].unique().sort_index().to_pandas()
+                actual = psdf.groupby("a")["b"].unique().sort_index()._to_pandas()
                 expect = pdf.groupby("a")["b"].unique().sort_index()
                 self.assert_eq(len(actual), len(expect))
                 for act, exp in zip(actual, expect):
@@ -2367,7 +2367,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         actual = psdf.groupby("d").apply(sum_with_acc_frame)
         actual.columns = ["d", "v"]
         self.assert_eq(
-            actual.to_pandas().sort_index(),
+            actual._to_pandas().sort_index(),
             pdf.groupby("d").apply(sum).sort_index().reset_index(drop=True),
         )
         self.assert_eq(acc.value, 2)
@@ -2378,7 +2378,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             return np.sum(x)
 
         self.assert_eq(
-            psdf.groupby("d")["v"].apply(sum_with_acc_series).to_pandas().sort_index(),
+            psdf.groupby("d")["v"].apply(sum_with_acc_series)._to_pandas().sort_index(),
             pdf.groupby("d")["v"].apply(sum).sort_index().reset_index(drop=True),
         )
         self.assert_eq(acc.value, 4)
