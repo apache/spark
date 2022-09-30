@@ -6077,7 +6077,8 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         pdf = psdf.to_pandas()
         pobj = psobj.to_pandas()
         # Regression in pandas 1.5.0 when other is Series and method is "pearson" or "spearman"
-        # See https://github.com/pandas-dev/pandas/issues/48826
+        # See https://github.com/pandas-dev/pandas/issues/48826 for the reported issue,
+        # and https://github.com/pandas-dev/pandas/pull/46174 for the initial PR that causes.
         if LooseVersion(pd.__version__) >= LooseVersion("1.5.0") and isinstance(pobj, pd.Series):
             methods = ["kendall"]
         else:
