@@ -38,6 +38,7 @@ import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, HadoopFsRelation, LogicalRelation}
@@ -1080,9 +1081,10 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         spark.sql("INSERT OVERWRITE TABLE tbl2 SELECT COL1, COL2, COL3 FROM view1")
         val identifier = TableIdentifier("tbl2")
         val location = spark.sessionState.catalog.getTableMetadata(identifier).location.toString
+        val bucketMetadata = new MetadataBuilder().putLong(BucketSpec.toString(), 3).build()
         val expectedSchema = StructType(Seq(
           StructField("COL1", LongType, true),
-          StructField("COL3", IntegerType, true),
+          StructField("COL3", IntegerType, true, bucketMetadata),
           StructField("COL2", IntegerType, true)))
         assert(spark.read.parquet(location).schema == expectedSchema)
         checkAnswer(spark.table("tbl2"), df)

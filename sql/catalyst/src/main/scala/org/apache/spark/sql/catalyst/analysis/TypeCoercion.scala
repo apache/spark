@@ -25,7 +25,7 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.EvalMode.TRY
+import org.apache.spark.sql.catalyst.expressions.EvalMode.{LEGACY, TRY}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -767,12 +767,12 @@ abstract class TypeCoercionBase {
     }
 
     override val transform: PartialFunction[Expression, Expression] = {
-      case b @ Equality(left: Attribute, right: Attribute)
-          if b.childrenResolved && left.dataType != right.dataType && isIntegralTypes(b.children) =>
+      case b @ Equality(l: Attribute, r: Attribute)
+          if b.childrenResolved && l.dataType != r.dataType && isIntegralTypes(b.children) =>
         // The result type is:
         // 1. The attribute data type with larger bucket number.
         // 2. The attribute data type with larger default size if it is not bucketed attribute.
-        val resultType = Seq(left, right).maxBy { a =>
+        val resultType = Seq(l, r).maxBy { a =>
           if (a.metadata.contains(BucketSpec.toString())) {
             a.metadata.getLong(BucketSpec.toString()).toDouble
           } else {
@@ -782,10 +782,16 @@ abstract class TypeCoercionBase {
           }
         }.dataType
 
-        val newLeft =
-          if (left.dataType == resultType) left else Cast(left, resultType, evalMode = TRY)
-        val newRight =
-          if (right.dataType == resultType) right else Cast(right, resultType, evalMode = TRY)
+        val evalMode = if (findTightestCommonType(l.dataType, r.dataType).contains(resultType)) {
+          // Use TRY mode if ansi enabled to avoid runtime exception because we may cast long type
+          // to integer type.
+          LEGACY
+        } else {
+          TRY
+        }
+
+        val newLeft = if (l.dataType == resultType) l else Cast(l, resultType, evalMode = evalMode)
+        val newRight = if (r.dataType == resultType) r else Cast(r, resultType, evalMode = evalMode)
         b.makeCopy(Array(newLeft, newRight))
     }
   }

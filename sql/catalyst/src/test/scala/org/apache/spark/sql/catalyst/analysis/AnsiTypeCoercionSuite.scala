@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.EvalMode.TRY
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1045,5 +1046,13 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
       ruleTest(
         AnsiTypeCoercion.GetDateFieldOperations, operation(ts), operation(Cast(ts, DateType)))
     }
+  }
+
+  test("SPARK-40609: Casts types according to bucket info for Equality expression") {
+    ruleTest(TypeCoercion.EqualityTypeCasts,
+      EqualTo(AttributeReference("l", IntegerType, metadata = bucketMetadata(200))(),
+        AttributeReference("r", LongType)()),
+      EqualTo(AttributeReference("l", IntegerType, metadata = bucketMetadata(200))(),
+        Cast(AttributeReference("r", LongType)(), IntegerType, evalMode = TRY)))
   }
 }
