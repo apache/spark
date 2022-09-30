@@ -82,9 +82,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people", false)))
     Seq(
       "h2.test.not_existing_table" ->
-        "Table or view not found: h2.test.not_existing_table",
+        "Table h2.test.not_existing_table not found",
       "h2.bad_test.not_existing_table" ->
-        "Table or view not found: h2.bad_test.not_existing_table"
+        "Table h2.bad_test.not_existing_table not found"
     ).foreach { case (table, expectedMsg) =>
       val msg = intercept[AnalysisException] {
         sql(s"DROP TABLE $table")

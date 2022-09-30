@@ -25,7 +25,9 @@ import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.util.control.NonFatal
 
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
+import org.mockito.invocation.InvocationOnMock
 import org.roaringbitmap.RoaringBitmap
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.exceptions.TestFailedException
@@ -36,13 +38,14 @@ import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests
+import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
-import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceRequests}
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
-import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
+import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, Utils}
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
@@ -3421,6 +3424,23 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(mergedRp.getExecutorCores.get == 4)
   }
 
+  test("test merge task resource profiles") {
+    conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
+    // Ensure the initialization of SparkEnv
+    sc
+
+    val treqs1 = new TaskResourceRequests().cpus(1)
+    val rp1 = new TaskResourceProfile(treqs1.requests)
+    val treqs2 = new TaskResourceRequests().cpus(1)
+    val rp2 = new TaskResourceProfile(treqs2.requests)
+    val treqs3 = new TaskResourceRequests().cpus(2)
+    val rp3 = new TaskResourceProfile(treqs3.requests)
+    val mergedRp = scheduler.mergeResourceProfilesForStage(HashSet(rp1, rp2, rp3))
+
+    assert(mergedRp.isInstanceOf[TaskResourceProfile])
+    assert(mergedRp.getTaskCpus.get == 2)
+  }
+
   /**
    * Checks the DAGScheduler's internal logic for traversing an RDD DAG by making sure that
    * getShuffleDependenciesAndResourceProfiles correctly returns the direct shuffle dependencies
@@ -4440,6 +4460,64 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
   }
 
+  Seq(true, false).foreach { registerMergeResults =>
+    test("SPARK-40096: Send finalize events even if shuffle merger blocks indefinitely " +
+      s"with registerMergeResults is ${registerMergeResults}") {
+      initPushBasedShuffleConfs(conf)
+
+      sc.conf.set("spark.shuffle.push.results.timeout", "1s")
+      val myScheduler = new MyDAGScheduler(
+        sc,
+        taskScheduler,
+        sc.listenerBus,
+        mapOutputTracker,
+        blockManagerMaster,
+        sc.env,
+        shuffleMergeFinalize = false)
+
+      val mergerLocs = Seq(makeBlockManagerId("hostA"), makeBlockManagerId("hostB"))
+      val timeoutSecs = 1
+      val sendRequestsLatch = new CountDownLatch(mergerLocs.size)
+      val completeLatch = new CountDownLatch(mergerLocs.size)
+      val canSendRequestLatch = new CountDownLatch(1)
+
+      val blockStoreClient = mock(classOf[ExternalBlockStoreClient])
+      val blockStoreClientField = classOf[BlockManager].getDeclaredField("blockStoreClient")
+      blockStoreClientField.setAccessible(true)
+      blockStoreClientField.set(sc.env.blockManager, blockStoreClient)
+
+      val sentHosts = ArrayBuffer[String]()
+      var hostAInterrupted = false
+      doAnswer { (invoke: InvocationOnMock) =>
+        val host = invoke.getArgument[String](0)
+        sendRequestsLatch.countDown()
+        try {
+          if (host == "hostA") {
+            canSendRequestLatch.await(timeoutSecs * 2, TimeUnit.SECONDS)
+          }
+          sentHosts += host
+        } catch {
+          case _: InterruptedException => hostAInterrupted = true
+        } finally {
+          completeLatch.countDown()
+        }
+      }.when(blockStoreClient).finalizeShuffleMerge(any(), any(), any(), any(), any())
+
+      val shuffleMapRdd = new MyRDD(sc, 1, Nil)
+      val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+      shuffleDep.setMergerLocs(mergerLocs)
+      val shuffleStage = myScheduler.createShuffleMapStage(shuffleDep, 0)
+
+      myScheduler.finalizeShuffleMerge(shuffleStage, registerMergeResults)
+      sendRequestsLatch.await()
+      verify(blockStoreClient, times(2))
+        .finalizeShuffleMerge(any(), any(), any(), any(), any())
+      assert(sentHosts.nonEmpty)
+      assert(sentHosts.head === "hostB" && sentHosts.length == 1)
+      completeLatch.await()
+      assert(hostAInterrupted)
+    }
+  }
 
   /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.

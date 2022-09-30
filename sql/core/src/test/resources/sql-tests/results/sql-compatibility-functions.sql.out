@@ -93,7 +93,19 @@ SELECT string(1, 2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Function string accepts only one argument; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1044",
+  "messageParameters" : {
+    "name" : "string"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "string(1, 2)"
+  } ]
+}
 
 
 -- !query

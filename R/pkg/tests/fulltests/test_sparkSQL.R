@@ -622,7 +622,7 @@ test_that("read/write json files", {
 
     # Test errorifexists
     expect_error(write.df(df, jsonPath2, "json", mode = "errorifexists"),
-                 "analysis error - path file:.*already exists")
+                 "analysis error - Path file:.*already exists")
 
     # Test write.json
     jsonPath3 <- tempfile(pattern = "jsonPath3", fileext = ".json")
@@ -3963,13 +3963,13 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
   expect_error(write.df(df, source = "csv"),
               "Error in save : illegal argument - Expected exactly one path to be specified")
   expect_error(write.json(df, jsonPath),
-              "Error in json : analysis error - path file:.*already exists")
+              "Error in json : analysis error - Path file:.*already exists")
   expect_error(write.text(df, jsonPath),
-              "Error in text : analysis error - path file:.*already exists")
+              "Error in text : analysis error - Path file:.*already exists")
   expect_error(write.orc(df, jsonPath),
-              "Error in orc : analysis error - path file:.*already exists")
+              "Error in orc : analysis error - Path file:.*already exists")
   expect_error(write.parquet(df, jsonPath),
-              "Error in parquet : analysis error - path file:.*already exists")
+              "Error in parquet : analysis error - Path file:.*already exists")
   expect_error(write.parquet(df, jsonPath, mode = 123), "mode should be character or omitted.")
 
   # Arguments checking in R side.

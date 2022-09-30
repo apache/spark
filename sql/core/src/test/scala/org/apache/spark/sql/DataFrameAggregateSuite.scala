@@ -1015,11 +1015,20 @@ class DataFrameAggregateSuite extends QueryTest
       // When ANSI mode is on, it will implicit cast the string as boolean and throw a runtime
       // error. Here we simply test with ANSI mode off.
       if (!conf.ansiEnabled) {
-        val error = intercept[AnalysisException] {
-          sql("SELECT COUNT_IF(x) FROM tempView")
-        }
-        assert(error.message.contains("cannot resolve 'count_if(tempview.x)' due to data type " +
-          "mismatch: argument 1 requires boolean type, however, 'tempview.x' is of string type"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SELECT COUNT_IF(x) FROM tempView")
+          },
+          errorClass = "DATATYPE_MISMATCH",
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          sqlState = None,
+          parameters = Map(
+            "sqlExpr" -> "\"count_if(x)\"",
+            "paramIndex" -> "1",
+            "inputSql" -> "\"x\"",
+            "inputType" -> "\"STRING\"",
+            "requiredType" -> "\"BOOLEAN\""),
+          context = ExpectedContext(fragment = "COUNT_IF(x)", start = 7, stop = 17))
       }
     }
   }
@@ -1133,9 +1142,18 @@ class DataFrameAggregateSuite extends QueryTest
       checkAnswer(nonStringMapDF.groupBy(struct($"col.a")).count().select("count"), Row(1))
     }
 
-    val arrayDF = Seq(Tuple1(Seq(1))).toDF("col")
-    val e = intercept[AnalysisException](arrayDF.groupBy(struct($"col.a")).count())
-    assert(e.message.contains("requires integral type"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(Tuple1(Seq(1))).toDF("col").groupBy(struct($"col.a")).count()
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      parameters = Map(
+        "sqlExpr" -> "\"col[a]\"",
+        "paramIndex" -> "2",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"INTEGRAL\""))
   }
 
   test("SPARK-34716: Support ANSI SQL intervals by the aggregate function `sum`") {

@@ -19,13 +19,13 @@ import inspect
 
 import pyspark.pandas as ps
 from pyspark.pandas.exceptions import PandasNotImplementedError
-from pyspark.pandas.missing.scalars import _MissingPandasLikeScalars
+from pyspark.pandas.missing.scalars import MissingPandasLikeScalars
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class ScalarTest(PandasOnSparkTestCase):
     def test_missing(self):
-        missing_scalars = inspect.getmembers(_MissingPandasLikeScalars)
+        missing_scalars = inspect.getmembers(MissingPandasLikeScalars)
 
         missing_scalars = [
             name

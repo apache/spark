@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.functions.{length, struct, sum}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -26,7 +25,6 @@ import org.apache.spark.sql.types._
  * Comprehensive tests for Dataset.unpivot.
  */
 class DatasetUnpivotSuite extends QueryTest
-  with QueryErrorsSuiteBase
   with SharedSparkSession {
   import testImplicits._
 
@@ -362,9 +360,10 @@ class DatasetUnpivotSuite extends QueryTest
     checkError(
       exception = e1,
       errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
       parameters = Map(
         "objectName" -> "`1`",
-        "objectList" -> "`id`, `int1`, `str1`, `str2`, `long1`"))
+        "proposal" -> "`id`, `int1`, `str1`, `str2`, `long1`"))
 
     // unpivoting where value column does not exist
     val e2 = intercept[AnalysisException] {
@@ -378,9 +377,10 @@ class DatasetUnpivotSuite extends QueryTest
     checkError(
       exception = e2,
       errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
       parameters = Map(
         "objectName" -> "`does`",
-        "objectList" -> "`id`, `int1`, `long1`, `str1`, `str2`"))
+        "proposal" -> "`id`, `int1`, `long1`, `str1`, `str2`"))
 
     // unpivoting with empty list of value columns
     // where potential value columns are of incompatible types
@@ -499,10 +499,11 @@ class DatasetUnpivotSuite extends QueryTest
     checkError(
       exception = e,
       errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
       // expected message is wrong: https://issues.apache.org/jira/browse/SPARK-39783
       parameters = Map(
         "objectName" -> "`an`.`id`",
-        "objectList" -> "`an`.`id`, `int1`, `long1`, `str`.`one`, `str`.`two`"))
+        "proposal" -> "`an`.`id`, `int1`, `long1`, `str`.`one`, `str`.`two`"))
   }
 
   test("unpivot with struct fields") {

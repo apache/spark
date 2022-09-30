@@ -64,6 +64,10 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(ps.Index([])._summary(), "Index: 0 entries")
         with self.assertRaisesRegexp(ValueError, "The truth value of a Int64Index is ambiguous."):
             bool(ps.Index([1]))
+        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+            ps.Int64Index([1, 2, 3], name=[(1, 2, 3)])
+        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+            ps.Float64Index([1.0, 2.0, 3.0], name=[(1, 2, 3)])
 
     def test_index_from_series(self):
         pser = pd.Series([1, 2, 3], name="a", index=[10, 20, 30])
@@ -199,9 +203,36 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         # non-string names
         self.assert_eq(psidx.to_frame(name=[10, 20]), pidx.to_frame(name=[10, 20]))
         self.assert_eq(psidx.to_frame(name=("x", 10)), pidx.to_frame(name=("x", 10)))
-        self.assert_eq(
-            psidx.to_frame(name=[("x", 10), ("y", 20)]), pidx.to_frame(name=[("x", 10), ("y", 20)])
-        )
+        if LooseVersion(pd.__version__) < LooseVersion("1.5.0"):
+            self.assert_eq(
+                psidx.to_frame(name=[("x", 10), ("y", 20)]),
+                pidx.to_frame(name=[("x", 10), ("y", 20)]),
+            )
+        else:
+            # Since pandas 1.5.0, the result is changed as below:
+            #      (x, 10)  (y, 20)
+            #   b
+            # 0 4        0        4
+            # 1 5        1        5
+            # 3 6        3        6
+            # 5 3        5        3
+            # 6 2        6        2
+            # 8 1        8        1
+            # 9 0        9        0
+            #   0        9        0
+            #   0        9        0
+            #
+            # The columns should be `Index([('x', 20), ('y', 20)], dtype='object')`,
+            # but pandas API on Spark doesn't support such a way for creating Index.
+            # So, we currently cannot follow the behavior of pandas.
+            expected_result = ps.DataFrame(
+                {("x", 10): [0, 1, 3, 5, 6, 8, 9, 9, 9], ("y", 20): [4, 5, 6, 3, 2, 1, 0, 0, 0]},
+                index=ps.MultiIndex.from_tuples(
+                    [(0, 4), (1, 5), (3, 6), (5, 3), (6, 2), (8, 1), (9, 0), (9, 0), (9, 0)],
+                    names=[None, "b"],
+                ),
+            )
+            self.assert_eq(psidx.to_frame(name=[("x", 10), ("y", 20)]), expected_result)
 
     def test_index_names(self):
         psdf = self.psdf
@@ -349,11 +380,11 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         # here the output is different than pandas in terms of order
         expected = [0, 1, 3, 5, 6, 8, 9]
 
-        self.assert_eq(expected, sorted(psidx.unique().to_pandas()))
-        self.assert_eq(expected, sorted(psidx.unique(level=0).to_pandas()))
+        self.assert_eq(expected, sorted(psidx.unique()._to_pandas()))
+        self.assert_eq(expected, sorted(psidx.unique(level=0)._to_pandas()))
 
         expected = [1, 2, 4, 6, 7, 9, 10]
-        self.assert_eq(expected, sorted((psidx + 1).unique().to_pandas()))
+        self.assert_eq(expected, sorted((psidx + 1).unique()._to_pandas()))
 
         with self.assertRaisesRegex(IndexError, "Too many levels*"):
             psidx.unique(level=1)
@@ -449,6 +480,20 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             pmidx1.symmetric_difference(pmidx2).sort_values(),
         )
 
+        # Pandas has a bug that raise TypeError when setting `result_name` for MultiIndex.
+        pandas_result = pmidx1.symmetric_difference(pmidx2)
+        pandas_result.names = ["a", "b"]
+        self.assert_eq(
+            psmidx1.symmetric_difference(psmidx2, result_name=["a", "b"]).sort_values(),
+            pandas_result,
+        )
+
+        # Pandas sort the result by default, so doesn't provide the `True` for sort.
+        self.assert_eq(
+            psmidx1.symmetric_difference(psmidx2, sort=True),
+            pmidx1.symmetric_difference(pmidx2),
+        )
+
         idx = ps.Index(["a", "b", "c"])
         midx = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
 
@@ -462,7 +507,7 @@ class IndexesTest(ComparisonTestBase, TestUtils):
 
         self.assert_eq(
             midx.symmetric_difference(midx_),
-            midx.to_pandas().symmetric_difference(midx_.to_pandas()),
+            midx._to_pandas().symmetric_difference(midx_._to_pandas()),
         )
 
         with self.assertRaisesRegex(NotImplementedError, "Doesn't support*"):
@@ -1311,7 +1356,7 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             psdf = ps.DataFrame({"a": [-5, -4, -3, -2, -1], "b": [1, 1, 1, 1, 1]})
             psdf["b"] = None
             psmidx = psdf.set_index(["a", "b"]).index
-            pmidx = psmidx.to_pandas()
+            pmidx = psmidx._to_pandas()
             self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
             self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
@@ -1319,7 +1364,7 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": ["e", "c", "b", "d", "a"]})
             psdf["a"] = None
             psmidx = psdf.set_index(["a", "b"]).index
-            pmidx = psmidx.to_pandas()
+            pmidx = psmidx._to_pandas()
             self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
             self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
@@ -1328,7 +1373,7 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             psdf["a"] = None
             psdf["b"] = None
             psmidx = psdf.set_index(["a", "b"]).index
-            pmidx = psmidx.to_pandas()
+            pmidx = psmidx._to_pandas()
             self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
             self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
@@ -1337,7 +1382,7 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             psdf["a"] = None
             psdf["b"] = None
             psmidx = psdf.set_index(["a", "b"]).index
-            pmidx = psmidx.to_pandas()
+            pmidx = psmidx._to_pandas()
             self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
             self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
@@ -1965,6 +2010,13 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         other = {("c", "z"): None, ("d", "w"): None}
         self.assert_eq(pmidx.intersection(other), psmidx.intersection(other).sort_values())
 
+        # MultiIndex with different names.
+        pmidx1 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")], names=["X", "Y"])
+        pmidx2 = pd.MultiIndex.from_tuples([("c", "z"), ("d", "w")], names=["A", "B"])
+        psmidx1 = ps.from_pandas(pmidx1)
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.intersection(pmidx2), psmidx1.intersection(psmidx2).sort_values())
+
         with self.assertRaisesRegex(TypeError, "Input must be Index or array-like"):
             psidx.intersection(4)
         with self.assertRaisesRegex(TypeError, "other must be a MultiIndex or a list of tuples"):
@@ -1977,6 +2029,9 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             psidx.intersection(ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]}))
         with self.assertRaisesRegex(ValueError, "Index data must be 1-dimensional"):
             psmidx.intersection(ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]}))
+        # other = list of tuple
+        with self.assertRaisesRegex(ValueError, "Names should be list-like for a MultiIndex"):
+            psidx.intersection([(1, 2), (3, 4)])
 
     def test_item(self):
         pidx = pd.Index([10])
@@ -2521,6 +2576,14 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             IndexError, "Too many levels: Index has only 2 levels, -3 is not a valid level number"
         ):
             psmidx.droplevel(-3)
+
+    def test_multi_index_nunique(self):
+        tuples = [(1, "red"), (1, "blue"), (2, "red"), (2, "green")]
+        pmidx = pd.MultiIndex.from_tuples(tuples)
+        psmidx = ps.from_pandas(pmidx)
+
+        with self.assertRaisesRegex(NotImplementedError, "nunique is not defined for MultiIndex"):
+            psmidx.nunique()
 
 
 if __name__ == "__main__":

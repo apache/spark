@@ -26,6 +26,11 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.types.StructType
 
 
+private[hive] trait RawHiveTable {
+  def rawTable: Object
+  def toCatalogTable: CatalogTable
+}
+
 /**
  * An externally visible interface to the Hive client.  This interface is shared across both the
  * internal and external classloaders for a given version of Hive and thus must expose only
@@ -92,6 +97,15 @@ private[hive] trait HiveClient {
 
   /** Returns the metadata for the specified table or None if it doesn't exist. */
   def getTableOption(dbName: String, tableName: String): Option[CatalogTable]
+
+  /** Returns the specified catalog and Hive table, or throws `NoSuchTableException`. */
+  final def getRawHiveTable(dbName: String, tableName: String): RawHiveTable = {
+    getRawHiveTableOption(dbName, tableName)
+      .getOrElse(throw new NoSuchTableException(dbName, tableName))
+  }
+
+  /** Returns the metadata for the specified catalog and Hive table or None if it doesn't exist. */
+  def getRawHiveTableOption(dbName: String, tableName: String): Option[RawHiveTable]
 
   /** Returns metadata of existing permanent tables/views for given names. */
   def getTablesByName(dbName: String, tableNames: Seq[String]): Seq[CatalogTable]
@@ -203,12 +217,12 @@ private[hive] trait HiveClient {
       db: String,
       table: String,
       spec: TablePartitionSpec): Option[CatalogTablePartition] = {
-    getPartitionOption(getTable(db, table), spec)
+    getPartitionOption(getRawHiveTable(db, table), spec)
   }
 
   /** Returns the specified partition or None if it does not exist. */
   def getPartitionOption(
-      table: CatalogTable,
+      table: RawHiveTable,
       spec: TablePartitionSpec): Option[CatalogTablePartition]
 
   /**
@@ -222,7 +236,7 @@ private[hive] trait HiveClient {
 
   /** Returns partitions filtered by predicates for the given table. */
   def getPartitionsByFilter(
-      catalogTable: CatalogTable,
+      catalogTable: RawHiveTable,
       predicates: Seq[Expression]): Seq[CatalogTablePartition]
 
   /** Loads a static partition into an existing table. */

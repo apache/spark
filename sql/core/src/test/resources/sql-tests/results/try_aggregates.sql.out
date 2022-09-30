@@ -227,3 +227,73 @@ SELECT try_avg(col) FROM VALUES (interval '106751991 DAYS'), (interval '1 DAYS')
 struct<try_avg(col):interval day to second>
 -- !query output
 NULL
+
+
+-- !query
+SELECT try_avg(col / 0) FROM VALUES (5), (10), (15) AS tab(col)
+-- !query schema
+struct<try_avg((col / 0)):double>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_avg(col / 0) FROM VALUES (5.0), (10.0), (15.0) AS tab(col)
+-- !query schema
+struct<try_avg((col / 0)):decimal(12,10)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_avg(col / 0) FROM VALUES (NULL), (10), (15) AS tab(col)
+-- !query schema
+struct<try_avg((col / 0)):double>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_avg(col + 1L) FROM VALUES (9223372036854775807L), (1L) AS tab(col)
+-- !query schema
+struct<try_avg((col + 1)):double>
+-- !query output
+-4.6116860184273879E18
+
+
+-- !query
+SELECT try_avg(col / 0) FROM VALUES (interval '1 months'), (interval '1 months') AS tab(col)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_DIVIDED_BY_ZERO",
+  "sqlState" : "22012",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 22,
+    "fragment" : "col / 0"
+  } ]
+}
+
+
+-- !query
+SELECT try_avg(col / 0) FROM VALUES (interval '1 seconds'), (interval '1 seconds') AS tab(col)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_DIVIDED_BY_ZERO",
+  "sqlState" : "22012",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 22,
+    "fragment" : "col / 0"
+  } ]
+}

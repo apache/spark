@@ -2586,8 +2586,8 @@ object SQLConf {
         "1. pyspark.sql.DataFrame.toPandas. " +
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
         "or a NumPy ndarray. " +
-        "The following data types are unsupported: " +
-        "ArrayType of TimestampType, and nested StructType.")
+        "The following data type is unsupported: " +
+        "ArrayType of TimestampType.")
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 
@@ -3571,6 +3571,15 @@ object SQLConf {
       .internal()
       .doc("When true, grouping_id() returns int values instead of long values.")
       .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+   val LEGACY_GROUPING_ID_WITH_APPENDED_USER_GROUPBY =
+    buildConf("spark.sql.legacy.groupingIdWithAppendedUserGroupBy")
+      .internal()
+      .doc("When true, grouping_id() returns values based on grouping set columns plus " +
+        "user-given group-by expressions order like Spark 3.2.0, 3.2.1, 3.2.2, and 3.3.0.")
+      .version("3.2.3")
       .booleanConf
       .createWithDefault(false)
 
@@ -4657,6 +4666,9 @@ class SQLConf extends Serializable with Logging {
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
 
+  def groupingIdWithAppendedUserGroupByEnabled: Boolean =
+    getConf(SQLConf.LEGACY_GROUPING_ID_WITH_APPENDED_USER_GROUPBY)
+
   def metadataCacheTTL: Long = getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
 
   def coalesceBucketsInJoinEnabled: Boolean = getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED)
@@ -4704,6 +4716,8 @@ class SQLConf extends Serializable with Logging {
 
   def errorMessageFormat: ErrorMessageFormat.Value =
     ErrorMessageFormat.withName(getConf(SQLConf.ERROR_MESSAGE_FORMAT))
+
+  def defaultDatabase: String = getConf(StaticSQLConf.CATALOG_DEFAULT_DATABASE)
 
   /** ********************** SQLConf functionality methods ************ */
 

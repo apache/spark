@@ -598,6 +598,16 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                         repr(actual.sort_values(list(actual.columns)).reset_index(drop=True)),
                         repr(expected.sort_values(list(expected.columns)).reset_index(drop=True)),
                     )
+                    actual = ps.concat(
+                        psdfs, axis=1, ignore_index=ignore_index, join=join, sort=True
+                    )
+                    expected = pd.concat(
+                        pdfs, axis=1, ignore_index=ignore_index, join=join, sort=True
+                    )
+                    self.assert_eq(
+                        repr(actual.reset_index(drop=True)),
+                        repr(expected.reset_index(drop=True)),
+                    )
 
     def test_combine_first(self):
         pser1 = pd.Series({"falcon": 330.0, "eagle": 160.0})
@@ -1502,9 +1512,9 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.dot(psdf), pser.dot(pdf))
 
         psser = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}).b
-        pser = psser.to_pandas()
+        pser = psser._to_pandas()
         psdf = ps.DataFrame({"c": [7, 8, 9]})
-        pdf = psdf.to_pandas()
+        pdf = psdf._to_pandas()
         self.assert_eq(psser.dot(psdf), pser.dot(pdf))
 
         # SPARK-36968: ps.Series.dot raise "matrices are not aligned" if index is not same
@@ -1871,8 +1881,8 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         self._test_corrwith(self.psdf3, self.psdf4.f)
 
     def _test_corrwith(self, psdf, psobj):
-        pdf = psdf.to_pandas()
-        pobj = psobj.to_pandas()
+        pdf = psdf._to_pandas()
+        pobj = psobj._to_pandas()
         for drop in [True, False]:
             p_corr = pdf.corrwith(pobj, drop=drop)
             ps_corr = psdf.corrwith(psobj, drop=drop)

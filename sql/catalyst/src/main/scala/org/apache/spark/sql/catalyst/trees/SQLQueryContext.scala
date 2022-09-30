@@ -124,7 +124,7 @@ case class SQLQueryContext(
     }
   }
 
-  private def isValid: Boolean = {
+  def isValid: Boolean = {
     sqlText.isDefined && originStartIndex.isDefined && originStopIndex.isDefined &&
       originStartIndex.get >= 0 && originStopIndex.get < sqlText.get.length &&
       originStartIndex.get <= originStopIndex.get

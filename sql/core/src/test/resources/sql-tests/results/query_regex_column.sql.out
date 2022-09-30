@@ -35,11 +35,19 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`(a)?+.+`",
-    "objectList" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
-  }
+    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "`(a)?+.+`"
+  } ]
 }
 
 
@@ -51,11 +59,19 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t`.`(a)?+.+`",
-    "objectList" : "`t`.`A`, `t`.`B`, `t`.`c`, `t`.`d`"
-  }
+    "proposal" : "`t`.`A`, `t`.`B`, `t`.`c`, `t`.`d`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "t.`(a)?+.+`"
+  } ]
 }
 
 
@@ -67,11 +83,19 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`(a|b)`",
-    "objectList" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
-  }
+    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 14,
+    "fragment" : "`(a|b)`"
+  } ]
 }
 
 
@@ -83,11 +107,19 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`(a|b)?+.+`",
-    "objectList" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
-  }
+    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "`(a|b)?+.+`"
+  } ]
 }
 
 
@@ -99,11 +131,19 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`(a|b)?+.+`",
-    "objectList" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
-  }
+    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 22,
+    "fragment" : "`(a|b)?+.+`"
+  } ]
 }
 
 
@@ -115,11 +155,19 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`(a)`",
-    "objectList" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
-  }
+    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 16,
+    "fragment" : "`(a)`"
+  } ]
 }
 
 
@@ -342,11 +390,19 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`(a)`",
-    "objectList" : "`testdata3`.`a`, `testdata3`.`b`"
-  }
+    "proposal" : "`testdata3`.`a`, `testdata3`.`b`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 43,
+    "fragment" : "`(a)`"
+  } ]
 }
 
 
@@ -358,9 +414,17 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`(a)?+.+`",
-    "objectList" : "`testdata3`.`a`, `testdata3`.`b`"
-  }
+    "proposal" : "`testdata3`.`a`, `testdata3`.`b`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 47,
+    "fragment" : "`(a)?+.+`"
+  } ]
 }

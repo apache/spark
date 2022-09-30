@@ -45,7 +45,13 @@ SELECT * FROM t2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "messageParameters" : {
+    "config" : "spark.sql.legacy.ctePrecedencePolicy",
+    "name" : "t"
+  }
+}
 
 
 -- !query
@@ -82,7 +88,13 @@ SELECT * FROM t2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "messageParameters" : {
+    "config" : "spark.sql.legacy.ctePrecedencePolicy",
+    "name" : "t"
+  }
+}
 
 
 -- !query
@@ -136,7 +148,13 @@ SELECT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "messageParameters" : {
+    "config" : "spark.sql.legacy.ctePrecedencePolicy",
+    "name" : "t"
+  }
+}
 
 
 -- !query
@@ -151,7 +169,13 @@ SELECT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "messageParameters" : {
+    "config" : "spark.sql.legacy.ctePrecedencePolicy",
+    "name" : "t"
+  }
+}
 
 
 -- !query
@@ -167,7 +191,13 @@ SELECT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "messageParameters" : {
+    "config" : "spark.sql.legacy.ctePrecedencePolicy",
+    "name" : "t"
+  }
+}
 
 
 -- !query
@@ -181,7 +211,13 @@ WHERE c IN (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name t is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "messageParameters" : {
+    "config" : "spark.sql.legacy.ctePrecedencePolicy",
+    "name" : "t"
+  }
+}
 
 
 -- !query
@@ -210,7 +246,13 @@ SELECT * FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name aBc is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "messageParameters" : {
+    "config" : "spark.sql.legacy.ctePrecedencePolicy",
+    "name" : "aBc"
+  }
+}
 
 
 -- !query
@@ -223,7 +265,13 @@ SELECT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Name aBc is ambiguous in nested CTE. Please set spark.sql.legacy.ctePrecedencePolicy to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "messageParameters" : {
+    "config" : "spark.sql.legacy.ctePrecedencePolicy",
+    "name" : "aBc"
+  }
+}
 
 
 -- !query
