@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CTERelationDef, CTERelationRef, Filter, Join, LogicalPlan, Project, Subquery, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{SCALAR_SUBQUERY, SCALAR_SUBQUERY_REFERENCE, TreePattern}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
@@ -153,11 +153,9 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
 
   // First traversal builds up the cache and inserts `ScalarSubqueryReference`s to the plan.
   private def insertReferences(plan: LogicalPlan, cache: ArrayBuffer[Header]): LogicalPlan = {
-    plan.transformDownWithSubqueries {
-      case n => n.transformExpressionsDownWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY)) {
-        case s: ScalarSubquery if !s.isCorrelated && s.deterministic
-          // Subquery expressions with nested subquery expressions within are not supported for now.
-          && !s.plan.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY, SCALAR_SUBQUERY) =>
+    plan.transformUpWithSubqueries {
+      case n => n.transformExpressionsUpWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY)) {
+        case s: ScalarSubquery if !s.isCorrelated && s.deterministic =>
           val (subqueryIndex, headerIndex) = cacheSubquery(s.plan, cache)
           ScalarSubqueryReference(subqueryIndex, headerIndex, s.dataType, s.exprId)
       }
@@ -212,6 +210,10 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
       cachedPlan: LogicalPlan): Option[(LogicalPlan, AttributeMap[Attribute])] = {
     checkIdenticalPlans(newPlan, cachedPlan).map(cachedPlan -> _).orElse(
       (newPlan, cachedPlan) match {
+        case (_, _) if newPlan.containsPattern(SCALAR_SUBQUERY_REFERENCE) ||
+          cachedPlan.containsPattern(SCALAR_SUBQUERY_REFERENCE) =>
+          // Subquery expressions with nested subquery expressions within are not supported for now.
+          None
         case (np: Project, cp: Project) =>
           tryMergePlans(np.child, cp.child).map { case (mergedChild, outputMap) =>
             val (mergedProjectList, newOutputMap) =
