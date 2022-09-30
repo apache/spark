@@ -546,8 +546,8 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         subquery3)
       .where(
         subquery4 +
-          subquery5 +
-          subquery6 === 0)
+        subquery5 +
+        subquery6 === 0)
 
     val mergedSubquery = testRelation
       .select(
@@ -569,8 +569,8 @@ class MergeScalarSubqueriesSuite extends PlanTest {
           extractorExpression(0, analyzedMergedSubquery.output, 2))
         .where(
           extractorExpression(0, analyzedMergedSubquery.output, 0) +
-            extractorExpression(0, analyzedMergedSubquery.output, 1) +
-            extractorExpression(0, analyzedMergedSubquery.output, 2) === 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1) +
+          extractorExpression(0, analyzedMergedSubquery.output, 2) === 0),
       Seq(definitionNode(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
