@@ -139,7 +139,7 @@ class TimedeltaOpsTest(OpsTestBase):
         data = [timedelta(1), timedelta(microseconds=2)]
         pser = pd.Series(data)
         psser = ps.Series(data)
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):

@@ -982,7 +982,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with ps.option_context("compute.default_index_type", "distributed"):
             # the index is different.
             self.assert_eq(
-                psser.reset_index().to_pandas().reset_index(drop=True), pser.reset_index()
+                psser.reset_index()._to_pandas().reset_index(drop=True), pser.reset_index()
             )
 
     def test_index_to_series_reset_index(self):
@@ -2866,7 +2866,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser = ps.Series([1, 2, np.nan, 4, 5])  # Arrow takes np.nan as null
             psser.loc[3] = np.nan  # Spark takes np.nan as NaN
             kcodes, kuniques = psser.factorize(na_sentinel=None)
-            pcodes, puniques = psser.to_pandas().factorize(sort=True, na_sentinel=None)
+            pcodes, puniques = psser._to_pandas().factorize(sort=True, na_sentinel=None)
             self.assert_eq(pcodes.tolist(), kcodes.to_list())
             self.assert_eq(puniques, kuniques)
 
