@@ -33,8 +33,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 
-
-
 abstract class StringRegexExpressionJoni extends BinaryExpression
   with ImplicitCastInputTypes with NullIntolerant {
 
@@ -198,9 +196,6 @@ case class LikeJoni(left: Expression, right: Expression, escapeChar: Char)
   }
 }
 
-/**
- * Optimized version of LIKE ALL, when all pattern values are literal.
- */
 sealed abstract class MultiLikeJoniBase
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -397,7 +392,6 @@ case class NotLikeAnyJoni(child: Expression, patterns: Seq[UTF8String]) extends 
 case class RLikeJoni(left: Expression, right: Expression) extends StringRegexExpressionJoni {
 
   override def escape(v: Array[Byte]): Array[Byte] = v
-  override def escape(v: Array[Byte]): Array[Byte] = v
   override def matches(regex: Regex, input: Array[Byte]): Boolean = {
     regex.matcher(input).search(0, input.length, Option.DEFAULT) > -1
   }
@@ -441,8 +435,6 @@ case class RLikeJoni(left: Expression, right: Expression) extends StringRegexExp
         """)
       }
     } else {
-      val rightStr = ctx.freshName("rightStr")
-      val pattern = ctx.freshName("pattern")
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           byte[] pattern = ${eval2}.getBytes();

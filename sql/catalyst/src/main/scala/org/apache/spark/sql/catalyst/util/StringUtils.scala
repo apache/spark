@@ -85,7 +85,6 @@ object StringUtils extends Logging {
             case c if c == escapeChar =>
               out.appendAll(Pattern.quote(Character.toString(c.toChar)).getBytes())
             case _ => fail(s"the escape character is not allowed to precede '$c'")
-            // case c => out += '\\' +=c
           }
         case c if c == escapeChar => fail("it is not allowed to end with the escape character")
         case '_' => out += '.'

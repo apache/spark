@@ -82,97 +82,6 @@ class RegexpExpressionJoniSuite extends SparkFunSuite with ExpressionEvalHelper 
       .jNotLikeAny(Literal.create(null, StringType), "%yoo%"), true)
   }
 
-  test("RLIKE literal Regular Expression") {
-    checkLiteralRow(Literal.create(null, StringType) jRlike _, "abdef", null)
-    checkEvaluation("abdef" jRlike Literal.create(null, StringType), null)
-    checkEvaluation(Literal.create(null, StringType) jRlike Literal.create(null, StringType), null)
-    checkEvaluation("abdef" jRlike NonFoldableLiteral.create("abdef", StringType), true)
-    checkEvaluation("abdef" jRlike NonFoldableLiteral.create(null, StringType), null)
-    checkEvaluation(
-      Literal.create(null, StringType) jRlike NonFoldableLiteral.create("abdef", StringType), null)
-    checkEvaluation(
-      Literal.create(null, StringType) jRlike NonFoldableLiteral.create(null, StringType), null)
-
-    checkLiteralRow("abdef" jRlike _, "abdef", true)
-    checkLiteralRow("abbbbc" jRlike _, "a.*c", true)
-
-    checkLiteralRow("fofo" jRlike _, "^fo", true)
-    checkLiteralRow("fo\no" jRlike _, "^fo\no$", true)
-    checkLiteralRow("Bn" jRlike _, "^Ba*n", true)
-    checkLiteralRow("afofo" jRlike _, "fo", true)
-    checkLiteralRow("afofo" jRlike _, "^fo", false)
-    checkLiteralRow("Baan" jRlike _, "^Ba?n", false)
-    checkLiteralRow("axe" jRlike _, "pi|apa", false)
-    checkLiteralRow("pip" jRlike _, "^(pi)*$", false)
-
-    checkLiteralRow("abc" jRlike _, "^ab", true)
-    checkLiteralRow("abc" jRlike _, "^bc", false)
-    checkLiteralRow("abc" jRlike _, "^ab", true)
-    checkLiteralRow("abc" jRlike _, "^bc", false)
-
-    intercept[org.joni.exception.SyntaxException] {
-      evaluateWithoutCodegen("abbbbc" jRlike "**")
-    }
-    intercept[org.joni.exception.SyntaxException] {
-      val regex = 'a.string.at(0)
-      evaluateWithoutCodegen("abbbbc" jRlike regex, create_row("**"))
-    }
-
-    intercept[org.joni.exception.SyntaxException] {
-      evaluateWithoutCodegen("abbbbc" jRlike "**")
-    }
-  }
-
-  test("RLIKE Non-literal Regular Expression") {
-    val regEx = 'a.string.at(0)
-    checkEvaluation("abdef" jRlike regEx, true, create_row("abdef"))
-    checkEvaluation("abbbbc" jRlike regEx, true, create_row("a.*c"))
-    checkEvaluation("fofo" jRlike regEx, true, create_row("^fo"))
-    checkEvaluation("fo\no" jRlike regEx, true, create_row("^fo\no$"))
-    checkEvaluation("Bn" jRlike regEx, true, create_row("^Ba*n"))
-
-    intercept[org.joni.exception.SyntaxException] {
-      evaluateWithoutCodegen("abbbbc" jRlike regEx, create_row("**"))
-    }
-  }
-
-  test("RLIKE Regular Expression") {
-    checkLiteralRow(Literal.create(null, StringType) jRlike _, "abdef", null)
-    checkEvaluation("abdef" jRlike Literal.create(null, StringType), null)
-    checkEvaluation(Literal.create(null, StringType) jRlike Literal.create(null, StringType), null)
-    checkEvaluation("abdef" jRlike NonFoldableLiteral.create("abdef", StringType), true)
-    checkEvaluation("abdef" jRlike NonFoldableLiteral.create(null, StringType), null)
-    checkEvaluation(
-      Literal.create(null, StringType) jRlike NonFoldableLiteral.create("abdef", StringType), null)
-    checkEvaluation(
-      Literal.create(null, StringType) jRlike NonFoldableLiteral.create(null, StringType), null)
-
-    checkLiteralRow("abdef" jRlike _, "abdef", true)
-    checkLiteralRow("abbbbc" jRlike _, "a.*c", true)
-
-    checkLiteralRow("fofo" jRlike _, "^fo", true)
-    checkLiteralRow("fo\no" jRlike _, "^fo\no$", true)
-    checkLiteralRow("Bn" jRlike _, "^Ba*n", true)
-    checkLiteralRow("afofo" jRlike _, "fo", true)
-    checkLiteralRow("afofo" jRlike _, "^fo", false)
-    checkLiteralRow("Baan" jRlike _, "^Ba?n", false)
-    checkLiteralRow("axe" jRlike _, "pi|apa", false)
-    checkLiteralRow("pip" jRlike _, "^(pi)*$", false)
-
-    checkLiteralRow("abc" jRlike _, "^ab", true)
-    checkLiteralRow("abc" jRlike _, "^bc", false)
-    checkLiteralRow("abc" jRlike _, "^ab", true)
-    checkLiteralRow("abc" jRlike _, "^bc", false)
-
-    intercept[org.joni.exception.SyntaxException] {
-      evaluateWithoutCodegen("abbbbc" jRlike "**")
-    }
-    intercept[org.joni.exception.SyntaxException] {
-      val regex = 'a.string.at(0)
-      evaluateWithoutCodegen("abbbbc" jRlike regex, create_row("**"))
-    }
-  }
-
   test("LIKE Pattern") {
 
     // null handling
@@ -324,26 +233,41 @@ class RegexpExpressionJoniSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("RLIKE Regular Expression") {
+    checkLiteralRow(Literal.create(null, StringType) jRlike _, "abdef", null)
+    checkEvaluation("abdef" jRlike Literal.create(null, StringType), null)
+    checkEvaluation(Literal.create(null, StringType) jRlike Literal.create(null, StringType), null)
+    checkEvaluation("abdef" jRlike NonFoldableLiteral.create("abdef", StringType), true)
+    checkEvaluation("abdef" jRlike NonFoldableLiteral.create(null, StringType), null)
+    checkEvaluation(
+      Literal.create(null, StringType) jRlike NonFoldableLiteral.create("abdef", StringType), null)
+    checkEvaluation(
+      Literal.create(null, StringType) jRlike NonFoldableLiteral.create(null, StringType), null)
 
-  test("failed") {
+    checkLiteralRow("abdef" jRlike _, "abdef", true)
+    checkLiteralRow("abbbbc" jRlike _, "a.*c", true)
 
-    checkLiteralRow("a" jLike _, "", false)
-    checkLiteralRow("""aa""" jLike _, """""", false)
-    checkLiteralRow("""bbaa""" jLike _, """""", false)
-    checkLiteralRow("""bbaa""" jLike _, """aa""", false)
+    checkLiteralRow("fofo" jRlike _, "^fo", true)
+    checkLiteralRow("fo\no" jRlike _, "^fo\no$", true)
+    checkLiteralRow("Bn" jRlike _, "^Ba*n", true)
+    checkLiteralRow("afofo" jRlike _, "fo", true)
+    checkLiteralRow("afofo" jRlike _, "^fo", false)
+    checkLiteralRow("Baan" jRlike _, "^Ba?n", false)
+    checkLiteralRow("axe" jRlike _, "pi|apa", false)
+    checkLiteralRow("pip" jRlike _, "^(pi)*$", false)
 
+    checkLiteralRow("abc" jRlike _, "^ab", true)
+    checkLiteralRow("abc" jRlike _, "^bc", false)
+    checkLiteralRow("abc" jRlike _, "^ab", true)
+    checkLiteralRow("abc" jRlike _, "^bc", false)
 
-    // checkLiteralRow("a" jlike _, "", false)
-
-    checkLiteralRow("""bbaa""" jLike _, """bba""", false)
-    checkLiteralRow("""_\\\%aaa""" jLike _, """%\\""", false)
-
-    // unicode
-    // scalastyle:off nonascii
-    checkLiteralRow("a\u20ACa" jLike _, "_\u20AC_", true)
-    checkLiteralRow("a€a" jLike _, "_€_", true)
-    checkLiteralRow("a€a" jLike _, "_\u20AC_", true)
-    checkLiteralRow("a\u20ACa" jLike _, "_€_", true)
+    intercept[org.joni.exception.SyntaxException] {
+      evaluateWithoutCodegen("abbbbc" jRlike "**")
+    }
+    intercept[org.joni.exception.SyntaxException] {
+      val regex = 'a.string.at(0)
+      evaluateWithoutCodegen("abbbbc" jRlike regex, create_row("**"))
+    }
   }
 
 }
