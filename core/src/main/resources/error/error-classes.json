@@ -2077,7 +2077,7 @@
   },
   "_LEGACY_ERROR_TEMP_1169" : {
     "message" : [
-      "Requested partitioning does not match the table $tableName:",
+      "Requested partitioning does not match the table <tableName>:",
       "Requested partitions: <normalizedPartSpec>",
       "Table partitions: <partColNames>"
     ]
@@ -2130,7 +2130,7 @@
   },
   "_LEGACY_ERROR_TEMP_1179" : {
     "message" : [
-      "Table-valued function $name with alternatives: <usage>",
+      "Table-valued function <name> with alternatives: <usage>",
       "cannot be applied to (<arguments>): <details>."
     ]
   },
@@ -2233,6 +2233,532 @@
   "_LEGACY_ERROR_TEMP_1199" : {
     "message" : [
       "Invalid bound function '<bound>: there are <argsLen> arguments but <inputTypesLen> parameters returned from 'inputTypes()'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1200" : {
+    "message" : [
+      "<name> is not supported for v2 tables."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1201" : {
+    "message" : [
+      "Cannot resolve column name \"<colName>\" among (<fieldNames>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1202" : {
+    "message" : [
+      "Cannot write to '<tableName>', too many data columns:",
+      "Table columns: <tableColumns>",
+      "Data columns: <dataColumns>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1203" : {
+    "message" : [
+      "Cannot write to '<tableName>', not enough data columns:",
+      "Table columns: <tableColumns>",
+      "Data columns: <dataColumns>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1204" : {
+    "message" : [
+      "Cannot write incompatible data to table '<tableName>':",
+      "- <errors>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1205" : {
+    "message" : [
+      "Expected only partition pruning predicates: <nonPartitionPruningPredicates>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1206" : {
+    "message" : [
+      "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1207" : {
+    "message" : [
+      "The duration and time inputs to window must be an integer, long or string literal."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1208" : {
+    "message" : [
+      "No such struct field <fieldName> in <fields>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1209" : {
+    "message" : [
+      "Ambiguous reference to fields <fields>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1210" : {
+    "message" : [
+      "The second argument in <funcName> should be a boolean literal."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1211" : {
+    "message" : [
+      "Detected implicit cartesian product for <joinType> join between logical plans",
+      "<leftPlan>",
+      "and",
+      "rightPlan",
+      "Join condition is missing or trivial.",
+      "Either: use the CROSS JOIN syntax to allow cartesian products between these relations, or: enable implicit cartesian products by setting the configuration variable spark.sql.crossJoin.enabled=true."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1212" : {
+    "message" : [
+      "Found conflicting attributes <conflictingAttrs> in the condition joining outer plan:",
+      "<outerPlan>",
+      "and subplan:",
+      "<subplan>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1213" : {
+    "message" : [
+      "Window expression is empty in <expr>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1214" : {
+    "message" : [
+      "Found different window function type in <windowExpressions>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1215" : {
+    "message" : [
+      "char/varchar type can only be used in the table schema. You can set <config> to true, so that Spark treat them as string type as same as Spark 3.0 and earlier."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1216" : {
+    "message" : [
+      "The pattern '<pattern>' is invalid, <message>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1217" : {
+    "message" : [
+      "<tableIdentifier> already exists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1218" : {
+    "message" : [
+      "<tableIdentifier> should be converted to HadoopFsRelation."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1219" : {
+    "message" : [
+      "Hive metastore does not support altering database location"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1220" : {
+    "message" : [
+      "Hive <tableType> is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1221" : {
+    "message" : [
+      "Hive 0.12 doesn't support creating permanent functions. Please use Hive 0.13 or higher."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1222" : {
+    "message" : [
+      "Unknown resource type: <resourceType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1223" : {
+    "message" : [
+      "Invalid field id '<field>' in day-time interval. Supported interval fields: <supportedIds>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1224" : {
+    "message" : [
+      "'interval <startFieldName> to <endFieldName>' is invalid."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1225" : {
+    "message" : [
+      "Invalid field id '<field>' in year-month interval. Supported interval fields: <supportedIds>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1226" : {
+    "message" : [
+      "The SQL config '<configName>' was removed in the version <version>. <comment>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1227" : {
+    "message" : [
+      "<msg><e1>",
+      "Failed fallback parsing: <e2>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1228" : {
+    "message" : [
+      "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1229" : {
+    "message" : [
+      "<decimalType> can only support precision up to <precision>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1230" : {
+    "message" : [
+      "Negative scale is not allowed: <scale>. You can use <config>=true to enable legacy mode to allow it."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1231" : {
+    "message" : [
+      "<key> is not a valid partition column in table <tblName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1232" : {
+    "message" : [
+      "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1233" : {
+    "message" : [
+      "Found duplicate column(s) <colType>: <duplicateCol>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1234" : {
+    "message" : [
+      "Temporary view <tableIdent> is not cached for analyzing columns."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1235" : {
+    "message" : [
+      "Column <name> in table <tableIdent> is of type <dataType>, and Spark does not support statistics collection on this column type."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1236" : {
+    "message" : [
+      "ANALYZE TABLE is not supported on views."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1237" : {
+    "message" : [
+      "The list of partition columns with values in partition specification for table '<table>' in database '<database>' is not a prefix of the list of partition columns defined in the table schema. Expected a prefix of [<schemaColumns>], but got [<specColumns>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1238" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1239" : {
+    "message" : [
+      "Analyzing column statistics is not supported for column <name> of data type: <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1240" : {
+    "message" : [
+      "Table <table> already exists.<guide>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1241" : {
+    "message" : [
+      "CREATE-TABLE-AS-SELECT cannot create table with location to a non-empty directory <tablePath>. To allow overwriting the existing non-empty directory, set '<config>' to true."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1242" : {
+    "message" : [
+      "Undefined function: <rawName>. This function is neither a built-in/temporary function, nor a persistent function that is qualified as <fullName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1243" : {
+    "message" : [
+      "Undefined function: <rawName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1244" : {
+    "message" : [
+      "Attempted to unset non-existent property '<property>' in table '<table>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1245" : {
+    "message" : [
+      "ALTER TABLE CHANGE COLUMN is not supported for changing column '<originName>' with type '<originType>' to '<newName>' with type '<newType>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1246" : {
+    "message" : [
+      "Can't find column `<name>` given table data columns <fieldNames>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1247" : {
+    "message" : [
+      "Operation not allowed: ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition is not supported for tables created with the datasource API."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1248" : {
+    "message" : [
+      "Operation not allowed: ALTER TABLE SET SERDE is not supported for tables created with the datasource API."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1249" : {
+    "message" : [
+      "Operation not allowed: <cmd> only works on partitioned tables: <tableIdentWithDB>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1250" : {
+    "message" : [
+      "<action> is not allowed on <tableName> since filesource partition management is disabled (spark.sql.hive.manageFilesourcePartitions = false)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1251" : {
+    "message" : [
+      "<action> is not allowed on <tableName> since its partition metadata is not stored in the Hive metastore. To import this information into the metastore, run `msck repair table <tableName>`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1252" : {
+    "message" : [
+      "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1253" : {
+    "message" : [
+      "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1254" : {
+    "message" : [
+      "Cannot overwrite a path that is also being read from."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1255" : {
+    "message" : [
+      "Cannot drop built-in function '<functionName>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1256" : {
+    "message" : [
+      "Cannot refresh built-in function <functionName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1257" : {
+    "message" : [
+      "Cannot refresh temporary function <functionName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1258" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1259" : {
+    "message" : [
+      "ALTER ADD COLUMNS does not support views. You must drop and re-create the views for adding the new columns. Views: <table>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1260" : {
+    "message" : [
+      "ALTER ADD COLUMNS does not support datasource table with type <tableType>. You must drop and re-create the table for adding the new columns. Tables: <table>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1261" : {
+    "message" : [
+      "LOAD DATA is not supported for datasource tables: <tableIdentWithDB>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1262" : {
+    "message" : [
+      "LOAD DATA target table <tableIdentWithDB> is partitioned, but no partition spec is provided."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1263" : {
+    "message" : [
+      "LOAD DATA target table <tableIdentWithDB> is partitioned, but number of columns in provided partition spec (<partitionSize>) do not match number of partitioned columns in table (<targetTableSize>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1264" : {
+    "message" : [
+      "LOAD DATA target table <tableIdentWithDB> is not partitioned, but a partition spec was provided."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1265" : {
+    "message" : [
+      "LOAD DATA input path does not exist: <path>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1266" : {
+    "message" : [
+      "Operation not allowed: TRUNCATE TABLE on external tables: <tableIdentWithDB>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1267" : {
+    "message" : [
+      "Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported for tables that are not partitioned: <tableIdentWithDB>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1268" : {
+    "message" : [
+      "Failed to truncate table <tableIdentWithDB> when removing data of the path: <path>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1269" : {
+    "message" : [
+      "SHOW PARTITIONS is not allowed on a table that is not partitioned: <tableIdentWithDB>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1270" : {
+    "message" : [
+      "SHOW CREATE TABLE is not supported on a temporary view: <table>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1271" : {
+    "message" : [
+      "Failed to execute SHOW CREATE TABLE against table <table>, which is created by Hive and uses the following unsupported feature(s)",
+      "<unsupportedFeatures>",
+      "Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1272" : {
+    "message" : [
+      "SHOW CREATE TABLE doesn't support transactional Hive table. Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1273" : {
+    "message" : [
+      "Failed to execute SHOW CREATE TABLE against table <table>, which is created by Hive and uses the following unsupported serde configuration",
+      "<configs>",
+      "Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1274" : {
+    "message" : [
+      "<table> is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1275" : {
+    "message" : [
+      "Failed to execute SHOW CREATE TABLE against table/view <table>, which is created by Hive and uses the following unsupported feature(s)",
+      "<features>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1276" : {
+    "message" : [
+      "The logical plan that represents the view is not analyzed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1277" : {
+    "message" : [
+      "The number of columns produced by the SELECT clause (num: `<analyzedPlanLength>`) does not match the number of column names specified by CREATE VIEW (num: `<userSpecifiedColumnsLength>`)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1278" : {
+    "message" : [
+      "<name> is not a view."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1279" : {
+    "message" : [
+      "View <name> already exists. If you want to update the view definition, please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1280" : {
+    "message" : [
+      "It is not allowed to create a persisted view from the Dataset API."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1281" : {
+    "message" : [
+      "Recursive view <viewIdent> detected (cycle: <newPath>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1282" : {
+    "message" : [
+      "Not allowed to create a permanent view <name> without explicitly assigning an alias for expression <attrName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1283" : {
+    "message" : [
+      "Not allowed to create a permanent view <name> by referencing a temporary view <nameParts>. Please create a temp view instead by CREATE TEMP VIEW."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1284" : {
+    "message" : [
+      "Not allowed to create a permanent view <name> by referencing a temporary function `<funcName>`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1285" : {
+    "message" : [
+      "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the",
+      "referenced columns only include the internal corrupt record column",
+      "(named _corrupt_record by default). For example:",
+      "spark.read.schema(schema).csv(file).filter($\"_corrupt_record\".isNotNull).count()",
+      "and spark.read.schema(schema).csv(file).select(\"_corrupt_record\").show().",
+      "Instead, you can cache or save the parsed results and then send the same query.",
+      "For example, val df = spark.read.schema(schema).csv(file).cache() and then",
+      "df.filter($\"_corrupt_record\".isNotNull).count()."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1286" : {
+    "message" : [
+      "User-defined partition column <columnName> not found in the JDBC relation: <schema>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1287" : {
+    "message" : [
+      "Partition column type should be <numericType>, <dateType>, or <timestampType>, but <dataType> found."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1288" : {
+    "message" : [
+      "Table or view '<name>' already exists. SaveMode: ErrorIfExists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1289" : {
+    "message" : [
+      "Column name \"<name>\" contains invalid character(s). Please use alias to rename it."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1290" : {
+    "message" : [
+      "Text data source supports only a single column, and you have <schemaSize> columns."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1291" : {
+    "message" : [
+      "Can't find required partition column <readField> in partition schema <partitionSchema>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1292" : {
+    "message" : [
+      "Temporary view '<tableIdent>' should not have specified a database."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1293" : {
+    "message" : [
+      "Hive data source can only be used with tables, you can't use it with CREATE TEMP VIEW USING."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1294" : {
+    "message" : [
+      "The timestamp provided for the '<strategy>' option is invalid. The expected format is 'YYYY-MM-DDTHH:mm:ss', but the provided timestamp: <timeString>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1295" : {
+    "message" : [
+      "Set a host to read from with option(\"host\", ...)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1296" : {
+    "message" : [
+      "Set a port to read from with option(\"port\", ...)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1297" : {
+    "message" : [
+      "IncludeTimestamp must be set to either \"true\" or \"false\"."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1298" : {
+    "message" : [
+      "checkpointLocation must be specified either through option(\"checkpointLocation\", ...) or SparkSession.conf.set(\"<config>\", ...)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1299" : {
+    "message" : [
+      "This query does not support recovering from checkpoint location. Delete <checkpointPath> to start over."
     ]
   }
 }

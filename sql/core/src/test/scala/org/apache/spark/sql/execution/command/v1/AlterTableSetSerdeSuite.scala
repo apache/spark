@@ -82,17 +82,19 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
       checkSerdeProps(tableIdent, Map.empty[String, String])
 
       // set table serde and/or properties (should fail on datasource tables)
-      val e1 = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t SET SERDE 'whatever'")
-      }
-      assert(e1.getMessage == "Operation not allowed: " +
-        "ALTER TABLE SET SERDE is not supported for tables created with the datasource API")
-      val e2 = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t SET SERDE 'org.apache.madoop' " +
-          "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
-      }
-      assert(e2.getMessage == "Operation not allowed: " +
-        "ALTER TABLE SET SERDE is not supported for tables created with the datasource API")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t SET SERDE 'whatever'")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1248",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t SET SERDE 'org.apache.madoop' " +
+            "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1248",
+        parameters = Map.empty)
 
       // set serde properties only
       sql(s"ALTER TABLE $t SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
@@ -126,37 +128,37 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
       checkPartitionSerdeProps(tableIdent, spec, Map.empty[String, String])
 
       // set table serde and/or properties (should fail on datasource tables)
-      val e1 = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t PARTITION (a=1, b=2) SET SERDE 'whatever'")
-      }
-      assert(e1.getMessage == "Operation not allowed: " +
-        "ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition " +
-        "is not supported for tables created with the datasource API")
-      val e2 = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t PARTITION (a=1, b=2) SET SERDE 'org.apache.madoop' " +
-          "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
-      }
-      assert(e2.getMessage == "Operation not allowed: " +
-        "ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition " +
-        "is not supported for tables created with the datasource API")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t PARTITION (a=1, b=2) SET SERDE 'whatever'")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1247",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t PARTITION (a=1, b=2) SET SERDE 'org.apache.madoop' " +
+            "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1247",
+        parameters = Map.empty)
 
       // set serde properties only
-      val e3 = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t PARTITION (a=1, b=2) " +
-          "SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
-      }
-      assert(e3.getMessage == "Operation not allowed: " +
-        "ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition " +
-        "is not supported for tables created with the datasource API")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t PARTITION (a=1, b=2) " +
+            "SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1247",
+        parameters = Map.empty)
 
       // set things without explicitly specifying database
       sessionCatalog.setCurrentDatabase("ns")
-      val e4 = intercept[AnalysisException] {
-        sql(s"ALTER TABLE tbl PARTITION (a=1, b=2) SET SERDEPROPERTIES ('kay' = 'veee')")
-      }
-      assert(e4.getMessage == "Operation not allowed: " +
-        "ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition " +
-        "is not supported for tables created with the datasource API")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE tbl PARTITION (a=1, b=2) SET SERDEPROPERTIES ('kay' = 'veee')")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1247",
+        parameters = Map.empty)
 
       // table to alter does not exist
       val e5 = intercept[AnalysisException] {
