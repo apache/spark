@@ -63,7 +63,7 @@ case class AttachDistributedSequenceExec(
         val unsafeRowWriter =
           new org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter(1)
 
-        var id = startIndices(partId)
+        var id = startIndices(partId) - 1L
         iter.map { row =>
           // Writes to an UnsafeRow directly
           unsafeRowWriter.reset()
@@ -79,7 +79,7 @@ case class AttachDistributedSequenceExec(
         val unsafeRowWriter =
           new org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter(1)
 
-        var id = 0L
+        var id = -1L
         iter.map { row =>
           // Writes to an UnsafeRow directly
           unsafeRowWriter.reset()
