@@ -20,12 +20,13 @@ import java.io.File
 
 import io.fabric8.kubernetes.api.model.{Config => _, _}
 import io.fabric8.kubernetes.client.KubernetesClient
-import io.fabric8.kubernetes.client.dsl.{MixedOperation, PodResource}
+import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, never, verify, when}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.deploy.k8s.features.{KubernetesDriverCustomFeatureConfigStep, KubernetesExecutorCustomFeatureConfigStep, KubernetesFeatureConfigStep}
 import org.apache.spark.internal.config.ConfigEntry
 
@@ -156,9 +157,8 @@ abstract class PodBuilderSuite extends SparkFunSuite {
 
   protected def mockKubernetesClient(pod: Pod = podWithSupportedFeatures()): KubernetesClient = {
     val kubernetesClient = mock(classOf[KubernetesClient])
-    val pods =
-      mock(classOf[MixedOperation[Pod, PodList, PodResource[Pod]]])
-    val podResource = mock(classOf[PodResource[Pod]])
+    val pods = mock(classOf[PODS])
+    val podResource = mock(classOf[PodResource])
     when(kubernetesClient.pods()).thenReturn(pods)
     when(pods.load(any(classOf[File]))).thenReturn(podResource)
     when(podResource.get()).thenReturn(pod)

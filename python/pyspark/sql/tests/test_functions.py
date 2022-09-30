@@ -145,6 +145,22 @@ class FunctionsTests(ReusedSQLTestCase):
         result = [tuple(x) for x in data.select(explode_outer("mapfield")).collect()]
         self.assertEqual(result, [("a", "b"), (None, None), (None, None)])
 
+    def test_inline(self):
+        from pyspark.sql.functions import inline, inline_outer
+
+        d = [
+            Row(structlist=[Row(b=1, c=2), Row(b=3, c=4)]),
+            Row(structlist=[Row(b=None, c=5), None]),
+            Row(structlist=[]),
+        ]
+        data = self.spark.createDataFrame(d)
+
+        result = [tuple(x) for x in data.select(inline(data.structlist)).collect()]
+        self.assertEqual(result, [(1, 2), (3, 4), (None, 5), (None, None)])
+
+        result = [tuple(x) for x in data.select(inline_outer(data.structlist)).collect()]
+        self.assertEqual(result, [(1, 2), (3, 4), (None, 5), (None, None), (None, None)])
+
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
         df = self.spark.read.json(rdd)
