@@ -989,12 +989,8 @@ private[spark] class TaskSchedulerImpl(
         barrierCoordinator.stop()
       }
     }
-    Utils.tryLogNonFatalError {
-      starvationTimer.cancel()
-    }
-    Utils.tryLogNonFatalError {
-      abortTimer.cancel()
-    }
+    starvationTimer.cancel()
+    abortTimer.cancel()
   }
 
   override def defaultParallelism(): Int = backend.defaultParallelism()
