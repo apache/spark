@@ -913,10 +913,9 @@ class InternalFrame:
         +--------+---+
         """
         if len(sdf.columns) > 0:
+            original_columns = sdf.columns
 
             if sdf.rdd.getNumPartitions() > 1:
-                original_columns = sdf.columns
-
                 partition_id_col_name = verify_temp_column_name(
                     sdf, "__attach_distributed_seq_partition_id_column__"
                 )
@@ -961,12 +960,15 @@ class InternalFrame:
                     .withColumn(
                         column_name, F.col(column_name) + SF.within_partition_increasing_id()
                     )
-                    .select(original_columns + [column_name])
+                    .select([column_name] + original_columns)
                 )
                 return sdf
 
             else:
-                return sdf.withColumn(column_name, SF.within_partition_increasing_id())
+                sdf.select(
+                    [SF.within_partition_increasing_id().alias(column_name)]
+                    + [F.col(col) for col in original_columns]
+                )
         else:
             cnt = sdf.count()
             if cnt > 0:
