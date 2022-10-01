@@ -15,73 +15,13 @@
 # limitations under the License.
 #
 
+from typing_extensions import Protocol
 from typing import Callable, Union
 from pyspark.sql.connect.column import ExpressionOrString, ScalarFunctionExpression, ColumnOrString
 from pyspark.sql.connect.function_builder import UserDefinedFunction
 
-FunctionBuilderCallables = Union[
-    Callable[[ExpressionOrString], ScalarFunctionExpression],
-    Callable[[ExpressionOrString, ExpressionOrString], ScalarFunctionExpression],
-    Callable[
-        [ExpressionOrString, ExpressionOrString, ExpressionOrString], ScalarFunctionExpression
-    ],
-    Callable[
-        [ExpressionOrString, ExpressionOrString, ExpressionOrString, ExpressionOrString],
-        ScalarFunctionExpression,
-    ],
-    Callable[
-        [
-            ExpressionOrString,
-            ExpressionOrString,
-            ExpressionOrString,
-            ExpressionOrString,
-            ExpressionOrString,
-        ],
-        ScalarFunctionExpression,
-    ],
-    Callable[
-        [
-            ExpressionOrString,
-            ExpressionOrString,
-            ExpressionOrString,
-            ExpressionOrString,
-            ExpressionOrString,
-            ExpressionOrString,
-        ],
-        ScalarFunctionExpression,
-    ],
-]
+class FunctionBuilderCallable(Protocol):
+    def __call__(self, *_: ExpressionOrString) -> ScalarFunctionExpression: ...
 
-UserDefinedFunctionCallables = Union[
-    Callable[[ColumnOrString], UserDefinedFunction],
-    Callable[[ColumnOrString, ColumnOrString], UserDefinedFunction],
-    Callable[[ColumnOrString, ColumnOrString, ColumnOrString], UserDefinedFunction],
-    Callable[[ColumnOrString, ColumnOrString, ColumnOrString, ColumnOrString], UserDefinedFunction],
-    Callable[
-        [ColumnOrString, ColumnOrString, ColumnOrString, ColumnOrString, ColumnOrString],
-        UserDefinedFunction,
-    ],
-    Callable[
-        [
-            ColumnOrString,
-            ColumnOrString,
-            ColumnOrString,
-            ColumnOrString,
-            ColumnOrString,
-            ColumnOrString,
-        ],
-        UserDefinedFunction,
-    ],
-    Callable[
-        [
-            ColumnOrString,
-            ColumnOrString,
-            ColumnOrString,
-            ColumnOrString,
-            ColumnOrString,
-            ColumnOrString,
-            ColumnOrString,
-        ],
-        UserDefinedFunction,
-    ],
-]
+class UserDefinedFunctionCallable(Protocol):
+    def __call__(self, *_: ColumnOrString) -> UserDefinedFunction: ...
