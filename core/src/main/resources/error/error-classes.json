@@ -525,6 +525,23 @@
     ],
     "sqlState" : "42000"
   },
+  "REDACTION_FUNCTION_ERROR" : {
+    "message": [
+      "Redaction function failed:"
+    ],
+    "subClass": {
+      "MASK_CCN_FORMAT_MATCH_ERROR": {
+        "message": [
+          "The input <input> of function MASK_CCN does not match the provided or default format <format>. Please use the TRY_MASK_CCN function to receive a NULL result in this case instead."
+        ]
+      },
+      "MASK_CCN_INVALID_FORMAT_ERROR": {
+        "message": [
+          "The provided format of function <functionName> is invalid. Valid formats must be string literals which may include characters: 'X' which represents a digit which will be converted to 'X' in the result, any digit '0' to '9' which represents a digit which will be left unchanged, and any '-' character should match exactly in the input string. No other format characters are allowed. The default is: XXXX-XXXX-XXXX-XXXX"
+        ]
+      }
+    }
+  },
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [
       "Failed to rename as <sourcePath> was not found"

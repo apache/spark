@@ -808,7 +808,11 @@ object FunctionRegistry {
     // csv
     expression[CsvToStructs]("from_csv"),
     expression[SchemaOfCsv]("schema_of_csv"),
-    expression[StructsToCsv]("to_csv")
+    expression[StructsToCsv]("to_csv"),
+
+    // redaction functions (SPARK-40623)
+    expression[MaskCcn]("mask_ccn"),
+    expression[TryMaskCcn]("try_mask_ccn")
   )
 
   val builtin: SimpleFunctionRegistry = {
