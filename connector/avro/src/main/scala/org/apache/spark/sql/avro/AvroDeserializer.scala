@@ -131,6 +131,9 @@ private[sql] class AvroDeserializer(
       case (INT, DateType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, dateRebaseFunc(value.asInstanceOf[Int]))
 
+      case (INT, ByteType) => (updater, ordinal, value) =>
+        updater.setByte(ordinal, value.asInstanceOf[Int].asInstanceOf[Byte])
+
       case (LONG, LongType) => (updater, ordinal, value) =>
         updater.setLong(ordinal, value.asInstanceOf[Long])
 

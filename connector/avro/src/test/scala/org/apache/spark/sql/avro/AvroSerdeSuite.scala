@@ -23,7 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.NoopFilters
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.CORRECTED
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{ByteType, IntegerType, StructType}
 
 /**
  * Tests for [[AvroSerializer]] and [[AvroDeserializer]], complementing those in [[AvroSuite]]
@@ -45,6 +45,22 @@ class AvroSerdeSuite extends SparkFunSuite {
           .build()
       val serializer = Serializer.create(CATALYST_STRUCT, avro, fieldMatch)
       val deserializer = Deserializer.create(CATALYST_STRUCT, avro, fieldMatch)
+      assert(serializer.serialize(deserializer.deserialize(record).get) === record)
+    }
+  }
+
+  test("Test byte conversion") {
+    withFieldMatchType { fieldMatch =>
+      val (top, nest) = fieldMatch match {
+        case BY_NAME => ("foo", "bar")
+        case BY_POSITION => ("NOTfoo", "NOTbar")
+      }
+      val avro = createNestedAvroSchemaWithFields(top, _.optionalInt(nest))
+      val record = new GenericRecordBuilder(avro)
+        .set(top, new GenericRecordBuilder(avro.getField(top).schema()).set(nest, -128).build())
+        .build()
+      val serializer = Serializer.create(CATALYST_STRUCT_WITH_BYTE, avro, fieldMatch)
+      val deserializer = Deserializer.create(CATALYST_STRUCT_WITH_BYTE, avro, fieldMatch)
       assert(serializer.serialize(deserializer.deserialize(record).get) === record)
     }
   }
@@ -196,6 +212,8 @@ object AvroSerdeSuite {
   private val CATALYST_STRUCT =
     new StructType().add("foo", new StructType().add("bar", IntegerType))
 
+  private val CATALYST_STRUCT_WITH_BYTE =
+    new StructType().add("foo", new StructType().add("bar", ByteType))
   /**
    * Specifier for type of field matching to be used for easy creation of tests that do both
    * positional and by-name field matching.
