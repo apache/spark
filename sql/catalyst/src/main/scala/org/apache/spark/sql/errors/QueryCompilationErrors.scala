@@ -2934,9 +2934,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def cannotParseIntervalError(delayThreshold: String, e: Throwable): Throwable = {
+    val threshold = if (delayThreshold == null) "" else delayThreshold
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1318",
-      messageParameters = Map("delayThreshold" -> delayThreshold),
+      messageParameters = Map("delayThreshold" -> threshold),
       cause = Some(e))
   }
 
