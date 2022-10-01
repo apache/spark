@@ -1413,6 +1413,25 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=True))
         self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=True, min_count=2))
 
+    def test_sum(self):
+        pdf = pd.DataFrame(
+            {
+                "A": ["a", "a", "b", "a"],
+                "B": [1, 2, 1, 2],
+                "C": [-1.5, np.nan, -3.2, 0.1],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf.groupby("A").sum().sort_index(), psdf.groupby("A").sum().sort_index())
+        self.assert_eq(
+            pdf.groupby("A").sum(min_count=2).sort_index(),
+            psdf.groupby("A").sum(min_count=2).sort_index(),
+        )
+        self.assert_eq(
+            pdf.groupby("A").sum(min_count=3).sort_index(),
+            psdf.groupby("A").sum(min_count=3).sort_index(),
+        )
+
     def test_mad(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.mad())
 
