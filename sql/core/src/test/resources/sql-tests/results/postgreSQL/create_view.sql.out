@@ -277,7 +277,13 @@ CREATE VIEW v1_temp AS SELECT * FROM temp_table
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `spark_catalog`.`temp_view_test`.`v1_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "messageParameters" : {
+    "name" : "`spark_catalog`.`temp_view_test`.`v1_temp`",
+    "nameParts" : "temp_table"
+  }
+}
 
 
 -- !query
@@ -333,7 +339,13 @@ CREATE VIEW temp_view_test.v3_temp AS SELECT * FROM temp_table
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `spark_catalog`.`temp_view_test`.`v3_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "messageParameters" : {
+    "name" : "`spark_catalog`.`temp_view_test`.`v3_temp`",
+    "nameParts" : "temp_table"
+  }
+}
 
 
 -- !query
@@ -382,7 +394,13 @@ CREATE VIEW v4_temp AS
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `spark_catalog`.`temp_view_test`.`v4_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "messageParameters" : {
+    "name" : "`spark_catalog`.`temp_view_test`.`v4_temp`",
+    "nameParts" : "temp_table"
+  }
+}
 
 
 -- !query
@@ -394,7 +412,13 @@ CREATE VIEW v5_temp AS
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `spark_catalog`.`temp_view_test`.`v5_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "messageParameters" : {
+    "name" : "`spark_catalog`.`temp_view_test`.`v5_temp`",
+    "nameParts" : "temp_table"
+  }
+}
 
 
 -- !query
@@ -553,7 +577,13 @@ CREATE VIEW v6_temp AS SELECT * FROM base_table WHERE id IN (SELECT id FROM temp
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `spark_catalog`.`temp_view_test`.`v6_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "messageParameters" : {
+    "name" : "`spark_catalog`.`temp_view_test`.`v6_temp`",
+    "nameParts" : "temp_table"
+  }
+}
 
 
 -- !query
@@ -562,7 +592,13 @@ CREATE VIEW v7_temp AS SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM tem
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `spark_catalog`.`temp_view_test`.`v7_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "messageParameters" : {
+    "name" : "`spark_catalog`.`temp_view_test`.`v7_temp`",
+    "nameParts" : "temp_table"
+  }
+}
 
 
 -- !query
@@ -571,7 +607,13 @@ CREATE VIEW v8_temp AS SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM temp
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `spark_catalog`.`temp_view_test`.`v8_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "messageParameters" : {
+    "name" : "`spark_catalog`.`temp_view_test`.`v8_temp`",
+    "nameParts" : "temp_table"
+  }
+}
 
 
 -- !query
@@ -580,7 +622,13 @@ CREATE VIEW v9_temp AS SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `spark_catalog`.`temp_view_test`.`v9_temp` by referencing a temporary view temp_table. Please create a temp view instead by CREATE TEMP VIEW
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "messageParameters" : {
+    "name" : "`spark_catalog`.`temp_view_test`.`v9_temp`",
+    "nameParts" : "temp_table"
+  }
+}
 
 
 -- !query
@@ -689,7 +737,13 @@ CREATE VIEW temporal1 AS SELECT * FROM t1 CROSS JOIN tt
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `spark_catalog`.`testviewschm2`.`temporal1` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "messageParameters" : {
+    "name" : "`spark_catalog`.`testviewschm2`.`temporal1`",
+    "nameParts" : "tt"
+  }
+}
 
 
 -- !query
@@ -730,7 +784,13 @@ CREATE VIEW temporal2 AS SELECT * FROM t1 INNER JOIN tt ON t1.num = tt.num2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `spark_catalog`.`testviewschm2`.`temporal2` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "messageParameters" : {
+    "name" : "`spark_catalog`.`testviewschm2`.`temporal2`",
+    "nameParts" : "tt"
+  }
+}
 
 
 -- !query
@@ -771,7 +831,13 @@ CREATE VIEW temporal3 AS SELECT * FROM t1 LEFT JOIN tt ON t1.num = tt.num2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `spark_catalog`.`testviewschm2`.`temporal3` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "messageParameters" : {
+    "name" : "`spark_catalog`.`testviewschm2`.`temporal3`",
+    "nameParts" : "tt"
+  }
+}
 
 
 -- !query
@@ -812,7 +878,13 @@ CREATE VIEW temporal4 AS SELECT * FROM t1 LEFT JOIN tt ON t1.num = tt.num2 AND t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `spark_catalog`.`testviewschm2`.`temporal4` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "messageParameters" : {
+    "name" : "`spark_catalog`.`testviewschm2`.`temporal4`",
+    "nameParts" : "tt"
+  }
+}
 
 
 -- !query
@@ -821,7 +893,13 @@ CREATE VIEW temporal5 AS SELECT * FROM t1 WHERE num IN (SELECT num FROM t1 WHERE
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `spark_catalog`.`testviewschm2`.`temporal5` by referencing a temporary view tt. Please create a temp view instead by CREATE TEMP VIEW
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "messageParameters" : {
+    "name" : "`spark_catalog`.`testviewschm2`.`temporal5`",
+    "nameParts" : "tt"
+  }
+}
 
 
 -- !query

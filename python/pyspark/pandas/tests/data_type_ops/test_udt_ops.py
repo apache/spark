@@ -126,7 +126,7 @@ class UDTOpsTest(OpsTestBase):
         sparse_vector = SparseVector(len(sparse_values), sparse_values)
         pser = pd.Series([sparse_vector])
         psser = ps.Series([sparse_vector])
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):

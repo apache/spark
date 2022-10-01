@@ -5240,6 +5240,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     '%s/to_parquet/foo.parquet' % path,
         ...     mode = 'overwrite',
         ...     partition_cols=['date', 'country'])
+
+        Notes
+        -----
+        pandas API on Spark writes Parquet files into the directory, `path`, and writes
+        multiple part files in the directory unlike pandas.
+        pandas API on Spark respects HDFS's property such as 'fs.default.name'.
         """
         if index_col is None:
             log_advice(
@@ -5266,11 +5272,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         **options: "OptionalPrimitiveType",
     ) -> None:
         """
-        Write the DataFrame out as a ORC file or directory.
+        Write a DataFrame to the ORC format.
 
         Parameters
         ----------
-        path : str, required
+        path : str
             Path to write to.
         mode : str
             Python write mode, default 'w'.
@@ -5317,6 +5323,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     '%s/to_orc/foo.orc' % path,
         ...     mode = 'overwrite',
         ...     partition_cols=['date', 'country'])
+
+        Notes
+        -----
+        pandas API on Spark writes ORC files into the directory, `path`, and writes
+        multiple part files in the directory unlike pandas.
+        pandas API on Spark respects HDFS's property such as 'fs.default.name'.
         """
         if index_col is None:
             log_advice(
@@ -12854,8 +12866,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         sdf = self._internal.spark_frame.select(mode_scols)
         sdf = sdf.select(*[F.array_sort(F.col(name)).alias(name) for name in mode_col_names])
 
-        tmp_zip_col = "__tmp_zip_col__"
-        tmp_explode_col = "__tmp_explode_col__"
+        zip_col_name = verify_temp_column_name(sdf, "__mode_zip_tmp_col__")
+        explode_col_name = verify_temp_column_name(sdf, "__mode_explode_tmp_col__")
 
         # After this transformation, sdf turns out to be:
         # +-------+----+-----+
@@ -12865,11 +12877,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # |   null|null|  2.0|
         # +-------+----+-----+
         sdf = (
-            sdf.select(F.arrays_zip(*[F.col(name) for name in mode_col_names]).alias(tmp_zip_col))
-            .select(F.explode(F.col(tmp_zip_col)).alias(tmp_explode_col))
+            sdf.select(F.arrays_zip(*[F.col(name) for name in mode_col_names]).alias(zip_col_name))
+            .select(F.explode(F.col(zip_col_name)).alias(explode_col_name))
             .select(
                 *[
-                    F.col("{0}.{1}".format(tmp_explode_col, name)).alias(name)
+                    F.col("{0}.{1}".format(explode_col_name, name)).alias(name)
                     for name in mode_col_names
                 ]
             )

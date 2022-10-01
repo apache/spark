@@ -49,6 +49,10 @@ WITH
   t(x) AS (SELECT 2)
 SELECT * FROM t;
 
+-- invalid CTE relation should fail the query even if it's not referenced
+WITH t AS (SELECT 1 FROM non_existing_table)
+SELECT 2;
+
 -- Clean up
 DROP VIEW IF EXISTS t;
 DROP VIEW IF EXISTS t2;

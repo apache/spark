@@ -44,7 +44,7 @@ import org.apache.spark.network.shuffle.protocol.MergeStatuses
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.{RDD, RDDCheckpointData}
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.{ResourceProfile, TaskResourceProfile}
 import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
@@ -592,7 +592,12 @@ private[spark] class DAGScheduler(
         if (x.amount > v.amount) x else v).getOrElse(v)
       k -> larger
     }
-    new ResourceProfile(mergedExecReq, mergedTaskReq)
+
+    if (mergedExecReq.isEmpty) {
+      new TaskResourceProfile(mergedTaskReq)
+    } else {
+      new ResourceProfile(mergedExecReq, mergedTaskReq)
+    }
   }
 
   /**

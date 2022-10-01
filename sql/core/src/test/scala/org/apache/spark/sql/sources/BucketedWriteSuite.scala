@@ -238,19 +238,23 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
   }
 
   test("write bucketed data with the overlapping bucketBy/sortBy and partitionBy columns") {
-    val e1 = intercept[AnalysisException](df.write
-      .partitionBy("i", "j")
-      .bucketBy(8, "j", "k")
-      .sortBy("k")
-      .saveAsTable("bucketed_table"))
-    assert(e1.message.contains("bucketing column 'j' should not be part of partition columns"))
+    checkError(
+      exception = intercept[AnalysisException](df.write
+        .partitionBy("i", "j")
+        .bucketBy(8, "j", "k")
+        .sortBy("k")
+        .saveAsTable("bucketed_table")),
+      errorClass = "_LEGACY_ERROR_TEMP_1166",
+      parameters = Map("bucketCol" -> "j", "normalizedPartCols" -> "i, j"))
 
-    val e2 = intercept[AnalysisException](df.write
-      .partitionBy("i", "j")
-      .bucketBy(8, "k")
-      .sortBy("i")
-      .saveAsTable("bucketed_table"))
-    assert(e2.message.contains("bucket sorting column 'i' should not be part of partition columns"))
+    checkError(
+      exception = intercept[AnalysisException](df.write
+        .partitionBy("i", "j")
+        .bucketBy(8, "k")
+        .sortBy("i")
+        .saveAsTable("bucketed_table")),
+      errorClass = "_LEGACY_ERROR_TEMP_1167",
+      parameters = Map("sortCol" -> "i", "normalizedPartCols" -> "i, j"))
   }
 
   test("write bucketed data without partitionBy") {

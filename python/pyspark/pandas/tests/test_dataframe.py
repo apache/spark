@@ -723,7 +723,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
         self.assert_eq(psdf, pdf)
         self.assert_eq(psdf.columns.names, pdf.columns.names)
-        self.assert_eq(psdf.to_pandas().columns.names, pdf.columns.names)
+        self.assert_eq(psdf._to_pandas().columns.names, pdf.columns.names)
 
     def test_dataframe_multiindex_names_level(self):
         columns = pd.MultiIndex.from_tuples(
@@ -738,7 +738,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf.columns.names, pdf.columns.names)
-        self.assert_eq(psdf.to_pandas().columns.names, pdf.columns.names)
+        self.assert_eq(psdf._to_pandas().columns.names, pdf.columns.names)
 
         psdf1 = ps.from_pandas(pdf)
         self.assert_eq(psdf1.columns.names, pdf.columns.names)
@@ -750,13 +750,13 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
         self.assert_eq(psdf["X"], pdf["X"])
         self.assert_eq(psdf["X"].columns.names, pdf["X"].columns.names)
-        self.assert_eq(psdf["X"].to_pandas().columns.names, pdf["X"].columns.names)
+        self.assert_eq(psdf["X"]._to_pandas().columns.names, pdf["X"].columns.names)
         self.assert_eq(psdf["X"]["A"], pdf["X"]["A"])
         self.assert_eq(psdf["X"]["A"].columns.names, pdf["X"]["A"].columns.names)
-        self.assert_eq(psdf["X"]["A"].to_pandas().columns.names, pdf["X"]["A"].columns.names)
+        self.assert_eq(psdf["X"]["A"]._to_pandas().columns.names, pdf["X"]["A"].columns.names)
         self.assert_eq(psdf[("X", "A")], pdf[("X", "A")])
         self.assert_eq(psdf[("X", "A")].columns.names, pdf[("X", "A")].columns.names)
-        self.assert_eq(psdf[("X", "A")].to_pandas().columns.names, pdf[("X", "A")].columns.names)
+        self.assert_eq(psdf[("X", "A")]._to_pandas().columns.names, pdf[("X", "A")].columns.names)
         self.assert_eq(psdf[("X", "A", "Z")], pdf[("X", "A", "Z")])
 
     def test_itertuples(self):
@@ -866,7 +866,9 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
         with ps.option_context("compute.default_index_type", "distributed"):
             # the index is different.
-            self.assert_eq(psdf.reset_index().to_pandas().reset_index(drop=True), pdf.reset_index())
+            self.assert_eq(
+                psdf.reset_index()._to_pandas().reset_index(drop=True), pdf.reset_index()
+            )
 
     def test_reset_index_with_multiindex_columns(self):
         index = pd.MultiIndex.from_tuples(
@@ -979,14 +981,14 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         df = ps.range(10)
         df.__repr__()
         df["a"] = df["id"]
-        self.assertEqual(df.__repr__(), df.to_pandas().__repr__())
+        self.assertEqual(df.__repr__(), df._to_pandas().__repr__())
 
     def test_repr_html_cache_invalidation(self):
         # If there is any cache, inplace operations should invalidate it.
         df = ps.range(10)
         df._repr_html_()
         df["a"] = df["id"]
-        self.assertEqual(df._repr_html_(), df.to_pandas()._repr_html_())
+        self.assertEqual(df._repr_html_(), df._to_pandas()._repr_html_())
 
     def test_empty_dataframe(self):
         pdf = pd.DataFrame({"a": pd.Series([], dtype="i1"), "b": pd.Series([], dtype="str")})
@@ -2413,7 +2415,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
     def test_to_pandas(self):
         pdf, psdf = self.df_pair
-        self.assert_eq(psdf.to_pandas(), pdf)
+        self.assert_eq(psdf._to_pandas(), pdf)
 
     def test_isin(self):
         pdf = pd.DataFrame(
@@ -2510,7 +2512,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
         def check(op, right_psdf=right_psdf, right_pdf=right_pdf):
             k_res = op(left_psdf, right_psdf)
-            k_res = k_res.to_pandas()
+            k_res = k_res._to_pandas()
             k_res = k_res.sort_values(by=list(k_res.columns))
             k_res = k_res.reset_index(drop=True)
             p_res = op(left_pdf, right_pdf)
@@ -2667,7 +2669,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
         def check(op, right_psdf=right_psdf, right_pdf=right_pdf):
             k_res = op(left_psdf, right_psdf)
-            k_res = k_res.to_pandas()
+            k_res = k_res._to_pandas()
             k_res = k_res.sort_values(by=list(k_res.columns))
             k_res = k_res.reset_index(drop=True)
             p_res = op(left_pdf, right_pdf)
@@ -6074,9 +6076,16 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self._test_corrwith(df_bool, df_bool.B)
 
     def _test_corrwith(self, psdf, psobj):
-        pdf = psdf.to_pandas()
-        pobj = psobj.to_pandas()
-        for method in ["pearson", "spearman", "kendall"]:
+        pdf = psdf._to_pandas()
+        pobj = psobj._to_pandas()
+        # Regression in pandas 1.5.0 when other is Series and method is "pearson" or "spearman"
+        # See https://github.com/pandas-dev/pandas/issues/48826 for the reported issue,
+        # and https://github.com/pandas-dev/pandas/pull/46174 for the initial PR that causes.
+        if LooseVersion(pd.__version__) >= LooseVersion("1.5.0") and isinstance(pobj, pd.Series):
+            methods = ["kendall"]
+        else:
+            methods = ["pearson", "spearman", "kendall"]
+        for method in methods:
             for drop in [True, False]:
                 p_corr = pdf.corrwith(pobj, drop=drop, method=method)
                 ps_corr = psdf.corrwith(psobj, drop=drop, method=method)
@@ -6497,7 +6506,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
         # string columns
         psdf = ps.DataFrame({"A": ["a", "b", "b", "c"], "B": ["d", "e", "f", "f"]})
-        pdf = psdf.to_pandas()
+        pdf = psdf._to_pandas()
         self.assert_eq(psdf.describe(), pdf.describe().astype(str))
         psdf.A += psdf.A
         pdf.A += pdf.A
@@ -6520,7 +6529,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
                 ],
             }
         )
-        pdf = psdf.to_pandas()
+        pdf = psdf._to_pandas()
         # NOTE: Set `datetime_is_numeric=True` for pandas:
         # FutureWarning: Treating datetime data as categorical rather than numeric in
         # `.describe` is deprecated and will be removed in a future version of pandas.
@@ -6575,7 +6584,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
                 ],
             }
         )
-        pdf = psdf.to_pandas()
+        pdf = psdf._to_pandas()
         if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
             self.assert_eq(
                 psdf.describe().loc[["count", "mean", "min", "max"]],
@@ -6628,7 +6637,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
                 ],
             }
         )
-        pdf = psdf.to_pandas()
+        pdf = psdf._to_pandas()
         if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
             pandas_result = pdf.describe(datetime_is_numeric=True)
             pandas_result.B = pandas_result.B.astype(str)
@@ -6693,7 +6702,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
                 "c": [None, None, None],
             }
         )
-        pdf = psdf.to_pandas()
+        pdf = psdf._to_pandas()
         if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
             pandas_result = pdf.describe(datetime_is_numeric=True)
             pandas_result.b = pandas_result.b.astype(str)
@@ -6734,7 +6743,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
     def test_describe_empty(self):
         # Empty DataFrame
         psdf = ps.DataFrame(columns=["A", "B"])
-        pdf = psdf.to_pandas()
+        pdf = psdf._to_pandas()
         self.assert_eq(
             psdf.describe(),
             pdf.describe().astype(float),
@@ -6742,7 +6751,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
         # Explicit empty DataFrame numeric only
         psdf = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
-        pdf = psdf.to_pandas()
+        pdf = psdf._to_pandas()
         self.assert_eq(
             psdf[psdf.a != psdf.a].describe(),
             pdf[pdf.a != pdf.a].describe(),
@@ -6750,7 +6759,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
         # Explicit empty DataFrame string only
         psdf = ps.DataFrame({"a": ["a", "b", "c"], "b": ["q", "w", "e"]})
-        pdf = psdf.to_pandas()
+        pdf = psdf._to_pandas()
         self.assert_eq(
             psdf[psdf.a != psdf.a].describe(),
             pdf[pdf.a != pdf.a].describe().astype(float),
@@ -6763,7 +6772,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
                 "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)],
             }
         )
-        pdf = psdf.to_pandas()
+        pdf = psdf._to_pandas()
         # For timestamp type, we should convert NaT to None in pandas result
         # since pandas API on Spark doesn't support the NaT for object type.
         if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
@@ -6804,7 +6813,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psdf = ps.DataFrame(
             {"a": [1, 2, 3], "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]}
         )
-        pdf = psdf.to_pandas()
+        pdf = psdf._to_pandas()
         if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
             pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
             pdf_result.b = pdf_result.b.where(pdf_result.b.notnull(), None).astype(str)
@@ -6844,7 +6853,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
         # Explicit empty DataFrame numeric & string
         psdf = ps.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
-        pdf = psdf.to_pandas()
+        pdf = psdf._to_pandas()
         self.assert_eq(
             psdf[psdf.a != psdf.a].describe(),
             pdf[pdf.a != pdf.a].describe(),
@@ -6854,7 +6863,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psdf = ps.DataFrame(
             {"a": ["a", "b", "c"], "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]}
         )
-        pdf = psdf.to_pandas()
+        pdf = psdf._to_pandas()
         if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
             pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
             self.assert_eq(

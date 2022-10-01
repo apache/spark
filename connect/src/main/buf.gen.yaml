@@ -26,15 +26,6 @@ plugins:
     out: gen/proto/python
   - remote: buf.build/grpc/plugins/python:v1.47.0-1
     out: gen/proto/python
-  - remote: buf.build/protocolbuffers/plugins/go:v1.28.0-1
-    out: gen/proto/go
-    opt:
-      - paths=source_relative
-  - remote: buf.build/grpc/plugins/go:v1.2.0-1
-    out: gen/proto/go
-    opt:
-      - paths=source_relative
-      - require_unimplemented_servers=false
   - remote: buf.build/grpc/plugins/ruby:v1.47.0-1
     out: gen/proto/ruby
   - remote: buf.build/protocolbuffers/plugins/ruby:v21.2.0-1

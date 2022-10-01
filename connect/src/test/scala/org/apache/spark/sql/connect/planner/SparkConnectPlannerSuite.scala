@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{SparkFunSuite, TestUtils}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -57,11 +57,6 @@ trait SparkConnectSessionTest {
 class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   protected var spark: SparkSession = null
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    TestUtils.configTestLog4j2("INFO")
-  }
 
   test("Simple Limit") {
     assertThrows[IndexOutOfBoundsException] {

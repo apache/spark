@@ -39,6 +39,12 @@ import org.apache.spark.util.Utils
 class HivePartitionFilteringSuite(version: String)
     extends HiveVersionSuite(version) with BeforeAndAfterAll with SQLHelper {
 
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    // SPARK-40619: explicitly call gc to avoid OutOfMemoryError as far as possible.
+    System.gc()
+  }
+
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
   private val fallbackKey = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key
   private val pruningFastFallback = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK.key

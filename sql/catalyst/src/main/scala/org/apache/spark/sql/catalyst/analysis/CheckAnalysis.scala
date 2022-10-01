@@ -114,12 +114,22 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
-    // We transform up and order the rules so as to catch the first possible failure instead
-    // of the result of cascading resolution failures. Inline all CTEs in the plan to help check
-    // query plan structures in subqueries.
     val inlineCTE = InlineCTE(alwaysInline = true)
-    inlineCTE(plan).foreachUp {
+    val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int)]
+    inlineCTE.buildCTEMap(plan, cteMap)
+    cteMap.values.foreach { case (relation, refCount) =>
+      // If a CTE relation is never used, it will disappear after inline. Here we explicitly check
+      // analysis for it, to make sure the entire query plan is valid.
+      if (refCount == 0) checkAnalysis0(relation.child)
+    }
+    // Inline all CTEs in the plan to help check query plan structures in subqueries.
+    checkAnalysis0(inlineCTE(plan))
+  }
 
+  def checkAnalysis0(plan: LogicalPlan): Unit = {
+    // We transform up and order the rules so as to catch the first possible failure instead
+    // of the result of cascading resolution failures.
+    plan.foreachUp {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case leaf: LeafNode if leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>

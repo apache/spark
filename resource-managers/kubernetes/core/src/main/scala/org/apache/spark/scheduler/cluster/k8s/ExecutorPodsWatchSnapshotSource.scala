@@ -25,6 +25,7 @@ import io.fabric8.kubernetes.client.Watcher.Action
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_ENABLE_API_WATCHER
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_NAMESPACE
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
@@ -46,6 +47,8 @@ class ExecutorPodsWatchSnapshotSource(
   private var watchConnection: Closeable = _
   private val enableWatching = conf.get(KUBERNETES_EXECUTOR_ENABLE_API_WATCHER)
 
+  private val namespace = conf.get(KUBERNETES_NAMESPACE)
+
   // If we're constructed with the old API get the SparkConf from the running SparkContext.
   def this(snapshotsStore: ExecutorPodsSnapshotsStore, kubernetesClient: KubernetesClient) = {
     this(snapshotsStore, kubernetesClient, SparkContext.getOrCreate().conf)
@@ -58,6 +61,7 @@ class ExecutorPodsWatchSnapshotSource(
       logDebug(s"Starting to watch for pods with labels $SPARK_APP_ID_LABEL=$applicationId," +
         s" $SPARK_ROLE_LABEL=$SPARK_POD_EXECUTOR_ROLE.")
       watchConnection = kubernetesClient.pods()
+        .inNamespace(namespace)
         .withLabel(SPARK_APP_ID_LABEL, applicationId)
         .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
         .watch(new ExecutorPodsWatcher())
