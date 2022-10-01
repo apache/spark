@@ -17,7 +17,7 @@
 
 r"""
  Split lines into words, group by words and use the state per key to track session of each key.
-
+ The timeout is set as 10 seconds, so each session window lasts until there is no more input to the key for 10 seconds.
  Usage: structured_network_wordcount_windowed.py <hostname> <port>
  <hostname> and <port> describe the TCP server that Structured Streaming
  would connect to receive data.
@@ -41,6 +41,7 @@ from pyspark.sql.functions import split
 from pyspark.sql.types import (
     LongType,
     StringType,
+    TimestampType,
     StructType,
     StructField,
 )
@@ -71,7 +72,7 @@ if __name__ == "__main__":
     # Split the lines into words, retaining timestamps, each word become a sessionId
     events = lines.select(
         explode(split(lines.value, " ")).alias("sessionId"),
-        lines.timestamp.cast("long"),
+        lines.timestamp,
     )
 
     # Type of output records.
@@ -79,8 +80,8 @@ if __name__ == "__main__":
         [
             StructField("sessionId", StringType()),
             StructField("count", LongType()),
-            StructField("start", LongType()),
-            StructField("end", LongType()),
+            StructField("start", TimestampType()),
+            StructField("end", TimestampType()),
         ]
     )
     # Type of group state.
@@ -88,38 +89,39 @@ if __name__ == "__main__":
     session_state_schema = StructType(
         [
             StructField("count", LongType()),
-            StructField("start", LongType()),
-            StructField("end", LongType()),
+            StructField("start", TimestampType()),
+            StructField("end", TimestampType()),
         ]
     )
 
     def func(
-        key: Any, pdf_iter: Iterable[pd.DataFrame], state: GroupState
+        key: Any, pdfs: Iterable[pd.DataFrame], state: GroupState
     ) -> Iterable[pd.DataFrame]:
         if state.hasTimedOut:
             count, start, end = state.get
             state.remove()
+            (session_id,) = key
             yield pd.DataFrame(
                 {
-                    "sessionId": [key[0]],
+                    "sessionId": [session_id],
                     "count": [count],
                     "start": [start],
                     "end": [end],
                 }
             )
         else:
-            start = math.inf
-            end = 0
-            count = 0
-            for pdf in pdf_iter:
-                start = min(start, min(pdf["timestamp"]))
-                end = max(end, max(pdf["timestamp"]))
+            first_pdf = next(pdfs)
+            start = first_pdf["timestamp"].min()
+            end = first_pdf["timestamp"].max()
+            count = len(first_pdf)
+            for pdf in pdfs:
+                start = min(start, pdf["timestamp"].min())
+                end = max(end, pdf["timestamp"].max())
                 count = count + len(pdf)
             if state.exists:
-                old_session = state.get
-                count = count + old_session[0]
-                start = old_session[1]
-                end = max(end, old_session[2])
+                (old_count, start, old_end) = state.get
+                count = count + old_count
+                end = max(end, old_end)
             state.update((count, start, end))
             state.setTimeoutDuration(10000)
             yield pd.DataFrame()
