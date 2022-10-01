@@ -1072,6 +1072,44 @@ class FunctionsTests(ReusedSQLTestCase):
         for a, e in zip(df.first(), expected):
             self.assertAlmostEqual(a, e, 5)
 
+    def test_map_functions(self):
+        from pyspark.sql import functions as F
+
+        expected = {"a": 1, "b": 2}
+        expected2 = {"c": 3, "d": 4}
+        df = self.spark.createDataFrame(
+            [(list(expected.keys()), list(expected.values()))], ["k", "v"]
+        )
+        actual = (
+            df.select(
+                F.expr("map('c', 3, 'd', 4) as dict2"),
+                F.map_from_arrays(df.k, df.v).alias("dict"),
+                "*",
+            )
+            .select(
+                F.map_contains_key("dict", "a").alias("one"),
+                F.map_contains_key("dict", "d").alias("not_exists"),
+                F.map_keys("dict").alias("keys"),
+                F.map_values("dict").alias("values"),
+                F.map_entries("dict").alias("items"),
+                "*",
+            )
+            .select(
+                F.map_concat("dict", "dict2").alias("merged"),
+                F.map_from_entries(F.arrays_zip("keys", "values")).alias("from_items"),
+                "*",
+            )
+            .first()
+        )
+        self.assertEqual(expected, actual["dict"])
+        self.assertTrue(actual["one"])
+        self.assertFalse(actual["not_exists"])
+        self.assertEqual(list(expected.keys()), actual["keys"])
+        self.assertEqual(list(expected.values()), actual["values"])
+        self.assertEqual(expected, dict(actual["items"]))
+        self.assertEqual({**expected, **expected2}, dict(actual["merged"]))
+        self.assertEqual(expected, actual["from_items"])
+
 
 if __name__ == "__main__":
     import unittest
