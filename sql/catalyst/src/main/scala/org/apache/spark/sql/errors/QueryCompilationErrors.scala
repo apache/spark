@@ -1209,7 +1209,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "continuousSources" -> continuousSources.mkString(", ")))
   }
 
-  def noSuchTableError(ident: Identifier): Throwable = {
+  def noSuchTableError(ident: Identifier): NoSuchTableException = {
     new NoSuchTableException(ident)
   }
 
