@@ -2860,5 +2860,147 @@
     "message" : [
       "Invalid join type in joinWith: <joinType>."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1320" : {
+    "message" : [
+      "Typed column <typedCol> that needs input type and schema cannot be passed in untyped `select` API. Use the typed `Dataset.select` API instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1321" : {
+    "message" : [
+      "Invalid view name: <viewName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1322" : {
+    "message" : [
+      "Invalid number of buckets: bucket(<numBuckets>, <e>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1323" : {
+    "message" : [
+      "\"<colName>\" is not a numeric column. Aggregation function can only be applied on a numeric column."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1324" : {
+    "message" : [
+      "The pivot column <pivotColumn> has more than <maxValues> distinct values, this could indicate an error. If this was intended, set <config> to at least the number of distinct values of the pivot column."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1325" : {
+    "message" : [
+      "Cannot modify the value of a static config: <key>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1326" : {
+    "message" : [
+      "Cannot modify the value of a Spark config: <key>.",
+      "See also 'https://spark.apache.org/docs/latest/sql-migration-guide.html#ddl-statements'"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1327" : {
+    "message" : [
+      "Command execution is not supported in runner <runner>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1328" : {
+    "message" : [
+      "Can not instantiate class <className>, please make sure it has public non argument constructor."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1329" : {
+    "message" : [
+      "Can not load class <className>, please make sure it is on the classpath."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1330" : {
+    "message" : [
+      "Class <className> doesn't implement interface UserDefinedAggregateFunction."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1331" : {
+    "message" : [
+      "Missing field <fieldName> in table <table> with schema:",
+      "<schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1332" : {
+    "message" : [
+      "<errorMessage>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1333" : {
+    "message" : [
+      "Invalid view text: <viewText>. The view <tableName> may have been tampered with."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1334" : {
+    "message" : [
+      "Cannot specify both version and timestamp when time travelling the table."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1335" : {
+    "message" : [
+      "<expr> is not a valid timestamp expression for time travel."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1336" : {
+    "message" : [
+      "Cannot time travel <target>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1337" : {
+    "message" : [
+      "Table <tableName> does not support time travel."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1338" : {
+    "message" : [
+      "Sinks cannot request distribution and ordering in continuous execution mode"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1339" : {
+    "message" : [
+      "Failed to execute INSERT INTO command because the VALUES list contains a DEFAULT column reference as part of another expression; this is not allowed"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1340" : {
+    "message" : [
+      "Failed to execute UPDATE command because the SET list contains a DEFAULT column reference as part of another expression; this is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1341" : {
+    "message" : [
+      "Failed to execute UPDATE command because the WHERE clause contains a DEFAULT column reference; this is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1342" : {
+    "message" : [
+      "Failed to execute MERGE command because the WHERE clause contains a DEFAULT column reference; this is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1343" : {
+    "message" : [
+      "Failed to execute MERGE INTO command because one of its INSERT or UPDATE assignments contains a DEFAULT column reference as part of another expression; this is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1344" : {
+    "message" : [
+      "Invalid DEFAULT value for column <fieldName>: <defaultValue> fails to parse as a valid literal value."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1345" : {
+    "message" : [
+      "Failed to execute <statementType> command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1346" : {
+    "message" : [
+      "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1347" : {
+    "message" : [
+      "Failed to execute command because subquery expressions are not allowed in DEFAULT values."
+    ]
   }
 }
