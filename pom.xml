@@ -1193,7 +1193,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.16.0</version>
+        <version>1.17.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2948,7 +2948,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.0.0-M5</version>
+          <version>3.0.0-M7</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -2988,6 +2988,7 @@
               <test.src.tables>src</test.src.tables>
             </systemProperties>
             <failIfNoTests>false</failIfNoTests>
+            <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
             <excludedGroups>${test.exclude.tags}</excludedGroups>
             <groups>${test.include.tags}</groups>
           </configuration>
@@ -3188,7 +3189,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-dependency-plugin</artifactId>
-          <version>3.1.1</version>
+          <version>3.3.0</version>
           <executions>
             <execution>
               <id>default-cli</id>
