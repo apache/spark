@@ -17,7 +17,8 @@
 
 r"""
  Split lines into words, group by words and use the state per key to track session of each key.
- The timeout is set as 10 seconds, so each session window lasts until there is no more input to the key for 10 seconds.
+ Each session window sets a 10 seconds processing time timeout.
+ After 10 seconds of idle period, the session summary will be finalized and output to sink.
  Usage: structured_network_wordcount_windowed.py <hostname> <port>
  <hostname> and <port> describe the TCP server that Structured Streaming
  would connect to receive data.
