@@ -154,9 +154,10 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     val schema = new StructType().add("k", IntegerType).add("v", StringType)
     val smallDF = spark.createDataFrame(rdd, schema)
     val df = spark.range(10).join(broadcast(smallDF), col("k") === col("id"))
-    assert(df.queryExecution.executedPlan.exists(p =>
-      p.isInstanceOf[WholeStageCodegenExec] &&
-        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[BroadcastHashJoinExec]))
+    val broadcastHashJoin = df.queryExecution.executedPlan.find {
+      case WholeStageCodegenExec(ProjectExec(_, _: BroadcastHashJoinExec)) => true
+    }
+    assert(broadcastHashJoin.isDefined)
     assert(df.collect() === Array(Row(1, 1, "1"), Row(1, 1, "1"), Row(2, 2, "2")))
   }
 
@@ -201,8 +202,10 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       // test one join with non-unique key from build side
       val joinNonUniqueDF = df1.join(df2.hint(hint), $"k1" === $"k2" % 3, "full_outer")
       assert(joinNonUniqueDF.queryExecution.executedPlan.collect {
-        case WholeStageCodegenExec(_ : ShuffledHashJoinExec) if hint == "SHUFFLE_HASH" => true
-        case WholeStageCodegenExec(_ : SortMergeJoinExec) if hint == "SHUFFLE_MERGE" => true
+        case WholeStageCodegenExec(ProjectExec(_, _: ShuffledHashJoinExec))
+            if hint == "SHUFFLE_HASH" => true
+        case WholeStageCodegenExec(ProjectExec(_, _ : SortMergeJoinExec))
+            if hint == "SHUFFLE_MERGE" => true
       }.size === 1)
       checkAnswer(joinNonUniqueDF, Seq(Row(0, 0), Row(0, 3), Row(0, 6), Row(0, 9), Row(1, 1),
         Row(1, 4), Row(1, 7), Row(2, 2), Row(2, 5), Row(2, 8), Row(3, null), Row(4, null)))
@@ -211,8 +214,10 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       val joinWithNonEquiDF = df1.join(df2.hint(hint),
         $"k1" === $"k2" % 3 && $"k1" + 3 =!= $"k2", "full_outer")
       assert(joinWithNonEquiDF.queryExecution.executedPlan.collect {
-        case WholeStageCodegenExec(_ : ShuffledHashJoinExec) if hint == "SHUFFLE_HASH" => true
-        case WholeStageCodegenExec(_ : SortMergeJoinExec) if hint == "SHUFFLE_MERGE" => true
+        case WholeStageCodegenExec(ProjectExec(_, _: ShuffledHashJoinExec))
+            if hint == "SHUFFLE_HASH" => true
+        case WholeStageCodegenExec(ProjectExec(_, _ : SortMergeJoinExec))
+            if hint == "SHUFFLE_MERGE" => true
       }.size === 1)
       checkAnswer(joinWithNonEquiDF, Seq(Row(0, 0), Row(0, 6), Row(0, 9), Row(1, 1),
         Row(1, 7), Row(2, 2), Row(2, 8), Row(3, null), Row(4, null), Row(null, 3), Row(null, 4),
@@ -378,7 +383,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           .join(df3, $"k1" <= $"k3", "left_outer")
         hasJoinInCodegen = twoJoinsDF.queryExecution.executedPlan.collect {
           case WholeStageCodegenExec(BroadcastNestedLoopJoinExec(
-            _: BroadcastNestedLoopJoinExec, _, _, _, _)) => true
+            ProjectExec(_, _: BroadcastNestedLoopJoinExec), _, _, _, _)) => true
         }.size === 1
         assert(hasJoinInCodegen == codegenEnabled)
         checkAnswer(twoJoinsDF,

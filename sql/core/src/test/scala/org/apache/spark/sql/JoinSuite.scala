@@ -27,16 +27,16 @@ import org.mockito.Mockito._
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Cast, Coalesce, GenericRow, IsNotNull, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
-import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
@@ -1057,7 +1057,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val pythonEvals = collect(joinNode.get) {
       case p: BatchEvalPythonExec => p
     }
-    assert(pythonEvals.size == 2)
+    assert(pythonEvals.size == 4)
 
     checkAnswer(df, Row(1, 2, 1, 2) :: Nil)
   }
@@ -1453,6 +1453,31 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       val result2 = sql(queryBuildRight)
 
       checkAnswer(result1, result2)
+    }
+  }
+
+  test("SPARK-36290: Pull out join condition can infer more filter conditions") {
+    import org.apache.spark.sql.catalyst.dsl.expressions.DslString
+
+    withTable("t1", "t2") {
+      spark.sql("CREATE TABLE t1(a int, b int) using parquet")
+      spark.sql("CREATE TABLE t2(a string, b string, c string) using parquet")
+
+      spark.sql("SELECT t1.* FROM t1 RIGHT JOIN t2 ON coalesce(t1.a, t1.b) = t2.a")
+        .queryExecution.optimizedPlan.find(_.isInstanceOf[Filter]) match {
+        case Some(Filter(condition, _)) =>
+          condition === IsNotNull(Coalesce(Seq("a".attr, "b".attr)))
+        case _ =>
+          fail("It should contains Filter")
+      }
+
+      spark.sql("SELECT t1.* FROM t1 LEFT JOIN t2 ON t1.a = t2.a")
+        .queryExecution.optimizedPlan.find(_.isInstanceOf[Filter]) match {
+        case Some(Filter(condition, _)) =>
+          condition === IsNotNull(Cast("a".attr, IntegerType))
+        case _ =>
+          fail("It should contains Filter")
+      }
     }
   }
 }
