@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.MultiAlias
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.types.Metadata
 
 /**
@@ -42,6 +42,14 @@ trait AliasHelper {
         (a.toAttribute, a)
     }
     AttributeMap(aliasMap)
+  }
+
+  protected def getAliasMap(plan: LogicalPlan): AttributeMap[Alias] = {
+    plan match {
+      case p: Project => getAliasMap(p)
+      case a: Aggregate => getAliasMap(a)
+      case _ => AttributeMap.empty[Alias]
+    }
   }
 
   protected def getAliasMap(exprs: Seq[NamedExpression]): AttributeMap[Alias] = {

@@ -602,4 +602,24 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         "Missing or unexpected reused ReusedSubqueryExec in the plan")
     }
   }
+
+  test("SPARK-40632: Do not inject runtime filter if condition reference non simple expression") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+      val myUdf = (s: Long) => {
+        s * s
+      }
+      spark.udf.register("myUdf", myUdf)
+      assertDidNotRewriteSemiJoin(
+        """
+          |SELECT *
+          |FROM   bf1
+          |       JOIN (SELECT *,
+          |                    myUdf(c2) AS myUdf
+          |             FROM   bf2) tmp
+          |         ON bf1.c1 = tmp.myudf
+          |WHERE  tmp.a2 = 62
+        """.stripMargin)
+    }
+  }
 }

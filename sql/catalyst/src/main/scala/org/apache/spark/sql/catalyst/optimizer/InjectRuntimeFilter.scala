@@ -156,6 +156,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE)
   }
 
+  private def isSimpleExpression(e: Expression, attributeMap: AttributeMap[Alias]): Boolean = {
+    val originExp = e match {
+      case a: Attribute => attributeMap.get(a).getOrElse(a)
+      case _ => e
+    }
+    isSimpleExpression(originExp)
+  }
+
   private def isProbablyShuffleJoin(left: LogicalPlan,
       right: LogicalPlan, hint: JoinHint): Boolean = {
     !hintToBroadcastLeft(hint) && !hintToBroadcastRight(hint) &&
@@ -281,6 +289,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, hint) =>
         var newLeft = left
         var newRight = right
+        val attributeMap = AttributeMap(join.children.flatMap(getAliasMap))
         (leftKeys, rightKeys).zipped.foreach((l, r) => {
           // Check if:
           // 1. There is already a DPP filter on the key
@@ -289,7 +298,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           if (filterCounter < numFilterThreshold &&
             !hasDynamicPruningSubquery(left, right, l, r) &&
             !hasRuntimeFilter(newLeft, newRight, l, r) &&
-            isSimpleExpression(l) && isSimpleExpression(r)) {
+            isSimpleExpression(l, attributeMap) && isSimpleExpression(r, attributeMap)) {
             val oldLeft = newLeft
             val oldRight = newRight
             if (canPruneLeft(joinType) && filteringHasBenefit(left, right, l, hint)) {
