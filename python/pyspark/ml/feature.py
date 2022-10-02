@@ -116,6 +116,8 @@ __all__ = [
     "VectorSlicer",
     "Word2Vec",
     "Word2VecModel",
+    "SkipGram",
+    "SkipGramModel",
 ]
 
 
@@ -6118,6 +6120,150 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable["Word2VecModel"],
         assert self._java_obj is not None
         tuples = self._java_obj.findSynonymsArray(word, num)
         return list(map(lambda st: (st._1(), st._2()), list(tuples)))
+
+
+class _SkipGramParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCol):
+    """
+    Params for :py:class:`SkipGram` and :py:class:`SkipGramModel`.
+
+    .. versionadded:: 3.4.0
+    """
+
+    vectorSize: Param[int] = Param(
+        Params._dummy(),
+        "vectorSize",
+        "the dimension of codes after transforming from words",
+        typeConverter=TypeConverters.toInt,
+    )
+    numPartitions: Param[int] = Param(
+        Params._dummy(),
+        "numPartitions",
+        "number of partitions for sentences of words",
+        typeConverter=TypeConverters.toInt,
+    )
+    minCount: Param[int] = Param(
+        Params._dummy(),
+        "minCount",
+        "the minimum number of times a token must appear to be included in the "
+        + "SkipGram model's vocabulary",
+        typeConverter=TypeConverters.toInt,
+    )
+    windowSize: Param[int] = Param(
+        Params._dummy(),
+        "windowSize",
+        "the window size (context words from [-window, window]). Default value is 5",
+        typeConverter=TypeConverters.toInt,
+    )
+    negative: Param[int] = Param(
+        Params._dummy(),
+        "negative",
+        "the number of negative samples. Default value is 5",
+        typeConverter=TypeConverters.toInt,
+    )
+    numThread: Param[int] = Param(
+        Params._dummy(),
+        "numThread",
+        "the number of threads to use. Default value is 1",
+        typeConverter=TypeConverters.toInt,
+    )
+    sample: Param[float] = Param(
+        Params._dummy(),
+        "sample",
+        "the word frequency subsample ratio. Default value is 0",
+        typeConverter=TypeConverters.toFloat,
+    )
+    pow: Param[float] = Param(
+        Params._dummy(),
+        "pow",
+        "the word frequency negative sampling power. Default value is 0",
+        typeConverter=TypeConverters.toFloat,
+    )
+    intermediateStorageLevel: Param[str] = Param(
+        Params._dummy(),
+        "intermediateStorageLevel",
+        "StorageLevel for intermediate datasets. Cannot be 'NONE'. Default value is MEMORY_AND_DISK",
+        typeConverter=TypeConverters.toString,
+    )
+
+    def __init__(self, *args: Any):
+        super(_SkipGramParams, self).__init__(*args)
+        self._setDefault(
+            vectorSize=100,
+            minCount=5,
+            numPartitions=1,
+            stepSize=0.025,
+            maxIter=1,
+            windowSize=5,
+            negative=5,
+            numThread=1,
+            sample=0,
+            pow=0,
+            intermediateStorageLevel="MEMORY_AND_DISK",
+        )
+
+    @since("3.4.0")
+    def getVectorSize(self) -> int:
+        """
+        Gets the value of vectorSize or its default value.
+        """
+        return self.getOrDefault(self.vectorSize)
+
+    @since("3.4.0")
+    def getNumPartitions(self) -> int:
+        """
+        Gets the value of numPartitions or its default value.
+        """
+        return self.getOrDefault(self.numPartitions)
+
+    @since("3.4.0")
+    def getMinCount(self) -> int:
+        """
+        Gets the value of minCount or its default value.
+        """
+        return self.getOrDefault(self.minCount)
+
+    @since("3.4.0")
+    def getWindowSize(self) -> int:
+        """
+        Gets the value of windowSize or its default value.
+        """
+        return self.getOrDefault(self.windowSize)
+
+    @since("3.4.0")
+    def getNegative(self) -> int:
+        """
+        Gets the number of negative samples.
+        """
+        return self.getOrDefault(self.negative)
+
+    @since("3.4.0")
+    def getNumThread(self) -> int:
+        """
+        Gets the number of threads to use.
+        """
+        return self.getOrDefault(self.numThread)
+
+    @since("3.4.0")
+    def getSample(self) -> float:
+        """
+        Gets the word frequency subsample ratio.
+        """
+        return self.getOrDefault(self.sample)
+
+    @since("3.4.0")
+    def getPow(self) -> float:
+        """
+        Gets the word frequency negative sampling power.
+        """
+        return self.getOrDefault(self.pow)
+
+    @since("3.4.0")
+    def getIntermediateStorageLevel(self) -> str:
+        """
+        Gets the value of intermediateStorageLevel or its default value.
+        """
+        return self.getOrDefault(self.intermediateStorageLevel)
+
 
 
 class _PCAParams(HasInputCol, HasOutputCol):
