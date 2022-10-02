@@ -35,7 +35,7 @@ on:
         description: Hadoop version to run with. HADOOP_PROFILE environment variable should accept it.
         required: false
         type: string
-        default: hadoop3
+        default: hadoop2
       envs:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
