@@ -6526,7 +6526,7 @@ class SkipGramModel(JavaModel, _SkipGramParams, JavaMLReadable["SkipGramModel"],
         return self._call_java("findSynonyms", word, num)
 
     @since("3.4.0")
-    def findSynonymsArray(self, word: Union[Vector, str], num: int) -> List[Tuple[str, float]]:
+    def findSynonymsArray(self, word: Union[List[float], str], num: int) -> List[Tuple[str, float]]:
         """
         Find "num" number of words closest in similarity to "word".
         word can be a string or vector representation.
