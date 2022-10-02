@@ -195,7 +195,20 @@ SELECT `not_exist`()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: not_exist. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.not_exist.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "messageParameters" : {
+    "fullName" : "spark_catalog.default.not_exist",
+    "rawName" : "not_exist"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "`not_exist`()"
+  } ]
+}
 
 
 -- !query
@@ -204,7 +217,19 @@ SELECT `not_exist`.not_exist()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: not_exist.not_exist; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1243",
+  "messageParameters" : {
+    "rawName" : "not_exist.not_exist"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "`not_exist`.not_exist()"
+  } ]
+}
 
 
 -- !query
@@ -307,7 +332,20 @@ SELECT "not_exist"()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: not_exist. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.not_exist.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "messageParameters" : {
+    "fullName" : "spark_catalog.default.not_exist",
+    "rawName" : "not_exist"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "\"not_exist\"()"
+  } ]
+}
 
 
 -- !query
@@ -316,7 +354,19 @@ SELECT "not_exist".not_exist()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: not_exist.not_exist; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1243",
+  "messageParameters" : {
+    "rawName" : "not_exist.not_exist"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "\"not_exist\".not_exist()"
+  } ]
+}
 
 
 -- !query
@@ -402,7 +452,20 @@ SELECT `not_exist`()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: not_exist. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.not_exist.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "messageParameters" : {
+    "fullName" : "spark_catalog.default.not_exist",
+    "rawName" : "not_exist"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "`not_exist`()"
+  } ]
+}
 
 
 -- !query
@@ -411,7 +474,19 @@ SELECT `not_exist`.not_exist()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: not_exist.not_exist; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1243",
+  "messageParameters" : {
+    "rawName" : "not_exist.not_exist"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "`not_exist`.not_exist()"
+  } ]
+}
 
 
 -- !query
@@ -436,7 +511,12 @@ DROP VIEW v
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-Table spark_catalog.default.v not found
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1115",
+  "messageParameters" : {
+    "msg" : "Table spark_catalog.default.v not found"
+  }
+}
 
 
 -- !query
