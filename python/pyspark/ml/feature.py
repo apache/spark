@@ -6264,6 +6264,228 @@ class _SkipGramParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCo
         """
         return self.getOrDefault(self.intermediateStorageLevel)
 
+@inherit_doc
+class SkipGram(
+    JavaEstimator["SkipGramModel"],
+    _Word2VecParams,
+    JavaMLReadable["SkipGram"],
+    JavaMLWritable,
+):
+    """
+    SkipGram trains a model of `RDD[(String, Vector)]`,
+    i.e. transforms a word into a code for further
+    natural language processing or machine learning process.
+
+    .. versionadded:: 3.4.0
+
+    Examples
+    --------
+    >>> sent = ("a b " * 100 + "a c " * 10).split(" ")
+    >>> doc = spark.createDataFrame([(sent,), (sent,)], ["sentence"])
+    >>> skipGram = SkipGram(vectorSize=5, inputCol="sentence", outputCol="model")
+    >>> skipGram.setMaxIter(10)
+    SkipGram...
+    >>> skipGram.getMaxIter()
+    10
+    >>> skipGram.clear(skipGram.maxIter)
+    >>> model = skipGram.fit(doc)
+    >>> model.getMinCount()
+    5
+    >>> model.setInputCol("sentence")
+    SkipGramModel...
+    >>> model.getVectors().show()
+    +----+--------------------+
+    |word|              vector|
+    +----+--------------------+
+    |   a|[0.0951...
+    |   b|[-1.202...
+    |   c|[0.3015...
+    +----+--------------------+
+    ...
+    >>> model.findSynonymsArray("a", 2)
+    [('b', 0.015859...), ('c', -0.568079...)]
+    >>> from pyspark.sql.functions import format_number as fmt
+    >>> model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
+    +----+----------+
+    |word|similarity|
+    +----+----------+
+    |   b|   0.01586|
+    |   c|  -0.56808|
+    +----+----------+
+    ...
+    >>> model.transform(doc).head().model
+    DenseVector([-0.4833, 0.1855, -0.273, -0.0509, -0.4769])
+    >>> skipGramPath = temp_path + "/skipGram"
+    >>> skipGram.save(skipGramPath)
+    >>> loadedSkipGram = SkipGram.load(skipGramPath)
+    >>> loadedSkipGram.getVectorSize() == skipGram.getVectorSize()
+    True
+    >>> loadedSkipGram.getNumPartitions() == skipGram.getNumPartitions()
+    True
+    >>> loadedSkipGram.getMinCount() == skipGram.getMinCount()
+    True
+    >>> modelPath = temp_path + "/skipGram-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = SkipGramModel.load(modelPath)
+    >>> loadedModel.getVectors().first().word == model.getVectors().first().word
+    True
+    >>> loadedModel.getVectors().first().vector == model.getVectors().first().vector
+    True
+    >>> loadedModel.transform(doc).take(1) == model.transform(doc).take(1)
+    True
+    """
+
+    _input_kwargs: Dict[str, Any]
+
+    @keyword_only
+    def __init__(
+        self,
+        *,
+        vectorSize: int = 100,
+        minCount: int = 5,
+        numPartitions: int = 1,
+        stepSize: float = 0.025,
+        maxIter: int = 1,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        windowSize: int = 5,
+        negative: int = 5,
+        numThread: int = 1,
+        sample: float = 0,
+        pow: float = 0,
+        intermediateStorageLevel = "MEMORY_AND_DISK",
+    ):
+        """
+        __init__(self, \\*, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, \
+                 maxIter=1, seed=None, inputCol=None, outputCol=None, windowSize=5, \
+                 negative: int = 5, numThread: int = 1, sample: float = 0,
+                 pow: float = 0, intermediateStorageLevel = "MEMORY_AND_DISK")
+        """
+        super(SkipGram, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.SkipGram", self.uid)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.4.0")
+    def setParams(
+        self,
+        *,
+        vectorSize: int = 100,
+        minCount: int = 5,
+        numPartitions: int = 1,
+        stepSize: float = 0.025,
+        maxIter: int = 1,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        windowSize: int = 5,
+        negative: int = 5,
+        numThread: int = 1,
+        sample: float = 0,
+        pow: float = 0,
+        intermediateStorageLevel = "MEMORY_AND_DISK") -> "SkipGram":
+        """
+        setParams(self, \\*, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, \
+                  inputCol=None, outputCol=None, windowSize=5, \
+                  negative: int = 5, numThread: int = 1, sample: float = 0,
+                  pow: float = 0, intermediateStorageLevel = "MEMORY_AND_DISK")
+        Sets params for this SkipGram.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("3.4.0")
+    def setVectorSize(self, value: int) -> "SkipGram":
+        """
+        Sets the value of :py:attr:`vectorSize`.
+        """
+        return self._set(vectorSize=value)
+
+    @since("3.4.0")
+    def setNumPartitions(self, value: int) -> "SkipGram":
+        """
+        Sets the value of :py:attr:`numPartitions`.
+        """
+        return self._set(numPartitions=value)
+
+    @since("3.4.0")
+    def setMinCount(self, value: int) -> "SkipGram":
+        """
+        Sets the value of :py:attr:`minCount`.
+        """
+        return self._set(minCount=value)
+
+    @since("3.4.0")
+    def setWindowSize(self, value: int) -> "SkipGram":
+        """
+        Sets the value of :py:attr:`windowSize`.
+        """
+        return self._set(windowSize=value)
+
+    def setMaxIter(self, value: int) -> "SkipGram":
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    def setInputCol(self, value: str) -> "SkipGram":
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value: str) -> "SkipGram":
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.4.0")
+    def setStepSize(self, value: float) -> "SkipGram":
+        """
+        Sets the value of :py:attr:`stepSize`.
+        """
+        return self._set(stepSize=value)
+
+    @since("3.4.0")
+    def setNegative(self, value: int) -> "SkipGram":
+        """
+        Sets the value of :py:attr:`negative`.
+        """
+        return self._set(negative=value)
+
+    @since("3.4.0")
+    def setNumThread(self, value: int) -> "SkipGram":
+        """
+        Sets the value of :py:attr:`numThread`.
+        """
+        return self._set(numThread=value)
+
+    @since("3.4.0")
+    def setSample(self, value: float) -> "SkipGram":
+        """
+        Sets the value of :py:attr:`sample`.
+        """
+        return self._set(sample=value)
+
+    @since("3.4.0")
+    def setPow(self, value: float) -> "SkipGram":
+        """
+        Sets the value of :py:attr:`pow`.
+        """
+        return self._set(pow=value)
+
+    @since("3.4.0")
+    def setIntermediateStorageLevel(self, value: str) -> "SkipGram":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
+
+    def _create_model(self, java_model: "JavaObject") -> "SkipGramModel":
+        return SkipGramModel(java_model)
+
+
 
 
 class _PCAParams(HasInputCol, HasOutputCol):
