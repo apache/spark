@@ -33,6 +33,7 @@ from pyspark.ml.feature import (
     MaxAbsScaler,
     VectorSlicer,
     Word2Vec,
+    SkipGram,
 )
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.ml.param import Param, Params, TypeConverters
@@ -312,6 +313,11 @@ class ParamTests(SparkSessionTestCase):
 
     def test_word2vec_param(self):
         model = Word2Vec().setWindowSize(6)
+        # Check windowSize is set properly
+        self.assertEqual(model.getWindowSize(), 6)
+
+    def test_skip_gram_param(self):
+        model = SkipGram().setWindowSize(6)
         # Check windowSize is set properly
         self.assertEqual(model.getWindowSize(), 6)
 
