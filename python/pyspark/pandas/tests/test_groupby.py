@@ -1450,6 +1450,14 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(
             pdf.groupby("A").first().sort_index(), psdf.groupby("A").first().sort_index()
         )
+        self.assert_eq(
+            pdf.groupby("A").first(min_count=1).sort_index(),
+            psdf.groupby("A").first(min_count=1).sort_index(),
+        )
+        self.assert_eq(
+            pdf.groupby("A").first(min_count=2).sort_index(),
+            psdf.groupby("A").first(min_count=2).sort_index(),
+        )
 
     def test_last(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.last())
