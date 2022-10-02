@@ -6267,7 +6267,7 @@ class _SkipGramParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCo
 @inherit_doc
 class SkipGram(
     JavaEstimator["SkipGramModel"],
-    _Word2VecParams,
+    _SkipGramParams,
     JavaMLReadable["SkipGram"],
     JavaMLWritable,
 ):
@@ -6486,6 +6486,58 @@ class SkipGram(
         return SkipGramModel(java_model)
 
 
+class SkipGramModel(JavaModel, _SkipGramParams, JavaMLReadable["SkipGramModel"], JavaMLWritable):
+    """
+    Model fitted by :py:class:`SkipGram`.
+
+    .. versionadded:: 3.4.0
+    """
+
+    @since("3.4.0")
+    def getVectors(self) -> DataFrame:
+        """
+        Returns the vector representation of the words as a dataframe
+        with two fields, word and vector.
+        """
+        return self._call_java("getVectors")
+
+    def setInputCol(self, value: str) -> "SkipGramModel":
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value: str) -> "SkipGramModel":
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.4.0")
+    def findSynonyms(self, word: Union[str, List[float]], num: int) -> DataFrame:
+        """
+        Find "num" number of words closest in similarity to "word".
+        word can be a string or vector representation.
+        Returns a dataframe with two fields word and similarity (which
+        gives the cosine similarity).
+        """
+        if not isinstance(word, str):
+            word = _convert_to_vector(word)
+        return self._call_java("findSynonyms", word, num)
+
+    @since("3.4.0")
+    def findSynonymsArray(self, word: Union[Vector, str], num: int) -> List[Tuple[str, float]]:
+        """
+        Find "num" number of words closest in similarity to "word".
+        word can be a string or vector representation.
+        Returns an array with two fields word and similarity (which
+        gives the cosine similarity).
+        """
+        if not isinstance(word, str):
+            word = _convert_to_vector(word)
+        assert self._java_obj is not None
+        tuples = self._java_obj.findSynonymsArray(word, num)
+        return list(map(lambda st: (st._1(), st._2()), list(tuples)))
 
 
 class _PCAParams(HasInputCol, HasOutputCol):
