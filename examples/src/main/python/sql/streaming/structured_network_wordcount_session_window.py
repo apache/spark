@@ -31,7 +31,7 @@ r"""
     localhost 9999`
 """
 import sys
-from typing import Iterator, Any
+from typing import Iterable, Any
 
 import pandas as pd
 
@@ -95,8 +95,8 @@ if __name__ == "__main__":
     )
 
     def func(
-        key: Any, pdfs: Iterator[pd.DataFrame], state: GroupState
-    ) -> Iterator[pd.DataFrame]:
+        key: Any, pdfs: Iterable[pd.DataFrame], state: GroupState
+    ) -> Iterable[pd.DataFrame]:
         if state.hasTimedOut:
             count, start, end = state.get
             state.remove()
@@ -110,11 +110,12 @@ if __name__ == "__main__":
                 }
             )
         else:
-            first_pdf = next(pdfs)
+            pdf_iter = iter(pdfs)
+            first_pdf = next(pdf_iter)
             start = first_pdf["timestamp"].min()
             end = first_pdf["timestamp"].max()
             count = len(first_pdf)
-            for pdf in pdfs:
+            for pdf in pdf_iter:
                 start = min(start, pdf["timestamp"].min())
                 end = max(end, pdf["timestamp"].max())
                 count = count + len(pdf)
