@@ -48,6 +48,7 @@ import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
+import org.apache.spark.serializer.SerializerHelper
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleBlockPusher}
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
@@ -172,7 +173,7 @@ private[spark] class Executor(
   env.serializerManager.setDefaultClassLoader(replClassLoader)
 
   // Max size of direct result. If task result is bigger than this, we use the block manager
-  // to send the result back.
+  // to send the result back. This is guaranteed to be smaller than array bytes limit (2GB)
   private val maxDirectResultSize = Math.min(
     conf.get(TASK_MAX_DIRECT_RESULT_SIZE),
     RpcUtils.maxMessageSizeBytes(conf))
@@ -596,7 +597,7 @@ private[spark] class Executor(
 
         val resultSer = env.serializer.newInstance()
         val beforeSerializationNs = System.nanoTime()
-        val valueBytes = resultSer.serialize(value)
+        val valueByteBuffer = SerializerHelper.serializeToChunkedBuffer(resultSer, value)
         val afterSerializationNs = System.nanoTime()
 
         // Deserialization happens in two parts: first, we deserialize a Task object, which
@@ -659,25 +660,27 @@ private[spark] class Executor(
         val accumUpdates = task.collectAccumulatorUpdates()
         val metricPeaks = metricsPoller.getTaskMetricPeaks(taskId)
         // TODO: do not serialize value twice
-        val directResult = new DirectTaskResult(valueBytes, accumUpdates, metricPeaks)
-        val serializedDirectResult = ser.serialize(directResult)
-        val resultSize = serializedDirectResult.limit()
+        val directResult = new DirectTaskResult(valueByteBuffer, accumUpdates, metricPeaks)
+        val serializedDirectResult = SerializerHelper.serializeToChunkedBuffer(ser, directResult)
+        val resultSize = serializedDirectResult.size
 
         // directSend = sending directly back to the driver
-        val serializedResult: ByteBuffer = {
+        val serializedResult: ChunkedByteBuffer = {
           if (maxResultSize > 0 && resultSize > maxResultSize) {
             logWarning(s"Finished $taskName. Result is larger than maxResultSize " +
               s"(${Utils.bytesToString(resultSize)} > ${Utils.bytesToString(maxResultSize)}), " +
               s"dropping it.")
-            ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
+            SerializerHelper.serializeToChunkedBuffer(ser,
+              new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
           } else if (resultSize > maxDirectResultSize) {
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
               blockId,
-              new ChunkedByteBuffer(serializedDirectResult.duplicate()),
+              serializedDirectResult,
               StorageLevel.MEMORY_AND_DISK_SER)
             logInfo(s"Finished $taskName. $resultSize bytes result sent via BlockManager)")
-            ser.serialize(new IndirectTaskResult[Any](blockId, resultSize))
+            SerializerHelper.serializeToChunkedBuffer(ser,
+              new IndirectTaskResult[Any](blockId, resultSize))
           } else {
             logInfo(s"Finished $taskName. $resultSize bytes result sent to driver")
             serializedDirectResult
@@ -687,7 +690,8 @@ private[spark] class Executor(
         executorSource.SUCCEEDED_TASKS.inc(1L)
         setTaskFinishedAndClearInterruptStatus()
         plugins.foreach(_.onTaskSucceeded())
-        execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
+        // toByteBuffer is safe here, guarded by maxDirectResultSize
+        execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult.toByteBuffer)
       } catch {
         case t: TaskKilledException =>
           logInfo(s"Executor killed $taskName, reason: ${t.reason}")

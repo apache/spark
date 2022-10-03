@@ -802,6 +802,8 @@ package object config {
     ConfigBuilder("spark.task.maxDirectResultSize")
       .version("2.0.0")
       .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ < ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toLong,
+        "The max direct result size is 2GB")
       .createWithDefault(1L << 20)
 
   private[spark] val TASK_MAX_FAILURES =

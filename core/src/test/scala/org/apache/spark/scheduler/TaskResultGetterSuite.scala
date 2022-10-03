@@ -153,7 +153,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
       override def canFetchMoreResults(size: Long): Boolean = false
     }
     val indirectTaskResult = IndirectTaskResult(TaskResultBlockId(0), 0)
-    val directTaskResult = new DirectTaskResult(ByteBuffer.allocate(0), Nil, Array())
+    val directTaskResult = new DirectTaskResult(ByteBuffer.allocate(0), Nil, Array[Long]())
     val ser = sc.env.closureSerializer.newInstance()
     val serializedIndirect = ser.serialize(indirectTaskResult)
     val serializedDirect = ser.serialize(directTaskResult)

@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.io
 
-import java.io.{File, FileInputStream, InputStream}
+import java.io.{Externalizable, File, FileInputStream, InputStream, ObjectInput, ObjectOutput, OutputStream}
 import java.nio.ByteBuffer
 import java.nio.channels.WritableByteChannel
 
@@ -42,8 +42,9 @@ import org.apache.spark.util.Utils
  *               buffers may also be used elsewhere then the caller is responsible for copying
  *               them as needed.
  */
-private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
+private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Externalizable {
   require(chunks != null, "chunks must not be null")
+  require(!chunks.contains(null), "chunks must not be null")
   require(chunks.forall(_.position() == 0), "chunks' positions must be 0")
 
   // Chunk size in bytes
@@ -56,7 +57,13 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   /**
    * This size of this buffer, in bytes.
    */
-  val size: Long = chunks.map(_.limit().asInstanceOf[Long]).sum
+  var _size: Long = chunks.map(_.limit().asInstanceOf[Long]).sum
+
+  def size: Long = _size
+
+  def this() = {
+    this(Array.empty[ByteBuffer])
+  }
 
   def this(byteBuffer: ByteBuffer) = {
     this(Array(byteBuffer))
@@ -82,6 +89,104 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
         bytes.limit(originalLimit)
       }
     }
+  }
+
+  /**
+   * write to stream with zero copy if possible
+   */
+  def writeToStream(out: OutputStream): Unit = {
+    var buffer: Array[Byte] = null
+    val bufferLen = 1024 * 1024;
+    chunks.foreach(chunk => {
+      if (chunk.hasArray) {
+        // zero copy if the bytebuffer is backed by array
+        out.write(chunk.array(), chunk.arrayOffset(), chunk.limit())
+      } else {
+        // fallback to copy approach
+        if (buffer == null) {
+          buffer = new Array[Byte](bufferLen)
+        }
+        val originalPos = chunk.position()
+        chunk.rewind()
+        var bytesToRead = Math.min(chunk.remaining(), bufferLen)
+        while (bytesToRead > 0) {
+          chunk.get(buffer, 0, bytesToRead)
+          out.write(buffer, 0, bytesToRead)
+          bytesToRead = Math.min(chunk.remaining(), bufferLen)
+        }
+        chunk.position(originalPos)
+      }
+    })
+  }
+
+  /**
+   * write to ObjectOutput with zero copy if possible
+   */
+  override def writeExternal(out: ObjectOutput): Unit = {
+    // we want to keep the chunks layout
+    out.writeInt(chunks.length)
+    chunks.foreach(buffer => out.writeInt(buffer.limit()))
+    chunks.foreach(buffer => out.writeBoolean(buffer.isDirect))
+    var buffer: Array[Byte] = null
+    val bufferLen = 1024 * 1024;
+    chunks.foreach(chunk => {
+      if (chunk.hasArray) {
+        // zero copy if the bytebuffer is backed by array
+        out.write(chunk.array(), chunk.arrayOffset(), chunk.limit())
+      } else {
+        // fallback to copy approach
+        if (buffer == null) {
+          buffer = new Array[Byte](bufferLen)
+        }
+        val originalPos = chunk.position()
+        chunk.rewind()
+        var bytesToRead = Math.min(chunk.remaining(), bufferLen)
+        while (bytesToRead > 0) {
+          chunk.get(buffer, 0, bytesToRead)
+          out.write(buffer, 0, bytesToRead)
+          bytesToRead = Math.min(chunk.remaining(), bufferLen)
+        }
+        chunk.position(originalPos)
+      }
+    })
+  }
+
+  override def readExternal(in: ObjectInput): Unit = {
+    val chunksNum = in.readInt()
+    val indices = 0 until chunksNum
+    val chunksSize = indices.map(_ => in.readInt())
+    val chunksDirect = indices.map(_ => in.readBoolean())
+    val chunks = new Array[ByteBuffer](chunksNum)
+
+    val copyBufferLen = 1024 * 1024
+    val copyBuffer: Array[Byte] = if (chunksDirect.exists(identity)) {
+      new Array[Byte](copyBufferLen)
+    } else {
+      null
+    }
+
+    indices.foreach(i => {
+      val chunkSize = chunksSize(i)
+      chunks(i) = if (chunksDirect(i)) {
+        val buffer = ByteBuffer.allocateDirect(chunkSize)
+        var bytesRemaining = chunkSize
+        var bytesToRead = Math.min(copyBufferLen, bytesRemaining)
+        while (bytesRemaining > 0) {
+          bytesToRead = Math.min(copyBufferLen, bytesRemaining)
+          in.readFully(copyBuffer, 0, bytesToRead)
+          buffer.put(copyBuffer, 0, bytesToRead)
+          bytesRemaining -= bytesToRead
+        }
+        buffer.rewind()
+        buffer
+      } else {
+        val arr = new Array[Byte](chunkSize)
+        in.readFully(arr, 0, chunkSize)
+        ByteBuffer.wrap(arr)
+      }
+    })
+    this.chunks = chunks
+    this._size = chunks.map(_.limit().toLong).sum
   }
 
   /**
