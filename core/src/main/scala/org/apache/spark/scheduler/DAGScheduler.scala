@@ -232,6 +232,13 @@ private[spark] class DAGScheduler(
       DAGScheduler.DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS)
 
   /**
+   * Whether ignore stage fetch failure caused by executor decommission when
+   * count spark.stage.maxConsecutiveAttempts
+   */
+  private[scheduler] val ignoreDecommissionFetchFailure =
+    sc.getConf.get(config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE)
+
+  /**
    * Number of max concurrent tasks check failures for each barrier job.
    */
   private[scheduler] val barrierJobIdToNumTasksCheckFailures = new ConcurrentHashMap[Int, Int]
@@ -1871,7 +1878,17 @@ private[spark] class DAGScheduler(
             s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
             s"(attempt ${failedStage.latestInfo.attemptNumber}) running")
         } else {
-          failedStage.failedAttemptIds.add(task.stageAttemptId)
+          val ignoreStageFailure = ignoreDecommissionFetchFailure &&
+            isExecutorDecommissioningOrDecommissioned(taskScheduler, bmAddress)
+          if (ignoreStageFailure) {
+            logInfo("Ignoring fetch failure from $task of $failedStage attempt " +
+              s"${task.stageAttemptId} when count spark.stage.maxConsecutiveAttempts " +
+              "as executor ${bmAddress.executorId} is decommissioned and " +
+              s" ${config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key}=true")
+          } else {
+            failedStage.failedAttemptIds.add(task.stageAttemptId)
+          }
+
           val shouldAbortStage =
             failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts ||
             disallowStageRetryForTest
@@ -2168,6 +2185,26 @@ private[spark] class DAGScheduler(
       case _: ExecutorLostFailure | UnknownReason =>
         // Unrecognized failure - also do nothing. If the task fails repeatedly, the TaskScheduler
         // will abort the job.
+    }
+  }
+
+  /**
+   * Whether executor is decommissioning or decommissioned.
+   * Return true when:
+   *  1. Waiting for decommission start
+   *  2. Under decommission process
+   * Return false when:
+   *  1. Stopped or terminated after finishing decommission
+   *  2. Under decommission process, then removed by driver with other reasons
+   */
+  private[scheduler] def isExecutorDecommissioningOrDecommissioned(
+      taskScheduler: TaskScheduler, bmAddress: BlockManagerId): Boolean = {
+    if (bmAddress != null) {
+      taskScheduler
+        .getExecutorDecommissionState(bmAddress.executorId)
+        .nonEmpty
+    } else {
+      false
     }
   }
 
