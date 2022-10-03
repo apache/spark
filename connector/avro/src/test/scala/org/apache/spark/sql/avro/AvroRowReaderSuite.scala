@@ -95,7 +95,7 @@ class AvroRowReaderSuite
     }
   }
   
-  test("read Bytetype data correctly") {
+  test("SPARK-40409: read Bytetype data correctly") {
     withTempPath { dir =>
       val catalystSchema = StructType(Seq(StructField("value", ByteType, true)))
       val df = spark.createDataFrame(
