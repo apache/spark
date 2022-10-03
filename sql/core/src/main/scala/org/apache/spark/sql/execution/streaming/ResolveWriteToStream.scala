@@ -80,7 +80,7 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
         logWarning("Temporary checkpoint location created which is deleted normally when" +
           s" the query didn't fail: $tempDir. If it's required to delete it under any" +
           s" circumstances, please set ${SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key} to" +
-          " true. Important to know deleting temp checkpoint folder is best effort.")
+          s" true. Important to know deleting temp checkpoint folder is best effort.")
         tempDir
       } else {
         throw QueryCompilationErrors.checkpointLocationNotSpecifiedError()
