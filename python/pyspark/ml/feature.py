@@ -6122,7 +6122,7 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable["Word2VecModel"],
         return list(map(lambda st: (st._1(), st._2()), list(tuples)))
 
 
-class _SkipGramParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCol):
+class _SkipGramParams(HasStepSize, HasMaxIter, HasInputCol, HasOutputCol):
     """
     Params for :py:class:`SkipGram` and :py:class:`SkipGramModel`.
 
