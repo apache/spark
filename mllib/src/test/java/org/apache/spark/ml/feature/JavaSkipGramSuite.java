@@ -18,7 +18,6 @@
 package org.apache.spark.ml.feature;
 
 import org.apache.spark.SharedSparkSession;
-import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -55,7 +54,7 @@ public class JavaSkipGramSuite extends SharedSparkSession {
         Dataset<Row> result = model.transform(documentDF);
 
         for (Row r : result.select("result").collectAsList()) {
-            double[] polyFeatures = ((Vector) r.get(0)).toArray();
+            float[] polyFeatures = ((float[]) r.get(0));
             Assert.assertEquals(3, polyFeatures.length);
         }
     }
