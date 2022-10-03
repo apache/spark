@@ -49,6 +49,7 @@ from pyspark.sql.functions import (
     date_sub,
     add_months,
     array_repeat,
+    arrays_zip,
     size,
     slice,
     least,
@@ -57,6 +58,14 @@ from pyspark.sql.functions import (
     hypot,
     pow,
     pmod,
+    map_from_arrays,
+    map_contains_key,
+    map_keys,
+    map_values,
+    map_entries,
+    map_concat,
+    map_from_entries,
+    expr,
 )
 from pyspark.sql import functions
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
@@ -494,18 +503,18 @@ class FunctionsTests(ReusedSQLTestCase):
         exprs = [col("x"), "x"]
 
         for fun in funs:
-            for expr in exprs:
-                res = fun(expr)
+            for _expr in exprs:
+                res = fun(_expr)
                 self.assertIsInstance(res, Column)
                 self.assertIn(f"""'x {fun.__name__.replace("_", " ").upper()}'""", str(res))
 
-        for expr in exprs:
-            res = functions.asc(expr)
+        for _expr in exprs:
+            res = functions.asc(_expr)
             self.assertIsInstance(res, Column)
             self.assertIn("""'x ASC NULLS FIRST'""", str(res))
 
-        for expr in exprs:
-            res = functions.desc(expr)
+        for _expr in exprs:
+            res = functions.desc(_expr)
             self.assertIsInstance(res, Column)
             self.assertIn("""'x DESC NULLS LAST'""", str(res))
 
@@ -1073,8 +1082,7 @@ class FunctionsTests(ReusedSQLTestCase):
             self.assertAlmostEqual(a, e, 5)
 
     def test_map_functions(self):
-        from pyspark.sql import functions as F
-
+        # SPARK-38496: Check basic functionality of all "map" type related functions
         expected = {"a": 1, "b": 2}
         expected2 = {"c": 3, "d": 4}
         df = self.spark.createDataFrame(
@@ -1082,21 +1090,21 @@ class FunctionsTests(ReusedSQLTestCase):
         )
         actual = (
             df.select(
-                F.expr("map('c', 3, 'd', 4) as dict2"),
-                F.map_from_arrays(df.k, df.v).alias("dict"),
+                expr("map('c', 3, 'd', 4) as dict2"),
+                map_from_arrays(df.k, df.v).alias("dict"),
                 "*",
             )
             .select(
-                F.map_contains_key("dict", "a").alias("one"),
-                F.map_contains_key("dict", "d").alias("not_exists"),
-                F.map_keys("dict").alias("keys"),
-                F.map_values("dict").alias("values"),
-                F.map_entries("dict").alias("items"),
+                map_contains_key("dict", "a").alias("one"),
+                map_contains_key("dict", "d").alias("not_exists"),
+                map_keys("dict").alias("keys"),
+                map_values("dict").alias("values"),
+                map_entries("dict").alias("items"),
                 "*",
             )
             .select(
-                F.map_concat("dict", "dict2").alias("merged"),
-                F.map_from_entries(F.arrays_zip("keys", "values")).alias("from_items"),
+                map_concat("dict", "dict2").alias("merged"),
+                map_from_entries(arrays_zip("keys", "values")).alias("from_items"),
                 "*",
             )
             .first()
