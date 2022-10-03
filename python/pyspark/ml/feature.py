@@ -6264,6 +6264,7 @@ class _SkipGramParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCo
         """
         return self.getOrDefault(self.intermediateStorageLevel)
 
+
 @inherit_doc
 class SkipGram(
     JavaEstimator["SkipGramModel"],
@@ -6353,7 +6354,7 @@ class SkipGram(
         numThread: int = 1,
         sample: float = 0,
         pow: float = 0,
-        intermediateStorageLevel = "MEMORY_AND_DISK",
+        intermediateStorageLevel="MEMORY_AND_DISK",
     ):
         """
         __init__(self, \\*, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, \
@@ -6383,7 +6384,8 @@ class SkipGram(
         numThread: int = 1,
         sample: float = 0,
         pow: float = 0,
-        intermediateStorageLevel = "MEMORY_AND_DISK") -> "SkipGram":
+        intermediateStorageLevel="MEMORY_AND_DISK",
+    ) -> "SkipGram":
         """
         setParams(self, \\*, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, \
                   inputCol=None, outputCol=None, windowSize=5, \
