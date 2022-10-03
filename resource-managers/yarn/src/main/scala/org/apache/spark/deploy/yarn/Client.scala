@@ -1413,8 +1413,6 @@ private[spark] object Client extends Logging {
 
   val SPARK_TESTING = "SPARK_TESTING"
 
-  val CLASS_PATH_SEPARATOR = ":"
-
   /**
    * Return the path to the given application's staging directory.
    */
@@ -1473,7 +1471,7 @@ private[spark] object Client extends Logging {
     }
 
     val cpSet = extraClassPath match {
-      case Some(classPath) => classPath.split(CLASS_PATH_SEPARATOR).toSet
+      case Some(classPath) => classPath.split(File.pathSeparator).toSet
       case _ => Set.empty[String]
     }
 
@@ -1520,8 +1518,8 @@ private[spark] object Client extends Logging {
     }
 
     sys.env.get(ENV_DIST_CLASSPATH).foreach { cp =>
-      val newCp = cp.split(CLASS_PATH_SEPARATOR)
-        .filterNot(cpSet.contains).mkString(CLASS_PATH_SEPARATOR)
+      val newCp = cp.split(File.pathSeparator)
+        .filterNot(cpSet.contains).mkString(File.pathSeparator)
       addClasspathEntry(getClusterPath(sparkConf, newCp), env)
     }
 
