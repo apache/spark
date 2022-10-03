@@ -146,7 +146,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
         operatorOptimizationRuleSet: _*) ::
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
-        PushDownPredicates) :: Nil
+        PushDownPredicates) ::
+      Batch("Pull out complex join condition", Once,
+        PullOutComplexJoinCondition) :: Nil
     }
 
     val batches = (
@@ -289,7 +291,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
-      PullOutComplexJoinCondition,
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),
       SpecialDatetimeValues,
