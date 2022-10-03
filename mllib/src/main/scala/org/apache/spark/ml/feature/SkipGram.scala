@@ -108,7 +108,8 @@ private[feature] trait SkipGramBase extends Params
    * Default: 0
    * @group param
    */
-  final val pow = new DoubleParam(this, "pow", "the negative sampling word frequency power (0 <= pow <= 1)",
+  final val pow = new DoubleParam(this, "pow", "the negative sampling word frequency power " +
+    "(0 <= pow <= 1)",
     ParamValidators.inRange(0, 1))
 
   /** @group getParam */
@@ -119,7 +120,8 @@ private[feature] trait SkipGramBase extends Params
    * Default: 0
    * @group param
    */
-  final val sample = new DoubleParam(this, "sample", "the frequent word subsample ratio (0 <= sample <= 1)",
+  final val sample = new DoubleParam(this, "sample", "the frequent word subsample ratio " +
+    "(0 <= sample <= 1)",
     ParamValidators.inRange(0, 1))
 
   /** @group getParam */
@@ -352,16 +354,16 @@ class SkipGramModel private[ml] (
   @Since("3.4.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
-    
+
     val datasetWithI = dataset.withColumn("i", monotonically_increasing_id())
-    
+
     val sentenceAvg = datasetWithI
       .select(col("i"), explode(col($(inputCol))).alias("word"))
       .join(this.getVectors, Seq("word"), "inner")
       .groupBy("i")
       .agg(array((0 until $(vectorSize))
         .map(j => avg(col("vector").getItem(j))): _*).alias($(outputCol)))
-    
+
     datasetWithI
       .join(sentenceAvg, Seq("i"), "full_outer")
       .drop("i")
