@@ -33,13 +33,17 @@ public class JavaSkipGramSuite extends SharedSparkSession {
     @Test
     public void testJavaSkipGram() {
         StructType schema = new StructType(new StructField[]{
-                new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
+          new StructField("text",
+                  new ArrayType(DataTypes.StringType, true),
+                  false, Metadata.empty())
         });
         Dataset<Row> documentDF = spark.createDataFrame(
                 Arrays.asList(
                         RowFactory.create(Arrays.asList("Hi I heard about Spark".split(" "))),
-                        RowFactory.create(Arrays.asList("I wish Java could use case classes".split(" "))),
-                        RowFactory.create(Arrays.asList("Logistic regression models are neat".split(" ")))),
+                        RowFactory.create(Arrays.asList("I wish Java could use case classes"
+                                .split(" "))),
+                        RowFactory.create(Arrays.asList("Logistic regression models are neat"
+                                .split(" ")))),
                 schema);
 
         SkipGram SkipGram = new SkipGram()
