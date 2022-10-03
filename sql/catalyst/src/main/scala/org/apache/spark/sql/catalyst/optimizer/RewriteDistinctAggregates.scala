@@ -405,28 +405,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       }
       Aggregate(groupByAttrs, patchedAggExpressions, firstAggregate)
     } else {
-      // We may have one distinct group only because we grouped using ExpressionSet.
-      // To prevent SparkStrategies from complaining during sanity check, we need to check whether
-      // the original list of aggregate expressions had multiple distinct groups and, if so,
-      // patch that list so we have only one distinct group.
-      val funcChildren = distinctAggs.flatMap { e =>
-        e.aggregateFunction.children.filter(!_.foldable)
-      }
-      val funcChildrenLookup = funcChildren.map { e =>
-        (e, funcChildren.find(fc => e.semanticEquals(fc)).getOrElse(e))
-      }.toMap
-
-      if (funcChildrenLookup.keySet.size > funcChildrenLookup.values.toSet.size) {
-        val patchedAggExpressions = a.aggregateExpressions.map { e =>
-          e.transformDown {
-            case e: Expression =>
-              funcChildrenLookup.getOrElse(e, e)
-          }.asInstanceOf[NamedExpression]
-        }
-        a.copy(aggregateExpressions = patchedAggExpressions)
-      } else {
-        a
-      }
+      a
     }
   }
 
