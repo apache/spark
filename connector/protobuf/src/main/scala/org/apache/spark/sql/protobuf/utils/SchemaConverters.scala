@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.protobuf.utils
 
-import java.util
-
 import scala.collection.JavaConverters._
 
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
@@ -40,8 +38,8 @@ object SchemaConverters {
    *
    * @since 3.4.0
    */
-  def toSqlType(protoSchema: Descriptor): SchemaType = {
-    toSqlTypeHelper(protoSchema)
+  def toSqlType(descriptor: Descriptor): SchemaType = {
+    toSqlTypeHelper(descriptor)
   }
 
   def toSqlTypeHelper(descriptor: Descriptor):
@@ -62,7 +60,7 @@ object SchemaConverters {
       case STRING => Some(StringType)
       case BYTE_STRING => Some(BinaryType)
       case ENUM => Some(StringType)
-      case MESSAGE if fd.getMessageType.getOptions.hasMapEntry =>
+      case MESSAGE if fd.isRepeated && fd.getMessageType.getOptions.hasMapEntry =>
         var keyType: DataType = NullType
         var valueType: DataType = NullType
         fd.getMessageType.getFields.forEach{
@@ -98,10 +96,6 @@ object SchemaConverters {
       nullable = !fd.isRequired && !fd.isRepeated
     ))
   }
-
-  case class ProtoMessage(messageName: String, fieldList: util.ArrayList[ProtoField])
-
-  case class ProtoField(name: String, catalystType: DataType)
 
   private[protobuf] class IncompatibleSchemaException(
                                                     msg: String,

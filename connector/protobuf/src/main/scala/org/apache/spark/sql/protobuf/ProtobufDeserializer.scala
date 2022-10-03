@@ -33,16 +33,16 @@ import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType,
 import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] class ProtobufDeserializer(
-                                      rootProtoType: Descriptor,
+                                         rootDescriptor: Descriptor,
                                       rootCatalystType: DataType,
                                       positionalFieldMatch: Boolean,
                                       filters: StructFilters) {
 
   def this(
-            rootProtoType: Descriptor,
+            rootDescriptor: Descriptor,
             rootCatalystType: DataType) = {
     this(
-      rootProtoType,
+      rootDescriptor,
       rootCatalystType,
       positionalFieldMatch = false,
       new NoopFilters)
@@ -58,7 +58,7 @@ private[sql] class ProtobufDeserializer(
         val resultRow = new SpecificInternalRow(st.map(_.dataType))
         val fieldUpdater = new RowUpdater(resultRow)
         val applyFilters = filters.skipRow(resultRow, _)
-        val writer = getRecordWriter(rootProtoType, st, Nil, Nil, applyFilters)
+        val writer = getRecordWriter(rootDescriptor, st, Nil, Nil, applyFilters)
         (data: Any) => {
           val record = data.asInstanceOf[DynamicMessage]
           val skipRow = writer(fieldUpdater, record)
@@ -67,7 +67,7 @@ private[sql] class ProtobufDeserializer(
     }
   } catch {
     case ise: IncompatibleSchemaException => throw new IncompatibleSchemaException(
-      s"Cannot convert Protobuf type ${rootProtoType.getName} " +
+      s"Cannot convert Protobuf type ${rootDescriptor.getName} " +
         s"to SQL type ${rootCatalystType.sql}.", ise)
   }
 

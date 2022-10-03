@@ -51,7 +51,7 @@ object functions {
    * can be set via the option protoSchema.
    *
    * @param data         the binary column.
-   * @param descFilePath the protobuf schema in Message GeneratedMessageV3 format.
+   * @param descFilePath the protobuf descriptor in Message GeneratedMessageV3 format.
    * @param messageName  the protobuf MessageName to look for in descriptorFile.
    * @since 3.4.0
    */
@@ -64,7 +64,7 @@ object functions {
    * Converts a column into binary of protobuf format.
    *
    * @param data         the data column.
-   * @param descFilePath the protobuf schema in Message GeneratedMessageV3 format.
+   * @param descFilePath the protobuf descriptor in Message GeneratedMessageV3 format.
    * @param messageName  the protobuf MessageName to look for in descriptorFile.
    * @since 3.4.0
    */
