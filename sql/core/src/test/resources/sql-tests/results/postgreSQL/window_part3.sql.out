@@ -407,7 +407,20 @@ SELECT range(1, 100) OVER () FROM empsalary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: range. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.range.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "messageParameters" : {
+    "fullName" : "spark_catalog.default.range",
+    "rawName" : "range"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "range(1, 100) OVER ()"
+  } ]
+}
 
 
 -- !query

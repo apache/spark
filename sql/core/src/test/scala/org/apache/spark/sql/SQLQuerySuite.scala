@@ -1829,8 +1829,11 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           sql("select a.* from testData2")
         },
         errorClass = "_LEGACY_ERROR_TEMP_1050",
-        parameters = Map("attributes" -> "ArrayBuffer(a)"),
-        context = ExpectedContext(fragment = "a.*", start = 7, stop = 9))
+        errorSubClass = None,
+        sqlState = None,
+        parameters = Map("attributes" -> "(ArrayBuffer|List)\\(a\\)"),
+        matchPVals = true,
+        queryContext = Array(ExpectedContext(fragment = "a.*", start = 7, stop = 9)))
     }
   }
 
@@ -3698,11 +3701,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTempView("df") {
       Seq("m@ca").toDF("s").createOrReplaceTempView("df")
 
-      val e = intercept[AnalysisException] {
-        sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM df").collect()
-      }
-      assert(e.message.contains("the pattern 'm%@ca' is invalid, " +
-        "the escape character is not allowed to precede '@'"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM df").collect()
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1216",
+        parameters = Map(
+          "pattern" -> "m%@ca",
+          "message" -> "the escape character is not allowed to precede '@'"))
 
       checkAnswer(sql("SELECT s LIKE 'm@@ca' ESCAPE '@' FROM df"), Row(true))
     }

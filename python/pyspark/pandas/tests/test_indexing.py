@@ -138,10 +138,10 @@ class BasicIndexingTest(ComparisonTestBase):
         pdf = self.pdf
 
         df1 = ps.from_pandas(pdf.set_index("month"))
-        self.assertPandasEqual(df1.to_pandas(), pdf.set_index("month"))
+        self.assertPandasEqual(df1._to_pandas(), pdf.set_index("month"))
 
         df2 = ps.from_pandas(pdf.set_index(["year", "month"]))
-        self.assertPandasEqual(df2.to_pandas(), pdf.set_index(["year", "month"]))
+        self.assertPandasEqual(df2._to_pandas(), pdf.set_index(["year", "month"]))
 
     def test_limitations(self):
         df = self.psdf.set_index("month")
