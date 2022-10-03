@@ -20,8 +20,13 @@ package org.apache.spark.deploy
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.BUFFER_SIZE
 
 class SparkHadoopUtilSuite extends SparkFunSuite {
+
+  private val launch = "spark launch"
+  private val hadoopPropagation = "spark.hadoop propagation"
+  private val hivePropagation = "spark.hive propagation"
 
   /**
    * Verify that spark.hadoop options are propagated, and that
@@ -32,21 +37,22 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     val hadoopConf = new Configuration(false)
     sc.set("spark.hadoop.orc.filterPushdown", "true")
     new SparkHadoopUtil().appendSparkHadoopConfigs(sc, hadoopConf)
-    assertConfigValue(hadoopConf, "orc.filterPushdown", "true" )
-    assertConfigValue(hadoopConf, "fs.s3a.downgrade.syncable.exceptions", "true")
-    assertConfigValue(hadoopConf, "fs.s3a.endpoint", "s3.amazonaws.com")
+    assertConfigMatches(hadoopConf, "orc.filterPushdown", "true", hadoopPropagation)
+    assertConfigMatches(hadoopConf, "fs.s3a.downgrade.syncable.exceptions", "true", launch)
+    assertConfigMatches(hadoopConf, "fs.s3a.endpoint", "s3.amazonaws.com", launch)
   }
 
   /**
    * An empty S3A endpoint will be overridden just as a null value
    * would.
    */
+
   test("appendSparkHadoopConfigs with S3A endpoint set to empty string") {
     val sc = new SparkConf()
     val hadoopConf = new Configuration(false)
     sc.set("spark.hadoop.fs.s3a.endpoint", "")
     new SparkHadoopUtil().appendSparkHadoopConfigs(sc, hadoopConf)
-    assertConfigValue(hadoopConf, "fs.s3a.endpoint", "s3.amazonaws.com")
+    assertConfigMatches(hadoopConf, "fs.s3a.endpoint", "s3.amazonaws.com", launch)
   }
 
   /**
@@ -81,6 +87,30 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
   }
 
   /**
+   * spark.hive.* is passed to the hadoop config as hive.*.
+   */
+  test("spark.hive propagation") {
+    val sc = new SparkConf()
+    val hadoopConf = new Configuration(false)
+    sc.set("spark.hive.hiveoption", "value")
+    new SparkHadoopUtil().appendS3AndSparkHadoopHiveConfigurations(sc, hadoopConf)
+    // the endpoint value will not have been set
+    assertConfigMatches(hadoopConf, "hive.hiveoption", "value", hivePropagation)
+  }
+
+  /**
+   * The explicit buffer size propagation records this.
+   */
+  test("buffer size propagation") {
+    val sc = new SparkConf()
+    val hadoopConf = new Configuration(false)
+    sc.set(BUFFER_SIZE.key, "123")
+    new SparkHadoopUtil().appendS3AndSparkHadoopHiveConfigurations(sc, hadoopConf)
+    // the endpoint value will not have been set
+    assertConfigMatches(hadoopConf, "io.file.buffer.size", "123", BUFFER_SIZE.key)
+  }
+
+  /**
    * Assert that a hadoop configuration option has the expected value.
    * @param hadoopConf configuration to query
    * @param key key to look up
@@ -92,5 +122,43 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     expected: String): Unit = {
     assert(hadoopConf.get(key) === expected,
       s"Mismatch in expected value of $key")
+  }
+
+
+  /**
+   * Assert that a hadoop configuration option has the expected value
+   * and has the expected source.
+   *
+   * @param hadoopConf configuration to query
+   * @param key        key to look up
+   * @param expected   expected value.
+   * @param expectedSource expected source
+   */
+  private def assertConfigMatches(
+    hadoopConf: Configuration,
+    key: String,
+    expected: String,
+    expectedSource: String): Unit = {
+    assertConfigValue(hadoopConf, key, expected)
+    assertConfigSource(hadoopConf, key, expectedSource)
+  }
+
+  /**
+   * Assert that a source of a configuration matches a specific string.
+   * @param hadoopConf hadoop configuration
+   * @param key key to probe
+   * @param expectedSource expected source
+   */
+  private def assertConfigSource(
+    hadoopConf: Configuration,
+    key: String,
+    expectedSource: String): Unit = {
+    val v = hadoopConf.get(key)
+    // get the possibly null source list
+    val sources = hadoopConf.getPropertySources(key)
+    assert(sources != null && sources.length > 0,
+      s"Expected source for $key with value $v")
+    assert(sources(0) ===  expectedSource,
+      s"Expected source $key with value $v: to contain $expectedSource")
   }
 }

@@ -437,27 +437,31 @@ private[spark] object SparkHadoopUtil extends Logging {
     // Note: this null check is around more than just access to the "conf" object to maintain
     // the behavior of the old implementation of this code, for backwards compatibility.
     if (conf != null) {
+      val envKeyId = "AWS_ACCESS_KEY_ID"
       // Explicitly check for S3 environment variables
-      val keyId = System.getenv("AWS_ACCESS_KEY_ID")
-      val accessKey = System.getenv("AWS_SECRET_ACCESS_KEY")
+      val keyId = System.getenv(envKeyId)
+      val envSecretKey = "AWS_SECRET_ACCESS_KEY"
+      val accessKey = System.getenv(envSecretKey)
       if (keyId != null && accessKey != null) {
-        hadoopConf.set("fs.s3.awsAccessKeyId", keyId)
-        hadoopConf.set("fs.s3n.awsAccessKeyId", keyId)
-        hadoopConf.set("fs.s3a.access.key", keyId)
-        hadoopConf.set("fs.s3.awsSecretAccessKey", accessKey)
-        hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey)
-        hadoopConf.set("fs.s3a.secret.key", accessKey)
+        val source = "Spark set from "
+        hadoopConf.set("fs.s3.awsAccessKeyId", keyId, source + envKeyId)
+        hadoopConf.set("fs.s3n.awsAccessKeyId", keyId, source + envKeyId)
+        hadoopConf.set("fs.s3a.access.key", keyId, source + envKeyId)
+        hadoopConf.set("fs.s3.awsSecretAccessKey", accessKey, source + envSecretKey)
+        hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey, source + envSecretKey)
+        hadoopConf.set("fs.s3a.secret.key", accessKey, source + envSecretKey)
 
-        val sessionToken = System.getenv("AWS_SESSION_TOKEN")
+        val envSessionToken = "AWS_SESSION_TOKEN"
+        val sessionToken = System.getenv(envSessionToken)
         if (sessionToken != null) {
-          hadoopConf.set("fs.s3a.session.token", sessionToken)
+          hadoopConf.set("fs.s3a.session.token", sessionToken, source + envSessionToken)
         }
       }
       appendHiveConfigs(hadoopConf)
       appendSparkHadoopConfigs(conf, hadoopConf)
       appendSparkHiveConfigs(conf, hadoopConf)
       val bufferSize = conf.get(BUFFER_SIZE).toString
-      hadoopConf.set("io.file.buffer.size", bufferSize)
+      hadoopConf.set("io.file.buffer.size", bufferSize, BUFFER_SIZE.key)
     }
   }
 
@@ -474,21 +478,22 @@ private[spark] object SparkHadoopUtil extends Logging {
 
   private def appendHiveConfigs(hadoopConf: Configuration): Unit = {
     hiveConfKeys.foreach { kv =>
-      hadoopConf.set(kv.getKey, kv.getValue)
+      hadoopConf.set(kv.getKey, kv.getValue, "hive-site.xml")
     }
   }
 
   private def appendSparkHadoopConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
     // Copy any "spark.hadoop.foo=bar" spark properties into conf as "foo=bar"
     for ((key, value) <- conf.getAll if key.startsWith("spark.hadoop.")) {
-      hadoopConf.set(key.substring("spark.hadoop.".length), value)
+      hadoopConf.set(key.substring("spark.hadoop.".length), value, "spark.hadoop propagation")
     }
+    val launcher = "spark launch"
     if (conf.getOption("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version").isEmpty) {
-      hadoopConf.set("mapreduce.fileoutputcommitter.algorithm.version", "1")
+      hadoopConf.set("mapreduce.fileoutputcommitter.algorithm.version", "1", launcher)
     }
     // Since Hadoop 3.3.1, HADOOP-17597 starts to throw exceptions by default
     if (conf.getOption("spark.hadoop.fs.s3a.downgrade.syncable.exceptions").isEmpty) {
-      hadoopConf.set("fs.s3a.downgrade.syncable.exceptions", "true")
+      hadoopConf.set("fs.s3a.downgrade.syncable.exceptions", "true", launcher)
     }
     // In Hadoop 3.3.1, AWS region handling with the default "" endpoint only works
     // in EC2 deployments or when the AWS CLI is installed.
@@ -500,14 +505,14 @@ private[spark] object SparkHadoopUtil extends Logging {
       hadoopConf.get("fs.s3a.endpoint.region") == null) {
       // set to US central endpoint which can also connect to buckets
       // in other regions at the expense of a HEAD request during fs creation
-      hadoopConf.set("fs.s3a.endpoint", "s3.amazonaws.com")
+      hadoopConf.set("fs.s3a.endpoint", "s3.amazonaws.com", launcher)
     }
   }
 
   private def appendSparkHiveConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
     // Copy any "spark.hive.foo=bar" spark properties into conf as "hive.foo=bar"
     for ((key, value) <- conf.getAll if key.startsWith("spark.hive.")) {
-      hadoopConf.set(key.substring("spark.".length), value)
+      hadoopConf.set(key.substring("spark.".length), value, "spark.hive propagation")
     }
   }
 
