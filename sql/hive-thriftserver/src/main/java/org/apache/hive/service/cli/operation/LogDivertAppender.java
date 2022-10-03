@@ -48,7 +48,6 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
   private static final Logger LOG = LogManager.getLogger(LogDivertAppender.class.getName());
   private final OperationManager operationManager;
   private boolean isVerbose;
-  private Layout verboseLayout;
 
   /**
    * A log filter that filters messages coming from the logger with the given names.
@@ -284,7 +283,6 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
 
     this.isVerbose = (loggingMode == OperationLog.LoggingLevel.VERBOSE);
     this.operationManager = operationManager;
-    this.verboseLayout = isVerbose ? getLayout() : CLIServiceUtils.verboseLayout;
     addFilter(new NameFilter(loggingMode, operationManager));
   }
 
