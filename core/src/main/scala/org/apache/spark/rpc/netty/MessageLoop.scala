@@ -173,7 +173,7 @@ private class DedicatedMessageLoop(
   (1 to endpoint.threadCount()).foreach { _ =>
     /**
      * We need to be careful not to use [[ExecutorService#submit]].
-     * `submit` api will swallow errors in [[FutureTask#setException]].
+     * `submit` api will swallow uncaught exceptions in [[FutureTask#setException]].
      * */
     threadpool.execute(receiveLoopRunnable)
   }
