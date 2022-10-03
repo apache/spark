@@ -94,4 +94,21 @@ class AvroRowReaderSuite
       }
     }
   }
+  
+  test("read Bytetype data correctly") {
+    withTempPath { dir =>
+      val catalystSchema = StructType(Seq(StructField("value", ByteType, true)))
+      val df = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq("-128".toByte).map(Row(_))), catalystSchema)
+      df.coalesce(1)
+        .write
+        .format("avro")
+        .save(dir.getCanonicalPath)
+
+      val readDf = spark.read.schema(catalystSchema).format("avro").load(dir.getCanonicalPath)
+      val headRow = readDf.head()
+      assert(headRow.getByte(0) == ("-128").toByte)
+      assert(readDf.count() == 1)
+    }
+  }
 }
