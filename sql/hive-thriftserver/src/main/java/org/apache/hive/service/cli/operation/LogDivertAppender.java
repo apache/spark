@@ -298,7 +298,6 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
       // the last subAppend call, change the layout to preserve consistency.
       if (isCurrModeVerbose != isVerbose) {
         isVerbose = isCurrModeVerbose;
-        // setLayout(isVerbose, verboseLayout);
       }
     }
 
