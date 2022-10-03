@@ -210,12 +210,7 @@ private[yarn] class ExecutorRunnable(
 
   private def prepareEnvironment(): HashMap[String, String] = {
     val env = new HashMap[String, String]()
-    val executorClassPath = sparkConf.get(EXECUTOR_CLASS_PATH).map { s =>
-      val strings = s.split(":")
-      val ret = strings.filter(v => !v.contains("selenium") && !v.contains("opentelemetry"))
-      ret.mkString(":")
-    }
-    Client.populateClasspath(null, conf, sparkConf, env, executorClassPath)
+    Client.populateClasspath(null, conf, sparkConf, env, sparkConf.get(EXECUTOR_CLASS_PATH))
 
     System.getenv().asScala.filterKeys(_.startsWith("SPARK"))
       .foreach { case (k, v) => env(k) = v }

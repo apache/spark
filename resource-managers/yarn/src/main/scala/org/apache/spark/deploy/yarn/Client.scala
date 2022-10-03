@@ -909,12 +909,7 @@ private[spark] class Client(
       pySparkArchives: Seq[String]): HashMap[String, String] = {
     logInfo("Setting up the launch environment for our AM container")
     val env = new HashMap[String, String]()
-    val driverClassPath = sparkConf.get(DRIVER_CLASS_PATH).map { s =>
-      val strings = s.split(":")
-      val ret = strings.filter(v => !v.contains("selenium") && !v.contains("opentelemetry"))
-      ret.mkString(":")
-    }
-    populateClasspath(args, hadoopConf, sparkConf, env, driverClassPath)
+    populateClasspath(args, hadoopConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
     env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
     env("SPARK_PREFER_IPV6") = Utils.preferIPv6.toString
@@ -1418,6 +1413,8 @@ private[spark] object Client extends Logging {
 
   val SPARK_TESTING = "SPARK_TESTING"
 
+  val CLASS_PATH_SEPARATOR = ":"
+
   /**
    * Return the path to the given application's staging directory.
    */
@@ -1475,6 +1472,11 @@ private[spark] object Client extends Logging {
       addClasspathEntry(getClusterPath(sparkConf, cp), env)
     }
 
+    val cpSet = extraClassPath match {
+      case Some(classPath) => classPath.split(CLASS_PATH_SEPARATOR).toSet
+      case _ => Set.empty[String]
+    }
+
     addClasspathEntry(Environment.PWD.$$(), env)
 
     addClasspathEntry(Environment.PWD.$$() + Path.SEPARATOR + LOCALIZED_CONF_DIR, env)
@@ -1517,12 +1519,10 @@ private[spark] object Client extends Logging {
       populateHadoopClasspath(conf, env)
     }
 
-    sys.env.get(ENV_DIST_CLASSPATH).map { s =>
-      val strings = s.split(":")
-      val ret = strings.filter(v => !v.contains("selenium") && !v.contains("opentelemetry"))
-      ret.mkString(":")
-    }.foreach { cp =>
-      addClasspathEntry(getClusterPath(sparkConf, cp), env)
+    sys.env.get(ENV_DIST_CLASSPATH).foreach { cp =>
+      val newCp = cp.split(CLASS_PATH_SEPARATOR)
+        .filterNot(cpSet.contains).mkString(CLASS_PATH_SEPARATOR)
+      addClasspathEntry(getClusterPath(sparkConf, newCp), env)
     }
 
     // Add the localized Hadoop config at the end of the classpath, in case it contains other
