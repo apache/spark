@@ -47,7 +47,6 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -1300,8 +1299,6 @@ private[hive] object HiveClientImpl extends Logging {
     // 3: we set all entries in config to this hiveConf.
     val confMap = (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue) ++
       sparkConf.getAll.toMap ++ extraConfig).toMap
-    val sparkHadoopUtil = new SparkHadoopUtil()
-
     val fromSpark = "Set by Spark"
     confMap.foreach { case (k, v) => hiveConf.set(k, v, fromSpark) }
     SQLConf.get.redactOptions(confMap).foreach { case (k, v) =>
