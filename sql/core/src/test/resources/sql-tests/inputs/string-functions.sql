@@ -219,3 +219,53 @@ select to_binary(null, cast(null as string));
 -- invalid format
 select to_binary('abc', 1);
 select to_binary('abc', 'invalidFormat');
+
+-- mask_ccn
+select mask_ccn(ccn) from values ("1234-5678-9876-5432") as tab(ccn);
+select mask_ccn("  1234 5678 9876 5432", "XXXX XXXX XXXX 1234");
+select mask_ccn("1234567898765432");
+select mask_ccn("1234567898765432", "XXXX-XXXX-XXXX-1234");
+select mask_ccn("1234-5678-9876-5432", format) from values ("XXXX-XXXX-XXXX-XXXX") as tab(format);
+
+-- try_mask_ccn
+select try_mask_ccn(ccn) from values ("1234-5678-9876-5432") as tab(ccn);
+select try_mask_ccn("  1234 5678 9876 5432", "XXXX XXXX XXXX 1234");
+select try_mask_ccn("1234567898765432");
+select try_mask_ccn("1234567898765432", "XXXX-XXXX-XXXX-1234");
+select try_mask_ccn("1234-5678-9876-5432", format)
+from values ("XXXX-XXXX-XXXX-XXXX") as tab(format);
+
+-- mask_digits
+select mask_digits(digits) from values ("1234-5678-9876-5432") as tab(digits);
+select mask_digits("  1234 5678 9876 5432", "XXXX XXXX XXXX 1234");
+select mask_digits("1234567898765432");
+select mask_digits("1234567898765432", "XXXX-XXXX-XXXX-1234");
+select mask_digits("1234-5678-9876-5432", format)
+from values ("XXXX-XXXX-XXXX-XXXX") as tab(format);
+
+-- try_mask_digits
+select try_mask_digits(digits) from values ("1234-5678-9876-5432") as tab(digits);
+select try_mask_digits("  1234 5678 9876 5432", "XXXX XXXX XXXX 1234");
+select try_mask_digits("1234567898765432");
+select try_mask_digits("1234567898765432", "XXXX-XXXX-XXXX-1234");
+select try_mask_digits("1234-5678-9876-5432", format)
+from values ("XXXX-XXXX-XXXX-XXXX") as tab(format);
+
+-- mask_phone
+select mask_phone(num) from values ("(555) 867-5309") AS tab(num);
+select mask_phone("  555 867 5309", "  XXX XXX XXXX");
+select mask_phone("  +1 555 867 5309", "  +1 XXX XXX XXXX");
+select mask_phone("[555 867 5309]", "[XXX XXX XXXX]");
+select mask_phone("+15558675309");
+select mask_phone("+1 555 867 5309", "+1 (XXX) XXX-XXXX");
+select mask_phone("(555) 867-5309", format) from values ("(XXX) XXX-XXXX") AS tab(format);
+
+-- try_mask_phone
+select try_mask_phone(num) from values ("(555) 867-5309") AS tab(num);
+select try_mask_phone("  555 867 5309", "  XXX XXX XXXX");
+select try_mask_phone("  +1 555 867 5309", "  +1 XXX XXX XXXX");
+select try_mask_phone("[555 867 5309]", "[XXX XXX XXXX]");
+select try_mask_phone("+15558675309");
+select try_mask_phone("+1 555 867 5309", "+1 (XXX) XXX-XXXX");
+select try_mask_phone("(555) 867-5309", format) from values ("(XXX) XXX-XXXX") AS tab(format);
+

@@ -134,12 +134,6 @@ case class TryMaskCcn(left: Expression, right: Expression)
           XXX XXX XXXX
       > SELECT _FUNC_("  +1 555 867 5309", "  +1 XXX XXX XXXX");
           +1 XXX XXX XXXX
-      > SELECT _FUNC_("[555 867 5309]", "[XXX XXX XXXX]");
-        Error: the format string is invalid
-      > SELECT _FUNC_("+15558675309");
-        Error: the input string does not match the format
-      > SELECT _FUNC_("+1 555 867 5309", "+1 (XXX) XXX-XXXX");
-        Error: the input string does not match the format
   """,
   since = "3.4.0",
   group = "string_funcs"
@@ -233,7 +227,7 @@ abstract class MaskDigitSequence(
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
-      val formatStringValid = formatString.forall {
+      val formatStringValid = formatString.nonEmpty && formatString.forall {
         case ch if MaskDigitSequence.VALID_FORMAT_CHARACTERS.contains(ch) => true
         case ch if ch.isDigit || ch.isWhitespace => true
         case _ => false
