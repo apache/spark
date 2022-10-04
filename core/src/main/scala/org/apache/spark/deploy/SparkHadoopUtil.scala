@@ -512,7 +512,7 @@ private[spark] object SparkHadoopUtil extends Logging {
   private def appendSparkHiveConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
     // Copy any "spark.hive.foo=bar" spark properties into conf as "hive.foo=bar"
     for ((key, value) <- conf.getAll if key.startsWith("spark.hive.")) {
-      hadoopConf.set(key.substring("spark.".length), value, "spark.hive propagation")
+      hadoopConf.set(key.substring("spark.".length), value, "Set by Spark from keys starting with 'spark.hive'")
     }
   }
 
