@@ -18,11 +18,7 @@
 package org.apache.spark.mllib.feature
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.config.Kryo._
-import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.internal.SQLConf._
-import org.apache.spark.util.Utils
 
 class SkipGramSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -32,7 +28,7 @@ class SkipGramSuite extends SparkFunSuite with MLlibTestSparkContext {
     val sentence = "a b " * 100 + "a c " * 10
     val localDoc = Seq(sentence, sentence)
     val doc = sc.parallelize(localDoc)
-      .map(line => line.split(" ").toSeq)
+      .map(line => line.split(" "))
     val model = new SkipGram().setVectorSize(10).fit(doc)
     val syms = model.findSynonyms("a", 2)
     assert(syms.length == 2)
