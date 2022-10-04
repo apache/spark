@@ -123,7 +123,8 @@ case class AdaptiveSparkPlanExec(
       ReplaceHashWithSortAgg,
       RemoveRedundantSorts,
       DisableUnnecessaryBucketedScan,
-      OptimizeSkewedJoin(ensureRequirements)
+      OptimizeSkewedJoin(ensureRequirements),
+      UncachePandasIndexing
     ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules
   }
 

@@ -41,14 +41,17 @@ case class AttachDistributedSequenceExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val childRDD = child.execute().map(_.copy())
-    val checkpointed = if (childRDD.getNumPartitions > 1) {
+    val childRDD = if (child.execute().getNumPartitions > 1) {
       // to avoid execute multiple jobs. zipWithIndex launches a Spark job.
-      childRDD.localCheckpoint()
+      // todo: add a config for StorageLevel
+      val cached = child.execute().map(_.copy()).persist()
+      val rddName = s"__Pandas_AttachDistributedSequence_${cached.id}__"
+      cached.setName(rddName)
+      cached
     } else {
-      childRDD
+      child.execute()
     }
-    checkpointed.zipWithIndex().mapPartitions { iter =>
+    childRDD.zipWithIndex().mapPartitions { iter =>
       val unsafeProj = UnsafeProjection.create(output, output)
       val joinedRow = new JoinedRow
       val unsafeRowWriter =
