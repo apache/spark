@@ -485,7 +485,7 @@ private[spark] object SparkHadoopUtil extends Logging {
   private def appendSparkHadoopConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
     // Copy any "spark.hadoop.foo=bar" spark properties into conf as "foo=bar"
     for ((key, value) <- conf.getAll if key.startsWith("spark.hadoop.")) {
-      hadoopConf.set(key.substring("spark.hadoop.".length), value, "spark.hadoop propagation")
+      hadoopConf.set(key.substring("spark.hadoop.".length), value, "Set by Spark from keys starting with 'spark.hadoop'")
     }
     val launcher = "spark launch"
     if (conf.getOption("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version").isEmpty) {
