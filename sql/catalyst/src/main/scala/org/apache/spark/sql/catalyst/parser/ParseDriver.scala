@@ -118,6 +118,7 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     parser.legacy_setops_precedence_enabled = conf.setOpsPrecedenceEnforced
     parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
     parser.SQL_standard_keyword_behavior = conf.enforceReservedKeywords
+    parser.double_quoted_identifiers = conf.double_quoted_identifiers
 
     try {
       try {
@@ -347,6 +348,23 @@ case object PostProcessor extends SqlBaseParserBaseListener {
 
   /** Remove the back ticks from an Identifier. */
   override def exitQuotedIdentifier(ctx: SqlBaseParser.QuotedIdentifierContext): Unit = {
+    if (ctx.BACKQUOTED_IDENTIFIER() != null) {
+      replaceTokenByIdentifier(ctx, 1) { token =>
+        // Remove the double back ticks in the string.
+        token.setText(token.getText.replace("``", "`"))
+        token
+      }
+    } else if (ctx.DOUBLEQUOTED_STRING() != null) {
+      replaceTokenByIdentifier(ctx, 1) { token =>
+        // Remove the double quotes in the string.
+        token.setText(token.getText.replace("\"\"", "\""))
+        token
+      }
+    }
+  }
+
+  /** Remove the back ticks from an Identifier. */
+  override def exitBackQuotedIdentifier(ctx: SqlBaseParser.BackQuotedIdentifierContext): Unit = {
     replaceTokenByIdentifier(ctx, 1) { token =>
       // Remove the double back ticks in the string.
       token.setText(token.getText.replace("``", "`"))

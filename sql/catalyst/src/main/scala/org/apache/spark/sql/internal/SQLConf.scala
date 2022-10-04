@@ -2909,6 +2909,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(sys.env.get("SPARK_ANSI_SQL_MODE").contains("true"))
 
+  val DOUBLE_QUOTED_IDENTIFIERS = buildConf("spark.sql.ansi.double_quoted_identifiers")
+    .doc("When true, Spark SQL reads literals enclosed in double quoted (\") as identifiers. " +
+      "When false they are read as string literals.")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val ENABLE_DEFAULT_COLUMNS =
     buildConf("spark.sql.defaultColumn.enabled")
       .internal()
@@ -4584,6 +4591,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
+
+  def double_quoted_identifiers: Boolean = getConf(DOUBLE_QUOTED_IDENTIFIERS)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>
