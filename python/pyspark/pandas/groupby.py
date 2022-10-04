@@ -513,13 +513,13 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Examples
         --------
         >>> df = ps.DataFrame({"A": [1, 2, 1, 2], "B": [True, False, False, True],
-        ...                    "C": [3, 3, 4, 4], "D": ["a", "a", "a", "b"]})
+        ...                    "C": [3, 3, 4, 4], "D": ["a", "a", "b", "a"]})
         >>> df
            A      B  C  D
         0  1   True  3  a
         1  2  False  3  a
-        2  1  False  4  a
-        3  2   True  4  b
+        2  1  False  4  b
+        3  2   True  4  a
 
         >>> df.groupby("A").last().sort_index()
                B  C  D
@@ -538,14 +538,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         >>> df.groupby("D").last().sort_index()
            A      B  C
         D
-        a  1  False  4
-        b  2   True  4
+        a  2   True  4
+        b  1  False  4
 
         >>> df.groupby("D").last(min_count=3).sort_index()
-             A      B    C
+             A     B    C
         D
-        a  1.0  False  4.0
-        b  NaN   None  NaN
+        a  2.0  True  4.0
+        b  NaN  None  NaN
         """
         if not isinstance(min_count, int):
             raise TypeError("min_count must be integer")
@@ -887,7 +887,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             It takes no effect since only numeric columns can be support here.
 
             .. versionadded:: 3.4.0
-        min_count: int, default 0
+        min_count : int, default 0
             The required number of valid values to perform the operation.
             If fewer than min_count non-NA values are present the result will be NA.
 
@@ -1279,7 +1279,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             Include only float, int, boolean columns. If None, will attempt to use
             everything, then use only numeric data.
 
-        min_count: int, default 0
+        min_count : int, default 0
             The required number of valid values to perform the operation.
             If fewer than min_count non-NA values are present the result will be NA.
 
