@@ -127,6 +127,8 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
    *               merged as there can be subqueries that are different ([[checkIdenticalPlans]] is
    *               false) due to an extra [[Project]] node in one of them. In that case
    *               `attributes.size` remains 1 after merging, but the merged flag becomes true.
+   * @param references A set of subquery indexes in the cache to track all (including transitive)
+   *                   nested subqueries.
    */
   case class Header(
       attributes: Seq[Attribute],
