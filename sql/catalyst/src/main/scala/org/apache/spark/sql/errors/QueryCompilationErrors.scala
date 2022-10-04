@@ -3154,11 +3154,4 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorSubClass = "MASK_CCN_INVALID_FORMAT_ERROR",
       messageParameters = Map("functionName" -> functionName))
   }
-
-  def maskCcnFormatMatchError(input: String, format: String): Throwable = {
-    new AnalysisException(
-      errorClass = "REDACTION_FUNCTION_ERROR",
-      errorSubClass = "MASK_CCN_FORMAT_MATCH_ERROR",
-      messageParameters = Map("input" -> input, "format" -> format))
-  }
 }

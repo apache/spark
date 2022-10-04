@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -225,7 +225,7 @@ class MaskCcnParser(formatString: String, nullOnError: Boolean) extends Serializ
     if (error && nullOnError) {
       null
     } else if (error) {
-      throw QueryCompilationErrors.maskCcnFormatMatchError(inputString, formatString)
+      throw QueryExecutionErrors.maskCcnFormatMatchError(inputString, formatString)
     } else {
       UTF8String.fromString(result)
     }

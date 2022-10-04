@@ -2133,4 +2133,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "numElements" -> numElements.toString,
         "size" -> elementSize.toString))
   }
+
+  def maskCcnFormatMatchError(input: String, format: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "REDACTION_FUNCTION_ERROR",
+      errorSubClass = "MASK_CCN_FORMAT_MATCH_ERROR",
+      messageParameters = Map(
+        "input" -> input,
+        "format" -> format))
+  }
 }
