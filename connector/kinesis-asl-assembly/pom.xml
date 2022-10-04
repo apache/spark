@@ -62,11 +62,11 @@
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
-      <version>2.6.1</version>
+      <version>3.16.3</version>
       <!-- 
          We are being explicit about version here and overriding the 
          spark default of 2.5.0 because KCL appears to have introduced 
-         a dependency on protobuf 2.6.1 somewhere between KCL 1.4.0 and 1.6.1.
+         a dependency on protobuf 3.16.3 somewhere between KCL 1.4.0 and 1.6.1.
        -->
     </dependency>
     <dependency>
