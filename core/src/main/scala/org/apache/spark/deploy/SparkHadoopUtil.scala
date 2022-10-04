@@ -105,6 +105,23 @@ private[spark] class SparkHadoopUtil extends Logging {
     }
   }
 
+  /**
+   * Extract the origin of a configuration key, or a default value if
+   * the key is not found or its origin is not known.
+   * Note that options provided by credential providers (JCEKS stores etc)
+   * are not resolved, so values retrieved by Configuration.getPassword()
+   * may not be recorded as having an origin.
+   *
+   * @param hadoopConf hadoop configuration to examine.
+   * @param key        key to look up
+   * @param defVal     default value
+   * @return the origin of the current entry in the configuration, or the default.
+   */
+  def extractOrigin(hadoopConf: Configuration, key: String,
+    defVal: String): String = {
+    SparkHadoopUtil.extractOrigin(hadoopConf, key, defVal)
+  }
+
   def appendSparkHiveConfigs(
       srcMap: Map[String, String],
       destMap: HashMap[String, String]): Unit = {
@@ -485,15 +502,16 @@ private[spark] object SparkHadoopUtil extends Logging {
   private def appendSparkHadoopConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
     // Copy any "spark.hadoop.foo=bar" spark properties into conf as "foo=bar"
     for ((key, value) <- conf.getAll if key.startsWith("spark.hadoop.")) {
-      hadoopConf.set(key.substring("spark.hadoop.".length), value, "Set by Spark from keys starting with 'spark.hadoop'")
+      hadoopConf.set(key.substring("spark.hadoop.".length), value,
+        "Set by Spark from keys starting with 'spark.hadoop'")
     }
-    val launcher = "spark launch"
+    val setBySpark = "Set by Spark to default values"
     if (conf.getOption("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version").isEmpty) {
-      hadoopConf.set("mapreduce.fileoutputcommitter.algorithm.version", "1", launcher)
+      hadoopConf.set("mapreduce.fileoutputcommitter.algorithm.version", "1", setBySpark)
     }
     // Since Hadoop 3.3.1, HADOOP-17597 starts to throw exceptions by default
     if (conf.getOption("spark.hadoop.fs.s3a.downgrade.syncable.exceptions").isEmpty) {
-      hadoopConf.set("fs.s3a.downgrade.syncable.exceptions", "true", launcher)
+      hadoopConf.set("fs.s3a.downgrade.syncable.exceptions", "true", setBySpark)
     }
     // In Hadoop 3.3.1, AWS region handling with the default "" endpoint only works
     // in EC2 deployments or when the AWS CLI is installed.
@@ -505,14 +523,35 @@ private[spark] object SparkHadoopUtil extends Logging {
       hadoopConf.get("fs.s3a.endpoint.region") == null) {
       // set to US central endpoint which can also connect to buckets
       // in other regions at the expense of a HEAD request during fs creation
-      hadoopConf.set("fs.s3a.endpoint", "s3.amazonaws.com", launcher)
+      hadoopConf.set("fs.s3a.endpoint", "s3.amazonaws.com", setBySpark)
     }
   }
 
   private def appendSparkHiveConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
     // Copy any "spark.hive.foo=bar" spark properties into conf as "hive.foo=bar"
     for ((key, value) <- conf.getAll if key.startsWith("spark.hive.")) {
-      hadoopConf.set(key.substring("spark.".length), value, "Set by Spark from keys starting with 'spark.hive'")
+      hadoopConf.set(key.substring("spark.".length), value,
+        "Set by Spark from keys starting with 'spark.hive'")
+    }
+  }
+
+  /**
+   * Extract the origin of a configuration key, or a default value if
+   * the key is not found or its origin is not known.
+   * Note that options provided by credential providers (JCEKS stores etc)
+   * are not resolved, so values retrieved by Configuration.getPassword()
+   * may not be recorded as having an origin.
+   * @param hadoopConf hadoop configuration to examine.
+   * @param key key to look up
+   * @param defVal default value
+   * @return the origin of the current entry in the configuration, or the default.
+   */
+  def extractOrigin(hadoopConf: Configuration, key: String, defVal: String): String = {
+    val sources = hadoopConf.getPropertySources(key)
+    if (sources != null && sources.length > 0) {
+      sources(0)
+    } else {
+      defVal
     }
   }
 

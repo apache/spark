@@ -24,9 +24,9 @@ import org.apache.spark.internal.config.BUFFER_SIZE
 
 class SparkHadoopUtilSuite extends SparkFunSuite {
 
-  private val launch = "spark launch"
-  private val hadoopPropagation = "spark.hadoop propagation"
-  private val hivePropagation = "spark.hive propagation"
+  private val launch = "Set by Spark to default values"
+  private val hadoopPropagation = "Set by Spark from keys starting with 'spark.hadoop'"
+  private val hivePropagation = "Set by Spark from keys starting with 'spark.hive'"
 
   /**
    * Verify that spark.hadoop options are propagated, and that
@@ -46,7 +46,6 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
    * An empty S3A endpoint will be overridden just as a null value
    * would.
    */
-
   test("appendSparkHadoopConfigs with S3A endpoint set to empty string") {
     val sc = new SparkConf()
     val hadoopConf = new Configuration(false)
@@ -155,10 +154,10 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     expectedSource: String): Unit = {
     val v = hadoopConf.get(key)
     // get the possibly null source list
-    val sources = hadoopConf.getPropertySources(key)
-    assert(sources != null && sources.length > 0,
+    val origin = new SparkHadoopUtil().extractOrigin(hadoopConf, key, null)
+    assert(origin != null,
       s"Sources are missing for '$key' with value '$v'")
-    assert(sources(0) ===  expectedSource,
+    assert(origin ===  expectedSource,
       s"Expected source $key with value $v: to contain $expectedSource")
   }
 }
