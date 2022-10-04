@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 
@@ -28,9 +28,9 @@ class RedactionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     compare(tryMask = false, input = "123", format = "XX9", expected = "XX3")
     compare(tryMask = false, input = "1-2-3", format = "9-9-X", expected = "1-2-X")
     compare(tryMask = false, input = "  1-2-3  ", format = "9-9-X", expected = "  1-2-X  ")
+    compare(tryMask = false, input = "  123  ", format = "  XXX  ", expected = "  XXX  ")
     // Negative tests
     expectTypeCheckFailure(input = "123", format = "XYZ")
-    expectTypeCheckFailure(input = "  123  ", format = "  XXX  ")
     expectError(input = "12", format = "XXX")
     expectError(input = "1234", format = "XXX")
     expectError(input = "1-2-3", format = "XXX")
@@ -44,9 +44,9 @@ class RedactionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     compare(tryMask = true, input = "123", format = "XX9", expected = "XX3")
     compare(tryMask = true, input = "1-2-3", format = "9-9-X", expected = "1-2-X")
     compare(tryMask = true, input = "  1-2-3  ", format = "9-9-X", expected = "  1-2-X  ")
+    compare(tryMask = true, input = "  123  ", format = "  XXX  ", expected = "  XXX  ")
     // Negative tests
     expectTypeCheckFailure(input = "123", format = "XYZ")
-    expectTypeCheckFailure(input = "  123  ", format = "  XXX  ")
     expectNull(input = "12", format = "XXX")
     expectNull(input = "1234", format = "XXX")
     expectNull(input = "1-2-3", format = "XXX")
@@ -77,7 +77,7 @@ class RedactionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def expectError(input: String, format: String): Unit = {
     val fn = MaskCcn(Literal(input), Literal(format))
     assert(fn.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-    checkExceptionInExpression[AnalysisException](
+    checkExceptionInExpression[SparkRuntimeException](
       fn, "does not match the provided or default format")
   }
 
