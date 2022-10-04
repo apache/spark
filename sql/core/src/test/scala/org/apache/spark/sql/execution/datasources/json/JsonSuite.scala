@@ -3387,9 +3387,8 @@ abstract class JsonSuite
     // We should parse "a" as null but continue parsing "b" correctly as it is valid.
     withTempPath { path =>
       Seq(
-          """{"a": {"x": 1, "y": true}, "b": {"x": 1}}""",
-          """{"a": {"x": 2}, "b": {"x": 2}}"""",
-        ).toDF()
+        """{"a": {"x": 1, "y": true}, "b": {"x": 1}}""",
+        """{"a": {"x": 2}, "b": {"x": 2}}"""").toDF()
         .repartition(1)
         .write.text(path.getAbsolutePath)
 
