@@ -198,7 +198,7 @@
 | org.apache.spark.sql.catalyst.expressions.MapKeys | map_keys | SELECT map_keys(map(1, 'a', 2, 'b')) | struct<map_keys(map(1, a, 2, b)):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.MapValues | map_values | SELECT map_values(map(1, 'a', 2, 'b')) | struct<map_values(map(1, a, 2, b)):array<string>> |
 | org.apache.spark.sql.catalyst.expressions.MapZipWith | map_zip_with | SELECT map_zip_with(map(1, 'a', 2, 'b'), map(1, 'x', 2, 'y'), (k, v1, v2) -> concat(v1, v2)) | struct<map_zip_with(map(1, a, 2, b), map(1, x, 2, y), lambdafunction(concat(namedlambdavariable(), namedlambdavariable()), namedlambdavariable(), namedlambdavariable(), namedlambdavariable())):map<int,string>> |
-| org.apache.spark.sql.catalyst.expressions.MaskCcn | mask_ccn | SELECT mask_ccn("1234-5678-9876-5432", "XXXX-XXXX-XXXX-9999") | struct<mask_ccn("1234-5678-9876-5432", "XXXX-XXXX-XXXX-9999"):string> |
+| org.apache.spark.sql.catalyst.expressions.MaskCcn | mask_ccn | SELECT mask_ccn(ccn) FROM VALUES ("1234-5678-9876-5432") AS tab(ccn) | struct<mask_ccn(ccn, XXXX-XXXX-XXXX-XXXX):string> |
 | org.apache.spark.sql.catalyst.expressions.Md5 | md5 | SELECT md5('Spark') | struct<md5(Spark):string> |
 | org.apache.spark.sql.catalyst.expressions.MicrosToTimestamp | timestamp_micros | SELECT timestamp_micros(1230219000123123) | struct<timestamp_micros(1230219000123123):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.MillisToTimestamp | timestamp_millis | SELECT timestamp_millis(1230219000123) | struct<timestamp_millis(1230219000123):timestamp> |
@@ -323,7 +323,7 @@
 | org.apache.spark.sql.catalyst.expressions.TryAdd | try_add | SELECT try_add(1, 2) | struct<try_add(1, 2):int> |
 | org.apache.spark.sql.catalyst.expressions.TryDivide | try_divide | SELECT try_divide(3, 2) | struct<try_divide(3, 2):double> |
 | org.apache.spark.sql.catalyst.expressions.TryElementAt | try_element_at | SELECT try_element_at(array(1, 2, 3), 2) | struct<try_element_at(array(1, 2, 3), 2):int> |
-| org.apache.spark.sql.catalyst.expressions.TryMaskCcn | try_mask_ccn | SELECT try_mask_ccn("1234-5678-9876-5432", "XXXX-XXXX-XXXX-9999") | struct<try_mask_ccn("1234-5678-9876-5432", "XXXX-XXXX-XXXX-9999"):string> |
+| org.apache.spark.sql.catalyst.expressions.TryMaskCcn | try_mask_ccn | SELECT try_mask_ccn(ccn) FROM VALUES ("1234-5678-9876-5432") AS tab(ccn) | struct<try_mask_ccn(ccn, XXXX-XXXX-XXXX-XXXX):string> |
 | org.apache.spark.sql.catalyst.expressions.TryMultiply | try_multiply | SELECT try_multiply(2, 3) | struct<try_multiply(2, 3):int> |
 | org.apache.spark.sql.catalyst.expressions.TrySubtract | try_subtract | SELECT try_subtract(2, 1) | struct<try_subtract(2, 1):int> |
 | org.apache.spark.sql.catalyst.expressions.TryToBinary | try_to_binary | SELECT try_to_binary('abc', 'utf-8') | struct<try_to_binary(abc, utf-8):binary> |
