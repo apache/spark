@@ -365,7 +365,6 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         # columnar form (dictionary of numpy arrays)
         def multiples_column_fn():
             def predict(inputs):
-                inputs = np.squeeze(inputs, axis=1)
                 return {"x2": inputs * 2, "x3": inputs * 3}
 
             return predict
@@ -385,7 +384,6 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         # row form: list of dictionaries
         def multiples_row_fn():
             def predict(inputs):
-                inputs = np.squeeze(inputs, axis=1)
                 return [{"x2": x * 2, "x3": x * 3} for x in inputs]
 
             return predict
