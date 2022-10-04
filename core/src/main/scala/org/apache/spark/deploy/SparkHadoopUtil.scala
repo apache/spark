@@ -443,7 +443,7 @@ private[spark] object SparkHadoopUtil extends Logging {
       val envSecretKey = "AWS_SECRET_ACCESS_KEY"
       val accessKey = System.getenv(envSecretKey)
       if (keyId != null && accessKey != null) {
-        val source = "Spark set from "
+        val source = "Set by Spark from "
         hadoopConf.set("fs.s3.awsAccessKeyId", keyId, source + envKeyId)
         hadoopConf.set("fs.s3n.awsAccessKeyId", keyId, source + envKeyId)
         hadoopConf.set("fs.s3a.access.key", keyId, source + envKeyId)
