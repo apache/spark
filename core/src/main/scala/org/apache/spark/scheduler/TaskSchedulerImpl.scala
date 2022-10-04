@@ -120,6 +120,12 @@ private[spark] class TaskSchedulerImpl(
   // on this class.  Protected by `this`
   private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
 
+  override def runningTaskIdsByStageId(stageId: Int): Option[Set[Long]] = synchronized {
+    taskSetsByStageIdAndAttempt.get(stageId).flatMap { attempts =>
+      Option(attempts.flatMap { case (_, tsm) => tsm.runningTasksSet }.toSet)
+    }
+  }
+
   // keyed by taskset
   // value is true if the task set has not rejected any resources due to locality
   // since the timer was last reset
@@ -130,6 +136,10 @@ private[spark] class TaskSchedulerImpl(
   private[scheduler] val taskIdToTaskSetManager = new ConcurrentHashMap[Long, TaskSetManager]
   // Protected by `this`
   val taskIdToExecutorId = new HashMap[Long, String]
+
+  override def isRunning(taskId: Long): Boolean = synchronized {
+    taskIdToExecutorId.contains(taskId)
+  }
 
   @volatile private var hasReceivedTask = false
   @volatile private var hasLaunchedTask = false

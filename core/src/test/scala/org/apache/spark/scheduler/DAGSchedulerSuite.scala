@@ -18,11 +18,13 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-import java.util.concurrent.{CountDownLatch, Delayed, ScheduledFuture, TimeUnit}
+import java.util.concurrent.{CountDownLatch, Delayed, Executors, ScheduledFuture, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.concurrent.{Future, Promise}
+import scala.concurrent.duration.Duration
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
@@ -47,7 +49,7 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, Utils}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, ThreadUtils, Utils}
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -169,6 +171,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   /** Stages for which the DAGScheduler has called TaskScheduler.cancelTasks(). */
   val cancelledStages = new HashSet[Int]()
 
+  /** Assume the behavior of all tasks within a taskSet is consistent. */
+  val runningTaskSetByStage = new HashMap[Int, HashSet[Long]]
+
+  /** Executor pool for concurrent tests. */
+  lazy val executorPool = Executors.newFixedThreadPool(10)
+
   val tasksMarkedAsCompleted = new ArrayBuffer[Task[_]]()
 
   val taskScheduler = new TaskScheduler() {
@@ -186,9 +194,25 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       // normally done by TaskSetManager
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
       taskSets += taskSet
+
+      // Use 10 * stageId + stageAttemptId as taskSet id, which is unique
+      // because the attempt of each stage is less than 10.
+      val runningTasks = runningTaskSetByStage.getOrElseUpdate(taskSet.stageId, HashSet[Long]())
+      runningTasks += (10 * taskSet.stageId + taskSet.stageAttemptId.toLong)
+      executorPool.execute { () =>
+        // Mock the taskSet finished after approximately 1s
+        Thread.sleep(1000)
+        runningTaskSetByStage.remove(taskSet.stageId)
+      }
     }
     override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = {
       cancelledStages += stageId
+
+      executorPool.execute { () =>
+        // Mock the asynchronous cancelling
+        Thread.sleep(100)
+        runningTaskSetByStage.remove(stageId)
+      }
     }
     override def killTaskAttempt(
       taskId: Long, interruptThread: Boolean, reason: String): Boolean = false
@@ -215,6 +239,16 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     override def getExecutorDecommissionState(
       executorId: String): Option[ExecutorDecommissionState] = {
       executorsPendingDecommission.get(executorId)
+    }
+    override def runningTaskIdsByStageId(stageId: Int): Option[Set[Long]] = synchronized {
+      runningTaskSetByStage.get(stageId).flatMap { tasks =>
+        Option(tasks.toSet)
+      }
+    }
+    override def isRunning(taskId: Long): Boolean = synchronized {
+      runningTaskSetByStage.exists {
+        case (_, taskIds) => taskIds.contains(taskId)
+      }
     }
   }
 
@@ -879,6 +913,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         decommissionInfo: ExecutorDecommissionInfo): Unit = {}
       override def getExecutorDecommissionState(
         executorId: String): Option[ExecutorDecommissionState] = None
+      override def runningTaskIdsByStageId(stageId: Int): Option[Set[Long]] = None
+      override def isRunning(taskId: Long): Boolean = false
     }
     val noKillScheduler = new DAGScheduler(
       sc,
@@ -4561,6 +4597,21 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       completeLatch.await()
       assert(hostAInterrupted)
     }
+  }
+
+  test("SPARK-40647: Failing job should keep waiting until all related tasks have been killed.") {
+    val listener = new JobListener {
+      private val jobPromise: Promise[Unit] = Promise()
+      override def taskSucceeded(index: Int, result: Any): Unit = jobPromise.success()
+      override def jobFailed(exception: Exception): Unit = jobPromise.failure(exception)
+      def completionFuture: Future[Unit] = jobPromise.future
+    }
+
+    submit(new MyRDD(sc, 1, Nil), Array(0), listener = listener)
+    failed(taskSets(0), "some failure")
+    // Wait for the job end
+    ThreadUtils.awaitReady(listener.completionFuture, Duration.Inf)
+    assert(runningTaskSetByStage.contains(taskSets(0).stageId) === false)
   }
 
   /**

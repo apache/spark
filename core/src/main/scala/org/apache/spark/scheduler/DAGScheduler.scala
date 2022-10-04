@@ -2776,10 +2776,21 @@ private[spark] class DAGScheduler(
       job: ActiveJob,
       failureReason: String,
       exception: Option[Throwable] = None): Unit = {
+    // Get the running tasks before killing
+    val runningTaskIds: HashSet[Long] = jobIdToStageIds(job.jobId).flatMap { stageId =>
+      taskScheduler.runningTaskIdsByStageId(stageId).getOrElse(Set.empty)
+    }
     if (cancelRunningIndependentStages(job, failureReason)) {
       // SPARK-15783 important to cleanup state first, just for tests where we have some asserts
       // against the state.  Otherwise we have a *little* bit of flakiness in the tests.
       cleanupStateForJobAndIndependentStages(job)
+
+      // Wait until all related running tasks have been killed since killing tasks is asynchronous.
+      logInfo(s"Waiting for ${runningTaskIds.size} tasks to be killed before failing job.")
+      while (runningTaskIds.exists(taskScheduler.isRunning(_))) {
+        Thread.sleep(100)
+      }
+
       val error = new SparkException(failureReason, exception.orNull)
       job.listener.jobFailed(error)
       listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobFailed(error)))

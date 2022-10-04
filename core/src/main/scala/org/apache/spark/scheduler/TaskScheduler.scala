@@ -125,4 +125,14 @@ private[spark] trait TaskScheduler {
    */
   def applicationAttemptId(): Option[String]
 
+  /**
+   * Get all running task ids within the stage.
+   */
+  def runningTaskIdsByStageId(stageId: Int): Option[Set[Long]]
+
+  /**
+   * Determine if a task is running.
+   */
+  def isRunning(taskId: Long): Boolean
+
 }
