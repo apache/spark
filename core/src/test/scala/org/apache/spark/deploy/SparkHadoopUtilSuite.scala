@@ -157,7 +157,7 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     // get the possibly null source list
     val sources = hadoopConf.getPropertySources(key)
     assert(sources != null && sources.length > 0,
-      s"Expected source for $key with value $v")
+      s"Sources are missing for '$key' with value '$v'")
     assert(sources(0) ===  expectedSource,
       s"Expected source $key with value $v: to contain $expectedSource")
   }
