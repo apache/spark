@@ -456,7 +456,7 @@ class JacksonParser(
             schema.existenceDefaultsBitmask(index) = false
           } catch {
             case e: SparkUpgradeException => throw e
-            case NonFatal(e) if isRoot =>
+            case NonFatal(e) =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()
           }
@@ -500,13 +500,27 @@ class JacksonParser(
       fieldConverter: ValueConverter,
       isRoot: Boolean = false): ArrayData = {
     val values = ArrayBuffer.empty[Any]
+    var badRecordException: Option[Throwable] = None
+
     while (nextUntil(parser, JsonToken.END_ARRAY)) {
-      val v = fieldConverter.apply(parser)
-      if (isRoot && v == null) throw QueryExecutionErrors.rootConverterReturnNullError()
-      values += v
+      try {
+        val v = fieldConverter.apply(parser)
+        if (isRoot && v == null) throw QueryExecutionErrors.rootConverterReturnNullError()
+        values += v
+      } catch {
+        case PartialResultException(row, cause) =>
+          badRecordException = badRecordException.orElse(Some(cause))
+          values += row
+      }
     }
 
-    new GenericArrayData(values.toArray)
+    val arrayData = new GenericArrayData(values.toArray)
+
+    if (badRecordException.isEmpty) {
+      arrayData
+    } else {
+      throw PartialResultException(InternalRow(arrayData), badRecordException.get)
+    }
   }
 
   /**
