@@ -444,7 +444,7 @@ class SkipGram extends Serializable with Logging {
     val sent = cacheAndCount(dataset.mapPartitions{it =>
       val vocab = vocabBC.value
       it.map(_.filter(vocab.contains).map(vocab(_)))
-    })
+    }.repartition(numPartitions * 5))
     val expTable = sc.broadcast(createExpTable())
 
     val emb = cacheAndCount(countRDD.mapPartitions{it =>
