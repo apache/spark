@@ -33,11 +33,12 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
-import org.apache.spark.tags.ExtendedYarnTest
+import org.apache.spark.tags.{ExtendedLevelDBTest, ExtendedYarnTest}
 
 /**
  * Integration test for the external shuffle service with a yarn mini-cluster
  */
+@ExtendedLevelDBTest
 @ExtendedYarnTest
 class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
 
@@ -86,6 +87,7 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
 /**
  * Integration test for the external shuffle service with auth on.
  */
+@ExtendedLevelDBTest
 @ExtendedYarnTest
 class YarnShuffleAuthSuite extends YarnShuffleIntegrationSuite {
 
