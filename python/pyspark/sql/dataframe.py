@@ -4430,7 +4430,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrame(self._jdf.withColumnRenamed(existing, new), self.sparkSession)
 
-    def withColumnsRenamed(self, *colsMap: Dict[str, str]) -> "DataFrame":
+    def withColumnsRenamed(self, colsMap: Dict[str, str]) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by renaming multiple columns.
         This is a no-op if schema doesn't contain the given column names.
@@ -4465,10 +4465,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  5|  Bob|   7|   8|
         +---+-----+----+----+
         """
-        # Below code is to help enable kwargs in future.
-        assert len(colsMap) == 1
-        colsMap = colsMap[0]  # type: ignore[assignment]
-
         if not isinstance(colsMap, dict):
             raise TypeError("colsMap must be dict of existing column name and new column name.")
 
