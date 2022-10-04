@@ -921,12 +921,27 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("SPARK-40311: withColumnsRenamed duplicate column names") {
-    val newSalary = salary.withColumnRenamed("personId", "id")
-    val joinedDf = person.join(newSalary, person("id") === newSalary("id"), "inner")
-    val df = joinedDf.withColumnsRenamed(Map("id" -> "renamed1"))
+  test("SPARK-40311: withColumnsRenamed duplicate column names simple") {
+    val e = intercept[AnalysisException] {
+      person.withColumnsRenamed(Map("id" -> "renamed", "name" -> "renamed"))
+    }
+    assert(e.getMessage ===
+      "Found duplicate column(s) in given column names for withColumnsRenamed: `renamed`")
+  }
 
-    assert(df.columns === Array("renamed1", "name", "age", "renamed1", "salary"))
+  test("SPARK-40311: withColumnsRenamed duplicate column names simple case sensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val df = person.withColumnsRenamed(Map("id" -> "renamed", "name" -> "Renamed"))
+      assert(df.columns === Array("renamed", "Renamed", "age"))
+    }
+  }
+
+  test("SPARK-40311: withColumnsRenamed duplicate column names indirect") {
+    val e = intercept[AnalysisException] {
+      person.withColumnsRenamed(Map("id" -> "renamed1", "renamed1" -> "age"))
+    }
+    assert(e.getMessage ===
+      "Found duplicate column(s) in given column names for withColumnsRenamed: `age`")
   }
 
   test("SPARK-20384: Value class filter") {

@@ -2815,9 +2815,12 @@ class Dataset[T] private[sql](
    *
    * `colsMap` is a map of existing column name and new column name.
    *
+   * @throws AnalysisException if there are duplicate names in resulting projection
+   *
    * @group untypedrel
    * @since 3.4.0
    */
+  @throws[AnalysisException]
   def withColumnsRenamed(colsMap: Map[String, String]): DataFrame = {
     val resolver = sparkSession.sessionState.analyzer.resolver
     val output: Seq[NamedExpression] = queryExecution.analyzed.output
@@ -2832,6 +2835,10 @@ class Dataset[T] private[sql](
         }
       )
     }
+    SchemaUtils.checkColumnNameDuplication(
+      projectList.map(_.name),
+      "in given column names for withColumnsRenamed",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
     withPlan(Project(projectList, logicalPlan))
   }
 
