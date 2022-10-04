@@ -51,12 +51,6 @@ import org.apache.spark.unsafe.types.UTF8String
         XXXX-XXXX-XXXX-XXXX
       > SELECT _FUNC_("  1234 5678 9876 5432", "XXXX XXXX XXXX 1234");
           XXXX XXXX XXXX 5432
-      > SELECT _FUNC_("[1234-5678-9876-5432]", "[XXXX-XXXX-XXXX-1234]");
-        Error: the format string is invalid
-      > SELECT _FUNC_("1234567898765432");
-        Error: the input string does not match the format
-      > SELECT _FUNC_("1234567898765432", "XXXX-XXXX-XXXX-1234");
-        Error: the input string does not match the format
   """,
   since = "3.4.0",
   group = "string_funcs"
@@ -95,8 +89,6 @@ case class MaskCcn(left: Expression, right: Expression)
         XXXX-XXXX-XXXX-XXXX
       > SELECT _FUNC_("  1234 5678 9876 5432", "XXXX XXXX XXXX 1234");
           XXXX XXXX XXXX 5432
-      > SELECT _FUNC_("[1234-5678-9876-5432]", "[XXXX-XXXX-XXXX-1234]");
-        Error: the format string is invalid
       > SELECT _FUNC_("1234567898765432");
         NULL
       > SELECT _FUNC_("1234567898765432", "XXXX-XXXX-XXXX-1234");
