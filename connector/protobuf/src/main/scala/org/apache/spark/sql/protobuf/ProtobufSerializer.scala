@@ -36,12 +36,12 @@ import org.apache.spark.sql.types._
  */
 private[sql] class ProtobufSerializer(
                                     rootCatalystType: DataType,
-                                    rootProtoType: Descriptor,
+                                    rootDescriptor: Descriptor,
                                     nullable: Boolean,
                                     positionalFieldMatch: Boolean) extends Logging {
 
-  def this(rootCatalystType: DataType, rootProtoType: Descriptor, nullable: Boolean) = {
-    this(rootCatalystType, rootProtoType, nullable, positionalFieldMatch = false)
+  def this(rootCatalystType: DataType, rootDescriptor: Descriptor, nullable: Boolean) = {
+    this(rootCatalystType, rootDescriptor, nullable, positionalFieldMatch = false)
   }
 
   def serialize(catalystData: Any): Any = {
@@ -52,12 +52,12 @@ private[sql] class ProtobufSerializer(
     val baseConverter = try {
       rootCatalystType match {
         case st: StructType =>
-          newStructConverter(st, rootProtoType, Nil, Nil).asInstanceOf[Any => Any]
+          newStructConverter(st, rootDescriptor, Nil, Nil).asInstanceOf[Any => Any]
       }
     } catch {
       case ise: IncompatibleSchemaException => throw new IncompatibleSchemaException(
         s"Cannot convert SQL type ${rootCatalystType.sql} to Protobuf type " +
-          s"${rootProtoType.getName}.", ise)
+          s"${rootDescriptor.getName}.", ise)
     }
     if (nullable) {
       (data: Any) =>

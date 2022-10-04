@@ -36,16 +36,17 @@ private[sql] object ProtobufUtils extends Logging {
   private[sql] case class ProtoMatchedField(
                                              catalystField: StructField,
                                              catalystPosition: Int,
-                                             protoField: FieldDescriptor)
+                                             fieldDescriptor: FieldDescriptor)
 
   /**
    * Helper class to perform field lookup/matching on Protobuf schemas.
    *
-   * This will match `protoSchema` against `catalystSchema`, attempting to find a matching field in
-   * the Protobuf schema for each field in the Catalyst schema and vice-versa, respecting
+   * This will match `descriptor` against `catalystSchema`, attempting to find a matching field in
+   * the Protobuf descriptor for each field in the Catalyst schema and vice-versa, respecting
    * settings for case sensitivity. The match results can be accessed using the getter methods.
    *
-   * @param protoSchema          The schema in which to search for fields. Must be of type RECORD.
+   * @param descriptor           The descriptor in which to search for fields.
+   *                             Must be of type Descriptor.
    * @param catalystSchema       The Catalyst schema to use for matching.
    * @param protoPath            The seq of parent field names leading to `protoSchema`.
    * @param catalystPath         The seq of parent field names leading to `catalystSchema`.
@@ -54,19 +55,19 @@ private[sql] object ProtobufUtils extends Logging {
    *                             otherwise, perform field matching using field names.
    */
   class ProtoSchemaHelper(
-                           protoSchema: Descriptor,
+                           descriptor: Descriptor,
                            catalystSchema: StructType,
                            protoPath: Seq[String],
                            catalystPath: Seq[String],
                            positionalFieldMatch: Boolean) {
-    if (protoSchema.getName == null) {
+    if (descriptor.getName == null) {
       throw new IncompatibleSchemaException(
-        s"Attempting to treat ${protoSchema.getName} as a RECORD, " +
-          s"but it was: ${protoSchema.getContainingType}")
+        s"Attempting to treat ${descriptor.getName} as a RECORD, " +
+          s"but it was: ${descriptor.getContainingType}")
     }
 
-    private[this] val protoFieldArray = protoSchema.getFields.asScala.toArray
-    private[this] val fieldMap = protoSchema.getFields.asScala
+    private[this] val protoFieldArray = descriptor.getFields.asScala.toArray
+    private[this] val fieldMap = descriptor.getFields.asScala
       .groupBy(_.getName.toLowerCase(Locale.ROOT))
       .mapValues(_.toSeq) // toSeq needed for scala 2.13
 
@@ -103,7 +104,7 @@ private[sql] object ProtobufUtils extends Logging {
      * Only required (non-nullable) fields are checked; nullable fields are ignored.
      */
     def validateNoExtraRequiredProtoFields(): Unit = {
-      val extraFields = protoFieldArray.toSet -- matchedFields.map(_.protoField)
+      val extraFields = protoFieldArray.toSet -- matchedFields.map(_.fieldDescriptor)
       extraFields.filterNot(isNullable).foreach { extraField =>
         if (positionalFieldMatch) {
           throw new IncompatibleSchemaException(s"Found field '${extraField.getName()}'" +
@@ -152,8 +153,8 @@ private[sql] object ProtobufUtils extends Logging {
     }
   }
 
-  def buildDescriptor(protoFilePath: String, messageName: String): Descriptor = {
-    val fileDescriptor: Descriptors.FileDescriptor = parseFileDescriptor(protoFilePath)
+  def buildDescriptor(descFilePath: String, messageName: String): Descriptor = {
+    val fileDescriptor: Descriptors.FileDescriptor = parseFileDescriptor(descFilePath)
     var result: Descriptors.Descriptor = null;
 
     for (descriptor <- fileDescriptor.getMessageTypes.asScala) {
@@ -168,16 +169,17 @@ private[sql] object ProtobufUtils extends Logging {
     result
   }
 
-  def parseFileDescriptor(protoFilePath: String): Descriptors.FileDescriptor = {
+  def parseFileDescriptor(descFilePath: String): Descriptors.FileDescriptor = {
     var fileDescriptorSet: DescriptorProtos.FileDescriptorSet = null
     try {
-      val dscFile = new BufferedInputStream(new FileInputStream(protoFilePath))
+      val dscFile = new BufferedInputStream(new FileInputStream(descFilePath))
       fileDescriptorSet = DescriptorProtos.FileDescriptorSet.parseFrom(dscFile)
     } catch {
       case ex: InvalidProtocolBufferException =>
         throw new RuntimeException("Error parsing descriptor byte[] into Descriptor object", ex)
       case ex: IOException =>
-        throw new RuntimeException("Error reading Protobuf file at path: " + protoFilePath, ex)
+        throw new RuntimeException("Error reading Protobuf descriptor file at path: " +
+          descFilePath, ex)
     }
 
     val descriptorProto: DescriptorProtos.FileDescriptorProto = fileDescriptorSet.getFile(0)
@@ -204,8 +206,8 @@ private[sql] object ProtobufUtils extends Logging {
     case n => s"field '${n.mkString(".")}'"
   }
 
-  /** Return true iff `protoField` is nullable, i.e. `UNION` type and has `NULL` as an option. */
-  private[protobuf] def isNullable(protoField: FieldDescriptor): Boolean =
-    !protoField.isOptional
+  /** Return true if `fieldDescriptor` is optional. */
+  private[protobuf] def isNullable(fieldDescriptor: FieldDescriptor): Boolean =
+    !fieldDescriptor.isOptional
 
 }

@@ -35,7 +35,6 @@ private[sql] class ProtobufOptions(
     this(CaseInsensitiveMap(parameters), conf)
   }
 
-
   val parseMode: ParseMode =
     parameters.get("mode").map(ParseMode.fromString).getOrElse(FailFastMode)
 }
