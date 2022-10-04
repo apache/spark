@@ -532,7 +532,7 @@
     "subClass" : {
       "MASK_FORMAT_MATCH_ERROR" : {
         "message" : [
-          "The input <input> of function <functionName> does not match the provided or default format <format>. Please use the <try_function_name> function to receive a NULL result in this case instead."
+          "The input <input> of function <functionName> does not match the provided or default format <format>. Please use the <tryFunctionName> function to receive a NULL result in this case instead."
         ]
       },
       "MASK_INVALID_FORMAT_ERROR" : {

@@ -205,6 +205,7 @@ case class TryMaskPhone(left: Expression, right: Expression)
   override protected def withNewChildrenInternal(
       newInput: Expression, newFormat: Expression): TryMaskPhone =
     copy(left = newInput, right = newFormat)
+  override def nullable: Boolean = true
 }
 
 /** Companion object for the Mask* classes. */
@@ -248,7 +249,8 @@ abstract class MaskDigitSequence(
       if (formatStringValid) {
         TypeCheckResult.TypeCheckSuccess
       } else {
-        throw QueryCompilationErrors.maskInvalidFormatError(prettyName, defaultFormat)
+        throw QueryCompilationErrors.maskInvalidFormatError(
+          prettyName.toUpperCase(Locale.ROOT), defaultFormat)
       }
     } else {
       inputTypeCheck
@@ -349,7 +351,7 @@ class MaskDigitSequenceParser(
       null
     } else if (error) {
       throw QueryExecutionErrors.maskFormatMatchError(
-        functionName.toUpperCase(), inputString, formatString)
+        inputString, functionName.toUpperCase(), formatString)
     } else {
       UTF8String.fromString(result)
     }
