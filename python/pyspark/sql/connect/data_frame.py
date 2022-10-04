@@ -231,7 +231,7 @@ class DataFrame(object):
 
     def toPandas(self) -> pandas.DataFrame:
         query = self._plan.collect(self._session)
-        return self._session.toPandas(query)
+        return self._session._toPandas(query)
 
     def explain(self) -> str:
         query = self._plan.collect(self._session)
