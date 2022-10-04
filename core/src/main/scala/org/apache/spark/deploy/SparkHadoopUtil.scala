@@ -478,7 +478,7 @@ private[spark] object SparkHadoopUtil extends Logging {
 
   private def appendHiveConfigs(hadoopConf: Configuration): Unit = {
     hiveConfKeys.foreach { kv =>
-      hadoopConf.set(kv.getKey, kv.getValue, "hive-site.xml")
+      hadoopConf.set(kv.getKey, kv.getValue, "Set by Spark from hive-site.xml")
     }
   }
 
