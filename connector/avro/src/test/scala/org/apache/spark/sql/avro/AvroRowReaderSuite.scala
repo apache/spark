@@ -94,7 +94,6 @@ class AvroRowReaderSuite
       }
     }
   }
-  
   test("SPARK-40409: read Bytetype data correctly") {
     withTempPath { dir =>
       val catalystSchema = StructType(Seq(StructField("value", ByteType, true)))
