@@ -59,7 +59,7 @@ import org.apache.spark.unsafe.types.UTF8String
         Error: the input string does not match the format
   """,
   since = "3.4.0",
-  group = "redaction_funcs"
+  group = "string_funcs"
 )
 case class MaskCcn(left: Expression, right: Expression)
   extends MaskDigitSequence(left, right, "mask_ccn", false) {
@@ -102,7 +102,7 @@ case class MaskCcn(left: Expression, right: Expression)
         NULL
   """,
   since = "3.4.0",
-  group = "redaction_funcs"
+  group = "string_funcs"
 )
 case class TryMaskCcn(left: Expression, right: Expression)
   extends MaskDigitSequence(left, right, "try_mask_ccn", true) {

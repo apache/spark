@@ -542,6 +542,7 @@ object FunctionRegistry {
     expression[Like]("like"),
     expression[ILike]("ilike"),
     expression[Lower]("lower"),
+    expression[MaskCcn]("mask_ccn"),
     expression[OctetLength]("octet_length"),
     expression[StringLocate]("locate"),
     expressionBuilder("lpad", LPadExpressionBuilder),
@@ -573,6 +574,7 @@ object FunctionRegistry {
     expression[StringTranslate]("translate"),
     expression[StringTrim]("trim"),
     expression[StringTrimBoth]("btrim"),
+    expression[TryMaskCcn]("try_mask_ccn"),
     expression[Upper]("ucase", true),
     expression[UnBase64]("unbase64"),
     expression[Unhex]("unhex"),
@@ -808,11 +810,7 @@ object FunctionRegistry {
     // csv
     expression[CsvToStructs]("from_csv"),
     expression[SchemaOfCsv]("schema_of_csv"),
-    expression[StructsToCsv]("to_csv"),
-
-    // redaction functions (SPARK-40623)
-    expression[MaskCcn]("mask_ccn"),
-    expression[TryMaskCcn]("try_mask_ccn")
+    expression[StructsToCsv]("to_csv")
   )
 
   val builtin: SimpleFunctionRegistry = {
