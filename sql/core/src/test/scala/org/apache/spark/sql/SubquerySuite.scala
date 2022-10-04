@@ -2327,4 +2327,14 @@ class SubquerySuite extends QueryTest
       assert(findProject(df2).size == 3)
     }
   }
+
+  test("SPARK-40618: Regression test for merging subquery bug with nested subqueries") {
+    // This test contains a subquery expression with another subquery expression nested inside.
+    // It acts as a regression test to ensure that the MergeScalarSubqueries rule does not attempt
+    // to merge them together.
+    withTable("t") {
+      sql("create table t(col int) using csv")
+      checkAnswer(sql("select(select sum((select sum(col) from t)) from t)"), Row(null))
+    }
+  }
 }
