@@ -44,14 +44,47 @@ import org.apache.spark.util.collection.OpenHashMap
 
 
 
-private object ParItr {
+object ParItr {
 
-  def foreach[A](i: Iterator[A], cpus: Int, batch: Int)(f: A => Unit): Unit = {
+  def grouped(inIt: Iterator[Array[Int]], maxLen: Int): Iterator[Array[Array[Int]]] = {
+    val it = inIt.buffered
+    new Iterator[Array[Array[Int]]] {
+      val data = ArrayBuffer.empty[Array[Int]]
+
+      override def hasNext: Boolean = it.hasNext
+
+      override def next(): Array[Array[Int]] = {
+        var sum = 0
+        data.clear()
+        while (it.hasNext && (sum + it.head.length < maxLen || data.isEmpty)) {
+          data.append(it.head)
+          sum += it.head.length
+          it.next()
+        }
+        data.toArray
+      }
+    }
+  }
+
+
+  def foreach[A](i: Iterator[A], cpus: Int)(f: A => Unit): Unit = {
     val support = new ForkJoinTaskSupport(new java.util.concurrent.ForkJoinPool(cpus))
-    i.grouped(batch).foreach{arr =>
-      val parr = arr.par
-      parr.tasksupport = support
-      parr.foreach(f)
+    val parr = (0 until cpus).toArray.par
+    parr.tasksupport = support
+    parr.foreach{_ =>
+      var x: A = null.asInstanceOf[A]
+
+      while (synchronized{
+        if (i.hasNext) {
+          x = i.next()
+          true
+        } else {
+          x = null.asInstanceOf[A]
+          false
+        }
+      }) {
+        f(x)
+      }
     }
   }
 
@@ -141,7 +174,7 @@ private[spark] object SkipGram {
                     numPartitions: Int,
                     numThread: Int): RDD[(Int, (Array[Int], Array[Int]))] = {
     sent.mapPartitions { it =>
-      ParItr.map(it.grouped(numPartitions * numPartitions), numThread, numThread) { sG =>
+      ParItr.map(ParItr.grouped(it, 1000000), numThread, numThread) { sG =>
         val l = Array.fill(numPartitions)(ArrayBuffer.empty[Int])
         val r = Array.fill(numPartitions)(ArrayBuffer.empty[Int])
         val buffers = Array.fill(numPartitions)(new CyclicBuffer(window))
@@ -172,8 +205,6 @@ private[spark] object SkipGram {
                 l(a).append(s(i))
                 r(a).append(v)
 
-                l(a).append(v)
-                r(a).append(s(i))
                 buffer.next()
               }
               buffers(a).push(s(i), i - skipped)
@@ -498,11 +529,16 @@ class SkipGram extends Serializable with Logging {
         val lExpTable = expTable.value
         val random = new java.util.Random(seed)
 
-        ParItr.foreach(sIt.zipWithIndex, numThread, 100000)({case ((l, r), ii) =>
+        ParItr.foreach(sIt, numThread)({case ((l, r)) =>
           var pos = 0
-          while (pos < l.length) {
-            val word = vocab.getOrDefault(l(pos), -1)
-            val lastWord = vocab.getOrDefault(r(pos), -1)
+          while (pos < l.length * 2) {
+            var word = vocab.getOrDefault(l(pos / 2), -1)
+            var lastWord = vocab.getOrDefault(r(pos / 2), -1)
+            if (pos % 2 == 1) {
+              val t = word
+              word = lastWord
+              lastWord = t
+            }
             if (word != -1 && lastWord != -1) {
               val l1 = lastWord * vectorSize
               val neu1e = new Array[Float](vectorSize)
