@@ -33,17 +33,15 @@ class SkipGramSuite extends SparkFunSuite with MLlibTestSparkContext {
     val localDoc = Seq(sentence, sentence)
     val doc = sc.parallelize(localDoc)
       .map(line => line.split(" ").toSeq)
-    val model = new Word2Vec().setVectorSize(10).setSeed(42L).fit(doc)
+    val model = new SkipGram().setVectorSize(10).fit(doc)
     val syms = model.findSynonyms("a", 2)
     assert(syms.length == 2)
     assert(syms(0)._1 == "b")
     assert(syms(1)._1 == "c")
 
-    // Test that model built using Word2Vec, i.e wordVectors and wordIndec
-    // and a Word2VecMap give the same values.
-    val word2VecMap = model.getVectors
-    val newModel = new Word2VecModel(word2VecMap)
-    assert(newModel.getVectors.mapValues(_.toSeq).toMap ===
-      word2VecMap.mapValues(_.toSeq).toMap)
+    val emb = model.getVectors
+    val newModel = new SkipGramModel(emb)
+    assert(newModel.getVectors.mapValues(_.toSeq).collectAsMap() ===
+      emb.mapValues(_.toSeq).collectAsMap())
   }
 }
