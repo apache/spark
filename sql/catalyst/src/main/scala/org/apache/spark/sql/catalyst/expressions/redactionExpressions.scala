@@ -40,7 +40,7 @@ import org.apache.spark.unsafe.types.UTF8String
     The format can consist of the following characters, case insensitive:
       - Each 'X' represents a digit which will be converted to 'X' in the result.
       - Each digit '0'-'9' represents a digit which will be left unchanged in the result.
-      - Each '-' character should match exactly in the input string.
+      - Each '-' or '+' or '(' or ')' character should match exactly in the input string.
       - Each whitespace character is ignored.
     No other format characters are allowed. Any whitespace in the input string is left unchanged.
     The default is: XXXX-XXXX-XXXX-XXXX.
@@ -62,8 +62,9 @@ import org.apache.spark.unsafe.types.UTF8String
   group = "string_funcs"
 )
 case class MaskCcn(left: Expression, right: Expression)
-  extends MaskDigitSequence(left, right, "mask_ccn", false) {
-  def this(left: Expression) = this(left, Literal(MaskCcn.DEFAULT_FORMAT))
+  extends MaskDigitSequence(
+    left, right, "mask_ccn", MaskDigitSequence.DEFAULT_FORMAT_MASK_CCN, false) {
+  def this(left: Expression) = this(left, Literal(MaskDigitSequence.DEFAULT_FORMAT_MASK_CCN))
   override protected def withNewChildrenInternal(
       newInput: Expression, newFormat: Expression): MaskCcn =
     copy(left = newInput, right = newFormat)
@@ -83,7 +84,7 @@ case class MaskCcn(left: Expression, right: Expression)
     The format can consist of the following characters, case insensitive:
       - Each 'X' represents a digit which will be converted to 'X' in the result.
       - Each digit '0'-'9' represents a digit which will be left unchanged in the result.
-      - Each '-' character should match exactly in the input string.
+      - Each '-' or '+' or '(' or ')' character should match exactly in the input string.
       - Each whitespace character is ignored.
     No other format characters are allowed. Any whitespace in the input string is left unchanged.
     The default is: XXXX-XXXX-XXXX-XXXX.
@@ -105,22 +106,124 @@ case class MaskCcn(left: Expression, right: Expression)
   group = "string_funcs"
 )
 case class TryMaskCcn(left: Expression, right: Expression)
-  extends MaskDigitSequence(left, right, "try_mask_ccn", true) {
-  def this(left: Expression) = this(left, Literal(MaskCcn.DEFAULT_FORMAT))
+  extends MaskDigitSequence(
+    left, right, "try_mask_ccn", MaskDigitSequence.DEFAULT_FORMAT_MASK_CCN, true) {
+  def this(left: Expression) = this(left, Literal(MaskDigitSequence.DEFAULT_FORMAT_MASK_CCN))
   override protected def withNewChildrenInternal(
       newInput: Expression, newFormat: Expression): TryMaskCcn =
     copy(left = newInput, right = newFormat)
   override def nullable: Boolean = true
 }
 
-/** Companion object for the MaskCcn and TryMaskCcn classes. */
-object MaskCcn {
-  val DEFAULT_FORMAT = "XXXX-XXXX-XXXX-XXXX"
+/**
+ * A function that converts a string representing a phone number in a form updated to mask the
+ * digits in the interest of redacting the information. Returns an error if the format string is
+ * invalid or if the input string does not match the format string.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(input) - Convert string 'input' representing a phone number to an updated version
+    applying a transformation to the characters. This can be useful for creating copies of tables
+    with sensitive information removed, but retaining the same schema. Returns an error if the
+    format string is invalid or if the input string does not match the format string.
+    The format can consist of the following characters, case insensitive:
+      - Each 'X' represents a digit which will be converted to 'X' in the result.
+      - Each digit '0'-'9' represents a digit which will be left unchanged in the result.
+      - Each '-' or '+' or '(' or ')' character should match exactly in the input string.
+      - Each whitespace character is ignored.
+    No other format characters are allowed. Any whitespace in the input string is left unchanged.
+    The default is: (XXX) XXX-XXXX.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(num) FROM VALUES ("(555) 867-5309") AS tab(num);
+        (XXX) XXX-XXXX
+      > SELECT _FUNC_("  555 867 5309", "  XXX XXX XXXX");
+          XXX XXX XXXX
+      > SELECT _FUNC_("  +1 555 867 5309", "  +1 XXX XXX XXXX");
+          +1 XXX XXX XXXX
+      > SELECT _FUNC_("[555 867 5309]", "[XXX XXX XXXX]");
+        Error: the format string is invalid
+      > SELECT _FUNC_("+15558675309");
+        Error: the input string does not match the format
+      > SELECT _FUNC_("+1 555 867 5309", "+1 (XXX) XXX-XXXX");
+        Error: the input string does not match the format
+  """,
+  since = "3.4.0",
+  group = "string_funcs"
+)
+case class MaskPhone(left: Expression, right: Expression)
+  extends MaskDigitSequence(
+    left, right, "mask_phone", MaskDigitSequence.DEFAULT_FORMAT_MASK_PHONE, false) {
+  def this(left: Expression) = this(left, Literal(MaskDigitSequence.DEFAULT_FORMAT_MASK_PHONE))
+  override protected def withNewChildrenInternal(
+      newInput: Expression, newFormat: Expression): MaskPhone =
+    copy(left = newInput, right = newFormat)
+}
+
+/**
+ * A function that converts a string representing a phone number in a form updated to mask the
+ * digits in the interest of redacting the information. Returns an error if the format string is
+ * invalid or NULL if the input string does not match the format string.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(input) - Convert string 'input' representing a phone number to an updated version
+    applying a transformation to the characters. This can be useful for creating copies of tables
+    with sensitive information removed, but retaining the same schema. Returns an error if the
+    format string is invalid or NULL if the input string does not match the format string.
+    The format can consist of the following characters, case insensitive:
+      - Each 'X' represents a digit which will be converted to 'X' in the result.
+      - Each digit '0'-'9' represents a digit which will be left unchanged in the result.
+      - Each '-' or '+' or '(' or ')' character should match exactly in the input string.
+      - Each whitespace character is ignored.
+    No other format characters are allowed. Any whitespace in the input string is left unchanged.
+    The default is: (XXX) XXX-XXXX.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(num) FROM VALUES ("(555) 867-5309") AS tab(num);
+        (XXX) XXX-XXXX
+      > SELECT _FUNC_("  555 867 5309", "  XXX XXX XXXX");
+          XXX XXX XXXX
+      > SELECT _FUNC_("  +1 555 867 5309", "  +1 XXX XXX XXXX");
+          +1 XXX XXX XXXX
+      > SELECT _FUNC_("[555 867 5309]", "[XXX XXX XXXX]");
+        Error: the format string is invalid
+      > SELECT _FUNC_("+15558675309");
+        NULL
+      > SELECT _FUNC_("+1 555 867 5309", "+1 (XXX) XXX-XXXX");
+        NULL
+  """,
+  since = "3.4.0",
+  group = "string_funcs"
+)
+case class TryMaskPhone(left: Expression, right: Expression)
+  extends MaskDigitSequence(
+    left, right, "try_mask_phone", MaskDigitSequence.DEFAULT_FORMAT_MASK_PHONE, true) {
+  def this(left: Expression) = this(left, Literal(MaskDigitSequence.DEFAULT_FORMAT_MASK_PHONE))
+  override protected def withNewChildrenInternal(
+      newInput: Expression, newFormat: Expression): TryMaskPhone =
+    copy(left = newInput, right = newFormat)
+}
+
+/** Companion object for the Mask* classes. */
+object MaskDigitSequence {
+  // Default format string for the MASK_CCN and TRY_MASK_CCN functions.
+  val DEFAULT_FORMAT_MASK_CCN = "XXXX-XXXX-XXXX-XXXX"
+  // Default format string for the MASK_PHONE and TRY_MASK_PHONE functions.
+  val DEFAULT_FORMAT_MASK_PHONE = "(XXX) XXX-XXXX"
+  // Valid characters that may appear in the format string, in addition to digits or whitespace.
+  val VALID_FORMAT_CHARACTERS = Set('x', 'X', '-', '+', '(', ')')
 }
 
 /** Implementation of an expression to mask digits in a string to replacement characters. */
 abstract class MaskDigitSequence(
-    left: Expression, right: Expression, functionName: String, nullOnError: Boolean)
+    left: Expression,
+    right: Expression,
+    functionName: String,
+    defaultFormat: String,
+    nullOnError: Boolean)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
   private def format: Expression = right
 
@@ -129,7 +232,7 @@ abstract class MaskDigitSequence(
   } else {
     ""
   }
-  private lazy val parser = new MaskDigitSequenceParser(formatString, nullOnError)
+  private lazy val parser = new MaskDigitSequenceParser(functionName, formatString, nullOnError)
 
   override def prettyName: String = functionName
   override def dataType: DataType = StringType
@@ -138,14 +241,14 @@ abstract class MaskDigitSequence(
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
       val formatStringValid = formatString.forall {
-        case 'x' | 'X' | '-' => true
+        case ch if MaskDigitSequence.VALID_FORMAT_CHARACTERS.contains(ch) => true
         case ch if ch.isDigit || ch.isWhitespace => true
         case _ => false
       }
       if (formatStringValid) {
         TypeCheckResult.TypeCheckSuccess
       } else {
-        throw QueryCompilationErrors.maskCcnInvalidFormatError(prettyName)
+        throw QueryCompilationErrors.maskInvalidFormatError(prettyName, defaultFormat)
       }
     } else {
       inputTypeCheck
@@ -175,7 +278,10 @@ abstract class MaskDigitSequence(
 }
 
 /** Executes the string parsing steps for the MaskDigitSequence class. */
-class MaskDigitSequenceParser(formatString: String, nullOnError: Boolean) extends Serializable {
+class MaskDigitSequenceParser(
+    functionName: String,
+    formatString: String,
+    nullOnError: Boolean) extends Serializable {
   def parse(input: UTF8String): UTF8String = {
     val inputString = input.toString
     var formatStringIndex = 0
@@ -206,19 +312,24 @@ class MaskDigitSequenceParser(formatString: String, nullOnError: Boolean) extend
         // Check the corresponding character in the format string.
         skipFormatWhitespace()
         val newChar = (inputChar, formatString(formatStringIndex)) match {
-          // If both the input and format characters are '-', then this is a match, so continue.
-          case ('-', '-') =>
-            '-'
+          // If both the input and format characters are equal and valid format string characters,
+          // then this is a match, so continue.
+          case (inputChar, formatChar)
+            if inputChar == formatChar &&
+              MaskDigitSequence.VALID_FORMAT_CHARACTERS.contains(inputChar) =>
+            inputChar
           // If the input character is a digit and the format character is 'X', this is a match.
           case (inputChar, 'X') if inputChar.isDigit =>
             'X'
+          case (inputChar, 'x') if inputChar.isDigit =>
+            'x'
           // If both the input and format characters are digits, this is a match.
           case (inputChar, formatChar) if inputChar.isDigit && formatChar.isDigit =>
             inputChar
           // Otherwise, this is an error because the input string does not match the format string.
           case _ =>
             error = true
-            'X'
+            inputChar
         }
         formatStringIndex += 1
         newChar
@@ -237,7 +348,8 @@ class MaskDigitSequenceParser(formatString: String, nullOnError: Boolean) extend
     if (error && nullOnError) {
       null
     } else if (error) {
-      throw QueryExecutionErrors.maskCcnFormatMatchError(inputString, formatString)
+      throw QueryExecutionErrors.maskFormatMatchError(
+        functionName.toUpperCase(), inputString, formatString)
     } else {
       UTF8String.fromString(result)
     }
