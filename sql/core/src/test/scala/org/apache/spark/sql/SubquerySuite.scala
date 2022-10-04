@@ -2332,9 +2332,32 @@ class SubquerySuite extends QueryTest
     // This test contains a subquery expression with another subquery expression nested inside.
     // It acts as a regression test to ensure that the MergeScalarSubqueries rule does not attempt
     // to merge them together.
-    withTable("t") {
+    withTable("t", "t2") {
       sql("create table t(col int) using csv")
       checkAnswer(sql("select(select sum((select sum(col) from t)) from t)"), Row(null))
+
+      checkAnswer(sql(
+        """
+          |select
+          |  (select sum(
+          |    (select sum(
+          |        (select sum(col) from t))
+          |     from t))
+          |  from t)
+          |""".stripMargin),
+        Row(null))
+
+      sql("create table t2(col int) using csv")
+      checkAnswer(sql(
+        """
+          |select
+          |  (select sum(
+          |    (select sum(
+          |        (select sum(col) from t))
+          |     from t2))
+          |  from t)
+          |""".stripMargin),
+        Row(null))
     }
   }
 }
