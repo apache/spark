@@ -34,15 +34,15 @@ from pyspark.sql.connect.column import (
     Expression,
     LiteralExpression,
 )
-from pyspark.sql.connect._typing import ColumnOrString, ExpressionOrString
 
 if TYPE_CHECKING:
+    from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString
     from pyspark.sql.connect.client import RemoteSparkSession
 
 
 class GroupingFrame(object):
 
-    MeasuresType = Union[Sequence[Tuple[ExpressionOrString, str]], Dict[str, str]]
+    MeasuresType = Union[Sequence[Tuple['ExpressionOrString', str]], Dict[str, str]]
     OptMeasuresType = Optional[MeasuresType]
 
     def __init__(self, df: "DataFrame", *grouping_cols: Union[ColumnRef, str]) -> None:
@@ -161,7 +161,7 @@ class DataFrame(object):
         gf = self.groupBy(*all_cols)
         return gf.agg()
 
-    def drop(self, *cols: ColumnOrString) -> "DataFrame":
+    def drop(self, *cols: 'ColumnOrString') -> "DataFrame":
         all_cols = self.columns
         dropped = set([c.name() if isinstance(c, ColumnRef) else self[c].name() for c in cols])
         dropped_cols = filter(lambda x: x in dropped, all_cols)
@@ -175,7 +175,7 @@ class DataFrame(object):
     def first(self) -> Optional["pandas.DataFrame"]:
         return self.head(1)
 
-    def groupBy(self, *cols: ColumnOrString) -> GroupingFrame:
+    def groupBy(self, *cols: 'ColumnOrString') -> GroupingFrame:
         return GroupingFrame(self, *cols)
 
     def head(self, n: int) -> Optional["pandas.DataFrame"]:
@@ -197,7 +197,7 @@ class DataFrame(object):
     def limit(self, n: int) -> "DataFrame":
         return DataFrame.withPlan(plan.Limit(child=self._plan, limit=n), session=self._session)
 
-    def sort(self, *cols: ColumnOrString) -> "DataFrame":
+    def sort(self, *cols: 'ColumnOrString') -> "DataFrame":
         """Sort by a specific column"""
         return DataFrame.withPlan(plan.Sort(self._plan, *cols), session=self._session)
 
