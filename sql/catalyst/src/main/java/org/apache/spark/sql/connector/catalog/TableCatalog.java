@@ -177,7 +177,7 @@ public interface TableCatalog extends CatalogPlugin {
    *                                     including the catalog name.
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional). The
-   *                                  error message should contain the qualified table name,
+   *                                  error message should contain the qualified namespace name,
    *                                  including the catalog name.
    */
   Table createTable(
