@@ -18,16 +18,14 @@
 import functools
 from typing import TYPE_CHECKING, Optional, Any, Iterable, Union
 
+import pyspark.sql.connect.proto as proto
 import pyspark.sql.types
 from pyspark.sql.connect.column import (
-    ColumnOrString,
     ColumnRef,
     Expression,
-    ExpressionOrString,
     ScalarFunctionExpression,
 )
-
-import pyspark.sql.connect.proto as proto
+from pyspark.sql.connect._typing import ColumnOrString, ExpressionOrString
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import RemoteSparkSession

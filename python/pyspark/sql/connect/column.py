@@ -17,11 +17,9 @@
 
 from typing import List, Union, cast, get_args, TYPE_CHECKING, Optional, Callable, Any
 
-import pyspark.sql.connect.proto as proto
 
-PrimitiveType = Union[str, int, bool, float]
-ExpressionOrString = Union[str, "Expression"]
-ColumnOrString = Union[str, "ColumnRef"]
+import pyspark.sql.connect.proto as proto
+from pyspark.sql.connect._typing import PrimitiveType
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import RemoteSparkSession

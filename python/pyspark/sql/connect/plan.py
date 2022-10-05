@@ -27,13 +27,11 @@ from typing import (
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.column import (
-    ColumnOrString,
     ColumnRef,
     Expression,
-    ExpressionOrString,
     SortOrder,
 )
-
+from pyspark.sql.connect._typing import ColumnOrString, ExpressionOrString
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import RemoteSparkSession

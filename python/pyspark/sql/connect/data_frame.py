@@ -30,18 +30,14 @@ import pandas
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.column import (
-    ColumnOrString,
     ColumnRef,
     Expression,
-    ExpressionOrString,
     LiteralExpression,
 )
+from pyspark.sql.connect._typing import ColumnOrString, ExpressionOrString
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import RemoteSparkSession
-
-
-ColumnOrName = Union[ColumnRef, str]
 
 
 class GroupingFrame(object):
@@ -201,7 +197,7 @@ class DataFrame(object):
     def limit(self, n: int) -> "DataFrame":
         return DataFrame.withPlan(plan.Limit(child=self._plan, limit=n), session=self._session)
 
-    def sort(self, *cols: ColumnOrName) -> "DataFrame":
+    def sort(self, *cols: ColumnOrString) -> "DataFrame":
         """Sort by a specific column"""
         return DataFrame.withPlan(plan.Sort(self._plan, *cols), session=self._session)
 
