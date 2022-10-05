@@ -271,6 +271,17 @@ sql_kafka = Module(
     ],
 )
 
+connect = Module(
+    name="connect",
+    dependencies=[sql],
+    source_file_regexes=[
+        "connector/connect",
+    ],
+    sbt_test_goals=[
+        "connect/test",
+    ],
+)
+
 sketch = Module(
     name="sketch",
     dependencies=[tags],
@@ -473,9 +484,9 @@ pyspark_sql = Module(
     ],
 )
 
-pyspark_sql = Module(
-    name="pyspark-sql-connect",
-    dependencies=[pyspark_core, hive, avro],
+pyspark_connect = Module(
+    name="pyspark-connect",
+    dependencies=[pyspark_sql, connect],
     source_file_regexes=["python/pyspark/sql/connect"],
     python_test_goals=[
         # doctests
