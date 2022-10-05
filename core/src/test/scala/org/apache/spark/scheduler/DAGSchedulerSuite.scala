@@ -4504,64 +4504,62 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
   }
 
-  test("SPARK-40096: Send finalize events even if shuffle merger blocks indefinitely ") {
-    initPushBasedShuffleConfs(conf)
+  Seq(true, false).foreach { registerMergeResults =>
+    test("SPARK-40096: Send finalize events even if shuffle merger blocks indefinitely " +
+      s"with registerMergeResults is ${registerMergeResults}") {
+      initPushBasedShuffleConfs(conf)
 
-    sc.conf.set("spark.shuffle.push.results.timeout", "1s")
-    val scheduler = new DAGScheduler(
-      sc,
-      taskScheduler,
-      sc.listenerBus,
-      mapOutputTracker,
-      blockManagerMaster,
-      sc.env)
+      sc.conf.set("spark.shuffle.push.results.timeout", "1s")
+      val scheduler = new DAGScheduler(
+        sc,
+        taskScheduler,
+        sc.listenerBus,
+        mapOutputTracker,
+        blockManagerMaster,
+        sc.env)
 
-    val mergerLocs = Seq(makeBlockManagerId("hostA"), makeBlockManagerId("hostB"))
-    val timeoutSecs = 1
-    val sendRequestsLatch = new CountDownLatch(mergerLocs.size)
-    val completeLatch = new CountDownLatch(mergerLocs.size)
-    val canSendRequestLatch = new CountDownLatch(1)
+      val mergerLocs = Seq(makeBlockManagerId("hostA"), makeBlockManagerId("hostB"))
+      val timeoutSecs = 1
+      val sendRequestsLatch = new CountDownLatch(mergerLocs.size)
+      val completeLatch = new CountDownLatch(mergerLocs.size)
+      val canSendRequestLatch = new CountDownLatch(1)
 
-    val blockStoreClient = mock(classOf[ExternalBlockStoreClient])
-    val blockStoreClientField = classOf[BlockManager].getDeclaredField("blockStoreClient")
-    blockStoreClientField.setAccessible(true)
-    blockStoreClientField.set(sc.env.blockManager, blockStoreClient)
+      val blockStoreClient = mock(classOf[ExternalBlockStoreClient])
+      val blockStoreClientField = classOf[BlockManager].getDeclaredField("blockStoreClient")
+      blockStoreClientField.setAccessible(true)
+      blockStoreClientField.set(sc.env.blockManager, blockStoreClient)
 
-    val sentHosts = ArrayBuffer[String]()
-    var hostAInterrupted = false
-    doAnswer { (invoke: InvocationOnMock) =>
-      val host = invoke.getArgument[String](0)
-      sendRequestsLatch.countDown()
-      try {
-        if (host == "hostA") {
-          canSendRequestLatch.await(timeoutSecs * 2, TimeUnit.SECONDS)
+      val sentHosts = ArrayBuffer[String]()
+      var hostAInterrupted = false
+      doAnswer { (invoke: InvocationOnMock) =>
+        val host = invoke.getArgument[String](0)
+        sendRequestsLatch.countDown()
+        try {
+          if (host == "hostA") {
+            canSendRequestLatch.await(timeoutSecs * 2, TimeUnit.SECONDS)
+          }
+          sentHosts += host
+        } catch {
+          case _: InterruptedException => hostAInterrupted = true
+        } finally {
+          completeLatch.countDown()
         }
-        sentHosts += host
-      } catch {
-        case _: InterruptedException => hostAInterrupted = true
-      } finally {
-        completeLatch.countDown()
-      }
-    }.when(blockStoreClient).finalizeShuffleMerge(any(), any(), any(), any(), any())
+      }.when(blockStoreClient).finalizeShuffleMerge(any(), any(), any(), any(), any())
 
-    val shuffleMapRdd = new MyRDD(sc, 1, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
-    shuffleDep.setMergerLocs(mergerLocs)
-    val shuffleStage = scheduler.createShuffleMapStage(shuffleDep, 0)
+      val shuffleMapRdd = new MyRDD(sc, 1, Nil)
+      val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+      shuffleDep.setMergerLocs(mergerLocs)
+      val shuffleStage = scheduler.createShuffleMapStage(shuffleDep, 0)
 
-    scheduler.finalizeShuffleMerge(shuffleStage, true)
-    sendRequestsLatch.await()
-    verify(blockStoreClient, times(2))
-      .finalizeShuffleMerge(any(), any(), any(), any(), any())
-    assert(sentHosts.nonEmpty)
-    assert(sentHosts.head === "hostB" && sentHosts.length == 1)
-    completeLatch.await()
-    assert(hostAInterrupted)
-
-    clearInvocations(blockStoreClient)
-    scheduler.finalizeShuffleMerge(shuffleStage, false)
-    verify(blockStoreClient, times(2))
-      .finalizeShuffleMerge(any(), any(), any(), any(), any())
+      scheduler.finalizeShuffleMerge(shuffleStage, registerMergeResults)
+      sendRequestsLatch.await()
+      verify(blockStoreClient, times(2))
+        .finalizeShuffleMerge(any(), any(), any(), any(), any())
+      assert(sentHosts.nonEmpty)
+      assert(sentHosts.head === "hostB" && sentHosts.length == 1)
+      completeLatch.await()
+      assert(hostAInterrupted)
+    }
   }
 
   /**
