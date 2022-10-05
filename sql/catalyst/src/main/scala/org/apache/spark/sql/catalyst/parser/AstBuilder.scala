@@ -3940,7 +3940,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     }
 
     AlterColumn(
-      createUnresolvedTable(ctx.table, s"ALTER TABLE ... CHANGE COLUMN"),
+      createUnresolvedTable(ctx.table, "ALTER TABLE ... CHANGE COLUMN"),
       UnresolvedFieldName(columnNameParts),
       dataType = Option(ctx.colType().dataType()).map(typedVisit[DataType]),
       nullable = None,
