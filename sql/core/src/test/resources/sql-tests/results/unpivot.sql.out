@@ -185,7 +185,20 @@ UNPIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'up.*' given input columns 'course, year, earningsYear'; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1051",
+  "messageParameters" : {
+    "columns" : "course, year, earningsYear",
+    "targetString" : "up"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 11,
+    "fragment" : "up.*"
+  } ]
+}
 
 
 -- !query
