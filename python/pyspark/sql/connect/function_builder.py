@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.typing import FunctionBuilderCallable, UserDefinedFunctionCallable
 
 
-def _build(name: str, *args: 'ExpressionOrString') -> ScalarFunctionExpression:
+def _build(name: str, *args: "ExpressionOrString") -> ScalarFunctionExpression:
     """
     Simple wrapper function that converts the arguments into the appropriate types.
     Parameters
@@ -53,7 +53,7 @@ class FunctionBuilder:
     """This class is used to build arbitrary functions used in expressions"""
 
     def __getattr__(self, name: str) -> "FunctionBuilderCallable":
-        def _(*args: 'ExpressionOrString') -> ScalarFunctionExpression:
+        def _(*args: "ExpressionOrString") -> ScalarFunctionExpression:
             return _build(name, *args)
 
         _.__doc__ = f"""Function to apply {name}"""

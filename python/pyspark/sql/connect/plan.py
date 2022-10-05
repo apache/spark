@@ -56,7 +56,7 @@ class LogicalPlan(object):
         return exp
 
     def to_attr_or_expression(
-        self, col: 'ColumnOrString', session: Optional["RemoteSparkSession"]
+        self, col: "ColumnOrString", session: Optional["RemoteSparkSession"]
     ) -> proto.Expression:
         """Returns either an instance of an unresolved attribute or the serialized
         expression value of the column."""
@@ -136,7 +136,7 @@ class Project(LogicalPlan):
 
     """
 
-    def __init__(self, child: Optional["LogicalPlan"], *columns: 'ExpressionOrString') -> None:
+    def __init__(self, child: Optional["LogicalPlan"], *columns: "ExpressionOrString") -> None:
         super().__init__(child)
         self._raw_columns = list(columns)
         self.alias: Optional[str] = None
@@ -303,7 +303,7 @@ class Sort(LogicalPlan):
 
 
 class Aggregate(LogicalPlan):
-    MeasureType = Tuple['ExpressionOrString', str]
+    MeasureType = Tuple["ExpressionOrString", str]
     MeasuresType = Sequence[MeasureType]
     OptMeasuresType = Optional[MeasuresType]
 
@@ -367,7 +367,7 @@ class Join(LogicalPlan):
         self,
         left: Optional["LogicalPlan"],
         right: "LogicalPlan",
-        on: 'ColumnOrString',
+        on: "ColumnOrString",
         how: proto.Join.JoinType.ValueType = proto.Join.JoinType.JOIN_TYPE_INNER,
     ) -> None:
         super().__init__(left)

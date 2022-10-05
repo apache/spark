@@ -20,11 +20,9 @@ from typing import Union
 from pyspark.sql.connect.column import ScalarFunctionExpression, Expression, ColumnRef
 from pyspark.sql.connect.function_builder import UserDefinedFunction
 
-
 ExpressionOrString = Union[str, Expression]
 
 ColumnOrString = Union[str, ColumnRef]
-
 
 class FunctionBuilderCallable(Protocol):
     def __call__(self, *_: ExpressionOrString) -> ScalarFunctionExpression: ...
