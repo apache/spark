@@ -18,9 +18,11 @@
 package org.apache.spark.deploy
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
+import java.net.{InetAddress, UnknownHostException}
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Date, Locale}
+import java.util
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
@@ -103,23 +105,6 @@ private[spark] class SparkHadoopUtil extends Logging {
     for ((key, value) <- srcMap if key.startsWith("spark.hadoop.")) {
       destMap.put(key.substring("spark.hadoop.".length), value)
     }
-  }
-
-  /**
-   * Extract the origin of a configuration key, or a default value if
-   * the key is not found or its origin is not known.
-   * Note that options provided by credential providers (JCEKS stores etc)
-   * are not resolved, so values retrieved by Configuration.getPassword()
-   * may not be recorded as having an origin.
-   *
-   * @param hadoopConf hadoop configuration to examine.
-   * @param key        key to look up
-   * @param defVal     default value
-   * @return the origin of the current entry in the configuration, or the default.
-   */
-  def extractOrigin(hadoopConf: Configuration, key: String,
-    defVal: String): String = {
-    SparkHadoopUtil.extractOrigin(hadoopConf, key, defVal)
   }
 
   def appendSparkHiveConfigs(
@@ -454,31 +439,49 @@ private[spark] object SparkHadoopUtil extends Logging {
     // Note: this null check is around more than just access to the "conf" object to maintain
     // the behavior of the old implementation of this code, for backwards compatibility.
     if (conf != null) {
-      val envKeyId = "AWS_ACCESS_KEY_ID"
       // Explicitly check for S3 environment variables
-      val keyId = System.getenv(envKeyId)
-      val envSecretKey = "AWS_SECRET_ACCESS_KEY"
-      val accessKey = System.getenv(envSecretKey)
-      if (keyId != null && accessKey != null) {
-        val source = "Set by Spark from "
-        hadoopConf.set("fs.s3.awsAccessKeyId", keyId, source + envKeyId)
-        hadoopConf.set("fs.s3n.awsAccessKeyId", keyId, source + envKeyId)
-        hadoopConf.set("fs.s3a.access.key", keyId, source + envKeyId)
-        hadoopConf.set("fs.s3.awsSecretAccessKey", accessKey, source + envSecretKey)
-        hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey, source + envSecretKey)
-        hadoopConf.set("fs.s3a.secret.key", accessKey, source + envSecretKey)
-
-        val envSessionToken = "AWS_SESSION_TOKEN"
-        val sessionToken = System.getenv(envSessionToken)
-        if (sessionToken != null) {
-          hadoopConf.set("fs.s3a.session.token", sessionToken, source + envSessionToken)
-        }
-      }
+      val env: util.Map[String, String] = System.getenv
+      appendS3CredentialsFromEnvironment(hadoopConf, env)
       appendHiveConfigs(hadoopConf)
       appendSparkHadoopConfigs(conf, hadoopConf)
       appendSparkHiveConfigs(conf, hadoopConf)
       val bufferSize = conf.get(BUFFER_SIZE).toString
       hadoopConf.set("io.file.buffer.size", bufferSize, BUFFER_SIZE.key)
+    }
+  }
+
+  /**
+   * Append any AWS secrets from the environment variables
+   * if both `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are set.
+   * If these two are set and `AWS_SESSION_TOKEN` is also set,
+   * then `fs.s3a.session.token`.
+   * The option is set with a source string which includes the hostname
+   * on which it was set. This can help debug propagation issues.
+   * @param hadoopConf configuration to patch
+   * @param env environment.
+   */
+  // Exposed for testing
+  private[deploy] def appendS3CredentialsFromEnvironment(
+    hadoopConf: Configuration,
+    env: util.Map[String, String]): Unit = {
+    val envKeyId = "AWS_ACCESS_KEY_ID"
+    val keyId = env.get(envKeyId)
+    val envSecretKey = "AWS_SECRET_ACCESS_KEY"
+    val accessKey = env.get(envSecretKey)
+    if (keyId != null && accessKey != null) {
+      val source = "Set by Spark on " + getLocalHostname + " from "
+      hadoopConf.set("fs.s3.awsAccessKeyId", keyId, source + envKeyId)
+      hadoopConf.set("fs.s3n.awsAccessKeyId", keyId, source + envKeyId)
+      hadoopConf.set("fs.s3a.access.key", keyId, source + envKeyId)
+      hadoopConf.set("fs.s3.awsSecretAccessKey", accessKey, source + envSecretKey)
+      hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey, source + envSecretKey)
+      hadoopConf.set("fs.s3a.secret.key", accessKey, source + envSecretKey)
+
+      val envSessionToken = "AWS_SESSION_TOKEN"
+      val sessionToken = env.get(envSessionToken)
+      if (sessionToken != null) {
+        hadoopConf.set("fs.s3a.session.token", sessionToken, source + envSessionToken)
+      }
     }
   }
 
@@ -509,7 +512,9 @@ private[spark] object SparkHadoopUtil extends Logging {
     if (conf.getOption("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version").isEmpty) {
       hadoopConf.set("mapreduce.fileoutputcommitter.algorithm.version", "1", setBySpark)
     }
-    // Since Hadoop 3.3.1, HADOOP-17597 starts to throw exceptions by default
+    // In Hadoop 3.3.1, HADOOP-17597 starts to throw exceptions by default
+    // this has been reverted in 3.3.2 (HADOOP-17928); setting it to
+    // true here is harmless
     if (conf.getOption("spark.hadoop.fs.s3a.downgrade.syncable.exceptions").isEmpty) {
       hadoopConf.set("fs.s3a.downgrade.syncable.exceptions", "true", setBySpark)
     }
@@ -517,8 +522,6 @@ private[spark] object SparkHadoopUtil extends Logging {
     // in EC2 deployments or when the AWS CLI is installed.
     // The workaround is to set the name of the S3 endpoint explicitly,
     // if not already set. See HADOOP-17771.
-    // This change is harmless on older versions and compatible with
-    // later Hadoop releases
     if (hadoopConf.get("fs.s3a.endpoint", "").isEmpty &&
       hadoopConf.get("fs.s3a.endpoint.region") == null) {
       // set to US central endpoint which can also connect to buckets
@@ -536,22 +539,38 @@ private[spark] object SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Extract the origin of a configuration key, or a default value if
-   * the key is not found or its origin is not known.
+   * Return a hostname without throwing an exception if the system
+   * does not know its own name.
+   * The returned hostname string format is "hostname/ip address",
+   *
+   * @return hostname or "unknown/0.0.0.0"
+   */
+  private def getLocalHostname: String = {
+    try
+      InetAddress.getLocalHost.toString
+    catch {
+      // this surfaces on machines with serious networking issues
+      // which are therefore unlikely to be able to deploy spark.
+      case _: UnknownHostException => "unknown/0.0.0.0"
+    }
+  }
+
+  /**
+   * Extract the sources of a configuration key, or a default value if
+   * the key is not found or it has no known sources.
    * Note that options provided by credential providers (JCEKS stores etc)
    * are not resolved, so values retrieved by Configuration.getPassword()
    * may not be recorded as having an origin.
    * @param hadoopConf hadoop configuration to examine.
    * @param key key to look up
-   * @param defVal default value
-   * @return the origin of the current entry in the configuration, or the default.
+   * @return the origin of the current entry in the configuration, or the empty string.
    */
-  def extractOrigin(hadoopConf: Configuration, key: String, defVal: String): String = {
+  def propertySources(hadoopConf: Configuration, key: String): String = {
     val sources = hadoopConf.getPropertySources(key)
-    if (sources != null && sources.length > 0) {
-      sources(0)
+    if (sources != null && sources.nonEmpty) {
+      sources.mkString("," )
     } else {
-      defVal
+      ""
     }
   }
 
