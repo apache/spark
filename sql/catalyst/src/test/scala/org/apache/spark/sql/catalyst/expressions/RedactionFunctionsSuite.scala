@@ -86,7 +86,7 @@ class RedactionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       functionName = "MASK_CCN",
       defaultFormat = "XXXX-XXXX-XXXX-XXXX")
     expectTypeCheckFailure(
-      functionType = MaskPhone(Literal("123"), Literal("XYZ")),
+      functionType = MaskPhone(Literal("123"), Literal("")),
       functionName = "MASK_PHONE",
       defaultFormat = "(XXX) XXX-XXXX")
     expectTypeCheckFailure(
@@ -94,7 +94,7 @@ class RedactionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       functionName = "TRY_MASK_CCN",
       defaultFormat = "XXXX-XXXX-XXXX-XXXX")
     expectTypeCheckFailure(
-      functionType = TryMaskPhone(Literal("123"), Literal("XYZ")),
+      functionType = TryMaskPhone(Literal("123"), Literal("")),
       functionName = "TRY_MASK_PHONE",
       defaultFormat = "(XXX) XXX-XXXX")
   }

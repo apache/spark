@@ -268,4 +268,3 @@ select try_mask_phone("[555 867 5309]", "[XXX XXX XXXX]");
 select try_mask_phone("+15558675309");
 select try_mask_phone("+1 555 867 5309", "+1 (XXX) XXX-XXXX");
 select try_mask_phone("(555) 867-5309", format) from values ("(XXX) XXX-XXXX") AS tab(format);
-
