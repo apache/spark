@@ -219,3 +219,18 @@ select to_binary(null, cast(null as string));
 -- invalid format
 select to_binary('abc', 1);
 select to_binary('abc', 'invalidFormat');
+
+-- mask_ccn
+select mask_ccn(ccn) from values ("1234-5678-9876-5432") as tab(ccn);
+select mask_ccn("  1234 5678 9876 5432", "XXXX XXXX XXXX 1234");
+select mask_ccn("1234567898765432");
+select mask_ccn("1234567898765432", "XXXX-XXXX-XXXX-1234");
+select mask_ccn("1234-5678-9876-5432", format) from values ("XXXX-XXXX-XXXX-XXXX") as tab(format);
+
+-- try_mask_ccn
+select try_mask_ccn(ccn) from values ("1234-5678-9876-5432") as tab(ccn);
+select try_mask_ccn("  1234 5678 9876 5432", "XXXX XXXX XXXX 1234");
+select try_mask_ccn("1234567898765432");
+select try_mask_ccn("1234567898765432", "XXXX-XXXX-XXXX-1234");
+select try_mask_ccn("1234-5678-9876-5432", format)
+from values ("XXXX-XXXX-XXXX-XXXX") as tab(format);

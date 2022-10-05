@@ -31,6 +31,7 @@ class RedactionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     compare(tryMask = false, input = "  123  ", format = "  XXX  ", expected = "  XXX  ")
     // Negative tests
     expectTypeCheckFailure(input = "123", format = "XYZ")
+    expectTypeCheckFailure(input = "123", format = "")
     expectError(input = "12", format = "XXX")
     expectError(input = "1234", format = "XXX")
     expectError(input = "1-2-3", format = "XXX")
@@ -47,6 +48,7 @@ class RedactionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     compare(tryMask = true, input = "  123  ", format = "  XXX  ", expected = "  XXX  ")
     // Negative tests
     expectTypeCheckFailure(input = "123", format = "XYZ")
+    expectTypeCheckFailure(input = "123", format = "")
     expectNull(input = "12", format = "XXX")
     expectNull(input = "1234", format = "XXX")
     expectNull(input = "1-2-3", format = "XXX")

@@ -1480,3 +1480,114 @@ org.apache.spark.sql.AnalysisException
     "invalidValue" : "invalidformat"
   }
 }
+
+
+-- !query
+select mask_ccn(ccn) from values ("1234-5678-9876-5432") as tab(ccn)
+-- !query schema
+struct<mask_ccn(ccn, XXXX-XXXX-XXXX-XXXX):string>
+-- !query output
+XXXX-XXXX-XXXX-XXXX
+
+
+-- !query
+select mask_ccn("  1234 5678 9876 5432", "XXXX XXXX XXXX 1234")
+-- !query schema
+struct<mask_ccn(  1234 5678 9876 5432, XXXX XXXX XXXX 1234):string>
+-- !query output
+  XXXX XXXX XXXX 5432
+
+
+-- !query
+select mask_ccn("1234567898765432")
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "REDACTION_FUNCTION_ERROR",
+  "errorSubClass" : "MASK_CCN_FORMAT_MATCH_ERROR",
+  "messageParameters" : {
+    "format" : "XXXX-XXXX-XXXX-XXXX",
+    "input" : "1234567898765432"
+  }
+}
+
+
+-- !query
+select mask_ccn("1234567898765432", "XXXX-XXXX-XXXX-1234")
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "REDACTION_FUNCTION_ERROR",
+  "errorSubClass" : "MASK_CCN_FORMAT_MATCH_ERROR",
+  "messageParameters" : {
+    "format" : "XXXX-XXXX-XXXX-1234",
+    "input" : "1234567898765432"
+  }
+}
+
+
+-- !query
+select mask_ccn("1234-5678-9876-5432", format) from values ("XXXX-XXXX-XXXX-XXXX") as tab(format)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "REDACTION_FUNCTION_ERROR",
+  "errorSubClass" : "MASK_CCN_INVALID_FORMAT_ERROR",
+  "messageParameters" : {
+    "functionName" : "mask_ccn"
+  }
+}
+
+
+-- !query
+select try_mask_ccn(ccn) from values ("1234-5678-9876-5432") as tab(ccn)
+-- !query schema
+struct<try_mask_ccn(ccn, XXXX-XXXX-XXXX-XXXX):string>
+-- !query output
+XXXX-XXXX-XXXX-XXXX
+
+
+-- !query
+select try_mask_ccn("  1234 5678 9876 5432", "XXXX XXXX XXXX 1234")
+-- !query schema
+struct<try_mask_ccn(  1234 5678 9876 5432, XXXX XXXX XXXX 1234):string>
+-- !query output
+  XXXX XXXX XXXX 5432
+
+
+-- !query
+select try_mask_ccn("1234567898765432")
+-- !query schema
+struct<try_mask_ccn(1234567898765432, XXXX-XXXX-XXXX-XXXX):string>
+-- !query output
+NULL
+
+
+-- !query
+select try_mask_ccn("1234567898765432", "XXXX-XXXX-XXXX-1234")
+-- !query schema
+struct<try_mask_ccn(1234567898765432, XXXX-XXXX-XXXX-1234):string>
+-- !query output
+NULL
+
+
+-- !query
+select try_mask_ccn("1234-5678-9876-5432", format)
+from values ("XXXX-XXXX-XXXX-XXXX") as tab(format)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "REDACTION_FUNCTION_ERROR",
+  "errorSubClass" : "MASK_CCN_INVALID_FORMAT_ERROR",
+  "messageParameters" : {
+    "functionName" : "try_mask_ccn"
+  }
+}

@@ -21,7 +21,6 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -57,7 +56,7 @@ import org.apache.spark.unsafe.types.UTF8String
 )
 case class MaskCcn(left: Expression, right: Expression)
   extends MaskDigitSequence(left, right, "mask_ccn", false) {
-  def this(left: Expression) = this(left, Literal(MaskCcn.DEFAULT_FORMAT))
+  def this(left: Expression) = this(left, Literal(MaskDigitSequence.DEFAULT_FORMAT_MASK_CCN))
   override protected def withNewChildrenInternal(
       newInput: Expression, newFormat: Expression): MaskCcn =
     copy(left = newInput, right = newFormat)
@@ -98,16 +97,19 @@ case class MaskCcn(left: Expression, right: Expression)
 )
 case class TryMaskCcn(left: Expression, right: Expression)
   extends MaskDigitSequence(left, right, "try_mask_ccn", true) {
-  def this(left: Expression) = this(left, Literal(MaskCcn.DEFAULT_FORMAT))
+  def this(left: Expression) = this(left, Literal(MaskDigitSequence.DEFAULT_FORMAT_MASK_CCN))
   override protected def withNewChildrenInternal(
       newInput: Expression, newFormat: Expression): TryMaskCcn =
     copy(left = newInput, right = newFormat)
   override def nullable: Boolean = true
 }
 
-/** Companion object for the MaskCcn and TryMaskCcn classes. */
-object MaskCcn {
-  val DEFAULT_FORMAT = "XXXX-XXXX-XXXX-XXXX"
+/** Companion object for the Mask* classes. */
+object MaskDigitSequence {
+  // Default format string for the MASK_CCN and TRY_MASK_CCN functions.
+  val DEFAULT_FORMAT_MASK_CCN = "XXXX-XXXX-XXXX-XXXX"
+  // Valid characters that may appear in the format string, in addition to digits or whitespace.
+  val VALID_FORMAT_CHARACTERS = Set('x', 'X', '-')
 }
 
 /** Implementation of an expression to mask digits in a string to replacement characters. */
@@ -116,11 +118,7 @@ abstract class MaskDigitSequence(
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
   private def format: Expression = right
 
-  private lazy val formatString = if (format.foldable) {
-    format.eval().toString.toUpperCase(Locale.ROOT)
-  } else {
-    ""
-  }
+  private lazy val formatString = format.eval().toString.toUpperCase(Locale.ROOT)
   private lazy val parser = new MaskDigitSequenceParser(formatString, nullOnError)
 
   override def prettyName: String = functionName
@@ -129,10 +127,13 @@ abstract class MaskDigitSequence(
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
-      val formatStringValid = formatString.forall {
-        case 'x' | 'X' | '-' => true
-        case ch if ch.isDigit || ch.isWhitespace => true
-        case _ => false
+      val formatStringValid = format.foldable && {
+        val charsValid = formatString.map {
+          case ch if MaskDigitSequence.VALID_FORMAT_CHARACTERS.contains(ch) => true
+          case ch if ch.isDigit || ch.isWhitespace => true
+          case _ => false
+        }
+        charsValid.nonEmpty && charsValid.forall(_ == true)
       }
       if (formatStringValid) {
         TypeCheckResult.TypeCheckSuccess
@@ -148,21 +149,20 @@ abstract class MaskDigitSequence(
     parser.parse(string.asInstanceOf[UTF8String])
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val builder = ctx.addReferenceObj(
-      "parser", parser, classOf[MaskDigitSequenceParser].getName)
-    val eval = left.genCode(ctx)
-    ev.copy(code =
-      code"""
-        |${eval.code}
-        |boolean ${ev.isNull} = ${eval.isNull};
-        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        |if (!${ev.isNull}) {
-        |  ${ev.value} = $builder.parse(${eval.value});
-        |  if (${ev.value} == null) {
-        |    ${ev.isNull} = true;
-        |  }
-        |}
-      """.stripMargin)
+    nullSafeCodeGen(ctx, ev, (input: String, _: String) => {
+      val builder = ctx.addReferenceObj(
+        "parser", parser, classOf[MaskDigitSequenceParser].getName)
+      if (nullable) {
+        s"""
+          ${ev.value} = $builder.parse($input);
+          ${ev.isNull} = ${ev.value} == null;
+        """
+      } else {
+        s"""
+          ${ev.value} = $builder.parse($input);
+        """
+      }
+    })
   }
 }
 
@@ -172,11 +172,12 @@ class MaskDigitSequenceParser(formatString: String, nullOnError: Boolean) extend
     val inputString = input.toString
     var formatStringIndex = 0
     var error = false
-    def skipFormatWhitespace(): Unit =
+    def skipFormatWhitespace(): Unit = {
       while (formatStringIndex < formatString.length &&
         formatString(formatStringIndex).isWhitespace) {
         formatStringIndex += 1
       }
+    }
     // Check and consume each character in the input string, comparing against characters in the
     // format string.
     val result = inputString.map { inputChar =>
@@ -187,6 +188,9 @@ class MaskDigitSequenceParser(formatString: String, nullOnError: Boolean) extend
       } else if (inputChar.isWhitespace) {
         // The input character is whitespace. Ignore it and continue comparing the next input
         // character against the same format string character as this iteration.
+        // Note that the intention is to skip and ignore whitespace in both the input string and the
+        // format string. For example, for use cases like credit card numbers, phone numbers, and
+        // social security numbers, these are not material to the data in the field.
         inputChar
       } else if (formatStringIndex >= formatString.length) {
         // We have already consumed all the characters in the format string, but one or more
@@ -216,10 +220,11 @@ class MaskDigitSequenceParser(formatString: String, nullOnError: Boolean) extend
         newChar
       }
     }
+    // Intentionally skip and ignore any remaining whitespace in the format string.
+    skipFormatWhitespace()
     // We have now consumed all the characters in the input string. Check that we have also consumed
     // all the characters in the format string at this point. If not, this is an error because the
     // input string does not match the format string.
-    skipFormatWhitespace()
     if (formatStringIndex != formatString.length) {
       error = true
     }
