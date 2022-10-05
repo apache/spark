@@ -23,7 +23,7 @@ import uuid
 from pyspark.testing.utils import search_jar
 
 
-connect_jar = search_jar("connector/connect", "spark-connect", "spark-connect")
+connect_jar = search_jar("connector/connect", "spark-connect-assembly-", "spark-connect")
 if connect_jar is None:
     connect_requirement_message = (  # type: ignore
         "Skipping all Spark Connect Python tests as the optional Spark Connect project was "
