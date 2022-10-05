@@ -408,6 +408,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
                 s"${RPC_MESSAGE_MAX_SIZE.key} (%d bytes). Consider increasing " +
                 s"${RPC_MESSAGE_MAX_SIZE.key} or using broadcast variables for large values."
               msg = msg.format(task.taskId, task.index, serializedTask.limit(), maxRpcMessageSize)
+              // Actually this task is not running yet, we can clean up related state here.
+              scheduler.cleanupTaskState(task.taskId)
               taskSetMgr.abort(msg)
             } catch {
               case e: Exception => logError("Exception in error callback", e)
