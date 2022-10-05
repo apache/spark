@@ -287,7 +287,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def ansiDateTimeError(e: Exception): SparkDateTimeException = {
     new SparkDateTimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2000",
-      errorSubClass = None,
       messageParameters = Map(
         "message" -> e.getMessage,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
@@ -351,7 +350,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       dataType: DataType): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2005",
-      errorSubClass = None,
       messageParameters = Map("dataType" -> dataType.toString()))
   }
 
