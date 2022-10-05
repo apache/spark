@@ -286,20 +286,29 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = "")
   }
 
-  def ansiDateTimeError(e: DateTimeException): DateTimeException = {
-    val newMessage = s"${e.getMessage}. " +
-      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
-    new DateTimeException(newMessage, e.getCause)
+  def ansiDateTimeError(e: Exception): SparkDateTimeException = {
+    new SparkDateTimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2000",
+      errorSubClass = None,
+      messageParameters = Map(
+        "message" -> e.getMessage,
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = Array.empty,
+      summary = "")
   }
 
-  def ansiIllegalArgumentError(message: String): IllegalArgumentException = {
-    val newMessage = s"$message. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
-      s"to false to bypass this error."
-    new IllegalArgumentException(newMessage)
+  def ansiIllegalArgumentError(message: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2001",
+      messageParameters = Map(
+        "message" -> message,
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
-  def ansiIllegalArgumentError(e: IllegalArgumentException): IllegalArgumentException = {
-    ansiIllegalArgumentError(e.getMessage)
+  def ansiIllegalArgumentError(e: Exception): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2002",
+      messageParameters = Map("message" -> e.getMessage))
   }
 
   def overflowInSumOfDecimalError(context: SQLQueryContext): ArithmeticException = {
@@ -310,10 +319,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     arithmeticOverflowError("Overflow in integral divide", "try_divide", context)
   }
 
-  def mapSizeExceedArraySizeWhenZipMapError(size: Int): RuntimeException = {
-    new RuntimeException(s"Unsuccessful try to zip maps with $size " +
-      "unique keys due to exceeding the array size limit " +
-      s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+  def mapSizeExceedArraySizeWhenZipMapError(size: Int): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2003",
+      messageParameters = Map(
+        "size" -> size.toString(),
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
   }
 
   def literalTypeUnsupportedError(v: Any): RuntimeException = {
@@ -334,27 +345,41 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "type" ->  toSQLType(dataType)))
   }
 
-  def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
-    new RuntimeException(s"no default for type $dataType")
+  def noDefaultForDataTypeError(dataType: DataType): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2004",
+      messageParameters = Map("dataType" -> dataType.toString()))
   }
 
-  def orderedOperationUnsupportedByDataTypeError(dataType: DataType): Throwable = {
-    new IllegalArgumentException(s"Type $dataType does not support ordered operations")
+  def orderedOperationUnsupportedByDataTypeError(
+      dataType: DataType): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2005",
+      errorSubClass = None,
+      messageParameters = Map("dataType" -> dataType.toString()))
   }
 
-  def regexGroupIndexLessThanZeroError(): Throwable = {
-    new IllegalArgumentException("The specified group index cannot be less than zero")
+  def regexGroupIndexLessThanZeroError(): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2006",
+      messageParameters = Map.empty)
   }
 
   def regexGroupIndexExceedGroupCountError(
-      groupCount: Int, groupIndex: Int): Throwable = {
-    new IllegalArgumentException(
-      s"Regex group count is $groupCount, but the specified group index is $groupIndex")
+      groupCount: Int, groupIndex: Int): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2007",
+      messageParameters = Map(
+        "groupCount" -> groupCount.toString(),
+        "groupIndex" -> groupIndex.toString()))
   }
 
-  def invalidUrlError(url: UTF8String, e: URISyntaxException): Throwable = {
-    new IllegalArgumentException(s"Find an invalid url string ${url.toString}. " +
-      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.", e)
+  def invalidUrlError(url: UTF8String, e: URISyntaxException): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2008",
+      messageParameters = Map(
+        "url" -> url.toString,
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
   def illegalUrlError(url: UTF8String): Throwable = {
@@ -364,52 +389,74 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     )
   }
 
-  def dataTypeOperationUnsupportedError(): Throwable = {
-    new UnsupportedOperationException("dataType")
+  def dataTypeOperationUnsupportedError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2009",
+      messageParameters = Map.empty)
   }
 
-  def mergeUnsupportedByWindowFunctionError(): Throwable = {
-    new UnsupportedOperationException("Window Functions do not support merging.")
+  def mergeUnsupportedByWindowFunctionError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2010",
+      messageParameters = Map.empty)
   }
 
-  def dataTypeUnexpectedError(dataType: DataType): Throwable = {
-    new UnsupportedOperationException(s"Unexpected data type ${dataType.catalogString}")
+  def dataTypeUnexpectedError(dataType: DataType): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2011",
+      messageParameters = Map("dataType" -> dataType.catalogString))
   }
 
-  def typeUnsupportedError(dataType: DataType): Throwable = {
-    new IllegalArgumentException(s"Unexpected type $dataType")
+  def typeUnsupportedError(dataType: DataType): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2012",
+      messageParameters = Map("dataType" -> dataType.toString()))
   }
 
-  def negativeValueUnexpectedError(frequencyExpression : Expression): Throwable = {
-    new SparkException(s"Negative values found in ${frequencyExpression.sql}")
+  def negativeValueUnexpectedError(
+      frequencyExpression : Expression): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2013",
+      messageParameters = Map("frequencyExpression" -> frequencyExpression.sql))
   }
 
-  def addNewFunctionMismatchedWithFunctionError(funcName: String): Throwable = {
-    new IllegalArgumentException(s"$funcName is not matched at addNewFunction")
+  def addNewFunctionMismatchedWithFunctionError(funcName: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2014",
+      messageParameters = Map("funcName" -> funcName))
   }
 
   def cannotGenerateCodeForIncomparableTypeError(
-      codeType: String, dataType: DataType): Throwable = {
-    new IllegalArgumentException(
-      s"Cannot generate $codeType code for incomparable type: ${dataType.catalogString}")
+      codeType: String, dataType: DataType): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2015",
+      messageParameters = Map(
+        "codeType" -> codeType,
+        "dataType" -> dataType.catalogString))
   }
 
-  def cannotInterpolateClassIntoCodeBlockError(arg: Any): Throwable = {
-    new IllegalArgumentException(
-      s"Can not interpolate ${arg.getClass.getName} into code block.")
+  def cannotInterpolateClassIntoCodeBlockError(arg: Any): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2016",
+      messageParameters = Map("arg" -> arg.getClass.getName))
   }
 
-  def customCollectionClsNotResolvedError(): Throwable = {
-    new UnsupportedOperationException("not resolved")
+  def customCollectionClsNotResolvedError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2017",
+      messageParameters = Map.empty)
   }
 
-  def classUnsupportedByMapObjectsError(cls: Class[_]): RuntimeException = {
-    new RuntimeException(s"class `${cls.getName}` is not supported by `MapObjects` as " +
-      "resulting collection.")
+  def classUnsupportedByMapObjectsError(cls: Class[_]): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2018",
+      messageParameters = Map("cls" -> cls.getName))
   }
 
-  def nullAsMapKeyNotAllowedError(): RuntimeException = {
-    new RuntimeException("Cannot use null as map key!")
+  def nullAsMapKeyNotAllowedError(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2019",
+      messageParameters = Map.empty)
   }
 
   def methodNotDeclaredError(name: String): Throwable = {
@@ -417,28 +464,41 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       s"""A method named "$name" is not declared in any enclosing class nor any supertype""")
   }
 
-  def constructorNotFoundError(cls: String): Throwable = {
-    new RuntimeException(s"Couldn't find a valid constructor on $cls")
+  def constructorNotFoundError(cls: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2020",
+      messageParameters = Map("cls" -> cls.toString()))
   }
 
-  def primaryConstructorNotFoundError(cls: Class[_]): Throwable = {
-    new RuntimeException(s"Couldn't find a primary constructor on $cls")
+  def primaryConstructorNotFoundError(cls: Class[_]): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2021",
+      messageParameters = Map("cls" -> cls.toString()))
   }
 
-  def unsupportedNaturalJoinTypeError(joinType: JoinType): Throwable = {
-    new RuntimeException("Unsupported natural join type " + joinType)
+  def unsupportedNaturalJoinTypeError(joinType: JoinType): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2022",
+      messageParameters = Map("joinType" -> joinType.toString()))
   }
 
-  def notExpectedUnresolvedEncoderError(attr: AttributeReference): Throwable = {
-    new RuntimeException(s"Unresolved encoder expected, but $attr was found.")
+  def notExpectedUnresolvedEncoderError(attr: AttributeReference): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2023",
+      messageParameters = Map("attr" -> attr.toString()))
   }
 
-  def unsupportedEncoderError(): Throwable = {
-    new RuntimeException("Only expression encoders are supported for now.")
+  def unsupportedEncoderError(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2024",
+      messageParameters = Map.empty)
   }
 
-  def notOverrideExpectedMethodsError(className: String, m1: String, m2: String): Throwable = {
-    new RuntimeException(s"$className must override either $m1 or $m2")
+  def notOverrideExpectedMethodsError(
+      className: String, m1: String, m2: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2025",
+      messageParameters = Map("className" -> className, "m1" -> m1, "m2" -> m2))
   }
 
   def failToConvertValueToJsonError(value: AnyRef, cls: Class[_], dataType: DataType): Throwable = {

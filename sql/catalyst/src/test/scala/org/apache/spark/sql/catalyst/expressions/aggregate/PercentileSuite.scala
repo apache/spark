@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.SparkException
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -321,13 +321,15 @@ class PercentileSuite extends SparkFunSuite {
     val buffer = new GenericInternalRow(new Array[Any](2))
     agg.initialize(buffer)
 
-    val caught =
-      intercept[SparkException]{
-        // Add some non-empty row with negative frequency
-        agg.update(buffer, InternalRow(1, -5))
-        agg.eval(buffer)
-      }
-    assert(caught.getMessage.startsWith("Negative values found in "))
+    checkError(
+      exception =
+        intercept[SparkIllegalArgumentException]{
+          // Add some non-empty row with negative frequency
+          agg.update(buffer, InternalRow(1, -5))
+          agg.eval(buffer)
+        },
+      errorClass = "_LEGACY_ERROR_TEMP_2013",
+      parameters = Map("frequencyExpression" -> "CAST(boundreference() AS INT)"))
   }
 
   private def compareEquals(
