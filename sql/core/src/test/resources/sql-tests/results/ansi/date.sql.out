@@ -50,8 +50,14 @@ select make_date(2000, 13, 1)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid value for MonthOfYear (valid values 1 - 12): 13. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid value for MonthOfYear (valid values 1 - 12): 13"
+  }
+}
 
 
 -- !query
@@ -59,8 +65,14 @@ select make_date(2000, 1, 33)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid value for DayOfMonth (valid values 1 - 28/31): 33. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid value for DayOfMonth (valid values 1 - 28/31): 33"
+  }
+}
 
 
 -- !query
@@ -226,8 +238,13 @@ select next_day("2015-07-23", "xx")
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal input for day of week: xx. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2002",
+  "messageParameters" : {
+    "message" : "Illegal input for day of week: xx"
+  }
+}
 
 
 -- !query

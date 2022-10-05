@@ -149,8 +149,14 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 61)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid value for SecondOfMinute (valid values 0 - 59): 61. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 61"
+  }
+}
 
 
 -- !query
@@ -174,8 +180,14 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 99.999999)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid value for SecondOfMinute (valid values 0 - 59): 99. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 99"
+  }
+}
 
 
 -- !query
@@ -183,8 +195,14 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 999.999999)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid value for SecondOfMinute (valid values 0 - 59): 999. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 999"
+  }
+}
 
 
 -- !query
