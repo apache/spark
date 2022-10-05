@@ -27,6 +27,8 @@ from typing import (
     TYPE_CHECKING,
 )
 
+import pandas
+
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.column import (
     ColumnOrString,
@@ -225,11 +227,11 @@ class DataFrame(object):
         return ""
 
     def collect(self):
-        query = self._plan.collect(self._session)
-        return self._session.collect(query)
+        raise NotImplementedError("Please use toPandas().")
 
-    def toPandas(self):
-        return self.collect()
+    def toPandas(self) -> pandas.DataFrame:
+        query = self._plan.collect(self._session)
+        return self._session._to_pandas(query)
 
     def explain(self) -> str:
         query = self._plan.collect(self._session)
