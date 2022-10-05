@@ -34,9 +34,9 @@ private[sql] object ProtobufUtils extends Logging {
 
   /** Wrapper for a pair of matched fields, one Catalyst and one corresponding Protobuf field. */
   private[sql] case class ProtoMatchedField(
-                                             catalystField: StructField,
-                                             catalystPosition: Int,
-                                             fieldDescriptor: FieldDescriptor)
+      catalystField: StructField,
+      catalystPosition: Int,
+      fieldDescriptor: FieldDescriptor)
 
   /**
    * Helper class to perform field lookup/matching on Protobuf schemas.
@@ -45,21 +45,20 @@ private[sql] object ProtobufUtils extends Logging {
    * the Protobuf descriptor for each field in the Catalyst schema and vice-versa, respecting
    * settings for case sensitivity. The match results can be accessed using the getter methods.
    *
-   * @param descriptor           The descriptor in which to search for fields.
-   *                             Must be of type Descriptor.
-   * @param catalystSchema       The Catalyst schema to use for matching.
-   * @param protoPath            The seq of parent field names leading to `protoSchema`.
-   * @param catalystPath         The seq of parent field names leading to `catalystSchema`.
-   * @param positionalFieldMatch If true, perform field matching in a positional fashion
-   *                             (structural comparison between schemas, ignoring names);
-   *                             otherwise, perform field matching using field names.
+   * @param descriptor
+   *   The descriptor in which to search for fields. Must be of type Descriptor.
+   * @param catalystSchema
+   *   The Catalyst schema to use for matching.
+   * @param protoPath
+   *   The seq of parent field names leading to `protoSchema`.
+   * @param catalystPath
+   *   The seq of parent field names leading to `catalystSchema`.
    */
   class ProtoSchemaHelper(
-                           descriptor: Descriptor,
-                           catalystSchema: StructType,
-                           protoPath: Seq[String],
-                           catalystPath: Seq[String],
-                           positionalFieldMatch: Boolean) {
+      descriptor: Descriptor,
+      catalystSchema: StructType,
+      protoPath: Seq[String],
+      catalystPath: Seq[String]) {
     if (descriptor.getName == null) {
       throw new IncompatibleSchemaException(
         s"Attempting to treat ${descriptor.getName} as a RECORD, " +
@@ -74,48 +73,35 @@ private[sql] object ProtobufUtils extends Logging {
     /** The fields which have matching equivalents in both Protobuf and Catalyst schemas. */
     val matchedFields: Seq[ProtoMatchedField] = catalystSchema.zipWithIndex.flatMap {
       case (sqlField, sqlPos) =>
-        getProtoField(sqlField.name, sqlPos).map(ProtoMatchedField(sqlField, sqlPos, _))
+        getFieldByName(sqlField.name).map(ProtoMatchedField(sqlField, sqlPos, _))
     }
 
     /**
      * Validate that there are no Catalyst fields which don't have a matching Protobuf field,
-     * throwing [[IncompatibleSchemaException]] if such extra fields are found.
-     * If `ignoreNullable` is false, consider nullable Catalyst fields to be eligible to be an
-     * extra field; otherwise, ignore nullable Catalyst fields when checking for extras.
+     * throwing [[IncompatibleSchemaException]] if such extra fields are found. If
+     * `ignoreNullable` is false, consider nullable Catalyst fields to be eligible to be an extra
+     * field; otherwise, ignore nullable Catalyst fields when checking for extras.
      */
     def validateNoExtraCatalystFields(ignoreNullable: Boolean): Unit =
-      catalystSchema.zipWithIndex.foreach { case (sqlField, sqlPos) =>
-        if (getProtoField(sqlField.name, sqlPos).isEmpty &&
+      catalystSchema.fields.foreach { sqlField =>
+        if (getFieldByName(sqlField.name).isEmpty &&
           (!ignoreNullable || !sqlField.nullable)) {
-          if (positionalFieldMatch) {
-            throw new IncompatibleSchemaException("Cannot find field at position " +
-              s"$sqlPos of ${toFieldStr(protoPath)} from Protobuf schema " +
-              s"(using positional matching)")
-          } else {
-            throw new IncompatibleSchemaException(
-              s"Cannot find ${toFieldStr(catalystPath :+ sqlField.name)} in Protobuf schema")
-          }
+          throw new IncompatibleSchemaException(
+            s"Cannot find ${toFieldStr(catalystPath :+ sqlField.name)} in Protobuf schema")
         }
       }
 
     /**
      * Validate that there are no Protobuf fields which don't have a matching Catalyst field,
-     * throwing [[IncompatibleSchemaException]] if such extra fields are found.
-     * Only required (non-nullable) fields are checked; nullable fields are ignored.
+     * throwing [[IncompatibleSchemaException]] if such extra fields are found. Only required
+     * (non-nullable) fields are checked; nullable fields are ignored.
      */
     def validateNoExtraRequiredProtoFields(): Unit = {
       val extraFields = protoFieldArray.toSet -- matchedFields.map(_.fieldDescriptor)
       extraFields.filterNot(isNullable).foreach { extraField =>
-        if (positionalFieldMatch) {
-          throw new IncompatibleSchemaException(s"Found field '${extraField.getName()}'" +
-            s" at position ${extraField.getIndex} of ${toFieldStr(protoPath)} from Protobuf " +
-            s"schema but there is no match in the SQL schema at ${toFieldStr(catalystPath)} " +
-            s"(using positional matching)")
-        } else {
-          throw new IncompatibleSchemaException(
-            s"Found ${toFieldStr(protoPath :+ extraField.getName())} in Protobuf schema " +
-              "but there is no match in the SQL schema")
-        }
+        throw new IncompatibleSchemaException(
+          s"Found ${toFieldStr(protoPath :+ extraField.getName())} in Protobuf schema " +
+            "but there is no match in the SQL schema")
       }
     }
 
@@ -123,8 +109,10 @@ private[sql] object ProtobufUtils extends Logging {
      * Extract a single field from the contained Protobuf schema which has the desired field name,
      * performing the matching with proper case sensitivity according to SQLConf.resolver.
      *
-     * @param name The name of the field to search for.
-     * @return `Some(match)` if a matching Protobuf field is found, otherwise `None`.
+     * @param name
+     *   The name of the field to search for.
+     * @return
+     *   `Some(match)` if a matching Protobuf field is found, otherwise `None`.
      */
     private[protobuf] def getFieldByName(name: String): Option[FieldDescriptor] = {
 
@@ -135,20 +123,11 @@ private[sql] object ProtobufUtils extends Logging {
       candidates.filter(f => SQLConf.get.resolver(f.getName(), name)) match {
         case Seq(protoField) => Some(protoField)
         case Seq() => None
-        case matches => throw new IncompatibleSchemaException(s"Searching for '$name' in " +
-          s"Protobuf schema at ${toFieldStr(protoPath)} gave ${matches.size} matches. " +
-          s"Candidates: " + matches.map(_.getName()).mkString("[", ", ", "]")
-        )
-      }
-    }
-
-    /** Get the Protobuf field corresponding to the provided Catalyst field name/position,
-     *  if any. */
-    def getProtoField(fieldName: String, catalystPos: Int): Option[FieldDescriptor] = {
-      if (positionalFieldMatch) {
-        protoFieldArray.lift(catalystPos)
-      } else {
-        getFieldByName(fieldName)
+        case matches =>
+          throw new IncompatibleSchemaException(
+            s"Searching for '$name' in " +
+              s"Protobuf schema at ${toFieldStr(protoPath)} gave ${matches.size} matches. " +
+              s"Candidates: " + matches.map(_.getName()).mkString("[", ", ", "]"))
       }
     }
   }
@@ -178,14 +157,17 @@ private[sql] object ProtobufUtils extends Logging {
       case ex: InvalidProtocolBufferException =>
         throw new RuntimeException("Error parsing descriptor byte[] into Descriptor object", ex)
       case ex: IOException =>
-        throw new RuntimeException("Error reading Protobuf descriptor file at path: " +
-          descFilePath, ex)
+        throw new RuntimeException(
+          "Error reading Protobuf descriptor file at path: " +
+            descFilePath,
+          ex)
     }
 
     val descriptorProto: DescriptorProtos.FileDescriptorProto = fileDescriptorSet.getFile(0)
     try {
       val fileDescriptor: Descriptors.FileDescriptor = Descriptors.FileDescriptor.buildFrom(
-        descriptorProto, new Array[Descriptors.FileDescriptor](0))
+        descriptorProto,
+        new Array[Descriptors.FileDescriptor](0))
       if (fileDescriptor.getMessageTypes().isEmpty()) {
         throw new RuntimeException("No MessageTypes returned, " + fileDescriptor.getName());
       }

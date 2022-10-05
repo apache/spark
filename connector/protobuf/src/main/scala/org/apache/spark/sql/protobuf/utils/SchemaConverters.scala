@@ -26,6 +26,7 @@ import org.apache.spark.sql.types._
 
 @DeveloperApi
 object SchemaConverters {
+
   /**
    * Internal wrapper for SQL data type and nullability.
    *
@@ -42,14 +43,15 @@ object SchemaConverters {
     toSqlTypeHelper(descriptor)
   }
 
-  def toSqlTypeHelper(descriptor: Descriptor):
-  SchemaType = ScalaReflectionLock.synchronized {
-    SchemaType(StructType(descriptor.getFields.asScala.flatMap(
-      structFieldFor(_, Set.empty)).toSeq),
+  def toSqlTypeHelper(descriptor: Descriptor): SchemaType = ScalaReflectionLock.synchronized {
+    SchemaType(
+      StructType(descriptor.getFields.asScala.flatMap(structFieldFor(_, Set.empty)).toSeq),
       nullable = true)
   }
 
-  def structFieldFor(fd: FieldDescriptor, existingRecordNames: Set[String]): Option[StructField] = {
+  def structFieldFor(
+      fd: FieldDescriptor,
+      existingRecordNames: Set[String]): Option[StructField] = {
     import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
     val dataType = fd.getJavaType match {
       case INT => Some(IntegerType)
@@ -63,43 +65,47 @@ object SchemaConverters {
       case MESSAGE if fd.isRepeated && fd.getMessageType.getOptions.hasMapEntry =>
         var keyType: DataType = NullType
         var valueType: DataType = NullType
-        fd.getMessageType.getFields.forEach{
-          field =>
-            field.getName match {
-              case "key" =>
-                keyType = structFieldFor(field, existingRecordNames).get.dataType
-              case "value" =>
-                valueType = structFieldFor(field, existingRecordNames).get.dataType
-            }
+        fd.getMessageType.getFields.forEach { field =>
+          field.getName match {
+            case "key" =>
+              keyType = structFieldFor(field, existingRecordNames).get.dataType
+            case "value" =>
+              valueType = structFieldFor(field, existingRecordNames).get.dataType
+          }
         }
-      return Option(StructField(fd.getName, MapType(keyType, valueType,
-        valueContainsNull = false).defaultConcreteType, nullable = false))
+        return Option(
+          StructField(
+            fd.getName,
+            MapType(keyType, valueType, valueContainsNull = false).defaultConcreteType,
+            nullable = false))
       case MESSAGE =>
         if (existingRecordNames.contains(fd.getFullName)) {
-          throw new IncompatibleSchemaException(
-            s"""
+          throw new IncompatibleSchemaException(s"""
                |Found recursive reference in Protobuf schema, which can not be processed by Spark:
                |${fd.toString()}""".stripMargin)
         }
         val newRecordNames = existingRecordNames + fd.getFullName
 
-          Option(fd.getMessageType.getFields.asScala.flatMap(
-            structFieldFor(_, newRecordNames.toSet)).toSeq)
-            .filter(_.nonEmpty)
-            .map(StructType.apply)
-      case _ => throw new IncompatibleSchemaException(s"Cannot convert Protobuf type" +
-        s" ${fd.getJavaType}")
+        Option(
+          fd.getMessageType.getFields.asScala
+            .flatMap(structFieldFor(_, newRecordNames.toSet))
+            .toSeq)
+          .filter(_.nonEmpty)
+          .map(StructType.apply)
+      case _ =>
+        throw new IncompatibleSchemaException(
+          s"Cannot convert Protobuf type" +
+            s" ${fd.getJavaType}")
     }
-    dataType.map(dt => StructField(
-      fd.getName,
-      if (fd.isRepeated) ArrayType(dt, containsNull = false) else dt,
-      nullable = !fd.isRequired && !fd.isRepeated
-    ))
+    dataType.map(dt =>
+      StructField(
+        fd.getName,
+        if (fd.isRepeated) ArrayType(dt, containsNull = false) else dt,
+        nullable = !fd.isRequired && !fd.isRepeated))
   }
 
-  private[protobuf] class IncompatibleSchemaException(
-                                                    msg: String,
-                                                    ex: Throwable = null) extends Exception(msg, ex)
+  private[protobuf] class IncompatibleSchemaException(msg: String, ex: Throwable = null)
+      extends Exception(msg, ex)
 
   private[protobuf] class UnsupportedProtoValueException(msg: String) extends Exception(msg)
 }

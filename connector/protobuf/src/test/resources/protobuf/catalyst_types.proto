@@ -74,6 +74,7 @@ message newProducer {
 message newConsumer {
   string key = 1;
   int32  value = 2;
+  Actual actual = 3;
 }
 
 message oldProducer {

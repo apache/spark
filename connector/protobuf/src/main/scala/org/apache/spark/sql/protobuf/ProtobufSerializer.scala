@@ -28,44 +28,42 @@ import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils.{toFieldStr, ProtoMatchedField}
-import org.apache.spark.sql.protobuf.utils.SchemaConverters.{IncompatibleSchemaException, UnsupportedProtoValueException}
+import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.types._
 
 /**
  * A serializer to serialize data in catalyst format to data in Protobuf format.
  */
 private[sql] class ProtobufSerializer(
-                                    rootCatalystType: DataType,
-                                    rootDescriptor: Descriptor,
-                                    nullable: Boolean,
-                                    positionalFieldMatch: Boolean) extends Logging {
-
-  def this(rootCatalystType: DataType, rootDescriptor: Descriptor, nullable: Boolean) = {
-    this(rootCatalystType, rootDescriptor, nullable, positionalFieldMatch = false)
-  }
+    rootCatalystType: DataType,
+    rootDescriptor: Descriptor,
+    nullable: Boolean)
+    extends Logging {
 
   def serialize(catalystData: Any): Any = {
     converter.apply(catalystData)
   }
 
   private val converter: Any => Any = {
-    val baseConverter = try {
-      rootCatalystType match {
-        case st: StructType =>
-          newStructConverter(st, rootDescriptor, Nil, Nil).asInstanceOf[Any => Any]
-      }
-    } catch {
-      case ise: IncompatibleSchemaException => throw new IncompatibleSchemaException(
-        s"Cannot convert SQL type ${rootCatalystType.sql} to Protobuf type " +
-          s"${rootDescriptor.getName}.", ise)
-    }
-    if (nullable) {
-      (data: Any) =>
-        if (data == null) {
-          null
-        } else {
-          baseConverter.apply(data)
+    val baseConverter =
+      try {
+        rootCatalystType match {
+          case st: StructType =>
+            newStructConverter(st, rootDescriptor, Nil, Nil).asInstanceOf[Any => Any]
         }
+      } catch {
+        case ise: IncompatibleSchemaException =>
+          throw new IncompatibleSchemaException(
+            s"Cannot convert SQL type ${rootCatalystType.sql} to Protobuf type " +
+              s"${rootDescriptor.getName}.",
+            ise)
+      }
+    if (nullable) { (data: Any) =>
+      if (data == null) {
+        null
+      } else {
+        baseConverter.apply(data)
+      }
     } else {
       baseConverter
     }
@@ -73,15 +71,14 @@ private[sql] class ProtobufSerializer(
 
   private type Converter = (SpecializedGetters, Int) => Any
 
-
   private def newConverter(
-                            catalystType: DataType,
-                            protoType: FieldDescriptor,
-                            catalystPath: Seq[String],
-                            protoPath: Seq[String]): Converter = {
+      catalystType: DataType,
+      fieldDescriptor: FieldDescriptor,
+      catalystPath: Seq[String],
+      protoPath: Seq[String]): Converter = {
     val errorPrefix = s"Cannot convert SQL ${toFieldStr(catalystPath)} " +
       s"to Protobuf ${toFieldStr(protoPath)} because "
-    (catalystType, protoType.getJavaType) match {
+    (catalystType, fieldDescriptor.getJavaType) match {
       case (NullType, _) =>
         (getter, ordinal) => null
       case (BooleanType, BOOLEAN) =>
@@ -101,16 +98,17 @@ private[sql] class ProtobufSerializer(
       case (DoubleType, DOUBLE) =>
         (getter, ordinal) => getter.getDouble(ordinal)
       case (StringType, ENUM) =>
-        val enumSymbols: Set[String] = protoType.getEnumType.getValues.asScala.map(
-          e => e.toString).toSet
+        val enumSymbols: Set[String] =
+          fieldDescriptor.getEnumType.getValues.asScala.map(e => e.toString).toSet
         (getter, ordinal) =>
           val data = getter.getUTF8String(ordinal).toString
           if (!enumSymbols.contains(data)) {
-            throw new IncompatibleSchemaException(errorPrefix +
-              s""""$data" cannot be written since it's not defined in enum """ +
-              enumSymbols.mkString("\"", "\", \"", "\""))
+            throw new IncompatibleSchemaException(
+              errorPrefix +
+                s""""$data" cannot be written since it's not defined in enum """ +
+                enumSymbols.mkString("\"", "\", \"", "\""))
           }
-          protoType.getEnumType.findValueByName(data)
+          fieldDescriptor.getEnumType.findValueByName(data)
       case (StringType, STRING) =>
         (getter, ordinal) => {
           String.valueOf(getter.getUTF8String(ordinal))
@@ -122,29 +120,31 @@ private[sql] class ProtobufSerializer(
       case (DateType, INT) =>
         (getter, ordinal) => getter.getInt(ordinal)
 
-      case (TimestampType, LONG) => protoType.getContainingType match {
-        // For backward compatibility, if the Protobuf type is Long and it is not logical type
-        // (the `null` case), output the timestamp value as with millisecond precision.
-        case null => (getter, ordinal) =>
-          DateTimeUtils.microsToMillis(getter.getLong(ordinal))
-        case other => throw new IncompatibleSchemaException(errorPrefix +
-          s"SQL type ${TimestampType.sql} cannot be converted to Protobuf logical type $other")
-      }
+      case (TimestampType, LONG) =>
+        fieldDescriptor.getContainingType match {
+          // For backward compatibility, if the Protobuf type is Long and it is not logical type
+          // (the `null` case), output the timestamp value as with millisecond precision.
+          case null => (getter, ordinal) => DateTimeUtils.microsToMillis(getter.getLong(ordinal))
+          case other =>
+            throw new IncompatibleSchemaException(errorPrefix +
+              s"SQL type ${TimestampType.sql} cannot be converted to Protobuf logical type $other")
+        }
 
-      case (TimestampNTZType, LONG) => protoType.getContainingType match {
-        // To keep consistent with TimestampType, if the Protobuf type is Long and it is not
-        // logical type (the `null` case), output the TimestampNTZ as long value
-        // in millisecond precision.
-        case null => (getter, ordinal) =>
-          DateTimeUtils.microsToMillis(getter.getLong(ordinal))
-        case other => throw new IncompatibleSchemaException(errorPrefix +
-          s"SQL type ${TimestampNTZType.sql} cannot be converted to Protobuf logical type $other")
-      }
+      case (TimestampNTZType, LONG) =>
+        fieldDescriptor.getContainingType match {
+          // To keep consistent with TimestampType, if the Protobuf type is Long and it is not
+          // logical type (the `null` case), output the TimestampNTZ as long value
+          // in millisecond precision.
+          case null => (getter, ordinal) => DateTimeUtils.microsToMillis(getter.getLong(ordinal))
+          case other =>
+            throw new IncompatibleSchemaException(errorPrefix +
+              s"SQL type ${TimestampNTZType.sql} cannot be converted " +
+              s"to Protobuf logical type $other")
+        }
 
       case (ArrayType(et, containsNull), _) =>
-        val elementConverter = newConverter(
-          et, protoType,
-          catalystPath :+ "element", protoPath :+ "element")
+        val elementConverter =
+          newConverter(et, fieldDescriptor, catalystPath :+ "element", protoPath :+ "element")
         (getter, ordinal) => {
           val arrayData = getter.getArray(ordinal)
           val len = arrayData.numElements()
@@ -164,16 +164,16 @@ private[sql] class ProtobufSerializer(
         }
 
       case (st: StructType, MESSAGE) =>
-        val structConverter = newStructConverter(
-          st, protoType.getMessageType, catalystPath, protoPath)
+        val structConverter =
+          newStructConverter(st, fieldDescriptor.getMessageType, catalystPath, protoPath)
         val numFields = st.length
         (getter, ordinal) => structConverter(getter.getStruct(ordinal, numFields))
 
       case (MapType(kt, vt, valueContainsNull), MESSAGE) =>
         var keyField: FieldDescriptor = null
         var valueField: FieldDescriptor = null
-        protoType.getMessageType.getFields.asScala.map{
-          field => field.getName match {
+        fieldDescriptor.getMessageType.getFields.asScala.map { field =>
+          field.getName match {
             case "key" =>
               keyField = field
             case "value" =>
@@ -181,10 +181,9 @@ private[sql] class ProtobufSerializer(
           }
         }
 
-        val keyConverter = newConverter(kt, keyField, catalystPath :+ "key",
-          protoPath :+ "key")
-        val valueConverter = newConverter(vt, valueField, catalystPath :+ "value",
-          protoPath :+ "value")
+        val keyConverter = newConverter(kt, keyField, catalystPath :+ "key", protoPath :+ "key")
+        val valueConverter =
+          newConverter(vt, valueField, catalystPath :+ "value", protoPath :+ "value")
 
         (getter, ordinal) =>
           val mapData = getter.getMap(ordinal)
@@ -194,7 +193,7 @@ private[sql] class ProtobufSerializer(
           val valueArray = mapData.valueArray()
           var i = 0
           while (i < len) {
-            val result = DynamicMessage.newBuilder(protoType.getMessageType)
+            val result = DynamicMessage.newBuilder(fieldDescriptor.getMessageType)
             if (valueContainsNull && valueArray.isNullAt(i)) {
               result.setField(keyField, keyConverter(keyArray, i))
               result.setField(valueField, valueField.getDefaultValue)
@@ -213,40 +212,47 @@ private[sql] class ProtobufSerializer(
         (getter, ordinal) => getter.getLong(ordinal)
 
       case _ =>
-        throw new IncompatibleSchemaException(errorPrefix +
-          s"schema is incompatible (sqlType = ${catalystType.sql}, " +
-          s"protoType = ${protoType.getJavaType})")
+        throw new IncompatibleSchemaException(
+          errorPrefix +
+            s"schema is incompatible (sqlType = ${catalystType.sql}, " +
+            s"protoType = ${fieldDescriptor.getJavaType})")
     }
   }
 
   private def newStructConverter(
-                                  catalystStruct: StructType,
-                                  protoStruct: Descriptor,
-                                  catalystPath: Seq[String],
-                                  protoPath: Seq[String]): InternalRow => DynamicMessage = {
+      catalystStruct: StructType,
+      descriptor: Descriptor,
+      catalystPath: Seq[String],
+      protoPath: Seq[String]): InternalRow => DynamicMessage = {
 
-    val protoSchemaHelper = new ProtobufUtils.ProtoSchemaHelper(
-      protoStruct, catalystStruct, protoPath, catalystPath, positionalFieldMatch)
+    val protoSchemaHelper =
+      new ProtobufUtils.ProtoSchemaHelper(descriptor, catalystStruct, protoPath, catalystPath)
 
-     protoSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = false)
-     protoSchemaHelper.validateNoExtraRequiredProtoFields()
+    protoSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = false)
+    protoSchemaHelper.validateNoExtraRequiredProtoFields()
 
-    val (protoIndices, fieldConverters: Array[Converter]) = protoSchemaHelper.matchedFields.map {
-      case ProtoMatchedField(catalystField, _, protoField) =>
-        val converter = newConverter(catalystField.dataType,
+    val (protoIndices, fieldConverters: Array[Converter]) = protoSchemaHelper.matchedFields
+      .map { case ProtoMatchedField(catalystField, _, protoField) =>
+        val converter = newConverter(
+          catalystField.dataType,
           protoField,
-          catalystPath :+ catalystField.name, protoPath :+ protoField.getName)
+          catalystPath :+ catalystField.name,
+          protoPath :+ protoField.getName)
         (protoField, converter)
-    }.toArray.unzip
+      }
+      .toArray
+      .unzip
 
     val numFields = catalystStruct.length
     row: InternalRow =>
-      val result = DynamicMessage.newBuilder(protoStruct)
+      val result = DynamicMessage.newBuilder(descriptor)
       var i = 0
       while (i < numFields) {
         if (row.isNullAt(i)) {
-          throw new UnsupportedProtoValueException(
-            s"Cannot set ${protoIndices(i).getName} a Null, Protobuf does not allow Null values")
+          if (!protoIndices(i).isRepeated() &&
+            protoIndices(i).getJavaType() != FieldDescriptor.JavaType.MESSAGE) {
+            result.setField(protoIndices(i), protoIndices(i).getDefaultValue())
+          }
         } else {
           result.setField(protoIndices(i), fieldConverters(i).apply(row, i))
         }

@@ -26,33 +26,41 @@ object functions {
 // scalastyle:on: object.name
 
   /**
-   * Converts a binary column of Protobuf format into its corresponding catalyst value.
-   * The specified schema must match actual schema of the read data, otherwise the behavior
-   * is undefined: it may fail or return arbitrary result.
-   * To deserialize the data with a compatible and evolved schema, the expected Protobuf schema
-   * can be set via the option protoSchema.
+   * Converts a binary column of Protobuf format into its corresponding catalyst value. The
+   * specified schema must match actual schema of the read data, otherwise the behavior is
+   * undefined: it may fail or return arbitrary result. To deserialize the data with a compatible
+   * and evolved schema, the expected Protobuf schema can be set via the option protoSchema.
    *
-   * @param data         the binary column.
-   * @param descFilePath the protobuf descriptor in Message GeneratedMessageV3 format.
-   * @param messageName  the protobuf message name to look for in descriptorFile.
+   * @param data
+   *   the binary column.
+   * @param descFilePath
+   *   the protobuf descriptor in Message GeneratedMessageV3 format.
+   * @param messageName
+   *   the protobuf message name to look for in descriptorFile.
    * @since 3.4.0
    */
   @Experimental
-  def from_protobuf(data: Column, descFilePath: String, messageName: String,
-                 options: java.util.Map[String, String]): Column = {
-    new Column(ProtobufDataToCatalyst(data.expr, descFilePath, messageName, options.asScala.toMap))
+  def from_protobuf(
+      data: Column,
+      descFilePath: String,
+      messageName: String,
+      options: java.util.Map[String, String]): Column = {
+    new Column(
+      ProtobufDataToCatalyst(data.expr, descFilePath, messageName, options.asScala.toMap))
   }
 
   /**
-   * Converts a binary column of Protobuf format into its corresponding catalyst value.
-   * The specified schema must match actual schema of the read data, otherwise the behavior
-   * is undefined: it may fail or return arbitrary result.
-   * To deserialize the data with a compatible and evolved schema, the expected Protobuf schema
-   * can be set via the option protoSchema.
+   * Converts a binary column of Protobuf format into its corresponding catalyst value. The
+   * specified schema must match actual schema of the read data, otherwise the behavior is
+   * undefined: it may fail or return arbitrary result. To deserialize the data with a compatible
+   * and evolved schema, the expected Protobuf schema can be set via the option protoSchema.
    *
-   * @param data         the binary column.
-   * @param descFilePath the protobuf descriptor in Message GeneratedMessageV3 format.
-   * @param messageName  the protobuf MessageName to look for in descriptorFile.
+   * @param data
+   *   the binary column.
+   * @param descFilePath
+   *   the protobuf descriptor in Message GeneratedMessageV3 format.
+   * @param messageName
+   *   the protobuf MessageName to look for in descriptorFile.
    * @since 3.4.0
    */
   @Experimental
@@ -63,9 +71,12 @@ object functions {
   /**
    * Converts a column into binary of protobuf format.
    *
-   * @param data         the data column.
-   * @param descFilePath the protobuf descriptor in Message GeneratedMessageV3 format.
-   * @param messageName  the protobuf MessageName to look for in descriptorFile.
+   * @param data
+   *   the data column.
+   * @param descFilePath
+   *   the protobuf descriptor in Message GeneratedMessageV3 format.
+   * @param messageName
+   *   the protobuf MessageName to look for in descriptorFile.
    * @since 3.4.0
    */
   @Experimental

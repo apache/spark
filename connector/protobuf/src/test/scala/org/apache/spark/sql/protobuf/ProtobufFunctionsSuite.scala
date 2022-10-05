@@ -18,9 +18,8 @@ package org.apache.spark.sql.protobuf
 
 import scala.collection.JavaConverters._
 
-import com.google.protobuf.{ByteString, Descriptors, DynamicMessage}
+import com.google.protobuf.{ByteString, DynamicMessage}
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.functions.{lit, struct}
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
@@ -34,8 +33,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   val testFileDesc = testFile("protobuf/functions_suite.desc").replace("file:/", "/")
 
   test("roundtrip in to_protobuf and from_protobuf - struct") {
-    val df = spark.range(10).select(
-      struct(
+    val df = spark
+      .range(1, 10)
+      .select(struct(
         $"id",
         $"id".cast("string").as("string_value"),
         $"id".cast("int").as("int32_value"),
@@ -51,41 +51,44 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
         $"id".cast("double").as("double_value"),
         lit(1202.00).cast(org.apache.spark.sql.types.FloatType).as("float_value"),
         lit(true).as("bool_value"),
-        lit("0".getBytes).as("bytes_value")
-      ).as("SimpleMessage")
-    )
-    val protoStructDF = df.select(functions.to_protobuf($"SimpleMessage", testFileDesc,
-      "SimpleMessage").as("proto"))
-    val actualDf = protoStructDF.select(functions.from_protobuf($"proto", testFileDesc,
-      "SimpleMessage").as("proto.*"))
+        lit("0".getBytes).as("bytes_value")).as("SimpleMessage"))
+    val protoStructDF = df.select(
+      functions.to_protobuf($"SimpleMessage", testFileDesc, "SimpleMessage").as("proto"))
+    val actualDf = protoStructDF.select(
+      functions.from_protobuf($"proto", testFileDesc, "SimpleMessage").as("proto.*"))
     checkAnswer(actualDf, df)
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Repeated") {
     val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "SimpleMessageRepeated")
 
-    val dynamicMessage = DynamicMessage.newBuilder(descriptor)
+    val dynamicMessage = DynamicMessage
+      .newBuilder(descriptor)
       .setField(descriptor.findFieldByName("key"), "key")
       .setField(descriptor.findFieldByName("value"), "value")
       .addRepeatedField(descriptor.findFieldByName("rbool_value"), false)
       .addRepeatedField(descriptor.findFieldByName("rbool_value"), true)
-      .addRepeatedField(descriptor.findFieldByName("rdouble_value"), 1092092.654D)
-      .addRepeatedField(descriptor.findFieldByName("rdouble_value"), 1092093.654D)
+      .addRepeatedField(descriptor.findFieldByName("rdouble_value"), 1092092.654d)
+      .addRepeatedField(descriptor.findFieldByName("rdouble_value"), 1092093.654d)
       .addRepeatedField(descriptor.findFieldByName("rfloat_value"), 10903.0f)
       .addRepeatedField(descriptor.findFieldByName("rfloat_value"), 10902.0f)
-      .addRepeatedField(descriptor.findFieldByName("rnested_enum"),
+      .addRepeatedField(
+        descriptor.findFieldByName("rnested_enum"),
         descriptor.findEnumTypeByName("NestedEnum").findValueByName("ESTED_NOTHING"))
-      .addRepeatedField(descriptor.findFieldByName("rnested_enum"),
+      .addRepeatedField(
+        descriptor.findFieldByName("rnested_enum"),
         descriptor.findEnumTypeByName("NestedEnum").findValueByName("NESTED_FIRST"))
       .build()
 
     val df = Seq(dynamicMessage.toByteArray).toDF("value")
-    val fromProtoDF = df.select(functions.from_protobuf($"value", testFileDesc,
-      "SimpleMessageRepeated").as("value_from"))
-    val toProtoDF = fromProtoDF.select(functions.to_protobuf($"value_from", testFileDesc,
-      "SimpleMessageRepeated").as("value_to"))
-    val toFromProtoDF = toProtoDF.select(functions.from_protobuf($"value_to", testFileDesc,
-      "SimpleMessageRepeated").as("value_to_from"))
+    val fromProtoDF = df.select(
+      functions.from_protobuf($"value", testFileDesc, "SimpleMessageRepeated").as("value_from"))
+    val toProtoDF = fromProtoDF.select(
+      functions.to_protobuf($"value_from", testFileDesc, "SimpleMessageRepeated").as("value_to"))
+    val toFromProtoDF = toProtoDF.select(
+      functions
+        .from_protobuf($"value_to", testFileDesc, "SimpleMessageRepeated")
+        .as("value_to_from"))
     checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
   }
 
@@ -93,29 +96,32 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
     val repeatedMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "RepeatedMessage")
     val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
 
-    val basicMessage = DynamicMessage.newBuilder(basicMessageDesc)
+    val basicMessage = DynamicMessage
+      .newBuilder(basicMessageDesc)
       .setField(basicMessageDesc.findFieldByName("id"), 1111L)
       .setField(basicMessageDesc.findFieldByName("string_value"), "value")
       .setField(basicMessageDesc.findFieldByName("int32_value"), 12345)
       .setField(basicMessageDesc.findFieldByName("int64_value"), 0x90000000000L)
-      .setField(basicMessageDesc.findFieldByName("double_value"), 10000000000.0D)
+      .setField(basicMessageDesc.findFieldByName("double_value"), 10000000000.0d)
       .setField(basicMessageDesc.findFieldByName("float_value"), 10902.0f)
       .setField(basicMessageDesc.findFieldByName("bool_value"), true)
-      .setField(basicMessageDesc.findFieldByName("bytes_value"),
+      .setField(
+        basicMessageDesc.findFieldByName("bytes_value"),
         ByteString.copyFromUtf8("ProtobufDeserializer"))
       .build()
 
-    val dynamicMessage = DynamicMessage.newBuilder(repeatedMessageDesc)
+    val dynamicMessage = DynamicMessage
+      .newBuilder(repeatedMessageDesc)
       .addRepeatedField(repeatedMessageDesc.findFieldByName("basic_message"), basicMessage)
       .build()
 
     val df = Seq(dynamicMessage.toByteArray).toDF("value")
-    val fromProtoDF = df.select(functions.from_protobuf($"value", testFileDesc,
-      "RepeatedMessage").as("value_from"))
-    val toProtoDF = fromProtoDF.select(functions.to_protobuf($"value_from", testFileDesc,
-      "RepeatedMessage").as("value_to"))
-    val toFromProtoDF = toProtoDF.select(functions.from_protobuf($"value_to", testFileDesc,
-      "RepeatedMessage").as("value_to_from"))
+    val fromProtoDF = df.select(
+      functions.from_protobuf($"value", testFileDesc, "RepeatedMessage").as("value_from"))
+    val toProtoDF = fromProtoDF.select(
+      functions.to_protobuf($"value_from", testFileDesc, "RepeatedMessage").as("value_to"))
+    val toFromProtoDF = toProtoDF.select(
+      functions.from_protobuf($"value_to", testFileDesc, "RepeatedMessage").as("value_to_from"))
     checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
   }
 
@@ -123,97 +129,118 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
     val repeatedMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "RepeatedMessage")
     val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
 
-    val basicMessage1 = DynamicMessage.newBuilder(basicMessageDesc)
+    val basicMessage1 = DynamicMessage
+      .newBuilder(basicMessageDesc)
       .setField(basicMessageDesc.findFieldByName("id"), 1111L)
       .setField(basicMessageDesc.findFieldByName("string_value"), "value1")
       .setField(basicMessageDesc.findFieldByName("int32_value"), 12345)
       .setField(basicMessageDesc.findFieldByName("int64_value"), 0x90000000000L)
-      .setField(basicMessageDesc.findFieldByName("double_value"), 10000000000.0D)
+      .setField(basicMessageDesc.findFieldByName("double_value"), 10000000000.0d)
       .setField(basicMessageDesc.findFieldByName("float_value"), 10902.0f)
       .setField(basicMessageDesc.findFieldByName("bool_value"), true)
-      .setField(basicMessageDesc.findFieldByName("bytes_value"),
+      .setField(
+        basicMessageDesc.findFieldByName("bytes_value"),
         ByteString.copyFromUtf8("ProtobufDeserializer1"))
       .build()
-    val basicMessage2 = DynamicMessage.newBuilder(basicMessageDesc)
+    val basicMessage2 = DynamicMessage
+      .newBuilder(basicMessageDesc)
       .setField(basicMessageDesc.findFieldByName("id"), 1112L)
       .setField(basicMessageDesc.findFieldByName("string_value"), "value2")
       .setField(basicMessageDesc.findFieldByName("int32_value"), 12346)
       .setField(basicMessageDesc.findFieldByName("int64_value"), 0x90000000000L)
-      .setField(basicMessageDesc.findFieldByName("double_value"), 10000000000.0D)
+      .setField(basicMessageDesc.findFieldByName("double_value"), 10000000000.0d)
       .setField(basicMessageDesc.findFieldByName("float_value"), 10903.0f)
       .setField(basicMessageDesc.findFieldByName("bool_value"), false)
-      .setField(basicMessageDesc.findFieldByName("bytes_value"),
+      .setField(
+        basicMessageDesc.findFieldByName("bytes_value"),
         ByteString.copyFromUtf8("ProtobufDeserializer2"))
       .build()
 
-    val dynamicMessage = DynamicMessage.newBuilder(repeatedMessageDesc)
+    val dynamicMessage = DynamicMessage
+      .newBuilder(repeatedMessageDesc)
       .addRepeatedField(repeatedMessageDesc.findFieldByName("basic_message"), basicMessage1)
       .addRepeatedField(repeatedMessageDesc.findFieldByName("basic_message"), basicMessage2)
       .build()
 
     val df = Seq(dynamicMessage.toByteArray).toDF("value")
-    val fromProtoDF = df.select(functions.from_protobuf($"value", testFileDesc,
-      "RepeatedMessage").as("value_from"))
-    val toProtoDF = fromProtoDF.select(functions.to_protobuf($"value_from", testFileDesc,
-      "RepeatedMessage").as("value_to"))
-    val toFromProtoDF = toProtoDF.select(functions.from_protobuf($"value_to", testFileDesc,
-      "RepeatedMessage").as("value_to_from"))
+    val fromProtoDF = df.select(
+      functions.from_protobuf($"value", testFileDesc, "RepeatedMessage").as("value_from"))
+    val toProtoDF = fromProtoDF.select(
+      functions.to_protobuf($"value_from", testFileDesc, "RepeatedMessage").as("value_to"))
+    val toFromProtoDF = toProtoDF.select(
+      functions.from_protobuf($"value_to", testFileDesc, "RepeatedMessage").as("value_to_from"))
     checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Map") {
     val messageMapDesc = ProtobufUtils.buildDescriptor(testFileDesc, "SimpleMessageMap")
 
-    val mapStr1 = DynamicMessage.newBuilder(
-      messageMapDesc.findNestedTypeByName("StringMapdataEntry"))
-      .setField(messageMapDesc.findNestedTypeByName("StringMapdataEntry").findFieldByName("key"),
+    val mapStr1 = DynamicMessage
+      .newBuilder(messageMapDesc.findNestedTypeByName("StringMapdataEntry"))
+      .setField(
+        messageMapDesc.findNestedTypeByName("StringMapdataEntry").findFieldByName("key"),
         "string_key")
-      .setField(messageMapDesc.findNestedTypeByName("StringMapdataEntry").findFieldByName("value"),
+      .setField(
+        messageMapDesc.findNestedTypeByName("StringMapdataEntry").findFieldByName("value"),
         "value1")
       .build()
-    val mapStr2 = DynamicMessage.newBuilder(
-      messageMapDesc.findNestedTypeByName("StringMapdataEntry"))
-      .setField(messageMapDesc.findNestedTypeByName("StringMapdataEntry").findFieldByName("key"),
+    val mapStr2 = DynamicMessage
+      .newBuilder(messageMapDesc.findNestedTypeByName("StringMapdataEntry"))
+      .setField(
+        messageMapDesc.findNestedTypeByName("StringMapdataEntry").findFieldByName("key"),
         "string_key")
-      .setField(messageMapDesc.findNestedTypeByName("StringMapdataEntry").findFieldByName("value"),
+      .setField(
+        messageMapDesc.findNestedTypeByName("StringMapdataEntry").findFieldByName("value"),
         "value2")
       .build()
-    val mapInt64 = DynamicMessage.newBuilder(
-      messageMapDesc.findNestedTypeByName("Int64MapdataEntry"))
-      .setField(messageMapDesc.findNestedTypeByName("Int64MapdataEntry").findFieldByName("key"),
+    val mapInt64 = DynamicMessage
+      .newBuilder(messageMapDesc.findNestedTypeByName("Int64MapdataEntry"))
+      .setField(
+        messageMapDesc.findNestedTypeByName("Int64MapdataEntry").findFieldByName("key"),
         0x90000000000L)
-      .setField(messageMapDesc.findNestedTypeByName("Int64MapdataEntry").findFieldByName("value"),
+      .setField(
+        messageMapDesc.findNestedTypeByName("Int64MapdataEntry").findFieldByName("value"),
         0x90000000001L)
       .build()
-    val mapInt32 = DynamicMessage.newBuilder(
-      messageMapDesc.findNestedTypeByName("Int32MapdataEntry"))
-      .setField(messageMapDesc.findNestedTypeByName("Int32MapdataEntry").findFieldByName("key"),
+    val mapInt32 = DynamicMessage
+      .newBuilder(messageMapDesc.findNestedTypeByName("Int32MapdataEntry"))
+      .setField(
+        messageMapDesc.findNestedTypeByName("Int32MapdataEntry").findFieldByName("key"),
         12345)
-      .setField(messageMapDesc.findNestedTypeByName("Int32MapdataEntry").findFieldByName("value"),
+      .setField(
+        messageMapDesc.findNestedTypeByName("Int32MapdataEntry").findFieldByName("value"),
         54321)
       .build()
-    val mapFloat = DynamicMessage.newBuilder(
-      messageMapDesc.findNestedTypeByName("FloatMapdataEntry"))
-      .setField(messageMapDesc.findNestedTypeByName("FloatMapdataEntry").findFieldByName("key"),
+    val mapFloat = DynamicMessage
+      .newBuilder(messageMapDesc.findNestedTypeByName("FloatMapdataEntry"))
+      .setField(
+        messageMapDesc.findNestedTypeByName("FloatMapdataEntry").findFieldByName("key"),
         "float_key")
-      .setField(messageMapDesc.findNestedTypeByName("FloatMapdataEntry").findFieldByName("value"),
-        109202.234F)
+      .setField(
+        messageMapDesc.findNestedTypeByName("FloatMapdataEntry").findFieldByName("value"),
+        109202.234f)
       .build()
-    val mapDouble = DynamicMessage.newBuilder(
-      messageMapDesc.findNestedTypeByName("DoubleMapdataEntry"))
-      .setField(messageMapDesc.findNestedTypeByName("DoubleMapdataEntry").findFieldByName("key")
-        , "double_key")
-      .setField(messageMapDesc.findNestedTypeByName("DoubleMapdataEntry").findFieldByName("value")
-        , 109202.12D)
+    val mapDouble = DynamicMessage
+      .newBuilder(messageMapDesc.findNestedTypeByName("DoubleMapdataEntry"))
+      .setField(
+        messageMapDesc.findNestedTypeByName("DoubleMapdataEntry").findFieldByName("key"),
+        "double_key")
+      .setField(
+        messageMapDesc.findNestedTypeByName("DoubleMapdataEntry").findFieldByName("value"),
+        109202.12d)
       .build()
-    val mapBool = DynamicMessage.newBuilder(messageMapDesc.findNestedTypeByName("BoolMapdataEntry"))
-      .setField(messageMapDesc.findNestedTypeByName("BoolMapdataEntry").findFieldByName("key"),
+    val mapBool = DynamicMessage
+      .newBuilder(messageMapDesc.findNestedTypeByName("BoolMapdataEntry"))
+      .setField(
+        messageMapDesc.findNestedTypeByName("BoolMapdataEntry").findFieldByName("key"),
         true)
-      .setField(messageMapDesc.findNestedTypeByName("BoolMapdataEntry").findFieldByName("value"),
+      .setField(
+        messageMapDesc.findNestedTypeByName("BoolMapdataEntry").findFieldByName("value"),
         false)
       .build()
 
-    val dynamicMessage = DynamicMessage.newBuilder(messageMapDesc)
+    val dynamicMessage = DynamicMessage
+      .newBuilder(messageMapDesc)
       .setField(messageMapDesc.findFieldByName("key"), "key")
       .setField(messageMapDesc.findFieldByName("value"), "value")
       .addRepeatedField(messageMapDesc.findFieldByName("string_mapdata"), mapStr1)
@@ -226,12 +253,12 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       .build()
 
     val df = Seq(dynamicMessage.toByteArray).toDF("value")
-    val fromProtoDF = df.select(functions.from_protobuf($"value", testFileDesc,
-      "SimpleMessageMap").as("value_from"))
-    val toProtoDF = fromProtoDF.select(functions.to_protobuf($"value_from", testFileDesc,
-      "SimpleMessageMap").as("value_to"))
-    val toFromProtoDF = toProtoDF.select(functions.from_protobuf($"value_to", testFileDesc,
-      "SimpleMessageMap").as("value_to_from"))
+    val fromProtoDF = df.select(
+      functions.from_protobuf($"value", testFileDesc, "SimpleMessageMap").as("value_from"))
+    val toProtoDF = fromProtoDF.select(
+      functions.to_protobuf($"value_from", testFileDesc, "SimpleMessageMap").as("value_to"))
+    val toFromProtoDF = toProtoDF.select(
+      functions.from_protobuf($"value_to", testFileDesc, "SimpleMessageMap").as("value_to_from"))
     checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
   }
 
@@ -239,26 +266,31 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
     val messageEnumDesc = ProtobufUtils.buildDescriptor(testFileDesc, "SimpleMessageEnum")
     val basicEnumDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicEnumMessage")
 
-    val dynamicMessage = DynamicMessage.newBuilder(messageEnumDesc)
+    val dynamicMessage = DynamicMessage
+      .newBuilder(messageEnumDesc)
       .setField(messageEnumDesc.findFieldByName("key"), "key")
       .setField(messageEnumDesc.findFieldByName("value"), "value")
-      .setField(messageEnumDesc.findFieldByName("nested_enum"),
+      .setField(
+        messageEnumDesc.findFieldByName("nested_enum"),
         messageEnumDesc.findEnumTypeByName("NestedEnum").findValueByName("ESTED_NOTHING"))
-      .setField(messageEnumDesc.findFieldByName("nested_enum"),
+      .setField(
+        messageEnumDesc.findFieldByName("nested_enum"),
         messageEnumDesc.findEnumTypeByName("NestedEnum").findValueByName("NESTED_FIRST"))
-      .setField(messageEnumDesc.findFieldByName("basic_enum"),
+      .setField(
+        messageEnumDesc.findFieldByName("basic_enum"),
         basicEnumDesc.findEnumTypeByName("BasicEnum").findValueByName("FIRST"))
-      .setField(messageEnumDesc.findFieldByName("basic_enum"),
+      .setField(
+        messageEnumDesc.findFieldByName("basic_enum"),
         basicEnumDesc.findEnumTypeByName("BasicEnum").findValueByName("NOTHING"))
       .build()
 
     val df = Seq(dynamicMessage.toByteArray).toDF("value")
-    val fromProtoDF = df.select(functions.from_protobuf($"value", testFileDesc,
-      "SimpleMessageEnum").as("value_from"))
-    val toProtoDF = fromProtoDF.select(functions.to_protobuf($"value_from", testFileDesc,
-      "SimpleMessageEnum").as("value_to"))
-    val toFromProtoDF = toProtoDF.select(functions.from_protobuf($"value_to", testFileDesc,
-      "SimpleMessageEnum").as("value_to_from"))
+    val fromProtoDF = df.select(
+      functions.from_protobuf($"value", testFileDesc, "SimpleMessageEnum").as("value_from"))
+    val toProtoDF = fromProtoDF.select(
+      functions.to_protobuf($"value_from", testFileDesc, "SimpleMessageEnum").as("value_to"))
+    val toFromProtoDF = toProtoDF.select(
+      functions.from_protobuf($"value_to", testFileDesc, "SimpleMessageEnum").as("value_to_from"))
     checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
   }
 
@@ -267,26 +299,29 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
     val messageIncludeDesc = ProtobufUtils.buildDescriptor(testFileDesc, "IncludedExample")
     val messageOtherDesc = ProtobufUtils.buildDescriptor(testFileDesc, "OtherExample")
 
-    val otherMessage = DynamicMessage.newBuilder(messageOtherDesc)
+    val otherMessage = DynamicMessage
+      .newBuilder(messageOtherDesc)
       .setField(messageOtherDesc.findFieldByName("other"), "other value")
       .build()
 
-    val includeMessage = DynamicMessage.newBuilder(messageIncludeDesc)
+    val includeMessage = DynamicMessage
+      .newBuilder(messageIncludeDesc)
       .setField(messageIncludeDesc.findFieldByName("included"), "included value")
       .setField(messageIncludeDesc.findFieldByName("other"), otherMessage)
       .build()
 
-    val dynamicMessage = DynamicMessage.newBuilder(messageMultiDesc)
+    val dynamicMessage = DynamicMessage
+      .newBuilder(messageMultiDesc)
       .setField(messageMultiDesc.findFieldByName("included_example"), includeMessage)
       .build()
 
     val df = Seq(dynamicMessage.toByteArray).toDF("value")
-    val fromProtoDF = df.select(functions.from_protobuf($"value", testFileDesc,
-      "MultipleExample").as("value_from"))
-    val toProtoDF = fromProtoDF.select(functions.to_protobuf($"value_from", testFileDesc,
-      "MultipleExample").as("value_to"))
-    val toFromProtoDF = toProtoDF.select(functions.from_protobuf($"value_to", testFileDesc,
-      "MultipleExample").as("value_to_from"))
+    val fromProtoDF = df.select(
+      functions.from_protobuf($"value", testFileDesc, "MultipleExample").as("value_from"))
+    val toProtoDF = fromProtoDF.select(
+      functions.to_protobuf($"value_from", testFileDesc, "MultipleExample").as("value_to"))
+    val toFromProtoDF = toProtoDF.select(
+      functions.from_protobuf($"value_to", testFileDesc, "MultipleExample").as("value_to_from"))
     checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
   }
 
@@ -294,15 +329,19 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
     val schemaA = ProtobufUtils.buildDescriptor(testFileDesc, "recursiveA")
     val schemaB = ProtobufUtils.buildDescriptor(testFileDesc, "recursiveB")
 
-    val messageBForA = DynamicMessage.newBuilder(schemaB)
-      .setField(schemaB.findFieldByName("keyB"), "key").build()
+    val messageBForA = DynamicMessage
+      .newBuilder(schemaB)
+      .setField(schemaB.findFieldByName("keyB"), "key")
+      .build()
 
-    val messageA = DynamicMessage.newBuilder(schemaA)
+    val messageA = DynamicMessage
+      .newBuilder(schemaA)
       .setField(schemaA.findFieldByName("keyA"), "key")
       .setField(schemaA.findFieldByName("messageB"), messageBForA)
       .build()
 
-    val messageB = DynamicMessage.newBuilder(schemaB)
+    val messageB = DynamicMessage
+      .newBuilder(schemaB)
       .setField(schemaB.findFieldByName("keyB"), "key")
       .setField(schemaB.findFieldByName("messageA"), messageA)
       .build()
@@ -310,8 +349,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
     val df = Seq(messageB.toByteArray).toDF("messageB")
 
     val e = intercept[IncompatibleSchemaException] {
-      df.select(functions.from_protobuf($"messageB", testFileDesc,
-        "recursiveB").as("messageFromProto")).show()
+      df.select(
+        functions.from_protobuf($"messageB", testFileDesc, "recursiveB").as("messageFromProto"))
+        .show()
     }
     val expectedMessage = s"""
          |Found recursive reference in Protobuf schema, which can not be processed by Spark:
@@ -323,15 +363,19 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
     val schemaC = ProtobufUtils.buildDescriptor(testFileDesc, "recursiveC")
     val schemaD = ProtobufUtils.buildDescriptor(testFileDesc, "recursiveD")
 
-    val messageDForC = DynamicMessage.newBuilder(schemaD)
-      .setField(schemaD.findFieldByName("keyD"), "key").build()
+    val messageDForC = DynamicMessage
+      .newBuilder(schemaD)
+      .setField(schemaD.findFieldByName("keyD"), "key")
+      .build()
 
-    val messageC = DynamicMessage.newBuilder(schemaC)
+    val messageC = DynamicMessage
+      .newBuilder(schemaC)
       .setField(schemaC.findFieldByName("keyC"), "key")
       .setField(schemaC.findFieldByName("messageD"), messageDForC)
       .build()
 
-    val messageD = DynamicMessage.newBuilder(schemaD)
+    val messageD = DynamicMessage
+      .newBuilder(schemaD)
       .setField(schemaD.findFieldByName("keyD"), "key")
       .addRepeatedField(schemaD.findFieldByName("messageC"), messageC)
       .build()
@@ -339,8 +383,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
     val df = Seq(messageD.toByteArray).toDF("messageD")
 
     val e = intercept[IncompatibleSchemaException] {
-      df.select(functions.from_protobuf($"messageD", testFileDesc,
-        "recursiveD").as("messageFromProto")).show()
+      df.select(
+        functions.from_protobuf($"messageD", testFileDesc, "recursiveD").as("messageFromProto"))
+        .show()
     }
     val expectedMessage =
       s"""
@@ -354,21 +399,39 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
     val oldProducer = ProtobufUtils.buildDescriptor(testFileDesc, "oldProducer")
     val newConsumer = ProtobufUtils.buildDescriptor(testFileDesc, "newConsumer")
 
-    val oldProducerMessage = DynamicMessage.newBuilder(oldProducer)
+    val oldProducerMessage = DynamicMessage
+      .newBuilder(oldProducer)
       .setField(oldProducer.findFieldByName("key"), "key")
       .build()
 
     val df = Seq(oldProducerMessage.toByteArray).toDF("oldProducerData")
-    val fromProtoDf = df.select(functions.from_protobuf($"oldProducerData", testFileDesc,
-      "newConsumer").as("newConsumerProto"))
+    val fromProtoDf = df.select(
+      functions
+        .from_protobuf($"oldProducerData", testFileDesc, "newConsumer")
+        .as("fromProto"))
 
-    val actualFieldNames = fromProtoDf.select("newConsumerProto.*")
-      .schema.fields.toSeq.map(f => f.name)
-    newConsumer.getFields.asScala.map {
-      f => {
+    val toProtoDf = fromProtoDf.select(
+      functions
+        .to_protobuf($"fromProto", testFileDesc, "newConsumer")
+        .as("toProto"))
+
+    val toProtoDfToFromProtoDf = toProtoDf.select(
+      functions
+        .from_protobuf($"toProto", testFileDesc, "newConsumer")
+        .as("toProtoToFromProto"))
+
+    val actualFieldNames =
+      toProtoDfToFromProtoDf.select("toProtoToFromProto.*").schema.fields.toSeq.map(f => f.name)
+    newConsumer.getFields.asScala.map { f =>
+      {
         assert(actualFieldNames.contains(f.getName))
+
       }
     }
+    assert(
+      toProtoDfToFromProtoDf.select("toProtoToFromProto.value").take(1).toSeq(0).get(0) == null)
+    assert(
+      toProtoDfToFromProtoDf.select("toProtoToFromProto.actual.*").take(1).toSeq(0).get(0) == null)
   }
 
   test("Handle extra fields : newProducer -> oldConsumer") {
@@ -376,26 +439,30 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
     val newProducer = ProtobufUtils.buildDescriptor(testFileDesc, "newProducer")
     val oldConsumer = ProtobufUtils.buildDescriptor(testFileDesc, "oldConsumer")
 
-    val newProducerMessage = DynamicMessage.newBuilder(newProducer)
+    val newProducerMessage = DynamicMessage
+      .newBuilder(newProducer)
       .setField(newProducer.findFieldByName("key"), "key")
       .setField(newProducer.findFieldByName("value"), 1)
       .build()
 
     val df = Seq(newProducerMessage.toByteArray).toDF("newProducerData")
-    val fromProtoDf = df.select(functions.from_protobuf($"newProducerData", testFileDesc,
-      "oldConsumer").as("oldConsumerProto"))
+    val fromProtoDf = df.select(
+      functions
+        .from_protobuf($"newProducerData", testFileDesc, "oldConsumer")
+        .as("oldConsumerProto"))
 
     val expectedFieldNames = oldConsumer.getFields.asScala.map(f => f.getName)
-    fromProtoDf.select("oldConsumerProto.*").schema.fields.toSeq.map {
-      f => {
+    fromProtoDf.select("oldConsumerProto.*").schema.fields.toSeq.map { f =>
+      {
         assert(expectedFieldNames.contains(f.name))
       }
     }
   }
 
   test("roundtrip in to_protobuf and from_protobuf - with null") {
-    val df = spark.range(10).select(
-      struct(
+    val df = spark
+      .range(10)
+      .select(struct(
         $"id",
         lit(null).cast("string").as("string_value"),
         $"id".cast("int").as("int32_value"),
@@ -411,48 +478,42 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
         $"id".cast("double").as("double_value"),
         lit(1202.00).cast(org.apache.spark.sql.types.FloatType).as("float_value"),
         lit(true).as("bool_value"),
-        lit("0".getBytes).as("bytes_value")
-      ).as("SimpleMessage")
-    )
+        lit("0".getBytes).as("bytes_value")).as("SimpleMessage"))
 
-    intercept[SparkException] {
-      df.select(functions.to_protobuf($"SimpleMessage", testFileDesc,
-        "SimpleMessage").as("proto")).collect()
-    }
+    val toProtoDf = df.select(
+      functions.to_protobuf($"SimpleMessage", testFileDesc, "SimpleMessage").as("to_proto"))
+    val fromProtoDf = toProtoDf.select(
+      functions.from_protobuf($"to_proto", testFileDesc, "SimpleMessage") as 'from_proto)
+    assert(!fromProtoDf.select("from_proto.string_value").isEmpty)
   }
 
   test("from_protobuf filter to_protobuf") {
     val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
 
-    val basicMessage = DynamicMessage.newBuilder(basicMessageDesc)
+    val basicMessage = DynamicMessage
+      .newBuilder(basicMessageDesc)
       .setField(basicMessageDesc.findFieldByName("id"), 1111L)
       .setField(basicMessageDesc.findFieldByName("string_value"), "slam")
       .setField(basicMessageDesc.findFieldByName("int32_value"), 12345)
       .setField(basicMessageDesc.findFieldByName("int64_value"), 0x90000000000L)
-      .setField(basicMessageDesc.findFieldByName("double_value"), 10000000000.0D)
+      .setField(basicMessageDesc.findFieldByName("double_value"), 10000000000.0d)
       .setField(basicMessageDesc.findFieldByName("float_value"), 10902.0f)
       .setField(basicMessageDesc.findFieldByName("bool_value"), true)
-      .setField(basicMessageDesc.findFieldByName("bytes_value"),
+      .setField(
+        basicMessageDesc.findFieldByName("bytes_value"),
         ByteString.copyFromUtf8("ProtobufDeserializer"))
       .build()
 
-
     val df = Seq(basicMessage.toByteArray).toDF("value")
-    val resultFrom = df.select(functions.from_protobuf($"value", testFileDesc,
-      "BasicMessage") as 'sample)
+    val resultFrom = df
+      .select(functions.from_protobuf($"value", testFileDesc, "BasicMessage") as 'sample)
       .where("sample.string_value == \"slam\"")
 
-    val resultToFrom = resultFrom.select(functions.to_protobuf($"sample",
-      testFileDesc, "BasicMessage") as 'value)
-      .select(functions.from_protobuf($"value", testFileDesc,
-        "BasicMessage") as 'sample)
+    val resultToFrom = resultFrom
+      .select(functions.to_protobuf($"sample", testFileDesc, "BasicMessage") as 'value)
+      .select(functions.from_protobuf($"value", testFileDesc, "BasicMessage") as 'sample)
       .where("sample.string_value == \"slam\"")
 
     assert(resultFrom.except(resultToFrom).isEmpty)
-  }
-
-  def buildDescriptor(desc: String): Descriptors.Descriptor = {
-    val descriptor = ProtobufUtils.parseFileDescriptor(testFileDesc).getMessageTypes().get(0)
-    descriptor
   }
 }
