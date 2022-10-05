@@ -98,7 +98,7 @@ object MimaExcludes {
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.AnalysisException.this"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.SparkException.this"),
 
-    // [SPARK-XXXXX]
+    // [SPARK-37935][SQL] Eliminate separate error sub-classes fields
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkException.this"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.AnalysisException.this")
   )
