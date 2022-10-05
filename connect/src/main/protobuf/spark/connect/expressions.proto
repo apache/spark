@@ -34,6 +34,7 @@ message Expression {
     UnresolvedAttribute unresolved_attribute = 2;
     UnresolvedFunction unresolved_function = 3;
     ExpressionString expression_string = 4;
+    UnresolvedStar unresolved_star = 5;
   }
 
   message Literal {
@@ -155,4 +156,7 @@ message Expression {
     string expression = 1;
   }
 
+  // UnresolvedStar is used to expand all the fields of a relation or struct.
+  message UnresolvedStar {
+  }
 }
