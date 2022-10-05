@@ -3002,5 +3002,130 @@
     "message" : [
       "Failed to execute command because subquery expressions are not allowed in DEFAULT values."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_2026" : {
+    "message" : [
+      "Failed to convert value <value> (class of <cls>) with the type of <dataType> to JSON."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2027" : {
+    "message" : [
+      "Unexpected operator <op> in correlated subquery<pos>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2028" : {
+    "message" : [
+      "This line should be unreachable<err>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2029" : {
+    "message" : [
+      "Not supported rounding mode: <roundMode>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2030" : {
+    "message" : [
+      "Can not handle nested schema yet...  plan <plan>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2031" : {
+    "message" : [
+      "The input external row cannot be null."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2032" : {
+    "message" : [
+      "<fieldCannotBeNullMsg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2033" : {
+    "message" : [
+      "Unable to create database <name> as failed to create its directory <locationUri>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2034" : {
+    "message" : [
+      "Unable to drop database <name> as failed to delete its directory <locationUri>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2035" : {
+    "message" : [
+      "Unable to create table <table> as failed to create its directory <defaultTableLocation>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2036" : {
+    "message" : [
+      "Unable to delete partition path <partitionPath>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2037" : {
+    "message" : [
+      "Unable to drop table <table> as failed to delete its directory <dir>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2038" : {
+    "message" : [
+      "Unable to rename table <oldName> to <newName> as failed to rename its directory <oldDir>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2039" : {
+    "message" : [
+      "Unable to create partition path <partitionPath>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2040" : {
+    "message" : [
+      "Unable to rename partition path <oldPartPath>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2041" : {
+    "message" : [
+      "<methodName> is not implemented"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2042" : {
+    "message" : [
+      "<message>. If necessary set <ansiConfig> to false to bypass this error."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2043" : {
+    "message" : [
+      "- <sqlValue> caused overflow"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2044" : {
+    "message" : [
+      "<sqlValue1> <symbol> <sqlValue2> caused overflow"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2045" : {
+    "message" : [
+      "Unsupported table change: <message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2046" : {
+    "message" : [
+      "[BUG] Not a DataSourceRDDPartition: <split>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2047" : {
+    "message" : [
+      "'path' is not specified"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2048" : {
+    "message" : [
+      "Schema must be specified when creating a streaming source DataFrame. If some files already exist in the directory, then depending on the file format you may be able to create a static DataFrame on that directory with 'spark.read.load(directory)' and infer schema from it."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2049" : {
+    "message" : [
+      "Data source <className> does not support streamed <operator>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2050" : {
+    "message" : [
+      "Expected exactly one path to be specified, but got: <paths>"
+    ]
   }
 }

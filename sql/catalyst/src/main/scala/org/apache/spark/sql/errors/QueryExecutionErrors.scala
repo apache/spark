@@ -441,88 +441,141 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new RuntimeException(s"$className must override either $m1 or $m2")
   }
 
-  def failToConvertValueToJsonError(value: AnyRef, cls: Class[_], dataType: DataType): Throwable = {
-    new RuntimeException(s"Failed to convert value $value (class of $cls) " +
-      s"with the type of $dataType to JSON.")
+  def failToConvertValueToJsonError(
+      value: AnyRef, cls: Class[_], dataType: DataType): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2026",
+      messageParameters = Map(
+        "value" -> value.toString(),
+        "cls" -> cls.toString(),
+        "dataType" -> dataType.toString()))
   }
 
-  def unexpectedOperatorInCorrelatedSubquery(op: LogicalPlan, pos: String = ""): Throwable = {
-    new RuntimeException(s"Unexpected operator $op in correlated subquery" + pos)
+  def unexpectedOperatorInCorrelatedSubquery(
+      op: LogicalPlan, pos: String = ""): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2027",
+      messageParameters = Map("op" -> op.toString(), "pos" -> pos))
   }
 
-  def unreachableError(err: String = ""): Throwable = {
-    new RuntimeException("This line should be unreachable" + err)
+  def unreachableError(err: String = ""): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2028",
+      messageParameters = Map("err" -> err))
   }
 
-  def unsupportedRoundingMode(roundMode: BigDecimal.RoundingMode.Value): Throwable = {
-    new RuntimeException(s"Not supported rounding mode: $roundMode")
+  def unsupportedRoundingMode(roundMode: BigDecimal.RoundingMode.Value): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2029",
+      messageParameters = Map("roundMode" -> roundMode.toString()))
   }
 
-  def resolveCannotHandleNestedSchema(plan: LogicalPlan): Throwable = {
-    new RuntimeException(s"Can not handle nested schema yet...  plan $plan")
+  def resolveCannotHandleNestedSchema(plan: LogicalPlan): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2030",
+      messageParameters = Map("plan" -> plan.toString()))
   }
 
-  def inputExternalRowCannotBeNullError(): RuntimeException = {
-    new RuntimeException("The input external row cannot be null.")
+  def inputExternalRowCannotBeNullError(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2031",
+      messageParameters = Map.empty)
   }
 
   def fieldCannotBeNullMsg(index: Int, fieldName: String): String = {
     s"The ${index}th field '$fieldName' of input row cannot be null."
   }
 
-  def fieldCannotBeNullError(index: Int, fieldName: String): RuntimeException = {
-    new RuntimeException(fieldCannotBeNullMsg(index, fieldName))
+  def fieldCannotBeNullError(index: Int, fieldName: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2032",
+      messageParameters = Map("fieldCannotBeNullMsg" -> fieldCannotBeNullMsg(index, fieldName)))
   }
 
   def unableToCreateDatabaseAsFailedToCreateDirectoryError(
       dbDefinition: CatalogDatabase, e: IOException): Throwable = {
-    new SparkException(s"Unable to create database ${dbDefinition.name} as failed " +
-      s"to create its directory ${dbDefinition.locationUri}", e)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2033",
+      messageParameters = Map(
+        "name" -> dbDefinition.name,
+        "locationUri" -> dbDefinition.locationUri.toString()),
+      cause = e)
   }
 
   def unableToDropDatabaseAsFailedToDeleteDirectoryError(
       dbDefinition: CatalogDatabase, e: IOException): Throwable = {
-    new SparkException(s"Unable to drop database ${dbDefinition.name} as failed " +
-      s"to delete its directory ${dbDefinition.locationUri}", e)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2034",
+      messageParameters = Map(
+        "name" -> dbDefinition.name,
+        "locationUri" -> dbDefinition.locationUri.toString()),
+      cause = e)
   }
 
   def unableToCreateTableAsFailedToCreateDirectoryError(
       table: String, defaultTableLocation: Path, e: IOException): Throwable = {
-    new SparkException(s"Unable to create table $table as failed " +
-      s"to create its directory $defaultTableLocation", e)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2035",
+      messageParameters = Map(
+        "table" -> table,
+        "defaultTableLocation" -> defaultTableLocation.toString()),
+      cause = e)
   }
 
   def unableToDeletePartitionPathError(partitionPath: Path, e: IOException): Throwable = {
-    new SparkException(s"Unable to delete partition path $partitionPath", e)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2036",
+      messageParameters = Map("partitionPath" -> partitionPath.toString()),
+      cause = e)
   }
 
   def unableToDropTableAsFailedToDeleteDirectoryError(
       table: String, dir: Path, e: IOException): Throwable = {
-    new SparkException(s"Unable to drop table $table as failed " +
-      s"to delete its directory $dir", e)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2037",
+      messageParameters = Map("table" -> table, "dir" -> dir.toString()),
+      cause = e)
   }
 
   def unableToRenameTableAsFailedToRenameDirectoryError(
       oldName: String, newName: String, oldDir: Path, e: IOException): Throwable = {
-    new SparkException(s"Unable to rename table $oldName to $newName as failed " +
-      s"to rename its directory $oldDir", e)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2038",
+      messageParameters = Map(
+        "oldName" -> oldName,
+        "newName" -> newName,
+        "oldDir" -> oldDir.toString()),
+      cause = e)
   }
 
   def unableToCreatePartitionPathError(partitionPath: Path, e: IOException): Throwable = {
-    new SparkException(s"Unable to create partition path $partitionPath", e)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2039",
+      messageParameters = Map("partitionPath" -> partitionPath.toString()),
+      cause = e)
   }
 
   def unableToRenamePartitionPathError(oldPartPath: Path, e: IOException): Throwable = {
-    new SparkException(s"Unable to rename partition path $oldPartPath", e)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2040",
+      messageParameters = Map("oldPartPath" -> oldPartPath.toString()),
+      cause = e)
   }
 
-  def methodNotImplementedError(methodName: String): Throwable = {
-    new UnsupportedOperationException(s"$methodName is not implemented")
+  def methodNotImplementedError(methodName: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2041",
+      messageParameters = Map("methodName" -> methodName))
   }
 
-  def arithmeticOverflowError(e: ArithmeticException): ArithmeticException = {
-    new ArithmeticException(s"${e.getMessage}. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
-      s"to false to bypass this error.")
+  def arithmeticOverflowError(e: ArithmeticException): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "_LEGACY_ERROR_TEMP_2042",
+      messageParameters = Map(
+        "message" -> e.getMessage,
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = Array.empty,
+      summary = "")
   }
 
   def arithmeticOverflowError(
@@ -542,14 +595,24 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = getSummary(context))
   }
 
-  def unaryMinusCauseOverflowError(originValue: Int): ArithmeticException = {
-    arithmeticOverflowError(s"- ${toSQLValue(originValue, IntegerType)} caused overflow")
+  def unaryMinusCauseOverflowError(originValue: Int): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "_LEGACY_ERROR_TEMP_2043",
+      messageParameters = Map("sqlValue" -> toSQLValue(originValue, IntegerType)),
+      context = Array.empty,
+      summary = "")
   }
 
   def binaryArithmeticCauseOverflowError(
-      eval1: Short, symbol: String, eval2: Short): ArithmeticException = {
-    arithmeticOverflowError(
-      s"${toSQLValue(eval1, ShortType)} $symbol ${toSQLValue(eval2, ShortType)} caused overflow")
+      eval1: Short, symbol: String, eval2: Short): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "_LEGACY_ERROR_TEMP_2044",
+      messageParameters = Map(
+        "sqlValue1" -> toSQLValue(eval1, ShortType),
+        "symbol" -> symbol,
+        "sqlValue2" -> toSQLValue(eval2, ShortType)),
+      context = Array.empty,
+      summary = "")
   }
 
   def intervalArithmeticOverflowError(
@@ -581,25 +644,31 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def unsupportedTableChangeError(e: IllegalArgumentException): Throwable = {
-    new SparkException(s"Unsupported table change: ${e.getMessage}", e)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2045",
+      messageParameters = Map("message" -> e.getMessage),
+      cause = e)
   }
 
   def notADatasourceRDDPartitionError(split: Partition): Throwable = {
-    new SparkException(s"[BUG] Not a DataSourceRDDPartition: $split")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2046",
+      messageParameters = Map("split" -> split.toString()),
+      cause = null)
   }
 
-  def dataPathNotSpecifiedError(): Throwable = {
-    new IllegalArgumentException("'path' is not specified")
+  def dataPathNotSpecifiedError(): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2047",
+      errorSubClass = None,
+      messageParameters = Map.empty)
   }
 
-  def createStreamingSourceNotSpecifySchemaError(): Throwable = {
-    new IllegalArgumentException(
-      s"""
-         |Schema must be specified when creating a streaming source DataFrame. If some
-         |files already exist in the directory, then depending on the file format you
-         |may be able to create a static DataFrame on that directory with
-         |'spark.read.load(directory)' and infer schema from it.
-       """.stripMargin)
+  def createStreamingSourceNotSpecifySchemaError(): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2048",
+      errorSubClass = None,
+      messageParameters = Map.empty)
   }
 
   def inferDateWithLegacyTimeParserError(): Throwable = {
@@ -609,14 +678,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def streamedOperatorUnsupportedByDataSourceError(
-      className: String, operator: String): Throwable = {
-    new UnsupportedOperationException(
-      s"Data source $className does not support streamed $operator")
+      className: String, operator: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2049",
+      messageParameters = Map("className" -> className, "operator" -> operator))
   }
 
-  def multiplePathsSpecifiedError(allPaths: Seq[String]): Throwable = {
-    new IllegalArgumentException("Expected exactly one path to be specified, but " +
-      s"got: ${allPaths.mkString(", ")}")
+  def multiplePathsSpecifiedError(allPaths: Seq[String]): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2050",
+      messageParameters = Map("paths" -> allPaths.mkString(", ")))
   }
 
   def failedToFindDataSourceError(provider: String, error: Throwable): Throwable = {
