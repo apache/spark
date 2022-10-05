@@ -32,19 +32,23 @@ class TextOptions(@transient private val parameters: CaseInsensitiveMap[String])
 
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
+  private def getString(paramName: TextOptions.Value): Option[String] = {
+    parameters.get(paramName.toString)
+  }
+
   /**
    * Compression codec to use.
    */
-  val compressionCodec = parameters.get(COMPRESSION).map(CompressionCodecs.getCodecClassName)
+  val compressionCodec = getString(COMPRESSION).map(CompressionCodecs.getCodecClassName)
 
   /**
    * wholetext - If true, read a file as a single row and not split by "\n".
    */
-  val wholeText = parameters.getOrElse(WHOLETEXT, "false").toBoolean
+  val wholeText = getString(WHOLETEXT).getOrElse("false").toBoolean
 
-  val encoding: Option[String] = parameters.get(ENCODING)
+  val encoding: Option[String] = getString(ENCODING)
 
-  val lineSeparator: Option[String] = parameters.get(LINE_SEPARATOR).map { lineSep =>
+  val lineSeparator: Option[String] = getString(LINE_SEPARATOR).map { lineSep =>
     require(lineSep.nonEmpty, s"'$LINE_SEPARATOR' cannot be an empty string.")
 
     lineSep
@@ -58,9 +62,9 @@ class TextOptions(@transient private val parameters: CaseInsensitiveMap[String])
     lineSeparatorInRead.getOrElse("\n".getBytes(StandardCharsets.UTF_8))
 }
 
-private[datasources] object TextOptions {
-  val COMPRESSION = "compression"
-  val WHOLETEXT = "wholetext"
-  val ENCODING = "encoding"
-  val LINE_SEPARATOR = "lineSep"
+object TextOptions extends Enumeration {
+  val COMPRESSION = Value("compression")
+  val WHOLETEXT = Value("wholetext")
+  val ENCODING = Value("encoding")
+  val LINE_SEPARATOR = Value("lineSep")
 }

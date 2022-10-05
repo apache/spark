@@ -39,6 +39,10 @@ class ParquetOptions(
   def this(parameters: Map[String, String], sqlConf: SQLConf) =
     this(CaseInsensitiveMap(parameters), sqlConf)
 
+  private def getString(paramName: ParquetOptions.Value): Option[String] = {
+    parameters.get(paramName.toString)
+  }
+
   /**
    * Compression codec to use. By default use the value specified in SQLConf.
    * Acceptable values are defined in [[shortParquetCompressionCodecNames]].
@@ -47,9 +51,9 @@ class ParquetOptions(
     // `compression`, `parquet.compression`(i.e., ParquetOutputFormat.COMPRESSION), and
     // `spark.sql.parquet.compression.codec`
     // are in order of precedence from highest to lowest.
-    val parquetCompressionConf = parameters.get(ParquetOutputFormat.COMPRESSION)
-    val codecName = parameters
-      .get("compression")
+    val parquetCompressionConf = getString(PARQUET_COMPRESS)
+    val codecName =
+      getString(COMPRESSION)
       .orElse(parquetCompressionConf)
       .getOrElse(sqlConf.parquetCompressionCodec)
       .toLowerCase(Locale.ROOT)
@@ -66,28 +70,25 @@ class ParquetOptions(
    * Whether it merges schemas or not. When the given Parquet files have different schemas,
    * the schemas can be merged.  By default use the value specified in SQLConf.
    */
-  val mergeSchema: Boolean = parameters
-    .get(MERGE_SCHEMA)
+  val mergeSchema: Boolean = getString(MERGE_SCHEMA)
     .map(_.toBoolean)
     .getOrElse(sqlConf.isParquetSchemaMergingEnabled)
 
   /**
    * The rebasing mode for the DATE and TIMESTAMP_MICROS, TIMESTAMP_MILLIS values in reads.
    */
-  def datetimeRebaseModeInRead: String = parameters
-    .get(DATETIME_REBASE_MODE)
+  def datetimeRebaseModeInRead: String = getString(DATETIME_REBASE_MODE)
     .getOrElse(sqlConf.getConf(SQLConf.PARQUET_REBASE_MODE_IN_READ))
   /**
    * The rebasing mode for INT96 timestamp values in reads.
    */
-  def int96RebaseModeInRead: String = parameters
-    .get(INT96_REBASE_MODE)
+  def int96RebaseModeInRead: String = getString(INT96_REBASE_MODE)
     .getOrElse(sqlConf.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ))
 }
 
 
-object ParquetOptions {
-  val MERGE_SCHEMA = "mergeSchema"
+object ParquetOptions extends Enumeration {
+  val MERGE_SCHEMA = Value("mergeSchema")
 
   // The parquet compression short names
   private val shortParquetCompressionCodecNames = Map(
@@ -108,11 +109,14 @@ object ParquetOptions {
   // Julian and Proleptic Gregorian calendars. It impacts on the behaviour of the Parquet
   // datasource similarly to the SQL config `spark.sql.parquet.datetimeRebaseModeInRead`,
   // and can be set to the same values: `EXCEPTION`, `LEGACY` or `CORRECTED`.
-  val DATETIME_REBASE_MODE = "datetimeRebaseMode"
+  val DATETIME_REBASE_MODE = Value("datetimeRebaseMode")
 
   // The option controls rebasing of the INT96 timestamp values between Julian and Proleptic
   // Gregorian calendars. It impacts on the behaviour of the Parquet datasource similarly to
   // the SQL config `spark.sql.parquet.int96RebaseModeInRead`.
   // The valid option values are: `EXCEPTION`, `LEGACY` or `CORRECTED`.
-  val INT96_REBASE_MODE = "int96RebaseMode"
+  val INT96_REBASE_MODE = Value("int96RebaseMode")
+
+  val PARQUET_COMPRESS = Value(ParquetOutputFormat.COMPRESSION)
+  val COMPRESSION = Value("compression")
 }

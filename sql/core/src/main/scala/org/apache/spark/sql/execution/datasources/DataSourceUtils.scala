@@ -167,9 +167,9 @@ object DataSourceUtils extends PredicateHelper {
   def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
     val (config, option) = format match {
       case "Parquet INT96" =>
-        (SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key, ParquetOptions.INT96_REBASE_MODE)
+        (SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key, ParquetOptions.INT96_REBASE_MODE.toString)
       case "Parquet" =>
-        (SQLConf.PARQUET_REBASE_MODE_IN_READ.key, ParquetOptions.DATETIME_REBASE_MODE)
+        (SQLConf.PARQUET_REBASE_MODE_IN_READ.key, ParquetOptions.DATETIME_REBASE_MODE.toString)
       case "Avro" =>
         (SQLConf.AVRO_REBASE_MODE_IN_READ.key, "datetimeRebaseMode")
       case _ => throw new IllegalStateException(s"Unrecognized format $format.")

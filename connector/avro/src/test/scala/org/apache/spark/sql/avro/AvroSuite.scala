@@ -1804,13 +1804,13 @@ abstract class AvroSuite
         spark
           .read
           .format("avro")
-          .option(AvroOptions.ignoreExtensionKey, false)
+          .option(AvroOptions.IGNORE_EXTENSION_KEY.toString, false)
           .load(dir.getCanonicalPath)
           .count()
       }
       val deprecatedEvents = logAppender.loggingEvents
         .filter(_.getMessage.getFormattedMessage.contains(
-          s"Option ${AvroOptions.ignoreExtensionKey} is deprecated"))
+          s"Option ${AvroOptions.IGNORE_EXTENSION_KEY.toString} is deprecated"))
       assert(deprecatedEvents.size === 1)
     }
   }
@@ -1881,7 +1881,7 @@ abstract class AvroSuite
     }
     withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
       modes.foreach { mode =>
-        f(Map(AvroOptions.DATETIME_REBASE_MODE -> mode.toString))
+        f(Map(AvroOptions.DATETIME_REBASE_MODE.toString -> mode.toString))
       }
     }
   }

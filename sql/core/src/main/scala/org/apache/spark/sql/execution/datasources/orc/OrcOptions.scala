@@ -45,9 +45,9 @@ class OrcOptions(
   val compressionCodec: String = {
     // `compression`, `orc.compress`(i.e., OrcConf.COMPRESS), and `spark.sql.orc.compression.codec`
     // are in order of precedence from highest to lowest.
-    val orcCompressionConf = parameters.get(COMPRESS.getAttribute)
+    val orcCompressionConf = parameters.get(ORC_COMPRESSION.toString)
     val codecName = parameters
-      .get("compression")
+      .get(COMPRESSION.toString)
       .orElse(orcCompressionConf)
       .getOrElse(sqlConf.orcCompressionCodec)
       .toLowerCase(Locale.ROOT)
@@ -64,13 +64,15 @@ class OrcOptions(
    * the schemas can be merged. By default use the value specified in SQLConf.
    */
   val mergeSchema: Boolean = parameters
-    .get(MERGE_SCHEMA)
+    .get(MERGE_SCHEMA.toString)
     .map(_.toBoolean)
     .getOrElse(sqlConf.isOrcSchemaMergingEnabled)
 }
 
-object OrcOptions {
-  val MERGE_SCHEMA = "mergeSchema"
+object OrcOptions extends Enumeration {
+  val MERGE_SCHEMA = Value("mergeSchema")
+  val ORC_COMPRESSION = Value(COMPRESS.getAttribute)
+  val COMPRESSION = Value("compression")
 
   // The ORC compression short names
   private val shortOrcCompressionCodecNames = Map(
