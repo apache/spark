@@ -22,9 +22,11 @@ import tempfile
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.connect.client import RemoteSparkSession
 from pyspark.sql.connect.function_builder import udf
+from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import ReusedPySparkTestCase
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectSQLTestCase(ReusedPySparkTestCase):
     """Parent test fixture class for all Spark Connect related
     test cases."""
@@ -55,7 +57,6 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
 
 class SparkConnectTests(SparkConnectSQLTestCase):
     def test_simple_read(self) -> None:
-        """Tests that we can access the Spark Connect GRPC service locally."""
         df = self.connect.read.table(self.tbl_name)
         data = df.limit(10).toPandas()
         # Check that the limit is applied
@@ -77,7 +78,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_spark_connect import *  # noqa: F401
+    from pyspark.sql.tests.test_connect_basic import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore

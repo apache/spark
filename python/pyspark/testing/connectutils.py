@@ -14,10 +14,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 from typing import Any, Dict
 import functools
 import unittest
 import uuid
+
+from pyspark.testing.utils import search_jar
+
+
+connect_jar = search_jar("connector/connect", "spark-connect", "spark-connect")
+if connect_jar is None:
+    connect_requirement_message = (  # type: ignore
+        "Skipping all Spark Connect Python tests as the optional Spark Connect project was "
+        "not compiled into a JAR. To run these tests, you need to build Spark with "
+        "'build/sbt -Pconnect package' or "
+        "'build/mvn -Pconnect package' before running this test."
+    )
+else:
+    existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
+    jars_args = "--jars %s" % connect_jar
+    plugin_args = "--conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin"
+    os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, plugin_args, existing_args])
+    connect_requirement_message = None  # type: ignore
+
+should_test_connect = connect_requirement_message is None
 
 
 class MockRemoteSession:
@@ -33,6 +54,7 @@ class MockRemoteSession:
         return functools.partial(self.hooks[item])
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class PlanOnlyTestFixture(unittest.TestCase):
     @classmethod
     def setUpClass(cls: Any) -> None:

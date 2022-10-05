@@ -492,10 +492,10 @@ pyspark_connect = Module(
         # doctests
         # No doctests yet.
         # unittests
-        "pyspark.sql.tests.connect.test_column_expressions",
-        "pyspark.sql.tests.connect.test_plan_only",
-        "pyspark.sql.tests.connect.test_select_ops",
-        "pyspark.sql.tests.connect.test_spark_connect",
+        "pyspark.sql.tests.test_connect_column_expressions",
+        "pyspark.sql.tests.test_connect_plan_only",
+        "pyspark.sql.tests.test_connect_select_ops",
+        "pyspark.sql.tests.test_connect_basic",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
