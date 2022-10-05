@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -58,6 +58,7 @@ import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.{Utils => CUtils}
 
 /**
  * A trivial [[Analyzer]] with a dummy [[SessionCatalog]], [[EmptyFunctionRegistry]] and
@@ -982,9 +983,11 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
       case s: ExposesMetadataColumns => s.withMetadataColumns()
       case p: Project =>
-        p.copy(
+        val newProj = p.copy(
           projectList = p.metadataOutput ++ p.projectList,
           child = addMetadataCol(p.child))
+        newProj.copyTagsFrom(p)
+        newProj
       case _ => plan.withNewChildren(plan.children.map(addMetadataCol))
     }
   }
@@ -1088,7 +1091,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         }.getOrElse(u)
 
       case u @ UnresolvedView(identifier, cmd, allowTemp, relationTypeMismatchHint) =>
-        lookupTableOrView(identifier).map {
+        lookupTableOrView(identifier, viewOnly = true).map {
           case _: ResolvedTempView if !allowTemp =>
             throw QueryCompilationErrors.expectViewNotTempViewError(identifier, cmd, u)
           case t: ResolvedTable =>
@@ -1134,12 +1137,17 @@ class Analyzer(override val catalogManager: CatalogManager)
      * Resolves relations to `ResolvedTable` or `Resolved[Temp/Persistent]View`. This is
      * for resolving DDL and misc commands.
      */
-    private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {
+    private def lookupTableOrView(
+        identifier: Seq[String],
+        viewOnly: Boolean = false): Option[LogicalPlan] = {
       lookupTempView(identifier).map { tempView =>
         ResolvedTempView(identifier.asIdentifier, tempView.tableMeta.schema)
       }.orElse {
         expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
+            if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog)) {
+              throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
+            }
             CatalogV2Util.loadTable(catalog, ident).map {
               case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
                 v1Table.v1Table.tableType == CatalogTableType.VIEW =>
@@ -3438,9 +3446,12 @@ class Analyzer(override val catalogManager: CatalogManager)
         i.userSpecifiedCols, "in the column list", resolver)
 
       i.userSpecifiedCols.map { col =>
-        i.table.resolve(Seq(col), resolver).getOrElse(
-          throw QueryCompilationErrors.unresolvedAttributeError(
-            "UNRESOLVED_COLUMN", col, i.table.output.map(_.name), i.origin))
+        i.table.resolve(Seq(col), resolver).getOrElse {
+          val candidates = i.table.output.map(_.name)
+          val orderedCandidates = StringUtils.orderStringsBySimilarity(col, candidates)
+          throw QueryCompilationErrors
+            .unresolvedAttributeError("UNRESOLVED_COLUMN", col, orderedCandidates, i.origin)
+        }
       }
     }
 
@@ -3452,7 +3463,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw QueryCompilationErrors.writeTableWithMismatchedColumnsError(
           cols.size, query.output.size, query)
       }
-      val nameToQueryExpr = cols.zip(query.output).toMap
+      val nameToQueryExpr = CUtils.toMap(cols, query.output)
       // Static partition columns in the table output should not appear in the column list
       // they will be handled in another rule ResolveInsertInto
       val reordered = tableOutput.flatMap { nameToQueryExpr.get(_).orElse(None) }
@@ -3523,8 +3534,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
     project.setTagValue(
       Project.hiddenOutputTag,
-      hiddenList.map(_.markAsSupportsQualifiedStar()) ++
-        project.child.metadataOutput.filter(_.supportsQualifiedStar))
+      hiddenList.map(_.markAsQualifiedAccessOnly()) ++
+        project.child.metadataOutput.filter(_.qualifiedAccessOnly))
     project
   }
 

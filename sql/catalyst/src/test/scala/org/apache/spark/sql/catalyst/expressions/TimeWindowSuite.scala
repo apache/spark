@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.internal.SQLConf
@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampN
 class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with PrivateMethodTester {
 
   test("time window is unevaluable") {
-    intercept[UnsupportedOperationException] {
+    intercept[SparkException] {
       evaluateWithoutCodegen(TimeWindow(Literal(10L), "1 second", "1 second", "0 second"))
     }
   }

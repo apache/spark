@@ -53,6 +53,10 @@ class ReshapeTest(PandasOnSparkTestCase):
             NotImplementedError, "get_dummies currently does not support sparse"
         ):
             ps.get_dummies(psser, sparse=True)
+        with self.assertRaisesRegex(NotImplementedError, "get_dummies currently only accept"):
+            ps.get_dummies(ps.Series([b"1"]))
+        with self.assertRaisesRegex(NotImplementedError, "get_dummies currently only accept"):
+            ps.get_dummies(ps.Series([None]))
 
     def test_get_dummies_object(self):
         pdf = pd.DataFrame(
@@ -413,10 +417,65 @@ class ReshapeTest(PandasOnSparkTestCase):
                 .reset_index(drop=True)
             ),
         )
+        # Including Series
+        self.assert_eq(
+            pd.merge_asof(pdf_left["a"], pdf_right, on="a").sort_values("a").reset_index(drop=True),
+            ps.merge_asof(psdf_left["a"], psdf_right, on="a")
+            .sort_values("a")
+            .reset_index(drop=True),
+        )
+        self.assert_eq(
+            pd.merge_asof(pdf_left, pdf_right["a"], on="a").sort_values("a").reset_index(drop=True),
+            ps.merge_asof(psdf_left, psdf_right["a"], on="a")
+            .sort_values("a")
+            .reset_index(drop=True),
+        )
+        self.assert_eq(
+            pd.merge_asof(pdf_left["a"], pdf_right["a"], on="a")
+            .sort_values("a")
+            .reset_index(drop=True),
+            ps.merge_asof(psdf_left["a"], psdf_right["a"], on="a")
+            .sort_values("a")
+            .reset_index(drop=True),
+        )
 
         self.assertRaises(
             AnalysisException, lambda: ps.merge_asof(psdf_left, psdf_right, on="a", tolerance=-1)
         )
+        with self.assertRaisesRegex(
+            ValueError,
+            'Can only pass argument "on" OR "left_on" and "right_on", not a combination of both.',
+        ):
+            ps.merge_asof(psdf_left, psdf_right, on="a", left_on="a")
+        psdf_multi_index = ps.DataFrame(
+            {"a": [1, 2, 3, 6, 7], "b": ["v", "w", "x", "y", "z"], "right_val": [1, 2, 3, 6, 7]},
+            index=pd.MultiIndex.from_tuples([(1, 2), (3, 4), (5, 6), (7, 8), (9, 10)]),
+        )
+        with self.assertRaisesRegex(ValueError, "right can only have one index"):
+            ps.merge_asof(psdf_left, psdf_multi_index, right_index=True)
+        with self.assertRaisesRegex(ValueError, "left can only have one index"):
+            ps.merge_asof(psdf_multi_index, psdf_right, left_index=True)
+        with self.assertRaisesRegex(ValueError, "Must pass right_on or right_index=True"):
+            ps.merge_asof(psdf_left, psdf_right, left_index=True)
+        with self.assertRaisesRegex(ValueError, "Must pass left_on or left_index=True"):
+            ps.merge_asof(psdf_left, psdf_right, right_index=True)
+        with self.assertRaisesRegex(ValueError, "can only asof on a key for left"):
+            ps.merge_asof(psdf_left, psdf_right, right_on="a", left_on=["a", "b"])
+        with self.assertRaisesRegex(ValueError, "can only asof on a key for right"):
+            ps.merge_asof(psdf_left, psdf_right, right_on=["a", "b"], left_on="a")
+        with self.assertRaisesRegex(
+            ValueError, 'Can only pass argument "on" OR "left_by" and "right_by".'
+        ):
+            ps.merge_asof(psdf_left, psdf_right, on="a", by="b", left_by="a")
+        with self.assertRaisesRegex(ValueError, "missing right_by"):
+            ps.merge_asof(psdf_left, psdf_right, on="a", left_by="b")
+        with self.assertRaisesRegex(ValueError, "missing left_by"):
+            ps.merge_asof(psdf_left, psdf_right, on="a", right_by="b")
+        with self.assertRaisesRegex(ValueError, "left_by and right_by must be same length"):
+            ps.merge_asof(psdf_left, psdf_right, on="a", left_by="b", right_by=["a", "b"])
+        psdf_right.columns = ["A", "B", "C"]
+        with self.assertRaisesRegex(ValueError, "No common columns to perform merge on."):
+            ps.merge_asof(psdf_left, psdf_right)
 
 
 if __name__ == "__main__":

@@ -67,18 +67,25 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private var appOperations: AppsAPIGroupDSL = _
 
   @Mock
-  private var statefulSetOperations: MixedOperation[
-    apps.StatefulSet, apps.StatefulSetList, RollableScalableResource[apps.StatefulSet]] = _
+  private var statefulSetOperations: STATEFUL_SETS = _
 
   @Mock
-  private var editableSet: RollableScalableResource[apps.StatefulSet] = _
+  private var statefulSetNamespaced: STATEFUL_SETS_NAMESPACED = _
+
+  @Mock
+  private var editableSet: STATEFUL_SET_RES = _
 
   @Mock
   private var podOperations: PODS = _
 
+  @Mock
+  private var podsWithNamespace: PODS_WITH_NAMESPACE = _
 
   @Mock
-  private var driverPodOperations: PodResource[Pod] = _
+  private var podResource: PodResource = _
+
+  @Mock
+  private var driverPodOperations: PodResource = _
 
   private var podsAllocatorUnderTest: StatefulSetPodsAllocator = _
 
@@ -102,10 +109,14 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   before {
     MockitoAnnotations.openMocks(this).close()
     when(kubernetesClient.pods()).thenReturn(podOperations)
+    when(podOperations.inNamespace("default")).thenReturn(podsWithNamespace)
     when(kubernetesClient.apps()).thenReturn(appOperations)
     when(appOperations.statefulSets()).thenReturn(statefulSetOperations)
-    when(statefulSetOperations.withName(any())).thenReturn(editableSet)
-    when(podOperations.withName(driverPodName)).thenReturn(driverPodOperations)
+    when(statefulSetOperations.inNamespace("default")).thenReturn(statefulSetNamespaced)
+    when(statefulSetNamespaced.resource(any())).thenReturn(editableSet)
+    when(statefulSetNamespaced.withName(any())).thenReturn(editableSet)
+    when(podsWithNamespace.withName(driverPodName)).thenReturn(driverPodOperations)
+    when(podsWithNamespace.resource(any())).thenReturn(podResource)
     when(driverPodOperations.get).thenReturn(driverPod)
     when(driverPodOperations.waitUntilReady(any(), any())).thenReturn(driverPod)
     when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
@@ -128,7 +139,8 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       Map(defaultProfile -> (10),
           immrprof -> (420)))
     val captor = ArgumentCaptor.forClass(classOf[StatefulSet])
-    verify(statefulSetOperations, times(2)).create(any())
+    verify(statefulSetNamespaced, times(2)).resource(any())
+    verify(editableSet, times(2)).create()
     podsAllocatorUnderTest.stop(appId)
     verify(editableSet, times(2)).delete()
   }
@@ -137,7 +149,8 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocatorUnderTest.setTotalExpectedExecutors(
       Map(defaultProfile -> (10)))
     val captor = ArgumentCaptor.forClass(classOf[StatefulSet])
-    verify(statefulSetOperations, times(1)).create(captor.capture())
+    verify(statefulSetNamespaced, times(1)).resource(captor.capture())
+    verify(editableSet, times(1)).create()
     val set = captor.getValue()
     val setName = set.getMetadata().getName()
     val namespace = set.getMetadata().getNamespace()
@@ -145,7 +158,7 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     val spec = set.getSpec()
     assert(spec.getReplicas() === 10)
     assert(spec.getPodManagementPolicy() === "Parallel")
-    verify(podOperations, never()).create(any())
+    verify(podResource, never()).create()
     podsAllocatorUnderTest.setTotalExpectedExecutors(
       Map(defaultProfile -> (20)))
     verify(editableSet, times(1)).scale(any(), any())

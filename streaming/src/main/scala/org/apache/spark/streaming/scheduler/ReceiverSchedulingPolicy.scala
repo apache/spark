@@ -22,6 +22,7 @@ import scala.collection.mutable
 
 import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, TaskLocation}
 import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.util.collection.Utils
 
 /**
  * A class that tries to schedule receivers with evenly distributed. There are two phases for
@@ -135,7 +136,7 @@ private[streaming] class ReceiverSchedulingPolicy {
       leastScheduledExecutors += executor
     }
 
-    receivers.map(_.streamId).zip(scheduledLocations.map(_.toSeq)).toMap
+    Utils.toMap(receivers.map(_.streamId), scheduledLocations.map(_.toSeq))
   }
 
   /**

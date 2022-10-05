@@ -36,23 +36,13 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       val wrongColumn = ApproxCountDistinctForIntervals(
         AttributeReference("a", dataType)(),
         endpointsExpression = CreateArray(Seq(1, 10).map(Literal(_))))
-      assert(
-        wrongColumn.checkInputDataTypes() match {
-          case TypeCheckFailure(msg)
-            if msg.contains("requires (numeric or timestamp or date or timestamp_ntz or " +
-              "interval year to month or interval day to second) type") => true
-          case _ => false
-        })
+      assert(wrongColumn.checkInputDataTypes().isFailure)
     }
 
     var wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = Literal(0.5d))
-    assert(
-      wrongEndpoints.checkInputDataTypes() match {
-        case TypeCheckFailure(msg) if msg.contains("requires array type") => true
-        case _ => false
-      })
+    assert(wrongEndpoints.checkInputDataTypes().isFailure)
 
     wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),

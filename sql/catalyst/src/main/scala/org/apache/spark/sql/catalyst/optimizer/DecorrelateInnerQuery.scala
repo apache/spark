@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.util.collection.Utils
 
 /**
  * Decorrelate the inner query by eliminating outer references and create domain joins.
@@ -346,7 +347,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
           val domains = attributes.map(_.newInstance())
           // A placeholder to be rewritten into domain join.
           val domainJoin = DomainJoin(domains, plan)
-          val outerReferenceMap = attributes.zip(domains).toMap
+          val outerReferenceMap = Utils.toMap(attributes, domains)
           // Build join conditions between domain attributes and outer references.
           // EqualNullSafe is used to make sure null key can be joined together. Note
           // outer referenced attributes can be changed during the outer query optimization.

@@ -17,23 +17,46 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{EvalMode, _}
 import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SUM, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-abstract class SumBase(child: Expression) extends DeclarativeAggregate
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the sum calculated from values of a group.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (5), (10), (15) AS tab(col);
+       30
+      > SELECT _FUNC_(col) FROM VALUES (NULL), (10), (15) AS tab(col);
+       25
+      > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
+       NULL
+  """,
+  group = "agg_funcs",
+  since = "1.0.0")
+case class Sum(
+    child: Expression,
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get))
+  extends DeclarativeAggregate
   with ImplicitCastInputTypes
-  with UnaryLike[Expression] {
+  with UnaryLike[Expression]
+  with SupportQueryContext {
 
-  // Whether to use ANSI add or not during the execution.
-  def useAnsiAdd: Boolean
+  def this(child: Expression) = this(child, EvalMode.fromSQLConf(SQLConf.get))
 
-  protected def shouldTrackIsEmpty: Boolean
+  private def shouldTrackIsEmpty: Boolean = resultType match {
+    case _: DecimalType => true
+    // For try_sum(), the result of following data types can be null on overflow.
+    // Thus we need additional buffer to keep track of whether overflow happens.
+    case _: IntegralType | _: AnsiIntervalType if evalMode == EvalMode.TRY => true
+    case _ => false
+  }
 
   override def nullable: Boolean = true
 
@@ -48,7 +71,7 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
 
   final override val nodePatterns: Seq[TreePattern] = Seq(SUM)
 
-  protected lazy val resultType = child.dataType match {
+  private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
       DecimalType.bounded(precision + 10, scale)
     case _: IntegralType => LongType
@@ -65,7 +88,7 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
 
   private def add(left: Expression, right: Expression): Expression = left.dataType match {
     case _: DecimalType => DecimalAddNoOverflowCheck(left, right, left.dataType)
-    case _ => Add(left, right, EvalMode.fromBoolean(useAnsiAdd))
+    case _ => Add(left, right, evalMode)
   }
 
   override lazy val aggBufferAttributes = if (shouldTrackIsEmpty) {
@@ -81,7 +104,7 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
       Seq(Literal(null, resultType))
     }
 
-  protected def getUpdateExpressions: Seq[Expression] = if (shouldTrackIsEmpty) {
+  override lazy val updateExpressions: Seq[Expression] = if (shouldTrackIsEmpty) {
     // If shouldTrackIsEmpty is true, the initial value of `sum` is 0. We need to keep `sum`
     // unchanged if the input is null, as SUM function ignores null input. The `sum` can only be
     // null if overflow happens under non-ansi mode.
@@ -123,7 +146,7 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
    * isEmpty:  Set to false if either one of the left or right is set to false. This
    * means we have seen at least a value that was not null.
    */
-  protected def getMergeExpressions: Seq[Expression] = if (shouldTrackIsEmpty) {
+  override lazy val mergeExpressions: Seq[Expression] = if (shouldTrackIsEmpty) {
     val bufferOverflow = !isEmpty.left && sum.left.isNull
     val inputOverflow = !isEmpty.right && sum.right.isNull
     Seq(
@@ -148,10 +171,11 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
    * So now, if ansi is enabled, then throw exception, if not then return null.
    * If sum is not null, then return the sum.
    */
-  protected def getEvaluateExpression(context: SQLQueryContext = null): Expression = {
+  override lazy val evaluateExpression: Expression = {
     resultType match {
       case d: DecimalType =>
-        val checkOverflowInSum = CheckOverflowInSum(sum, d, !useAnsiAdd, context)
+        val checkOverflowInSum =
+          CheckOverflowInSum(sum, d, evalMode != EvalMode.ANSI, getContextOrNull())
         If(isEmpty, Literal.create(null, resultType), checkOverflowInSum)
       case _ if shouldTrackIsEmpty =>
         If(isEmpty, Literal.create(null, resultType), sum)
@@ -159,47 +183,17 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
     }
   }
 
-  // The flag `useAnsiAdd` won't be shown in the `toString` or `toAggString` methods
+  // The flag `evalMode` won't be shown in the `toString` or `toAggString` methods
   override def flatArguments: Iterator[Any] = Iterator(child)
-}
 
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the sum calculated from values of a group.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(col) FROM VALUES (5), (10), (15) AS tab(col);
-       30
-      > SELECT _FUNC_(col) FROM VALUES (NULL), (10), (15) AS tab(col);
-       25
-      > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
-       NULL
-  """,
-  group = "agg_funcs",
-  since = "1.0.0")
-case class Sum(
-    child: Expression,
-    useAnsiAdd: Boolean = SQLConf.get.ansiEnabled)
-  extends SumBase(child) with SupportQueryContext {
-  def this(child: Expression) = this(child, useAnsiAdd = SQLConf.get.ansiEnabled)
-
-  override def shouldTrackIsEmpty: Boolean = resultType match {
-    case _: DecimalType => true
-    case _ => false
-  }
-
-  override protected def withNewChildInternal(newChild: Expression): Sum = copy(child = newChild)
-
-  override lazy val updateExpressions: Seq[Expression] = getUpdateExpressions
-
-  override lazy val mergeExpressions: Seq[Expression] = getMergeExpressions
-
-  override lazy val evaluateExpression: Expression = getEvaluateExpression(getContextOrNull())
-
-  override def initQueryContext(): Option[SQLQueryContext] = if (useAnsiAdd) {
+  override def initQueryContext(): Option[SQLQueryContext] = if (evalMode == EvalMode.ANSI) {
     Some(origin.context)
   } else {
     None
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -219,48 +213,13 @@ case class Sum(
   since = "3.3.0",
   group = "agg_funcs")
 // scalastyle:on line.size.limit
-case class TrySum(child: Expression) extends SumBase(child) {
-
-  override def useAnsiAdd: Boolean = dataType match {
-    // Double type won't fail, thus useAnsiAdd is always false
-    // For decimal type, it returns NULL on overflow. It behaves the same as TrySum when
-    // `useAnsiAdd` is false.
-    case _: DoubleType | _: DecimalType => false
-    case _ => true
-  }
-
-  override def shouldTrackIsEmpty: Boolean = resultType match {
-    // The sum of following data types can cause overflow.
-    case _: DecimalType | _: IntegralType | _: YearMonthIntervalType | _: DayTimeIntervalType =>
-      true
-    case _ =>
-      false
-  }
-
-  override lazy val updateExpressions: Seq[Expression] =
-    if (useAnsiAdd) {
-      val expressions = getUpdateExpressions
-      // If the length of updateExpressions is larger than 1, the tail expressions are for
-      // tracking whether the input is empty, which doesn't need `TryEval` execution.
-      Seq(TryEval(expressions.head)) ++ expressions.tail
+object TrySumExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1) {
+      Sum(expressions.head, EvalMode.TRY)
     } else {
-      getUpdateExpressions
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
     }
-
-  override lazy val mergeExpressions: Seq[Expression] =
-    if (useAnsiAdd) {
-      val expressions = getMergeExpressions
-      // If the length of getMergeExpressions is larger than 1, the tail expressions are for
-      // tracking whether the input is empty, which doesn't need `TryEval` execution.
-      Seq(TryEval(expressions.head)) ++ expressions.tail
-    } else {
-      getMergeExpressions
-    }
-
-  override lazy val evaluateExpression: Expression = getEvaluateExpression()
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(child = newChild)
-
-  override def prettyName: String = "try_sum"
+  }
 }

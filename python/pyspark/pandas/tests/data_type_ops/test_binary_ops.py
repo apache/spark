@@ -152,7 +152,7 @@ class BinaryOpsTest(OpsTestBase):
         data = [b"1", b"2", b"3"]
         pser = pd.Series(data)
         psser = ps.Series(data)
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):

@@ -25,6 +25,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.{Utils => CUtils}
 
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
@@ -218,7 +219,7 @@ object AggUtils {
     }
 
     // 3. Create an Aggregate operator for partial aggregation (for distinct)
-    val distinctColumnAttributeLookup = distinctExpressions.zip(distinctAttributes).toMap
+    val distinctColumnAttributeLookup = CUtils.toMap(distinctExpressions, distinctAttributes)
     val rewrittenDistinctFunctions = functionsWithDistinct.map {
       // Children of an AggregateFunction with DISTINCT keyword has already
       // been evaluated. At here, we need to replace original children

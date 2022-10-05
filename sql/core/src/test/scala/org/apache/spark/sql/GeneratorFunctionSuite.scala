@@ -219,20 +219,21 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
 
   test("inline raises exception on array of null type") {
     val m = intercept[AnalysisException] {
-      spark.range(2).selectExpr("inline(array())")
+      spark.range(2).select(inline(array()))
     }.getMessage
     assert(m.contains("data type mismatch"))
   }
 
   test("inline with empty table") {
     checkAnswer(
-      spark.range(0).selectExpr("inline(array(struct(10, 100)))"),
+      spark.range(0).select(inline(array(struct(lit(10), lit(100))))),
       Nil)
   }
 
   test("inline on literal") {
     checkAnswer(
-      spark.range(2).selectExpr("inline(array(struct(10, 100), struct(20, 200), struct(30, 300)))"),
+      spark.range(2).select(inline(array(struct(lit(10), lit(100)), struct(lit(20), lit(200)),
+        struct(lit(30), lit(300))))),
       Row(10, 100) :: Row(20, 200) :: Row(30, 300) ::
         Row(10, 100) :: Row(20, 200) :: Row(30, 300) :: Nil)
   }
@@ -241,39 +242,39 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     val df = Seq((1, 2)).toDF("a", "b")
 
     checkAnswer(
-      df.selectExpr("inline(array(struct(a), struct(a)))"),
+      df.select(inline(array(struct('a), struct('a)))),
       Row(1) :: Row(1) :: Nil)
 
     checkAnswer(
-      df.selectExpr("inline(array(struct(a, b), struct(a, b)))"),
+      df.select(inline(array(struct('a, 'b), struct('a, 'b)))),
       Row(1, 2) :: Row(1, 2) :: Nil)
 
     // Spark think [struct<a:int>, struct<b:int>] is heterogeneous due to name difference.
     val m = intercept[AnalysisException] {
-      df.selectExpr("inline(array(struct(a), struct(b)))")
+      df.select(inline(array(struct('a), struct('b))))
     }.getMessage
     assert(m.contains("data type mismatch"))
 
     checkAnswer(
-      df.selectExpr("inline(array(struct(a), named_struct('a', b)))"),
+      df.select(inline(array(struct('a), struct('b.alias("a"))))),
       Row(1) :: Row(2) :: Nil)
 
     // Spark think [struct<a:int>, struct<col1:int>] is heterogeneous due to name difference.
     val m2 = intercept[AnalysisException] {
-      df.selectExpr("inline(array(struct(a), struct(2)))")
+      df.select(inline(array(struct('a), struct(lit(2)))))
     }.getMessage
     assert(m2.contains("data type mismatch"))
 
     checkAnswer(
-      df.selectExpr("inline(array(struct(a), named_struct('a', 2)))"),
+      df.select(inline(array(struct('a), struct(lit(2).alias("a"))))),
       Row(1) :: Row(2) :: Nil)
 
     checkAnswer(
-      df.selectExpr("struct(a)").selectExpr("inline(array(*))"),
+      df.select(struct('a)).select(inline(array("*"))),
       Row(1) :: Nil)
 
     checkAnswer(
-      df.selectExpr("array(struct(a), named_struct('a', b))").selectExpr("inline(*)"),
+      df.select(array(struct('a), struct('b.alias("a")))).selectExpr("inline(*)"),
       Row(1) :: Row(2) :: Nil)
   }
 
@@ -282,11 +283,11 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     val df2 = df.select(
       when($"col1" === 1, null).otherwise(array(struct($"col1", $"col2"))).as("col1"))
     checkAnswer(
-      df2.selectExpr("inline(col1)"),
+      df2.select(inline('col1)),
       Row(3, "4") :: Row(5, "6") :: Nil
     )
     checkAnswer(
-      df2.selectExpr("inline_outer(col1)"),
+      df2.select(inline_outer('col1)),
       Row(null, null) :: Row(3, "4") :: Row(5, "6") :: Nil
     )
   }
@@ -405,14 +406,13 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         |)
         |as tbl(a, b)
          """.stripMargin)
-    df.createOrReplaceTempView("t1")
 
     checkAnswer(
-      sql("select inline(b) from t1"),
+      df.select(inline('b)),
       Row(0, 1) :: Row(null, null) :: Row(2, 3) :: Row(null, null) :: Nil)
 
     checkAnswer(
-      sql("select a, inline(b) from t1"),
+      df.select('a, inline('b)),
       Row(1, 0, 1) :: Row(1, null, null) :: Row(1, 2, 3) :: Row(1, null, null) :: Nil)
   }
 

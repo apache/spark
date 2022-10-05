@@ -63,7 +63,6 @@ from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.missing.indexes import MissingPandasLikeIndex
 from pyspark.pandas.series import Series, first_series
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkIndexMethods
 from pyspark.pandas.utils import (
     is_name_like_tuple,
@@ -1897,6 +1896,7 @@ class Index(IndexOpsMixin):
                    )
         """
         from pyspark.pandas.indexes.multi import MultiIndex
+        from pyspark.pandas.indexes.category import CategoricalIndex
 
         if isinstance(self, MultiIndex) != isinstance(other, MultiIndex):
             raise NotImplementedError(
@@ -1908,6 +1908,9 @@ class Index(IndexOpsMixin):
             )
 
         index_fields = self._index_fields_for_union_like(other, func_name="append")
+        # Since pandas 1.5.0, the order of category matters.
+        if isinstance(other, CategoricalIndex):
+            other = other.reorder_categories(self.categories.to_list())
 
         sdf_self = self._internal.spark_frame.select(self._internal.index_spark_columns)
         sdf_other = other._internal.spark_frame.select(other._internal.index_spark_columns)
@@ -2268,7 +2271,7 @@ class Index(IndexOpsMixin):
 
         psdf: DataFrame = DataFrame(self._internal.resolved_copy)
         if repeats == 0:
-            return DataFrame(psdf._internal.with_filter(SF.lit(False))).index
+            return DataFrame(psdf._internal.with_filter(F.lit(False))).index
         else:
             return ps.concat([psdf] * repeats).index
 
@@ -2316,11 +2319,11 @@ class Index(IndexOpsMixin):
         """
         sdf = self._internal.spark_frame
         if self.is_monotonic_increasing:
-            sdf = sdf.where(self.spark.column <= SF.lit(label).cast(self.spark.data_type)).select(
+            sdf = sdf.where(self.spark.column <= F.lit(label).cast(self.spark.data_type)).select(
                 F.max(self.spark.column)
             )
         elif self.is_monotonic_decreasing:
-            sdf = sdf.where(self.spark.column >= SF.lit(label).cast(self.spark.data_type)).select(
+            sdf = sdf.where(self.spark.column >= F.lit(label).cast(self.spark.data_type)).select(
                 F.min(self.spark.column)
             )
         else:
@@ -2509,7 +2512,7 @@ class Index(IndexOpsMixin):
         elif is_list_like(other):
             other_idx = Index(other)
             if isinstance(other_idx, MultiIndex):
-                return other_idx.to_frame().head(0).index
+                raise ValueError("Names should be list-like for a MultiIndex")
             spark_frame_other = other_idx.to_frame()._to_spark()
             keep_name = True
         else:

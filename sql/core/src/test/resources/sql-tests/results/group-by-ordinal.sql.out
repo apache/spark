@@ -98,7 +98,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "-1",
     "size" : "2"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 33,
+    "fragment" : "-1"
+  } ]
 }
 
 
@@ -114,7 +121,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "0",
     "size" : "2"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 32,
+    "fragment" : "0"
+  } ]
 }
 
 
@@ -130,7 +144,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "3",
     "size" : "2"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 32,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -144,9 +165,16 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "GROUP_BY_POS_REFERS_AGG_EXPR",
   "sqlState" : "42000",
   "messageParameters" : {
-    "index" : "3",
-    "aggExpr" : "sum(data.b) AS `sum(b)`"
-  }
+    "aggExpr" : "sum(data.b) AS `sum(b)`",
+    "index" : "3"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 40,
+    "stopIndex" : 40,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -160,9 +188,16 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "GROUP_BY_POS_REFERS_AGG_EXPR",
   "sqlState" : "42000",
   "messageParameters" : {
-    "index" : "3",
-    "aggExpr" : "(sum(data.b) + CAST(2 AS BIGINT)) AS `(sum(b) + 2)`"
-  }
+    "aggExpr" : "(sum(data.b) + CAST(2 AS BIGINT)) AS `(sum(b) + 2)`",
+    "index" : "3"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 44,
+    "stopIndex" : 44,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -187,7 +222,9 @@ select * from data group by a, b, 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Star (*) is not allowed in select list when GROUP BY ordinal position is used
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1019"
+}
 
 
 -- !query
@@ -390,7 +427,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "-1",
     "size" : "3"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 46,
+    "fragment" : "-1"
+  } ]
 }
 
 
@@ -404,9 +448,16 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "GROUP_BY_POS_REFERS_AGG_EXPR",
   "sqlState" : "42000",
   "messageParameters" : {
-    "index" : "3",
-    "aggExpr" : "count(1) AS `count(1)`"
-  }
+    "aggExpr" : "count(1) AS `count(1)`",
+    "index" : "3"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 45,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -422,7 +473,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "-1",
     "size" : "3"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 47,
+    "stopIndex" : 48,
+    "fragment" : "-1"
+  } ]
 }
 
 
@@ -436,9 +494,16 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "GROUP_BY_POS_REFERS_AGG_EXPR",
   "sqlState" : "42000",
   "messageParameters" : {
-    "index" : "3",
-    "aggExpr" : "count(1) AS `count(1)`"
-  }
+    "aggExpr" : "count(1) AS `count(1)`",
+    "index" : "3"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 50,
+    "stopIndex" : 50,
+    "fragment" : "3"
+  } ]
 }
 
 

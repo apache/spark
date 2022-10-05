@@ -190,7 +190,13 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE t ALTER COLUMN i FIRST")
       }
-      assert(e.message.contains("ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables"))
+      checkError(
+        exception = e,
+        errorClass = "UNSUPPORTED_FEATURE",
+        errorSubClass = "TABLE_OPERATION",
+        sqlState = "0A000",
+        parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
+          "operation" -> "ALTER COLUMN ... FIRST | ALTER"))
     }
   }
 
@@ -519,19 +525,29 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("create table - partition column names not in table definition") {
-    val e = intercept[AnalysisException] {
-      sql("CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
-    }
-    assert(e.message == "partition column c is not defined in table " +
-      s"$SESSION_CATALOG_NAME.default.tbl, defined table columns are: a, b")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1206",
+      parameters = Map(
+        "colType" -> "partition",
+        "colName" -> "c",
+        "tableName" -> s"$SESSION_CATALOG_NAME.default.tbl",
+        "tableCols" -> "a, b"))
   }
 
   test("create table - bucket column names not in table definition") {
-    val e = intercept[AnalysisException] {
-      sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
-    }
-    assert(e.message == "bucket column c is not defined in table " +
-      s"$SESSION_CATALOG_NAME.default.tbl, defined table columns are: a, b")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1206",
+      parameters = Map(
+        "colType" -> "bucket",
+        "colName" -> "c",
+        "tableName" -> s"$SESSION_CATALOG_NAME.default.tbl",
+        "tableCols" -> "a, b"))
   }
 
   test("create table - column repeated in partition columns") {
@@ -956,7 +972,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       sql("DROP VIEW dbx.tab1")
     }
     assert(e.getMessage.contains(
-      "dbx.tab1 is a table. 'DROP VIEW' expects a view. Please use DROP TABLE instead."))
+      "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead"))
   }
 
   protected def testSetProperties(isDatasourceTable: Boolean): Unit = {
