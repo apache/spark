@@ -1518,6 +1518,8 @@ private[spark] object Client extends Logging {
     }
 
     sys.env.get(ENV_DIST_CLASSPATH).foreach { cp =>
+      // SPARK-40635: during the test, add a jar de-duplication process to avoid
+      // that the startup command can't be executed due to the too long classpath.
       val newCp = if (Utils.isTesting) {
         cp.split(File.pathSeparator)
           .filterNot(cpSet.contains).mkString(File.pathSeparator)
