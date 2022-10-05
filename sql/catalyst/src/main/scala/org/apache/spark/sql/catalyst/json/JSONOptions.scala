@@ -26,7 +26,6 @@ import com.fasterxml.jackson.core.json.JsonReadFeature
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.FileSourceOptions
-import org.apache.spark.sql.catalyst.json.JSONOptions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -55,6 +54,8 @@ private[sql] class JSONOptions(
   private def getString(paramName: JSONOptions.Value): Option[String] = {
     parameters.get(paramName.toString)
   }
+
+  import org.apache.spark.sql.catalyst.json.JSONOptions._
 
   val samplingRatio = getString(SAMPLING_RATIO).map(_.toDouble).getOrElse(1.0)
   val primitivesAsString = getString(PRIMITIVES_AS_STRING).map(_.toBoolean).getOrElse(false)

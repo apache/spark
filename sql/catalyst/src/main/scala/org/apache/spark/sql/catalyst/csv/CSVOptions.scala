@@ -25,7 +25,6 @@ import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, Unescape
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.FileSourceOptions
-import org.apache.spark.sql.catalyst.csv.CSVOptions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -102,6 +101,8 @@ class CSVOptions(
   private def getString(paramName: CSVOptions.Value): Option[String] = {
     parameters.get(paramName.toString)
   }
+
+  import org.apache.spark.sql.catalyst.csv.CSVOptions._
 
   val delimiter = CSVExprUtils.toDelimiterStr(
     getString(SEP).getOrElse(getString(DELIMITER).getOrElse(",")))
