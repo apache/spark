@@ -925,8 +925,9 @@ class DataFrameSuite extends QueryTest
     val e = intercept[AnalysisException] {
       person.withColumnsRenamed(Map("id" -> "renamed", "name" -> "renamed"))
     }
-    assert(e.getMessage ===
-      "Found duplicate column(s) in given column names for withColumnsRenamed: `renamed`")
+    assert(e.getMessage.contains("Found duplicate column(s)"))
+    assert(e.getMessage.contains("in given column names for withColumnsRenamed:"))
+    assert(e.getMessage.contains("`renamed`"))
   }
 
   test("SPARK-40311: withColumnsRenamed duplicate column names simple case sensitive") {
@@ -940,8 +941,9 @@ class DataFrameSuite extends QueryTest
     val e = intercept[AnalysisException] {
       person.withColumnsRenamed(Map("id" -> "renamed1", "renamed1" -> "age"))
     }
-    assert(e.getMessage ===
-      "Found duplicate column(s) in given column names for withColumnsRenamed: `age`")
+    assert(e.getMessage.contains("Found duplicate column(s)"))
+    assert(e.getMessage.contains("in given column names for withColumnsRenamed:"))
+    assert(e.getMessage.contains("`age`"))
   }
 
   test("SPARK-20384: Value class filter") {
