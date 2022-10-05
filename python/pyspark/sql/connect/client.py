@@ -141,7 +141,7 @@ class RemoteSparkSession(object):
     def sql(self, sql_string: str) -> "DataFrame":
         return DataFrame.withPlan(SQL(sql_string), self)
 
-    def collect(self, plan: pb2.Plan) -> pandas.DataFrame:
+    def _to_pandas(self, plan: pb2.Plan) -> pandas.DataFrame:
         req = pb2.Request()
         req.user_context.user_id = self._user_id
         req.plan.CopyFrom(plan)

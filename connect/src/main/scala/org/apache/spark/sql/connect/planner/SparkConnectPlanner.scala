@@ -96,7 +96,9 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       rel: proto.Project,
       common: Option[proto.RelationCommon]): LogicalPlan = {
     val baseRel = transformRelation(rel.getInput)
-    val projection = if (rel.getExpressionsCount == 0) {
+    // TODO: support the target field for *.
+    val projection =
+      if (rel.getExpressionsCount == 1 && rel.getExpressions(0).hasUnresolvedStar) {
       Seq(UnresolvedStar(Option.empty))
     } else {
       rel.getExpressionsList.asScala.map(transformExpression).map(UnresolvedAlias(_))

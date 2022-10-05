@@ -405,8 +405,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         return self._reduce_for_stat_function(F.count)
 
-    # TODO: We should fix See Also when Series implementation is finished.
-    def first(self, numeric_only: Optional[bool] = False) -> FrameLike:
+    def first(self, numeric_only: Optional[bool] = False, min_count: int = -1) -> FrameLike:
         """
         Compute first of group values.
 
@@ -415,6 +414,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         numeric_only : bool, default False
             Include only float, int, boolean columns. If None, will attempt to use
             everything, then use only numeric data.
+
+            .. versionadded:: 3.4.0
+        min_count : int, default -1
+            The required number of valid values to perform the operation. If fewer
+            than ``min_count`` non-NA values are present the result will be NA.
 
             .. versionadded:: 3.4.0
 
@@ -426,12 +430,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Examples
         --------
         >>> df = ps.DataFrame({"A": [1, 2, 1, 2], "B": [True, False, False, True],
-        ...                    "C": [3, 3, 4, 4], "D": ["a", "b", "b", "a"]})
+        ...                    "C": [3, 3, 4, 4], "D": ["a", "b", "a", "a"]})
         >>> df
            A      B  C  D
         0  1   True  3  a
         1  2  False  3  b
-        2  1  False  4  b
+        2  1  False  4  a
         3  2   True  4  a
 
         >>> df.groupby("A").first().sort_index()
@@ -447,9 +451,36 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         A
         1   True  3
         2  False  3
+
+        >>> df.groupby("D").first().sort_index()
+           A      B  C
+        D
+        a  1   True  3
+        b  2  False  3
+
+        >>> df.groupby("D").first(min_count=3).sort_index()
+             A     B    C
+        D
+        a  1.0  True  3.0
+        b  NaN  None  NaN
         """
+        if not isinstance(min_count, int):
+            raise TypeError("min_count must be integer")
+
+        if min_count > 0:
+
+            def first(col: Column) -> Column:
+                return F.when(
+                    F.count(F.when(~F.isnull(col), F.lit(0))) < min_count, F.lit(None)
+                ).otherwise(F.first(col, ignorenulls=True))
+
+        else:
+
+            def first(col: Column) -> Column:
+                return F.first(col, ignorenulls=True)
+
         return self._reduce_for_stat_function(
-            lambda col: F.first(col, ignorenulls=True),
+            first,
             accepted_spark_types=(NumericType, BooleanType) if numeric_only else None,
         )
 

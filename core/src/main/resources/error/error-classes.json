@@ -2760,5 +2760,247 @@
     "message" : [
       "This query does not support recovering from checkpoint location. Delete <checkpointPath> to start over."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_1300" : {
+    "message" : [
+      "Unable to find the column `<colName>` given [<actualColumns>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1301" : {
+    "message" : [
+      "Boundary start is not a valid integer: <start>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1302" : {
+    "message" : [
+      "Boundary end is not a valid integer: <end>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1303" : {
+    "message" : [
+      "Table or view '<ident>' not found."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1304" : {
+    "message" : [
+      "Unexpected type <className> of the relation <tableName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1305" : {
+    "message" : [
+      "Unsupported TableChange <change> in JDBC catalog."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1306" : {
+    "message" : [
+      "There is a 'path' or 'paths' option set and load() is called with path parameters. Either remove the path option if it's the same as the path parameter, or add it to the load() parameter if you do want to read multiple paths. To ignore this check, set '<config>' to 'true'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1307" : {
+    "message" : [
+      "There is a 'path' option set and save() is called with a path parameter. Either remove the path option, or call save() without the parameter. To ignore this check, set '<config>' to 'true'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1308" : {
+    "message" : [
+      "TableProvider implementation <source> cannot be written with <createMode> mode, please use Append or Overwrite modes instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1309" : {
+    "message" : [
+      "insertInto() can't be used together with partitionBy(). Partition columns have already been defined for the table. It is not necessary to use partitionBy()."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1310" : {
+    "message" : [
+      "Couldn't find a catalog to handle the identifier <quote>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1311" : {
+    "message" : [
+      "sortBy must be used together with bucketBy."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1312" : {
+    "message" : [
+      "'<operation>' does not support bucketBy right now."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1313" : {
+    "message" : [
+      "'<operation>' does not support bucketBy and sortBy right now."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1314" : {
+    "message" : [
+      "Table <tableIdent> already exists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1315" : {
+    "message" : [
+      "Cannot overwrite table <tableName> that is also being read from."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1316" : {
+    "message" : [
+      "Invalid partition transformation: <expr>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1317" : {
+    "message" : [
+      "Cannot resolve column name \"<colName>\" among (<fieldsStr>)<extraMsg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1318" : {
+    "message" : [
+      "Unable to parse '<delayThreshold>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1319" : {
+    "message" : [
+      "Invalid join type in joinWith: <joinType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1320" : {
+    "message" : [
+      "Typed column <typedCol> that needs input type and schema cannot be passed in untyped `select` API. Use the typed `Dataset.select` API instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1321" : {
+    "message" : [
+      "Invalid view name: <viewName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1322" : {
+    "message" : [
+      "Invalid number of buckets: bucket(<numBuckets>, <e>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1323" : {
+    "message" : [
+      "\"<colName>\" is not a numeric column. Aggregation function can only be applied on a numeric column."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1324" : {
+    "message" : [
+      "The pivot column <pivotColumn> has more than <maxValues> distinct values, this could indicate an error. If this was intended, set <config> to at least the number of distinct values of the pivot column."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1325" : {
+    "message" : [
+      "Cannot modify the value of a static config: <key>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1326" : {
+    "message" : [
+      "Cannot modify the value of a Spark config: <key>.",
+      "See also 'https://spark.apache.org/docs/latest/sql-migration-guide.html#ddl-statements'"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1327" : {
+    "message" : [
+      "Command execution is not supported in runner <runner>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1328" : {
+    "message" : [
+      "Can not instantiate class <className>, please make sure it has public non argument constructor."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1329" : {
+    "message" : [
+      "Can not load class <className>, please make sure it is on the classpath."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1330" : {
+    "message" : [
+      "Class <className> doesn't implement interface UserDefinedAggregateFunction."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1331" : {
+    "message" : [
+      "Missing field <fieldName> in table <table> with schema:",
+      "<schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1332" : {
+    "message" : [
+      "<errorMessage>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1333" : {
+    "message" : [
+      "Invalid view text: <viewText>. The view <tableName> may have been tampered with."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1334" : {
+    "message" : [
+      "Cannot specify both version and timestamp when time travelling the table."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1335" : {
+    "message" : [
+      "<expr> is not a valid timestamp expression for time travel."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1336" : {
+    "message" : [
+      "Cannot time travel <target>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1337" : {
+    "message" : [
+      "Table <tableName> does not support time travel."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1338" : {
+    "message" : [
+      "Sinks cannot request distribution and ordering in continuous execution mode"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1339" : {
+    "message" : [
+      "Failed to execute INSERT INTO command because the VALUES list contains a DEFAULT column reference as part of another expression; this is not allowed"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1340" : {
+    "message" : [
+      "Failed to execute UPDATE command because the SET list contains a DEFAULT column reference as part of another expression; this is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1341" : {
+    "message" : [
+      "Failed to execute UPDATE command because the WHERE clause contains a DEFAULT column reference; this is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1342" : {
+    "message" : [
+      "Failed to execute MERGE command because the WHERE clause contains a DEFAULT column reference; this is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1343" : {
+    "message" : [
+      "Failed to execute MERGE INTO command because one of its INSERT or UPDATE assignments contains a DEFAULT column reference as part of another expression; this is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1344" : {
+    "message" : [
+      "Invalid DEFAULT value for column <fieldName>: <defaultValue> fails to parse as a valid literal value."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1345" : {
+    "message" : [
+      "Failed to execute <statementType> command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1346" : {
+    "message" : [
+      "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1347" : {
+    "message" : [
+      "Failed to execute command because subquery expressions are not allowed in DEFAULT values."
+    ]
   }
 }

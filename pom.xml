@@ -189,7 +189,7 @@
     <guava.version>14.0.1</guava.version>
     <janino.version>3.1.7</janino.version>
     <jersey.version>2.36</jersey.version>
-    <joda.version>2.10.14</joda.version>
+    <joda.version>2.11.2</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
@@ -1193,7 +1193,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.16.0</version>
+        <version>1.17.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2948,7 +2948,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.0.0-M5</version>
+          <version>3.0.0-M7</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -2988,6 +2988,7 @@
               <test.src.tables>src</test.src.tables>
             </systemProperties>
             <failIfNoTests>false</failIfNoTests>
+            <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
             <excludedGroups>${test.exclude.tags}</excludedGroups>
             <groups>${test.include.tags}</groups>
           </configuration>
@@ -3188,7 +3189,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-dependency-plugin</artifactId>
-          <version>3.1.1</version>
+          <version>3.3.0</version>
           <executions>
             <execution>
               <id>default-cli</id>
