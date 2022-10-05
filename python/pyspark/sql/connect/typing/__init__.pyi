@@ -16,8 +16,8 @@
 #
 
 from typing_extensions import Protocol
-from typing import Callable, Union
-from pyspark.sql.connect.column import ExpressionOrString, ScalarFunctionExpression, ColumnOrString
+from pyspark.sql.connect.column import ScalarFunctionExpression
+from pyspark.sql.connect._typing import ExpressionOrString, ColumnOrString
 from pyspark.sql.connect.function_builder import UserDefinedFunction
 
 class FunctionBuilderCallable(Protocol):

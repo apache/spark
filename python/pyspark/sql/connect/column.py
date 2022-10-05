@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import List, Union, cast, get_args, TYPE_CHECKING, Optional, Callable, Any
+from typing import List, cast, get_args, TYPE_CHECKING, Optional, Callable, Any
 
 
 import pyspark.sql.connect.proto as proto

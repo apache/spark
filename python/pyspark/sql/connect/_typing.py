@@ -16,8 +16,10 @@
 #
 from typing import Union
 
+from pyspark.sql.connect.column import Expression, ColumnRef
+
 PrimitiveType = Union[str, int, bool, float]
 
-ExpressionOrString = Union[str, "Expression"]
+ExpressionOrString = Union[str, Expression]
 
-ColumnOrString = Union[str, "ColumnRef"]
+ColumnOrString = Union[str, ColumnRef]

@@ -132,7 +132,7 @@ class DataFrame(object):
         if self._plan is None:
             return []
         if "columns" not in self._cache and self._plan is not None:
-            pdd = self.limit(0).collect()
+            pdd = self.limit(0).toPandas()
             if pdd is None:
                 raise Exception("Empty result")
             # Translate to standard pytho array
@@ -141,7 +141,7 @@ class DataFrame(object):
 
     def count(self) -> int:
         """Returns the number of rows in the data frame"""
-        pdd = self.agg([(LiteralExpression(1), "count")]).collect()
+        pdd = self.agg([(LiteralExpression(1), "count")]).toPandas()
         if pdd is None:
             raise Exception("Empty result")
         return pdd.iloc[0, 0]
@@ -180,7 +180,7 @@ class DataFrame(object):
 
     def head(self, n: int) -> Optional["pandas.DataFrame"]:
         self.limit(n)
-        return self.collect()
+        return self.toPandas()
 
     # TODO(martin.grund) fix mypu
     def join(self, other: "DataFrame", on: Any, how: Any = None) -> "DataFrame":
@@ -239,7 +239,7 @@ class DataFrame(object):
             return self._plan.print()
         return ""
 
-    def collect(self):
+    def collect(self) -> None:
         raise NotImplementedError("Please use toPandas().")
 
     def toPandas(self) -> Optional["pandas.DataFrame"]:
@@ -248,7 +248,7 @@ class DataFrame(object):
         if self._session is None:
             raise Exception("Cannot collect on empty session.")
         query = self._plan.collect(self._session)
-        return self._session.collect(query)
+        return self._session._to_pandas(query)
 
     def explain(self) -> str:
         if self._plan is not None:
