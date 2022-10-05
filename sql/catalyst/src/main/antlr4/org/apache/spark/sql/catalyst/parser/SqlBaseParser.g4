@@ -225,8 +225,7 @@ statement
     ;
 
 timezone
-    : STRING
-    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING
+    : stringLit
     | LOCAL
     ;
 
@@ -911,8 +910,7 @@ unitToUnitInterval
 
 intervalValue
     : (PLUS | MINUS)?
-      (INTEGER_VALUE | DECIMAL_VALUE | STRING
-       | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING)
+      (INTEGER_VALUE | DECIMAL_VALUE | stringLit)
     ;
 
 colPosition
@@ -1079,15 +1077,13 @@ stringLit
     ;
 
 comment
-    : STRING
-    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING
+    : stringLit
     | NULL
     ;
 
 version
     : INTEGER_VALUE
-    | STRING
-    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING
+    | stringLit
     ;
 
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.
