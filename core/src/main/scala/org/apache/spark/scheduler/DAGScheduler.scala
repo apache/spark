@@ -2890,10 +2890,18 @@ private[spark] class DAGScheduler(
   }
 
   def stop(): Unit = {
-    messageScheduler.shutdownNow()
-    shuffleMergeFinalizeScheduler.shutdownNow()
-    eventProcessLoop.stop()
-    taskScheduler.stop()
+    Utils.tryLogNonFatalError {
+      messageScheduler.shutdownNow()
+    }
+    Utils.tryLogNonFatalError {
+      shuffleMergeFinalizeScheduler.shutdownNow()
+    }
+    Utils.tryLogNonFatalError {
+      eventProcessLoop.stop()
+    }
+    Utils.tryLogNonFatalError {
+      taskScheduler.stop()
+    }
   }
 
   eventProcessLoop.start()
