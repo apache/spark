@@ -3002,5 +3002,135 @@
     "message" : [
       "Failed to execute command because subquery expressions are not allowed in DEFAULT values."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_2000" : {
+    "message" : [
+      "<message>. If necessary set <ansiConfig> to false to bypass this error."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2001" : {
+    "message" : [
+      "<message> If necessary set <ansiConfig> to false to bypass this error"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2002" : {
+    "message" : [
+      "<message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2003" : {
+    "message" : [
+      "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2004" : {
+    "message" : [
+      "no default for type <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2005" : {
+    "message" : [
+      "Type <dataType> does not support ordered operations"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2006" : {
+    "message" : [
+      "The specified group index cannot be less than zero"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2007" : {
+    "message" : [
+      "Regex group count is <groupCount>, but the specified group index is <groupIndex>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2008" : {
+    "message" : [
+      "Find an invalid url string <url>. If necessary set <ansiConfig> to false to bypass this error."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2009" : {
+    "message" : [
+      "dataType"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2010" : {
+    "message" : [
+      "Window Functions do not support merging."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2011" : {
+    "message" : [
+      "Unexpected data type <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2012" : {
+    "message" : [
+      "Unexpected type <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2013" : {
+    "message" : [
+      "Negative values found in <frequencyExpression>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2014" : {
+    "message" : [
+      "<funcName> is not matched at addNewFunction"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2015" : {
+    "message" : [
+      "Cannot generate <codeType> code for incomparable type: <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2016" : {
+    "message" : [
+      "Can not interpolate <arg> into code block."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2017" : {
+    "message" : [
+      "not resolved"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2018" : {
+    "message" : [
+      "class `<cls>` is not supported by `MapObjects` as resulting collection."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2019" : {
+    "message" : [
+      "Cannot use null as map key!"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2020" : {
+    "message" : [
+      "Couldn't find a valid constructor on <cls>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2021" : {
+    "message" : [
+      "Couldn't find a primary constructor on <cls>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2022" : {
+    "message" : [
+      "Unsupported natural join type <joinType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2023" : {
+    "message" : [
+      "Unresolved encoder expected, but <attr> was found."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2024" : {
+    "message" : [
+      "Only expression encoders are supported for now."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2025" : {
+    "message" : [
+      "<className> must override either <m1> or <m2>"
+    ]
   }
 }
