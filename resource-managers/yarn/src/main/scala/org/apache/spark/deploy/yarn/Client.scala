@@ -1471,7 +1471,7 @@ private[spark] object Client extends Logging {
     }
 
     val cpSet = extraClassPath match {
-      case Some(classPath) => classPath.split(File.pathSeparator).toSet
+      case Some(classPath) if Utils.isTesting => classPath.split(File.pathSeparator).toSet
       case _ => Set.empty[String]
     }
 
@@ -1518,8 +1518,10 @@ private[spark] object Client extends Logging {
     }
 
     sys.env.get(ENV_DIST_CLASSPATH).foreach { cp =>
-      val newCp = cp.split(File.pathSeparator)
-        .filterNot(cpSet.contains).mkString(File.pathSeparator)
+      val newCp = if (Utils.isTesting) {
+        cp.split(File.pathSeparator)
+          .filterNot(cpSet.contains).mkString(File.pathSeparator)
+      } else cp
       addClasspathEntry(getClusterPath(sparkConf, newCp), env)
     }
 
