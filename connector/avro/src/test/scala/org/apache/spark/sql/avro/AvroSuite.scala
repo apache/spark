@@ -1804,13 +1804,13 @@ abstract class AvroSuite
         spark
           .read
           .format("avro")
-          .option(AvroOptions.IGNORE_EXTENSION_KEY.toString, false)
+          .option(AvroOptions.IGNORE_EXTENSION_KEY, false)
           .load(dir.getCanonicalPath)
           .count()
       }
       val deprecatedEvents = logAppender.loggingEvents
         .filter(_.getMessage.getFormattedMessage.contains(
-          s"Option ${AvroOptions.IGNORE_EXTENSION_KEY.toString} is deprecated"))
+          s"Option ${AvroOptions.IGNORE_EXTENSION_KEY} is deprecated"))
       assert(deprecatedEvents.size === 1)
     }
   }
