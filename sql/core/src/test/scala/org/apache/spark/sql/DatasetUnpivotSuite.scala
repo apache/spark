@@ -165,7 +165,7 @@ class DatasetUnpivotSuite extends QueryTest
       parameters = Map(
         "given" -> "ids",
         "empty" -> "values",
-        "types" -> "Alias ((id * 2) AS (id * 2))")
+        "expressions" -> "\"(id * 2) AS `(id * 2)`\"")
     )
 
     val e3 = intercept[AnalysisException] {
@@ -181,7 +181,7 @@ class DatasetUnpivotSuite extends QueryTest
       parameters = Map(
         "given" -> "ids",
         "empty" -> "values",
-        "types" -> "Alias (id AS uid)")
+        "expressions" -> "\"id AS uid\"")
     )
   }
 

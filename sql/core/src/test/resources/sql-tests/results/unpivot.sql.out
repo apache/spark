@@ -93,8 +93,8 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "empty" : "ids",
-    "given" : "values",
-    "types" : "Alias (the.earnings.2012 AS the.earnings.2012, the.earnings.2013 AS the.earnings.2013, the.earnings.2014 AS the.earnings.2014)"
+    "expressions" : "\"the.earnings.2012 AS `the.earnings.2012`\", \"the.earnings.2013 AS `the.earnings.2013`\", \"the.earnings.2014 AS `the.earnings.2014`\"",
+    "given" : "values"
   }
 }
 
@@ -314,8 +314,8 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "empty" : "ids",
-    "given" : "values",
-    "types" : "Alias (the.earnings.2012 AS 2012, the.earnings.2013 AS 2013, the.earnings.2014 AS 2014, ...)"
+    "expressions" : "\"the.earnings.2012 AS `2012`\", \"the.sales.2012 AS `2012`\", \"the.earnings.2013 AS `2013`\", \"the.sales.2013 AS `2013`\", \"the.earnings.2014 AS `2014`\", \"the.sales.2014 AS `2014`\"",
+    "given" : "values"
   }
 }
 
