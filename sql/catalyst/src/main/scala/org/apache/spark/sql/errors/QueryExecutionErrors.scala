@@ -32,7 +32,6 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
 
 import org.apache.spark._
-import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.catalyst.{TableIdentifier, WalkedTypePath}
@@ -619,17 +618,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       s"got: ${allPaths.mkString(", ")}")
   }
 
-  def failedToFindDataSourceError(provider: String, error: Throwable): Throwable = {
-    new ClassNotFoundException(
-      s"""
-         |Failed to find data source: $provider. Please find packages at
-         |https://spark.apache.org/third-party-projects.html
-       """.stripMargin, error)
+  def failedToFindDataSourceError(
+      provider: String, error: Throwable): SparkClassNotFoundException = {
+    new SparkClassNotFoundException(
+      errorClass = "_LEGACY_ERROR_TEMP_2051",
+      messageParameters = Map("provider" -> provider),
+      cause = error)
   }
 
-  def removedClassInSpark2Error(className: String, e: Throwable): Throwable = {
-    new ClassNotFoundException(s"$className was removed in Spark 2.0. " +
-      "Please check if your library is compatible with Spark 2.0", e)
+  def removedClassInSpark2Error(className: String, e: Throwable): SparkClassNotFoundException = {
+    new SparkClassNotFoundException(
+      errorClass = "_LEGACY_ERROR_TEMP_2052",
+      messageParameters = Map("className" -> className),
+      cause = e)
   }
 
   def incompatibleDataSourceRegisterError(e: Throwable): Throwable = {
@@ -664,22 +665,24 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     )
   }
 
-  def buildReaderUnsupportedForFileFormatError(format: String): Throwable = {
-    new UnsupportedOperationException(s"buildReader is not supported for $format")
+  def buildReaderUnsupportedForFileFormatError(
+      format: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2053",
+      messageParameters = Map("format" -> format))
   }
 
   def taskFailedWhileWritingRowsError(cause: Throwable): Throwable = {
-    new SparkException("Task failed while writing rows.", cause)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2054",
+      messageParameters = Map.empty,
+      cause = cause)
   }
 
-  def readCurrentFileNotFoundError(e: FileNotFoundException): Throwable = {
-    new FileNotFoundException(
-      s"""
-         |${e.getMessage}\n
-         |It is possible the underlying files have been updated. You can explicitly invalidate
-         |the cache in Spark by running 'REFRESH TABLE tableName' command in SQL or by
-         |recreating the Dataset/DataFrame involved.
-       """.stripMargin)
+  def readCurrentFileNotFoundError(e: FileNotFoundException): SparkFileNotFoundException = {
+    new SparkFileNotFoundException(
+      errorClass = "_LEGACY_ERROR_TEMP_2055",
+      messageParameters = Map.empty)
   }
 
   def saveModeUnsupportedError(saveMode: Any, pathExists: Boolean): Throwable = {
@@ -690,41 +693,54 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def cannotClearOutputDirectoryError(staticPrefixPath: Path): Throwable = {
-    new IOException(s"Unable to clear output directory $staticPrefixPath prior to writing to it")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2056",
+      messageParameters = Map("staticPrefixPath" -> staticPrefixPath.toString()),
+      cause = null)
   }
 
   def cannotClearPartitionDirectoryError(path: Path): Throwable = {
-    new IOException(s"Unable to clear partition directory $path prior to writing to it")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2057",
+      messageParameters = Map("path" -> path.toString()),
+      cause = null)
   }
 
   def failedToCastValueToDataTypeForPartitionColumnError(
-      value: String, dataType: DataType, columnName: String): Throwable = {
-    new RuntimeException(s"Failed to cast value `$value` to " +
-      s"`$dataType` for partition column `$columnName`")
+      value: String, dataType: DataType, columnName: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2058",
+      messageParameters = Map(
+        "value" -> value,
+        "dataType" -> dataType.toString(),
+        "columnName" -> columnName))
   }
 
   def endOfStreamError(): Throwable = {
-    new NoSuchElementException("End of stream")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2059",
+      messageParameters = Map.empty,
+      cause = null)
   }
 
   def fallbackV1RelationReportsInconsistentSchemaError(
-      v2Schema: StructType, v1Schema: StructType): Throwable = {
-    new IllegalArgumentException(
-      "The fallback v1 relation reports inconsistent schema:\n" +
-        "Schema of v2 scan:     " + v2Schema + "\n" +
-        "Schema of v1 relation: " + v1Schema)
+      v2Schema: StructType, v1Schema: StructType): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2060",
+      messageParameters = Map("v2Schema" -> v2Schema.toString(), "v1Schema" -> v1Schema.toString()))
   }
 
   def noRecordsFromEmptyDataReaderError(): Throwable = {
-    new IOException("No records should be returned from EmptyDataReader")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2061",
+      messageParameters = Map.empty,
+      cause = null)
   }
 
-  def fileNotFoundError(e: FileNotFoundException): Throwable = {
-    new FileNotFoundException(
-      e.getMessage + "\n" +
-        "It is possible the underlying files have been updated. " +
-        "You can explicitly invalidate the cache in Spark by " +
-        "recreating the Dataset/DataFrame involved.")
+  def fileNotFoundError(e: FileNotFoundException): SparkFileNotFoundException = {
+    new SparkFileNotFoundException(
+      errorClass = "_LEGACY_ERROR_TEMP_2062",
+      messageParameters = Map("message" -> e.getMessage))
   }
 
   def unsupportedSchemaColumnConvertError(
@@ -733,66 +749,102 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       logicalType: String,
       physicalType: String,
       e: Exception): Throwable = {
-    val message = "Parquet column cannot be converted in " +
-      s"file $filePath. Column: $column, " +
-      s"Expected: $logicalType, Found: $physicalType"
-    new QueryExecutionException(message, e)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2063",
+      messageParameters = Map(
+        "filePath" -> filePath,
+        "column" -> column,
+        "logicalType" -> logicalType,
+        "physicalType" -> physicalType),
+      cause = e)
   }
 
   def cannotReadFilesError(
       e: Throwable,
       path: String): Throwable = {
     val message = s"Encountered error while reading file $path. Details: "
-    new QueryExecutionException(message, e)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2064",
+      messageParameters = Map("path" -> path),
+      cause = e)
   }
 
   def cannotCreateColumnarReaderError(): Throwable = {
-    new UnsupportedOperationException("Cannot create columnar reader.")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2065",
+      messageParameters = Map.empty,
+      cause = null)
   }
 
-  def invalidNamespaceNameError(namespace: Array[String]): Throwable = {
-    new IllegalArgumentException(s"Invalid namespace name: ${namespace.quoted}")
+  def invalidNamespaceNameError(namespace: Array[String]): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2066",
+      messageParameters = Map("namespace" -> namespace.quoted))
   }
 
-  def unsupportedPartitionTransformError(transform: Transform): Throwable = {
-    new UnsupportedOperationException(
-      s"Unsupported partition transform: $transform")
+  def unsupportedPartitionTransformError(
+      transform: Transform): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2067",
+      messageParameters = Map("transform" -> transform.toString()))
   }
 
-  def missingDatabaseLocationError(): Throwable = {
-    new IllegalArgumentException("Missing database location")
+  def missingDatabaseLocationError(): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2068",
+      errorSubClass = None,
+      messageParameters = Map.empty)
   }
 
-  def cannotRemoveReservedPropertyError(property: String): Throwable = {
-    new UnsupportedOperationException(s"Cannot remove reserved property: $property")
+  def cannotRemoveReservedPropertyError(property: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2069",
+      messageParameters = Map("property" -> property))
   }
 
   def writingJobFailedError(cause: Throwable): Throwable = {
-    new SparkException("Writing job failed.", cause)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2070",
+      messageParameters = Map.empty,
+      cause = cause)
   }
 
   def commitDeniedError(
       partId: Int, taskId: Long, attemptId: Int, stageId: Int, stageAttempt: Int): Throwable = {
-    val message = s"Commit denied for partition $partId (task $taskId, attempt $attemptId, " +
-      s"stage $stageId.$stageAttempt)"
-    new CommitDeniedException(message, stageId, partId, attemptId)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2071",
+      messageParameters = Map(
+        "partId" -> partId.toString(),
+        "taskId" -> taskId.toString(),
+        "attemptId" -> attemptId.toString(),
+        "stageId" -> stageId.toString(),
+        "stageAttempt" -> stageAttempt.toString()),
+      cause = null)
   }
 
   def unsupportedTableWritesError(ident: Identifier): Throwable = {
     new SparkException(
-      s"Table implementation does not support writes: ${ident.quoted}")
+      errorClass = "_LEGACY_ERROR_TEMP_2072",
+      messageParameters = Map("idnt" -> ident.quoted),
+      cause = null)
   }
 
-  def cannotCreateJDBCTableWithPartitionsError(): Throwable = {
-    new UnsupportedOperationException("Cannot create JDBC table with partition")
+  def cannotCreateJDBCTableWithPartitionsError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2073",
+      messageParameters = Map.empty)
   }
 
-  def unsupportedUserSpecifiedSchemaError(): Throwable = {
-    new UnsupportedOperationException("user-specified schema")
+  def unsupportedUserSpecifiedSchemaError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2074",
+      messageParameters = Map.empty)
   }
 
-  def writeUnsupportedForBinaryFileDataSourceError(): Throwable = {
-    new UnsupportedOperationException("Write is not supported for binary file data source")
+  def writeUnsupportedForBinaryFileDataSourceError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2075",
+      messageParameters = Map.empty)
   }
 
   def fileLengthExceedsMaxLengthError(status: FileStatus, maxLength: Int): Throwable = {
