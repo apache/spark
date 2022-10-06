@@ -301,6 +301,24 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                 # stats returns three columns while here we set schema with two columns
                 df.groupby("id").applyInPandas(stats, schema="id integer, m double").collect()
 
+    def test_apply_in_pandas_returning_wrong_columns(self):
+        df = self.data
+
+        def stats(key, pdf):
+            v = pdf.v
+            # returning three columns
+            res = pd.DataFrame([key + (v.mean(), v.std())])
+            return res
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                PythonException,
+                "Number of columns of the returned pandas.DataFrame doesn't match "
+                "specified schema. Expected: 2 Actual: 3",
+            ):
+                # stats returns three columns while here we set schema with two columns
+                df.groupby("id").applyInPandas(stats, schema="id integer, m double, n string").collect()
+
     def test_apply_in_pandas_returning_empty_dataframe(self):
         df = self.data
 
