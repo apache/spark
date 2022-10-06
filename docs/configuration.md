@@ -358,15 +358,6 @@ of the most common options to set are:
   <td>3.0.1</td>
 </tr>
 <tr>
-  <td><code>spark.executor.killOnFatalError.depth</code></td>
-  <td>5</td>
-  <td>
-    The max depth of the exception chain in a failed task Spark will search for a fatal error to check whether it should kill an executor. 
-    0 means not checking any fatal error, 1 means checking only the exception but not the cause, and so on.
-  </td>
-  <td>3.1.0</td>
-</tr>
-<tr>
   <td><code>spark.extraListeners</code></td>
   <td>(none)</td>
   <td>
