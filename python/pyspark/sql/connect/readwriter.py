@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from pyspark.sql.connect.data_frame import DataFrame
+from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import Read
 
 from typing import TYPE_CHECKING
