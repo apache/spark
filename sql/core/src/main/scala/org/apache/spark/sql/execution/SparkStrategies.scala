@@ -562,8 +562,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             // [COUNT(DISTINCT bar), COUNT(DISTINCT foo)] is disallowed because those two distinct
             // aggregates have different column expressions.
             val distinctExpressions =
-            functionsWithDistinct.flatMap(
-              _.aggregateFunction.children.filterNot(_.foldable)).distinct
+              functionsWithDistinct.head.aggregateFunction.children.filterNot(_.foldable)
             val normalizedNamedDistinctExpressions = distinctExpressions.map { e =>
               // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here
               // because `distinctExpressions` is not extracted during logical phase.

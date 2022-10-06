@@ -255,7 +255,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       // Setup unique distinct aggregate children.
       val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq.distinct
       val distinctAggChildAttrMap = distinctAggChildren.map { e =>
-        ExpressionSet(Seq(e)) -> AttributeReference(e.sql, e.dataType, nullable = true)()
+        e.canonicalized -> AttributeReference(e.sql, e.dataType, nullable = true)()
       }
       val distinctAggChildAttrs = distinctAggChildAttrMap.map(_._2)
       // Setup all the filters in distinct aggregate.
@@ -293,9 +293,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             val naf = if (af.children.forall(_.foldable)) {
               af
             } else {
-              patchAggregateFunctionChildren(af) { x1 =>
-                val es = ExpressionSet(Seq(x1))
-                distinctAggChildAttrLookup.get(es)
+              patchAggregateFunctionChildren(af) { x =>
+                distinctAggChildAttrLookup.get(x.canonicalized)
               }
             }
             val newCondition = if (condition.isDefined) {
