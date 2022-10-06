@@ -19,4 +19,4 @@
 Spark through this API are can be changed at any time without warning."""
 
 
-from pyspark.sql.connect.data_frame import DataFrame  # noqa: F401
+from pyspark.sql.connect.dataframe import DataFrame  # noqa: F401

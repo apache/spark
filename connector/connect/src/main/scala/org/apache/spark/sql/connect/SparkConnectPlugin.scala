@@ -44,8 +44,8 @@ class SparkConnectPlugin extends SparkPlugin {
   override def driverPlugin(): DriverPlugin = new DriverPlugin {
 
     override def init(
-                       sc: SparkContext,
-                       pluginContext: PluginContext): util.Map[String, String] = {
+        sc: SparkContext,
+        pluginContext: PluginContext): util.Map[String, String] = {
       SparkConnectService.start()
       Map.empty[String, String].asJava
     }
