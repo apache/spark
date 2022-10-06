@@ -30,7 +30,7 @@ import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.types
 from pyspark import cloudpickle
-from pyspark.sql.connect.data_frame import DataFrame
+from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.plan import SQL
 

@@ -58,8 +58,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[AnalysisException] {
         assertSuccess(expr)
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("BINARY_OP_DIFF_TYPES"),
+      errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
       parameters = messageParameters)
   }
 
@@ -67,8 +66,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
     checkError(
       exception = intercept[AnalysisException] {
         assertSuccess(expr)
-      }, errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("BINARY_OP_WRONG_TYPE"),
+      },
+      errorClass = "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
       parameters = messageParameters)
   }
 
@@ -77,8 +76,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[AnalysisException] {
         assertSuccess(BitwiseNot($"stringField"))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"~stringField\"",
         "paramIndex" -> "1",
@@ -364,8 +362,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[AnalysisException] {
         assertSuccess(Round($"intField", $"booleanField"))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"round(intField, booleanField)\"",
         "paramIndex" -> "2",
@@ -376,8 +373,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[AnalysisException] {
         assertSuccess(Round($"intField", $"mapField"))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"round(intField, mapField)\"",
         "paramIndex" -> "2",
@@ -388,8 +384,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[AnalysisException] {
         assertSuccess(Round($"booleanField", $"intField"))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"round(booleanField, intField)\"",
         "paramIndex" -> "1",
@@ -406,8 +401,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[AnalysisException] {
         assertSuccess(BRound($"intField", $"booleanField"))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"bround(intField, booleanField)\"",
         "paramIndex" -> "2",
@@ -418,8 +412,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[AnalysisException] {
         assertSuccess(BRound($"intField", $"mapField"))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"bround(intField, mapField)\"",
         "paramIndex" -> "2",
@@ -430,8 +423,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[AnalysisException] {
         assertSuccess(BRound($"booleanField", $"intField"))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"bround(booleanField, intField)\"",
         "paramIndex" -> "1",

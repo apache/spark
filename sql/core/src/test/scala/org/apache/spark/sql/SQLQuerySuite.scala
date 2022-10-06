@@ -1829,7 +1829,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           sql("select a.* from testData2")
         },
         errorClass = "_LEGACY_ERROR_TEMP_1050",
-        errorSubClass = None,
         sqlState = None,
         parameters = Map("attributes" -> "(ArrayBuffer|List)\\(a\\)"),
         matchPVals = true,
@@ -2686,8 +2685,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           exception = intercept[AnalysisException] {
             sql(query)
           },
-          errorClass = "DATATYPE_MISMATCH",
-          errorSubClass = "BINARY_OP_DIFF_TYPES",
+          errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
           sqlState = None,
           parameters = Map(
             "sqlExpr" -> "\"(c = C)\"",

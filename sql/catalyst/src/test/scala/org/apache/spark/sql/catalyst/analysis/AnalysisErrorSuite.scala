@@ -116,19 +116,10 @@ class AnalysisErrorSuite extends AnalysisTest {
       name: String,
       plan: LogicalPlan,
       errorClass: String,
-      messageParameters: Map[String, String]): Unit = {
-    errorClassTest(name, plan, errorClass, null, messageParameters)
-  }
-
-  def errorClassTest(
-      name: String,
-      plan: LogicalPlan,
-      errorClass: String,
-      errorSubClass: String,
-      messageParameters: Map[String, String]): Unit = {
+      messageParameters: Map[String, String],
+      caseSensitive: Boolean = true): Unit = {
     test(name) {
-      assertAnalysisErrorClass(plan, errorClass, errorSubClass, messageParameters,
-        caseSensitive = true)
+      assertAnalysisErrorClass(plan, errorClass, messageParameters, caseSensitive)
     }
   }
 
@@ -148,8 +139,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorClassTest(
     "single invalid type, single arg",
     testRelation.select(TestFunction(dateLit :: Nil, IntegerType :: Nil).as("a")),
-    errorClass = "DATATYPE_MISMATCH",
-    errorSubClass = "UNEXPECTED_INPUT_TYPE",
+    errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"testfunction(NULL)\"",
       "paramIndex" -> "1",
@@ -161,8 +151,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "single invalid type, second arg",
     testRelation.select(
       TestFunction(dateLit :: dateLit :: Nil, DateType :: IntegerType :: Nil).as("a")),
-    errorClass = "DATATYPE_MISMATCH",
-    errorSubClass = "UNEXPECTED_INPUT_TYPE",
+    errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"testfunction(NULL, NULL)\"",
       "paramIndex" -> "2",
@@ -174,8 +163,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "multiple invalid type",
     testRelation.select(
       TestFunction(dateLit :: dateLit :: Nil, IntegerType :: IntegerType :: Nil).as("a")),
-    errorClass = "DATATYPE_MISMATCH",
-    errorSubClass = "UNEXPECTED_INPUT_TYPE",
+    errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"testfunction(NULL, NULL)\"",
       "paramIndex" -> "1",
@@ -307,8 +295,7 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           SpecifiedWindowFrame(RowFrame, Literal(0), Literal(0)))).as("window")),
-    errorClass = "DATATYPE_MISMATCH",
-    errorSubClass = "UNEXPECTED_INPUT_TYPE",
+    errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"nth_value(b, true)\"",
       "paramIndex" -> "2",
@@ -324,8 +311,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorClassTest(
     "unresolved attributes",
     testRelation.select($"abcd"),
-    "UNRESOLVED_COLUMN",
-    "WITH_SUGGESTION",
+    "UNRESOLVED_COLUMN.WITH_SUGGESTION",
     Map("objectName" -> "`abcd`", "proposal" -> "`a`"))
 
   errorClassTest(
@@ -333,8 +319,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     testRelation2.groupBy($"a")(max($"b"))
       .where(sum($"b") > 0)
       .orderBy($"havingCondition".asc),
-    "UNRESOLVED_COLUMN",
-    "WITH_SUGGESTION",
+    "UNRESOLVED_COLUMN.WITH_SUGGESTION",
     Map("objectName" -> "`havingCondition`", "proposal" -> "`max(b)`"))
 
   errorTest(
@@ -350,8 +335,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorClassTest(
     "sorting by attributes are not from grouping expressions",
     testRelation2.groupBy($"a", $"c")($"a", $"c", count($"a").as("a3")).orderBy($"b".asc),
-    "UNRESOLVED_COLUMN",
-    "WITH_SUGGESTION",
+    "UNRESOLVED_COLUMN.WITH_SUGGESTION",
     Map("objectName" -> "`b`", "proposal" -> "`a`, `c`, `a3`"))
 
   errorTest(
@@ -445,8 +429,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "SPARK-9955: correct error message for aggregate",
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
-    "UNRESOLVED_COLUMN",
-    "WITH_SUGGESTION",
+    "UNRESOLVED_COLUMN.WITH_SUGGESTION",
     Map("objectName" -> "`bad_column`", "proposal" -> "`a`, `b`, `c`, `d`, `e`"))
 
   errorTest(
@@ -832,8 +815,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     ).foreach { case (r, (sqlExpr, inputSql, inputType)) =>
       val plan = Project(Seq(r.as("r")), testRelation)
       assertAnalysisErrorClass(plan,
-        expectedErrorClass = "DATATYPE_MISMATCH",
-        expectedErrorSubClass = "UNEXPECTED_INPUT_TYPE",
+        expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         expectedMessageParameters = Map(
           "sqlExpr" -> sqlExpr,
           "paramIndex" -> "1",

@@ -285,7 +285,6 @@ abstract class SparkFunSuite
    * Checks an exception with an error class against expected results.
    * @param exception     The exception to check
    * @param errorClass    The expected error class identifying the error
-   * @param errorSubClass Optional the expected subclass, None if not given
    * @param sqlState      Optional the expected SQLSTATE, not verified if not supplied
    * @param parameters    A map of parameter names and values. The names are as defined
    *                      in the error-classes file.
@@ -295,21 +294,11 @@ abstract class SparkFunSuite
   protected def checkError(
       exception: SparkThrowable,
       errorClass: String,
-      errorSubClass: Option[String] = None,
       sqlState: Option[String] = None,
       parameters: Map[String, String] = Map.empty,
       matchPVals: Boolean = false,
       queryContext: Array[QueryContext] = Array.empty): Unit = {
-    val mainErrorClass :: tail = errorClass.split("\\.").toList
-    assert(tail.isEmpty || tail.length == 1)
-    // TODO: remove the `errorSubClass` parameter.
-    assert(tail.isEmpty || errorSubClass.isEmpty)
-    assert(exception.getErrorClass === mainErrorClass)
-    if (exception.getErrorSubClass != null) {
-      val subClass = errorSubClass.orElse(tail.headOption)
-      assert(subClass.isDefined)
-      assert(exception.getErrorSubClass === subClass.get)
-    }
+    assert(exception.getErrorClass === errorClass)
     sqlState.foreach(state => assert(exception.getSqlState === state))
     val expectedParameters = exception.getMessageParameters.asScala
     if (matchPVals == true) {
@@ -341,17 +330,9 @@ abstract class SparkFunSuite
   protected def checkError(
       exception: SparkThrowable,
       errorClass: String,
-      errorSubClass: String,
       sqlState: String,
       parameters: Map[String, String]): Unit =
-    checkError(exception, errorClass, Some(errorSubClass), Some(sqlState), parameters)
-
-  protected def checkError(
-      exception: SparkThrowable,
-      errorClass: String,
-      sqlState: String,
-      parameters: Map[String, String]): Unit =
-    checkError(exception, errorClass, None, Some(sqlState), parameters)
+    checkError(exception, errorClass, Some(sqlState), parameters)
 
   protected def checkError(
       exception: SparkThrowable,
@@ -359,51 +340,39 @@ abstract class SparkFunSuite
       sqlState: String,
       parameters: Map[String, String],
       context: QueryContext): Unit =
-    checkError(exception, errorClass, None, Some(sqlState), parameters, false, Array(context))
+    checkError(exception, errorClass, Some(sqlState), parameters, false, Array(context))
 
   protected def checkError(
       exception: SparkThrowable,
       errorClass: String,
       parameters: Map[String, String],
       context: QueryContext): Unit =
-    checkError(exception, errorClass, None, None, parameters, false, Array(context))
+    checkError(exception, errorClass, None, parameters, false, Array(context))
 
   protected def checkError(
       exception: SparkThrowable,
       errorClass: String,
-      errorSubClass: String,
       sqlState: String,
       context: QueryContext): Unit =
-    checkError(exception, errorClass, Some(errorSubClass), None, Map.empty, false, Array(context))
+    checkError(exception, errorClass, None, Map.empty, false, Array(context))
 
   protected def checkError(
       exception: SparkThrowable,
       errorClass: String,
-      errorSubClass: String,
       sqlState: Option[String],
       parameters: Map[String, String],
       context: QueryContext): Unit =
-    checkError(exception, errorClass, Some(errorSubClass), sqlState, parameters,
+    checkError(exception, errorClass, sqlState, parameters,
       false, Array(context))
 
   protected def checkErrorMatchPVals(
       exception: SparkThrowable,
       errorClass: String,
-      errorSubClass: String,
       sqlState: Option[String],
       parameters: Map[String, String],
       context: QueryContext): Unit =
-    checkError(exception, errorClass, Some(errorSubClass), sqlState, parameters,
+    checkError(exception, errorClass, sqlState, parameters,
       matchPVals = true, Array(context))
-
-  protected def checkError(
-      exception: SparkThrowable,
-      errorClass: String,
-      errorSubClass: String,
-      sqlState: String,
-      parameters: Map[String, String],
-      context: QueryContext): Unit =
-    checkError(exception, errorClass, Some(errorSubClass), None, parameters, false, Array(context))
 
   case class ExpectedContext(
       objectType: String,

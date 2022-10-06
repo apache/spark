@@ -103,8 +103,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisErrorClass(
       Project(Seq(UnresolvedAttribute("tBl.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
-      "UNRESOLVED_COLUMN",
-      "WITH_SUGGESTION",
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       Map("objectName" -> "`tBl`.`a`", "proposal" -> "`TbL`.`a`"),
       caseSensitive = true)
 
@@ -713,8 +712,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("CTE with non-existing column alias") {
     assertAnalysisErrorClass(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
-      "UNRESOLVED_COLUMN",
-      "WITH_SUGGESTION",
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       Map("objectName" -> "`y`", "proposal" -> "`t`.`x`"),
       caseSensitive = true)
   }
@@ -1153,8 +1151,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |GROUP BY c.x
         |ORDER BY c.x + c.y
         |""".stripMargin),
-      "UNRESOLVED_COLUMN",
-      "WITH_SUGGESTION",
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       Map("objectName" -> "`c`.`y`", "proposal" -> "`x`"),
       caseSensitive = true)
   }
@@ -1188,8 +1185,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
            |FROM t
            |GROUP BY t.c
            |HAVING abs(t.c) > 0d""".stripMargin),
-      expectedErrorClass = "DATATYPE_MISMATCH",
-      expectedErrorSubClass = "UNEXPECTED_INPUT_TYPE",
+      expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"abs(c)\"",
         "paramIndex" -> "1",
@@ -1207,8 +1203,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
          |FROM t
          |GROUP BY t.c, t.d
          |HAVING abs(c) > 0d""".stripMargin),
-      expectedErrorClass = "DATATYPE_MISMATCH",
-      expectedErrorSubClass = "UNEXPECTED_INPUT_TYPE",
+      expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"abs(c)\"",
         "paramIndex" -> "1",
