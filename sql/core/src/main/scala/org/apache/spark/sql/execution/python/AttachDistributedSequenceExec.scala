@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * A physical plan that adds a new long column with `sequenceAttr` that
@@ -40,13 +41,21 @@ case class AttachDistributedSequenceExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
+  @transient private var cached: RDD[InternalRow] = _
+  private def isCached = cached != null && cached.getStorageLevel != StorageLevel.NONE
+  override def nodeName: String = super.nodeName + s"(cached=$isCached)"
+
+  private[sql] def clean(): Unit = this.synchronized {
+    if (isCached) cached.unpersist(blocking = false)
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     val childRDD = if (child.execute().getNumPartitions > 1) {
       // to avoid execute multiple jobs. zipWithIndex launches a Spark job.
       // todo: add a config for StorageLevel
-      val cached = child.execute().map(_.copy()).persist()
-      val rddName = s"__Pandas_AttachDistributedSequence_${cached.id}__"
-      cached.setName(rddName)
+      this.synchronized {
+        cached = child.execute().map(_.copy()).persist()
+      }
       cached
     } else {
       child.execute()

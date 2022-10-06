@@ -19,29 +19,32 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.python.AttachDistributedSequenceExec
 
+
+// scalastyle:off println
 object UncachePandasIndexing extends Rule[SparkPlan] {
 
+  private def clean(plan: SparkPlan, doClean: Boolean): Unit = plan foreach {
+    case index: AttachDistributedSequenceExec if doClean =>
+      logWarning(s"clean AttachDistributedSequenceExec(${index.id})")
+      println(s"clean AttachDistributedSequenceExec(${index.id})")
+      index.clean()
+
+    case stage: QueryStageExec =>
+      // QueryStageExec itself is a leaf, should go through it.
+      clean(stage.plan, stage.isMaterialized)
+
+    case _ =>
+  }
+
   override def apply(plan: SparkPlan): SparkPlan = {
-    val sc = plan.session.sparkContext
-
-    // TODO: add a config to specify the maximum number of cached RDDs
-    sc.synchronized {
-      val cachedRDDs = sc.persistentRdds.toSeq
-        .filter { case (id, rdd) =>
-          rdd != null &&
-            rdd.name != null &&
-            rdd.name.startsWith("__Pandas_AttachDistributedSequence_")
-        }
-
-      val numCached = cachedRDDs.size
-      if (numCached > 1) {
-        cachedRDDs.sortBy(_._1).take(numCached - 1).foreach { case (id, rdd) =>
-          rdd.unpersist(blocking = false)
-        }
-      }
-    }
-
+    // TODO: add a config to enable it
+    println(s"before clean")
+    println(plan)
+    clean(plan, false)
+    println(s"after clean")
+    println(plan)
     plan
   }
 }
