@@ -61,7 +61,7 @@ object InMemoryColumnarBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val rowsNum = if (mainArgs.length > 0) mainArgs(0).toLong else 1000000
-    runBenchmark("Int In-memory") {
+    runBenchmark(s"Int In-memory with $rowsNum rows") {
       intCache(rowsNum = rowsNum, numIters = 3)
     }
   }
