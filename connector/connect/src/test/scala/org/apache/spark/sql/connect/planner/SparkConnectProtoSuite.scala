@@ -38,7 +38,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   test("Basic select") {
     val connectPlan = {
       // TODO: Scala only allows one implicit per scope so we keep proto implicit imports in
-      // this scope. Need to find a better way to make two implicits work in the smae scope.
+      // this scope. Need to find a better way to make two implicits work in the same scope.
       import org.apache.spark.sql.catalyst.connect.expressions._
       import org.apache.spark.sql.catalyst.connect.plans._
       transform(connectTestRelation.select("id".protoAttr))
