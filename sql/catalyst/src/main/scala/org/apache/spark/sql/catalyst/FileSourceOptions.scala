@@ -49,6 +49,7 @@ object FileSourceOptions {
  *  - get alternative option name if any
  */
 trait FileSourceOptionsSet {
+  // Option -> Alternative Option if any
   private val validOptions = collection.mutable.Map[String, Option[String]]()
 
   /**
@@ -57,6 +58,7 @@ trait FileSourceOptionsSet {
    * @param alternative Alternative option name if any
    */
   protected def newOption(name: String, alternative: Option[String] = None): String = {
+    // Register both of the options
     validOptions += (name -> alternative)
     validOptions ++ alternative.map(alterName => alterName -> Some(name))
     name
