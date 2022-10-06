@@ -161,8 +161,8 @@ message recursiveD {
 }
 
 message requiredMsg {
-  optional string key = 1;
+  string key = 1;
   int32 col_1 = 2;
-  optional string col_2 = 3;
-  optional int32 col_3 = 4;
+  string col_2 = 3;
+  int32 col_3 = 4;
 }

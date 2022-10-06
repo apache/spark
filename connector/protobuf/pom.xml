@@ -102,7 +102,7 @@
           <relocations>
             <relocation>
               <pattern>com.google.protobuf</pattern>
-              <shadedPattern>${spark.shade.packageName}.spark-proto.protobuf</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.spark-protobuf.protobuf</shadedPattern>
               <includes>
                 <include>com.google.protobuf.**</include>
               </includes>

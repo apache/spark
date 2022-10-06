@@ -491,7 +491,6 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       == inputDf.select("requiredMsg.key").take(1).toSeq(0).get(0))
     assert(actualMessage.getField(messageDescriptor.findFieldByName("col_2"))
       == inputDf.select("requiredMsg.col_2").take(1).toSeq(0).get(0))
-    // protobuf fields col_1 is required and col_3 is optional an field
     assert(actualMessage.getField(messageDescriptor.findFieldByName("col_1")) == 0)
     assert(actualMessage.getField(messageDescriptor.findFieldByName("col_3")) == 0)
 
