@@ -2359,8 +2359,7 @@ class SubquerySuite extends QueryTest
       val error = intercept[AnalysisException] {
         sql("select (select a + a from (select upper(x['a']) as a)) from v1").collect()
       }
-      assert(error.getMessage.contains(
-        "Correlated column references do not support data type map<string,int>: v1.x"))
+      assert(error.getMessage.contains("Correlated column reference 'v1.x' cannot be map type"))
     }
   }
 }

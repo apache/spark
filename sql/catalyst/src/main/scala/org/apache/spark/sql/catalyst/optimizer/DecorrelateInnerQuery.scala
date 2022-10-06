@@ -366,7 +366,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               // the EqualNullSafe join condition can become unresolved.
               if (!cond.resolved) {
                 if (!RowOrdering.isOrderable(a.dataType)) {
-                  throw QueryCompilationErrors.unsupportedOuterReferenceDataTypeError(
+                  throw QueryCompilationErrors.unsupportedCorrelatedReferenceDataTypeError(
                     o, a.dataType, plan.origin)
                 } else {
                   throw new IllegalStateException(s"Unable to decorrelate subquery: " +
