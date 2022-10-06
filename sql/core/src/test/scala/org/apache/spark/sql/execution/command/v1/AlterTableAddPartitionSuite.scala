@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
@@ -133,6 +134,26 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
         sql(s"ALTER TABLE $t ADD PARTITION (part=3) LOCATION '$part3Loc'")
         checkCachedRelation(v2, Seq(Row(0, 0), Row(0, 1), Row(0, 2), Row(0, 3)))
       }
+    }
+  }
+
+  // TODO: Move this test to the common trait as soon as it is migrated on checkError()
+  test("partition already exists") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $t ADD PARTITION (id=2) LOCATION 'loc1'")
+
+      val errMsg = intercept[PartitionsAlreadyExistException] {
+        sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'" +
+          " PARTITION (id=2) LOCATION 'loc1'")
+      }.getMessage
+      assert(errMsg ===
+      """The following partitions already exists in table 'tbl' database 'ns':
+        |Map(id -> 2)""".stripMargin)
+
+      sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
+        " PARTITION (id=2) LOCATION 'loc1'")
+      checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
     }
   }
 }
