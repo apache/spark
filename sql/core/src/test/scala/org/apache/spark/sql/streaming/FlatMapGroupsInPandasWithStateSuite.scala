@@ -34,9 +34,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
   import testImplicits._
 
   test("applyInPandasWithState - streaming") {
-    // scalastyle:off assume
     assume(shouldTestPandasUDFs)
-    // scalastyle:on assume
 
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count if state is defined, otherwise does not return anything
@@ -116,9 +114,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
 
   test("applyInPandasWithState - streaming, multiple groups in partition, " +
     "multiple outputs per grouping key") {
-    // scalastyle:off assume
     assume(shouldTestPandasUDFs)
-    // scalastyle:on assume
 
     val pythonScript =
       """
@@ -190,9 +186,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
   }
 
   test("applyInPandasWithState - streaming + aggregation") {
-    // scalastyle:off assume
     assume(shouldTestPandasUDFs)
-    // scalastyle:on assume
 
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
@@ -268,9 +262,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
   }
 
   test("applyInPandasWithState - streaming with processing time timeout") {
-    // scalastyle:off assume
     assume(shouldTestPandasUDFs)
-    // scalastyle:on assume
 
     // Function to maintain the count as state and set the proc. time timeout delay of 10 seconds.
     // It returns the count if changed, or -1 if the state was removed by timeout.
@@ -373,9 +365,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
   }
 
   test("applyInPandasWithState - streaming w/ event time timeout + watermark") {
-    // scalastyle:off assume
     assume(shouldTestPandasUDFs)
-    // scalastyle:on assume
 
     // timestamp_seconds assumes the base timezone is UTC. However, the provided function
     // localizes it. Therefore, this test assumes the timezone is in UTC
@@ -464,9 +454,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
 
   def testWithTimeout(timeoutConf: GroupStateTimeout): Unit = {
     test("SPARK-20714: watermark does not fail query when timeout = " + timeoutConf) {
-      // scalastyle:off assume
       assume(shouldTestPandasUDFs)
-      // scalastyle:on assume
 
       // timestamp_seconds assumes the base timezone is UTC. However, the provided function
       // localizes it. Therefore, this test assumes the timezone is in UTC
@@ -538,9 +526,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
   testWithTimeout(ProcessingTimeTimeout)
 
   test("applyInPandasWithState - uses state format version 2 by default") {
-    // scalastyle:off assume
     assume(shouldTestPandasUDFs)
-    // scalastyle:on assume
 
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count if state is defined, otherwise does not return anything
@@ -613,9 +599,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
   }
 
   test("applyInPandasWithState - streaming - arrow RecordBatch size with chunking") {
-    // scalastyle:off assume
     assume(shouldTestPandasUDFs)
-    // scalastyle:on assume
 
     val pythonScript =
       """
@@ -675,9 +659,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
   }
 
   test("applyInPandasWithState - streaming - partial consume of iterator in user function") {
-    // scalastyle:off assume
     assume(shouldTestPandasUDFs)
-    // scalastyle:on assume
 
     val pythonScript =
       """
@@ -740,9 +722,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
   }
 
   test("SPARK-40670: applyInPandasWithState - streaming having non-null columns") {
-    // scalastyle:off assume
     assume(shouldTestPandasUDFs)
-    // scalastyle:on assume
 
     // Function to maintain the count as state and set the proc. time timeout delay of 10 seconds.
     // It returns the count if changed, or -1 if the state was removed by timeout.
