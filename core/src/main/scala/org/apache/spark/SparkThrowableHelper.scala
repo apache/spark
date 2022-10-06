@@ -34,10 +34,6 @@ private[spark] object SparkThrowableHelper {
   val errorReader = new ErrorClassesJsonReader(
     Seq(Utils.getSparkClassLoader.getResource("error/error-classes.json")))
 
-  def getErrorSubClass(errorClass: String): String = {
-    errorClass.split('.').lastOption.orNull
-  }
-
   def getMessage(
       errorClass: String,
       messageParameters: Map[String, String]): String = {
