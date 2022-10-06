@@ -19,9 +19,9 @@ package org.apache.spark.sql.connect.planner
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
  * This suite is based on connect DSL and test that given same dataframe operations, whether
@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
  */
 class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
-  lazy val connectTestRelation = createLocalRelationProto(Seq(("id", IntegerType)))
+  lazy val connectTestRelation = createLocalRelationProto(Seq($"id".int))
 
   lazy val sparkTestRelation: LocalRelation = LocalRelation($"id".int)
 
@@ -46,12 +46,12 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
-  private def createLocalRelationProto(colNameTypeMap: Seq[(String, DataType)]): proto.Relation = {
+  private def createLocalRelationProto(attrs: Seq[AttributeReference]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
     // TODO: set data types for each local relation attribute one proto supports data type.
-    for ((k, v) <- colNameTypeMap) {
+    for (attr <- attrs) {
       localRelationBuilder.addAttributes(
-        proto.Expression.Attribute.newBuilder().setName(k).build()
+        proto.Expression.Attribute.newBuilder().setName(attr.name).build()
       )
     }
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
