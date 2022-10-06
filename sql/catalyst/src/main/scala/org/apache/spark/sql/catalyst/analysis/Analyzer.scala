@@ -871,13 +871,13 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       // once children are resolved, we can determine values from ids and vice versa
       // if only either is given, and only AttributeReference are given
-      case up @Unpivot(Some(ids), None, _, _, _, _) if up.childrenResolved &&
+      case up @ Unpivot(Some(ids), None, _, _, _, _) if up.childrenResolved &&
         ids.forall(_.resolved) &&
         ids.forall(_.isInstanceOf[AttributeReference]) =>
         val idAttrs = AttributeSet(up.ids.get)
         val values = up.child.output.filterNot(idAttrs.contains)
         up.copy(values = Some(values.map(Seq(_))))
-      case up @Unpivot(None, Some(values), _, _, _, _) if up.childrenResolved &&
+      case up @ Unpivot(None, Some(values), _, _, _, _) if up.childrenResolved &&
         values.forall(_.forall(_.resolved)) &&
         values.forall(_.forall(_.isInstanceOf[AttributeReference])) =>
         val valueAttrs = AttributeSet(up.values.get.flatten)
