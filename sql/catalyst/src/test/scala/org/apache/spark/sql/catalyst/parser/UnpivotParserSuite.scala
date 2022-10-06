@@ -39,7 +39,7 @@ class UnpivotParserSuite extends AnalysisTest {
       Unpivot(
         None,
         Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
-        Some(Seq(None, None)),
+        None,
         "col",
         Seq("val"),
         table("t")
@@ -78,7 +78,7 @@ class UnpivotParserSuite extends AnalysisTest {
       Unpivot(
         None,
         Some(Seq(Seq($"a", $"b").map(UnresolvedAlias(_)), Seq($"c", $"d").map(UnresolvedAlias(_)))),
-        Some(Seq(None, None)),
+        None,
         "col",
         Seq("val1", "val2"),
         table("t")
@@ -136,7 +136,7 @@ class UnpivotParserSuite extends AnalysisTest {
           Unpivot(
             None,
             Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
-            Some(Seq(None, None)),
+            None,
             "col",
             Seq("val"),
             table("t")
