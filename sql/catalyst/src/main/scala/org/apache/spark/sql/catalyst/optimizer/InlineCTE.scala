@@ -68,7 +68,7 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
       cteDef.child.exists(_.expressions.exists(_.isInstanceOf[OuterReference]))
   }
 
-  private def buildCTEMap(
+  def buildCTEMap(
       plan: LogicalPlan,
       cteMap: mutable.HashMap[Long, (CTERelationDef, Int)]): Unit = {
     plan match {

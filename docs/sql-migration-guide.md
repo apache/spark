@@ -80,6 +80,8 @@ license: |
   
   - Since Spark 3.3, the precision of the return type of round-like functions has been fixed. This may cause Spark throw `AnalysisException` of the `CANNOT_UP_CAST_DATATYPE` error class when using views created by prior versions. In such cases, you need to recreate the views using ALTER VIEW AS or CREATE OR REPLACE VIEW AS with newer Spark versions.
 
+  - Since Spark 3.3.1 and 3.2.3, for `SELECT ... GROUP BY a GROUPING SETS (b)`-style SQL statements, `grouping__id` returns different values from Apache Spark 3.2.0, 3.2.1, 3.2.2, and 3.3.0. It computes based on user-given group-by expressions plus grouping set columns. To restore the behavior before 3.3.1 and 3.2.3, you can set `spark.sql.legacy.groupingIdWithAppendedUserGroupBy`. For details, see [SPARK-40218](https://issues.apache.org/jira/browse/SPARK-40218) and [SPARK-40562](https://issues.apache.org/jira/browse/SPARK-40562).
+
 ## Upgrading from Spark SQL 3.1 to 3.2
 
   - Since Spark 3.2, ADD FILE/JAR/ARCHIVE commands require each path to be enclosed by `"` or `'` if the path contains whitespaces.

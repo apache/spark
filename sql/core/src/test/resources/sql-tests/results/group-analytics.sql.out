@@ -131,12 +131,19 @@ SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Empty set in ROLLUP grouping sets is not supported.(line 1, pos 61)
-
-== SQL ==
-SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year, (course, year), ()) ORDER BY course, year
--------------------------------------------------------------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0051",
+  "messageParameters" : {
+    "element" : "ROLLUP"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 53,
+    "stopIndex" : 101,
+    "fragment" : "GROUP BY ROLLUP(course, year, (course, year), ())"
+  } ]
+}
 
 
 -- !query
@@ -193,12 +200,19 @@ SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year, 
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Empty set in CUBE grouping sets is not supported.(line 1, pos 61)
-
-== SQL ==
-SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year, (course, year), ()) ORDER BY course, year
--------------------------------------------------------------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0051",
+  "messageParameters" : {
+    "element" : "CUBE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 53,
+    "stopIndex" : 99,
+    "fragment" : "GROUP BY CUBE(course, year, (course, year), ())"
+  } ]
+}
 
 
 -- !query

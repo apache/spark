@@ -199,7 +199,12 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Aggregate expression required for pivot, but 'coursesales.earnings' did not appear in any aggregate function.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1006",
+  "messageParameters" : {
+    "sql" : "coursesales.earnings"
+  }
+}
 
 
 -- !query
@@ -214,7 +219,12 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Aggregate expression required for pivot, but '__auto_generated_subquery_name.year' did not appear in any aggregate function.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1006",
+  "messageParameters" : {
+    "sql" : "__auto_generated_subquery_name.year"
+  }
+}
 
 
 -- !query
@@ -236,7 +246,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`year`",
     "proposal" : "`__auto_generated_subquery_name`.`course`, `__auto_generated_subquery_name`.`earnings`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 62,
+    "stopIndex" : 118,
+    "fragment" : "PIVOT (\n  udf(sum(earnings))\n  FOR year IN (2012, 2013)\n)"
+  } ]
 }
 
 
@@ -322,9 +339,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "PIVOT_VALUE_DATA_TYPE_MISMATCH",
   "sqlState" : "42000",
   "messageParameters" : {
+    "pivotType" : "struct<course:string,year:int>",
     "value" : "dotNET",
-    "valueType" : "string",
-    "pivotType" : "struct<course:string,year:int>"
+    "valueType" : "string"
   }
 }
 
@@ -346,7 +363,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`s`",
     "proposal" : "`coursesales`.`year`, `coursesales`.`course`, `coursesales`.`earnings`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 71,
+    "stopIndex" : 71,
+    "fragment" : "s"
+  } ]
 }
 
 

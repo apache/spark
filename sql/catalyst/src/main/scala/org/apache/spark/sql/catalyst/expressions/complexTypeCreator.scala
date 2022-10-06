@@ -359,6 +359,7 @@ object CreateStruct {
       // We should always use the last part of the column name (`c` in the above example) as the
       // alias name inside CreateNamedStruct.
       case (u: UnresolvedAttribute, _) => Seq(Literal(u.nameParts.last), u)
+      case (u @ UnresolvedExtractValue(_, e: Literal), _) => Seq(e, u)
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
       case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
       case (e, index) => Seq(Literal(s"col${index + 1}"), e)

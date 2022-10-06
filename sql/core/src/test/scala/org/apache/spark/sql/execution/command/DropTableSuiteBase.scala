@@ -57,7 +57,7 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       val errMsg = intercept[AnalysisException] {
         sql(s"DROP TABLE $catalog.ns.tbl")
       }.getMessage
-      assert(errMsg.contains("Table or view not found"))
+      assert(errMsg.contains(s"Table $catalog.ns.tbl not found"))
     }
   }
 

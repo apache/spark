@@ -165,7 +165,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`db1`.`t1`.`i1`",
     "proposal" : "`spark_catalog`.`mydb2`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "db1.t1.i1"
+  } ]
 }
 
 
@@ -198,7 +205,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`mydb1`.`t1`",
     "proposal" : "`spark_catalog`.`mydb1`.`t1`.`i1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "mydb1.t1"
+  } ]
 }
 
 
@@ -208,7 +222,20 @@ SELECT t1.x.y.* FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't1.x.y.*' given input columns 'i1'; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1051",
+  "messageParameters" : {
+    "columns" : "i1",
+    "targetString" : "t1.x.y"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "t1.x.y.*"
+  } ]
+}
 
 
 -- !query
@@ -224,7 +251,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`t1`",
     "proposal" : "`spark_catalog`.`mydb1`.`t1`.`i1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 9,
+    "fragment" : "t1"
+  } ]
 }
 
 
@@ -249,7 +283,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`mydb1`.`t1`.`i1`",
     "proposal" : "`spark_catalog`.`mydb2`.`t1`.`i1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "mydb1.t1.i1"
+  } ]
 }
 
 

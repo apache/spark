@@ -37,8 +37,8 @@ def _unsupported_property(property_name, deprecated=False, reason=""):
 
 
 class MissingPandasLikeDataFrameGroupBy:
-    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
-    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
+    # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Properties
     corr = _unsupported_property("corr")
@@ -61,13 +61,12 @@ class MissingPandasLikeDataFrameGroupBy:
     ohlc = _unsupported_function("ohlc")
     pct_change = _unsupported_function("pct_change")
     pipe = _unsupported_function("pipe")
-    prod = _unsupported_function("prod")
     resample = _unsupported_function("resample")
 
 
 class MissingPandasLikeSeriesGroupBy:
-    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
-    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
+    # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Properties
     corr = _unsupported_property("corr")
@@ -93,5 +92,4 @@ class MissingPandasLikeSeriesGroupBy:
     ohlc = _unsupported_function("ohlc")
     pct_change = _unsupported_function("pct_change")
     pipe = _unsupported_function("pipe")
-    prod = _unsupported_function("prod")
     resample = _unsupported_function("resample")

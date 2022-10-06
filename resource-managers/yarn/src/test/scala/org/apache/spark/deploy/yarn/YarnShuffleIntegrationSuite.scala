@@ -34,7 +34,7 @@ import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
-import org.apache.spark.tags.ExtendedYarnTest
+import org.apache.spark.tags.{ExtendedLevelDBTest, ExtendedYarnTest}
 
 /**
  * Integration test for the external shuffle service with a yarn mini-cluster
@@ -50,6 +50,7 @@ abstract class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
       classOf[YarnShuffleService].getCanonicalName)
     yarnConfig.set(SHUFFLE_SERVICE_PORT.key, "0")
     yarnConfig.set(SHUFFLE_SERVICE_DB_BACKEND.key, dbBackend.name())
+    yarnConfig.set(YarnTestAccessor.shuffleServiceIntegrationTestingKey, "true")
     yarnConfig
   }
 
@@ -71,26 +72,22 @@ abstract class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     val shuffleService = YarnTestAccessor.getShuffleServiceInstance
 
     val registeredExecFile = YarnTestAccessor.getRegisteredExecutorFile(shuffleService)
+    assert(registeredExecFile != null)
 
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(
       false,
       mainClassName(YarnExternalShuffleDriver.getClass),
-      appArgs = if (registeredExecFile != null) {
-        Seq(result.getAbsolutePath, registeredExecFile.getAbsolutePath)
-      } else {
-        Seq(result.getAbsolutePath)
-      },
+      appArgs = Seq(result.getAbsolutePath, registeredExecFile.getAbsolutePath),
       extraConf = extraSparkConf()
     )
     checkResult(finalState, result)
 
-    if (registeredExecFile != null) {
-      assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
-    }
+    assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
   }
 }
 
+@ExtendedLevelDBTest
 @ExtendedYarnTest
 class YarnShuffleIntegrationWithLevelDBBackendSuite
   extends YarnShuffleIntegrationSuite {
@@ -122,6 +119,7 @@ abstract class YarnShuffleAuthSuite extends YarnShuffleIntegrationSuite {
   }
 }
 
+@ExtendedLevelDBTest
 @ExtendedYarnTest
 class YarnShuffleAuthWithLevelDBBackendSuite extends YarnShuffleAuthSuite {
   override protected def dbBackend: DBBackend = DBBackend.LEVELDB

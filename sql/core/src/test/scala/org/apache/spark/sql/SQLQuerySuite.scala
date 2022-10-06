@@ -1789,8 +1789,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           nestedStructData.select($"record.r1.*"))
 
         // Try resolving something not there.
-        assert(intercept[AnalysisException](sql("SELECT abc.* FROM nestedStructTable"))
-          .getMessage.contains("cannot resolve"))
+        checkError(
+          exception = intercept[AnalysisException]{
+            sql("SELECT abc.* FROM nestedStructTable")
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1051",
+          parameters = Map("targetString" -> "abc", "columns" -> "record"),
+          context = ExpectedContext(fragment = "abc.*", start = 7, stop = 11))
       }
 
       // Create paths with unusual characters
@@ -1819,8 +1824,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
 
       // Try star expanding a scalar. This should fail.
-      assert(intercept[AnalysisException](sql("select a.* from testData2")).getMessage.contains(
-        "Can only star expand struct data types."))
+      checkError(
+        exception = intercept[AnalysisException]{
+          sql("select a.* from testData2")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1050",
+        errorSubClass = None,
+        sqlState = None,
+        parameters = Map("attributes" -> "(ArrayBuffer|List)\\(a\\)"),
+        matchPVals = true,
+        queryContext = Array(ExpectedContext(fragment = "a.*", start = 7, stop = 9)))
     }
   }
 
@@ -1866,15 +1879,20 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         dfNoCols,
         dfNoCols.select($"*"))
 
-      var e = intercept[AnalysisException] {
-        sql("SELECT a.* FROM temp_table_no_cols a")
-      }.getMessage
-      assert(e.contains("cannot resolve 'a.*' given input columns ''"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT a.* FROM temp_table_no_cols a")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1051",
+        parameters = Map("targetString" -> "a", "columns" -> ""),
+        context = ExpectedContext(fragment = "a.*", start = 7, stop = 9))
 
-      e = intercept[AnalysisException] {
-        dfNoCols.select($"b.*")
-      }.getMessage
-      assert(e.contains("cannot resolve 'b.*' given input columns ''"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          dfNoCols.select($"b.*")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1051",
+        parameters = Map("targetString" -> "b", "columns" -> ""))
     }
   }
 
@@ -2663,16 +2681,23 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         sql("CREATE TABLE t(c struct<f:int>) USING parquet")
         sql("CREATE TABLE S(C struct<F:int>) USING parquet")
         checkAnswer(sql("SELECT * FROM t, S WHERE t.c.f = S.C.F"), Seq.empty)
+        val query = "SELECT * FROM t, S WHERE c = C"
         checkError(
           exception = intercept[AnalysisException] {
-            sql("SELECT * FROM t, S WHERE c = C")
+            sql(query)
           },
           errorClass = "DATATYPE_MISMATCH",
-          errorSubClass = Some("BINARY_OP_DIFF_TYPES"),
+          errorSubClass = "BINARY_OP_DIFF_TYPES",
+          sqlState = None,
           parameters = Map(
             "sqlExpr" -> "\"(c = C)\"",
             "left" -> "\"STRUCT<f: INT>\"",
-            "right" -> "\"STRUCT<F: INT>\""))
+            "right" -> "\"STRUCT<F: INT>\""),
+          context = ExpectedContext(
+            fragment = "c = C",
+            start = 25,
+            stop = 29
+          ))
       }
     }
   }
@@ -3676,11 +3701,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTempView("df") {
       Seq("m@ca").toDF("s").createOrReplaceTempView("df")
 
-      val e = intercept[AnalysisException] {
-        sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM df").collect()
-      }
-      assert(e.message.contains("the pattern 'm%@ca' is invalid, " +
-        "the escape character is not allowed to precede '@'"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM df").collect()
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1216",
+        parameters = Map(
+          "pattern" -> "m%@ca",
+          "message" -> "the escape character is not allowed to precede '@'"))
 
       checkAnswer(sql("SELECT s LIKE 'm@@ca' ESCAPE '@' FROM df"), Row(true))
     }

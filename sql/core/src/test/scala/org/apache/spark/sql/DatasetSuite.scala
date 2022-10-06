@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import org.apache.hadoop.fs.{Path, PathFilter}
 import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
@@ -327,20 +328,30 @@ class DatasetSuite extends QueryTest
           ds.select(expr("`(_1)?+.+`").as[Int])
         },
         errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = Some("WITH_SUGGESTION"),
+        errorSubClass = "WITH_SUGGESTION",
+        sqlState = None,
         parameters = Map(
           "objectName" -> "`(_1)?+.+`",
-          "proposal" -> "`_1`, `_2`"))
+          "proposal" -> "`_1`, `_2`"),
+        context = ExpectedContext(
+          fragment = "`(_1)?+.+`",
+          start = 0,
+          stop = 9))
 
       checkError(
         exception = intercept[AnalysisException] {
           ds.select(expr("`(_1|_2)`").as[Int])
         },
         errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = Some("WITH_SUGGESTION"),
+        errorSubClass = "WITH_SUGGESTION",
+        sqlState = None,
         parameters = Map(
           "objectName" -> "`(_1|_2)`",
-          "proposal" -> "`_1`, `_2`"))
+          "proposal" -> "`_1`, `_2`"),
+        context = ExpectedContext(
+          fragment = "`(_1|_2)`",
+          start = 0,
+          stop = 8))
 
       var e = intercept[AnalysisException] {
         ds.select(ds("`(_1)?+.+`"))
@@ -777,6 +788,8 @@ class DatasetSuite extends QueryTest
 
     observe(spark.range(100), Map("percentile_approx_val" -> 49))
     observe(spark.range(0), Map("percentile_approx_val" -> null))
+    observe(spark.range(1, 10), Map("percentile_approx_val" -> 5))
+    observe(spark.range(1, 10, 1, 11), Map("percentile_approx_val" -> 5))
   }
 
   test("sample with replacement") {
@@ -890,10 +903,16 @@ class DatasetSuite extends QueryTest
   test("Kryo encoder: check the schema mismatch when converting DataFrame to Dataset") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val df = Seq((1.0)).toDF("a")
-    val e = intercept[AnalysisException] {
-      df.as[KryoData]
-    }.message
-    assert(e.contains("cannot cast double to binary"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.as[KryoData]
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("CAST_WITHOUT_SUGGESTION"),
+      parameters = Map(
+        "sqlExpr" -> "\"a\"",
+        "srcType" -> "\"DOUBLE\"",
+        "targetType" -> "\"BINARY\""))
   }
 
   test("Java encoder") {
@@ -2146,6 +2165,23 @@ class DatasetSuite extends QueryTest
       (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
       (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
       (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13))
+  }
+
+  test("SPARK-40407: repartition should not result in severe data skew") {
+    val df = spark.range(0, 100, 1, 50).repartition(4)
+    val result = df.mapPartitions(iter => Iterator.single(iter.length)).collect()
+    assert(result.sorted.toSeq === Seq(23, 25, 25, 27))
+  }
+
+  test("SPARK-40660: Switch to XORShiftRandom to distribute elements") {
+    withTempDir { dir =>
+      spark.range(10).repartition(10).write.mode(SaveMode.Overwrite).parquet(dir.getCanonicalPath)
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(spark.sessionState.newHadoopConf())
+      val parquetFiles = fs.listStatus(new Path(dir.getAbsolutePath), new PathFilter {
+        override def accept(path: Path): Boolean = path.getName.endsWith("parquet")
+      })
+      assert(parquetFiles.size === 10)
+    }
   }
 }
 

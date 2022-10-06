@@ -173,7 +173,7 @@ trait AnalysisTest extends PlanTest {
   protected def assertAnalysisErrorClass(
       inputPlan: LogicalPlan,
       expectedErrorClass: String,
-      expectedMessageParameters: Array[String],
+      expectedMessageParameters: Map[String, String],
       caseSensitive: Boolean = true): Unit = {
     assertAnalysisErrorClass(
       inputPlan,
@@ -187,7 +187,7 @@ trait AnalysisTest extends PlanTest {
       inputPlan: LogicalPlan,
       expectedErrorClass: String,
       expectedErrorSubClass: String,
-      expectedMessageParameters: Array[String],
+      expectedMessageParameters: Map[String, String],
       caseSensitive: Boolean): Unit = {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer
