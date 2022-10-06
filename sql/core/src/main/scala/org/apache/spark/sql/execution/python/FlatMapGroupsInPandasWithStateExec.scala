@@ -88,7 +88,7 @@ case class FlatMapGroupsInPandasWithStateExec(
   // but all nulls for value side by intention. This technically changes the schema of input to
   // be "nullable", hence the schema information and the internal projection of row should take
   // this into consideration. Strictly saying, it's not applied to the part of grouping key, but
-  // it doesn't hurt much to we apply the same for grouping key as well.
+  // it doesn't hurt much even if we apply the same for grouping key as well.
   private lazy val dedupAttributesWithNull =
     dedupAttributes.map(_.withNullability(newNullability = true))
   private lazy val childOutputWithNull = child.output.map(_.withNullability(newNullability = true))
