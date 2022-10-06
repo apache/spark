@@ -106,7 +106,7 @@ private[sql] class AvroOptions(
       ignoreFilesWithoutExtensionByDefault)
 
     parameters
-      .get(AvroOptions.IGNORE_EXTENSION_KEY)
+      .get(AvroOptions.IGNORE_EXTENSION)
       .map(_.toBoolean)
       .getOrElse(!ignoreFilesWithoutExtension)
   }
@@ -141,7 +141,7 @@ private[sql] object AvroOptions extends FileSourceOptionsSet {
     new AvroOptions(CaseInsensitiveMap(parameters), hadoopConf)
   }
 
-  val IGNORE_EXTENSION_KEY = newOption("ignoreExtension")
+  val IGNORE_EXTENSION = newOption("ignoreExtension")
   val MODE = newOption("mode")
   val RECORD_NAME = newOption("recordName")
   val COMPRESSION = newOption("compression")

@@ -52,13 +52,13 @@ trait FileSourceOptionsSet {
   private val validOptions = collection.mutable.Map[String, Option[String]]()
 
   /**
-   * Register a new Option. If two options are alternative to each other, each of them needs to be
-   * registered individually
+   * Register a new Option.
    * @param name The primary option name
    * @param alternative Alternative option name if any
    */
   protected def newOption(name: String, alternative: Option[String] = None): String = {
     validOptions += (name -> alternative)
+    validOptions ++ alternative.map(alterName => alterName -> Some(name))
     name
   }
 
