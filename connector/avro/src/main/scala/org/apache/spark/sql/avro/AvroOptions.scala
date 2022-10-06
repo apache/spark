@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.{FileSourceOptions, FileSourceOptionsSet}
+import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -132,7 +132,7 @@ private[sql] class AvroOptions(
     .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ))
 }
 
-private[sql] object AvroOptions extends FileSourceOptionsSet {
+private[sql] object AvroOptions extends DataSourceOptions {
   def apply(parameters: Map[String, String]): AvroOptions = {
     val hadoopConf = SparkSession
       .getActiveSession

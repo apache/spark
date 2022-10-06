@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
-import org.apache.spark.sql.catalyst.{FileSourceOptions, FileSourceOptionsSet}
+import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
 
@@ -86,7 +86,7 @@ class ParquetOptions(
 }
 
 
-object ParquetOptions extends FileSourceOptionsSet {
+object ParquetOptions extends DataSourceOptions {
   // The parquet compression short names
   private val shortParquetCompressionCodecNames = Map(
     "none" -> CompressionCodecName.UNCOMPRESSED,

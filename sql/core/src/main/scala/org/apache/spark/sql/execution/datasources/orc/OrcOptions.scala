@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.orc.OrcConf.COMPRESS
 
-import org.apache.spark.sql.catalyst.{FileSourceOptions, FileSourceOptionsSet}
+import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
 
@@ -69,7 +69,7 @@ class OrcOptions(
     .getOrElse(sqlConf.isOrcSchemaMergingEnabled)
 }
 
-object OrcOptions extends FileSourceOptionsSet {
+object OrcOptions extends DataSourceOptions {
   val MERGE_SCHEMA = newOption("mergeSchema")
   val ORC_COMPRESSION = newOption(COMPRESS.getAttribute)
   val COMPRESSION = newOption("compression")

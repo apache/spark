@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.text
 
 import java.nio.charset.{Charset, StandardCharsets}
 
-import org.apache.spark.sql.catalyst.{FileSourceOptions, FileSourceOptionsSet}
+import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs}
 
 /**
@@ -58,7 +58,7 @@ class TextOptions(@transient private val parameters: CaseInsensitiveMap[String])
     lineSeparatorInRead.getOrElse("\n".getBytes(StandardCharsets.UTF_8))
 }
 
-private[sql] object TextOptions extends FileSourceOptionsSet {
+private[sql] object TextOptions extends DataSourceOptions {
   val COMPRESSION = newOption("compression")
   val WHOLETEXT = newOption("wholetext")
   val ENCODING = newOption("encoding")

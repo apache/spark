@@ -24,7 +24,7 @@ import java.util.Locale
 import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.{FileSourceOptions, FileSourceOptionsSet}
+import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -330,7 +330,7 @@ class CSVOptions(
   }
 }
 
-object CSVOptions extends FileSourceOptionsSet {
+object CSVOptions extends DataSourceOptions {
   val HEADER = newOption("header")
   val INFER_SCHEMA = newOption("inferSchema")
   val IGNORE_LEADING_WHITESPACE = newOption("ignoreLeadingWhiteSpace")
@@ -364,10 +364,10 @@ object CSVOptions extends FileSourceOptionsSet {
   val TIME_ZONE = newOption("timeZone")
   val UNESCAPED_QUOTE_HANDLING = newOption("unescapedQuoteHandling")
   // Options with alternative
-  val ENCODING = newOption("encoding", Some("charset"))
-  val CHARSET = newOption("charset", Some("encoding"))
-  val CODEC = newOption("codec", Some("compression"))
-  val COMPRESSION = newOption("compression", Some("codec"))
-  val SEP = newOption("sep", Some("delimiter"))
-  val DELIMITER = newOption("delimiter", Some("sep"))
+  val CHARSET = newOption("charset")
+  val ENCODING = newOption("encoding", Some(CHARSET))
+  val CODEC = newOption("codec")
+  val COMPRESSION = newOption("compression", Some(CODEC))
+  val DELIMITER = newOption("delimiter")
+  val SEP = newOption("sep", Some(DELIMITER))
 }
