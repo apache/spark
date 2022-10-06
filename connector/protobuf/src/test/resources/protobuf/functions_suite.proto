@@ -159,3 +159,10 @@ message recursiveD {
   string keyD = 1;
   repeated recursiveC messageC = 2;
 }
+
+message requiredMsg {
+  optional string key = 1;
+  int32 col_1 = 2;
+  optional string col_2 = 3;
+  optional int32 col_3 = 4;
+}

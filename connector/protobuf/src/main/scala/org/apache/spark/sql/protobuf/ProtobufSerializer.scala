@@ -250,7 +250,8 @@ private[sql] class ProtobufSerializer(
       while (i < numFields) {
         if (row.isNullAt(i)) {
           if (!protoIndices(i).isRepeated() &&
-            protoIndices(i).getJavaType() != FieldDescriptor.JavaType.MESSAGE) {
+            protoIndices(i).getJavaType() != FieldDescriptor.JavaType.MESSAGE &&
+            protoIndices(i).isRequired()) {
             result.setField(protoIndices(i), protoIndices(i).getDefaultValue())
           }
         } else {

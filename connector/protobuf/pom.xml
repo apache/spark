@@ -78,10 +78,6 @@
     </dependency>
     --><!-- #endif scala-2.13 -->
     <dependency>
-      <groupId>org.tukaani</groupId>
-      <artifactId>xz</artifactId>
-    </dependency>
-    <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
       <version>${protobuf.version}</version>

@@ -20,11 +20,12 @@ import scala.collection.JavaConverters._
 
 import com.google.protobuf.{ByteString, DynamicMessage}
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.functions.{lit, struct}
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Serializable {
 
@@ -459,32 +460,50 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
     }
   }
 
-  test("roundtrip in to_protobuf and from_protobuf - with null") {
-    val df = spark
-      .range(10)
-      .select(struct(
-        $"id",
-        lit(null).cast("string").as("string_value"),
-        $"id".cast("int").as("int32_value"),
-        $"id".cast("int").as("uint32_value"),
-        $"id".cast("int").as("sint32_value"),
-        $"id".cast("int").as("fixed32_value"),
-        $"id".cast("int").as("sfixed32_value"),
-        $"id".cast("long").as("int64_value"),
-        $"id".cast("long").as("uint64_value"),
-        $"id".cast("long").as("sint64_value"),
-        $"id".cast("long").as("fixed64_value"),
-        $"id".cast("long").as("sfixed64_value"),
-        $"id".cast("double").as("double_value"),
-        lit(1202.00).cast(org.apache.spark.sql.types.FloatType).as("float_value"),
-        lit(true).as("bool_value"),
-        lit("0".getBytes).as("bytes_value")).as("SimpleMessage"))
+  test("roundtrip in to_protobuf and from_protobuf - with nulls") {
+    val schema = StructType(
+      StructField("requiredMsg",
+        StructType(
+          StructField("key", StringType, nullable = false) ::
+            StructField("col_1", IntegerType, nullable = true) ::
+            StructField("col_2", StringType, nullable = false) ::
+            StructField("col_3", IntegerType, nullable = true) :: Nil
+        ),
+        nullable = true
+      ) :: Nil
+    )
+    val inputDf = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(Row("key1", null, "value2", null))
+      )),
+      schema
+    )
+    val toProtobuf = inputDf.select(
+      functions.to_protobuf($"requiredMsg", testFileDesc, "requiredMsg")
+        .as("to_proto"))
 
-    val toProtoDf = df.select(
-      functions.to_protobuf($"SimpleMessage", testFileDesc, "SimpleMessage").as("to_proto"))
-    val fromProtoDf = toProtoDf.select(
-      functions.from_protobuf($"to_proto", testFileDesc, "SimpleMessage") as 'from_proto)
-    assert(!fromProtoDf.select("from_proto.string_value").isEmpty)
+    val binary = toProtobuf.take(1).toSeq(0).get(0).asInstanceOf[Array[Byte]]
+
+    val messageDescriptor = ProtobufUtils.buildDescriptor(testFileDesc, "requiredMsg")
+    val actualMessage = DynamicMessage.parseFrom(messageDescriptor, binary)
+
+    assert(actualMessage.getField(messageDescriptor.findFieldByName("key"))
+      == inputDf.select("requiredMsg.key").take(1).toSeq(0).get(0))
+    assert(actualMessage.getField(messageDescriptor.findFieldByName("col_2"))
+      == inputDf.select("requiredMsg.col_2").take(1).toSeq(0).get(0))
+    // protobuf fields col_1 is required and col_3 is optional an field
+    assert(actualMessage.getField(messageDescriptor.findFieldByName("col_1")) == 0)
+    assert(actualMessage.getField(messageDescriptor.findFieldByName("col_3")) == 0)
+
+    val fromProtoDf = toProtobuf.select(
+      functions.from_protobuf($"to_proto", testFileDesc, "requiredMsg") as 'from_proto)
+
+    assert(fromProtoDf.select("from_proto.key").take(1).toSeq(0).get(0)
+      == inputDf.select("requiredMsg.key").take(1).toSeq(0).get(0))
+    assert(fromProtoDf.select("from_proto.col_2").take(1).toSeq(0).get(0)
+      == inputDf.select("requiredMsg.col_2").take(1).toSeq(0).get(0))
+    assert(fromProtoDf.select("from_proto.col_1").take(1).toSeq(0).get(0) == null)
+    assert(fromProtoDf.select("from_proto.col_3").take(1).toSeq(0).get(0) == null)
   }
 
   test("from_protobuf filter to_protobuf") {
