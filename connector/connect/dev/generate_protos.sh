@@ -19,7 +19,7 @@ set -ex
 SPARK_HOME="$(cd "`dirname $0`"/../..; pwd)"
 cd "$SPARK_HOME"
 
-pushd connect/src/main
+pushd connector/connect/src/main
 
 LICENSE=$(cat <<'EOF'
 #
