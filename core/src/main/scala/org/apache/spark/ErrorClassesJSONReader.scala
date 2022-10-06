@@ -91,7 +91,18 @@ private object ErrorClassesJsonReader {
     .addModule(DefaultScalaModule)
     .build()
   private def readAsMap(url: URL): SortedMap[String, ErrorInfo] = {
-    mapper.readValue(url, new TypeReference[SortedMap[String, ErrorInfo]]() {})
+    val map = mapper.readValue(url, new TypeReference[SortedMap[String, ErrorInfo]]() {})
+    val errorClassWithDots = map.collectFirst {
+      case (errorClass, _) if errorClass.contains('.') => errorClass
+      case (_, ErrorInfo(_, Some(map), _)) if map.keys.exists(_.contains('.')) =>
+        map.keys.collectFirst { case s if s.contains('.') => s }.get
+    }
+    if (errorClassWithDots.isEmpty) {
+      map
+    } else {
+      throw SparkException.internalError(
+        s"Found the (sub-)error class with dots: ${errorClassWithDots.get}")
+    }
   }
 }
 

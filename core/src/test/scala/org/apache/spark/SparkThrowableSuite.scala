@@ -336,4 +336,51 @@ class SparkThrowableSuite extends SparkFunSuite {
       assert(reader.getErrorMessage("DIVIDE_BY_ZERO", Map.empty) == "abc")
     }
   }
+
+  test("prohibit dots in error class names") {
+    withTempDir { dir =>
+      val json = new File(dir, "errors.json")
+      FileUtils.writeStringToFile(json,
+        """
+          |{
+          |  "DIVIDE.BY_ZERO" : {
+          |    "message" : [
+          |      "abc"
+          |    ]
+          |  }
+          |}
+          |""".stripMargin)
+      val e = intercept[SparkException] {
+        new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURL))
+      }
+      assert(e.getErrorClass === "INTERNAL_ERROR")
+      assert(e.getMessage.contains("DIVIDE.BY_ZERO"))
+    }
+
+    withTempDir { dir =>
+      val json = new File(dir, "errors.json")
+      FileUtils.writeStringToFile(json,
+        """
+          |{
+          |  "DIVIDE" : {
+          |    "message" : [
+          |      "abc"
+          |    ],
+          |    "subClass" : {
+          |      "BY.ZERO" : {
+          |        "message" : [
+          |          "def"
+          |        ]
+          |      }
+          |    }
+          |  }
+          |}
+          |""".stripMargin)
+      val e = intercept[SparkException] {
+        new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURL))
+      }
+      assert(e.getErrorClass === "INTERNAL_ERROR")
+      assert(e.getMessage.contains("BY.ZERO"))
+    }
+  }
 }
