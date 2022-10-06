@@ -29,6 +29,7 @@ package object connect {
   object expressions { // scalastyle:ignore
     implicit class DslString(val s: String) {
       val identifier = CatalystSqlParser.parseMultipartIdentifier(s)
+
       def protoAttr: proto.Expression =
         proto.Expression.newBuilder()
           .setUnresolvedAttribute(
