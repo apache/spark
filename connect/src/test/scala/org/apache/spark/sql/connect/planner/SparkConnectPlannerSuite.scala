@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.Expression.UnresolvedStar
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -89,6 +90,22 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val res = transform(proto.Relation.newBuilder.setRead(readWithTable).build())
     assert(res !== null)
     assert(res.nodeName == "UnresolvedRelation")
+  }
+
+  test("Simple Project") {
+    val readWithTable = proto.Read.newBuilder()
+      .setNamedTable(proto.Read.NamedTable.newBuilder.addParts("name").build())
+      .build()
+    val project =
+      proto.Project.newBuilder()
+        .setInput(proto.Relation.newBuilder().setRead(readWithTable).build())
+        .addExpressions(
+          proto.Expression.newBuilder()
+            .setUnresolvedStar(UnresolvedStar.newBuilder().build()).build()
+        ).build()
+    val res = transform(proto.Relation.newBuilder.setProject(project).build())
+    assert(res !== null)
+    assert(res.nodeName == "Project")
   }
 
   test("Simple Sort") {

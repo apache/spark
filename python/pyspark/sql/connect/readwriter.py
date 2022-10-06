@@ -18,13 +18,18 @@
 from pyspark.sql.connect.data_frame import DataFrame
 from pyspark.sql.connect.plan import Read
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyspark.sql.connect.client import RemoteSparkSession
+
 
 class DataFrameReader:
     """
     TODO(SPARK-40539) Achieve parity with PySpark.
     """
 
-    def __init__(self, client):
+    def __init__(self, client: "RemoteSparkSession") -> None:
         self._client = client
 
     def table(self, tableName: str) -> "DataFrame":

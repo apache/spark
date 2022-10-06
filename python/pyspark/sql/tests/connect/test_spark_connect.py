@@ -57,7 +57,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
     def test_simple_read(self) -> None:
         """Tests that we can access the Spark Connect GRPC service locally."""
         df = self.connect.read.table(self.tbl_name)
-        data = df.limit(10).collect()
+        data = df.limit(10).toPandas()
         # Check that the limit is applied
         assert len(data.index) == 10
 
@@ -67,7 +67,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
         u = udf(conv_udf)
         df = self.connect.read.table(self.tbl_name)
-        result = df.select(u(df.id)).collect()
+        result = df.select(u(df.id)).toPandas()
         assert result is not None
 
     def test_simple_explain_string(self) -> None:
