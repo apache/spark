@@ -31,6 +31,9 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
     """Parent test fixture class for all Spark Connect related
     test cases."""
 
+    connect = RemoteSparkSession
+    tbl_name = str
+
     @classmethod
     def setUpClass(cls: Any) -> None:
         ReusedPySparkTestCase.setUpClass()
@@ -42,6 +45,10 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
         cls.df = cls.sc.parallelize(cls.testData).toDF()
 
         # Load test data
+        cls.spark_connect_test_data()
+
+    @classmethod
+    def spark_connect_test_data(cls: Any) -> None:
         # Setup Remote Spark Session
         cls.tbl_name = f"tbl{uuid.uuid4()}".replace("-", "")
         cls.connect = RemoteSparkSession(user_id="test_user")
