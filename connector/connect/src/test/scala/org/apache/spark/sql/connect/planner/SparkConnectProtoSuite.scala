@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
  */
 class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
-  lazy val connectTestRelation = createLocalRelationProto(Map("id" -> IntegerType))
+  lazy val connectTestRelation = createLocalRelationProto(Seq(("id", IntegerType)))
 
   lazy val sparkTestRelation: LocalRelation = LocalRelation($"id".int)
 
@@ -46,7 +46,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
-  private def createLocalRelationProto(colNameTypeMap: Map[String, DataType]): proto.Relation = {
+  private def createLocalRelationProto(colNameTypeMap: Seq[(String, DataType)]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
     // TODO: set data types for each local relation attribute one proto supports data type.
     for ((k, v) <- colNameTypeMap) {
