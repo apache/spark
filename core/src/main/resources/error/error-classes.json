@@ -3132,5 +3132,130 @@
     "message" : [
       "<className> must override either <m1> or <m2>"
     ]
+  },
+  "_LEGACY_ERROR_TEMP_2101" : {
+    "message" : [
+      "Not support non-primitive type now"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2102" : {
+    "message" : [
+      "Unsupported type: <catalogString>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2103" : {
+    "message" : [
+      "Dictionary encoding should not be used because of dictionary overflow."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2104" : {
+    "message" : [
+      "End of the iterator"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2105" : {
+    "message" : [
+      "Could not allocate memory to grow BytesToBytesMap"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2106" : {
+    "message" : [
+      "Can't acquire <size> bytes memory to build hash relation, got <got> bytes"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2107" : {
+    "message" : [
+      "There is not enough memory to build hash map"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2108" : {
+    "message" : [
+      "Does not support row that is larger than 256M"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2109" : {
+    "message" : [
+      "Cannot build HashedRelation with more than 1/3 billions unique keys"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2110" : {
+    "message" : [
+      "Can not build a HashedRelation that is larger than 8G"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2111" : {
+    "message" : [
+      "failed to push a row into <rowQueue>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2112" : {
+    "message" : [
+      "Unexpected window function frame <frame>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2113" : {
+    "message" : [
+      "Unable to parse <stats> as a percentile <message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2114" : {
+    "message" : [
+      "<stats> is not a recognised statistic"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2115" : {
+    "message" : [
+      "Unknown column: <unknownColumn>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2116" : {
+    "message" : [
+      "Unexpected: <o>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2117" : {
+    "message" : [
+      "Unscaled value too large for precision. If necessary set <ansiConfig> to false to bypass this error."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2118" : {
+    "message" : [
+      "Decimal precision <precision> exceeds max precision <maxPrecision>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2119" : {
+    "message" : [
+      "out of decimal type range: <str>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2120" : {
+    "message" : [
+      "Do not support array of type <clazz>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2121" : {
+    "message" : [
+      "Do not support type <clazz>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2122" : {
+    "message" : [
+      "Failed parsing <simpleString>: <raw>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2123" : {
+    "message" : [
+      "Failed to merge fields '<leftName>' and '<rightName>'. <message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2124" : {
+    "message" : [
+      "Failed to merge decimal types with incompatible scale <leftScale> and <rightScale>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2125" : {
+    "message" : [
+      "Failed to merge incompatible data types ${leftCatalogString} and ${rightCatalogString}"
+    ]
   }
 }
