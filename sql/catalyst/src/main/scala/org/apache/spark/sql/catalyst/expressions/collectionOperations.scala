@@ -730,7 +730,7 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     val prepareMaps = ctx.splitExpressionsWithCurrentInputs(
       expressions = assignments,
       funcName = "getMapConcatInputs",
-      extraArguments = (s"MapData[]", argsName) :: ("boolean", hasNullName) :: Nil,
+      extraArguments = ("MapData[]", argsName) :: ("boolean", hasNullName) :: Nil,
       returnType = "boolean",
       makeSplitFunction = body =>
         s"""

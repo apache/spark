@@ -15,13 +15,11 @@
 # limitations under the License.
 #
 
-from typing import List, Union, cast, get_args, TYPE_CHECKING
+from typing import List, cast, get_args, TYPE_CHECKING, Optional, Callable, Any
+
 
 import pyspark.sql.connect.proto as proto
-
-PrimitiveType = Union[str, int, bool, float]
-ExpressionOrString = Union[str, "Expression"]
-ColumnOrString = Union[str, "ColumnRef"]
+from pyspark.sql.connect._typing import PrimitiveType
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import RemoteSparkSession
@@ -33,10 +31,10 @@ class Expression(object):
     Expression base class.
     """
 
-    def __init__(self) -> None:  # type: ignore[name-defined]
+    def __init__(self) -> None:
         pass
 
-    def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":  # type: ignore
+    def to_plan(self, session: Optional["RemoteSparkSession"]) -> "proto.Expression":
         ...
 
     def __str__(self) -> str:
@@ -49,11 +47,11 @@ class LiteralExpression(Expression):
     The Python types are converted best effort into the relevant proto types. On the Spark Connect
     server side, the proto types are converted to the Catalyst equivalents."""
 
-    def __init__(self, value: PrimitiveType) -> None:  # type: ignore[name-defined]
+    def __init__(self, value: PrimitiveType) -> None:
         super().__init__()
         self._value = value
 
-    def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
+    def to_plan(self, session: Optional["RemoteSparkSession"]) -> "proto.Expression":
         """Converts the literal expression to the literal in proto.
 
         TODO(SPARK-40533) This method always assumes the largest type and can thus
@@ -75,8 +73,10 @@ class LiteralExpression(Expression):
         return f"Literal({self._value})"
 
 
-def _bin_op(name: str, doc: str = "binary function", reverse=False):
-    def _(self: "ColumnRef", other) -> Expression:
+def _bin_op(
+    name: str, doc: str = "binary function", reverse: bool = False
+) -> Callable[["ColumnRef", Any], Expression]:
+    def _(self: "ColumnRef", other: Any) -> Expression:
         if isinstance(other, get_args(PrimitiveType)):
             other = LiteralExpression(other)
         if not reverse:
@@ -94,12 +94,12 @@ class ColumnRef(Expression):
     qualified name are identical"""
 
     @classmethod
-    def from_qualified_name(cls, name) -> "ColumnRef":
+    def from_qualified_name(cls, name: str) -> "ColumnRef":
         return ColumnRef(*name.split("."))
 
-    def __init__(self, *parts: str) -> None:  # type: ignore[name-defined]
+    def __init__(self, *parts: str) -> None:
         super().__init__()
-        self._parts: List[str] = list(filter(lambda x: x is not None, list(parts)))
+        self._parts: List[str] = list(parts)
 
     def name(self) -> str:
         """Returns the qualified name of the column reference."""
@@ -123,7 +123,7 @@ class ColumnRef(Expression):
     __ge__ = _bin_op("greterEquals")
     __le__ = _bin_op("lessEquals")
 
-    def __eq__(self, other) -> Expression:  # type: ignore[override]
+    def __eq__(self, other: Any) -> Expression:  # type: ignore[override]
         """Returns a binary expression with the current column as the left
         side and the other expression as the right side.
         """
@@ -131,16 +131,16 @@ class ColumnRef(Expression):
             other = LiteralExpression(other)
         return ScalarFunctionExpression("eq", self, other)
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+    def to_plan(self, session: Optional["RemoteSparkSession"]) -> proto.Expression:
         """Returns the Proto representation of the expression."""
         expr = proto.Expression()
         expr.unresolved_attribute.parts.extend(self._parts)
         return expr
 
-    def desc(self):
+    def desc(self) -> "SortOrder":
         return SortOrder(self, ascending=False)
 
-    def asc(self):
+    def asc(self) -> "SortOrder":
         return SortOrder(self, ascending=True)
 
     def __str__(self) -> str:
@@ -148,7 +148,7 @@ class ColumnRef(Expression):
 
 
 class SortOrder(Expression):
-    def __init__(self, col: ColumnRef, ascending=True, nullsLast=True) -> None:
+    def __init__(self, col: ColumnRef, ascending: bool = True, nullsLast: bool = True) -> None:
         super().__init__()
         self.ref = col
         self.ascending = ascending
@@ -157,8 +157,8 @@ class SortOrder(Expression):
     def __str__(self) -> str:
         return str(self.ref) + " ASC" if self.ascending else " DESC"
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
-        return self.ref.to_plan()
+    def to_plan(self, session: Optional["RemoteSparkSession"]) -> proto.Expression:
+        return self.ref.to_plan(session)
 
 
 class ScalarFunctionExpression(Expression):
@@ -171,7 +171,7 @@ class ScalarFunctionExpression(Expression):
         self._args = args
         self._op = op
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+    def to_plan(self, session: Optional["RemoteSparkSession"]) -> proto.Expression:
         fun = proto.Expression()
         fun.unresolved_function.parts.append(self._op)
         fun.unresolved_function.arguments.extend([x.to_plan(session) for x in self._args])

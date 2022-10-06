@@ -35,7 +35,7 @@ class DefaultIndexTest(PandasOnSparkTestCase):
     def test_default_index_distributed(self):
         with ps.option_context("compute.default_index_type", "distributed"):
             sdf = self.spark.range(1000)
-            pdf = ps.DataFrame(sdf).to_pandas()
+            pdf = ps.DataFrame(sdf)._to_pandas()
             self.assertEqual(len(set(pdf.index)), len(pdf))
 
 
