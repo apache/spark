@@ -4430,6 +4430,46 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrame(self._jdf.withColumnRenamed(existing, new), self.sparkSession)
 
+    def withColumnsRenamed(self, colsMap: Dict[str, str]) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by renaming multiple columns.
+        This is a no-op if schema doesn't contain the given column names.
+
+        .. versionadded:: 3.4.0
+           Added support for multiple columns renaming
+
+        Parameters
+        ----------
+        colsMap : dict
+            a dict of existing column names and corresponding desired column names.
+            Currently, only single map is supported.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with renamed columns.
+
+        See Also
+        --------
+        :meth:`withColumnRenamed`
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        >>> df = df.withColumns({'age2': df.age + 2, 'age3': df.age + 3})
+        >>> df.withColumnsRenamed({'age2': 'age4', 'age3': 'age5'}).show()
+        +---+-----+----+----+
+        |age| name|age4|age5|
+        +---+-----+----+----+
+        |  2|Alice|   4|   5|
+        |  5|  Bob|   7|   8|
+        +---+-----+----+----+
+        """
+        if not isinstance(colsMap, dict):
+            raise TypeError("colsMap must be dict of existing column name and new column name.")
+
+        return DataFrame(self._jdf.withColumnsRenamed(colsMap), self.sparkSession)
+
     def withMetadata(self, columnName: str, metadata: Dict[str, Any]) -> "DataFrame":
         """Returns a new :class:`DataFrame` by updating an existing column with metadata.
 
