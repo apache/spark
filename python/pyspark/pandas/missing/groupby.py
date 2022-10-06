@@ -61,7 +61,6 @@ class MissingPandasLikeDataFrameGroupBy:
     ohlc = _unsupported_function("ohlc")
     pct_change = _unsupported_function("pct_change")
     pipe = _unsupported_function("pipe")
-    prod = _unsupported_function("prod")
     resample = _unsupported_function("resample")
 
 
@@ -93,5 +92,4 @@ class MissingPandasLikeSeriesGroupBy:
     ohlc = _unsupported_function("ohlc")
     pct_change = _unsupported_function("pct_change")
     pipe = _unsupported_function("pipe")
-    prod = _unsupported_function("prod")
     resample = _unsupported_function("resample")

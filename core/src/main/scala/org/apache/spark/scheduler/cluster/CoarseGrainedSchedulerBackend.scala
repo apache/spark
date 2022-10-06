@@ -348,18 +348,26 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         // Filter out executors under killing
         val activeExecutors = executorDataMap.filterKeys(isExecutorActive)
         val workOffers = activeExecutors.map {
-          case (id, executorData) =>
-            new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
-              Some(executorData.executorAddress.hostPort),
-              executorData.resourcesInfo.map { case (rName, rInfo) =>
-                (rName, rInfo.availableAddrs.toBuffer)
-              }, executorData.resourceProfileId)
+          case (id, executorData) => buildWorkerOffer(id, executorData)
         }.toIndexedSeq
         scheduler.resourceOffers(workOffers, true)
       }
       if (taskDescs.nonEmpty) {
         launchTasks(taskDescs)
       }
+    }
+
+    private def buildWorkerOffer(executorId: String, executorData: ExecutorData) = {
+      val resources = executorData.resourcesInfo.map { case (rName, rInfo) =>
+        (rName, rInfo.availableAddrs.toBuffer)
+      }
+      WorkerOffer(
+        executorId,
+        executorData.executorHost,
+        executorData.freeCores,
+        Some(executorData.executorAddress.hostPort),
+        resources,
+        executorData.resourceProfileId)
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -378,12 +386,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         // Filter out executors under killing
         if (isExecutorActive(executorId)) {
           val executorData = executorDataMap(executorId)
-          val workOffers = IndexedSeq(
-            new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores,
-              Some(executorData.executorAddress.hostPort),
-              executorData.resourcesInfo.map { case (rName, rInfo) =>
-                (rName, rInfo.availableAddrs.toBuffer)
-              }, executorData.resourceProfileId))
+          val workOffers = IndexedSeq(buildWorkerOffer(executorId, executorData))
           scheduler.resourceOffers(workOffers, false)
         } else {
           Seq.empty

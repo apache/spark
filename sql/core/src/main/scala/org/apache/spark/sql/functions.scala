@@ -2569,7 +2569,7 @@ object functions {
   /**
    * Calculates the hash code of given columns using the 64-bit
    * variant of the xxHash algorithm, and returns the result as a long
-   * column.
+   * column. The hash computation uses an initial seed of 42.
    *
    * @group misc_funcs
    * @since 3.0.0
@@ -4344,6 +4344,23 @@ object functions {
    * @since 2.2.0
    */
   def posexplode_outer(e: Column): Column = withExpr { GeneratorOuter(PosExplode(e.expr)) }
+
+   /**
+   * Creates a new row for each element in the given array of structs.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def inline(e: Column): Column = withExpr { Inline(e.expr) }
+
+  /**
+   * Creates a new row for each element in the given array of structs.
+   * Unlike inline, if the array is null or empty then null is produced for each nested column.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def inline_outer(e: Column): Column = withExpr { GeneratorOuter(Inline(e.expr)) }
 
   /**
    * Extracts json object from a json string based on json path specified, and returns json string

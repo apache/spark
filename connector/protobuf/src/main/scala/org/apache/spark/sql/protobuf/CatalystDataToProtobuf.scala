@@ -24,18 +24,18 @@ import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
 private[protobuf] case class CatalystDataToProtobuf(
-                                               child: Expression,
-                                               descFilePath: String,
-                                               messageName: String)
-  extends UnaryExpression {
+    child: Expression,
+    descFilePath: String,
+    messageName: String)
+    extends UnaryExpression {
 
   override def dataType: DataType = BinaryType
 
   @transient private lazy val protoType =
     ProtobufUtils.buildDescriptor(descFilePath, messageName)
 
-  @transient private lazy val serializer = new ProtobufSerializer(child.dataType, protoType,
-    child.nullable)
+  @transient private lazy val serializer =
+    new ProtobufSerializer(child.dataType, protoType, child.nullable)
 
   override def nullSafeEval(input: Any): Any = {
     val dynamicMessage = serializer.serialize(input).asInstanceOf[DynamicMessage]
@@ -46,11 +46,9 @@ private[protobuf] case class CatalystDataToProtobuf(
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)
-    defineCodeGen(ctx, ev, input =>
-      s"(byte[]) $expr.nullSafeEval($input)")
+    defineCodeGen(ctx, ev, input => s"(byte[]) $expr.nullSafeEval($input)")
   }
 
   override protected def withNewChildInternal(newChild: Expression): CatalystDataToProtobuf =
     copy(child = newChild)
 }
-

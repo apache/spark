@@ -1,5 +1,5 @@
 
-Ê
+‰
 Cconnector/protobuf/src/test/resources/protobuf/catalyst_types.protoorg.apache.spark.sql.protobuf")
 
 BooleanMsg
@@ -39,9 +39,10 @@ stringType".
 key (	Rkey"5
 newProducer
 key (	Rkey
-value (Rvalue"5
+value (Rvalue"t
 newConsumer
 key (	Rkey
-value (Rvalue"
+value (Rvalue=
+actual (2%.org.apache.spark.sql.protobuf.ActualRactual"
 oldProducer
 key (	RkeyBBCatalystTypesbproto3

@@ -755,7 +755,7 @@ class CliSuite extends SparkFunSuite {
         errorMessage =
           """{
             |  "errorClass" : "DIVIDE_BY_ZERO",
-            |  "message" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
+            |  "messageTemplate" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
             |  "sqlState" : "22012",
             |  "messageParameters" : {
             |    "config" : "\"spark.sql.ansi.enabled\""
@@ -772,4 +772,19 @@ class CliSuite extends SparkFunSuite {
     }
   }
   // scalastyle:on line.size.limit
+
+  test("SPARK-35242: Support change catalog default database for spark") {
+    // Create db and table first
+    runCliWithin(2.minute,
+      Seq("--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}"))(
+      "create database spark_35242;" -> "",
+      "use spark_35242;" -> "",
+      "CREATE TABLE spark_test(key INT, val STRING);" -> "")
+
+    // Set default db
+    runCliWithin(2.minute,
+      Seq("--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}",
+          "--conf", s"${StaticSQLConf.CATALOG_DEFAULT_DATABASE.key}=spark_35242"))(
+      "show tables;" -> "spark_test")
+  }
 }

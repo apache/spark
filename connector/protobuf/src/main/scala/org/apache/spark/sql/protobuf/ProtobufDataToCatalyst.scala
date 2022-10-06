@@ -29,15 +29,18 @@ import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMo
 import org.apache.spark.sql.protobuf.utils.{ProtobufOptions, ProtobufUtils, SchemaConverters}
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, StructType}
 
-private[protobuf] case class ProtobufDataToCatalyst(child: Expression, descFilePath: String,
-                                                 messageName: String,
-                                                 options: Map[String, String])
-  extends UnaryExpression with ExpectsInputTypes {
+private[protobuf] case class ProtobufDataToCatalyst(
+    child: Expression,
+    descFilePath: String,
+    messageName: String,
+    options: Map[String, String])
+    extends UnaryExpression
+    with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
   override lazy val dataType: DataType = {
-    val dt = SchemaConverters.toSqlType(expectedSchema).dataType
+    val dt = SchemaConverters.toSqlType(messageDescriptor).dataType
     parseMode match {
       // With PermissiveMode, the output Catalyst row might contain columns of null values for
       // corrupt records, even if some of the columns are not nullable in the user-provided schema.
@@ -51,10 +54,13 @@ private[protobuf] case class ProtobufDataToCatalyst(child: Expression, descFileP
 
   private lazy val protobufOptions = ProtobufOptions(options)
 
-  @transient private lazy val expectedSchema =
+  @transient private lazy val messageDescriptor =
     ProtobufUtils.buildDescriptor(descFilePath, messageName)
 
-  @transient private lazy val deserializer = new ProtobufDeserializer(expectedSchema, dataType)
+  @transient private lazy val fieldsNumbers =
+    messageDescriptor.getFields.asScala.map(f => f.getNumber)
+
+  @transient private lazy val deserializer = new ProtobufDeserializer(messageDescriptor, dataType)
 
   @transient private var result: DynamicMessage = _
 
@@ -88,9 +94,11 @@ private[protobuf] case class ProtobufDataToCatalyst(child: Expression, descFileP
       case PermissiveMode =>
         nullResultRow
       case FailFastMode =>
-        throw new SparkException("Malformed records are detected in record parsing. " +
-          s"Current parse Mode: ${FailFastMode.name}. To process malformed records as null " +
-          "result, try setting the option 'mode' as 'PERMISSIVE'.", e)
+        throw new SparkException(
+          "Malformed records are detected in record parsing. " +
+            s"Current parse Mode: ${FailFastMode.name}. To process malformed records as null " +
+            "result, try setting the option 'mode' as 'PERMISSIVE'.",
+          e)
       case _ =>
         throw new AnalysisException(unacceptableModeMessage(parseMode.name))
     }
@@ -99,22 +107,22 @@ private[protobuf] case class ProtobufDataToCatalyst(child: Expression, descFileP
   override def nullSafeEval(input: Any): Any = {
     val binary = input.asInstanceOf[Array[Byte]]
     try {
-      result = DynamicMessage.parseFrom(expectedSchema, binary)
+      result = DynamicMessage.parseFrom(messageDescriptor, binary)
       val unknownFields = result.getUnknownFields
-      val expectedFields = expectedSchema.getFields.asScala.map(f => f.getNumber)
-
       if (!unknownFields.asMap().isEmpty) {
-        unknownFields.asMap().keySet().asScala.map {
-          number => {
-             if (expectedFields.contains(number)) {
-               return handleException(new Throwable(s"Type mismatch encountered for field:" +
-                 s" ${expectedSchema.getFields.get(number)}"))
-             }
+        unknownFields.asMap().keySet().asScala.map { number =>
+          {
+            if (fieldsNumbers.contains(number)) {
+              return handleException(
+                new Throwable(s"Type mismatch encountered for field:" +
+                  s" ${messageDescriptor.getFields.get(number)}"))
+            }
           }
         }
       }
       val deserialized = deserializer.deserialize(result)
-      assert(deserialized.isDefined,
+      assert(
+        deserialized.isDefined,
         "Protobuf deserializer cannot return an empty result because filters are not pushed down")
       deserialized.get
     } catch {
@@ -130,10 +138,13 @@ private[protobuf] case class ProtobufDataToCatalyst(child: Expression, descFileP
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)
-    nullSafeCodeGen(ctx, ev, eval => {
-      val result = ctx.freshName("result")
-      val dt = CodeGenerator.boxedType(dataType)
-      s"""
+    nullSafeCodeGen(
+      ctx,
+      ev,
+      eval => {
+        val result = ctx.freshName("result")
+        val dt = CodeGenerator.boxedType(dataType)
+        s"""
         $dt $result = ($dt) $expr.nullSafeEval($eval);
         if ($result == null) {
           ${ev.isNull} = true;
@@ -141,7 +152,7 @@ private[protobuf] case class ProtobufDataToCatalyst(child: Expression, descFileP
           ${ev.value} = $result;
         }
       """
-    })
+      })
   }
 
   override protected def withNewChildInternal(newChild: Expression): ProtobufDataToCatalyst =

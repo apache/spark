@@ -27,9 +27,10 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, Par
  * Options for Protobuf Reader and Writer stored in case insensitive manner.
  */
 private[sql] class ProtobufOptions(
-                                 @transient val parameters: CaseInsensitiveMap[String],
-                                 @transient val conf: Configuration)
-  extends FileSourceOptions(parameters) with Logging {
+    @transient val parameters: CaseInsensitiveMap[String],
+    @transient val conf: Configuration)
+    extends FileSourceOptions(parameters)
+    with Logging {
 
   def this(parameters: Map[String, String], conf: Configuration) = {
     this(CaseInsensitiveMap(parameters), conf)
@@ -41,11 +42,9 @@ private[sql] class ProtobufOptions(
 
 private[sql] object ProtobufOptions {
   def apply(parameters: Map[String, String]): ProtobufOptions = {
-    val hadoopConf = SparkSession
-      .getActiveSession
+    val hadoopConf = SparkSession.getActiveSession
       .map(_.sessionState.newHadoopConf())
       .getOrElse(new Configuration())
     new ProtobufOptions(CaseInsensitiveMap(parameters), hadoopConf)
   }
 }
-

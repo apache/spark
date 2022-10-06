@@ -16,9 +16,7 @@
  */
 package org.apache.spark.sql.protobuf
 
-import java.util
-
-import com.google.protobuf.{ByteString, DynamicMessage}
+import com.google.protobuf.{ByteString, DynamicMessage, Message}
 import com.google.protobuf.Descriptors._
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
 
@@ -29,61 +27,56 @@ import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils.ProtoMatchedField
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils.toFieldStr
 import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, DataType, Decimal, DoubleType, FloatType, IntegerType, LongType, MapType, NullType, ShortType, StringType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] class ProtobufDeserializer(
-                                         rootDescriptor: Descriptor,
-                                      rootCatalystType: DataType,
-                                      positionalFieldMatch: Boolean,
-                                      filters: StructFilters) {
+    rootDescriptor: Descriptor,
+    rootCatalystType: DataType,
+    filters: StructFilters) {
 
-  def this(
-            rootDescriptor: Descriptor,
-            rootCatalystType: DataType) = {
-    this(
-      rootDescriptor,
-      rootCatalystType,
-      positionalFieldMatch = false,
-      new NoopFilters)
+  def this(rootDescriptor: Descriptor, rootCatalystType: DataType) = {
+    this(rootDescriptor, rootCatalystType, new NoopFilters)
   }
 
-  private val converter: Any => Option[Any] = try {
-    rootCatalystType match {
-      // A shortcut for empty schema.
-      case st: StructType if st.isEmpty =>
-        (_: Any) => Some(InternalRow.empty)
+  private val converter: Any => Option[InternalRow] =
+    try {
+      rootCatalystType match {
+        // A shortcut for empty schema.
+        case st: StructType if st.isEmpty =>
+          (_: Any) => Some(InternalRow.empty)
 
-      case st: StructType =>
-        val resultRow = new SpecificInternalRow(st.map(_.dataType))
-        val fieldUpdater = new RowUpdater(resultRow)
-        val applyFilters = filters.skipRow(resultRow, _)
-        val writer = getRecordWriter(rootDescriptor, st, Nil, Nil, applyFilters)
-        (data: Any) => {
-          val record = data.asInstanceOf[DynamicMessage]
-          val skipRow = writer(fieldUpdater, record)
-          if (skipRow) None else Some(resultRow)
-        }
+        case st: StructType =>
+          val resultRow = new SpecificInternalRow(st.map(_.dataType))
+          val fieldUpdater = new RowUpdater(resultRow)
+          val applyFilters = filters.skipRow(resultRow, _)
+          val writer = getRecordWriter(rootDescriptor, st, Nil, Nil, applyFilters)
+          (data: Any) => {
+            val record = data.asInstanceOf[DynamicMessage]
+            val skipRow = writer(fieldUpdater, record)
+            if (skipRow) None else Some(resultRow)
+          }
+      }
+    } catch {
+      case ise: IncompatibleSchemaException =>
+        throw new IncompatibleSchemaException(
+          s"Cannot convert Protobuf type ${rootDescriptor.getName} " +
+            s"to SQL type ${rootCatalystType.sql}.",
+          ise)
     }
-  } catch {
-    case ise: IncompatibleSchemaException => throw new IncompatibleSchemaException(
-      s"Cannot convert Protobuf type ${rootDescriptor.getName} " +
-        s"to SQL type ${rootCatalystType.sql}.", ise)
-  }
 
-  def deserialize(data: Any): Option[Any] = converter(data)
+  def deserialize(data: Message): Option[InternalRow] = converter(data)
 
   private def newArrayWriter(
-                              protoField: FieldDescriptor,
-                              protoPath: Seq[String],
-                              catalystPath: Seq[String],
-                              elementType: DataType,
-                              containsNull: Boolean): (CatalystDataUpdater, Int, Any) => Unit = {
-
+      protoField: FieldDescriptor,
+      protoPath: Seq[String],
+      catalystPath: Seq[String],
+      elementType: DataType,
+      containsNull: Boolean): (CatalystDataUpdater, Int, Any) => Unit = {
 
     val protoElementPath = protoPath :+ "element"
-    val elementWriter = newWriter(protoField, elementType,
-      protoElementPath, catalystPath :+ "element")
+    val elementWriter =
+      newWriter(protoField, elementType, protoElementPath, catalystPath :+ "element")
     (updater, ordinal, value) =>
       val collection = value.asInstanceOf[java.util.Collection[Any]]
       val result = createArrayData(elementType, collection.size())
@@ -110,57 +103,39 @@ private[sql] class ProtobufDeserializer(
   }
 
   private def newMapWriter(
-                            protoType: FieldDescriptor,
-                            protoPath: Seq[String],
-                            catalystPath: Seq[String],
-                            keyType: DataType,
-                            valueType: DataType,
-                            valueContainsNull: Boolean): (CatalystDataUpdater, Int, Any) => Unit = {
-
-    val keyWriter = newWriter(protoType.getMessageType.getFields.get(0), keyType,
-      protoPath :+ "key", catalystPath :+ "key")
-    val valueWriter = newWriter(protoType.getMessageType.getFields.get(1), valueType,
-      protoPath :+ "value", catalystPath :+ "value")
+      protoType: FieldDescriptor,
+      protoPath: Seq[String],
+      catalystPath: Seq[String],
+      keyType: DataType,
+      valueType: DataType,
+      valueContainsNull: Boolean): (CatalystDataUpdater, Int, Any) => Unit = {
+    val keyField = protoType.getMessageType.getFields.get(0)
+    val valueField = protoType.getMessageType.getFields.get(1)
+    val keyWriter = newWriter(keyField, keyType, protoPath :+ "key", catalystPath :+ "key")
+    val valueWriter =
+      newWriter(valueField, valueType, protoPath :+ "value", catalystPath :+ "value")
     (updater, ordinal, value) =>
       if (value != null) {
         val messageList = value.asInstanceOf[java.util.List[com.google.protobuf.Message]]
-        val map = new util.HashMap[AnyRef, AnyRef]()
-        messageList.forEach {
-          field => {
-            var key: AnyRef = null
-            var value: AnyRef = null
-            field.getAllFields.forEach {
-              (k, v) => {
-                k.getName match {
-                  case "key" =>
-                    key = v
-                  case "value" =>
-                    value = v
-                }
-              }
-            }
-            map.put(key, value)
-          }
-        }
-        val keyArray = createArrayData(keyType, map.size())
-        val keyUpdater = new ArrayDataUpdater(keyArray)
-        val valueArray = createArrayData(valueType, map.size())
+        val valueArray = createArrayData(valueType, messageList.size())
         val valueUpdater = new ArrayDataUpdater(valueArray)
-        val iter = map.entrySet().iterator()
+        val keyArray = createArrayData(keyType, messageList.size())
+        val keyUpdater = new ArrayDataUpdater(keyArray)
         var i = 0
-        while (iter.hasNext) {
-          val entry = iter.next()
-          assert(entry.getKey != null)
-          keyWriter(keyUpdater, i, entry.getKey)
-          if (entry.getValue == null) {
-            if (!valueContainsNull) {
-              throw new RuntimeException(
-                s"Map value at path ${toFieldStr(protoPath :+ "value")} is not allowed to be null")
+        messageList.forEach { field =>
+          {
+            keyWriter(keyUpdater, i, field.getField(keyField))
+            if (field.getField(valueField) == null) {
+              if (!valueContainsNull) {
+                throw new RuntimeException(
+                  s"Map value at path ${toFieldStr(protoPath :+ "value")}" +
+                    s" is not allowed to be null")
+              } else {
+                valueUpdater.setNullAt(i)
+              }
             } else {
-              valueUpdater.setNullAt(i)
+              valueWriter(valueUpdater, i, field.getField(valueField))
             }
-          } else {
-            valueWriter(valueUpdater, i, entry.getValue)
           }
           i += 1
         }
@@ -169,14 +144,14 @@ private[sql] class ProtobufDeserializer(
   }
 
   /**
-   * Creates a writer to write Protobuf values to Catalyst values at the given ordinal with
-   * the given updater.
+   * Creates a writer to write Protobuf values to Catalyst values at the given ordinal with the
+   * given updater.
    */
   private def newWriter(
-                         protoType: FieldDescriptor,
-                         catalystType: DataType,
-                         protoPath: Seq[String],
-                         catalystPath: Seq[String]): (CatalystDataUpdater, Int, Any) => Unit = {
+      protoType: FieldDescriptor,
+      catalystType: DataType,
+      protoPath: Seq[String],
+      catalystPath: Seq[String]): (CatalystDataUpdater, Int, Any) => Unit = {
     val errorPrefix = s"Cannot convert Protobuf ${toFieldStr(protoPath)} to " +
       s"SQL ${toFieldStr(catalystPath)} because "
     val incompatibleMsg = errorPrefix +
@@ -185,112 +160,115 @@ private[sql] class ProtobufDeserializer(
 
     (protoType.getJavaType, catalystType) match {
 
-      case (null, NullType) => (updater, ordinal, _) =>
-        updater.setNullAt(ordinal)
+      case (null, NullType) => (updater, ordinal, _) => updater.setNullAt(ordinal)
 
       // TODO: we can avoid boxing if future version of Protobuf provide primitive accessors.
-      case (BOOLEAN, BooleanType) => (updater, ordinal, value) =>
-        updater.setBoolean(ordinal, value.asInstanceOf[Boolean])
+      case (BOOLEAN, BooleanType) =>
+        (updater, ordinal, value) => updater.setBoolean(ordinal, value.asInstanceOf[Boolean])
 
       case (BOOLEAN, ArrayType(BooleanType, containsNull)) =>
-        newArrayWriter(protoType, protoPath,
-          catalystPath, BooleanType, containsNull)
+        newArrayWriter(protoType, protoPath, catalystPath, BooleanType, containsNull)
 
-      case (INT, IntegerType) => (updater, ordinal, value) =>
-        updater.setInt(ordinal, value.asInstanceOf[Int])
+      case (INT, IntegerType) =>
+        (updater, ordinal, value) => updater.setInt(ordinal, value.asInstanceOf[Int])
+
+      case (INT, ByteType) =>
+        (updater, ordinal, value) => updater.setByte(ordinal, value.asInstanceOf[Byte])
+
+      case (INT, ShortType) =>
+        (updater, ordinal, value) => updater.setShort(ordinal, value.asInstanceOf[Short])
 
       case (INT, ArrayType(IntegerType, containsNull)) =>
-        newArrayWriter(protoType, protoPath,
-          catalystPath, IntegerType, containsNull)
+        newArrayWriter(protoType, protoPath, catalystPath, IntegerType, containsNull)
 
-      case (LONG, LongType) => (updater, ordinal, value) =>
-        updater.setLong(ordinal, value.asInstanceOf[Long])
+      case (LONG, LongType) =>
+        (updater, ordinal, value) => updater.setLong(ordinal, value.asInstanceOf[Long])
 
       case (LONG, ArrayType(LongType, containsNull)) =>
-        newArrayWriter(protoType, protoPath,
-          catalystPath, LongType, containsNull)
+        newArrayWriter(protoType, protoPath, catalystPath, LongType, containsNull)
 
-      case (FLOAT, FloatType) => (updater, ordinal, value) =>
-        updater.setFloat(ordinal, value.asInstanceOf[Float])
+      case (FLOAT, FloatType) =>
+        (updater, ordinal, value) => updater.setFloat(ordinal, value.asInstanceOf[Float])
 
       case (FLOAT, ArrayType(FloatType, containsNull)) =>
-        newArrayWriter(protoType, protoPath,
-          catalystPath, FloatType, containsNull)
+        newArrayWriter(protoType, protoPath, catalystPath, FloatType, containsNull)
 
-      case (DOUBLE, DoubleType) => (updater, ordinal, value) =>
-        updater.setDouble(ordinal, value.asInstanceOf[Double])
+      case (DOUBLE, DoubleType) =>
+        (updater, ordinal, value) => updater.setDouble(ordinal, value.asInstanceOf[Double])
 
       case (DOUBLE, ArrayType(DoubleType, containsNull)) =>
-        newArrayWriter(protoType, protoPath,
-          catalystPath, DoubleType, containsNull)
+        newArrayWriter(protoType, protoPath, catalystPath, DoubleType, containsNull)
 
-      case (STRING, StringType) => (updater, ordinal, value) =>
-        val str = value match {
-          case s: String => UTF8String.fromString(s)
-        }
-        updater.set(ordinal, str)
+      case (STRING, StringType) =>
+        (updater, ordinal, value) =>
+          val str = value match {
+            case s: String => UTF8String.fromString(s)
+          }
+          updater.set(ordinal, str)
 
       case (STRING, ArrayType(StringType, containsNull)) =>
-        newArrayWriter(protoType, protoPath,
-          catalystPath, StringType, containsNull)
+        newArrayWriter(protoType, protoPath, catalystPath, StringType, containsNull)
 
-      case (BYTE_STRING, BinaryType) => (updater, ordinal, value) =>
-        val byte_array = value match {
-          case s: ByteString => s.toByteArray
-          case _ => throw new Exception("Invalid ByteString format")
-        }
-        updater.set(ordinal, byte_array)
+      case (BYTE_STRING, BinaryType) =>
+        (updater, ordinal, value) =>
+          val byte_array = value match {
+            case s: ByteString => s.toByteArray
+            case _ => throw new Exception("Invalid ByteString format")
+          }
+          updater.set(ordinal, byte_array)
 
       case (BYTE_STRING, ArrayType(BinaryType, containsNull)) =>
-        newArrayWriter(protoType, protoPath,
-          catalystPath, BinaryType, containsNull)
+        newArrayWriter(protoType, protoPath, catalystPath, BinaryType, containsNull)
 
       case (MESSAGE, MapType(keyType, valueType, valueContainsNull)) =>
-        newMapWriter(protoType, protoPath, catalystPath,
-          keyType, valueType, valueContainsNull)
+        newMapWriter(protoType, protoPath, catalystPath, keyType, valueType, valueContainsNull)
 
       case (MESSAGE, st: StructType) =>
-        val writeRecord = getRecordWriter(protoType.getMessageType, st, protoPath,
-          catalystPath, applyFilters = _ => false)
+        val writeRecord = getRecordWriter(
+          protoType.getMessageType,
+          st,
+          protoPath,
+          catalystPath,
+          applyFilters = _ => false)
         (updater, ordinal, value) =>
           val row = new SpecificInternalRow(st)
           writeRecord(new RowUpdater(row), value.asInstanceOf[DynamicMessage])
           updater.set(ordinal, row)
 
       case (MESSAGE, ArrayType(st: StructType, containsNull)) =>
-        newArrayWriter(protoType, protoPath,
-          catalystPath, st, containsNull)
+        newArrayWriter(protoType, protoPath, catalystPath, st, containsNull)
 
-      case (ENUM, StringType) => (updater, ordinal, value) =>
-        updater.set(ordinal, UTF8String.fromString(value.toString))
+      case (ENUM, StringType) =>
+        (updater, ordinal, value) => updater.set(ordinal, UTF8String.fromString(value.toString))
 
       case (ENUM, ArrayType(StringType, containsNull)) =>
-        newArrayWriter(protoType, protoPath,
-          catalystPath, StringType, containsNull)
+        newArrayWriter(protoType, protoPath, catalystPath, StringType, containsNull)
 
       case _ => throw new IncompatibleSchemaException(incompatibleMsg)
     }
   }
 
-
   private def getRecordWriter(
-                               protoType: Descriptor,
-                               catalystType: StructType,
-                               protoPath: Seq[String],
-                               catalystPath: Seq[String],
-                               applyFilters: Int => Boolean):
-  (CatalystDataUpdater, DynamicMessage) => Boolean = {
+      protoType: Descriptor,
+      catalystType: StructType,
+      protoPath: Seq[String],
+      catalystPath: Seq[String],
+      applyFilters: Int => Boolean): (CatalystDataUpdater, DynamicMessage) => Boolean = {
 
-    val protoSchemaHelper = new ProtobufUtils.ProtoSchemaHelper(
-      protoType, catalystType, protoPath, catalystPath, positionalFieldMatch)
+    val protoSchemaHelper =
+      new ProtobufUtils.ProtoSchemaHelper(protoType, catalystType, protoPath, catalystPath)
 
-   // protoSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = true)
-   // no need to validateNoExtraProtoFields since extra Protobuf fields are ignored
+    // TODO revisit validation of protobuf-catalyst fields.
+    // protoSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = true)
 
-    val (validFieldIndexes, fieldWriters) = protoSchemaHelper.matchedFields.map {
-      case ProtoMatchedField(catalystField, ordinal, protoField) =>
-        val baseWriter = newWriter(protoField, catalystField.dataType,
-          protoPath :+ protoField.getName, catalystPath :+ catalystField.name)
+    var i = 0
+    val (validFieldIndexes, fieldWriters) = protoSchemaHelper.matchedFields
+      .map { case ProtoMatchedField(catalystField, ordinal, protoField) =>
+        val baseWriter = newWriter(
+          protoField,
+          catalystField.dataType,
+          protoPath :+ protoField.getName,
+          catalystPath :+ catalystField.name)
         val fieldWriter = (fieldUpdater: CatalystDataUpdater, value: Any) => {
           if (value == null) {
             fieldUpdater.setNullAt(ordinal)
@@ -298,14 +276,21 @@ private[sql] class ProtobufDeserializer(
             baseWriter(fieldUpdater, ordinal, value)
           }
         }
+        i += 1
         (protoField, fieldWriter)
-    }.toArray.unzip
+      }
+      .toArray
+      .unzip
 
     (fieldUpdater, record) => {
       var i = 0
       var skipRow = false
       while (i < validFieldIndexes.length && !skipRow) {
-        fieldWriters(i)(fieldUpdater, record.getField(validFieldIndexes(i)))
+        val field = validFieldIndexes(i)
+        val value = if (field.isRepeated || field.hasDefaultValue || record.hasField(field)) {
+          record.getField(field)
+        } else null
+        fieldWriters(i)(fieldUpdater, value)
         skipRow = applyFilters(i)
         i += 1
       }
@@ -313,8 +298,7 @@ private[sql] class ProtobufDeserializer(
     }
   }
 
-  // TODO: Since createArrayData and CatalystDataUpdater is same between protobuf and avro,
-  //  it can be shared.
+  // TODO: All of the code below this line is same between protobuf and avro, it can be shared.
   private def createArrayData(elementType: DataType, length: Int): ArrayData = elementType match {
     case BooleanType => UnsafeArrayData.fromPrimitiveArray(new Array[Boolean](length))
     case ByteType => UnsafeArrayData.fromPrimitiveArray(new Array[Byte](length))

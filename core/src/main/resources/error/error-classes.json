@@ -118,6 +118,11 @@
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
         ]
       },
+      "FRAME_LESS_OFFSET_WITHOUT_FOLDABLE" : {
+        "message" : [
+          "Offset expression <offset> must be a literal."
+        ]
+      },
       "INVALID_JSON_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."
@@ -138,9 +143,54 @@
           "all arguments must be strings."
         ]
       },
+      "RANGE_FRAME_INVALID_TYPE" : {
+        "message" : [
+          "The data type <orderSpecType> used in the order specification does not match the data type <valueBoundaryType> which is used in the range frame."
+        ]
+      },
+      "RANGE_FRAME_MULTI_ORDER" : {
+        "message" : [
+          "A range window frame with value boundaries cannot be used in a window specification with multiple order by expressions: <orderSpec>."
+        ]
+      },
+      "RANGE_FRAME_WITHOUT_ORDER" : {
+        "message" : [
+          "A range window frame cannot be used in an unordered window specification."
+        ]
+      },
+      "SPECIFIED_WINDOW_FRAME_DIFF_TYPES" : {
+        "message" : [
+          "Window frame bounds <lower> and <upper> do not have the same type: <lowerType> <> <upperType>."
+        ]
+      },
+      "SPECIFIED_WINDOW_FRAME_INVALID_BOUND" : {
+        "message" : [
+          "Window frame upper bound <upper> does not follow the lower bound <lower>."
+        ]
+      },
+      "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE" : {
+        "message" : [
+          "The data type of the <location> bound <exprType> does not match the expected data type <expectedType>."
+        ]
+      },
+      "SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE" : {
+        "message" : [
+          "Window frame <location> bound <expression> is not a literal."
+        ]
+      },
+      "SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON" : {
+        "message" : [
+          "The lower bound of a window frame must be <comparison> to the upper bound."
+        ]
+      },
       "UNEXPECTED_INPUT_TYPE" : {
         "message" : [
           "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
+        ]
+      },
+      "UNSPECIFIED_FRAME" : {
+        "message" : [
+          "Cannot use an UnspecifiedFrame. This should have been converted during analysis."
         ]
       },
       "WRONG_NUM_PARAMS" : {
@@ -155,6 +205,11 @@
       "Datetime operation overflow: <operation>."
     ],
     "sqlState" : "22008"
+  },
+  "DEFAULT_DATABASE_NOT_EXISTS" : {
+    "message" : [
+      "Default database <defaultDatabase> does not exist, please create it first or change default database to 'default'."
+    ]
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [
@@ -1162,6 +1217,1920 @@
   "_LEGACY_ERROR_TEMP_0064" : {
     "message" : [
       "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1000" : {
+    "message" : [
+      "LEGACY store assignment policy is disallowed in Spark data source V2. Please set the configuration <configKey> to other values."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1001" : {
+    "message" : [
+      "USING column `<colName>` cannot be resolved on the <side> side of the join. The <side>-side columns: [<plan>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1002" : {
+    "message" : [
+      "Unable to generate an encoder for inner class `<className>` without access to the scope that this class was defined in.",
+      "Try moving this class out of its parent class."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1003" : {
+    "message" : [
+      "Couldn't find the reference column for <after> at <parentName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1004" : {
+    "message" : [
+      "Window specification <windowName> is not defined in the WINDOW clause."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1005" : {
+    "message" : [
+      "<expr> doesn't show up in the GROUP BY list <groupByAliases>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1006" : {
+    "message" : [
+      "Aggregate expression required for pivot, but '<sql>' did not appear in any aggregate function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1007" : {
+    "message" : [
+      "Cannot write into temp view <quoted> as it's not a data source v2 relation."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1008" : {
+    "message" : [
+      "<quoted> is not a temp view of streaming logical plan, please use batch API such as `DataFrameReader.table` to read it."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1009" : {
+    "message" : [
+      "The depth of view <identifier> exceeds the maximum view resolution depth (<maxNestedViewDepth>). Analysis is aborted to avoid errors. Increase the value of <config> to work around this."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1010" : {
+    "message" : [
+      "Inserting into a view is not allowed. View: <identifier>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1011" : {
+    "message" : [
+      "Writing into a view is not allowed. View: <identifier>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1012" : {
+    "message" : [
+      "Cannot write into v1 table: <identifier>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1013" : {
+    "message" : [
+      "<nameParts> is a <viewStr>. '<cmd>' expects a table.<hintStr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1014" : {
+    "message" : [
+      "<nameParts> is a temp view. '<cmd>' expects a permanent view."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1015" : {
+    "message" : [
+      "<identifier> is a table. '<cmd>' expects a view.<hintStr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1016" : {
+    "message" : [
+      "<nameParts> is a temp view. '<cmd>' expects a table or permanent view."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1017" : {
+    "message" : [
+      "<name> is a built-in/temporary function. '<cmd>' expects a persistent function.<hintStr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1018" : {
+    "message" : [
+      "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table` yet."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1019" : {
+    "message" : [
+      "Star (*) is not allowed in select list when GROUP BY ordinal position is used"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1020" : {
+    "message" : [
+      "Invalid usage of <elem> in <prettyName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1021" : {
+    "message" : [
+      "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1022" : {
+    "message" : [
+      "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1023" : {
+    "message" : [
+      "Function <prettyName> does not support <syntax>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1024" : {
+    "message" : [
+      "FILTER expression is non-deterministic, it cannot be used in aggregate functions."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1025" : {
+    "message" : [
+      "FILTER expression is not of type boolean. It cannot be used in an aggregate function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1026" : {
+    "message" : [
+      "FILTER expression contains aggregate. It cannot be used in an aggregate function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1027" : {
+    "message" : [
+      "FILTER expression contains window function. It cannot be used in an aggregate function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1028" : {
+    "message" : [
+      "Number of column aliases does not match number of columns. Number of column aliases: <columnSize>; number of columns: <outputSize>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1029" : {
+    "message" : [
+      "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF expected <aliasesSize> aliases but got <aliasesNames>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1030" : {
+    "message" : [
+      "Window aggregate function with filter predicate is not supported yet."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1031" : {
+    "message" : [
+      "It is not allowed to use a window function inside an aggregate function. Please use the inner window function in a sub-query."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1032" : {
+    "message" : [
+      "<expr> does not have any WindowExpression."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1033" : {
+    "message" : [
+      "<expr> has multiple Window Specifications (<distinctWindowSpec>).",
+      "Please file a bug report with this error message, stack trace, and the query."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1034" : {
+    "message" : [
+      "It is not allowed to use window functions inside <clauseName> clause."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1035" : {
+    "message" : [
+      "Cannot specify window frame for <prettyName> function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1036" : {
+    "message" : [
+      "Window Frame <wf> must match the required frame <required>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1037" : {
+    "message" : [
+      "Window function <wf> requires window to be ordered, please add ORDER BY clause. For example SELECT <wf>(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1038" : {
+    "message" : [
+      "Cannot write to table due to mismatched user specified column size(<columnSize>) and data column size(<outputSize>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1039" : {
+    "message" : [
+      "Multiple time/session window expressions would result in a cartesian product of rows, therefore they are currently not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1040" : {
+    "message" : [
+      "Gap duration expression used in session window must be CalendarIntervalType, but got <dt>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1041" : {
+    "message" : [
+      "Undefined function <name>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1042" : {
+    "message" : [
+      "Invalid number of arguments for function <name>. Expected: <expectedInfo>; Found: <actualNumber>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1043" : {
+    "message" : [
+      "Invalid arguments for function <name>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1044" : {
+    "message" : [
+      "Function <name> accepts only one argument."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1045" : {
+    "message" : [
+      "ALTER TABLE SET LOCATION does not support partition for v2 tables."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1046" : {
+    "message" : [
+      "Join strategy hint parameter should be an identifier or string but was <unsupported> (<class>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1047" : {
+    "message" : [
+      "<hintName> Hint parameter should include columns, but <invalidParams> found."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1048" : {
+    "message" : [
+      "<hintName> Hint expects a partition number as a parameter."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1049" : {
+    "message" : [
+      "Syntax error in attribute name: <name>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1050" : {
+    "message" : [
+      "Can only star expand struct data types. Attribute: `<attributes>`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1051" : {
+    "message" : [
+      "Cannot resolve '<targetString>.*' given input columns '<columns>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1052" : {
+    "message" : [
+      "ADD COLUMN with v1 tables cannot specify NOT NULL."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1053" : {
+    "message" : [
+      "ALTER COLUMN with v1 tables cannot specify NOT NULL."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1054" : {
+    "message" : [
+      "ALTER COLUMN cannot find column <colName> in v1 table. Available: <fieldNames>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1055" : {
+    "message" : [
+      "The database name is not valid: <quoted>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1056" : {
+    "message" : [
+      "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1057" : {
+    "message" : [
+      "SHOW COLUMNS with conflicting databases: '<dbA>' != '<dbB>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1058" : {
+    "message" : [
+      "Cannot create table with both USING <provider> and <serDeInfo>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1059" : {
+    "message" : [
+      "STORED AS with file format '<serdeInfo>' is invalid."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1060" : {
+    "message" : [
+      "<command> does not support nested column: <column>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1061" : {
+    "message" : [
+      "Column <colName> does not exist."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1062" : {
+    "message" : [
+      "Rename temporary view from '<oldName>' to '<newName>': destination view already exists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1063" : {
+    "message" : [
+      "Cannot drop a non-empty database: <db>. Use CASCADE option to drop a non-empty database."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1064" : {
+    "message" : [
+      "Cannot drop a non-empty namespace: <namespace>. Use CASCADE option to drop a non-empty namespace."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1065" : {
+    "message" : [
+      "`<name>` is not a valid name for tables/databases. Valid names only contain alphabet characters, numbers and _."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1066" : {
+    "message" : [
+      "<database> is a system preserved database, you cannot create a database with this name."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1067" : {
+    "message" : [
+      "Can not drop default database."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1068" : {
+    "message" : [
+      "<database> is a system preserved database, you cannot use it as current database. To access global temporary views, you should use qualified name with the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM <database>.viewName."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1069" : {
+    "message" : [
+      "CREATE EXTERNAL TABLE must be accompanied by LOCATION."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1070" : {
+    "message" : [
+      "Can not <methodName> the managed table('<tableIdentifier>'). The associated location('<tableLocation>') already exists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1071" : {
+    "message" : [
+      "Some existing schema fields (<nonExistentColumnNames>) are not present in the new schema. We don't support dropping columns yet."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1072" : {
+    "message" : [
+      "Only the tables/views belong to the same database can be retrieved. Querying tables/views are <qualifiedTableNames>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1073" : {
+    "message" : [
+      "RENAME TABLE source and destination databases do not match: '<db>' != '<newDb>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1074" : {
+    "message" : [
+      "RENAME TEMPORARY VIEW from '<oldName>' to '<newName>': cannot specify database name '<db>' in the destination table."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1075" : {
+    "message" : [
+      "RENAME TEMPORARY VIEW from '<oldName>' to '<newName>': destination table already exists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1076" : {
+    "message" : [
+      "Partition spec is invalid. <details>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1077" : {
+    "message" : [
+      "Function <func> already exists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1078" : {
+    "message" : [
+      "Can not load class '<className>' when registering the function '<func>', please make sure it is on the classpath."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1079" : {
+    "message" : [
+      "Resource Type '<resourceType>' is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1080" : {
+    "message" : [
+      "Table <identifier> did not specify database."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1081" : {
+    "message" : [
+      "Table <identifier> did not specify locationUri."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1082" : {
+    "message" : [
+      "Partition [<specString>] did not specify locationUri."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1083" : {
+    "message" : [
+      "Number of buckets should be greater than 0 but less than or equal to bucketing.maxBuckets (`<bucketingMaxBuckets>`). Got `<numBuckets>`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1084" : {
+    "message" : [
+      "Corrupted table name context in catalog: <numParts> parts expected, but part <index> is missing."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1085" : {
+    "message" : [
+      "Corrupted view SQL configs in catalog."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1086" : {
+    "message" : [
+      "Corrupted view query output column names in catalog: <numCols> parts expected, but part <index> is missing."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1087" : {
+    "message" : [
+      "Corrupted view referred temp view names in catalog."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1088" : {
+    "message" : [
+      "Corrupted view referred temp functions names in catalog."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1089" : {
+    "message" : [
+      "Column statistics deserialization is not supported for column <name> of data type: <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1090" : {
+    "message" : [
+      "Column statistics serialization is not supported for column <colName> of data type: <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1091" : {
+    "message" : [
+      "Cannot read table property '<key>' as it's corrupted.<details>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1092" : {
+    "message" : [
+      "The expression '<expr>' is not a valid schema string."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1093" : {
+    "message" : [
+      "Schema should be specified in DDL format as a string literal or output of the schema_of_json/schema_of_csv functions instead of <expr>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1094" : {
+    "message" : [
+      "Schema should be struct type but got <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1095" : {
+    "message" : [
+      "A type of keys and values in map() must be string, but got <map>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1096" : {
+    "message" : [
+      "Must use a map() function for options."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1097" : {
+    "message" : [
+      "The field for corrupt records must be string type and nullable."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1098" : {
+    "message" : [
+      "DataType '<x>' is not supported by <className>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1099" : {
+    "message" : [
+      "<funcName>() doesn't support the <mode> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1100" : {
+    "message" : [
+      "The '<argName>' parameter of function '<funcName>' needs to be a <requiredType> literal."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1101" : {
+    "message" : [
+      "Invalid value for the '<argName>' parameter of function '<funcName>': <invalidValue>.<endingMsg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1102" : {
+    "message" : [
+      "Literals of type '<field>' are currently not supported for the <srcDataType> type."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1103" : {
+    "message" : [
+      "Unsupported component type <clz> in arrays."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1104" : {
+    "message" : [
+      "The second argument should be a double literal."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1105" : {
+    "message" : [
+      "Field name should be String Literal, but it's <extraction>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1106" : {
+    "message" : [
+      "Can't extract value from <child>: need struct type but got <other>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1107" : {
+    "message" : [
+      "Table <table> declares <batchWrite> capability but <v2WriteClassName> is not an instance of <v1WriteClassName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1108" : {
+    "message" : [
+      "Delete by condition with subquery is not supported: <condition>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1109" : {
+    "message" : [
+      "Exec update failed: cannot translate expression to source filter: <f>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1110" : {
+    "message" : [
+      "Cannot delete from table <table> where <filters>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1111" : {
+    "message" : [
+      "DESCRIBE does not support partition for v2 tables."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1112" : {
+    "message" : [
+      "Table <table> cannot be replaced as it did not exist. Use CREATE OR REPLACE TABLE to create the table."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1113" : {
+    "message" : [
+      "Table <table> does not support <cmd>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1114" : {
+    "message" : [
+      "The streaming sources in a query do not have a common supported execution mode.",
+      "Sources support micro-batch: <microBatchSources>",
+      "Sources support continuous: <continuousSources>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1115" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1116" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1117" : {
+    "message" : [
+      "<sessionCatalog> requires a single-part namespace, but got <ns>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1118" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1119" : {
+    "message" : [
+      "<cmd> is not supported in JDBC catalog."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1120" : {
+    "message" : [
+      "Unsupported NamespaceChange <changes> in JDBC catalog."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1121" : {
+    "message" : [
+      "Table does not support <cmd>: <table>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1122" : {
+    "message" : [
+      "Table <table> is not a row-level operation table."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1123" : {
+    "message" : [
+      "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1124" : {
+    "message" : [
+      "<cmd> is not supported for v2 tables."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1125" : {
+    "message" : [
+      "Database from v1 session catalog is not specified."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1126" : {
+    "message" : [
+      "Nested databases are not supported by v1 session catalog: <catalog>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1127" : {
+    "message" : [
+      "Invalid partitionExprs specified: <sortOrders> For range partitioning use REPARTITION_BY_RANGE instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1128" : {
+    "message" : [
+      "Failed to resolve the schema for <format> for the partition column: <partitionColumn>. It must be specified manually."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1129" : {
+    "message" : [
+      "Unable to infer schema for <format>. It must be specified manually."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1130" : {
+    "message" : [
+      "Path does not exist: <path>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1131" : {
+    "message" : [
+      "Data source <className> does not support <outputMode> output mode."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1132" : {
+    "message" : [
+      "A schema needs to be specified when using <className>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1133" : {
+    "message" : [
+      "The user-specified schema doesn't match the actual schema:",
+      "user-specified: <schema>, actual: <actualSchema>. If you're using",
+      "DataFrameReader.schema API or creating a table, please do not specify the schema.",
+      "Or if you're scanning an existed table, please drop it and re-create it."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1134" : {
+    "message" : [
+      "Unable to infer schema for <format> at <fileCatalog>. It must be specified manually."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1135" : {
+    "message" : [
+      "<className> is not a valid Spark SQL Data Source."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1136" : {
+    "message" : [
+      "Cannot save interval data type into external storage."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1137" : {
+    "message" : [
+      "Unable to resolve <name> given [<outputStr>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1138" : {
+    "message" : [
+      "Hive built-in ORC data source must be used with Hive support enabled. Please use the native ORC data source by setting 'spark.sql.orc.impl' to 'native'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1139" : {
+    "message" : [
+      "Failed to find data source: <provider>. Avro is built-in but external data source module since Spark 2.4. Please deploy the application as per the deployment section of Apache Avro Data Source Guide."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1140" : {
+    "message" : [
+      "Failed to find data source: <provider>. Please deploy the application as per the deployment section of Structured Streaming + Kafka Integration Guide."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1141" : {
+    "message" : [
+      "Multiple sources found for <provider> (<sourceNames>), please specify the fully qualified class name."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1142" : {
+    "message" : [
+      "Datasource does not support writing empty or nested empty schemas. Please make sure the data schema has at least one or more column(s)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1143" : {
+    "message" : [
+      "The data to be inserted needs to have the same number of columns as the target table: target table has <targetSize> column(s) but the inserted data has <actualSize> column(s), which contain <staticPartitionsSize> partition column(s) having assigned constant values."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1144" : {
+    "message" : [
+      "The data to be inserted needs to have the same number of partition columns as the target table: target table has <targetSize> partition column(s) but the inserted data has <providedPartitionsSize> partition columns specified."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1145" : {
+    "message" : [
+      "<partKey> is not a partition column. Partition columns are <partitionColumns>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1146" : {
+    "message" : [
+      "Partition column <partColumn> have multiple values specified, <values>. Please only specify a single value."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1147" : {
+    "message" : [
+      "The ordering of partition columns is <partColumns>. All partition columns having constant values need to appear before other partition columns that do not have an assigned constant value."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1148" : {
+    "message" : [
+      "Can only write data to relations with a single path."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1149" : {
+    "message" : [
+      "Fail to rebuild expression: missing key <filter> in `translatedFilterToExpr`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1150" : {
+    "message" : [
+      "Column `<field>` has a data type of <fieldType>, which is not supported by <format>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1151" : {
+    "message" : [
+      "Fail to resolve data source for the table <table> since the table serde property has the duplicated key <key> with extra options specified for this scan operation. To fix this, you can rollback to the legacy behavior of ignoring the extra options by setting the config <config> to `false`, or address the conflicts of the same config."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1152" : {
+    "message" : [
+      "Path <outputPath> already exists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1153" : {
+    "message" : [
+      "Cannot use <field> for partition column."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1154" : {
+    "message" : [
+      "Cannot use all columns for partition columns."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1155" : {
+    "message" : [
+      "Partition column `<col>` not found in schema <schemaCatalog>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1156" : {
+    "message" : [
+      "Column <colName> not found in schema <tableSchema>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1157" : {
+    "message" : [
+      "Unsupported data source type for direct query on files: <className>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1158" : {
+    "message" : [
+      "Saving data into a view is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1159" : {
+    "message" : [
+      "The format of the existing table <tableName> is `<existingProvider>`. It doesn't match the specified format `<specifiedProvider>`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1160" : {
+    "message" : [
+      "The location of the existing table <identifier> is `<existingTableLoc>`. It doesn't match the specified location `<tableDescLoc>`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1161" : {
+    "message" : [
+      "The column number of the existing table <tableName> (<existingTableSchema>) doesn't match the data schema (<querySchema>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1162" : {
+    "message" : [
+      "Cannot resolve '<col>' given input columns: [<inputColumns>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1163" : {
+    "message" : [
+      "Specified partitioning does not match that of the existing table <tableName>.",
+      "Specified partition columns: [<specifiedPartCols>]",
+      "Existing partition columns: [<existingPartCols>]"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1164" : {
+    "message" : [
+      "Specified bucketing does not match that of the existing table <tableName>.",
+      "Specified bucketing: <specifiedBucketString>",
+      "Existing bucketing: <existingBucketString>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1165" : {
+    "message" : [
+      "It is not allowed to specify partitioning when the table schema is not defined."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1166" : {
+    "message" : [
+      "Bucketing column '<bucketCol>' should not be part of partition columns '<normalizedPartCols>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1167" : {
+    "message" : [
+      "Bucket sorting column '<sortCol>' should not be part of partition columns '<normalizedPartCols>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1168" : {
+    "message" : [
+      "<tableName> requires that the data to be inserted have the same number of columns as the target table: target table has <targetColumns> column(s) but the inserted data has <insertedColumns> column(s), including <staticPartCols> partition column(s) having constant value(s)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1169" : {
+    "message" : [
+      "Requested partitioning does not match the table <tableName>:",
+      "Requested partitions: <normalizedPartSpec>",
+      "Table partitions: <partColNames>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1170" : {
+    "message" : [
+      "Hive support is required to <detail>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1171" : {
+    "message" : [
+      "createTableColumnTypes option column <col> not found in schema <schema>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1172" : {
+    "message" : [
+      "Parquet type not yet supported: <parquetType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1173" : {
+    "message" : [
+      "Illegal Parquet type: <parquetType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1174" : {
+    "message" : [
+      "Unrecognized Parquet type: <field>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1175" : {
+    "message" : [
+      "Unsupported data type <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1176" : {
+    "message" : [
+      "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>.",
+      "Please try to re-create the view by running: <viewDDL>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1177" : {
+    "message" : [
+      "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1178" : {
+    "message" : [
+      "The number of partitions can't be specified with unspecified distribution. Invalid writer requirements detected."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1179" : {
+    "message" : [
+      "Table-valued function <name> with alternatives: <usage>",
+      "cannot be applied to (<arguments>): <details>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1180" : {
+    "message" : [
+      "Incompatible input data type.",
+      "Expected: <expectedDataType>; Found: <foundDataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1181" : {
+    "message" : [
+      "Stream-stream join without equality predicate is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1182" : {
+    "message" : [
+      "Column <ambiguousAttrs> are ambiguous. It's probably because you joined several Datasets together, and some of these Datasets are the same. This column points to one of the Datasets but Spark is unable to figure out which one. Please alias the Datasets with different names via `Dataset.as` before joining them, and specify the column using qualified name, e.g. `df.as(\"a\").join(df.as(\"b\"), $\"a.id\" > $\"b.id\")`. You can also set <config> to false to disable this check."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1183" : {
+    "message" : [
+      "Cannot use interval type in the table schema."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1184" : {
+    "message" : [
+      "Catalog <plugin> does not support <ability>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1185" : {
+    "message" : [
+      "<quoted> is not a valid <identifier> as it has more than 2 name parts."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1186" : {
+    "message" : [
+      "Multi-part identifier cannot be empty."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1187" : {
+    "message" : [
+      "Hive data source can only be used with tables, you can not <operation> files of Hive data source directly."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1188" : {
+    "message" : [
+      "There is a 'path' option set and <method>() is called with a path parameter. Either remove the path option, or call <method>() without the parameter. To ignore this check, set '<config>' to 'true'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1189" : {
+    "message" : [
+      "User specified schema not supported with `<operation>`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1190" : {
+    "message" : [
+      "Temporary view <viewName> doesn't support streaming write."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1191" : {
+    "message" : [
+      "Streaming into views <viewName> is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1192" : {
+    "message" : [
+      "The input source(<source>) is different from the table <tableName>'s data source provider(<provider>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1193" : {
+    "message" : [
+      "Table <tableName> doesn't support streaming write - <t>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1194" : {
+    "message" : [
+      "queryName must be specified for memory sink."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1195" : {
+    "message" : [
+      "'<source>' is not supported with continuous trigger."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1196" : {
+    "message" : [
+      "<columnType> column <columnName> not found in existing columns (<validColumnNames>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1197" : {
+    "message" : [
+      "'<operation>' does not support partitioning."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1198" : {
+    "message" : [
+      "Function '<unbound>' cannot process input: (<arguments>): <unsupported>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1199" : {
+    "message" : [
+      "Invalid bound function '<bound>: there are <argsLen> arguments but <inputTypesLen> parameters returned from 'inputTypes()'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1200" : {
+    "message" : [
+      "<name> is not supported for v2 tables."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1201" : {
+    "message" : [
+      "Cannot resolve column name \"<colName>\" among (<fieldNames>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1202" : {
+    "message" : [
+      "Cannot write to '<tableName>', too many data columns:",
+      "Table columns: <tableColumns>",
+      "Data columns: <dataColumns>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1203" : {
+    "message" : [
+      "Cannot write to '<tableName>', not enough data columns:",
+      "Table columns: <tableColumns>",
+      "Data columns: <dataColumns>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1204" : {
+    "message" : [
+      "Cannot write incompatible data to table '<tableName>':",
+      "- <errors>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1205" : {
+    "message" : [
+      "Expected only partition pruning predicates: <nonPartitionPruningPredicates>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1206" : {
+    "message" : [
+      "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1207" : {
+    "message" : [
+      "The duration and time inputs to window must be an integer, long or string literal."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1208" : {
+    "message" : [
+      "No such struct field <fieldName> in <fields>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1209" : {
+    "message" : [
+      "Ambiguous reference to fields <fields>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1210" : {
+    "message" : [
+      "The second argument in <funcName> should be a boolean literal."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1211" : {
+    "message" : [
+      "Detected implicit cartesian product for <joinType> join between logical plans",
+      "<leftPlan>",
+      "and",
+      "rightPlan",
+      "Join condition is missing or trivial.",
+      "Either: use the CROSS JOIN syntax to allow cartesian products between these relations, or: enable implicit cartesian products by setting the configuration variable spark.sql.crossJoin.enabled=true."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1212" : {
+    "message" : [
+      "Found conflicting attributes <conflictingAttrs> in the condition joining outer plan:",
+      "<outerPlan>",
+      "and subplan:",
+      "<subplan>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1213" : {
+    "message" : [
+      "Window expression is empty in <expr>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1214" : {
+    "message" : [
+      "Found different window function type in <windowExpressions>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1215" : {
+    "message" : [
+      "char/varchar type can only be used in the table schema. You can set <config> to true, so that Spark treat them as string type as same as Spark 3.0 and earlier."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1216" : {
+    "message" : [
+      "The pattern '<pattern>' is invalid, <message>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1217" : {
+    "message" : [
+      "<tableIdentifier> already exists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1218" : {
+    "message" : [
+      "<tableIdentifier> should be converted to HadoopFsRelation."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1219" : {
+    "message" : [
+      "Hive metastore does not support altering database location"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1220" : {
+    "message" : [
+      "Hive <tableType> is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1221" : {
+    "message" : [
+      "Hive 0.12 doesn't support creating permanent functions. Please use Hive 0.13 or higher."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1222" : {
+    "message" : [
+      "Unknown resource type: <resourceType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1223" : {
+    "message" : [
+      "Invalid field id '<field>' in day-time interval. Supported interval fields: <supportedIds>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1224" : {
+    "message" : [
+      "'interval <startFieldName> to <endFieldName>' is invalid."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1225" : {
+    "message" : [
+      "Invalid field id '<field>' in year-month interval. Supported interval fields: <supportedIds>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1226" : {
+    "message" : [
+      "The SQL config '<configName>' was removed in the version <version>. <comment>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1227" : {
+    "message" : [
+      "<msg><e1>",
+      "Failed fallback parsing: <e2>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1228" : {
+    "message" : [
+      "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1229" : {
+    "message" : [
+      "<decimalType> can only support precision up to <precision>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1230" : {
+    "message" : [
+      "Negative scale is not allowed: <scale>. You can use <config>=true to enable legacy mode to allow it."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1231" : {
+    "message" : [
+      "<key> is not a valid partition column in table <tblName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1232" : {
+    "message" : [
+      "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1233" : {
+    "message" : [
+      "Found duplicate column(s) <colType>: <duplicateCol>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1234" : {
+    "message" : [
+      "Temporary view <tableIdent> is not cached for analyzing columns."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1235" : {
+    "message" : [
+      "Column <name> in table <tableIdent> is of type <dataType>, and Spark does not support statistics collection on this column type."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1236" : {
+    "message" : [
+      "ANALYZE TABLE is not supported on views."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1237" : {
+    "message" : [
+      "The list of partition columns with values in partition specification for table '<table>' in database '<database>' is not a prefix of the list of partition columns defined in the table schema. Expected a prefix of [<schemaColumns>], but got [<specColumns>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1238" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1239" : {
+    "message" : [
+      "Analyzing column statistics is not supported for column <name> of data type: <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1240" : {
+    "message" : [
+      "Table <table> already exists.<guide>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1241" : {
+    "message" : [
+      "CREATE-TABLE-AS-SELECT cannot create table with location to a non-empty directory <tablePath>. To allow overwriting the existing non-empty directory, set '<config>' to true."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1242" : {
+    "message" : [
+      "Undefined function: <rawName>. This function is neither a built-in/temporary function, nor a persistent function that is qualified as <fullName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1243" : {
+    "message" : [
+      "Undefined function: <rawName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1244" : {
+    "message" : [
+      "Attempted to unset non-existent property '<property>' in table '<table>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1245" : {
+    "message" : [
+      "ALTER TABLE CHANGE COLUMN is not supported for changing column '<originName>' with type '<originType>' to '<newName>' with type '<newType>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1246" : {
+    "message" : [
+      "Can't find column `<name>` given table data columns <fieldNames>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1247" : {
+    "message" : [
+      "Operation not allowed: ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition is not supported for tables created with the datasource API."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1248" : {
+    "message" : [
+      "Operation not allowed: ALTER TABLE SET SERDE is not supported for tables created with the datasource API."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1249" : {
+    "message" : [
+      "Operation not allowed: <cmd> only works on partitioned tables: <tableIdentWithDB>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1250" : {
+    "message" : [
+      "<action> is not allowed on <tableName> since filesource partition management is disabled (spark.sql.hive.manageFilesourcePartitions = false)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1251" : {
+    "message" : [
+      "<action> is not allowed on <tableName> since its partition metadata is not stored in the Hive metastore. To import this information into the metastore, run `msck repair table <tableName>`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1252" : {
+    "message" : [
+      "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1253" : {
+    "message" : [
+      "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1254" : {
+    "message" : [
+      "Cannot overwrite a path that is also being read from."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1255" : {
+    "message" : [
+      "Cannot drop built-in function '<functionName>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1256" : {
+    "message" : [
+      "Cannot refresh built-in function <functionName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1257" : {
+    "message" : [
+      "Cannot refresh temporary function <functionName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1258" : {
+    "message" : [
+      "<msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1259" : {
+    "message" : [
+      "ALTER ADD COLUMNS does not support views. You must drop and re-create the views for adding the new columns. Views: <table>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1260" : {
+    "message" : [
+      "ALTER ADD COLUMNS does not support datasource table with type <tableType>. You must drop and re-create the table for adding the new columns. Tables: <table>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1261" : {
+    "message" : [
+      "LOAD DATA is not supported for datasource tables: <tableIdentWithDB>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1262" : {
+    "message" : [
+      "LOAD DATA target table <tableIdentWithDB> is partitioned, but no partition spec is provided."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1263" : {
+    "message" : [
+      "LOAD DATA target table <tableIdentWithDB> is partitioned, but number of columns in provided partition spec (<partitionSize>) do not match number of partitioned columns in table (<targetTableSize>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1264" : {
+    "message" : [
+      "LOAD DATA target table <tableIdentWithDB> is not partitioned, but a partition spec was provided."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1265" : {
+    "message" : [
+      "LOAD DATA input path does not exist: <path>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1266" : {
+    "message" : [
+      "Operation not allowed: TRUNCATE TABLE on external tables: <tableIdentWithDB>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1267" : {
+    "message" : [
+      "Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported for tables that are not partitioned: <tableIdentWithDB>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1268" : {
+    "message" : [
+      "Failed to truncate table <tableIdentWithDB> when removing data of the path: <path>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1269" : {
+    "message" : [
+      "SHOW PARTITIONS is not allowed on a table that is not partitioned: <tableIdentWithDB>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1270" : {
+    "message" : [
+      "SHOW CREATE TABLE is not supported on a temporary view: <table>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1271" : {
+    "message" : [
+      "Failed to execute SHOW CREATE TABLE against table <table>, which is created by Hive and uses the following unsupported feature(s)",
+      "<unsupportedFeatures>",
+      "Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1272" : {
+    "message" : [
+      "SHOW CREATE TABLE doesn't support transactional Hive table. Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1273" : {
+    "message" : [
+      "Failed to execute SHOW CREATE TABLE against table <table>, which is created by Hive and uses the following unsupported serde configuration",
+      "<configs>",
+      "Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1274" : {
+    "message" : [
+      "<table> is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1275" : {
+    "message" : [
+      "Failed to execute SHOW CREATE TABLE against table/view <table>, which is created by Hive and uses the following unsupported feature(s)",
+      "<features>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1276" : {
+    "message" : [
+      "The logical plan that represents the view is not analyzed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1277" : {
+    "message" : [
+      "The number of columns produced by the SELECT clause (num: `<analyzedPlanLength>`) does not match the number of column names specified by CREATE VIEW (num: `<userSpecifiedColumnsLength>`)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1278" : {
+    "message" : [
+      "<name> is not a view."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1279" : {
+    "message" : [
+      "View <name> already exists. If you want to update the view definition, please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1280" : {
+    "message" : [
+      "It is not allowed to create a persisted view from the Dataset API."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1281" : {
+    "message" : [
+      "Recursive view <viewIdent> detected (cycle: <newPath>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1282" : {
+    "message" : [
+      "Not allowed to create a permanent view <name> without explicitly assigning an alias for expression <attrName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1283" : {
+    "message" : [
+      "Not allowed to create a permanent view <name> by referencing a temporary view <nameParts>. Please create a temp view instead by CREATE TEMP VIEW."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1284" : {
+    "message" : [
+      "Not allowed to create a permanent view <name> by referencing a temporary function `<funcName>`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1285" : {
+    "message" : [
+      "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the",
+      "referenced columns only include the internal corrupt record column",
+      "(named _corrupt_record by default). For example:",
+      "spark.read.schema(schema).csv(file).filter($\"_corrupt_record\".isNotNull).count()",
+      "and spark.read.schema(schema).csv(file).select(\"_corrupt_record\").show().",
+      "Instead, you can cache or save the parsed results and then send the same query.",
+      "For example, val df = spark.read.schema(schema).csv(file).cache() and then",
+      "df.filter($\"_corrupt_record\".isNotNull).count()."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1286" : {
+    "message" : [
+      "User-defined partition column <columnName> not found in the JDBC relation: <schema>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1287" : {
+    "message" : [
+      "Partition column type should be <numericType>, <dateType>, or <timestampType>, but <dataType> found."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1288" : {
+    "message" : [
+      "Table or view '<name>' already exists. SaveMode: ErrorIfExists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1289" : {
+    "message" : [
+      "Column name \"<name>\" contains invalid character(s). Please use alias to rename it."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1290" : {
+    "message" : [
+      "Text data source supports only a single column, and you have <schemaSize> columns."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1291" : {
+    "message" : [
+      "Can't find required partition column <readField> in partition schema <partitionSchema>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1292" : {
+    "message" : [
+      "Temporary view '<tableIdent>' should not have specified a database."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1293" : {
+    "message" : [
+      "Hive data source can only be used with tables, you can't use it with CREATE TEMP VIEW USING."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1294" : {
+    "message" : [
+      "The timestamp provided for the '<strategy>' option is invalid. The expected format is 'YYYY-MM-DDTHH:mm:ss', but the provided timestamp: <timeString>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1295" : {
+    "message" : [
+      "Set a host to read from with option(\"host\", ...)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1296" : {
+    "message" : [
+      "Set a port to read from with option(\"port\", ...)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1297" : {
+    "message" : [
+      "IncludeTimestamp must be set to either \"true\" or \"false\"."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1298" : {
+    "message" : [
+      "checkpointLocation must be specified either through option(\"checkpointLocation\", ...) or SparkSession.conf.set(\"<config>\", ...)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1299" : {
+    "message" : [
+      "This query does not support recovering from checkpoint location. Delete <checkpointPath> to start over."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1300" : {
+    "message" : [
+      "Unable to find the column `<colName>` given [<actualColumns>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1301" : {
+    "message" : [
+      "Boundary start is not a valid integer: <start>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1302" : {
+    "message" : [
+      "Boundary end is not a valid integer: <end>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1303" : {
+    "message" : [
+      "Table or view '<ident>' not found."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1304" : {
+    "message" : [
+      "Unexpected type <className> of the relation <tableName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1305" : {
+    "message" : [
+      "Unsupported TableChange <change> in JDBC catalog."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1306" : {
+    "message" : [
+      "There is a 'path' or 'paths' option set and load() is called with path parameters. Either remove the path option if it's the same as the path parameter, or add it to the load() parameter if you do want to read multiple paths. To ignore this check, set '<config>' to 'true'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1307" : {
+    "message" : [
+      "There is a 'path' option set and save() is called with a path parameter. Either remove the path option, or call save() without the parameter. To ignore this check, set '<config>' to 'true'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1308" : {
+    "message" : [
+      "TableProvider implementation <source> cannot be written with <createMode> mode, please use Append or Overwrite modes instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1309" : {
+    "message" : [
+      "insertInto() can't be used together with partitionBy(). Partition columns have already been defined for the table. It is not necessary to use partitionBy()."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1310" : {
+    "message" : [
+      "Couldn't find a catalog to handle the identifier <quote>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1311" : {
+    "message" : [
+      "sortBy must be used together with bucketBy."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1312" : {
+    "message" : [
+      "'<operation>' does not support bucketBy right now."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1313" : {
+    "message" : [
+      "'<operation>' does not support bucketBy and sortBy right now."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1314" : {
+    "message" : [
+      "Table <tableIdent> already exists."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1315" : {
+    "message" : [
+      "Cannot overwrite table <tableName> that is also being read from."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1316" : {
+    "message" : [
+      "Invalid partition transformation: <expr>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1317" : {
+    "message" : [
+      "Cannot resolve column name \"<colName>\" among (<fieldsStr>)<extraMsg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1318" : {
+    "message" : [
+      "Unable to parse '<delayThreshold>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1319" : {
+    "message" : [
+      "Invalid join type in joinWith: <joinType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1320" : {
+    "message" : [
+      "Typed column <typedCol> that needs input type and schema cannot be passed in untyped `select` API. Use the typed `Dataset.select` API instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1321" : {
+    "message" : [
+      "Invalid view name: <viewName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1322" : {
+    "message" : [
+      "Invalid number of buckets: bucket(<numBuckets>, <e>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1323" : {
+    "message" : [
+      "\"<colName>\" is not a numeric column. Aggregation function can only be applied on a numeric column."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1324" : {
+    "message" : [
+      "The pivot column <pivotColumn> has more than <maxValues> distinct values, this could indicate an error. If this was intended, set <config> to at least the number of distinct values of the pivot column."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1325" : {
+    "message" : [
+      "Cannot modify the value of a static config: <key>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1326" : {
+    "message" : [
+      "Cannot modify the value of a Spark config: <key>.",
+      "See also 'https://spark.apache.org/docs/latest/sql-migration-guide.html#ddl-statements'"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1327" : {
+    "message" : [
+      "Command execution is not supported in runner <runner>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1328" : {
+    "message" : [
+      "Can not instantiate class <className>, please make sure it has public non argument constructor."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1329" : {
+    "message" : [
+      "Can not load class <className>, please make sure it is on the classpath."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1330" : {
+    "message" : [
+      "Class <className> doesn't implement interface UserDefinedAggregateFunction."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1331" : {
+    "message" : [
+      "Missing field <fieldName> in table <table> with schema:",
+      "<schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1332" : {
+    "message" : [
+      "<errorMessage>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1333" : {
+    "message" : [
+      "Invalid view text: <viewText>. The view <tableName> may have been tampered with."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1334" : {
+    "message" : [
+      "Cannot specify both version and timestamp when time travelling the table."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1335" : {
+    "message" : [
+      "<expr> is not a valid timestamp expression for time travel."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1336" : {
+    "message" : [
+      "Cannot time travel <target>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1337" : {
+    "message" : [
+      "Table <tableName> does not support time travel."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1338" : {
+    "message" : [
+      "Sinks cannot request distribution and ordering in continuous execution mode"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1339" : {
+    "message" : [
+      "Failed to execute INSERT INTO command because the VALUES list contains a DEFAULT column reference as part of another expression; this is not allowed"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1340" : {
+    "message" : [
+      "Failed to execute UPDATE command because the SET list contains a DEFAULT column reference as part of another expression; this is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1341" : {
+    "message" : [
+      "Failed to execute UPDATE command because the WHERE clause contains a DEFAULT column reference; this is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1342" : {
+    "message" : [
+      "Failed to execute MERGE command because the WHERE clause contains a DEFAULT column reference; this is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1343" : {
+    "message" : [
+      "Failed to execute MERGE INTO command because one of its INSERT or UPDATE assignments contains a DEFAULT column reference as part of another expression; this is not allowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1344" : {
+    "message" : [
+      "Invalid DEFAULT value for column <fieldName>: <defaultValue> fails to parse as a valid literal value."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1345" : {
+    "message" : [
+      "Failed to execute <statementType> command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1346" : {
+    "message" : [
+      "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1347" : {
+    "message" : [
+      "Failed to execute command because subquery expressions are not allowed in DEFAULT values."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2000" : {
+    "message" : [
+      "<message>. If necessary set <ansiConfig> to false to bypass this error."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2001" : {
+    "message" : [
+      "<message> If necessary set <ansiConfig> to false to bypass this error"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2002" : {
+    "message" : [
+      "<message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2003" : {
+    "message" : [
+      "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2004" : {
+    "message" : [
+      "no default for type <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2005" : {
+    "message" : [
+      "Type <dataType> does not support ordered operations"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2006" : {
+    "message" : [
+      "The specified group index cannot be less than zero"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2007" : {
+    "message" : [
+      "Regex group count is <groupCount>, but the specified group index is <groupIndex>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2008" : {
+    "message" : [
+      "Find an invalid url string <url>. If necessary set <ansiConfig> to false to bypass this error."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2009" : {
+    "message" : [
+      "dataType"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2010" : {
+    "message" : [
+      "Window Functions do not support merging."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2011" : {
+    "message" : [
+      "Unexpected data type <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2012" : {
+    "message" : [
+      "Unexpected type <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2013" : {
+    "message" : [
+      "Negative values found in <frequencyExpression>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2014" : {
+    "message" : [
+      "<funcName> is not matched at addNewFunction"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2015" : {
+    "message" : [
+      "Cannot generate <codeType> code for incomparable type: <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2016" : {
+    "message" : [
+      "Can not interpolate <arg> into code block."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2017" : {
+    "message" : [
+      "not resolved"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2018" : {
+    "message" : [
+      "class `<cls>` is not supported by `MapObjects` as resulting collection."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2019" : {
+    "message" : [
+      "Cannot use null as map key!"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2020" : {
+    "message" : [
+      "Couldn't find a valid constructor on <cls>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2021" : {
+    "message" : [
+      "Couldn't find a primary constructor on <cls>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2022" : {
+    "message" : [
+      "Unsupported natural join type <joinType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2023" : {
+    "message" : [
+      "Unresolved encoder expected, but <attr> was found."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2024" : {
+    "message" : [
+      "Only expression encoders are supported for now."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2025" : {
+    "message" : [
+      "<className> must override either <m1> or <m2>"
     ]
   }
 }

@@ -59,7 +59,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       val errMsg = intercept[AnalysisException] {
         sql(s"DESC $tbl key1").collect()
       }.getMessage
-      assert(errMsg === "Column key1 does not exist")
+      assert(errMsg === "Column key1 does not exist.")
     }
   }
 
@@ -79,7 +79,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         val errMsg = intercept[AnalysisException] {
           sql(s"DESC $tbl KEY").collect()
         }.getMessage
-        assert(errMsg === "Column KEY does not exist")
+        assert(errMsg === "Column KEY does not exist.")
       }
     }
   }
