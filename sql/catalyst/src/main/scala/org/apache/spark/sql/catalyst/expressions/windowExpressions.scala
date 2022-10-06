@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_WINDOW_EXPRESSION, WINDOW_EXPRESSION}
@@ -65,24 +66,27 @@ case class WindowSpecDefinition(
   override def checkInputDataTypes(): TypeCheckResult = {
     frameSpecification match {
       case UnspecifiedFrame =>
-        TypeCheckFailure(
-          "Cannot use an UnspecifiedFrame. This should have been converted during analysis. " +
-            "Please file a bug report.")
+        DataTypeMismatch(errorSubClass = "UNSPECIFIED_FRAME")
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && !f.isUnbounded &&
           orderSpec.isEmpty =>
-        TypeCheckFailure(
-          "A range window frame cannot be used in an unordered window specification.")
+        DataTypeMismatch(errorSubClass = "RANGE_FRAME_WITHOUT_ORDER")
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
           orderSpec.size > 1 =>
-        TypeCheckFailure(
-          s"A range window frame with value boundaries cannot be used in a window specification " +
-            s"with multiple order by expressions: ${orderSpec.mkString(",")}")
+        DataTypeMismatch(
+          errorSubClass = "RANGE_FRAME_MULTI_ORDER",
+          messageParameters = Map(
+            "orderSpec" -> orderSpec.mkString(",")
+          )
+        )
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
           !isValidFrameType(f.valueBoundary.head.dataType) =>
-        TypeCheckFailure(
-          s"The data type '${orderSpec.head.dataType.catalogString}' used in the order " +
-            "specification does not match the data type " +
-            s"'${f.valueBoundary.head.dataType.catalogString}' which is used in the range frame.")
+        DataTypeMismatch(
+          errorSubClass = "RANGE_FRAME_INVALID_TYPE",
+          messageParameters = Map(
+            "orderSpecType" -> toSQLType(orderSpec.head.dataType),
+            "valueBoundaryType" -> toSQLType(f.valueBoundary.head.dataType)
+          )
+        )
       case _ => TypeCheckSuccess
     }
   }
@@ -215,17 +219,32 @@ case class SpecifiedWindowFrame(
     // Check combination (of expressions).
     (lower, upper) match {
       case (l: Expression, u: Expression) if !isValidFrameBoundary(l, u) =>
-        TypeCheckFailure(s"Window frame upper bound '$upper' does not follow the lower bound " +
-          s"'$lower'.")
+        DataTypeMismatch(
+          errorSubClass = "SPECIFIED_WINDOW_FRAME_INVALID_BOUND",
+          messageParameters = Map(
+            "upper" -> toSQLExpr(upper),
+            "lower" -> toSQLExpr(lower)
+          )
+        )
       case (l: SpecialFrameBoundary, _) => TypeCheckSuccess
       case (_, u: SpecialFrameBoundary) => TypeCheckSuccess
       case (l: Expression, u: Expression) if l.dataType != u.dataType =>
-        TypeCheckFailure(
-          s"Window frame bounds '$lower' and '$upper' do no not have the same data type: " +
-            s"'${l.dataType.catalogString}' <> '${u.dataType.catalogString}'")
+        DataTypeMismatch(
+          errorSubClass = "SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
+          messageParameters = Map(
+            "lower" -> toSQLExpr(lower),
+            "upper" -> toSQLExpr(upper),
+            "lowerType" -> toSQLType(l.dataType),
+            "upperType" -> toSQLType(u.dataType)
+          )
+        )
       case (l: Expression, u: Expression) if isGreaterThan(l, u) =>
-        TypeCheckFailure(
-          "The lower bound of a window frame must be less than or equal to the upper bound")
+        DataTypeMismatch(
+          errorSubClass = "SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON",
+          messageParameters = Map(
+            "comparison" -> "less than or equal"
+          )
+        )
       case _ => TypeCheckSuccess
     }
   }
@@ -262,11 +281,22 @@ case class SpecifiedWindowFrame(
   private def checkBoundary(b: Expression, location: String): TypeCheckResult = b match {
     case _: SpecialFrameBoundary => TypeCheckSuccess
     case e: Expression if !e.foldable =>
-      TypeCheckFailure(s"Window frame $location bound '$e' is not a literal.")
+      DataTypeMismatch(
+        errorSubClass = "SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
+        messageParameters = Map(
+          "location" -> location,
+          "expression" -> toSQLExpr(e)
+        )
+      )
     case e: Expression if !frameType.inputType.acceptsType(e.dataType) =>
-      TypeCheckFailure(
-        s"The data type of the $location bound '${e.dataType.catalogString}' does not match " +
-          s"the expected data type '${frameType.inputType.simpleString}'.")
+      DataTypeMismatch(
+        errorSubClass = "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+        messageParameters = Map(
+          "location" -> location,
+          "exprType" -> toSQLType(e.dataType),
+          "expectedType" -> toSQLType(frameType.inputType)
+        )
+      )
     case _ => TypeCheckSuccess
   }
 
@@ -421,7 +451,12 @@ sealed abstract class FrameLessOffsetWindowFunction
     if (check.isFailure) {
       check
     } else if (!offset.foldable) {
-      TypeCheckFailure(s"Offset expression '$offset' must be a literal.")
+      DataTypeMismatch(
+        errorSubClass = "FRAME_LESS_OFFSET_WITHOUT_FOLDABLE",
+        messageParameters = Map(
+          "offset" -> toSQLExpr(offset)
+        )
+      )
     } else {
       TypeCheckSuccess
     }

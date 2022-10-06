@@ -180,10 +180,10 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   test("string") {
-    assert(string(showDbsContext.pattern) == "identifier_with_wildcards")
-    assert(string(createDbContext.commentSpec().get(0).STRING()) == "database_comment")
+    assert(string(showDbsContext.pattern.STRING()) == "identifier_with_wildcards")
+    assert(string(createDbContext.commentSpec().get(0).stringLit().STRING()) == "database_comment")
 
-    assert(string(createDbContext.locationSpec.asScala.head.STRING) == "/home/user/db")
+    assert(string(createDbContext.locationSpec.asScala.head.stringLit().STRING) == "/home/user/db")
   }
 
   test("position") {
@@ -211,7 +211,7 @@ class ParserUtilsSuite extends SparkFunSuite {
     val ctx = createDbContext.locationSpec.asScala.head
     val current = CurrentOrigin.get
     val (location, origin) = withOrigin(ctx) {
-      (string(ctx.STRING), CurrentOrigin.get)
+      (string(ctx.stringLit().STRING), CurrentOrigin.get)
     }
     assert(location == "/home/user/db")
     assert(origin == Origin(Some(3), Some(27)))

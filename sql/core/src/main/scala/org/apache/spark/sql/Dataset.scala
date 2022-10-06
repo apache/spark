@@ -2809,6 +2809,53 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * (Scala-specific)
+   * Returns a new Dataset with a columns renamed.
+   * This is a no-op if schema doesn't contain existingName.
+   *
+   * `colsMap` is a map of existing column name and new column name.
+   *
+   * @throws AnalysisException if there are duplicate names in resulting projection
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  @throws[AnalysisException]
+  def withColumnsRenamed(colsMap: Map[String, String]): DataFrame = {
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    val output: Seq[NamedExpression] = queryExecution.analyzed.output
+
+    val projectList = colsMap.foldLeft(output) {
+      case (attrs, (existingName, newName)) =>
+      attrs.map(attr =>
+        if (resolver(attr.name, existingName)) {
+          Alias(attr, newName)()
+        } else {
+          attr
+        }
+      )
+    }
+    SchemaUtils.checkColumnNameDuplication(
+      projectList.map(_.name),
+      "in given column names for withColumnsRenamed",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    withPlan(Project(projectList, logicalPlan))
+  }
+
+  /**
+   * (Java-specific)
+   * Returns a new Dataset with a columns renamed.
+   * This is a no-op if schema doesn't contain existingName.
+   *
+   * `colsMap` is a map of existing column name and new column name.
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def withColumnsRenamed(colsMap: java.util.Map[String, String]): DataFrame =
+    withColumnsRenamed(colsMap.asScala.toMap)
+
+  /**
    * Returns a new Dataset by updating an existing column with metadata.
    *
    * @group untypedrel

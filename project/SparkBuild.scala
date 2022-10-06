@@ -627,17 +627,17 @@ object SparkConnect {
     // For some reason the resolution from the imported Maven build does not work for some
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= Seq(
-      "io.grpc"             % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
-      "org.scala-lang"      % "scala-library"        % "2.12.16" % "provided",
-      "com.google.guava"    % "guava"                % "31.0.1-jre",
-      "com.google.guava"    % "failureaccess"        % "1.0.1",
-      "com.google.protobuf" % "protobuf-java"        % protoVersion % "protobuf"
+      "io.grpc" % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
+      "org.scala-lang" % "scala-library" % "2.12.16" % "provided",
+      "com.google.guava" % "guava" % "31.0.1-jre",
+      "com.google.guava" % "failureaccess" % "1.0.1",
+      "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
     ),
 
     dependencyOverrides ++= Seq(
-      "com.google.guava"    % "guava"                % "31.0.1-jre",
-      "com.google.guava"    % "failureaccess"        % "1.0.1",
-      "com.google.protobuf" % "protobuf-java"        % protoVersion
+      "com.google.guava" % "guava" % "31.0.1-jre",
+      "com.google.guava" % "failureaccess" % "1.0.1",
+      "com.google.protobuf" % "protobuf-java" % protoVersion
     ),
 
     (Compile / PB.targets) := Seq(
@@ -645,7 +645,7 @@ object SparkConnect {
       PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
     ),
 
-    (assembly / test) := false,
+    (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
 
@@ -1240,7 +1240,7 @@ object CopyDependencies {
       // For the SparkConnect build, we manually call the assembly target to
       // produce the shaded Jar which happens automatically in the case of Maven.
       // Later, when the dependencies are copied, we manually copy the shaded Jar only.
-      val fid = (LocalProject("connect")/assembly).value
+      val fid = (LocalProject("connect") / assembly).value
       val fidProtobuf = (LocalProject("protobuf")/assembly).value
 
       (Compile / dependencyClasspath).value.map(_.data)
