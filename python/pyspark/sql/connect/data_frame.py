@@ -23,7 +23,6 @@ from typing import (
     Sequence,
     Tuple,
     Union,
-    cast,
     TYPE_CHECKING,
 )
 
@@ -31,30 +30,26 @@ import pandas
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.column import (
-    ColumnOrString,
     ColumnRef,
     Expression,
-    ExpressionOrString,
     LiteralExpression,
 )
 
 if TYPE_CHECKING:
+    from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString
     from pyspark.sql.connect.client import RemoteSparkSession
-
-
-ColumnOrName = Union[ColumnRef, str]
 
 
 class GroupingFrame(object):
 
-    MeasuresType = Union[Sequence[Tuple[ExpressionOrString, str]], Dict[str, str]]
+    MeasuresType = Union[Sequence[Tuple["ExpressionOrString", str]], Dict[str, str]]
     OptMeasuresType = Optional[MeasuresType]
 
     def __init__(self, df: "DataFrame", *grouping_cols: Union[ColumnRef, str]) -> None:
         self._df = df
         self._grouping_cols = [x if isinstance(x, ColumnRef) else df[x] for x in grouping_cols]
 
-    def agg(self, exprs: MeasuresType = None) -> "DataFrame":
+    def agg(self, exprs: Optional[MeasuresType] = None) -> "DataFrame":
 
         # Normalize the dictionary into a list of tuples.
         if isinstance(exprs, Dict):
@@ -75,7 +70,7 @@ class GroupingFrame(object):
         return res
 
     def _map_cols_to_dict(self, fun: str, cols: List[Union[ColumnRef, str]]) -> Dict[str, str]:
-        return {x if isinstance(x, str) else cast(ColumnRef, x).name(): fun for x in cols}
+        return {x if isinstance(x, str) else x.name(): fun for x in cols}
 
     def min(self, *cols: Union[ColumnRef, str]) -> "DataFrame":
         expr = self._map_cols_to_dict("min", list(cols))
@@ -99,15 +94,17 @@ class DataFrame(object):
     of the DataFrame with the changes applied.
     """
 
-    def __init__(self, data: List[Any] = None, schema: List[str] = None):
+    def __init__(self, data: Optional[List[Any]] = None, schema: Optional[List[str]] = None):
         """Creates a new data frame"""
         self._schema = schema
         self._plan: Optional[plan.LogicalPlan] = None
         self._cache: Dict[str, Any] = {}
-        self._session: "RemoteSparkSession" = None
+        self._session: Optional["RemoteSparkSession"] = None
 
     @classmethod
-    def withPlan(cls, plan: plan.LogicalPlan, session=None) -> "DataFrame":
+    def withPlan(
+        cls, plan: plan.LogicalPlan, session: Optional["RemoteSparkSession"] = None
+    ) -> "DataFrame":
         """Main initialization method used to construct a new data frame with a child plan."""
         new_frame = DataFrame()
         new_frame._plan = plan
@@ -117,16 +114,16 @@ class DataFrame(object):
     def select(self, *cols: ColumnRef) -> "DataFrame":
         return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
 
-    def agg(self, exprs: Dict[str, str]) -> "DataFrame":
+    def agg(self, exprs: Optional[GroupingFrame.MeasuresType]) -> "DataFrame":
         return self.groupBy().agg(exprs)
 
-    def alias(self, alias):
+    def alias(self, alias: str) -> "DataFrame":
         return DataFrame.withPlan(plan.Project(self._plan).withAlias(alias), session=self._session)
 
-    def approxQuantile(self, col, probabilities, relativeError):
+    def approxQuantile(self, col: ColumnRef, probabilities: Any, relativeError: Any) -> "DataFrame":
         ...
 
-    def colRegex(self, regex) -> "DataFrame":
+    def colRegex(self, regex: str) -> "DataFrame":
         ...
 
     @property
@@ -135,67 +132,79 @@ class DataFrame(object):
         if self._plan is None:
             return []
         if "columns" not in self._cache and self._plan is not None:
-            pdd = self.limit(0).collect()
+            pdd = self.limit(0).toPandas()
+            if pdd is None:
+                raise Exception("Empty result")
             # Translate to standard pytho array
             self._cache["columns"] = pdd.columns.values
         return self._cache["columns"]
 
-    def count(self):
+    def count(self) -> int:
         """Returns the number of rows in the data frame"""
-        return self.agg([(LiteralExpression(1), "count")]).collect().iloc[0, 0]
+        pdd = self.agg([(LiteralExpression(1), "count")]).toPandas()
+        if pdd is None:
+            raise Exception("Empty result")
+        return pdd.iloc[0, 0]
 
-    def crossJoin(self, other):
+    def crossJoin(self, other: "DataFrame") -> "DataFrame":
         ...
 
     def coalesce(self, num_partitions: int) -> "DataFrame":
         ...
 
-    def describe(self, cols):
+    def describe(self, cols: List[ColumnRef]) -> Any:
         ...
 
     def distinct(self) -> "DataFrame":
         """Returns all distinct rows."""
-        all_cols = self.columns()
+        all_cols = self.columns
         gf = self.groupBy(*all_cols)
         return gf.agg()
 
-    def drop(self, *cols: ColumnOrString):
-        all_cols = self.columns()
+    def drop(self, *cols: "ColumnOrString") -> "DataFrame":
+        all_cols = self.columns
         dropped = set([c.name() if isinstance(c, ColumnRef) else self[c].name() for c in cols])
-        filter(lambda x: x in dropped, all_cols)
+        dropped_cols = filter(lambda x: x in dropped, all_cols)
+        return DataFrame.withPlan(plan.Project(self._plan, *dropped_cols), session=self._session)
 
     def filter(self, condition: Expression) -> "DataFrame":
         return DataFrame.withPlan(
             plan.Filter(child=self._plan, filter=condition), session=self._session
         )
 
-    def first(self):
+    def first(self) -> Optional["pandas.DataFrame"]:
         return self.head(1)
 
-    def groupBy(self, *cols: ColumnOrString):
+    def groupBy(self, *cols: "ColumnOrString") -> GroupingFrame:
         return GroupingFrame(self, *cols)
 
-    def head(self, n: int):
+    def head(self, n: int) -> Optional["pandas.DataFrame"]:
         self.limit(n)
-        return self.collect()
+        return self.toPandas()
 
-    def join(self, other, on, how=None):
+    # TODO(martin.grund) fix mypu
+    def join(self, other: "DataFrame", on: Any, how: Any = None) -> "DataFrame":
+        if self._plan is None:
+            raise Exception("Cannot join when self._plan is empty.")
+        if other._plan is None:
+            raise Exception("Cannot join when other._plan is empty.")
+
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=on, how=how),
             session=self._session,
         )
 
-    def limit(self, n):
+    def limit(self, n: int) -> "DataFrame":
         return DataFrame.withPlan(plan.Limit(child=self._plan, limit=n), session=self._session)
 
-    def sort(self, *cols: ColumnOrName):
+    def sort(self, *cols: "ColumnOrString") -> "DataFrame":
         """Sort by a specific column"""
         return DataFrame.withPlan(plan.Sort(self._plan, *cols), session=self._session)
 
-    def show(self, n: int, truncate: Optional[Union[bool, int]], vertical: Optional[bool]):
+    def show(self, n: int, truncate: Optional[Union[bool, int]], vertical: Optional[bool]) -> None:
         ...
 
-    def union(self, other) -> "DataFrame":
+    def union(self, other: "DataFrame") -> "DataFrame":
         return self.unionAll(other)
 
     def unionAll(self, other: "DataFrame") -> "DataFrame":
@@ -203,36 +212,49 @@ class DataFrame(object):
             raise ValueError("Argument to Union does not contain a valid plan.")
         return DataFrame.withPlan(plan.UnionAll(self._plan, other._plan), session=self._session)
 
-    def where(self, condition):
+    def where(self, condition: Expression) -> "DataFrame":
         return self.filter(condition)
 
-    def _get_alias(self):
+    def _get_alias(self) -> Optional[str]:
         p = self._plan
         while p is not None:
             if isinstance(p, plan.Project) and p.alias:
                 return p.alias
             p = p._child
+        return None
 
-    def __getattr__(self, name) -> "ColumnRef":
+    def __getattr__(self, name: str) -> "ColumnRef":
         return self[name]
 
-    def __getitem__(self, name) -> "ColumnRef":
+    def __getitem__(self, name: str) -> "ColumnRef":
         # Check for alias
         alias = self._get_alias()
-        return ColumnRef(alias, name)
+        if alias is not None:
+            return ColumnRef(alias)
+        else:
+            return ColumnRef(name)
 
     def _print_plan(self) -> str:
         if self._plan:
             return self._plan.print()
         return ""
 
-    def collect(self):
+    def collect(self) -> None:
         raise NotImplementedError("Please use toPandas().")
 
-    def toPandas(self) -> pandas.DataFrame:
+    def toPandas(self) -> Optional["pandas.DataFrame"]:
+        if self._plan is None:
+            raise Exception("Cannot collect on empty plan.")
+        if self._session is None:
+            raise Exception("Cannot collect on empty session.")
         query = self._plan.collect(self._session)
         return self._session._to_pandas(query)
 
     def explain(self) -> str:
-        query = self._plan.collect(self._session)
-        return self._session.analyze(query).explain_string
+        if self._plan is not None:
+            query = self._plan.collect(self._session)
+            if self._session is None:
+                raise Exception("Cannot analyze without RemoteSparkSession.")
+            return self._session.analyze(query).explain_string
+        else:
+            return ""
