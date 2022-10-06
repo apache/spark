@@ -3220,7 +3220,7 @@
   },
   "_LEGACY_ERROR_TEMP_2093" : {
     "message" : [
-      "Found duplicate field(s) \"<requiredFieldName>\": <matchedOrcFields> n case-insensitive mode"
+      "Found duplicate field(s) \"<requiredFieldName>\": <matchedOrcFields> in case-insensitive mode"
     ]
   },
   "_LEGACY_ERROR_TEMP_2094" : {
