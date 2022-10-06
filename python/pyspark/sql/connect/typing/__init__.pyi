@@ -14,3 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+from typing_extensions import Protocol
+from typing import Union
+from pyspark.sql.connect.column import ScalarFunctionExpression, Expression, ColumnRef
+from pyspark.sql.connect.function_builder import UserDefinedFunction
+
+ExpressionOrString = Union[str, Expression]
+
+ColumnOrString = Union[str, ColumnRef]
+
+class FunctionBuilderCallable(Protocol):
+    def __call__(self, *_: ExpressionOrString) -> ScalarFunctionExpression: ...
+
+class UserDefinedFunctionCallable(Protocol):
+    def __call__(self, *_: ColumnOrString) -> UserDefinedFunction: ...

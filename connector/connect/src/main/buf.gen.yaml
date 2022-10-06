@@ -14,27 +14,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Dict
-import functools
-import unittest
-import uuid
+version: v1
+plugins:
+  - remote: buf.build/protocolbuffers/plugins/cpp:v3.20.0-1
+    out: gen/proto/cpp
+  - remote: buf.build/protocolbuffers/plugins/csharp:v3.20.0-1
+    out: gen/proto/csharp
+  - remote: buf.build/protocolbuffers/plugins/java:v3.20.0-1
+    out: gen/proto/java
+  - remote: buf.build/grpc/plugins/ruby:v1.47.0-1
+    out: gen/proto/ruby
+  - remote: buf.build/protocolbuffers/plugins/ruby:v21.2.0-1
+    out: gen/proto/ruby
+   # Building the Python build and building the mypy interfaces.
+  - remote: buf.build/protocolbuffers/plugins/python:v3.20.0-1
+    out: gen/proto/python
+  - remote: buf.build/grpc/plugins/python:v1.47.0-1
+    out: gen/proto/python
+  - name: mypy
+    out: gen/proto/python
 
-
-class MockRemoteSession:
-    def __init__(self) -> None:
-        self.hooks: Dict[str, Any] = {}
-
-    def set_hook(self, name: str, hook: Any) -> None:
-        self.hooks[name] = hook
-
-    def __getattr__(self, item: str) -> Any:
-        if item not in self.hooks:
-            raise LookupError(f"{item} is not defined as a method hook in MockRemoteSession")
-        return functools.partial(self.hooks[item])
-
-
-class PlanOnlyTestFixture(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls: Any) -> None:
-        cls.connect = MockRemoteSession()
-        cls.tbl_name = f"tbl{uuid.uuid4()}".replace("-", "")

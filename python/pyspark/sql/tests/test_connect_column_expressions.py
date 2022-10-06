@@ -14,12 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.tests.connect.utils import PlanOnlyTestFixture
 
+from pyspark.testing.connectutils import PlanOnlyTestFixture
 import pyspark.sql.connect as c
 import pyspark.sql.connect.plan as p
 import pyspark.sql.connect.column as col
-
 import pyspark.sql.connect.functions as fun
 
 
@@ -54,7 +53,7 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.connect.test_column_expressions import *  # noqa: F401
+    from pyspark.sql.tests.test_connect_column_expressions import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore
