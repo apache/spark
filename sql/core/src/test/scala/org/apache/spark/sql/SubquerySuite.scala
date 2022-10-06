@@ -527,8 +527,8 @@ class SubquerySuite extends QueryTest
       }
       checkError(
         exception,
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
-        errorSubClass = "NON_CORRELATED_COLUMNS_IN_GROUP_BY",
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "NON_CORRELATED_COLUMNS_IN_GROUP_BY",
         parameters = Map("value" -> "c2"),
         sqlState = None,
         context = ExpectedContext(
@@ -542,8 +542,8 @@ class SubquerySuite extends QueryTest
     }
     checkErrorMatchPVals(
       exception1,
-      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
-      errorSubClass = "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
       parameters = Map("treeNode" -> "(?s)Filter .*"),
       sqlState = None,
       context = ExpectedContext(
@@ -553,8 +553,8 @@ class SubquerySuite extends QueryTest
     }
     checkErrorMatchPVals(
       exception2,
-      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
-      errorSubClass = "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT",
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT",
       parameters = Map.empty[String, String],
       sqlState = None,
       context = ExpectedContext(
@@ -567,8 +567,8 @@ class SubquerySuite extends QueryTest
     }
     checkErrorMatchPVals(
       exception,
-      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
-      errorSubClass = "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
       parameters = Map("treeNode" -> "(?s).*"),
       sqlState = None,
       context = ExpectedContext(
@@ -916,8 +916,7 @@ class SubquerySuite extends QueryTest
       checkError(
         exception =
           intercept[AnalysisException](sql(query)),
-        errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = "WITH_SUGGESTION",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = None,
         parameters = Map(
           "objectName" -> "`a`",
@@ -2020,8 +2019,8 @@ class SubquerySuite extends QueryTest
       }
       checkErrorMatchPVals(
         exception,
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
-        errorSubClass = "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
         parameters = Map("treeNode" -> "(?s).*"),
         sqlState = None,
         context = ExpectedContext(
@@ -2052,8 +2051,8 @@ class SubquerySuite extends QueryTest
       }
       checkErrorMatchPVals(
         exception1,
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
-        errorSubClass = "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
         parameters = Map("treeNode" -> "(?s).*"),
         sqlState = None,
         context = ExpectedContext(

@@ -166,8 +166,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
   "messageParameters" : {
     "expectedType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
     "exprType" : "\"STRING\"",
@@ -191,8 +190,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
   "messageParameters" : {
     "expectedType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
     "exprType" : "\"BINARY\"",
@@ -216,8 +214,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
   "messageParameters" : {
     "expectedType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
     "exprType" : "\"BOOLEAN\"",
@@ -241,8 +238,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "RANGE_FRAME_INVALID_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
   "messageParameters" : {
     "orderSpecType" : "\"TIMESTAMP\"",
     "sqlExpr" : "\"(PARTITION BY 1 ORDER BY CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)\"",

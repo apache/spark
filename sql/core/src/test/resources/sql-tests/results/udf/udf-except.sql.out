@@ -101,8 +101,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
-  "errorSubClass" : "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
   "messageParameters" : {
     "treeNode" : "(cast(udf(cast(k#x as string)) as string) = cast(udf(cast(outer(k#x) as string)) as string))\nAggregate [cast(udf(cast(max(cast(udf(cast(v#x as string)) as int)) as string)) as int) AS udf(max(udf(v)))#x]\n+- Filter (cast(udf(cast(k#x as string)) as string) = cast(udf(cast(outer(k#x) as string)) as string))\n   +- SubqueryAlias t2\n      +- View (`t2`, [k#x,v#x])\n         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]\n            +- Project [k#x, v#x]\n               +- SubqueryAlias t2\n                  +- LocalRelation [k#x, v#x]\n"
   },

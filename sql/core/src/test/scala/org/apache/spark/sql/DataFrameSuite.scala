@@ -2841,8 +2841,7 @@ class DataFrameSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df.groupBy($"d", $"b").as[GroupByKey, Row]
       },
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`d`", "proposal" -> "`a`, `b`, `c`"))
   }
 

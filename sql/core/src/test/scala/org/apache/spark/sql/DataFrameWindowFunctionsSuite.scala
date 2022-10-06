@@ -406,8 +406,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       df.select($"key", count("invalid").over()))
     checkError(
       exception = e,
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`invalid`",
         "proposal" -> "`value`, `key`"))

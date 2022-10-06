@@ -1297,8 +1297,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         checkError(
           exception =
             intercept[AnalysisException](sql("insert into t (I) select true from (select 1)")),
-          errorClass = "UNRESOLVED_COLUMN",
-          errorSubClass = "WITH_SUGGESTION",
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
           sqlState = None,
           parameters = Map("objectName" -> "`I`", "proposal" -> "`i`, `s`"),
           context = ExpectedContext(
@@ -2105,8 +2104,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               |)
             """.stripMargin)
         },
-        errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = "WITH_SUGGESTION",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42000",
         parameters = Map(
           "objectName" -> "`c3`",
