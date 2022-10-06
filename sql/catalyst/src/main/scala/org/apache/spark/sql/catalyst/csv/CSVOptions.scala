@@ -101,7 +101,7 @@ class CSVOptions(
   }
 
   val delimiter = CSVExprUtils.toDelimiterStr(
-    parameters.getOrElse(SEP, parameters.getOrElse("delimiter", ",")))
+    parameters.getOrElse(SEP, parameters.getOrElse(DELIMITER, ",")))
   val parseMode: ParseMode =
     parameters.get(MODE).map(ParseMode.fromString).getOrElse(PermissiveMode)
   val charset = parameters.getOrElse(ENCODING,
@@ -140,7 +140,7 @@ class CSVOptions(
 
 
   val compressionCodec: Option[String] = {
-    val name = parameters.get(COMPRESSION).orElse(parameters.get("codec"))
+    val name = parameters.get(COMPRESSION).orElse(parameters.get(CODEC))
     name.map(CompressionCodecs.getCodecClassName)
   }
 
@@ -332,8 +332,6 @@ class CSVOptions(
 
 object CSVOptions extends FileSourceOptionsSet {
   val HEADER = newOption("header")
-  val DELIMITER = newOption("delimiter")
-  val ENCODING = newOption("encoding")
   val INFER_SCHEMA = newOption("inferSchema")
   val IGNORE_LEADING_WHITESPACE = newOption("ignoreLeadingWhiteSpace")
   val IGNORE_TRAILING_WHITESPACE = newOption("ignoreTrailingWhiteSpace")
@@ -348,7 +346,6 @@ object CSVOptions extends FileSourceOptionsSet {
   val MAX_CHARS_PER_COLUMN = newOption("maxCharsPerColumn")
   val MODE = newOption("mode")
   val CHAR_TO_ESCAPE_QUOTE_ESCAPING = newOption("charToEscapeQuoteEscaping")
-  val CODEC = newOption("codec")
   val LOCALE = newOption("locale")
   val DATE_FORMAT = newOption("dateFormat")
   val TIMESTAMP_FORMAT = newOption("timestampFormat")
@@ -359,14 +356,18 @@ object CSVOptions extends FileSourceOptionsSet {
   val EMPTY_VALUE = newOption("emptynewOption")
   val LINE_SEP = newOption("lineSep")
   val INPUT_BUFFER_SIZE = newOption("inputBufferSize")
-  val SEP = newOption("sep")
-  val CHARSET = newOption("charset")
   val COLUMN_NAME_OF_CORRUPT_RECORD = newOption("columnNameOfCorruptRecord")
   val NULL_VALUE = newOption("nullnewOption")
   val NAN_VALUE = newOption("nannewOption")
   val POSITIVE_INF = newOption("positiveInf")
   val NEGATIVE_INF = newOption("negativeInf")
-  val COMPRESSION = newOption("compression")
   val TIME_ZONE = newOption("timeZone")
   val UNESCAPED_QUOTE_HANDLING = newOption("unescapedQuoteHandling")
+  // Options with alternative
+  val ENCODING = newOption("encoding", Some("charset"))
+  val CHARSET = newOption("charset", Some("encoding"))
+  val CODEC = newOption("codec", Some("compression"))
+  val COMPRESSION = newOption("compression", Some("codec"))
+  val SEP = newOption("sep", Some("delimiter"))
+  val DELIMITER = newOption("delimiter", Some("sep"))
 }

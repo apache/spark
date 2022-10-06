@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.catalyst
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.FileSourceOptions.{IGNORE_CORRUPT_FILES, IGNORE_MISSING_FILES}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
@@ -43,11 +41,38 @@ object FileSourceOptions {
   val IGNORE_MISSING_FILES = "ignoreMissingFiles"
 }
 
+/**
+ * Trait about how to register an option and retrieve all registered options
+ * for a file-based data source
+ */
 trait FileSourceOptionsSet {
-  private val optionNames: mutable.Set[String] = collection.mutable.Set[String]()
-  protected def newOption(name: String): String = {
-    optionNames += name
+  private val validOptions = collection.mutable.Map[String, Option[String]]()
+
+  /**
+   * Register a new Option. If two options are alternative to each other, each of them needs to be
+   * registered individually
+   * @param name The primary option name
+   * @param alternative Alternative option name if any
+   */
+  protected def newOption(name: String, alternative: Option[String] = None): String = {
+    validOptions += (name -> alternative)
     name
   }
-  def getValidOptionNames: Set[String] = optionNames.toSet
+
+  /**
+   * @return All valid file source options
+   */
+  def getAllValidOptions: scala.collection.Set[String] = validOptions.keySet
+
+  /**
+   * @param name Option name to be validated
+   * @return if the given Option name is valid
+   */
+  def isValidOption(name: String): Boolean = validOptions.contains(name)
+
+  /**
+   * @param name Option name
+   * @return Alternative option name if any
+   */
+  def getAlternativeOption(name: String): Option[String] = validOptions.getOrElse(name, None)
 }

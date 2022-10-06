@@ -3383,7 +3383,7 @@ abstract class JsonSuite
   }
 
   test("SPARK-40667: check the number of valid Json options") {
-    assert(JSONOptions.getValidOptionNames.size == 28)
+    assert(JSONOptions.getAllValidOptions.size == 28)
   }
 }
 

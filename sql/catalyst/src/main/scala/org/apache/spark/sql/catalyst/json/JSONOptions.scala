@@ -255,11 +255,12 @@ object JSONOptions extends FileSourceOptionsSet {
   val ENABLE_DATETIME_PARSING_FALLBACK = newOption("enableDateTimeParsingFallback")
   val MULTILINE = newOption("multiLine")
   val LINE_SEP = newOption("lineSep")
-  val ENCODING = newOption("encoding")
-  val CHARSET = newOption("charset")
   val PRETTY = newOption("pretty")
   val INFER_TIMESTAMP = newOption("inferTimestamp")
   val COLUMN_NAME_OF_CORRUPTED_RECORD = newOption("columnNameOfCorruptRecord")
   val TIME_ZONE = newOption("timeZone")
   val WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT = newOption("writeNonAsciiCharacterAsCodePoint")
+  // Options with alternative
+  val ENCODING = newOption("encoding", Some("charset"))
+  val CHARSET = newOption("charset", Some("encoding"))
 }
