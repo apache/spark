@@ -42,8 +42,11 @@ object FileSourceOptions {
 }
 
 /**
- * Trait about how to register an option and retrieve all registered options
- * for a file-based data source
+ * Interface defines for a file-based data source, how to
+ *  - register a new option name
+ *  - retrieve all registered option names
+ *  - valid a given option name
+ *  - get alternative option name if any
  */
 trait FileSourceOptionsSet {
   private val validOptions = collection.mutable.Map[String, Option[String]]()
@@ -62,17 +65,17 @@ trait FileSourceOptionsSet {
   /**
    * @return All valid file source options
    */
-  def getAllValidOptions: scala.collection.Set[String] = validOptions.keySet
+  def getAllValidOptionNames: scala.collection.Set[String] = validOptions.keySet
 
   /**
    * @param name Option name to be validated
    * @return if the given Option name is valid
    */
-  def isValidOption(name: String): Boolean = validOptions.contains(name)
+  def isValidOptionName(name: String): Boolean = validOptions.contains(name)
 
   /**
    * @param name Option name
    * @return Alternative option name if any
    */
-  def getAlternativeOption(name: String): Option[String] = validOptions.getOrElse(name, None)
+  def getAlternativeOptionName(name: String): Option[String] = validOptions.getOrElse(name, None)
 }

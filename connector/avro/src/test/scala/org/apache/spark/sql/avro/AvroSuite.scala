@@ -2274,7 +2274,7 @@ abstract class AvroSuite
   }
 
   test("SPARK-40667: Check the number of valid Avro options") {
-    assert(AvroOptions.getAllValidOptions.size == 9)
+    assert(AvroOptions.getAllValidOptionNames.size == 9)
   }
 }
 

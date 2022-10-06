@@ -1486,7 +1486,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-40667: check the number of valid Parquet options") {
-    assert(ParquetOptions.getAllValidOptions.size == 5)
+    assert(ParquetOptions.getAllValidOptionNames.size == 5)
   }
 
   test("SPARK-23173 Writing a file with data converted from JSON with and incorrect user schema") {
