@@ -4592,7 +4592,7 @@ class SQLConf extends Serializable with Logging {
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
 
-  def double_quoted_identifiers: Boolean = getConf(DOUBLE_QUOTED_IDENTIFIERS)
+  def doubleQuotedIdentifiers: Boolean = getConf(DOUBLE_QUOTED_IDENTIFIERS)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>

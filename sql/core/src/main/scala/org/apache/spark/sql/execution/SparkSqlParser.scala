@@ -168,10 +168,8 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   override def visitTimezone (ctx: TimezoneContext): String = {
-    if (ctx.STRING() != null) {
-      string(ctx.STRING)
-    } else if (ctx.DOUBLEQUOTED_STRING() != null) {
-      string(ctx.DOUBLEQUOTED_STRING())
+    if (ctx.stringLit() != null) {
+      string(visitStringLit(ctx.stringLit()))
     } else {
       TimeZone.getDefault.getID
     }

@@ -1285,10 +1285,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     if (ctx != null) {
       if (ctx.INTEGER_VALUE != null) {
         Some(ctx.INTEGER_VALUE().getText)
-      } else if (ctx.DOUBLEQUOTED_STRING() != null) {
-        Option(ctx.DOUBLEQUOTED_STRING()).map(string)
       } else {
-        Option(ctx.STRING()).map(string)
+        Option(string(visitStringLit(ctx.stringLit())))
       }
     } else {
       None
@@ -2614,14 +2612,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         assert(units.length == values.length)
         val kvs = units.indices.map { i =>
           val u = units(i).getText
-          val v = if (values(i).STRING() != null || values(i).DOUBLEQUOTED_STRING() != null) {
-            val value = string(if (values(i).STRING() != null) {
-              values(i).STRING()
-            }
-            else {
-              values(i).DOUBLEQUOTED_STRING()
-            }
-            )
+          val v = if (values(i).stringLit() != null) {
+            val value = string(visitStringLit(values(i).stringLit()))
             // SPARK-32840: For invalid cases, e.g. INTERVAL '1 day 2' hour,
             // INTERVAL 'interval 1' day, we need to check ahead before they are concatenated with
             // units and become valid ones, e.g. '1 day 2 hour'.
@@ -2659,12 +2651,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitUnitToUnitInterval(ctx: UnitToUnitIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
-      val value = Option(if (ctx.intervalValue.STRING != null) {
-        ctx.intervalValue.STRING
-      } else {
-        ctx.intervalValue.DOUBLEQUOTED_STRING
-      }
-      ).map(string).map { interval =>
+      val value = Option(ctx.intervalValue().stringLit()).map(s => string(visitStringLit(s)))
+        .map { interval =>
         if (ctx.intervalValue().MINUS() == null) {
           interval
         } else if (interval.startsWith("-")) {
@@ -4605,13 +4593,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   }
 
   override def visitComment (ctx: CommentContext): String = {
-    if (ctx.STRING() != null) {
-      string(ctx.STRING)
-    } else if (ctx.DOUBLEQUOTED_STRING() != null) {
-      string(ctx.DOUBLEQUOTED_STRING())
-    } else {
-      ""
-    }
+    Option(ctx.stringLit()).map(s => string(visitStringLit(s))).getOrElse("")
   }
 
   /**
