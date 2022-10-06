@@ -350,14 +350,6 @@ of the most common options to set are:
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.executor.allowSparkContext</code></td>
-  <td>false</td>
-  <td>
-    If set to true, SparkContext can be created in executors.
-  </td>
-  <td>3.0.1</td>
-</tr>
-<tr>
   <td><code>spark.extraListeners</code></td>
   <td>(none)</td>
   <td>
@@ -901,14 +893,6 @@ Apart from these, the following properties are also available, and may be useful
     Python binary executable to use for PySpark in both driver and executors.
   </td>
   <td>2.1.0</td>
-</tr>
-<tr>
-  <td><code>spark.plugins</code></td>
-  <td>(none)</td>
-  <td>
-    Comma-separated list of class names implementing <code>org.apache.spark.api.plugin.SparkPlugin</code> to load into the application.
-  </td>
-  <td>3.0.0</td>
 </tr>
 </table>
 
