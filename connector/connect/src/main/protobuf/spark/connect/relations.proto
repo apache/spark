@@ -177,6 +177,6 @@ message Sort {
 }
 
 message LocalRelation {
-  repeated Expression.Attribute attributes = 1;
+  repeated Expression.QualifiedAttribute attributes = 1;
   // TODO: support local data.
 }

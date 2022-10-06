@@ -51,7 +51,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     // TODO: set data types for each local relation attribute one proto supports data type.
     for (attr <- attrs) {
       localRelationBuilder.addAttributes(
-        proto.Expression.Attribute.newBuilder().setName(attr.name).build()
+        proto.Expression.QualifiedAttribute.newBuilder().setName(attr.name).build()
       )
     }
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()

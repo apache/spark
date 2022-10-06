@@ -72,11 +72,11 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   }
 
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
-    val attributes = rel.getAttributesList.asScala.map(transformAttribute(_))
+    val attributes = rel.getAttributesList.asScala.map(transformAttribute(_)).toSeq
     new org.apache.spark.sql.catalyst.plans.logical.LocalRelation(attributes)
   }
 
-  private def transformAttribute(exp: proto.Expression.Attribute): Attribute = {
+  private def transformAttribute(exp: proto.Expression.QualifiedAttribute): Attribute = {
     // TODO: use data type from the proto.
     AttributeReference(exp.getName, IntegerType)()
   }

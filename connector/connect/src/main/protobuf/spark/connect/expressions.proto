@@ -160,16 +160,9 @@ message Expression {
   message UnresolvedStar {
   }
 
-  // An resolved attribute that can specify a reference (e.g. column) without needing a resolution
+  // An qualified attribute that can specify a reference (e.g. column) without needing a resolution
   // by the analyzer.
-  message Attribute {
+  message QualifiedAttribute {
     string name = 1;
-    // TODO: Full definition of an attribute is at https://github.com/apache/spark/blob/4f4a080a78c3979961e8483aace663bdc45f489d/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/namedExpressions.scala#L105
-    // bool Nullability = 2;
-    //  repeated string Qualifier = 3;
-    //  int64 exprId = 4;
-    //  string UUID = 6;
-    //  string dataType = 5;
-    //  map[string, any] metadata = x;
   }
 }
