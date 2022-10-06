@@ -554,7 +554,7 @@
   },
   "UNPIVOT_REQUIRES_ATTRIBUTES" : {
     "message" : [
-      "UNPIVOT requires all given {given} expressions to be columns when no {empty} expressions are given. These are not columns: [<expressions>]."
+      "UNPIVOT requires all given <given> expressions to be columns when no <empty> expressions are given. These are not columns: [<expressions>]."
     ],
     "sqlState" : "42000"
   },

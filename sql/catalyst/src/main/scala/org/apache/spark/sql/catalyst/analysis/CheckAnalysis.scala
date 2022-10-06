@@ -432,12 +432,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case up @Unpivot(Some(ids), None, _, _, _, _)
             if up.childrenResolved && ids.forall(_.resolved) &&
               ids.exists(! _.isInstanceOf[AttributeReference]) =>
-            throw QueryCompilationErrors.unpivotRequiresAttributes("ids", "values", up.ids.get)
+            throw QueryCompilationErrors.unpivotRequiresAttributes("id", "value", up.ids.get)
           // given values must be AttributeReference when no ids given
           case up @Unpivot(None, Some(values), _, _, _, _)
             if up.childrenResolved && values.forall(_.forall(_.resolved)) &&
               values.exists(_.exists(! _.isInstanceOf[AttributeReference])) =>
-            throw QueryCompilationErrors.unpivotRequiresAttributes("values", "ids", values.flatten)
+            throw QueryCompilationErrors.unpivotRequiresAttributes("value", "id", values.flatten)
           // given values must not be empty seq
           case up @Unpivot(Some(ids), Some(Seq()), _, _, _, _)
             if up.childrenResolved && ids.forall(_.resolved) =>

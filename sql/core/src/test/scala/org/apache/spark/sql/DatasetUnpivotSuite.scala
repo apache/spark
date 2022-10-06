@@ -163,8 +163,8 @@ class DatasetUnpivotSuite extends QueryTest
       exception = e2,
       errorClass = "UNPIVOT_REQUIRES_ATTRIBUTES",
       parameters = Map(
-        "given" -> "ids",
-        "empty" -> "values",
+        "given" -> "id",
+        "empty" -> "value",
         "expressions" -> "\"(id * 2) AS `(id * 2)`\"")
     )
 
@@ -179,8 +179,8 @@ class DatasetUnpivotSuite extends QueryTest
       exception = e3,
       errorClass = "UNPIVOT_REQUIRES_ATTRIBUTES",
       parameters = Map(
-        "given" -> "ids",
-        "empty" -> "values",
+        "given" -> "id",
+        "empty" -> "value",
         "expressions" -> "\"id AS uid\"")
     )
   }
