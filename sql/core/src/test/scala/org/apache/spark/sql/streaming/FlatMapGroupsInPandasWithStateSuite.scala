@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{NoTimeout, ProcessingTimeTim
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.{Complete, Update}
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.functions.timestamp_seconds
+import org.apache.spark.sql.functions.{lit, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types._
@@ -737,5 +737,90 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         )
       }
     }
+  }
+
+  test("SPARK-40670: applyInPandasWithState - streaming having non-null columns") {
+    // scalastyle:off assume
+    assume(shouldTestPandasUDFs)
+    // scalastyle:on assume
+
+    // Function to maintain the count as state and set the proc. time timeout delay of 10 seconds.
+    // It returns the count if changed, or -1 if the state was removed by timeout.
+    val pythonScript =
+    """
+      |import pandas as pd
+      |from pyspark.sql.types import StructType, StructField, StringType
+      |
+      |tpe = StructType([
+      |    StructField("key1", StringType()),
+      |    StructField("key2", StringType()),
+      |    StructField("countAsStr", StringType())])
+      |
+      |def func(key, pdf_iter, state):
+      |    ret = None
+      |    if state.hasTimedOut:
+      |        state.remove()
+      |        yield pd.DataFrame({'key1': [key[0]], 'key2': [key[1]], 'countAsStr': [str(-1)]})
+      |    else:
+      |        count = state.getOption
+      |        if count is None:
+      |            count = 0
+      |        else:
+      |            count = count[0]
+      |
+      |        for pdf in pdf_iter:
+      |            count += len(pdf)
+      |
+      |        state.update((count,))
+      |        state.setTimeoutDuration(10000)
+      |        yield pd.DataFrame({'key1': [key[0]], 'key2': [key[1]], 'countAsStr': [str(count)]})
+      |""".stripMargin
+    val pythonFunc = TestGroupedMapPandasUDFWithState(
+      name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
+
+    val clock = new StreamManualClock
+    val inputData = MemoryStream[String]
+    val inputDataDS = inputData.toDS
+      .withColumnRenamed("value", "key1")
+      // the type of columns with string literal will be non-nullable
+      .withColumn("key2", lit("__FAKE__"))
+      .withColumn("val1", lit("__FAKE__"))
+      .withColumn("val2", lit("__FAKE__"))
+    val outputStructType = StructType(
+      Seq(
+        StructField("key1", StringType),
+        StructField("key2", StringType),
+        StructField("countAsStr", StringType)))
+    val stateStructType = StructType(Seq(StructField("count", LongType)))
+    val result =
+      inputDataDS
+        .groupBy("key1", "key2")
+        .applyInPandasWithState(
+          pythonFunc(
+            inputDataDS("key1"), inputDataDS("key2"), inputDataDS("val1"), inputDataDS("val2")
+          ).expr.asInstanceOf[PythonUDF],
+          outputStructType,
+          stateStructType,
+          "Update",
+          "ProcessingTimeTimeout")
+
+    testStream(result, Update)(
+      StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+      AddData(inputData, "a"),
+      AdvanceManualClock(1 * 1000),
+      CheckNewAnswer(("a", "__FAKE__", "1")),
+      assertNumStateRows(total = 1, updated = 1),
+
+      AddData(inputData, "b"),
+      AdvanceManualClock(1 * 1000),
+      CheckNewAnswer(("b", "__FAKE__", "1")),
+      assertNumStateRows(total = 2, updated = 1),
+
+      AddData(inputData, "b"),
+      AdvanceManualClock(10 * 1000),
+      CheckNewAnswer(("a", "__FAKE__", "-1"), ("b", "__FAKE__", "2")),
+      assertNumStateRows(
+        total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(1)))
+    )
   }
 }
