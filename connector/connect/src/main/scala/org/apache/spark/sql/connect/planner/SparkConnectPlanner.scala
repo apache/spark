@@ -24,7 +24,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, plans}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.types._
@@ -122,12 +122,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     }
   }
 
-  private def transformUnresolvedExpression(exp: proto.Expression): Expression = {
-    if (exp.getUnresolvedAttribute.getPartsCount == 1) {
-      Literal.create(exp.getUnresolvedAttribute.getParts(0), StringType)
-    } else {
-      UnresolvedAttribute(exp.getUnresolvedAttribute.getPartsList.asScala.toSeq)
-    }
+  private def transformUnresolvedExpression(exp: proto.Expression): UnresolvedAttribute = {
+    UnresolvedAttribute(exp.getUnresolvedAttribute.getPartsList.asScala.toSeq)
   }
 
   private def transformExpression(exp: proto.Expression): Expression = {

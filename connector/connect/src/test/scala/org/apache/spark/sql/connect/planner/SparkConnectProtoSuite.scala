@@ -19,7 +19,6 @@ package org.apache.spark.sql.connect.planner
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types.{DataType, IntegerType}
@@ -33,7 +32,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   lazy val connectTestRelation = createLocalRelationProto(Map("id" -> IntegerType))
 
-  lazy val sparkTestRelation: LocalRelation = LocalRelation(AttributeReference("id", IntegerType)())
+  lazy val sparkTestRelation: LocalRelation = LocalRelation($"id".int)
 
   test("Basic select") {
     val connectPlan = {
@@ -43,7 +42,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       import org.apache.spark.sql.catalyst.connect.plans._
       transform(connectTestRelation.select("id".protoAttr))
     }
-    val sparkPlan = sparkTestRelation.select("id")
+    val sparkPlan = sparkTestRelation.select($"id")
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
