@@ -25,11 +25,10 @@ from pyspark.testing.utils import search_jar
 
 connect_jar = search_jar("connector/connect", "spark-connect-assembly-", "spark-connect")
 if connect_jar is None:
-    connect_requirement_message = (  # type: ignore
+    connect_requirement_message = (
         "Skipping all Spark Connect Python tests as the optional Spark Connect project was "
         "not compiled into a JAR. To run these tests, you need to build Spark with "
-        "'build/sbt -Pconnect package' or "
-        "'build/mvn -Pconnect package' before running this test."
+        "'build/sbt package' or 'build/mvn package' before running this test."
     )
 else:
     existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
