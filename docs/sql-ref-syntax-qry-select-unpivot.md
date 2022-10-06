@@ -110,7 +110,7 @@ SELECT up.* FROM sales_quarterly
 
 -- multiple value columns can be unpivoted per row
 SELECT * FROM sales_quarterly
-    UNPIVOT INCLUDE NULLS (
+    UNPIVOT EXCLUDE NULLS (
         (first_quarter, second_quarter)
         FOR half_of_the_year IN (
             (q1, q2) AS H1,
@@ -125,7 +125,6 @@ SELECT * FROM sales_quarterly
 | 2021 | H1               | 2250          | 3200           |
 | 2021 | H2               | 4200          | 5900           |
 | 2022 | H1               | 4200          | 3100           |
-| 2022 | H2               | NULL          | NULL           |
 +------+------------------+---------------+----------------+
 ```
 
