@@ -299,7 +299,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def ansiIllegalArgumentError(message: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2001",
+      errorClass = "_LEGACY_ERROR_TEMP_2000",
       messageParameters = Map(
         "message" -> message,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))

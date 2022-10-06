@@ -3008,11 +3008,6 @@
       "<message>. If necessary set <ansiConfig> to false to bypass this error."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2001" : {
-    "message" : [
-      "<message> If necessary set <ansiConfig> to false to bypass this error"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2002" : {
     "message" : [
       "<message>"
@@ -3131,7 +3126,7 @@
   "_LEGACY_ERROR_TEMP_2025" : {
     "message" : [
       "<className> must override either <m1> or <m2>"
-      ]
+    ]
   },
   "_LEGACY_ERROR_TEMP_2026" : {
     "message" : [
