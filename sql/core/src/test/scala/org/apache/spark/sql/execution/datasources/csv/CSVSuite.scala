@@ -3083,7 +3083,7 @@ abstract class CSVSuite
   }
 
   test("SPARK-40667: check the number of valid CSV options") {
-    assert(CSVOptions.csvOptionNames.size == 38)
+    assert(CSVOptions.getValidOptionNames.size == 38)
   }
 }
 

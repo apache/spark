@@ -21,13 +21,11 @@ import java.nio.charset.{Charset, StandardCharsets}
 import java.time.ZoneId
 import java.util.Locale
 
-import scala.collection.mutable
-
 import com.fasterxml.jackson.core.{JsonFactory, JsonFactoryBuilder}
 import com.fasterxml.jackson.core.json.JsonReadFeature
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.FileSourceOptions
+import org.apache.spark.sql.catalyst.{FileSourceOptions, FileSourceOptionsSet}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -235,13 +233,7 @@ private[sql] object JSONOptionsInRead {
   )
 }
 
-object JSONOptions {
-  val jsonOptionNames: mutable.Set[String] = collection.mutable.Set[String]()
-  private def newOption(name: String): String = {
-    jsonOptionNames += name.toLowerCase(Locale.ROOT)
-    name
-  }
-
+object JSONOptions extends FileSourceOptionsSet {
   val SAMPLING_RATIO = newOption("samplingRatio")
   val PRIMITIVES_AS_STRING = newOption("primitivesAsString")
   val PREFERS_DECIMAL = newOption("prefersDecimal")

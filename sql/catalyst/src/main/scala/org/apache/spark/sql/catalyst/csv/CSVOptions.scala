@@ -21,12 +21,10 @@ import java.nio.charset.StandardCharsets
 import java.time.ZoneId
 import java.util.Locale
 
-import scala.collection.mutable
-
 import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.FileSourceOptions
+import org.apache.spark.sql.catalyst.{FileSourceOptions, FileSourceOptionsSet}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -332,13 +330,7 @@ class CSVOptions(
   }
 }
 
-object CSVOptions {
-  val csvOptionNames: mutable.Set[String] = collection.mutable.Set[String]()
-  private def newOption(name: String): String = {
-    csvOptionNames += name.toLowerCase(Locale.ROOT)
-    name
-  }
-
+object CSVOptions extends FileSourceOptionsSet {
   val HEADER = newOption("header")
   val DELIMITER = newOption("delimiter")
   val ENCODING = newOption("encoding")

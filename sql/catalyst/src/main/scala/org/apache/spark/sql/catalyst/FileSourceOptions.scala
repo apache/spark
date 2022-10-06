@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.FileSourceOptions.{IGNORE_CORRUPT_FILES, IGNORE_MISSING_FILES}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
@@ -39,4 +41,13 @@ class FileSourceOptions(
 object FileSourceOptions {
   val IGNORE_CORRUPT_FILES = "ignoreCorruptFiles"
   val IGNORE_MISSING_FILES = "ignoreMissingFiles"
+}
+
+trait FileSourceOptionsSet {
+  private val optionNames: mutable.Set[String] = collection.mutable.Set[String]()
+  protected def newOption(name: String): String = {
+    optionNames += name
+    name
+  }
+  def getValidOptionNames: Set[String] = optionNames.toSet
 }

@@ -582,7 +582,7 @@ abstract class OrcSuite
   }
 
   test("SPARK-40667: Check the number of valid ORC options") {
-    assert(OrcOptions.orcOptionNames.size == 3)
+    assert(OrcOptions.getValidOptionNames.size == 3)
   }
 }
 
