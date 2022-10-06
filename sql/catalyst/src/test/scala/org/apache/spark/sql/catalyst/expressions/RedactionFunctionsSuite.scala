@@ -27,7 +27,7 @@ class RedactionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     compare(tryMask = false, input = "123", format = "XXX", expected = "XXX")
     compare(tryMask = false, input = "123", format = "XX9", expected = "XX3")
     compare(tryMask = false, input = "1-2-3", format = "9-9-X", expected = "1-2-X")
-    compare(tryMask = false, input = "  1-2-3  ", format = "9-9-X", expected = "  1-2-X  ")
+    compare(tryMask = false, input = "  1-2-3  ", format = "  9-9-X  ", expected = "  1-2-X  ")
     compare(tryMask = false, input = "  123  ", format = "  XXX  ", expected = "  XXX  ")
     // Negative tests
     expectTypeCheckFailure(input = "123", format = "XYZ")
@@ -37,6 +37,9 @@ class RedactionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     expectError(input = "1-2-3", format = "XXX")
     expectError(input = "123", format = "X-X-X")
     expectError(input = "  123  ", format = "X-X-X")
+    expectError(input = "123", format = "  XXX  ")
+    expectError(input = "  123  ", format = "XXX")
+    expectError(input = "1 2 3", format = "X-X-X")
   }
 
   test("TryMaskCcn") {
@@ -44,7 +47,7 @@ class RedactionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     compare(tryMask = true, input = "123", format = "XXX", expected = "XXX")
     compare(tryMask = true, input = "123", format = "XX9", expected = "XX3")
     compare(tryMask = true, input = "1-2-3", format = "9-9-X", expected = "1-2-X")
-    compare(tryMask = true, input = "  1-2-3  ", format = "9-9-X", expected = "  1-2-X  ")
+    compare(tryMask = true, input = "  1-2-3  ", format = "  9-9-X  ", expected = "  1-2-X  ")
     compare(tryMask = true, input = "  123  ", format = "  XXX  ", expected = "  XXX  ")
     // Negative tests
     expectTypeCheckFailure(input = "123", format = "XYZ")
@@ -54,6 +57,9 @@ class RedactionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     expectNull(input = "1-2-3", format = "XXX")
     expectNull(input = "123", format = "X-X-X")
     expectNull(input = "  123  ", format = "X-X-X")
+    expectNull(input = "123", format = "  XXX  ")
+    expectNull(input = "  123  ", format = "XXX")
+    expectNull(input = "1 2 3", format = "X-X-X")
   }
 
   private def compare(

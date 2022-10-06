@@ -39,16 +39,14 @@ import org.apache.spark.unsafe.types.UTF8String
     The format can consist of the following characters, case insensitive:
       - Each 'X' represents a digit which will be converted to 'X' in the result.
       - Each digit '0'-'9' represents a digit which will be left unchanged in the result.
-      - Each '-' character should match exactly in the input string.
-      - Each whitespace character is ignored.
-    No other format characters are allowed. Any whitespace in the input string is left unchanged.
-    The default is: XXXX-XXXX-XXXX-XXXX.
+      - Each '-' or whitespace character should match exactly in the input string.
+    No other format characters are allowed. The default is: XXXX-XXXX-XXXX-XXXX.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_(ccn) FROM VALUES ("1234-5678-9876-5432") AS tab(ccn);
         XXXX-XXXX-XXXX-XXXX
-      > SELECT _FUNC_("  1234 5678 9876 5432", "XXXX XXXX XXXX 1234");
+      > SELECT _FUNC_("  1234 5678 9876 5432", "  XXXX XXXX XXXX 1234");
           XXXX XXXX XXXX 5432
   """,
   since = "3.4.0",
@@ -76,16 +74,14 @@ case class MaskCcn(left: Expression, right: Expression)
     The format can consist of the following characters, case insensitive:
       - Each 'X' represents a digit which will be converted to 'X' in the result.
       - Each digit '0'-'9' represents a digit which will be left unchanged in the result.
-      - Each '-' character should match exactly in the input string.
-      - Each whitespace character is ignored.
-    No other format characters are allowed. Any whitespace in the input string is left unchanged.
-    The default is: XXXX-XXXX-XXXX-XXXX.
+      - Each '-' or whitespace character should match exactly in the input string.
+    No other format characters are allowed. The default is: XXXX-XXXX-XXXX-XXXX.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_(ccn) FROM VALUES ("1234-5678-9876-5432") AS tab(ccn);
         XXXX-XXXX-XXXX-XXXX
-      > SELECT _FUNC_("  1234 5678 9876 5432", "XXXX XXXX XXXX 1234");
+      > SELECT _FUNC_("  1234 5678 9876 5432", "  XXXX XXXX XXXX 1234");
           XXXX XXXX XXXX 5432
       > SELECT _FUNC_("1234567898765432");
         NULL
@@ -172,25 +168,12 @@ class MaskDigitSequenceParser(formatString: String, nullOnError: Boolean) extend
     val inputString = input.toString
     var formatStringIndex = 0
     var error = false
-    def skipFormatWhitespace(): Unit = {
-      while (formatStringIndex < formatString.length &&
-        formatString(formatStringIndex).isWhitespace) {
-        formatStringIndex += 1
-      }
-    }
     // Check and consume each character in the input string, comparing against characters in the
     // format string.
     val result = inputString.map { inputChar =>
       if (error) {
         // If we have encountered an error, leave the input character alone; we will raise an
         // exception or return NULL after this loop has finished.
-        inputChar
-      } else if (inputChar.isWhitespace) {
-        // The input character is whitespace. Ignore it and continue comparing the next input
-        // character against the same format string character as this iteration.
-        // Note that the intention is to skip and ignore whitespace in both the input string and the
-        // format string. For example, for use cases like credit card numbers, phone numbers, and
-        // social security numbers, these are not material to the data in the field.
         inputChar
       } else if (formatStringIndex >= formatString.length) {
         // We have already consumed all the characters in the format string, but one or more
@@ -199,12 +182,12 @@ class MaskDigitSequenceParser(formatString: String, nullOnError: Boolean) extend
         error = true
         'X'
       } else {
-        // Check the corresponding character in the format string.
-        skipFormatWhitespace()
         val newChar = (inputChar, formatString(formatStringIndex)) match {
           // If both the input and format characters are '-', then this is a match, so continue.
-          case ('-', '-') =>
-            '-'
+          // If both the input and format characters are whitespace, this is a match.
+          case (inputChar, formatChar)
+            if inputChar == formatChar && (formatChar == '-' || formatChar.isWhitespace) =>
+            inputChar
           // If the input character is a digit and the format character is 'X', this is a match.
           case (inputChar, 'X') if inputChar.isDigit =>
             'X'
@@ -220,8 +203,6 @@ class MaskDigitSequenceParser(formatString: String, nullOnError: Boolean) extend
         newChar
       }
     }
-    // Intentionally skip and ignore any remaining whitespace in the format string.
-    skipFormatWhitespace()
     // We have now consumed all the characters in the input string. Check that we have also consumed
     // all the characters in the format string at this point. If not, this is an error because the
     // input string does not match the format string.

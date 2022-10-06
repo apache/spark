@@ -1491,11 +1491,27 @@ XXXX-XXXX-XXXX-XXXX
 
 
 -- !query
-select mask_ccn("  1234 5678 9876 5432", "XXXX XXXX XXXX 1234")
+select mask_ccn("  1234 5678 9876 5432  ", "  XXXX XXXX XXXX 1234  ")
 -- !query schema
-struct<mask_ccn(  1234 5678 9876 5432, XXXX XXXX XXXX 1234):string>
+struct<mask_ccn(  1234 5678 9876 5432  ,   XXXX XXXX XXXX 1234  ):string>
 -- !query output
   XXXX XXXX XXXX 5432
+
+
+-- !query
+select mask_ccn("  1234 5678 9876 5432  ", "XXXX XXXX XXXX 1234")
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "REDACTION_FUNCTION_ERROR",
+  "errorSubClass" : "MASK_CCN_FORMAT_MATCH_ERROR",
+  "messageParameters" : {
+    "format" : "XXXX XXXX XXXX 1234",
+    "input" : "  1234 5678 9876 5432  "
+  }
+}
 
 
 -- !query
@@ -1554,11 +1570,19 @@ XXXX-XXXX-XXXX-XXXX
 
 
 -- !query
-select try_mask_ccn("  1234 5678 9876 5432", "XXXX XXXX XXXX 1234")
+select try_mask_ccn("  1234 5678 9876 5432  ", "  XXXX XXXX XXXX 1234  ")
 -- !query schema
-struct<try_mask_ccn(  1234 5678 9876 5432, XXXX XXXX XXXX 1234):string>
+struct<try_mask_ccn(  1234 5678 9876 5432  ,   XXXX XXXX XXXX 1234  ):string>
 -- !query output
   XXXX XXXX XXXX 5432
+
+
+-- !query
+select try_mask_ccn("  1234 5678 9876 5432  ", "XXXX XXXX XXXX 1234")
+-- !query schema
+struct<try_mask_ccn(  1234 5678 9876 5432  , XXXX XXXX XXXX 1234):string>
+-- !query output
+NULL
 
 
 -- !query
