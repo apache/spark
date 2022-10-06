@@ -446,8 +446,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case up @Unpivot(Some(ids), Some(values), _, _, _, _)
             if up.childrenResolved && ids.forall(_.resolved) &&
               values.exists(_.length != up.valueColumnNames.length) =>
-            throw QueryCompilationErrors.unpivotValueSizeMismatchError(
-              up.valueColumnNames.length, up.values.get.map(_.length))
+            throw QueryCompilationErrors.unpivotValueSizeMismatchError(up.valueColumnNames.length)
           // see TypeCoercionBase.UnpivotCoercion
           case up: Unpivot if up.canBeCoercioned && !up.valuesTypeCoercioned =>
             throw QueryCompilationErrors.unpivotValueDataTypeMismatchError(up.values.get)

@@ -384,8 +384,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNPIVOT_VALUE_SIZE_MISMATCH",
   "sqlState" : "42000",
   "messageParameters" : {
-    "names" : "3",
-    "sizes" : "2, 2, 2"
+    "names" : "3"
   }
 }
 
@@ -403,7 +402,6 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNPIVOT_VALUE_SIZE_MISMATCH",
   "sqlState" : "42000",
   "messageParameters" : {
-    "names" : "2",
-    "sizes" : "1, 2, 3"
+    "names" : "2"
   }
 }
