@@ -236,6 +236,10 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
     assert(data(3) == Row("\"doh\""))
     assert(data.length == 4)
   }
+
+  test("SPARK-40667: check the number of valid Text options") {
+    assert(TextOptions.textOptionNames.size == 4)
+  }
 }
 
 class TextV1Suite extends TextSuite {

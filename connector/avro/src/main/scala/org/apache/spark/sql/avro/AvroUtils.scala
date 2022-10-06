@@ -50,8 +50,8 @@ private[sql] object AvroUtils extends Logging {
     val conf = spark.sessionState.newHadoopConfWithOptions(options)
     val parsedOptions = new AvroOptions(options, conf)
 
-    if (parsedOptions.parameters.contains(IGNORE_EXTENSION_KEY.toString)) {
-      logWarning(s"Option ${IGNORE_EXTENSION_KEY.toString} is deprecated. Please use the " +
+    if (parsedOptions.parameters.contains(IGNORE_EXTENSION_KEY)) {
+      logWarning(s"Option $IGNORE_EXTENSION_KEY is deprecated. Please use the " +
         "general data source option pathGlobFilter for filtering file names.")
     }
     // User can specify an optional avro json schema.

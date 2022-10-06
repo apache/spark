@@ -35,9 +35,10 @@ import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.logging.log4j.Level
-
 import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException, TestUtils}
+
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
+import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
@@ -3079,6 +3080,10 @@ abstract class CSVSuite
         }
       }
     }
+  }
+
+  test("SPARK-40667: check the number of valid CSV options") {
+    assert(CSVOptions.csvOptionNames.size == 38)
   }
 }
 

@@ -1881,7 +1881,7 @@ abstract class AvroSuite
     }
     withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
       modes.foreach { mode =>
-        f(Map(AvroOptions.DATETIME_REBASE_MODE.toString -> mode.toString))
+        f(Map(AvroOptions.DATETIME_REBASE_MODE -> mode.toString))
       }
     }
   }
@@ -2271,6 +2271,10 @@ abstract class AvroSuite
       val df2 = spark.read.format("avro").load(file.getCanonicalPath)
       checkAnswer(df2, df.collect().toSeq)
     }
+  }
+
+  test("SPARK-40667: Check the number of valid Avro options") {
+    assert(AvroOptions.avroOptionNames.size == 9)
   }
 }
 

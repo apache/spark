@@ -3381,6 +3381,10 @@ abstract class JsonSuite
       }
     }
   }
+
+  test("SPARK-40667: check the number of valid Json options") {
+    assert(JSONOptions.jsonOptionNames.size == 28)
+  }
 }
 
 class JsonV1Suite extends JsonSuite {

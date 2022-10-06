@@ -133,7 +133,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     // properties will supersede table properties.
     if (serde.contains("parquet")) {
       val options = relation.tableMeta.properties.filterKeys(isParquetProperty).toMap ++
-        relation.tableMeta.storage.properties + (ParquetOptions.MERGE_SCHEMA.toString ->
+        relation.tableMeta.storage.properties + (ParquetOptions.MERGE_SCHEMA ->
         SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
         convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet", isWrite)
     } else {
@@ -161,7 +161,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val serde = storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
 
     if (serde.contains("parquet")) {
-      val options = storage.properties + (ParquetOptions.MERGE_SCHEMA.toString ->
+      val options = storage.properties + (ParquetOptions.MERGE_SCHEMA ->
         SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
       storage.copy(
         serde = None,

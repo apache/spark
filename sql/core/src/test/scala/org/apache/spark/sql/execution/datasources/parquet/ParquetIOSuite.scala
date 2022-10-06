@@ -1485,6 +1485,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  test("SPARK-40667: check the number of valid Parquet options") {
+    assert(ParquetOptions.parquetOptionNames.size == 5)
+  }
+
   test("SPARK-23173 Writing a file with data converted from JSON with and incorrect user schema") {
     withTempPath { file =>
       val jsonData =

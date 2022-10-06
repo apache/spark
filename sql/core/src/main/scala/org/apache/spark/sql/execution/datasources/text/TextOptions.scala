@@ -18,6 +18,9 @@
 package org.apache.spark.sql.execution.datasources.text
 
 import java.nio.charset.{Charset, StandardCharsets}
+import java.util.Locale
+
+import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs}
@@ -32,23 +35,19 @@ class TextOptions(@transient private val parameters: CaseInsensitiveMap[String])
 
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
-  private def getString(paramName: TextOptions.Value): Option[String] = {
-    parameters.get(paramName.toString)
-  }
-
   /**
    * Compression codec to use.
    */
-  val compressionCodec = getString(COMPRESSION).map(CompressionCodecs.getCodecClassName)
+  val compressionCodec = parameters.get(COMPRESSION).map(CompressionCodecs.getCodecClassName)
 
   /**
    * wholetext - If true, read a file as a single row and not split by "\n".
    */
-  val wholeText = getString(WHOLETEXT).getOrElse("false").toBoolean
+  val wholeText = parameters.getOrElse(WHOLETEXT, "false").toBoolean
 
-  val encoding: Option[String] = getString(ENCODING)
+  val encoding: Option[String] = parameters.get(ENCODING)
 
-  val lineSeparator: Option[String] = getString(LINE_SEPARATOR).map { lineSep =>
+  val lineSeparator: Option[String] = parameters.get(LINE_SEPARATOR).map { lineSep =>
     require(lineSep.nonEmpty, s"'$LINE_SEPARATOR' cannot be an empty string.")
 
     lineSep
@@ -62,9 +61,15 @@ class TextOptions(@transient private val parameters: CaseInsensitiveMap[String])
     lineSeparatorInRead.getOrElse("\n".getBytes(StandardCharsets.UTF_8))
 }
 
-object TextOptions extends Enumeration {
-  val COMPRESSION = Value("compression")
-  val WHOLETEXT = Value("wholetext")
-  val ENCODING = Value("encoding")
-  val LINE_SEPARATOR = Value("lineSep")
+private[sql] object TextOptions {
+  val textOptionNames: mutable.Set[String] = collection.mutable.Set[String]()
+  private def newOption(name: String): String = {
+    textOptionNames += name.toLowerCase(Locale.ROOT)
+    name
+  }
+
+  val COMPRESSION = newOption("compression")
+  val WHOLETEXT = newOption("wholetext")
+  val ENCODING = newOption("encoding")
+  val LINE_SEPARATOR = newOption("lineSep")
 }

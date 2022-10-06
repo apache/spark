@@ -392,15 +392,15 @@ abstract class OrcSuite
     // OrcOptions's parameters have a higher priority than SQL configuration.
     // `mergeSchema` -> `spark.sql.orc.mergeSchema`
     withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true") {
-      val map1 = Map(OrcOptions.MERGE_SCHEMA.toString -> "true")
-      val map2 = Map(OrcOptions.MERGE_SCHEMA.toString -> "false")
+      val map1 = Map(OrcOptions.MERGE_SCHEMA -> "true")
+      val map2 = Map(OrcOptions.MERGE_SCHEMA -> "false")
       assert(new OrcOptions(map1, conf).mergeSchema == true)
       assert(new OrcOptions(map2, conf).mergeSchema == false)
     }
 
     withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "false") {
-      val map1 = Map(OrcOptions.MERGE_SCHEMA.toString -> "true")
-      val map2 = Map(OrcOptions.MERGE_SCHEMA.toString -> "false")
+      val map1 = Map(OrcOptions.MERGE_SCHEMA -> "true")
+      val map2 = Map(OrcOptions.MERGE_SCHEMA -> "false")
       assert(new OrcOptions(map1, conf).mergeSchema == true)
       assert(new OrcOptions(map2, conf).mergeSchema == false)
     }
@@ -415,9 +415,9 @@ abstract class OrcSuite
         assert(spark.read.orc(basePath).columns.length === expectedColumnNumber)
 
         // OrcOptions.MERGE_SCHEMA has higher priority
-        assert(spark.read.option(OrcOptions.MERGE_SCHEMA.toString, true)
+        assert(spark.read.option(OrcOptions.MERGE_SCHEMA, true)
           .orc(basePath).columns.length === 3)
-        assert(spark.read.option(OrcOptions.MERGE_SCHEMA.toString, false)
+        assert(spark.read.option(OrcOptions.MERGE_SCHEMA, false)
           .orc(basePath).columns.length === 2)
       }
     }
@@ -579,6 +579,10 @@ abstract class OrcSuite
       assert(spark.read.orc(canonicalPath).isEmpty,
         "ORC sources shall write an empty file contains meta if necessary")
     }
+  }
+
+  test("SPARK-40667: Check the number of valid ORC options") {
+    assert(OrcOptions.orcOptionNames.size == 3)
   }
 }
 

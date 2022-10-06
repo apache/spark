@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.orc
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.orc.OrcConf.COMPRESS
 
 import org.apache.spark.sql.catalyst.FileSourceOptions
@@ -45,9 +47,9 @@ class OrcOptions(
   val compressionCodec: String = {
     // `compression`, `orc.compress`(i.e., OrcConf.COMPRESS), and `spark.sql.orc.compression.codec`
     // are in order of precedence from highest to lowest.
-    val orcCompressionConf = parameters.get(ORC_COMPRESSION.toString)
+    val orcCompressionConf = parameters.get(ORC_COMPRESSION)
     val codecName = parameters
-      .get(COMPRESSION.toString)
+      .get(COMPRESSION)
       .orElse(orcCompressionConf)
       .getOrElse(sqlConf.orcCompressionCodec)
       .toLowerCase(Locale.ROOT)
@@ -64,15 +66,21 @@ class OrcOptions(
    * the schemas can be merged. By default use the value specified in SQLConf.
    */
   val mergeSchema: Boolean = parameters
-    .get(MERGE_SCHEMA.toString)
+    .get(MERGE_SCHEMA)
     .map(_.toBoolean)
     .getOrElse(sqlConf.isOrcSchemaMergingEnabled)
 }
 
-object OrcOptions extends Enumeration {
-  val MERGE_SCHEMA = Value("mergeSchema")
-  val ORC_COMPRESSION = Value(COMPRESS.getAttribute)
-  val COMPRESSION = Value("compression")
+object OrcOptions {
+  val orcOptionNames: mutable.Set[String] = collection.mutable.Set[String]()
+  private def newOption(name: String): String = {
+    orcOptionNames += name.toLowerCase(Locale.ROOT)
+    name
+  }
+
+  val MERGE_SCHEMA = newOption("mergeSchema")
+  val ORC_COMPRESSION = newOption(COMPRESS.getAttribute)
+  val COMPRESSION = newOption("compression")
 
   // The ORC compression short names
   private val shortOrcCompressionCodecNames = Map(

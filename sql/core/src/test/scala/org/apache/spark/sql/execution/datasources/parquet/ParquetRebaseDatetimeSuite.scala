@@ -105,8 +105,8 @@ abstract class ParquetRebaseDatetimeSuite
       conf: String,
       mode: LegacyBehaviorPolicy.Value): Map[String, String] = conf match {
     case SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key =>
-      Map(ParquetOptions.INT96_REBASE_MODE.toString -> mode.toString)
-    case _ => Map(ParquetOptions.DATETIME_REBASE_MODE.toString -> mode.toString)
+      Map(ParquetOptions.INT96_REBASE_MODE -> mode.toString)
+    case _ => Map(ParquetOptions.DATETIME_REBASE_MODE -> mode.toString)
   }
 
   private def runInMode(

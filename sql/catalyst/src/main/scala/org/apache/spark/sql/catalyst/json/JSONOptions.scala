@@ -21,6 +21,8 @@ import java.nio.charset.{Charset, StandardCharsets}
 import java.time.ZoneId
 import java.util.Locale
 
+import scala.collection.mutable
+
 import com.fasterxml.jackson.core.{JsonFactory, JsonFactoryBuilder}
 import com.fasterxml.jackson.core.json.JsonReadFeature
 
@@ -41,6 +43,8 @@ private[sql] class JSONOptions(
     defaultColumnNameOfCorruptRecord: String)
   extends FileSourceOptions(parameters) with Logging  {
 
+  import JSONOptions._
+
   def this(
     parameters: Map[String, String],
     defaultTimeZoneId: String,
@@ -51,36 +55,37 @@ private[sql] class JSONOptions(
         defaultColumnNameOfCorruptRecord)
   }
 
-  private def getString(paramName: JSONOptions.Value): Option[String] = {
-    parameters.get(paramName.toString)
-  }
-
-  import org.apache.spark.sql.catalyst.json.JSONOptions._
-
-  val samplingRatio = getString(SAMPLING_RATIO).map(_.toDouble).getOrElse(1.0)
-  val primitivesAsString = getString(PRIMITIVES_AS_STRING).map(_.toBoolean).getOrElse(false)
-  val prefersDecimal = getString(PREFERS_DECIMAL).map(_.toBoolean).getOrElse(false)
-  val allowComments = getString(ALLOW_COMMENTS).map(_.toBoolean).getOrElse(false)
+  val samplingRatio =
+    parameters.get(SAMPLING_RATIO).map(_.toDouble).getOrElse(1.0)
+  val primitivesAsString =
+    parameters.get(PRIMITIVES_AS_STRING).map(_.toBoolean).getOrElse(false)
+  val prefersDecimal =
+    parameters.get(PREFERS_DECIMAL).map(_.toBoolean).getOrElse(false)
+  val allowComments =
+    parameters.get(ALLOW_COMMENTS).map(_.toBoolean).getOrElse(false)
   val allowUnquotedFieldNames =
-    getString(ALLOW_UNQUOTED_FIELD_NAMES).map(_.toBoolean).getOrElse(false)
-  val allowSingleQuotes = getString(ALLOW_SINGLE_QUOTES).map(_.toBoolean).getOrElse(true)
+    parameters.get(ALLOW_UNQUOTED_FIELD_NAMES).map(_.toBoolean).getOrElse(false)
+  val allowSingleQuotes =
+    parameters.get(ALLOW_SINGLE_QUOTES).map(_.toBoolean).getOrElse(true)
   val allowNumericLeadingZeros =
-    getString(ALLOW_NUMERIC_LEADING_ZEROS).map(_.toBoolean).getOrElse(false)
-  val allowNonNumericNumbers = getString(ALLOW_NON_NUMERIC_NUMBERS).map(_.toBoolean).getOrElse(true)
+    parameters.get(ALLOW_NUMERIC_LEADING_ZEROS).map(_.toBoolean).getOrElse(false)
+  val allowNonNumericNumbers =
+    parameters.get(ALLOW_NON_NUMERIC_NUMBERS).map(_.toBoolean).getOrElse(true)
   val allowBackslashEscapingAnyCharacter =
-    getString(ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER).map(_.toBoolean).getOrElse(false)
+    parameters.get(ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER).map(_.toBoolean).getOrElse(false)
   private val allowUnquotedControlChars =
-    getString(ALLOW_UNQUOTED_CONTROL_CHARS).map(_.toBoolean).getOrElse(false)
-  val compressionCodec = getString(COMPRESSION).map(CompressionCodecs.getCodecClassName)
-  val parseMode: ParseMode = getString(MODE).map(ParseMode.fromString).getOrElse(PermissiveMode)
+    parameters.get(ALLOW_UNQUOTED_CONTROL_CHARS).map(_.toBoolean).getOrElse(false)
+  val compressionCodec = parameters.get(COMPRESSION).map(CompressionCodecs.getCodecClassName)
+  val parseMode: ParseMode =
+    parameters.get(MODE).map(ParseMode.fromString).getOrElse(PermissiveMode)
   val columnNameOfCorruptRecord =
-    getString(COLUMN_NAME_OF_CORRUPTED_RECORD).getOrElse(defaultColumnNameOfCorruptRecord)
+    parameters.getOrElse(COLUMN_NAME_OF_CORRUPTED_RECORD, defaultColumnNameOfCorruptRecord)
 
   // Whether to ignore column of all null values or empty array/struct during schema inference
-  val dropFieldIfAllNull = getString(DROP_FIELD_IF_ALL_NULL).map(_.toBoolean).getOrElse(false)
+  val dropFieldIfAllNull = parameters.get(DROP_FIELD_IF_ALL_NULL).map(_.toBoolean).getOrElse(false)
 
   // Whether to ignore null fields during json generating
-  val ignoreNullFields = getString(IGNORE_NULL_FIELDS).map(_.toBoolean)
+  val ignoreNullFields = parameters.get(IGNORE_NULL_FIELDS).map(_.toBoolean)
     .getOrElse(SQLConf.get.jsonGeneratorIgnoreNullFields)
 
   // If this is true, when writing NULL values to columns of JSON tables with explicit DEFAULT
@@ -90,30 +95,31 @@ private[sql] class JSONOptions(
   val writeNullIfWithDefaultValue = SQLConf.get.jsonWriteNullIfWithDefaultValue
 
   // A language tag in IETF BCP 47 format
-  val locale: Locale = getString(LOCALE).map(Locale.forLanguageTag).getOrElse(Locale.US)
+  val locale: Locale = parameters.get(LOCALE).map(Locale.forLanguageTag).getOrElse(Locale.US)
 
-  val zoneId: ZoneId = DateTimeUtils.getZoneId(getString(TIME_ZONE).getOrElse(defaultTimeZoneId))
+  val zoneId: ZoneId = DateTimeUtils.getZoneId(
+    parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 
-  val dateFormatInRead: Option[String] = getString(DATE_FORMAT)
-  val dateFormatInWrite: String = getString(DATE_FORMAT).getOrElse(DateFormatter.defaultPattern)
+  val dateFormatInRead: Option[String] = parameters.get(DATE_FORMAT)
+  val dateFormatInWrite: String = parameters.getOrElse(DATE_FORMAT, DateFormatter.defaultPattern)
 
   val timestampFormatInRead: Option[String] =
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-      Some(getString(TIMESTAMP_FORMAT).getOrElse(
+      Some(parameters.getOrElse(TIMESTAMP_FORMAT,
         s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"))
     } else {
-      getString(TIMESTAMP_FORMAT)
+      parameters.get(TIMESTAMP_FORMAT)
     }
-  val timestampFormatInWrite: String = getString(TIMESTAMP_FORMAT).getOrElse(
+  val timestampFormatInWrite: String = parameters.getOrElse(TIMESTAMP_FORMAT,
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
     } else {
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
     })
 
-  val timestampNTZFormatInRead: Option[String] = getString(TIMESTAMP_NTZ_FORMAT)
-  val timestampNTZFormatInWrite: String = getString(TIMESTAMP_NTZ_FORMAT).getOrElse(
-    s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
+  val timestampNTZFormatInRead: Option[String] = parameters.get(TIMESTAMP_NTZ_FORMAT)
+  val timestampNTZFormatInWrite: String =
+    parameters.getOrElse(TIMESTAMP_NTZ_FORMAT, s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 
   // SPARK-39731: Enables the backward compatible parsing behavior.
   // Generally, this config should be set to false to avoid producing potentially incorrect results
@@ -124,14 +130,14 @@ private[sql] class JSONOptions(
   // Otherwise, depending on the parser policy and a custom pattern, an exception may be thrown and
   // the value will be parsed as null.
   val enableDateTimeParsingFallback: Option[Boolean] =
-    getString(ENABLE_DATETIME_PARSING_FALLBACK).map(_.toBoolean)
+  parameters.get(ENABLE_DATETIME_PARSING_FALLBACK).map(_.toBoolean)
 
-  val multiLine = getString(MULTILINE).map(_.toBoolean).getOrElse(false)
+  val multiLine = parameters.get(MULTILINE).map(_.toBoolean).getOrElse(false)
 
   /**
    * A string between two consecutive JSON records.
    */
-  val lineSeparator: Option[String] = getString(LINE_SEP).map { sep =>
+  val lineSeparator: Option[String] = parameters.get(LINE_SEP).map { sep =>
     require(sep.nonEmpty, "'lineSep' cannot be an empty string.")
     sep
   }
@@ -144,7 +150,8 @@ private[sql] class JSONOptions(
    * when the multiLine option is set to `true`. If encoding is not specified in write,
    * UTF-8 is used by default.
    */
-  val encoding: Option[String] = getString(ENCODING).orElse(getString(CHARSET)).map(checkedEncoding)
+  val encoding: Option[String] = parameters.get(ENCODING)
+    .orElse(parameters.get(CHARSET)).map(checkedEncoding)
 
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
     lineSep.getBytes(encoding.getOrElse(StandardCharsets.UTF_8.name()))
@@ -154,20 +161,20 @@ private[sql] class JSONOptions(
   /**
    * Generating JSON strings in pretty representation if the parameter is enabled.
    */
-  val pretty: Boolean = getString(PRETTY).map(_.toBoolean).getOrElse(false)
+  val pretty: Boolean = parameters.get(PRETTY).map(_.toBoolean).getOrElse(false)
 
   /**
    * Enables inferring of TimestampType and TimestampNTZType from strings matched to the
    * corresponding timestamp pattern defined by the timestampFormat and timestampNTZFormat options
    * respectively.
    */
-  val inferTimestamp: Boolean = getString(INFER_TIMESTAMP).map(_.toBoolean).getOrElse(false)
+  val inferTimestamp: Boolean = parameters.get(INFER_TIMESTAMP).map(_.toBoolean).getOrElse(false)
 
   /**
    * Generating \u0000 style codepoints for non-ASCII characters if the parameter is enabled.
    */
   val writeNonAsciiCharacterAsCodePoint: Boolean =
-    getString(WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT).map(_.toBoolean).getOrElse(false)
+    parameters.get(WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT).map(_.toBoolean).getOrElse(false)
 
   /** Build a Jackson [[JsonFactory]] using JSON options. */
   def buildJsonFactory(): JsonFactory = {
@@ -228,33 +235,39 @@ private[sql] object JSONOptionsInRead {
   )
 }
 
-object JSONOptions extends Enumeration {
-  val SAMPLING_RATIO = Value("samplingRatio")
-  val PRIMITIVES_AS_STRING = Value("primitivesAsString")
-  val PREFERS_DECIMAL = Value("prefersDecimal")
-  val ALLOW_COMMENTS = Value("allowComments")
-  val ALLOW_UNQUOTED_FIELD_NAMES = Value("allowUnquotedFieldNames")
-  val ALLOW_SINGLE_QUOTES = Value("allowSingleQuotes")
-  val ALLOW_NUMERIC_LEADING_ZEROS = Value("allowNumericLeadingZeros")
-  val ALLOW_NON_NUMERIC_NUMBERS = Value("allowNonNumericNumbers")
-  val ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER = Value("allowBackslashEscapingAnyCharacter")
-  val ALLOW_UNQUOTED_CONTROL_CHARS = Value("allowUnquotedControlChars")
-  val COMPRESSION = Value("compression")
-  val MODE = Value("mode")
-  val DROP_FIELD_IF_ALL_NULL = Value("dropFieldIfAllNull")
-  val IGNORE_NULL_FIELDS = Value("ignoreNullFields")
-  val LOCALE = Value("locale")
-  val DATE_FORMAT = Value("dateFormat")
-  val TIMESTAMP_FORMAT = Value("timestampFormat")
-  val TIMESTAMP_NTZ_FORMAT = Value("timestampNTZFormat")
-  val ENABLE_DATETIME_PARSING_FALLBACK = Value("enableDateTimeParsingFallback")
-  val MULTILINE = Value("multiLine")
-  val LINE_SEP = Value("lineSep")
-  val ENCODING = Value("encoding")
-  val CHARSET = Value("charset")
-  val PRETTY = Value("pretty")
-  val INFER_TIMESTAMP = Value("inferTimestamp")
-  val COLUMN_NAME_OF_CORRUPTED_RECORD = Value("columnNameOfCorruptRecord")
-  val TIME_ZONE = Value("timeZone")
-  val WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT = Value("writeNonAsciiCharacterAsCodePoint")
+object JSONOptions {
+  val jsonOptionNames: mutable.Set[String] = collection.mutable.Set[String]()
+  private def newOption(name: String): String = {
+    jsonOptionNames += name.toLowerCase(Locale.ROOT)
+    name
+  }
+
+  val SAMPLING_RATIO = newOption("samplingRatio")
+  val PRIMITIVES_AS_STRING = newOption("primitivesAsString")
+  val PREFERS_DECIMAL = newOption("prefersDecimal")
+  val ALLOW_COMMENTS = newOption("allowComments")
+  val ALLOW_UNQUOTED_FIELD_NAMES = newOption("allowUnquotedFieldNames")
+  val ALLOW_SINGLE_QUOTES = newOption("allowSingleQuotes")
+  val ALLOW_NUMERIC_LEADING_ZEROS = newOption("allowNumericLeadingZeros")
+  val ALLOW_NON_NUMERIC_NUMBERS = newOption("allowNonNumericNumbers")
+  val ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER = newOption("allowBackslashEscapingAnyCharacter")
+  val ALLOW_UNQUOTED_CONTROL_CHARS = newOption("allowUnquotedControlChars")
+  val COMPRESSION = newOption("compression")
+  val MODE = newOption("mode")
+  val DROP_FIELD_IF_ALL_NULL = newOption("dropFieldIfAllNull")
+  val IGNORE_NULL_FIELDS = newOption("ignoreNullFields")
+  val LOCALE = newOption("locale")
+  val DATE_FORMAT = newOption("dateFormat")
+  val TIMESTAMP_FORMAT = newOption("timestampFormat")
+  val TIMESTAMP_NTZ_FORMAT = newOption("timestampNTZFormat")
+  val ENABLE_DATETIME_PARSING_FALLBACK = newOption("enableDateTimeParsingFallback")
+  val MULTILINE = newOption("multiLine")
+  val LINE_SEP = newOption("lineSep")
+  val ENCODING = newOption("encoding")
+  val CHARSET = newOption("charset")
+  val PRETTY = newOption("pretty")
+  val INFER_TIMESTAMP = newOption("inferTimestamp")
+  val COLUMN_NAME_OF_CORRUPTED_RECORD = newOption("columnNameOfCorruptRecord")
+  val TIME_ZONE = newOption("timeZone")
+  val WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT = newOption("writeNonAsciiCharacterAsCodePoint")
 }

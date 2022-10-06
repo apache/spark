@@ -21,6 +21,8 @@ import java.nio.charset.StandardCharsets
 import java.time.ZoneId
 import java.util.Locale
 
+import scala.collection.mutable
+
 import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
 
 import org.apache.spark.internal.Logging
@@ -36,6 +38,8 @@ class CSVOptions(
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
   extends FileSourceOptions(parameters) with Logging {
+
+  import CSVOptions._
 
   def this(
     parameters: Map[String, String],
@@ -60,19 +64,19 @@ class CSVOptions(
         defaultColumnNameOfCorruptRecord)
   }
 
-  private def getChar(csvOption: CSVOptions.Value, default: Char): Char = {
-    val paramValue = parameters.get(csvOption.toString)
+  private def getChar(paramName: String, default: Char): Char = {
+    val paramValue = parameters.get(paramName)
     paramValue match {
       case None => default
       case Some(null) => default
       case Some(value) if value.length == 0 => '\u0000'
       case Some(value) if value.length == 1 => value.charAt(0)
-      case _ => throw QueryExecutionErrors.paramExceedOneCharError(csvOption.toString)
+      case _ => throw QueryExecutionErrors.paramExceedOneCharError(paramName)
     }
   }
 
-  private def getInt(paramName: CSVOptions.Value, default: Int): Int = {
-    val paramValue = parameters.get(paramName.toString)
+  private def getInt(paramName: String, default: Int): Int = {
+    val paramValue = parameters.get(paramName)
     paramValue match {
       case None => default
       case Some(null) => default
@@ -80,13 +84,13 @@ class CSVOptions(
         value.toInt
       } catch {
         case e: NumberFormatException =>
-          throw QueryExecutionErrors.paramIsNotIntegerError(paramName.toString, value)
+          throw QueryExecutionErrors.paramIsNotIntegerError(paramName, value)
       }
     }
   }
 
-  private def getBool(paramName: CSVOptions.Value, default: Boolean = false): Boolean = {
-    val param = parameters.getOrElse(paramName.toString, default.toString)
+  private def getBool(paramName: String, default: Boolean = false): Boolean = {
+    val param = parameters.getOrElse(paramName, default.toString)
     if (param == null) {
       default
     } else if (param.toLowerCase(Locale.ROOT) == "true") {
@@ -94,32 +98,25 @@ class CSVOptions(
     } else if (param.toLowerCase(Locale.ROOT) == "false") {
       false
     } else {
-      throw QueryExecutionErrors.paramIsNotBooleanValueError(paramName.toString)
+      throw QueryExecutionErrors.paramIsNotBooleanValueError(paramName)
     }
   }
 
-  private def getString(paramName: CSVOptions.Value): Option[String] = {
-    parameters.get(paramName.toString)
-  }
-
-  import org.apache.spark.sql.catalyst.csv.CSVOptions._
-
   val delimiter = CSVExprUtils.toDelimiterStr(
-    getString(SEP).getOrElse(getString(DELIMITER).getOrElse(",")))
+    parameters.getOrElse(SEP, parameters.getOrElse("delimiter", ",")))
   val parseMode: ParseMode =
-    getString(MODE).map(ParseMode.fromString).getOrElse(PermissiveMode)
-  val charset = getString(ENCODING).getOrElse(
-    getString(CHARSET).getOrElse(StandardCharsets.UTF_8.name()))
+    parameters.get(MODE).map(ParseMode.fromString).getOrElse(PermissiveMode)
+  val charset = parameters.getOrElse(ENCODING,
+    parameters.getOrElse(CHARSET, StandardCharsets.UTF_8.name()))
 
   val quote = getChar(QUOTE, '\"')
   val escape = getChar(ESCAPE, '\\')
-  val charToEscapeQuoteEscaping = getString(CHAR_TO_ESCAPE_QUOTE_ESCAPING) match {
+  val charToEscapeQuoteEscaping = parameters.get(CHAR_TO_ESCAPE_QUOTE_ESCAPING) match {
     case None => None
     case Some(null) => None
     case Some(value) if value.length == 0 => None
     case Some(value) if value.length == 1 => Some(value.charAt(0))
-    case _ =>
-      throw QueryExecutionErrors.paramExceedOneCharError(CHAR_TO_ESCAPE_QUOTE_ESCAPING.toString)
+    case _ => throw QueryExecutionErrors.paramExceedOneCharError(CHAR_TO_ESCAPE_QUOTE_ESCAPING)
   }
   val comment = getChar(COMMENT, '\u0000')
 
@@ -134,26 +131,26 @@ class CSVOptions(
   val ignoreTrailingWhiteSpaceFlagInWrite = getBool(IGNORE_TRAILING_WHITESPACE, default = true)
 
   val columnNameOfCorruptRecord =
-    getString(COLUMN_NAME_OF_CORRUPT_RECORD).getOrElse(defaultColumnNameOfCorruptRecord)
+    parameters.getOrElse(COLUMN_NAME_OF_CORRUPT_RECORD, defaultColumnNameOfCorruptRecord)
 
-  val nullValue = getString(NULL_VALUE).getOrElse("")
+  val nullValue = parameters.getOrElse(NULL_VALUE, "")
 
-  val nanValue = getString(NAN_VALUE).getOrElse("NaN")
+  val nanValue = parameters.getOrElse(NAN_VALUE, "NaN")
 
-  val positiveInf = getString(POSITIVE_INF).getOrElse("Inf")
-  val negativeInf = getString(NEGATIVE_INF).getOrElse("-Inf")
+  val positiveInf = parameters.getOrElse(POSITIVE_INF, "Inf")
+  val negativeInf = parameters.getOrElse(NEGATIVE_INF, "-Inf")
 
 
   val compressionCodec: Option[String] = {
-    val name = getString(COMPRESSION).orElse(getString(CODEC))
+    val name = parameters.get(COMPRESSION).orElse(parameters.get("codec"))
     name.map(CompressionCodecs.getCodecClassName)
   }
 
   val zoneId: ZoneId = DateTimeUtils.getZoneId(
-    getString(TIME_ZONE).getOrElse(defaultTimeZoneId))
+    parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 
   // A language tag in IETF BCP 47 format
-  val locale: Locale = getString(LOCALE).map(Locale.forLanguageTag).getOrElse(Locale.US)
+  val locale: Locale = parameters.get(LOCALE).map(Locale.forLanguageTag).getOrElse(Locale.US)
 
   /**
    * Infer columns with all valid date entries as date type (otherwise inferred as string or
@@ -172,7 +169,7 @@ class CSVOptions(
     }
   }
 
-  val dateFormatOption: Option[String] = getString(DATE_FORMAT)
+  val dateFormatOption: Option[String] = parameters.get(DATE_FORMAT)
   // Provide a default value for dateFormatInRead when prefersDate. This ensures that the
   // Iso8601DateFormatter (with strict date parsing) is used for date inference
   val dateFormatInRead: Option[String] =
@@ -181,24 +178,24 @@ class CSVOptions(
     } else {
       dateFormatOption
     }
-  val dateFormatInWrite: String = getString(DATE_FORMAT).getOrElse(DateFormatter.defaultPattern)
+  val dateFormatInWrite: String = parameters.getOrElse(DATE_FORMAT, DateFormatter.defaultPattern)
 
   val timestampFormatInRead: Option[String] =
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-      Some(getString(TIMESTAMP_FORMAT).getOrElse(
+      Some(parameters.getOrElse(TIMESTAMP_FORMAT,
         s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"))
     } else {
-      getString(TIMESTAMP_FORMAT)
+      parameters.get(TIMESTAMP_FORMAT)
     }
-  val timestampFormatInWrite: String = getString(TIMESTAMP_FORMAT).getOrElse(
+  val timestampFormatInWrite: String = parameters.getOrElse(TIMESTAMP_FORMAT,
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
     } else {
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
     })
 
-  val timestampNTZFormatInRead: Option[String] = getString(TIMESTAMP_NTZ_FORMAT)
-  val timestampNTZFormatInWrite: String = getString(TIMESTAMP_NTZ_FORMAT).getOrElse(
+  val timestampNTZFormatInRead: Option[String] = parameters.get(TIMESTAMP_NTZ_FORMAT)
+  val timestampNTZFormatInWrite: String = parameters.getOrElse(TIMESTAMP_NTZ_FORMAT,
     s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 
   // SPARK-39731: Enables the backward compatible parsing behavior.
@@ -210,9 +207,9 @@ class CSVOptions(
   // Otherwise, depending on the parser policy and a custom pattern, an exception may be thrown and
   // the value will be parsed as null.
   val enableDateTimeParsingFallback: Option[Boolean] =
-    getString(ENABLE_DATETIME_PARSING_FALLBACK).map(_.toBoolean)
+  parameters.get(ENABLE_DATETIME_PARSING_FALLBACK).map(_.toBoolean)
 
-  val multiLine = getString(MULTI_LINE).map(_.toBoolean).getOrElse(false)
+  val multiLine = parameters.get(MULTI_LINE).map(_.toBoolean).getOrElse(false)
 
   val maxColumns = getInt(MAX_COLUMNS, 20480)
 
@@ -230,7 +227,7 @@ class CSVOptions(
   val isCommentSet = this.comment != '\u0000'
 
   val samplingRatio =
-    getString(SAMPLING_RATIO).map(_.toDouble).getOrElse(1.0)
+    parameters.get(SAMPLING_RATIO).map(_.toDouble).getOrElse(1.0)
 
   /**
    * Forcibly apply the specified or inferred schema to datasource files.
@@ -241,7 +238,7 @@ class CSVOptions(
   /**
    * String representation of an empty value in read and in write.
    */
-  val emptyValue = getString(EMPTY_VALUE)
+  val emptyValue = parameters.get(EMPTY_VALUE)
   /**
    * The string is returned when CSV reader doesn't have any characters for input value,
    * or an empty quoted string `""`. Default value is empty string.
@@ -255,7 +252,7 @@ class CSVOptions(
   /**
    * A string between two consecutive JSON records.
    */
-  val lineSeparator: Option[String] = getString(LINE_SEP).map { sep =>
+  val lineSeparator: Option[String] = parameters.get(LINE_SEP).map { sep =>
     require(sep.nonEmpty, "'lineSep' cannot be an empty string.")
     // Intentionally allow it up to 2 for Window's CRLF although multiple
     // characters have an issue with quotes. This is intentionally undocumented.
@@ -270,14 +267,14 @@ class CSVOptions(
   }
   val lineSeparatorInWrite: Option[String] = lineSeparator
 
-  val inputBufferSize: Option[Int] = getString(INPUT_BUFFER_SIZE).map(_.toInt)
+  val inputBufferSize: Option[Int] = parameters.get(INPUT_BUFFER_SIZE).map(_.toInt)
     .orElse(SQLConf.get.getConf(SQLConf.CSV_INPUT_BUFFER_SIZE))
 
   /**
    * The handling method to be used when unescaped quotes are found in the input.
    */
-  val unescapedQuoteHandling: UnescapedQuoteHandling = UnescapedQuoteHandling.valueOf(
-    getString(UNESCAPED_QUOTE_HANDLING).getOrElse("STOP_AT_DELIMITER").toUpperCase(Locale.ROOT))
+  val unescapedQuoteHandling: UnescapedQuoteHandling = UnescapedQuoteHandling.valueOf(parameters
+    .getOrElse(UNESCAPED_QUOTE_HANDLING, "STOP_AT_DELIMITER").toUpperCase(Locale.ROOT))
 
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
@@ -335,43 +332,49 @@ class CSVOptions(
   }
 }
 
-object CSVOptions extends Enumeration {
-  val HEADER = Value("header")
-  val DELIMITER = Value("delimiter")
-  val ENCODING = Value("encoding")
-  val INFER_SCHEMA = Value("inferSchema")
-  val IGNORE_LEADING_WHITESPACE = Value("ignoreLeadingWhiteSpace")
-  val IGNORE_TRAILING_WHITESPACE = Value("ignoreTrailingWhiteSpace")
-  val PREFERS_DATE = Value("prefersDate")
-  val ESCAPE_QUOTES = Value("escapeQuotes")
-  val QUOTE_ALL = Value("quoteAll")
-  val ENFORCE_SCHEMA = Value("enforceSchema")
-  val QUOTE = Value("quote")
-  val ESCAPE = Value("escape")
-  val COMMENT = Value("comment")
-  val MAX_COLUMNS = Value("maxColumns")
-  val MAX_CHARS_PER_COLUMN = Value("maxCharsPerColumn")
-  val MODE = Value("mode")
-  val CHAR_TO_ESCAPE_QUOTE_ESCAPING = Value("charToEscapeQuoteEscaping")
-  val CODEC = Value("codec")
-  val LOCALE = Value("locale")
-  val DATE_FORMAT = Value("dateFormat")
-  val TIMESTAMP_FORMAT = Value("timestampFormat")
-  val TIMESTAMP_NTZ_FORMAT = Value("timestampNTZFormat")
-  val ENABLE_DATETIME_PARSING_FALLBACK = Value("enableDateTimeParsingFallback")
-  val MULTI_LINE = Value("multiLine")
-  val SAMPLING_RATIO = Value("samplingRatio")
-  val EMPTY_VALUE = Value("emptyValue")
-  val LINE_SEP = Value("lineSep")
-  val INPUT_BUFFER_SIZE = Value("inputBufferSize")
-  val SEP = Value("sep")
-  val CHARSET = Value("charset")
-  val COLUMN_NAME_OF_CORRUPT_RECORD = Value("columnNameOfCorruptRecord")
-  val NULL_VALUE = Value("nullValue")
-  val NAN_VALUE = Value("nanValue")
-  val POSITIVE_INF = Value("positiveInf")
-  val NEGATIVE_INF = Value("negativeInf")
-  val COMPRESSION = Value("compression")
-  val TIME_ZONE = Value("timeZone")
-  val UNESCAPED_QUOTE_HANDLING = Value("unescapedQuoteHandling")
+object CSVOptions {
+  val csvOptionNames: mutable.Set[String] = collection.mutable.Set[String]()
+  private def newOption(name: String): String = {
+    csvOptionNames += name.toLowerCase(Locale.ROOT)
+    name
+  }
+
+  val HEADER = newOption("header")
+  val DELIMITER = newOption("delimiter")
+  val ENCODING = newOption("encoding")
+  val INFER_SCHEMA = newOption("inferSchema")
+  val IGNORE_LEADING_WHITESPACE = newOption("ignoreLeadingWhiteSpace")
+  val IGNORE_TRAILING_WHITESPACE = newOption("ignoreTrailingWhiteSpace")
+  val PREFERS_DATE = newOption("prefersDate")
+  val ESCAPE_QUOTES = newOption("escapeQuotes")
+  val QUOTE_ALL = newOption("quoteAll")
+  val ENFORCE_SCHEMA = newOption("enforceSchema")
+  val QUOTE = newOption("quote")
+  val ESCAPE = newOption("escape")
+  val COMMENT = newOption("comment")
+  val MAX_COLUMNS = newOption("maxColumns")
+  val MAX_CHARS_PER_COLUMN = newOption("maxCharsPerColumn")
+  val MODE = newOption("mode")
+  val CHAR_TO_ESCAPE_QUOTE_ESCAPING = newOption("charToEscapeQuoteEscaping")
+  val CODEC = newOption("codec")
+  val LOCALE = newOption("locale")
+  val DATE_FORMAT = newOption("dateFormat")
+  val TIMESTAMP_FORMAT = newOption("timestampFormat")
+  val TIMESTAMP_NTZ_FORMAT = newOption("timestampNTZFormat")
+  val ENABLE_DATETIME_PARSING_FALLBACK = newOption("enableDateTimeParsingFallback")
+  val MULTI_LINE = newOption("multiLine")
+  val SAMPLING_RATIO = newOption("samplingRatio")
+  val EMPTY_VALUE = newOption("emptynewOption")
+  val LINE_SEP = newOption("lineSep")
+  val INPUT_BUFFER_SIZE = newOption("inputBufferSize")
+  val SEP = newOption("sep")
+  val CHARSET = newOption("charset")
+  val COLUMN_NAME_OF_CORRUPT_RECORD = newOption("columnNameOfCorruptRecord")
+  val NULL_VALUE = newOption("nullnewOption")
+  val NAN_VALUE = newOption("nannewOption")
+  val POSITIVE_INF = newOption("positiveInf")
+  val NEGATIVE_INF = newOption("negativeInf")
+  val COMPRESSION = newOption("compression")
+  val TIME_ZONE = newOption("timeZone")
+  val UNESCAPED_QUOTE_HANDLING = newOption("unescapedQuoteHandling")
 }
