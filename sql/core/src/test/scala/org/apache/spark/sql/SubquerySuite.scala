@@ -562,17 +562,10 @@ class SubquerySuite extends QueryTest
   }
 
   test("non-equal correlated scalar subquery") {
-    val exception = intercept[AnalysisException] {
-      sql("select a, (select sum(b) from l l2 where l2.a < l1.a) sum_b from l l1")
-    }
-    checkErrorMatchPVals(
-      exception,
-      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-        "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-      parameters = Map("treeNode" -> "(?s).*"),
-      sqlState = None,
-      context = ExpectedContext(
-        fragment = "select sum(b) from l l2 where l2.a < l1.a", start = 11, stop = 51))
+    checkAnswer(
+      sql("select a, (select sum(b) from l l2 where l2.a < l1.a) sum_b from l l1"),
+      Seq(Row(1, null), Row(1, null), Row(2, 4), Row(2, 4), Row(3, 6), Row(null, null),
+        Row(null, null), Row(6, 9)))
   }
 
   test("disjunctive correlated scalar subquery") {

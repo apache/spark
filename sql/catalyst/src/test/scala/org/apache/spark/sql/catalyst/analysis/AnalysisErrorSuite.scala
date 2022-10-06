@@ -916,11 +916,10 @@ class AnalysisErrorSuite extends AnalysisTest {
       ($"a" + $"c" === $"b", "(a#x + outer(c#x)) = b#x"),
       (And($"a" === $"c", Cast($"d", IntegerType) === $"c"), "CAST(d#x AS INT) = outer(c#x)"))
     conditions.foreach { case (cond, msg) =>
-      val plan = Project(
-        ScalarSubquery(
+      val plan = Filter(
+        Exists(
           Aggregate(Nil, count(Literal(1)).as("cnt") :: Nil,
-            Filter(cond, t1))
-        ).as("sub") :: Nil,
+            Filter(cond, t1))),
         t2)
       assertAnalysisError(plan, s"Correlated column is not allowed in predicate: ($msg)" :: Nil)
     }
