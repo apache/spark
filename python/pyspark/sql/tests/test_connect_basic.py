@@ -63,7 +63,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         df = self.connect.read.table(self.tbl_name)
         data = df.limit(10).toPandas()
         # Check that the limit is applied
-        assert len(data.index) == 10
+        self.assertEqual(len(data.index), 10)
 
     def test_simple_udf(self) -> None:
         def conv_udf(x) -> str:
@@ -72,12 +72,12 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         u = udf(conv_udf)
         df = self.connect.read.table(self.tbl_name)
         result = df.select(u(df.id)).toPandas()
-        assert result is not None
+        self.assertIsNotNone(result)
 
     def test_simple_explain_string(self) -> None:
         df = self.connect.read.table(self.tbl_name).limit(10)
         result = df.explain()
-        assert len(result) > 0
+        self.assertGreater(len(result), 0)
 
 
 if __name__ == "__main__":
