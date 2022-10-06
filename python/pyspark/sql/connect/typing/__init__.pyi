@@ -14,23 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-version: v1
-plugins:
-  - remote: buf.build/protocolbuffers/plugins/cpp:v3.20.0-1
-    out: gen/proto/cpp
-  - remote: buf.build/protocolbuffers/plugins/csharp:v3.20.0-1
-    out: gen/proto/csharp
-  - remote: buf.build/protocolbuffers/plugins/java:v3.20.0-1
-    out: gen/proto/java
-  - remote: buf.build/grpc/plugins/ruby:v1.47.0-1
-    out: gen/proto/ruby
-  - remote: buf.build/protocolbuffers/plugins/ruby:v21.2.0-1
-    out: gen/proto/ruby
-   # Building the Python build and building the mypy interfaces.
-  - remote: buf.build/protocolbuffers/plugins/python:v3.20.0-1
-    out: gen/proto/python
-  - remote: buf.build/grpc/plugins/python:v1.47.0-1
-    out: gen/proto/python
-  - name: mypy
-    out: gen/proto/python
 
+from typing_extensions import Protocol
+from typing import Union
+from pyspark.sql.connect.column import ScalarFunctionExpression, Expression, ColumnRef
+from pyspark.sql.connect.function_builder import UserDefinedFunction
+
+ExpressionOrString = Union[str, Expression]
+
+ColumnOrString = Union[str, ColumnRef]
+
+class FunctionBuilderCallable(Protocol):
+    def __call__(self, *_: ExpressionOrString) -> ScalarFunctionExpression: ...
+
+class UserDefinedFunctionCallable(Protocol):
+    def __call__(self, *_: ColumnOrString) -> UserDefinedFunction: ...
