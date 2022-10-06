@@ -742,7 +742,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def readCurrentFileNotFoundError(e: FileNotFoundException): SparkFileNotFoundException = {
     new SparkFileNotFoundException(
       errorClass = "_LEGACY_ERROR_TEMP_2055",
-      messageParameters = Map.empty)
+      messageParameters = Map("message" -> e.getMessage))
   }
 
   def saveModeUnsupportedError(saveMode: Any, pathExists: Boolean): Throwable = {
