@@ -62,4 +62,3 @@ class PlanOnlyTestFixture(unittest.TestCase):
     def setUpClass(cls: Any) -> None:
         cls.connect = MockRemoteSession()
         cls.tbl_name = f"tbl{uuid.uuid4()}".replace("-", "")
-
