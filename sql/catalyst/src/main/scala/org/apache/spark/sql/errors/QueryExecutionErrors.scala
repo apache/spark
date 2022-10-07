@@ -822,7 +822,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def cannotReadFilesError(
       e: Throwable,
       path: String): Throwable = {
-    val message = s"Encountered error while reading file $path. Details: "
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2064",
       messageParameters = Map("path" -> path),
