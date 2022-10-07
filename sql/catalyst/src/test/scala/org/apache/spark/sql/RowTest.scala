@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql
 
+import scala.collection.mutable.ArraySeq
+
+import org.json4s.JsonAST.{JArray, JObject, JString}
 import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -29,8 +32,8 @@ class RowTest extends AnyFunSpec with Matchers {
 
   val schema = StructType(
     StructField("col1", StringType) ::
-    StructField("col2", StringType) ::
-    StructField("col3", IntegerType) :: Nil)
+      StructField("col2", StringType) ::
+      StructField("col3", IntegerType) :: Nil)
   val values = Array("value1", "value2", 1)
   val valuesWithoutCol3 = Array[Any](null, "value2", null)
 
@@ -67,18 +70,12 @@ class RowTest extends AnyFunSpec with Matchers {
     }
 
     it("getValuesMap() retrieves values of multiple fields as a Map(field -> value)") {
-      val expected = Map(
-        "col1" -> "value1",
-        "col2" -> "value2"
-      )
+      val expected = Map("col1" -> "value1", "col2" -> "value2")
       sampleRow.getValuesMap(List("col1", "col2")) shouldBe expected
     }
 
     it("getValuesMap() retrieves null value on non AnyVal Type") {
-      val expected = Map(
-        "col1" -> null,
-        "col2" -> "value2"
-      )
+      val expected = Map("col1" -> null, "col2" -> "value2")
       sampleRowWithoutCol3.getValuesMap[String](List("col1", "col2")) shouldBe expected
     }
 
@@ -90,6 +87,14 @@ class RowTest extends AnyFunSpec with Matchers {
 
     it("getAs() on type extending AnyVal does not throw exception when value is null") {
       sampleRowWithoutCol3.getAs[String](sampleRowWithoutCol3.fieldIndex("col1")) shouldBe null
+    }
+
+    it("json should convert a mutable array to JSON") {
+      val schema = new StructType().add(StructField("list", ArrayType(StringType)))
+      val values = ArraySeq("1", "2", "3")
+      val row = new GenericRowWithSchema(Array(values), schema)
+      val expectedList = JArray(JString("1") :: JString("2") :: JString("3") :: Nil)
+      row.jsonValue shouldBe new JObject(("list", expectedList) :: Nil)
     }
   }
 
