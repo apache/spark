@@ -45,11 +45,6 @@ trait SparkConnectPlanTest {
       .build()
 }
 
-trait SparkConnectSessionTest {
-  protected var spark: SparkSession
-
-}
-
 /**
  * This is a rudimentary test class for SparkConnect. The main goal of these basic tests is to
  * ensure that the transformation from Proto to LogicalPlan works and that the right nodes are
