@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.plans._
@@ -369,7 +370,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
                   throw QueryCompilationErrors.unsupportedCorrelatedReferenceDataTypeError(
                     o, a.dataType, plan.origin)
                 } else {
-                  throw new IllegalStateException(s"Unable to decorrelate subquery: " +
+                  throw SparkException.internalError(s"Unable to decorrelate subquery: " +
                     s"join condition '${cond.sql}' cannot be resolved.")
                 }
               }
