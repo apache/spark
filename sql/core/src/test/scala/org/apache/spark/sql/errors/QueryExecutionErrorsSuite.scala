@@ -144,8 +144,7 @@ class QueryExecutionErrorsSuite
         exception = intercept[SparkException] {
           df.collect
         }.getCause.asInstanceOf[SparkRuntimeException],
-        errorClass = "UNSUPPORTED_FEATURE",
-        errorSubClass = "AES_MODE",
+        errorClass = "UNSUPPORTED_FEATURE.AES_MODE",
         parameters = Map("mode" -> mode,
         "padding" -> padding,
         "functionName" -> "`aes_encrypt`/`aes_decrypt`"),
@@ -171,8 +170,7 @@ class QueryExecutionErrorsSuite
     def checkUnsupportedTypeInLiteral(v: Any, literal: String, dataType: String): Unit = {
       checkError(
         exception = intercept[SparkRuntimeException] { lit(v) },
-        errorClass = "UNSUPPORTED_FEATURE",
-        errorSubClass = "LITERAL_TYPE",
+        errorClass = "UNSUPPORTED_FEATURE.LITERAL_TYPE",
         parameters = Map("value" -> literal, "type" -> dataType),
         sqlState = "0A000")
     }
@@ -190,8 +188,7 @@ class QueryExecutionErrorsSuite
     }
     checkError(
       exception = e2,
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "PIVOT_TYPE",
+      errorClass = "UNSUPPORTED_FEATURE.PIVOT_TYPE",
       parameters = Map("value" -> "[dotnet,Dummies]",
       "type" -> "\"STRUCT<col1: STRING, training: STRING>\""),
       sqlState = "0A000")
@@ -208,8 +205,7 @@ class QueryExecutionErrorsSuite
     }
     checkError(
       exception = e1,
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "REPEATED_PIVOT",
+      errorClass = "UNSUPPORTED_FEATURE.REPEATED_PIVOT",
       parameters = Map[String, String](),
       sqlState = "0A000")
 
@@ -222,8 +218,7 @@ class QueryExecutionErrorsSuite
     }
     checkError(
       exception = e2,
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "PIVOT_AFTER_GROUP_BY",
+      errorClass = "UNSUPPORTED_FEATURE.PIVOT_AFTER_GROUP_BY",
       parameters = Map[String, String](),
       sqlState = "0A000")
   }
@@ -244,12 +239,8 @@ class QueryExecutionErrorsSuite
       val option = "\"datetimeRebaseMode\""
       checkError(
         exception = e,
-        errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-        errorSubClass = "READ_ANCIENT_DATETIME",
-        parameters = Map("format" -> format,
-        "config" -> config,
-        "option" -> option),
-        sqlState = null)
+        errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.READ_ANCIENT_DATETIME",
+        parameters = Map("format" -> format, "config" -> config, "option" -> option))
     }
 
     // Fail to write ancient datetime values.
@@ -264,11 +255,8 @@ class QueryExecutionErrorsSuite
         val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key + "\""
         checkError(
           exception = e,
-          errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-          errorSubClass = "WRITE_ANCIENT_DATETIME",
-          parameters = Map("format" -> format,
-            "config" -> config),
-          sqlState = null)
+          errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.WRITE_ANCIENT_DATETIME",
+          parameters = Map("format" -> format, "config" -> config))
       }
     }
   }
@@ -281,8 +269,7 @@ class QueryExecutionErrorsSuite
           exception = intercept[SparkException] {
             spark.read.schema("time timestamp_ntz").orc(file.getCanonicalPath).collect()
           }.getCause.asInstanceOf[SparkUnsupportedOperationException],
-          errorClass = "UNSUPPORTED_FEATURE",
-          errorSubClass = "ORC_TYPE_CAST",
+          errorClass = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
           parameters = Map("orcType" -> "\"TIMESTAMP\"",
             "toType" -> "\"TIMESTAMP_NTZ\""),
           sqlState = "0A000")
@@ -298,8 +285,7 @@ class QueryExecutionErrorsSuite
           exception = intercept[SparkException] {
             spark.read.schema("time timestamp_ltz").orc(file.getCanonicalPath).collect()
           }.getCause.asInstanceOf[SparkUnsupportedOperationException],
-          errorClass = "UNSUPPORTED_FEATURE",
-          errorSubClass = "ORC_TYPE_CAST",
+          errorClass = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
           parameters = Map("orcType" -> "\"TIMESTAMP_NTZ\"",
             "toType" -> "\"TIMESTAMP\""),
           sqlState = "0A000")
@@ -415,10 +401,8 @@ class QueryExecutionErrorsSuite
       }
       checkError(
         exception = e1,
-        errorClass = "UNSUPPORTED_SAVE_MODE",
-        errorSubClass = "NON_EXISTENT_PATH",
-        parameters = Map("saveMode" -> "NULL"),
-        sqlState = null)
+        errorClass = "UNSUPPORTED_SAVE_MODE.NON_EXISTENT_PATH",
+        parameters = Map("saveMode" -> "NULL"))
 
       Utils.createDirectory(path)
 
@@ -428,10 +412,8 @@ class QueryExecutionErrorsSuite
       }
       checkError(
         exception = e2,
-        errorClass = "UNSUPPORTED_SAVE_MODE",
-        errorSubClass = "EXISTENT_PATH",
-        parameters = Map("saveMode" -> "NULL"),
-        sqlState = null)
+        errorClass = "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
+        parameters = Map("saveMode" -> "NULL"))
     }
   }
 

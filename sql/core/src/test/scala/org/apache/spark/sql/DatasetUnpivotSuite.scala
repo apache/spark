@@ -359,8 +359,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e1,
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`1`",
         "proposal" -> "`id`, `int1`, `str1`, `str2`, `long1`"))
@@ -376,8 +375,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e2,
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`does`",
         "proposal" -> "`id`, `int1`, `long1`, `str1`, `str2`"))
@@ -498,8 +496,7 @@ class DatasetUnpivotSuite extends QueryTest
     }
     checkError(
       exception = e,
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       // expected message is wrong: https://issues.apache.org/jira/browse/SPARK-39783
       parameters = Map(
         "objectName" -> "`an`.`id`",

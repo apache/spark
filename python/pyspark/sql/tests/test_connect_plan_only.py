@@ -48,7 +48,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         expr = u("ThisCol", "ThatCol", "OtherCol")
         self.assertTrue(isinstance(expr, UserDefinedFunction))
         u_plan = expr.to_plan(self.connect)
-        assert u_plan is not None
+        self.assertIsNotNone(u_plan)
 
     def test_all_the_plans(self):
         def read_table(x):

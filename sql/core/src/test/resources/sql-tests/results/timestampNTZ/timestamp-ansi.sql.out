@@ -777,8 +777,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_WRONG_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP_NTZ\"",
     "inputType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
@@ -801,8 +800,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_WRONG_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP_NTZ\"",
     "inputType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
@@ -825,8 +823,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
     "left" : "\"TIMESTAMP_NTZ\"",
     "right" : "\"VOID\"",
@@ -849,8 +846,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
     "left" : "\"VOID\"",
     "right" : "\"TIMESTAMP_NTZ\"",
@@ -923,8 +919,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
     "pattern" : "'dd MM yyyy EEEEE'"
