@@ -21,8 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import java.net.{InetAddress, UnknownHostException}
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
-import java.util.{Arrays, Date, Locale}
-import java.util
+import java.util.{Arrays, Date, Locale, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
@@ -417,6 +416,58 @@ private[spark] object SparkHadoopUtil extends Logging {
    */
   private[spark] val SPARK_HADOOP_CONF_FILE = "__spark_hadoop_conf__.xml"
 
+  /**
+   * Source for hive-site.xml configuration options.
+   */
+  private[deploy] val SOURCE_HIVE_SITE = "Set by Spark from hive-site.xml"
+
+  /**
+   * Source for configuration options set by spark when another source is
+   * not explicitly declared.
+   */
+  private[deploy] val SOURCE_SPARK = "Set by Spark"
+
+  /**
+   * Source for configuration options with `spark.hadoop.` prefix copied
+   * from spark-defaults.
+   */
+  private[deploy] val SOURCE_SPARK_HADOOP =
+    "Set by Spark from keys starting with 'spark.hadoop'"
+
+  /*
+   * The AWS Authentication environment variables documented in
+   * https://docs.aws.amazon.com/sdkref/latest/guide/environment-variables.html.
+   * There are alternative names defined in `com.amazonaws.SDKGlobalConfiguration`
+   * and which are picked up by the authentication provider
+   * `EnvironmentVariableCredentialsProvider`; those are not propagated.
+   */
+
+  /**
+   * AWS Access key.
+   */
+  private[deploy] val ENV_VAR_AWS_ACCESS_KEY = "AWS_ACCESS_KEY_ID"
+
+  /**
+   * AWS Secret Key.
+   */
+  private[deploy] val ENV_VAR_AWS_SECRET_KEY = "AWS_SECRET_ACCESS_KEY"
+
+  /**
+   * AWS Session token.
+   */
+  private[deploy] val ENV_VAR_AWS_SESSION_TOKEN = "AWS_SESSION_TOKEN"
+
+  /**
+   * Source for configuration options with `spark.hive.` prefix copied
+   * from spark-defaults.
+   */
+  private[deploy] val SOURCE_SPARK_HIVE = "Set by Spark from keys starting with 'spark.hive'"
+
+  /**
+   * Hadoop configuration options set to their default values.
+   */
+  private[deploy] val SET_TO_DEFAULT_VALUES = "Set by Spark to default values"
+
   def get: SparkHadoopUtil = instance
 
   /**
@@ -439,9 +490,7 @@ private[spark] object SparkHadoopUtil extends Logging {
     // Note: this null check is around more than just access to the "conf" object to maintain
     // the behavior of the old implementation of this code, for backwards compatibility.
     if (conf != null) {
-      // Explicitly check for S3 environment variables
-      val env: util.Map[String, String] = System.getenv
-      appendS3CredentialsFromEnvironment(hadoopConf, env)
+      appendS3CredentialsFromEnvironment(hadoopConf, System.getenv)
       appendHiveConfigs(hadoopConf)
       appendSparkHadoopConfigs(conf, hadoopConf)
       appendSparkHiveConfigs(conf, hadoopConf)
@@ -457,30 +506,36 @@ private[spark] object SparkHadoopUtil extends Logging {
    * then `fs.s3a.session.token`.
    * The option is set with a source string which includes the hostname
    * on which it was set. This can help debug propagation issues.
+   *
    * @param hadoopConf configuration to patch
    * @param env environment.
    */
   // Exposed for testing
   private[deploy] def appendS3CredentialsFromEnvironment(
-    hadoopConf: Configuration,
-    env: util.Map[String, String]): Unit = {
-    val envKeyId = "AWS_ACCESS_KEY_ID"
-    val keyId = env.get(envKeyId)
-    val envSecretKey = "AWS_SECRET_ACCESS_KEY"
-    val accessKey = env.get(envSecretKey)
+      hadoopConf: Configuration,
+      env: JMap[String, String]): Unit = {
+    val keyId = env.get(ENV_VAR_AWS_ACCESS_KEY)
+    val accessKey = env.get(ENV_VAR_AWS_SECRET_KEY)
     if (keyId != null && accessKey != null) {
-      val source = "Set by Spark on " + getLocalHostname + " from "
-      hadoopConf.set("fs.s3.awsAccessKeyId", keyId, source + envKeyId)
-      hadoopConf.set("fs.s3n.awsAccessKeyId", keyId, source + envKeyId)
-      hadoopConf.set("fs.s3a.access.key", keyId, source + envKeyId)
-      hadoopConf.set("fs.s3.awsSecretAccessKey", accessKey, source + envSecretKey)
-      hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey, source + envSecretKey)
-      hadoopConf.set("fs.s3a.secret.key", accessKey, source + envSecretKey)
+      // source prefix string; will have environment variable added
+      val source = SOURCE_SPARK + " on " + getLocalHostname + " from "
+      hadoopConf.set("fs.s3.awsAccessKeyId", keyId, source +
+        ENV_VAR_AWS_ACCESS_KEY)
+      hadoopConf.set("fs.s3n.awsAccessKeyId", keyId, source +
+        ENV_VAR_AWS_ACCESS_KEY)
+      hadoopConf.set("fs.s3a.access.key", keyId, source +
+        ENV_VAR_AWS_ACCESS_KEY)
+      hadoopConf.set("fs.s3.awsSecretAccessKey", accessKey, source +
+        ENV_VAR_AWS_SECRET_KEY)
+      hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey, source +
+        ENV_VAR_AWS_SECRET_KEY)
+      hadoopConf.set("fs.s3a.secret.key", accessKey, source +
+        ENV_VAR_AWS_SECRET_KEY)
 
-      val envSessionToken = "AWS_SESSION_TOKEN"
-      val sessionToken = env.get(envSessionToken)
+      val sessionToken = env.get(ENV_VAR_AWS_SESSION_TOKEN)
       if (sessionToken != null) {
-        hadoopConf.set("fs.s3a.session.token", sessionToken, source + envSessionToken)
+        hadoopConf.set("fs.s3a.session.token", sessionToken, source +
+          ENV_VAR_AWS_SESSION_TOKEN)
       }
     }
   }
@@ -498,7 +553,7 @@ private[spark] object SparkHadoopUtil extends Logging {
 
   private def appendHiveConfigs(hadoopConf: Configuration): Unit = {
     hiveConfKeys.foreach { kv =>
-      hadoopConf.set(kv.getKey, kv.getValue, "Set by Spark from hive-site.xml")
+      hadoopConf.set(kv.getKey, kv.getValue, SOURCE_HIVE_SITE)
     }
   }
 
@@ -506,9 +561,9 @@ private[spark] object SparkHadoopUtil extends Logging {
     // Copy any "spark.hadoop.foo=bar" spark properties into conf as "foo=bar"
     for ((key, value) <- conf.getAll if key.startsWith("spark.hadoop.")) {
       hadoopConf.set(key.substring("spark.hadoop.".length), value,
-        "Set by Spark from keys starting with 'spark.hadoop'")
+        SOURCE_SPARK_HADOOP)
     }
-    val setBySpark = "Set by Spark to default values"
+    val setBySpark = SET_TO_DEFAULT_VALUES
     if (conf.getOption("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version").isEmpty) {
       hadoopConf.set("mapreduce.fileoutputcommitter.algorithm.version", "1", setBySpark)
     }
@@ -534,7 +589,7 @@ private[spark] object SparkHadoopUtil extends Logging {
     // Copy any "spark.hive.foo=bar" spark properties into conf as "hive.foo=bar"
     for ((key, value) <- conf.getAll if key.startsWith("spark.hive.")) {
       hadoopConf.set(key.substring("spark.".length), value,
-        "Set by Spark from keys starting with 'spark.hive'")
+        SOURCE_SPARK_HIVE)
     }
   }
 
