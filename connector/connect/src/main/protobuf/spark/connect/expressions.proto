@@ -164,5 +164,6 @@ message Expression {
   // by the analyzer.
   message QualifiedAttribute {
     string name = 1;
+    Type type = 2;
   }
 }

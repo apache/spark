@@ -77,8 +77,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   }
 
   private def transformAttribute(exp: proto.Expression.QualifiedAttribute): Attribute = {
-    // TODO: use data type from the proto.
-    AttributeReference(exp.getName, IntegerType)()
+    AttributeReference(exp.getName, TypeProtoConverter.toCatalystType(exp.getType))()
   }
 
   private def transformReadRel(
@@ -285,8 +284,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     logical.Aggregate(
       child = transformRelation(rel.getInput),
       groupingExpressions = ge.toSeq,
-      aggregateExpressions =
-        (rel.getMeasuresList.asScala.map(transformAggregateExpression) ++ ge).toSeq)
+      aggregateExpressions = rel.getMeasuresList.asScala.map(transformAggregateExpression).toSeq)
   }
 
   private def transformAggregateExpression(
