@@ -552,6 +552,12 @@
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"
     ]
   },
+  "UNPIVOT_REQUIRES_ATTRIBUTES" : {
+    "message" : [
+      "UNPIVOT requires all given <given> expressions to be columns when no <empty> expressions are given. These are not columns: [<expressions>]."
+    ],
+    "sqlState" : "42000"
+  },
   "UNPIVOT_REQUIRES_VALUE_COLUMNS" : {
     "message" : [
       "At least one value column needs to be specified for UNPIVOT, all columns specified as ids"
@@ -561,6 +567,12 @@
   "UNPIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
       "Unpivot value columns must share a least common type, some types do not: [<types>]"
+    ],
+    "sqlState" : "42000"
+  },
+  "UNPIVOT_VALUE_SIZE_MISMATCH" : {
+    "message" : [
+      "All unpivot value columns must have the same size as there are value column names (<names>)"
     ],
     "sqlState" : "42000"
   },
