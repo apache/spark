@@ -106,7 +106,7 @@ private[sql] class AvroOptions(
       ignoreFilesWithoutExtensionByDefault)
 
     parameters
-      .get(AvroOptions.IGNORE_EXTENSION)
+      .get(IGNORE_EXTENSION)
       .map(_.toBoolean)
       .getOrElse(!ignoreFilesWithoutExtension)
   }
