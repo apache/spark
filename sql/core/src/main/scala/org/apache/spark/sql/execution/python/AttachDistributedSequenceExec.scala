@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * A physical plan that adds a new long column with `sequenceAttr` that
@@ -40,15 +41,21 @@ case class AttachDistributedSequenceExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
+  @transient private var cached: RDD[InternalRow] = _
+
   override protected def doExecute(): RDD[InternalRow] = {
-    val childRDD = child.execute().map(_.copy())
-    val checkpointed = if (childRDD.getNumPartitions > 1) {
-      // to avoid execute multiple jobs. zipWithIndex launches a Spark job.
-      childRDD.localCheckpoint()
+    val childRDD = child.execute()
+    val cachedRDD = if (childRDD.getNumPartitions > 1) {
+      // zipWithIndex launches a Spark job when #partition > 1
+      // todo: add a config for StorageLevel
+      this.synchronized {
+        cached = childRDD.map(_.copy()).persist()
+      }
+      cached
     } else {
       childRDD
     }
-    checkpointed.zipWithIndex().mapPartitions { iter =>
+    cachedRDD.zipWithIndex().mapPartitions { iter =>
       val unsafeProj = UnsafeProjection.create(output, output)
       val joinedRow = new JoinedRow
       val unsafeRowWriter =
@@ -61,6 +68,16 @@ case class AttachDistributedSequenceExec(
         joinedRow(unsafeRowWriter.getRow, row)
       }.map(unsafeProj)
     }
+  }
+
+  override protected[sql] def cleanupResources(): Unit = {
+    this.synchronized {
+      if (cached != null && cached.getStorageLevel != StorageLevel.NONE) {
+        logWarning(s"clean up cached RDD(${cached.id}) in AttachDistributedSequenceExec($id)")
+        cached.unpersist(blocking = false)
+      }
+    }
+    super.cleanupResources()
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): AttachDistributedSequenceExec =
