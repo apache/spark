@@ -3382,8 +3382,16 @@ abstract class JsonSuite
     }
   }
 
-  test("SPARK-40667: check the number of valid Json options") {
-    assert(JSONOptions.getAllValidOptionNames.size == 28)
+  test("SPARK-40667: validate JSON Options") {
+    assert(JSONOptions.isValidOption("encoding"))
+    assert(JSONOptions.isValidOption("charset"))
+    assert(JSONOptions.isValidOption("dateFormat"))
+    assert(!JSONOptions.isValidOption("randomName"))
+
+    // Options with alternative
+    assert(JSONOptions.getAlternativeOption("encoding").contains("charset"))
+    assert(JSONOptions.getAlternativeOption("charset").contains("encoding"))
+    assert(JSONOptions.getAlternativeOption("dateFormat").isEmpty)
   }
 }
 

@@ -581,8 +581,10 @@ abstract class OrcSuite
     }
   }
 
-  test("SPARK-40667: Check the number of valid ORC options") {
-    assert(OrcOptions.getAllValidOptionNames.size == 3)
+  test("SPARK-40667: validate Orc Options") {
+    assert(OrcOptions.isValidOption("mergeSchema"))
+    assert(OrcOptions.isValidOption("orc.compress"))
+    assert(OrcOptions.isValidOption("compression"))
   }
 }
 

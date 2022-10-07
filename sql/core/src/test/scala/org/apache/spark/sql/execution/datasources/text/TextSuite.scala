@@ -237,8 +237,11 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
     assert(data.length == 4)
   }
 
-  test("SPARK-40667: check the number of valid Text options") {
-    assert(TextOptions.getAllValidOptionNames.size == 4)
+  test("SPARK-40667: validate Text Options") {
+    assert(TextOptions.isValidOption("compression"))
+    assert(TextOptions.isValidOption("wholetext"))
+    assert(TextOptions.isValidOption("encoding"))
+    assert(TextOptions.isValidOption("lineSep"))
   }
 }
 

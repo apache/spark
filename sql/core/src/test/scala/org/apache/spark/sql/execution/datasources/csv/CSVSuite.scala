@@ -3082,21 +3082,17 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-40667: check the number of valid CSV option names") {
-    assert(CSVOptions.getAllValidOptionNames.size == 38)
-  }
+  test("SPARK-40667: validate CSV Options") {
+    assert(CSVOptions.isValidOption("sep"))
+    assert(CSVOptions.isValidOption("delimiter"))
+    assert(CSVOptions.isValidOption("prefersDate"))
+    assert(!CSVOptions.isValidOption("inferSchemas"))
+    assert(!CSVOptions.isValidOption("randomName"))
 
-  test("SPARK-40667: validate a given option name") {
-    assert(CSVOptions.isValidOptionName("inferSchema"))
-    assert(CSVOptions.isValidOptionName("prefersDate"))
-    assert(!CSVOptions.isValidOptionName("inferSchemas"))
-    assert(!CSVOptions.isValidOptionName("randomName"))
-  }
-
-  test("SPARK-40667: get alternative option name") {
-    assert(CSVOptions.getAlternativeOptionName("sep").contains("delimiter"))
-    assert(CSVOptions.getAlternativeOptionName("delimiter").contains("sep"))
-    assert(CSVOptions.getAlternativeOptionName("prefersDate").isEmpty)
+    // Options with alternative
+    assert(CSVOptions.getAlternativeOption("sep").contains("delimiter"))
+    assert(CSVOptions.getAlternativeOption("delimiter").contains("sep"))
+    assert(CSVOptions.getAlternativeOption("prefersDate").isEmpty)
   }
 }
 

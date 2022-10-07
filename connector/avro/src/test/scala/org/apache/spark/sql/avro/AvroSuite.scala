@@ -2273,8 +2273,16 @@ abstract class AvroSuite
     }
   }
 
-  test("SPARK-40667: Check the number of valid Avro options") {
-    assert(AvroOptions.getAllValidOptionNames.size == 9)
+  test("SPARK-40667: validate Avro Options") {
+    assert(AvroOptions.isValidOption("ignoreExtension"))
+    assert(AvroOptions.isValidOption("mode"))
+    assert(AvroOptions.isValidOption("recordName"))
+    assert(AvroOptions.isValidOption("compression"))
+    assert(AvroOptions.isValidOption("avroSchema"))
+    assert(AvroOptions.isValidOption("avroSchemaUrl"))
+    assert(AvroOptions.isValidOption("recordNamespace"))
+    assert(AvroOptions.isValidOption("positionalFieldMatching"))
+    assert(AvroOptions.isValidOption("datetimeRebaseMode"))
   }
 }
 

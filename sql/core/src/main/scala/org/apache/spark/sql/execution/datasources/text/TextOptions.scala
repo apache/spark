@@ -44,8 +44,8 @@ class TextOptions(@transient private val parameters: CaseInsensitiveMap[String])
 
   val encoding: Option[String] = parameters.get(ENCODING)
 
-  val lineSeparator: Option[String] = parameters.get(LINE_SEPARATOR).map { lineSep =>
-    require(lineSep.nonEmpty, s"'$LINE_SEPARATOR' cannot be an empty string.")
+  val lineSeparator: Option[String] = parameters.get(LINE_SEP).map { lineSep =>
+    require(lineSep.nonEmpty, s"'$LINE_SEP' cannot be an empty string.")
 
     lineSep
   }
@@ -62,5 +62,5 @@ private[sql] object TextOptions extends DataSourceOptions {
   val COMPRESSION = newOption("compression")
   val WHOLETEXT = newOption("wholetext")
   val ENCODING = newOption("encoding")
-  val LINE_SEPARATOR = newOption("lineSep")
+  val LINE_SEP = newOption("lineSep")
 }

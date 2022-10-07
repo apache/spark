@@ -128,9 +128,9 @@ private[sql] class JSONOptions(
   // Otherwise, depending on the parser policy and a custom pattern, an exception may be thrown and
   // the value will be parsed as null.
   val enableDateTimeParsingFallback: Option[Boolean] =
-  parameters.get(ENABLE_DATETIME_PARSING_FALLBACK).map(_.toBoolean)
+    parameters.get(ENABLE_DATETIME_PARSING_FALLBACK).map(_.toBoolean)
 
-  val multiLine = parameters.get(MULTILINE).map(_.toBoolean).getOrElse(false)
+  val multiLine = parameters.get(MULTI_LINE).map(_.toBoolean).getOrElse(false)
 
   /**
    * A string between two consecutive JSON records.
@@ -253,7 +253,7 @@ object JSONOptions extends DataSourceOptions {
   val TIMESTAMP_FORMAT = newOption("timestampFormat")
   val TIMESTAMP_NTZ_FORMAT = newOption("timestampNTZFormat")
   val ENABLE_DATETIME_PARSING_FALLBACK = newOption("enableDateTimeParsingFallback")
-  val MULTILINE = newOption("multiLine")
+  val MULTI_LINE = newOption("multiLine")
   val LINE_SEP = newOption("lineSep")
   val PRETTY = newOption("pretty")
   val INFER_TIMESTAMP = newOption("inferTimestamp")
@@ -261,6 +261,7 @@ object JSONOptions extends DataSourceOptions {
   val TIME_ZONE = newOption("timeZone")
   val WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT = newOption("writeNonAsciiCharacterAsCodePoint")
   // Options with alternative
-  val ENCODING = newOption("encoding", Some("charset"))
-  val CHARSET = newOption("charset", Some("encoding"))
+  val ENCODING = "encoding"
+  val CHARSET = "charset"
+  newOption(ENCODING, CHARSET)
 }

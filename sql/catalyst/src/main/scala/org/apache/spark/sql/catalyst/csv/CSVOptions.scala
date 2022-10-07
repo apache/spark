@@ -205,7 +205,7 @@ class CSVOptions(
   // Otherwise, depending on the parser policy and a custom pattern, an exception may be thrown and
   // the value will be parsed as null.
   val enableDateTimeParsingFallback: Option[Boolean] =
-  parameters.get(ENABLE_DATETIME_PARSING_FALLBACK).map(_.toBoolean)
+    parameters.get(ENABLE_DATETIME_PARSING_FALLBACK).map(_.toBoolean)
 
   val multiLine = parameters.get(MULTI_LINE).map(_.toBoolean).getOrElse(false)
 
@@ -353,7 +353,7 @@ object CSVOptions extends DataSourceOptions {
   val ENABLE_DATETIME_PARSING_FALLBACK = newOption("enableDateTimeParsingFallback")
   val MULTI_LINE = newOption("multiLine")
   val SAMPLING_RATIO = newOption("samplingRatio")
-  val EMPTY_VALUE = newOption("emptynewOption")
+  val EMPTY_VALUE = newOption("emptyValue")
   val LINE_SEP = newOption("lineSep")
   val INPUT_BUFFER_SIZE = newOption("inputBufferSize")
   val COLUMN_NAME_OF_CORRUPT_RECORD = newOption("columnNameOfCorruptRecord")
@@ -364,10 +364,13 @@ object CSVOptions extends DataSourceOptions {
   val TIME_ZONE = newOption("timeZone")
   val UNESCAPED_QUOTE_HANDLING = newOption("unescapedQuoteHandling")
   // Options with alternative
-  val CHARSET = newOption("charset")
-  val ENCODING = newOption("encoding", Some(CHARSET))
-  val CODEC = newOption("codec")
-  val COMPRESSION = newOption("compression", Some(CODEC))
-  val DELIMITER = newOption("delimiter")
-  val SEP = newOption("sep", Some(DELIMITER))
+  val ENCODING = "encoding"
+  val CHARSET = "charset"
+  newOption(ENCODING, CHARSET)
+  val COMPRESSION = "compression"
+  val CODEC = "codec"
+  newOption(COMPRESSION, CODEC)
+  val SEP = "sep"
+  val DELIMITER = "delimiter"
+  newOption(SEP, DELIMITER)
 }

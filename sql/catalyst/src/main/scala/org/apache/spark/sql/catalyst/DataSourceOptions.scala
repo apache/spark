@@ -30,30 +30,38 @@ trait DataSourceOptions {
 
   /**
    * Register a new Option.
-   * @param name The primary option name
-   * @param alternative Alternative option name if any
    */
-  protected def newOption(name: String, alternative: Option[String] = None): String = {
+  protected def newOption(name: String): String = {
     // Register both of the options
-    validOptions += (name -> alternative)
-    validOptions ++ alternative.map(alterName => alterName -> Some(name))
+    validOptions += (name -> None)
     name
+  }
+
+  /**
+   * Register a new Option with an alternative name.
+   * @param name Option name
+   * @param alternative Alternative option name
+   */
+  protected def newOption(name: String, alternative: String): Unit = {
+    // Register both of the options
+    validOptions += (name -> Some(alternative))
+    validOptions += (alternative -> Some(name))
   }
 
   /**
    * @return All valid file source options
    */
-  def getAllValidOptionNames: scala.collection.Set[String] = validOptions.keySet
+  def getAllOptions: scala.collection.Set[String] = validOptions.keySet
 
   /**
    * @param name Option name to be validated
    * @return if the given Option name is valid
    */
-  def isValidOptionName(name: String): Boolean = validOptions.contains(name)
+  def isValidOption(name: String): Boolean = validOptions.contains(name)
 
   /**
    * @param name Option name
    * @return Alternative option name if any
    */
-  def getAlternativeOptionName(name: String): Option[String] = validOptions.getOrElse(name, None)
+  def getAlternativeOption(name: String): Option[String] = validOptions.get(name).flatten
 }

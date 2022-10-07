@@ -47,7 +47,7 @@ class ParquetOptions(
     // `compression`, `parquet.compression`(i.e., ParquetOutputFormat.COMPRESSION), and
     // `spark.sql.parquet.compression.codec`
     // are in order of precedence from highest to lowest.
-    val parquetCompressionConf = parameters.get(PARQUET_COMPRESS)
+    val parquetCompressionConf = parameters.get(PARQUET_COMPRESSION)
     val codecName = parameters
       .get(COMPRESSION)
       .orElse(parquetCompressionConf)
@@ -103,7 +103,7 @@ object ParquetOptions extends DataSourceOptions {
   }
 
   val MERGE_SCHEMA = newOption("mergeSchema")
-  val PARQUET_COMPRESS = newOption(ParquetOutputFormat.COMPRESSION)
+  val PARQUET_COMPRESSION = newOption(ParquetOutputFormat.COMPRESSION)
   val COMPRESSION = newOption("compression")
 
   // The option controls rebasing of the DATE and TIMESTAMP values between
