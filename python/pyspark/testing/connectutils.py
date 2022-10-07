@@ -57,5 +57,8 @@ class MockRemoteSession:
 class PlanOnlyTestFixture(unittest.TestCase):
     @classmethod
     def setUpClass(cls: Any) -> None:
-        cls.connect = MockRemoteSession()
+        cls._connect = MockRemoteSession()
         cls.tbl_name = f"tbl{uuid.uuid4()}".replace("-", "")
+
+    def connect(self) -> "MockRemoteSession":
+        self._connect
