@@ -26,9 +26,9 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.streaming.FileStreamSink
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.HadoopFSUtils
 
@@ -155,8 +155,9 @@ object InMemoryFileIndex extends Logging {
       paths = paths,
       hadoopConf = hadoopConf,
       filter = new PathFilterWrapper(filter),
-      ignoreMissingFiles =
-        new FileSourceOptions(CaseInsensitiveMap(parameters)).ignoreMissingFiles,
+      ignoreMissingFiles = CaseInsensitiveMap(parameters)
+        .get(FileIndexOptions.IGNORE_MISSING_FILES).map(_.toBoolean)
+        .getOrElse(SQLConf.get.ignoreMissingFiles),
       ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
       parallelismThreshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold,
       parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism)
