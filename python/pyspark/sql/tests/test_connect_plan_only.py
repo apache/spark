@@ -16,10 +16,10 @@
 #
 import unittest
 
+from pyspark.testing.connectutils import PlanOnlyTestFixture
 from pyspark.sql.connect import DataFrame
 from pyspark.sql.connect.plan import Read
 from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
-from pyspark.sql.tests.connect.utils.spark_connect_test_utils import PlanOnlyTestFixture
 from pyspark.sql.types import StringType
 
 
@@ -48,7 +48,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         expr = u("ThisCol", "ThatCol", "OtherCol")
         self.assertTrue(isinstance(expr, UserDefinedFunction))
         u_plan = expr.to_plan(self.connect)
-        assert u_plan is not None
+        self.assertIsNotNone(u_plan)
 
     def test_all_the_plans(self):
         def read_table(x):
@@ -64,7 +64,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_plan_only import *  # noqa: F401
+    from pyspark.sql.tests.test_connect_plan_only import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore

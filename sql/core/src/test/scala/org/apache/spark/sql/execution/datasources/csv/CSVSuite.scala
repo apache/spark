@@ -2683,8 +2683,7 @@ abstract class CSVSuite
               exception = intercept[AnalysisException] {
                 readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
               },
-              errorClass = "UNRESOLVED_COLUMN",
-              errorSubClass = Some("WITH_SUGGESTION"),
+              errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
               parameters = Map("objectName" -> "`AAA`", "proposal" -> "`BBB`, `aaa`"))
           }
         }

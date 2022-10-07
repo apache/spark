@@ -23,7 +23,7 @@
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
     <version>3.4.0-SNAPSHOT</version>
-    <relativePath>../pom.xml</relativePath>
+    <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <artifactId>spark-connect_2.12</artifactId>
@@ -34,6 +34,7 @@
     <sbt.project.name>connect</sbt.project.name>
     <protobuf.version>3.21.1</protobuf.version>
     <guava.version>31.0.1-jre</guava.version>
+    <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
     <io.grpc.version>1.47.0</io.grpc.version>
     <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
   </properties>
@@ -123,7 +124,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>failureaccess</artifactId>
-      <version>1.0.1</version>
+      <version>${guava.failureaccess.version}</version>
     </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>
@@ -243,6 +244,17 @@
               <include>com.google.guava:*</include>
               <include>io.grpc:*:</include>
               <include>com.google.protobuf:*</include>
+
+              <!--
+                The dependencies below are not added in SBT because SBT add them all
+                as assembly build.
+              -->
+              <include>com.google.android:annotations</include>
+              <include>com.google.api.grpc:proto-google-common-proto</include>
+              <include>io.perfmark:perfmark-api</include>
+              <include>org.codehaus.mojo:animal-sniffer-annotations</include>
+              <include>com.google.errorprone:error_prone_annotations</include>
+              <include>com.google.j2objc:j2objc-annotations</include>
             </includes>
           </artifactSet>
           <relocations>
@@ -270,6 +282,31 @@
             <relocation>
               <pattern>io.grpc</pattern>
               <shadedPattern>${spark.shade.packageName}.connect.grpc</shadedPattern>
+            </relocation>
+
+            <relocation>
+              <pattern>com.google.android</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.android</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.api.grpc</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.api</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>io.perfmark</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.perfmark</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>org.codehaus.mojo</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.mojo</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.errorprone</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.errorprone</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.com.google.j2objc</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.j2objc</shadedPattern>
             </relocation>
           </relocations>
         </configuration>

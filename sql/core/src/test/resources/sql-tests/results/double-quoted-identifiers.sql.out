@@ -376,8 +376,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITHOUT_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`hello`"
