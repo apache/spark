@@ -3185,7 +3185,7 @@
   },
   "_LEGACY_ERROR_TEMP_2136" : {
     "message" : [
-      "Cannot parse field name <fieldName>, field value <fieldValue>, [<token>] to target spark data type [<dataType>]."
+      "Failed to parse field name <fieldName>, field value <fieldValue>, [<token>] to target spark data type [<dataType>]."
     ]
   },
   "_LEGACY_ERROR_TEMP_2137" : {

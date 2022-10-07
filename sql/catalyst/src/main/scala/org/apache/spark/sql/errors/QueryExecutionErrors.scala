@@ -1225,8 +1225,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2136",
       messageParameters = Map(
-        "fieldName" -> parser.getCurrentName,
-        "fieldValue" -> parser.getText,
+        "fieldName" -> parser.getCurrentName.toString(),
+        "fieldValue" -> parser.getText.toString(),
         "token" -> token.toString(),
         "dataType" -> dataType.toString()))
   }
