@@ -1077,7 +1077,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       stats: String, e: NumberFormatException): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2113",
-      messageParameters = Map("stats" -> stats, "message" -> e.getMessage))
+      messageParameters = Map("stats" -> stats))
   }
 
   def statisticNotRecognizedError(stats: String): SparkIllegalArgumentException = {
