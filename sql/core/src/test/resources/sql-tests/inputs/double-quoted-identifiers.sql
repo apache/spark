@@ -1,7 +1,7 @@
 -- test cases for spark.sql.ansi.double_quoted_identifiers
 
 -- Base line
-SET spark.sql.ansi.double_quoted_identifiers = false;
+SET spark.sql.ansi.doubleQuotedIdentifiers = false;
 
 -- All these should error out in the parser
 SELECT 1 FROM "not_exist";
@@ -46,7 +46,7 @@ DROP VIEW v;
 SELECT INTERVAL "1" YEAR;
 
 -- Now turn on the config.
-SET spark.sql.ansi.double_quoted_identifiers = true;
+SET spark.sql.ansi.doubleQuotedIdentifiers = true;
 
 -- All these should error out in analysis now
 SELECT 1 FROM "not_exist";
