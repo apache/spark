@@ -842,7 +842,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def missingDatabaseLocationError(): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2068",
-      errorSubClass = None,
       messageParameters = Map.empty)
   }
 
