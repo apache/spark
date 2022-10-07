@@ -2454,6 +2454,14 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create a double literal for number with an exponent, e.g. 1E-30
    */
   override def visitExponentLiteral(ctx: ExponentLiteralContext): Literal = {
+    val legacyExponentLiteralAsDecimal =
+      conf.getConf(SQLConf.LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED)
+      if (!legacyExponentLiteralAsDecimal) {
+        logWarning(
+          "In Spark 3.0, numbers written in scientific notation would be parsed " +
+          "as Double. To restore the behavior before Spark 3.0, you can set " +
+          "spark.sql.legacy.exponentLiteralAsDecimal.enabled to true.")
+      }
     numericLiteral(ctx, ctx.getText, /* exponent values don't have a suffix */
       Double.MinValue, Double.MaxValue, DoubleType.simpleString)(_.toDouble)
   }
