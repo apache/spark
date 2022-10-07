@@ -714,14 +714,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def dataPathNotSpecifiedError(): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2047",
-      errorSubClass = None,
       messageParameters = Map.empty)
   }
 
   def createStreamingSourceNotSpecifySchemaError(): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2048",
-      errorSubClass = None,
       messageParameters = Map.empty)
   }
 
