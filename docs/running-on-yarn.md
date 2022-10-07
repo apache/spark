@@ -487,6 +487,20 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>3.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.yarn.am.tokenConfRegex</code></td>
+  <td>(none)</td>
+  <td>
+    This config is only supported when Hadoop version is 2.9+ or 3.x (e.g., when using the Hadoop 3.x profile). 
+    The value of this config is a regex expression used to grep a list of config entries from the job's configuration file (e.g., hdfs-site.xml) 
+    and send to RM, which uses them when renewing delegation tokens. A typical use case of this feature is to support delegation 
+    tokens in an environment where a YARN cluster needs to talk to multiple downstream HDFS clusters, where the YARN RM may not have configs 
+    (e.g., dfs.nameservices, dfs.ha.namenodes.*, dfs.namenode.rpc-address.*) to connect to these clusters. 
+    In this scenario, Spark users can specify the config value to be <code>^dfs.nameservices$|^dfs.namenode.rpc-address.*$|^dfs.ha.namenodes.*$</code> to parse 
+    these HDFS configs from the job's local configuration files. This config is very similar to <code>mapreduce.job.send-token-conf</code>. Please check YARN-5910 for more details.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.yarn.executor.failuresValidityInterval</code></td>
   <td>(none)</td>
   <td>
@@ -631,6 +645,33 @@ To use a custom metrics.properties for the application master and executors, upd
     Interval between reports of the current Spark job status in cluster mode.
   </td>
   <td>0.9.0</td>
+</tr>
+<tr>
+  <td><code>spark.yarn.clientLaunchMonitorInterval</code></td>
+  <td><code>1s</code></td>
+  <td>
+    Interval between requests for status the client mode AM when starting the app.
+  </td>
+  <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.yarn.includeDriverLogsLink</code></td>
+  <td><code>false</code></td>
+  <td>
+    In cluster mode, whether the client application report includes links to the driver 
+    container's logs. This requires polling the ResourceManager's REST API, so it 
+    places some additional load on the RM.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.yarn.unmanagedAM.enabled</code></td>
+  <td><code>false</code></td>
+  <td>
+    In client mode, whether to launch the Application Master service as part of the client 
+    using unmanaged am.
+  </td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
