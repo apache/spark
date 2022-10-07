@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst
+package org.apache.spark.sql.connect
 
 import scala.collection.JavaConverters._
 
@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 /**
  * A collection of implicit conversions that create a DSL for constructing connect protos.
  */
-package object connect {
+
+package object dsl {
 
   object expressions { // scalastyle:ignore
     implicit class DslString(val s: String) {
