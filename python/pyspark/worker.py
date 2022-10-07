@@ -179,7 +179,7 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec):
     return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), to_arrow_type(return_type))]
 
 
-def wrap_grouped_map_pandas_udf(f, return_type, argspec):
+def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
     def wrapped(key_series, value_series):
         import pandas as pd
 
@@ -194,16 +194,36 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec):
                 "Return type of the user-defined function should be "
                 "pandas.DataFrame, but is {}".format(type(result))
             )
-        # the number of columns of result have to match the return type
-        # but it is fine for result to have no columns at all if it is empty
-        if not (
-            len(result.columns) == len(return_type) or len(result.columns) == 0 and result.empty
-        ):
-            raise RuntimeError(
-                "Number of columns of the returned pandas.DataFrame "
-                "doesn't match specified schema. "
-                "Expected: {} Actual: {}".format(len(return_type), len(result.columns))
-            )
+
+        # check the schema of the result only if it is not empty or has columns
+        if not result.empty or len(result.columns) != 0:
+            # if any column name of the result is a string
+            # the column names of the result have to match the return type
+            #   see create_array in pyspark.sql.pandas.serializers.ArrowStreamPandasSerializer
+            field_names = set([field.name for field in return_type.fields])
+            column_names = set(result.columns)
+            if (
+                assign_cols_by_name(runner_conf)
+                and any(isinstance(name, str) for name in result.columns)
+                and column_names != field_names
+            ):
+                missing = sorted(list(field_names.difference(column_names)))
+                extra = sorted(list(column_names.difference(field_names)))
+                raise RuntimeError(
+                    "Column names of the returned pandas.DataFrame do not match specified schema."
+                    "{}{}".format(
+                        (" Missing: " + (", ".join(missing))) if missing else "",
+                        (" Unexpected: " + (", ".join(extra))) if extra else "",
+                    )
+                )
+            # otherwise the number of columns of result have to match the return type
+            elif len(result.columns) != len(return_type):
+                raise RuntimeError(
+                    "Number of columns of the returned pandas.DataFrame "
+                    "doesn't match specified schema. "
+                    "Expected: {} Actual: {}".format(len(return_type), len(result.columns))
+                )
+
         return result
 
     return lambda k, v: [(wrapped(k, v), to_arrow_type(return_type))]
@@ -396,7 +416,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         return arg_offsets, wrap_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
-        return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec)
+        return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
         return arg_offsets, wrap_grouped_map_pandas_udf_with_state(func, return_type)
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
@@ -410,6 +430,16 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         return arg_offsets, wrap_udf(func, return_type)
     else:
         raise ValueError("Unknown eval type: {}".format(eval_type))
+
+
+# Used by SQL_GROUPED_MAP_PANDAS_UDF and SQL_SCALAR_PANDAS_UDF when returning StructType
+def assign_cols_by_name(runner_conf):
+    return (
+        runner_conf.get(
+            "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true"
+        ).lower()
+        == "true"
+    )
 
 
 def read_udfs(pickleSer, infile, eval_type):
@@ -444,16 +474,9 @@ def read_udfs(pickleSer, infile, eval_type):
             runner_conf.get("spark.sql.execution.pandas.convertToArrowArraySafely", "false").lower()
             == "true"
         )
-        # Used by SQL_GROUPED_MAP_PANDAS_UDF and SQL_SCALAR_PANDAS_UDF when returning StructType
-        assign_cols_by_name = (
-            runner_conf.get(
-                "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true"
-            ).lower()
-            == "true"
-        )
 
         if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
-            ser = CogroupUDFSerializer(timezone, safecheck, assign_cols_by_name)
+            ser = CogroupUDFSerializer(timezone, safecheck, assign_cols_by_name(runner_conf))
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
             arrow_max_records_per_batch = runner_conf.get(
                 "spark.sql.execution.arrow.maxRecordsPerBatch", 10000
@@ -463,7 +486,7 @@ def read_udfs(pickleSer, infile, eval_type):
             ser = ApplyInPandasWithStateSerializer(
                 timezone,
                 safecheck,
-                assign_cols_by_name,
+                assign_cols_by_name(runner_conf),
                 state_object_schema,
                 arrow_max_records_per_batch,
             )
@@ -478,7 +501,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 or eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
             )
             ser = ArrowStreamPandasUDFSerializer(
-                timezone, safecheck, assign_cols_by_name, df_for_struct
+                timezone, safecheck, assign_cols_by_name(runner_conf), df_for_struct
             )
     else:
         ser = BatchedSerializer(CPickleSerializer(), 100)
