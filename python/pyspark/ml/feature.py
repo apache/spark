@@ -6160,6 +6160,12 @@ class _SkipGramParams(HasStepSize, HasMaxIter, HasInputCol, HasOutputCol):
         "the number of negative samples. Default value is 5",
         typeConverter=TypeConverters.toInt,
     )
+    sameOverhead: Param[int] = Param(
+        Params._dummy(),
+        "sameOverhead",
+        "the number of same word positive pairs. Default value is 0",
+        typeConverter=TypeConverters.toInt,
+    )
     numThread: Param[int] = Param(
         Params._dummy(),
         "numThread",
@@ -6196,6 +6202,7 @@ class _SkipGramParams(HasStepSize, HasMaxIter, HasInputCol, HasOutputCol):
             maxIter=1,
             windowSize=5,
             negative=5,
+            sameOverhead=0,
             numThread=1,
             sample=0,
             pow=0,
@@ -6236,6 +6243,13 @@ class _SkipGramParams(HasStepSize, HasMaxIter, HasInputCol, HasOutputCol):
         Gets the number of negative samples.
         """
         return self.getOrDefault(self.negative)
+
+    @since("3.4.0")
+    def getSameOverhead(self) -> int:
+        """
+        Gets the number of same word positive pairs.
+        """
+        return self.getOrDefault(self.sameOverhead)
 
     @since("3.4.0")
     def getNumThread(self) -> int:
@@ -6352,6 +6366,7 @@ class SkipGram(
         outputCol: Optional[str] = None,
         windowSize: int = 5,
         negative: int = 5,
+        sameOverhead: int = 0,
         numThread: int = 1,
         sample: float = 0,
         pow: float = 0,
@@ -6360,7 +6375,7 @@ class SkipGram(
         """
         __init__(self, \\*, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, \
                  maxIter=1, seed=None, inputCol=None, outputCol=None, windowSize=5, \
-                 negative: int = 5, numThread: int = 1, sample: float = 0,
+                 negative: int = 5, sameOverhead: int = 0, numThread: int = 1, sample: float = 0, \
                  pow: float = 0, intermediateStorageLevel = "MEMORY_AND_DISK")
         """
         super(SkipGram, self).__init__()
@@ -6382,6 +6397,7 @@ class SkipGram(
         outputCol: Optional[str] = None,
         windowSize: int = 5,
         negative: int = 5,
+        sameOverhead: int = 0,
         numThread: int = 1,
         sample: float = 0,
         pow: float = 0,
@@ -6390,8 +6406,9 @@ class SkipGram(
         """
         setParams(self, \\*, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, \
                   inputCol=None, outputCol=None, windowSize=5, \
-                  negative: int = 5, numThread: int = 1, sample: float = 0,
-                  pow: float = 0, intermediateStorageLevel = "MEMORY_AND_DISK")
+                  negative: int = 5, sameOverhead: int = 0, numThread: int = 1, \
+                  sample: float = 0, pow: float = 0, \
+                  intermediateStorageLevel = "MEMORY_AND_DISK")
         Sets params for this SkipGram.
         """
         kwargs = self._input_kwargs
@@ -6456,6 +6473,13 @@ class SkipGram(
         Sets the value of :py:attr:`negative`.
         """
         return self._set(negative=value)
+
+    @since("3.4.0")
+    def setSameOverhead(self, value: int) -> "SkipGram":
+        """
+        Sets the value of :py:attr:`sameOverhead`.
+        """
+        return self._set(sameOverhead=value)
 
     @since("3.4.0")
     def setNumThread(self, value: int) -> "SkipGram":
