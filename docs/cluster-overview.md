@@ -104,7 +104,7 @@ The following table summarizes terms you'll see used to refer to cluster concept
       <td>Application jar</td>
       <td>
         A jar containing the user's Spark application. In some cases users will want to create
-        an "uber jar" containing their application along with its dependencies. The user's jar
+        an "user jar" containing their application along with its dependencies. The user's jar
         should never include Hadoop or Spark libraries, however, these will be added at runtime.
       </td>
     </tr>
