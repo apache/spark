@@ -6299,24 +6299,24 @@ class SkipGram(
     +----+--------------------+
     |word|              vector|
     +----+--------------------+
-    |   b|[0.1210...
-    |   c|[0.4879...
-    |   a|[0.4852...
+    |   b|[-0.3471236, 0.03...|
+    |   c|[-0.08719989, -0....|
+    |   a|[0.82507014, -1.3...|
     +----+--------------------+
     ...
     >>> model.findSynonymsArray("a", 2)
-    [('b', 0.43708...), ('c', 0.60108...)]
+    [('b', -0.21021409332752228), ('c', -0.054875489324331284)]
     >>> from pyspark.sql.functions import format_number as fmt
     >>> model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
     +----+----------+
     |word|similarity|
     +----+----------+
-    |   b|   0.43708|
-    |   c|   0.60108|
+    |   b|  -0.21021|
+    |   c|  -0.05488|
     +----+----------+
     ...
     >>> model.transform(doc).head().model
-    [0.25058..., -0.37779..., 0.20149..., -0.46852..., -0.50518...]
+    [0.100870..., -0.25248..., 0.29237..., -0.26826..., -0.41230...]
     >>> skipGramPath = temp_path + "/skipGram"
     >>> skipGram.save(skipGramPath)
     >>> loadedSkipGram = SkipGram.load(skipGramPath)
