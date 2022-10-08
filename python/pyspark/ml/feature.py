@@ -6548,8 +6548,6 @@ class SkipGramModel(JavaModel, _SkipGramParams, JavaMLReadable["SkipGramModel"],
         Returns a dataframe with two fields word and similarity (which
         gives the cosine similarity).
         """
-        if not isinstance(word, str):
-            word = _convert_to_vector(word)
         return self._call_java("findSynonyms", word, num)
 
     @since("3.4.0")
@@ -6560,8 +6558,6 @@ class SkipGramModel(JavaModel, _SkipGramParams, JavaMLReadable["SkipGramModel"],
         Returns an array with two fields word and similarity (which
         gives the cosine similarity).
         """
-        if not isinstance(word, str):
-            word = _convert_to_vector(word)
         assert self._java_obj is not None
         tuples = self._java_obj.findSynonymsArray(word, num)
         return list(map(lambda st: (st._1(), st._2()), list(tuples)))
