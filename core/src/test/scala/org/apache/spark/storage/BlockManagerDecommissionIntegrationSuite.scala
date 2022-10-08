@@ -183,11 +183,14 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       taskEndEvents.asScala.filter(_.taskInfo.successful).map(_.taskInfo.executorId).headOption
     }
 
-    sc.addSparkListener(new SparkListener {
+    val listener = new SparkListener {
+      var removeReasonValidated = false
+
       override def onExecutorRemoved(execRemoved: SparkListenerExecutorRemoved): Unit = {
         executorRemovedSem.release()
-        assert(execRemoved.reason == ExecutorDecommission.msgPrefix + "test msg 0" ||
-          execRemoved.reason == "Command exited with code 0")
+        if (execRemoved.reason == ExecutorDecommission.msgPrefix + "test msg 0") {
+          removeReasonValidated = true
+        }
       }
 
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
@@ -213,7 +216,8 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
           }
         }
       }
-    })
+    }
+    sc.addSparkListener(listener)
 
     // Cache the RDD lazily
     if (persist) {
@@ -345,5 +349,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     // should have same value like before
     assert(testRdd.count() === numParts)
     assert(accum.value === numParts)
+    import scala.language.reflectiveCalls
+    assert(listener.removeReasonValidated)
   }
 }

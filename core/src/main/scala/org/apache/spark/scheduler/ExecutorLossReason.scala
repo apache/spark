@@ -77,12 +77,12 @@ case class ExecutorProcessLost(
  * If you update this code make sure to re-run the K8s integration tests.
  *
  * @param workerHost it is defined when the worker is decommissioned too
- * @param _message detailed decommission message
+ * @param reason detailed decommission message
  */
 private [spark] case class ExecutorDecommission(
     workerHost: Option[String] = None,
-    _message: String = "")
-  extends ExecutorLossReason(ExecutorDecommission.msgPrefix + _message)
+    reason: String = "")
+  extends ExecutorLossReason(ExecutorDecommission.msgPrefix + reason)
 
 private[spark] object ExecutorDecommission {
   val msgPrefix = "Executor decommission: "
