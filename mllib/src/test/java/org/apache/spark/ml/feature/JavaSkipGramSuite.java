@@ -24,6 +24,7 @@ import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.*;
 import org.junit.Assert;
 import org.junit.Test;
+import scala.collection.Seq;
 
 import java.util.Arrays;
 
@@ -54,8 +55,8 @@ public class JavaSkipGramSuite extends SharedSparkSession {
         Dataset<Row> result = model.transform(documentDF);
 
         for (Row r : result.select("result").collectAsList()) {
-            float[] polyFeatures = ((float[]) r.get(0));
-            Assert.assertEquals(3, polyFeatures.length);
+            Seq<Float> polyFeatures = ((Seq<Float>)r.get(0));
+            Assert.assertEquals(3, polyFeatures.size());
         }
     }
 }
