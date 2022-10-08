@@ -260,6 +260,7 @@ class SkipGram extends Serializable with Logging {
   private var sample: Double = 0
   private var pow: Double = 0
   private var intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
+  private var sameOverhead: Int = 0
 
   /**
    * Sets vector size (default: 100).
@@ -372,6 +373,18 @@ class SkipGram extends Serializable with Logging {
     require(numThread >= 0,
       s"Number of threads ${numThread}")
     this.numThread = numThread
+    this
+  }
+
+  /**
+   * Sets sameOverhead, the number of same word positive pairs
+   * per positive pair (default: 0)
+   */
+  @Since("3.4.0")
+  def setSameOverhead(sameOverhead: Int): this.type = {
+    require(sameOverhead >= 0,
+      s"Number of same word positive pairs ${sameOverhead}")
+    this.sameOverhead = sameOverhead
     this
   }
 
@@ -551,17 +564,26 @@ class SkipGram extends Serializable with Logging {
         rSyn1Neg.clear()
         val lExpTable = expTable.value
         val random = new java.util.Random(seed)
-
+        val overhead = 2 + sameOverhead
         ParItr.foreach(sIt, numThread)({case ((l, r)) =>
           var pos = 0
-          while (pos < l.length * 2) {
-            var word = vocab.getOrDefault(l(pos / 2), -1)
-            var lastWord = vocab.getOrDefault(r(pos / 2), -1)
-            if (pos % 2 == 1) {
-              val t = word
-              word = lastWord
-              lastWord = t
+          var word = -1
+          var lastWord = -1
+          while (pos < l.length * overhead) {
+
+            if (pos % overhead < 2) {
+              word = vocab.getOrDefault(l(pos / overhead), -1)
+              lastWord = vocab.getOrDefault(r(pos / overhead), -1)
+              if (pos % 2 == 1) {
+                val t = word
+                word = lastWord
+                lastWord = t
+              }
+            } else {
+              word = random.nextInt(vocab.size())
+              lastWord = word
             }
+
             if (word != -1 && lastWord != -1) {
               val l1 = lastWord * vectorSize
               val neu1e = new Array[Float](vectorSize)
