@@ -94,6 +94,7 @@ class SkipGramTests(MLlibTestCase):
             .setSample(1e-4)
             .setIntermediateRDDStorageLevel("DISK_ONLY_2")
             .setNegative(3)
+            .setSameOverhead(32)
             .setNumThread(10)
         )
         self.assertEqual(model.vectorSize, 2)
@@ -106,6 +107,7 @@ class SkipGramTests(MLlibTestCase):
         self.assertEqual(model.sample, 1e-4)
         self.assertEqual(model.intermediateRDDStorageLevel, "DISK_ONLY_2")
         self.assertEqual(model.negative, 3)
+        self.assertEqual(model.sameOverhead, 32)
         self.assertEqual(model.numThread, 10)
 
     def test_skip_gram_get_vectors(self):
