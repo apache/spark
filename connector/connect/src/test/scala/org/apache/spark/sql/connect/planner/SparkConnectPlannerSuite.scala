@@ -185,7 +185,12 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val simpleJoin = proto.Relation.newBuilder
       .setJoin(
-        proto.Join.newBuilder.setLeft(readRel).setRight(readRel).setOn(joinCondition).build())
+        proto.Join.newBuilder
+          .setLeft(readRel)
+          .setRight(readRel)
+          .setJoinType(proto.Join.JoinType.JOIN_TYPE_INNER)
+          .setJoinCondition(joinCondition)
+          .build())
       .build()
 
     val res = transform(simpleJoin)

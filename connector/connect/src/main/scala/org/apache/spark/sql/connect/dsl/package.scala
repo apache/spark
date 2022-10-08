@@ -51,6 +51,21 @@ package object dsl {
             .build()
         ).build()
       }
+
+      def join(
+        otherPlan: proto.Relation,
+        joinType: proto.Join.JoinType = proto.Join.JoinType.JOIN_TYPE_INNER,
+        condition: Option[proto.Expression] = None): proto.Relation = {
+        val relation = proto.Relation.newBuilder()
+        val join = proto.Join.newBuilder()
+        join.setLeft(logicalPlan)
+          .setRight(otherPlan)
+          .setJoinType(joinType)
+        if (condition.isDefined) {
+          join.setJoinCondition(condition.get)
+        }
+        relation.setJoin(join).build()
+      }
     }
   }
 }
