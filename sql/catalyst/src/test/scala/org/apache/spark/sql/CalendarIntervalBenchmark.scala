@@ -21,7 +21,6 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
 import org.apache.spark.sql.types.{CalendarIntervalType, DataType, StructType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -46,13 +45,7 @@ object CalendarIntervalBenchmark extends BenchmarkBase {
     runBenchmark(name) {
       val generator = RandomDataGenerator.forType(schema, nullable = false).get
       val toRow = RowEncoder(schema).createSerializer()
-      val attrs = schema.toAttributes
-      val safeProjection = GenerateSafeProjection.generate(attrs, attrs)
-
-      val rows = (1 to numRows).map(_ =>
-        // The output of encoder is UnsafeRow, use safeProjection to turn in into safe format.
-        safeProjection(toRow(generator().asInstanceOf[Row])).copy()
-      ).toArray
+      val rows = (1 to numRows).map(_ => toRow(generator().asInstanceOf[Row]).copy()).toArray
 
       val row = InternalRow.apply(new CalendarInterval(0, 0, 0))
       val unsafeRow = UnsafeProjection.create(Array[DataType](CalendarIntervalType)).apply(row)
