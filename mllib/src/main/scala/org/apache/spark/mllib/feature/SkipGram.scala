@@ -167,7 +167,7 @@ private[spark] object SkipGram {
     (Math.abs(h) % nPart).toInt
   }
 
-  private def shuffle(l: ArrayBuffer[Int], r: ArrayBuffer[Int], rnd: java.util.Random) = {
+  private def shuffle(l: ArrayBuffer[Int], r: ArrayBuffer[Int], rnd: java.util.Random): Unit = {
     var i = 0
     val n = l.length
     var t = 0
