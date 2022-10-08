@@ -46,27 +46,6 @@ import org.apache.spark.util.collection.OpenHashMap
 
 object ParItr {
 
-  def grouped(inIt: Iterator[Array[Int]], maxLen: Int): Iterator[Array[Array[Int]]] = {
-    val it = inIt.buffered
-    new Iterator[Array[Array[Int]]] {
-      val data = ArrayBuffer.empty[Array[Int]]
-
-      override def hasNext: Boolean = it.hasNext
-
-      override def next(): Array[Array[Int]] = {
-        var sum = 0
-        data.clear()
-        while (it.hasNext && (sum + it.head.length < maxLen || data.isEmpty)) {
-          data.append(it.head)
-          sum += it.head.length
-          it.next()
-        }
-        data.toArray
-      }
-    }
-  }
-
-
   def foreach[A](i: Iterator[A], cpus: Int)(f: A => Unit): Unit = {
     val support = new ForkJoinTaskSupport(new java.util.concurrent.ForkJoinPool(cpus))
     val parr = (0 until cpus).toArray.par
@@ -185,6 +164,26 @@ private[spark] object SkipGram {
     }
   }
 
+  private def grouped(inIt: Iterator[Array[Int]], maxLen: Int): Iterator[Array[Array[Int]]] = {
+    val it = inIt.buffered
+    new Iterator[Array[Array[Int]]] {
+      val data = ArrayBuffer.empty[Array[Int]]
+
+      override def hasNext: Boolean = it.hasNext
+
+      override def next(): Array[Array[Int]] = {
+        var sum = 0
+        data.clear()
+        while (it.hasNext && (sum + it.head.length < maxLen || data.isEmpty)) {
+          data.append(it.head)
+          sum += it.head.length
+          it.next()
+        }
+        data.toArray
+      }
+    }
+  }
+
   private def pairs(sent: RDD[Array[Int]],
                     salt: Int,
                     sampleProbBC: Broadcast[Int2IntOpenHashMap],
@@ -192,7 +191,7 @@ private[spark] object SkipGram {
                     numPartitions: Int,
                     numThread: Int): RDD[(Int, (Array[Int], Array[Int]))] = {
     sent.mapPartitions { it =>
-      ParItr.map(ParItr.grouped(it, 1000000), numThread, numThread) { sG =>
+      ParItr.map(SkipGram.grouped(it, 1000000), numThread, numThread) { sG =>
         val l = Array.fill(numPartitions)(ArrayBuffer.empty[Int])
         val r = Array.fill(numPartitions)(ArrayBuffer.empty[Int])
         val buffers = Array.fill(numPartitions)(new CyclicBuffer(window))
