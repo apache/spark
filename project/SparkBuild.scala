@@ -946,7 +946,6 @@ object YARN {
 }
 
 object Assembly {
-  import sbtassembly.AssemblyUtils._
   import sbtassembly.AssemblyPlugin.autoImport._
 
   val hadoopVersion = taskKey[String]("The version of hadoop that spark is compiled against.")
