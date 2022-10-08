@@ -256,6 +256,7 @@
               <include>com.google.errorprone:error_prone_annotations</include>
               <include>com.google.j2objc:j2objc-annotations</include>
               <include>org.checkerframework:checker-qual</include>
+              <include>com.google.code.gson:gson</include>
             </includes>
           </artifactSet>
           <relocations>
@@ -308,6 +309,10 @@
             <relocation>
               <pattern>org.checkerframework</pattern>
               <shadedPattern>${spark.shade.packageName}.connect.checkerframework</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.gson</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.gson</shadedPattern>
             </relocation>
 
             <!--
