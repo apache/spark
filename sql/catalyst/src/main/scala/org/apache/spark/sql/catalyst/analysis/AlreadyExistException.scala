@@ -61,7 +61,7 @@ class TempTableAlreadyExistsException(table: String)
 
 class PartitionsAlreadyExistException(message: String) extends AnalysisException(message) {
   def this(db: String, table: String, specs: Seq[TablePartitionSpec]) = {
-    this(s"The following partitions already exists in table '$table' database '$db':\n"
+    this(s"The following partitions already exist in table '$table' database '$db':\n"
       + specs.mkString("\n===\n"))
   }
 
@@ -69,7 +69,7 @@ class PartitionsAlreadyExistException(message: String) extends AnalysisException
     this(db, table, Seq(spec))
 
   def this(tableName: String, partitionIdents: Seq[InternalRow], partitionSchema: StructType) = {
-    this(s"The following partitions already exists in table $tableName:" +
+    this(s"The following partitions already exist in table $tableName:" +
       partitionIdents.map(id => partitionSchema.map(_.name).zip(id.toSeq(partitionSchema))
         .map( kv => s"${kv._1} -> ${kv._2}").mkString(",")).mkString("\n===\n"))
   }

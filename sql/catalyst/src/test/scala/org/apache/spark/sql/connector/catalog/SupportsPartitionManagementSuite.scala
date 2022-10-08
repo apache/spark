@@ -221,7 +221,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     val errMsg1 = intercept[PartitionsAlreadyExistException] {
       partTable.renamePartition(InternalRow(0, "abc"), InternalRow(1, "abc"))
     }.getMessage
-    assert(errMsg1.contains("Partition already exists"))
+    assert(errMsg1.contains("partitions already exist"))
 
     val newPart = InternalRow(2, "xyz")
     val errMsg2 = intercept[NoSuchPartitionException] {
