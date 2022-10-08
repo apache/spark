@@ -685,6 +685,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setNumThread(params.get("numThread").asInstanceOf[Int])
       .setLearningRate(params.get("learningRate").asInstanceOf[Double])
       .setNegative(params.get("negative").asInstanceOf[Int])
+      .setSameOverhead(params.get("sameOverhead").asInstanceOf[Int])
       .setNumPartitions(params.get("numPartitions").asInstanceOf[Int])
       .setNumIterations(params.get("numIterations").asInstanceOf[Int])
       .setMinCount(params.get("minCount").asInstanceOf[Int])
