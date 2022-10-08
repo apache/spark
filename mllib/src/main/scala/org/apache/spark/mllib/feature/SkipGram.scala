@@ -167,6 +167,24 @@ private[spark] object SkipGram {
     (Math.abs(h) % nPart).toInt
   }
 
+  private def shuffle(l: ArrayBuffer[Int], r: ArrayBuffer[Int], rnd: java.util.Random) = {
+    var i = 0
+    val n = l.length
+    var t = 0
+    while (i < n - 1) {
+      val j = i + rnd.nextInt(n - i)
+      t = l(j)
+      l(j) = l(i)
+      l(i) = t
+
+      t = r(j)
+      r(j) = r(i)
+      r(i) = t
+
+      i += 1
+    }
+  }
+
   private def pairs(sent: RDD[Array[Int]],
                     salt: Int,
                     sampleProbBC: Broadcast[Int2IntOpenHashMap],
@@ -216,7 +234,10 @@ private[spark] object SkipGram {
           }
           v += 1
         }
-        (0 until numPartitions).map(i => i -> (l(i).toArray, r(i).toArray))
+        (0 until numPartitions).map{i =>
+          shuffle(l(i), r(i), random)
+          i -> (l(i).toArray, r(i).toArray)
+        }
       }.flatten
     }
   }
