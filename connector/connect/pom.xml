@@ -267,17 +267,17 @@
               </includes>
             </relocation>
             <relocation>
-              <pattern>com.google.protobuf</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.protobuf</shadedPattern>
-              <includes>
-                <include>com.google.protobuf.**</include>
-              </includes>
-            </relocation>
-            <relocation>
               <pattern>com.google.thirdparty</pattern>
               <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
               <includes>
                 <include>com.google.thirdparty.**</include>
+              </includes>
+            </relocation>
+            <relocation>
+              <pattern>com.google.protobuf</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.protobuf</shadedPattern>
+              <includes>
+                <include>com.google.protobuf.**</include>
               </includes>
             </relocation>
             <relocation>
