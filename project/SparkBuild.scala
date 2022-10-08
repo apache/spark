@@ -655,6 +655,9 @@ object SparkConnect {
 
     (assembly / logLevel) := Level.Info,
 
+    // Exclude `scala-library` from assembly.
+    (assembly / assemblyPackageScala / assembleArtifact) := false,
+
     (assembly / assemblyShadeRules) := Seq(
       ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.grpc.@0").inAll,
       ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.guava.@1").inAll,
@@ -680,7 +683,7 @@ object SparkConnect {
       // Drop all proto files that are not needed as artifacts of the build.
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
-    },
+    }
   )
 }
 
