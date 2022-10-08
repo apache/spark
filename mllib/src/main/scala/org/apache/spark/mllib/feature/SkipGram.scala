@@ -211,7 +211,7 @@ private[spark] object SkipGram {
               }
               buffers(a).push(s(i), i - skipped)
             }
-            seed += s(i)
+            seed = seed * 239017 + s(i)
             i += 1
           }
           v += 1
