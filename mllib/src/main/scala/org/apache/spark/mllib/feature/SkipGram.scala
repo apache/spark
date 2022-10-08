@@ -201,10 +201,10 @@ private[spark] object SkipGram {
               buffer.checkVersion(v)
               buffer.resetIter()
               while (buffer.headInd() != -1 && buffer.headInd() >= (i - skipped) - window) {
-                val v = buffer.headVal()
-                if (s(i) != v) {
+                val w = buffer.headVal()
+                if (s(i) != w) {
                   l(a).append(s(i))
-                  r(a).append(v)
+                  r(a).append(w)
                 }
 
                 buffer.next()
