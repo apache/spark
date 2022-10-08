@@ -6181,7 +6181,8 @@ class _SkipGramParams(HasStepSize, HasMaxIter, HasInputCol, HasOutputCol):
     intermediateStorageLevel: Param[str] = Param(
         Params._dummy(),
         "intermediateStorageLevel",
-        "StorageLevel for intermediate datasets. Cannot be 'NONE'. Default value is MEMORY_AND_DISK",
+        "StorageLevel for intermediate datasets. Cannot be 'NONE'. " +
+        "Default value is MEMORY_AND_DISK",
         typeConverter=TypeConverters.toString,
     )
 
