@@ -310,6 +310,11 @@
               <shadedPattern>${spark.shade.packageName}.connect.checkerframework</shadedPattern>
             </relocation>
 
+            <!--
+              For `com.google.api.grpc:proto-google-common-protos`, do not directly define pattern
+              as `common.google`, otherwise, otherwise, the relocation result may be uncertain due
+              to the change of rule order.
+            -->
             <relocation>
               <pattern>com.google.api</pattern>
               <shadedPattern>${spark.shade.packageName}.connect.google_protos.api</shadedPattern>
