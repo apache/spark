@@ -32,8 +32,8 @@ class RowTest extends AnyFunSpec with Matchers {
 
   val schema = StructType(
     StructField("col1", StringType) ::
-      StructField("col2", StringType) ::
-      StructField("col3", IntegerType) :: Nil)
+    StructField("col2", StringType) ::
+    StructField("col3", IntegerType) :: Nil)
   val values = Array("value1", "value2", 1)
   val valuesWithoutCol3 = Array[Any](null, "value2", null)
 
@@ -70,12 +70,18 @@ class RowTest extends AnyFunSpec with Matchers {
     }
 
     it("getValuesMap() retrieves values of multiple fields as a Map(field -> value)") {
-      val expected = Map("col1" -> "value1", "col2" -> "value2")
+      val expected = Map(
+        "col1" -> "value1",
+        "col2" -> "value2"
+      )
       sampleRow.getValuesMap(List("col1", "col2")) shouldBe expected
     }
 
     it("getValuesMap() retrieves null value on non AnyVal Type") {
-      val expected = Map("col1" -> null, "col2" -> "value2")
+      val expected = Map(
+        "col1" -> null,
+        "col2" -> "value2"
+      )
       sampleRowWithoutCol3.getValuesMap[String](List("col1", "col2")) shouldBe expected
     }
 
