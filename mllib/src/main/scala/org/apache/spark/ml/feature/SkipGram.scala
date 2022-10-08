@@ -139,6 +139,18 @@ private[feature] trait SkipGramBase extends Params
   def getNegative: Int = $(negative)
 
   /**
+   * The number of same word positive pairs per different words positive pair
+   * Default: 0
+   * @group param
+   */
+  final val sameOverhead = new IntParam(this, "sameOverhead",
+    "the number same word positive pairs (>=0)",
+    ParamValidators.gtEq(0))
+
+  /** @group getParam */
+  def getSameOverhead: Int = $(sameOverhead)
+
+  /**
    * Param for StorageLevel for intermediate datasets. Pass in a string representation of
    * `StorageLevel`. Cannot be "NONE".
    * Default: "MEMORY_AND_DISK".
@@ -155,7 +167,7 @@ private[feature] trait SkipGramBase extends Params
 
   setDefault(vectorSize -> 100, windowSize -> 5, numPartitions -> 1, minCount -> 5,
     stepSize -> 0.025, maxIter -> 1, numThread -> 1,
-    pow -> 0.0, sample -> 0, negative -> 5,
+    pow -> 0.0, sample -> 0, negative -> 5, sameOverhead -> 0,
     intermediateStorageLevel -> "MEMORY_AND_DISK")
 
   /**
@@ -218,6 +230,10 @@ final class SkipGram @Since("3.4.0") (
 
   /** @group setParam */
   @Since("3.4.0")
+  def setSameOverhead(value: Int): this.type = set(sameOverhead, value)
+
+  /** @group setParam */
+  @Since("3.4.0")
   def setSample(value: Double): this.type = set(sample, value)
 
   /** @group setParam */
@@ -243,6 +259,7 @@ final class SkipGram @Since("3.4.0") (
       .setNumPartitions($(numPartitions))
       .setNumThread($(numThread))
       .setNegative($(negative))
+      .setSameOverhead($(sameOverhead))
       .setPow($(pow))
       .setSample($(sample))
       .setVectorSize($(vectorSize))

@@ -378,6 +378,7 @@ class SkipGram extends Serializable with Logging {
 
   /**
    * Sets sameOverhead, the number of same word positive pairs
+   * per different words positive pair
    * per positive pair (default: 0)
    */
   @Since("3.4.0")
