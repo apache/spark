@@ -279,7 +279,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
   Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).foreach { udf =>
     test(s"continuous mode with various UDFs - ${udf.prettyName}") {
       assume(
-        shouldTestPythonUDFs && udf.isInstanceOf[TestScalarPandasUDF] ||
+        shouldTestPandasUDFs && udf.isInstanceOf[TestScalarPandasUDF] ||
         shouldTestPythonUDFs && udf.isInstanceOf[TestPythonUDF] ||
         udf.isInstanceOf[TestScalaUDF])
 

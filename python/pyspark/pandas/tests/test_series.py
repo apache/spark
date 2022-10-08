@@ -982,7 +982,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with ps.option_context("compute.default_index_type", "distributed"):
             # the index is different.
             self.assert_eq(
-                psser.reset_index().to_pandas().reset_index(drop=True), pser.reset_index()
+                psser.reset_index()._to_pandas().reset_index(drop=True), pser.reset_index()
             )
 
     def test_index_to_series_reset_index(self):
@@ -2866,7 +2866,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser = ps.Series([1, 2, np.nan, 4, 5])  # Arrow takes np.nan as null
             psser.loc[3] = np.nan  # Spark takes np.nan as NaN
             kcodes, kuniques = psser.factorize(na_sentinel=None)
-            pcodes, puniques = psser.to_pandas().factorize(sort=True, na_sentinel=None)
+            pcodes, puniques = psser._to_pandas().factorize(sort=True, na_sentinel=None)
             self.assert_eq(pcodes.tolist(), kcodes.to_list())
             self.assert_eq(puniques, kuniques)
 
@@ -3073,6 +3073,33 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             # Test `inplace=True`
             psser.backfill(inplace=True)
             self.assert_eq(expected, psser)
+
+    def test_searchsorted(self):
+        pser1 = pd.Series([1, 2, 2, 3])
+
+        index2 = pd.date_range("2018-04-09", periods=4, freq="2D")
+        pser2 = pd.Series([1, 2, 3, 4], index=index2)
+
+        index3 = pd.MultiIndex.from_tuples(
+            [("A", "B"), ("C", "D"), ("E", "F")], names=["index1", "index2"]
+        )
+        pser3 = pd.Series([1.0, 2.0, 3.0], index=index3, name="name")
+
+        pser4 = pd.Series([])
+
+        for pser in [pser1, pser2, pser3, pser4]:
+            psser = ps.from_pandas(pser)
+            for value in [0.5, 1, 2, 3.0, 4, 5]:
+                for side in ["left", "right"]:
+                    self.assert_eq(
+                        pser.searchsorted(value, side=side),
+                        psser.searchsorted(value, side=side),
+                    )
+
+        with self.assertRaisesRegex(ValueError, "Invalid side"):
+            ps.from_pandas(pser1).searchsorted(1.1, side=[1, 2])
+        with self.assertRaisesRegex(ValueError, "Invalid side"):
+            ps.from_pandas(pser1).searchsorted(1.1, side="middle")
 
     def test_align(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})

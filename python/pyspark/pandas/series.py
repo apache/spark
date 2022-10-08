@@ -3315,15 +3315,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if not isinstance(periods, int):
             raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
 
+        sdf = self._internal.spark_frame
         scol = self.spark.column
         if periods == 0:
-            corr = self._internal.spark_frame.select(F.corr(scol, scol)).head()[0]
+            corr = sdf.select(F.corr(scol, scol)).head()[0]
         else:
             lag_scol = F.lag(scol, periods).over(Window.orderBy(NATURAL_ORDER_COLUMN_NAME))
-            tmp_lag_col = "__tmp_lag_col__"
+            lag_col_name = verify_temp_column_name(sdf, "__autocorr_lag_tmp_col__")
             corr = (
-                self._internal.spark_frame.withColumn(tmp_lag_col, lag_scol)
-                .select(F.corr(scol, F.col(tmp_lag_col)))
+                sdf.withColumn(lag_col_name, lag_scol)
+                .select(F.corr(scol, F.col(lag_col_name)))
                 .head()[0]
             )
         return np.nan if corr is None else corr
@@ -6609,6 +6610,80 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             column_label_names=[None],
         )
         return DataFrame(internal)
+
+    # TODO(SPARK-40553): 1, support array-like 'value'; 2, add parameter 'sorter'
+    def searchsorted(self, value: Any, side: str = "left") -> int:
+        """
+        Find indices where elements should be inserted to maintain order.
+
+        Find the indices into a sorted Series self such that, if the corresponding elements
+        in value were inserted before the indices, the order of self would be preserved.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        value : scalar
+            Values to insert into self.
+        side : {‘left’, ‘right’}, optional
+            If ‘left’, the index of the first suitable location found is given.
+            If ‘right’, return the last such index. If there is no suitable index,
+            return either 0 or N (where N is the length of self).
+
+        Returns
+        -------
+        int
+            insertion point
+
+        Notes
+        -----
+        The Series must be monotonically sorted, otherwise wrong locations will likely be returned.
+
+        Examples
+        --------
+        >>> ser = ps.Series([1, 2, 2, 3])
+        >>> ser.searchsorted(0)
+        0
+        >>> ser.searchsorted(1)
+        0
+        >>> ser.searchsorted(2)
+        1
+        >>> ser.searchsorted(5)
+        4
+        >>> ser.searchsorted(0, side="right")
+        0
+        >>> ser.searchsorted(1, side="right")
+        1
+        >>> ser.searchsorted(2, side="right")
+        3
+        >>> ser.searchsorted(5, side="right")
+        4
+        """
+        if side not in ["left", "right"]:
+            raise ValueError(f"Invalid side {side}")
+
+        sdf = self._internal.spark_frame
+        index_col_name = verify_temp_column_name(sdf, "__search_sorted_index_col__")
+        value_col_name = verify_temp_column_name(sdf, "__search_sorted_value_col__")
+        sdf = InternalFrame.attach_distributed_sequence_column(
+            sdf.select(self.spark.column.alias(value_col_name)), index_col_name
+        )
+
+        if side == "left":
+            results = sdf.select(
+                F.min(F.when(F.lit(value) <= F.col(value_col_name), F.col(index_col_name))),
+                F.count(F.lit(0)),
+            ).take(1)
+        else:
+            results = sdf.select(
+                F.min(F.when(F.lit(value) < F.col(value_col_name), F.col(index_col_name))),
+                F.count(F.lit(0)),
+            ).take(1)
+
+        if len(results) == 0:
+            return 0
+        else:
+            return results[0][1] if results[0][0] is None else results[0][0]
 
     def align(
         self,

@@ -610,11 +610,7 @@ object Core {
 
 
 object SparkConnect {
-
   import BuildCommons.protoVersion
-
-  private val shadePrefix = "org.sparkproject.connect"
-  val shadeJar = taskKey[Unit]("Shade the Jars")
 
   lazy val settings = Seq(
     // Setting version for the protobuf compiler. This has to be propagated to every sub-project
@@ -623,26 +619,39 @@ object SparkConnect {
 
     // For some reason the resolution from the imported Maven build does not work for some
     // of these dependendencies that we need to shade later on.
-    libraryDependencies ++= Seq(
-      "io.grpc"             % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
-      "org.scala-lang"      % "scala-library"        % "2.12.16" % "provided",
-      "com.google.guava"    % "guava"                % "31.0.1-jre",
-      "com.google.guava"    % "failureaccess"        % "1.0.1",
-      "com.google.protobuf" % "protobuf-java"        % protoVersion % "protobuf"
-    ),
+    libraryDependencies ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+      val guavaFailureaccessVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "guava.failureaccess.version").asInstanceOf[String]
+      Seq(
+        "io.grpc" % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
 
-    dependencyOverrides ++= Seq(
-      "com.google.guava"    % "guava"                % "31.0.1-jre",
-      "com.google.guava"    % "failureaccess"        % "1.0.1",
-      "com.google.protobuf" % "protobuf-java"        % protoVersion
-    ),
+    dependencyOverrides ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+      val guavaFailureaccessVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "guava.failureaccess.version").asInstanceOf[String]
+      Seq(
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion
+      )
+    },
 
     (Compile / PB.targets) := Seq(
-      PB.gens.java                -> (Compile / sourceManaged).value,
+      PB.gens.java -> (Compile / sourceManaged).value,
       PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
     ),
 
-    (assembly / test) := false,
+    (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
 
@@ -1195,7 +1204,7 @@ object CopyDependencies {
       // For the SparkConnect build, we manually call the assembly target to
       // produce the shaded Jar which happens automatically in the case of Maven.
       // Later, when the dependencies are copied, we manually copy the shaded Jar only.
-      val fid = (LocalProject("connect")/assembly).value
+      val fid = (LocalProject("connect") / assembly).value
 
       (Compile / dependencyClasspath).value.map(_.data)
         .filter { jar => jar.isFile() }

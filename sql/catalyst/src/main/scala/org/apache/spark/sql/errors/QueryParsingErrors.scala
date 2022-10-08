@@ -97,44 +97,47 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "TRANSFORM_DISTINCT_ALL",
+      errorClass = "UNSUPPORTED_FEATURE.TRANSFORM_DISTINCT_ALL",
       messageParameters = Map.empty,
       ctx)
   }
 
   def transformWithSerdeUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "TRANSFORM_NON_HIVE",
+      errorClass = "UNSUPPORTED_FEATURE.TRANSFORM_NON_HIVE",
       messageParameters = Map.empty,
       ctx)
+  }
+
+  def unpivotWithPivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
+    new ParseException("UNPIVOT cannot be used together with PIVOT in FROM clause", ctx)
   }
 
   def lateralWithPivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0013", ctx)
   }
 
+  def lateralWithUnpivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
+    new ParseException("LATERAL cannot be used together with UNPIVOT in FROM clause", ctx)
+  }
+
   def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "LATERAL_NATURAL_JOIN",
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_NATURAL_JOIN",
       messageParameters = Map.empty,
       ctx)
   }
 
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "LATERAL_JOIN_USING",
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_JOIN_USING",
       messageParameters = Map.empty,
       ctx)
   }
 
   def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "LATERAL_JOIN_OF_TYPE",
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_JOIN_OF_TYPE",
       messageParameters = Map("joinType" -> toSQLStmt(joinType)),
       ctx)
   }
@@ -173,8 +176,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "NATURAL_CROSS_JOIN",
+      errorClass = "UNSUPPORTED_FEATURE.NATURAL_CROSS_JOIN",
       messageParameters = Map.empty,
       ctx = ctx)
   }
@@ -336,16 +338,14 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def cannotCleanReservedNamespacePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "SET_NAMESPACE_PROPERTY",
+      errorClass = "UNSUPPORTED_FEATURE.SET_NAMESPACE_PROPERTY",
       messageParameters = Map("property" -> property, "msg" -> msg),
       ctx)
   }
 
   def propertiesAndDbPropertiesBothSpecifiedError(ctx: CreateNamespaceContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "SET_PROPERTIES_AND_DBPROPERTIES",
+      errorClass = "UNSUPPORTED_FEATURE.SET_PROPERTIES_AND_DBPROPERTIES",
       messageParameters = Map.empty,
       ctx
     )
@@ -354,8 +354,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def cannotCleanReservedTablePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "SET_TABLE_PROPERTY",
+      errorClass = "UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY",
       messageParameters = Map("property" -> property, "msg" -> msg),
       ctx)
   }
@@ -395,8 +394,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def descColumnForPartitionUnsupportedError(ctx: DescribeRelationContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "DESC_TABLE_COLUMN_PARTITION",
+      errorClass = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_PARTITION",
       messageParameters = Map.empty,
       ctx)
   }

@@ -885,8 +885,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sql("SELECT * FROM v1")
             }
             checkError(e,
-              errorClass = "UNRESOLVED_COLUMN",
-              errorSubClass = "WITH_SUGGESTION",
+              errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
               sqlState = None,
               parameters = Map(
                 "objectName" -> "`C1`",
@@ -916,8 +915,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sql("SELECT * FROM v4")
             }
             checkError(e,
-              errorClass = "UNRESOLVED_COLUMN",
-              errorSubClass = "WITH_SUGGESTION",
+              errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
               sqlState = None,
               parameters = Map(
                 "objectName" -> "`a`",

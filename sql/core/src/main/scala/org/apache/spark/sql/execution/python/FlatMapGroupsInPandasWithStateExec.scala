@@ -83,7 +83,17 @@ case class FlatMapGroupsInPandasWithStateExec(
   private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
   private lazy val (dedupAttributes, argOffsets) = resolveArgOffsets(
     groupingAttributes ++ child.output, groupingAttributes)
-  private lazy val unsafeProj = UnsafeProjection.create(dedupAttributes, child.output)
+
+  // See processTimedOutState: we create a row which contains the actual values for grouping key,
+  // but all nulls for value side by intention. This technically changes the schema of input to
+  // be "nullable", hence the schema information and the internal projection of row should take
+  // this into consideration. Strictly saying, it's not applied to the part of grouping key, but
+  // it doesn't hurt much even if we apply the same for grouping key as well.
+  private lazy val dedupAttributesWithNull =
+    dedupAttributes.map(_.withNullability(newNullability = true))
+  private lazy val childOutputWithNull = child.output.map(_.withNullability(newNullability = true))
+  private lazy val unsafeProj = UnsafeProjection.create(dedupAttributesWithNull,
+    childOutputWithNull)
 
   override def requiredChildDistribution: Seq[Distribution] =
     StatefulOperatorPartitioning.getCompatibleDistribution(
@@ -134,7 +144,7 @@ case class FlatMapGroupsInPandasWithStateExec(
           val joinedKeyRow = unsafeProj(
             new JoinedRow(
               stateData.keyRow,
-              new GenericInternalRow(Array.fill(dedupAttributes.length)(null: Any))))
+              new GenericInternalRow(Array.fill(dedupAttributesWithNull.length)(null: Any))))
 
           (stateData.keyRow, stateData, Iterator.single(joinedKeyRow))
         }
@@ -150,7 +160,7 @@ case class FlatMapGroupsInPandasWithStateExec(
         chainedFunc,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
         Array(argOffsets),
-        StructType.fromAttributes(dedupAttributes),
+        StructType.fromAttributes(dedupAttributesWithNull),
         sessionLocalTimeZone,
         pythonRunnerConf,
         stateEncoder.asInstanceOf[ExpressionEncoder[Row]],

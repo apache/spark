@@ -2127,6 +2127,8 @@ class Frame(object, metaclass=ABCMeta):
         """
         Return unbiased standard error of the mean over requested axis.
 
+        .. versionadded:: 3.3.0
+
         Parameters
         ----------
         axis : {index (0), columns (1)}
@@ -2139,6 +2141,9 @@ class Frame(object, metaclass=ABCMeta):
         ddof : int, default 1
             Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
             where N represents the number of elements.
+
+            .. versionchanged:: 3.4.0
+               Supported including arbitary integers.
         numeric_only : bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
@@ -2166,6 +2171,11 @@ class Frame(object, metaclass=ABCMeta):
         b    0.471405
         dtype: float64
 
+        >>> psdf.sem(ddof=2)
+        a    0.816497
+        b    0.816497
+        dtype: float64
+
         >>> psdf.sem(axis=1)
         0    1.5
         1    1.5
@@ -2187,7 +2197,8 @@ class Frame(object, metaclass=ABCMeta):
         >>> psser.sem(ddof=0)
         0.47140452079103173
         """
-        assert ddof in (0, 1)
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
 
         axis = validate_axis(axis)
 
@@ -2205,10 +2216,7 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            if ddof == 0:
-                return F.stddev_pop(spark_column)
-            else:
-                return F.stddev_samp(spark_column)
+            return SF.stddev(spark_column, ddof)
 
         def sem(psser: "Series") -> Column:
             return std(psser) / F.sqrt(Frame._count_expr(psser))
