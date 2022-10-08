@@ -788,7 +788,7 @@ class TimSort<K, Buffer> {
           if (--len1 == 1)
             break outer;
           minGallop--;
-        } while (count1 >= MIN_GALLOP | count2 >= MIN_GALLOP);
+        } while (count1 >= MIN_GALLOP || count2 >= MIN_GALLOP);
         if (minGallop < 0)
           minGallop = 0;
         minGallop += 2;  // Penalize for leaving gallop mode
@@ -910,7 +910,7 @@ class TimSort<K, Buffer> {
           if (--len1 == 0)
             break outer;
           minGallop--;
-        } while (count1 >= MIN_GALLOP | count2 >= MIN_GALLOP);
+        } while (count1 >= MIN_GALLOP || count2 >= MIN_GALLOP);
         if (minGallop < 0)
           minGallop = 0;
         minGallop += 2;  // Penalize for leaving gallop mode
