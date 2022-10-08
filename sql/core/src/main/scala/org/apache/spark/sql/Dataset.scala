@@ -2507,7 +2507,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] by sampling a fraction of rows, using a user-supplied seed.
+   * Returns a new [[Dataset]] by unionByNamerows, using a user-supplied seed.
    *
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate, range [0.0, 1.0].
