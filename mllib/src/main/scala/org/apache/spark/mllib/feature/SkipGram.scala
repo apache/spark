@@ -573,7 +573,7 @@ class SkipGram extends Serializable with Logging {
             if (pos % overhead < 2) {
               word = vocab.getOrDefault(l(pos / overhead), -1)
               lastWord = vocab.getOrDefault(r(pos / overhead), -1)
-              if (pos % 2 == 1) {
+              if (pos % overhead == 1) {
                 val t = word
                 word = lastWord
                 lastWord = t
