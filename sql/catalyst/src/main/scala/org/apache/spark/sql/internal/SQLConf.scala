@@ -3922,7 +3922,7 @@ object SQLConf {
 
   val REGEX_ENGINE =
     buildConf("spark.sql.Regex.Engine")
-      .version("3.1.2-mdh")
+      .version("3.4.0")
       .stringConf
       .createWithDefault("java")
 
