@@ -159,4 +159,10 @@ message Expression {
   // UnresolvedStar is used to expand all the fields of a relation or struct.
   message UnresolvedStar {
   }
+
+  // An qualified attribute that can specify a reference (e.g. column) without needing a resolution
+  // by the analyzer.
+  message QualifiedAttribute {
+    string name = 1;
+  }
 }
