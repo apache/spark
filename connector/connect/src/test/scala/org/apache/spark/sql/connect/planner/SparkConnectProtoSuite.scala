@@ -114,6 +114,36 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       import org.apache.spark.sql.connect.dsl.plans._
       transform(connectTestRelation.as("target_table"))
     }
+  }
+
+  test("Test StructType in LocalRelation") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      transform(createLocalRelationProtoByQualifiedAttributes(
+        Seq("a".protoQualifiedAttr.struct("id".protoQualifiedAttrInt))))
+    }
+    val sparkPlan = LocalRelation($"a".struct($"id".int))
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
+  private def createLocalRelationProtoByQualifiedAttributes(
+      attrs: Seq[proto.Expression.QualifiedAttribute]): proto.Relation = {
+    val localRelationBuilder = proto.LocalRelation.newBuilder()
+    for (attr <- attrs) {
+      localRelationBuilder.addAttributes(attr)
+    }
+    proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
+  }
+
+  private def createLocalRelationProto(attrs: Seq[AttributeReference]): proto.Relation = {
+    val localRelationBuilder = proto.LocalRelation.newBuilder()
+    for (attr <- attrs) {
+      localRelationBuilder.addAttributes(
+        proto.Expression.QualifiedAttribute.newBuilder()
+          .setName(attr.name)
+          .setType(DataTypeProtoConverter.toConnectProtoType(attr.dataType))
+      )
+    }
     val sparkPlan = sparkTestRelation.as("target_table")
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }

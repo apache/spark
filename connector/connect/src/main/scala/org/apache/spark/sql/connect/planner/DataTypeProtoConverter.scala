@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.planner
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructField, StructType}
 
 /**
  * This object offers methods to convert to/from connect proto to catalyst types.
@@ -29,9 +29,17 @@ object DataTypeProtoConverter {
     t.getKindCase match {
       case proto.DataType.KindCase.I32 => IntegerType
       case proto.DataType.KindCase.STRING => StringType
+      case proto.DataType.KindCase.STRUCT => convertProtoDataTypeToCatalyst(t.getStruct)
       case _ =>
         throw InvalidPlanInput(s"Does not support convert ${t.getKindCase} to catalyst types.")
     }
+  }
+
+  private def convertProtoDataTypeToCatalyst(t: proto.DataType.Struct): StructType = {
+    // TODO: handle nullbility
+    val structFields =
+      t.getFieldsList.map(f => StructField(f.getName, toCatalystType(f.getType))).toList
+    StructType.apply(structFields)
   }
 
   def toConnectProtoType(t: DataType): proto.DataType = {

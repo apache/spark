@@ -44,6 +44,38 @@ package object dsl {
               .addAllParts(identifier.asJava)
               .build())
           .build()
+
+      def protoQualifiedAttr: proto.Expression.QualifiedAttribute =
+        proto.Expression.QualifiedAttribute.newBuilder()
+          .setName(identifier.mkString("."))
+          .build()
+
+      def protoQualifiedAttrInt: proto.Expression.QualifiedAttribute = protoQualifiedAttrWithType(
+        proto.DataType.newBuilder().setI32(proto.DataType.I32.getDefaultInstance).build())
+
+      private def protoQualifiedAttrWithType(
+          dataType: proto.DataType): proto.Expression.QualifiedAttribute =
+        proto.Expression.QualifiedAttribute.newBuilder()
+          .setName(identifier.mkString("."))
+          .setType(dataType)
+          .build()
+    }
+
+    implicit class DslQualifiedAttr(val attr: proto.Expression.QualifiedAttribute) {
+      def struct(
+          attrs: proto.Expression.QualifiedAttribute*): proto.Expression.QualifiedAttribute = {
+        val structExpr = proto.DataType.Struct.newBuilder()
+        for (attr <- attrs) {
+          val structField = proto.DataType.StructField.newBuilder()
+          structField.setName(attr.getName)
+          structField.setType(attr.getType)
+          structExpr.addFields(structField)
+        }
+        proto.Expression.QualifiedAttribute.newBuilder()
+          .setName(attr.getName)
+          .setType(proto.DataType.newBuilder().setStruct(structExpr))
+          .build()
+      }
     }
 
     implicit class DslExpression(val expr: proto.Expression) {

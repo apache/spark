@@ -167,8 +167,14 @@ message DataType {
     Nullability nullability = 4;
   }
 
+  message StructField {
+    DataType type = 1;
+    string name = 2;
+    Nullability nullability = 3;
+  }
+
   message Struct {
-    repeated DataType types = 1;
+    repeated StructField fields = 1;
     uint32 type_variation_reference = 2;
     Nullability nullability = 3;
   }
