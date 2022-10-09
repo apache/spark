@@ -69,7 +69,6 @@ select map_contains_key(map('1', 'a', '2', 'b'), 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'map_contains_key(map('1', 'a', '2', 'b'), 1)' due to data type mismatch: Input to function map_contains_key should have been map followed by a value with same key type, but it's [map<string,string>, int].; line 1 pos 7
 {
   "errorClass" : "DATATYPE_MISMATCH",
   "errorSubClass" : "MAP_CONTAINS_KEY_DIFF_TYPES",

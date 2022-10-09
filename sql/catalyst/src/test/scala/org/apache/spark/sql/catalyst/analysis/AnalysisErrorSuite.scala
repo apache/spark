@@ -736,7 +736,18 @@ class AnalysisErrorSuite extends AnalysisTest {
       right,
       joinType = Cross,
       condition = Some($"b" === $"d"))
-    assertAnalysisError(plan2, "EqualTo does not support ordering on type map" :: Nil)
+
+    assertAnalysisErrorClass(
+      inputPlan = plan2,
+      expectedErrorClass = "DATATYPE_MISMATCH",
+      expectedErrorSubClass = "INVALID_ORDERING_TYPE",
+      expectedMessageParameters = Map(
+        "functionName" -> "EqualTo",
+        "dataType" -> "\"MAP<STRING, STRING>\"",
+        "sqlExpr" -> "\"(b = d)\""
+      ),
+      caseSensitive = true
+    )
   }
 
   test("PredicateSubQuery is used outside of a allowed nodes") {
