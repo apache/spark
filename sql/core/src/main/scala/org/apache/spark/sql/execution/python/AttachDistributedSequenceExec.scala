@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -45,11 +46,36 @@ case class AttachDistributedSequenceExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     val childRDD = child.execute()
-    val cachedRDD = if (childRDD.getNumPartitions > 1) {
+    // before `compute.distributed_sequence_index_storage_level` is explicitly set via
+    // `ps.set_option`, `SQLConf.get` can not get its value (as well as its default value);
+    // after `ps.set_option`, `SQLConf.get` can get its value:
+    //
+    //    In [1]: import pyspark.pandas as ps
+    //    In [2]: ps.get_option("compute.distributed_sequence_index_storage_level")
+    //    Out[2]: 'MEMORY_AND_DISK_SER'
+    //    In [3]: spark.conf.get("pandas_on_Spark.compute.distributed_sequence_index_storage_level")
+    //    ...
+    //    Py4JJavaError: An error occurred while calling o40.get.
+    //      : java.util.NoSuchElementException: pandas_on_Spark.compute.distributed_sequence_...
+    //    at org.apache.spark.sql.errors.QueryExecutionErrors$.noSuchElementExceptionError...
+    //    at org.apache.spark.sql.internal.SQLConf.$anonfun$getConfString$3(SQLConf.scala:4766)
+    //    ...
+    //    In [4]: ps.set_option("compute.distributed_sequence_index_storage_level", "NONE")
+    //    In [5]: spark.conf.get("pandas_on_Spark.compute.distributed_sequence_index_storage_level")
+    //    Out[5]: '"NONE"'
+    //    In [6]: ps.set_option("compute.distributed_sequence_index_storage_level", "DISK_ONLY")
+    //    In [7]: spark.conf.get("pandas_on_Spark.compute.distributed_sequence_index_storage_level")
+    //    Out[7]: '"DISK_ONLY"'
+    val storageLevel = StorageLevel.fromString(
+      SQLConf.get.getConfString(
+        "pandas_on_Spark.compute.distributed_sequence_index_storage_level",
+        "MEMORY_AND_DISK_SER"
+      ).replaceAll("\"", "")
+    )
+    val cachedRDD = if (childRDD.getNumPartitions > 1 && storageLevel != StorageLevel.NONE) {
       // zipWithIndex launches a Spark job when #partition > 1
-      // todo: add a config for StorageLevel
       this.synchronized {
-        cached = childRDD.map(_.copy()).persist()
+        cached = childRDD.map(_.copy()).persist(storageLevel)
       }
       cached
     } else {
