@@ -79,7 +79,7 @@ class PartitionsAlreadyExistException(message: String) extends AnalysisException
 
   def this(tableName: String, partitionIdents: Seq[InternalRow], partitionSchema: StructType) = {
     this(s"The following partitions already exists in table $tableName:" +
-      partitionIdents.map(_.toSeq(partitionSchema).zip(partitionSchema.map(_.name))
+      partitionIdents.map(id => partitionSchema.map(_.name).zip(id.toSeq(partitionSchema))
         .map( kv => s"${kv._1} -> ${kv._2}").mkString(",")).mkString("\n===\n"))
   }
 }

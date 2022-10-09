@@ -3064,7 +3064,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     def unpivot(
         self,
-        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        ids: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]],
         values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
         variableColumnName: str,
         valueColumnName: str,
@@ -3082,6 +3082,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         When no "id" columns are given, the unpivoted DataFrame consists of only the
         "variable" and "value" columns.
 
+        The `values` columns must not be empty so at least one value must be given to be unpivoted.
+        When `values` is `None`, all non-id columns will be unpivoted.
+
         All "value" columns must share a least common data type. Unless they are the same data type,
         all "value" columns are cast to the nearest common data type. For instance, types
         `IntegerType` and `LongType` are cast to `LongType`, while `IntegerType` and `StringType`
@@ -3091,13 +3094,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        ids : str, Column, tuple, list, optional
+        ids : str, Column, tuple, list
             Column(s) to use as identifiers. Can be a single column or column name,
             or a list or tuple for multiple columns.
         values : str, Column, tuple, list, optional
             Column(s) to unpivot. Can be a single column or column name, or a list or tuple
-            for multiple columns. If not specified or empty, uses all columns that
-            are not set as `ids`.
+            for multiple columns. If specified, must not be empty. If not specified, uses all
+            columns that are not set as `ids`.
         variableColumnName : str
             Name of the variable column.
         valueColumnName : str
@@ -3136,30 +3139,29 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         DataFrame.melt
         """
+        assert ids is not None, "ids must not be None"
 
         def to_jcols(
-            cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+            cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]
         ) -> JavaObject:
-            if cols is None:
-                lst = []
-            elif isinstance(cols, tuple):
-                lst = list(cols)
-            elif isinstance(cols, list):
-                lst = cols
-            else:
-                lst = [cols]
-            return self._jcols(*lst)
+            if isinstance(cols, list):
+                return self._jcols(*cols)
+            if isinstance(cols, tuple):
+                return self._jcols(*list(cols))
+            return self._jcols(cols)
 
-        return DataFrame(
-            self._jdf.unpivotWithSeq(
-                to_jcols(ids), to_jcols(values), variableColumnName, valueColumnName
-            ),
-            self.sparkSession,
-        )
+        jids = to_jcols(ids)
+        if values is None:
+            jdf = self._jdf.unpivotWithSeq(jids, variableColumnName, valueColumnName)
+        else:
+            jvals = to_jcols(values)
+            jdf = self._jdf.unpivotWithSeq(jids, jvals, variableColumnName, valueColumnName)
+
+        return DataFrame(jdf, self.sparkSession)
 
     def melt(
         self,
-        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        ids: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]],
         values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
         variableColumnName: str,
         valueColumnName: str,
