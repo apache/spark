@@ -6313,13 +6313,13 @@ class SkipGram(
     +----+--------------------+
     |word|              vector|
     +----+--------------------+
-    |   b|[-0.347..., 0.03...|
-    |   c|[-0.087..., -0....|
-    |   a|[0.825..., -1.3...|
+    |   b|[-0.347...
+    |   c|[-0.087...
+    |   a|[0.825...
     +----+--------------------+
     ...
     >>> model.findSynonymsArray("a", 2)
-    [('b', -0.21021409332752228), ('c', -0.054875489324331284)]
+    [('b', -0.21021...), ('c', -0.05487...)]
     >>> from pyspark.sql.functions import format_number as fmt
     >>> model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
     +----+----------+
