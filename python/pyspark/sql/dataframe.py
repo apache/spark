@@ -2044,7 +2044,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def join(
         self,
         other: "DataFrame",
-        on: Optional[Union[str, List[str], Column, List[Column]]] = None,
+        on: Optional[Union[str, List[str], bool, List[bool], Column, List[Column]]] = None,
         how: Optional[str] = None,
     ) -> "DataFrame":
         """Joins with another :class:`DataFrame`, using the given join expression.
@@ -2165,7 +2165,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         other: "DataFrame",
         leftAsOfColumn: Union[str, Column],
         rightAsOfColumn: Union[str, Column],
-        on: Optional[Union[str, List[str], Column, List[Column]]] = None,
+        on: Optional[Union[str, List[str], bool, List[bool], Column, List[Column]]] = None,
         how: Optional[str] = None,
         *,
         tolerance: Optional[Column] = None,
