@@ -72,8 +72,8 @@ object StringUtils extends Logging {
     val out = new ArrayBuffer[Byte]()
     out.appendAll("(?s)".getBytes())
 
-    def fail(message: String) = throw new AnalysisException(
-      s"the pattern '$pattern' is invalid, $message")
+    def fail(message: String) = throw QueryCompilationErrors.invalidPatternError(
+      pattern.toString, message)
 
     while (in.hasNext) {
       in.next match {

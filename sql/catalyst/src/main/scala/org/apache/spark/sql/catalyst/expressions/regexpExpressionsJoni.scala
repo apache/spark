@@ -28,13 +28,14 @@ import org.joni.{Option, Regex, Syntax}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, TreePattern}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 
 abstract class StringRegexExpressionJoni extends BinaryExpression
-  with ImplicitCastInputTypes with NullIntolerant {
+  with ImplicitCastInputTypes with NullIntolerant with Predicate {
 
   def escape(v: Array[Byte]): Array[Byte]
   def matches(regex: Regex, str: Array[Byte]): Boolean
@@ -84,15 +85,13 @@ abstract class StringRegexExpressionJoni extends BinaryExpression
       * str - a string expression
       * pattern - a string expression. The pattern is a string which is matched literally, with
           exception to the following special symbols:
-
-          _ matches any one character in the input (similar to . in posix regular expressions)
-
+          exception to the following special symbols:<br><br>
+            _ matches any one character in the input (similar to . in posix regular expressions)
           % matches zero or more characters in the input (similar to .* in posix regular
           expressions)
-
+          expressions)<br><br>
           Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
           to match "\abc", the pattern should be "\\abc".
-
           When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it fallbacks
           to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
           enabled, the pattern to match "\abc" should be "\abc".
@@ -130,6 +129,8 @@ case class LikeJoni(left: Expression, right: Expression, escapeChar: Char)
   override def matches(regex: Regex, input: Array[Byte]): Boolean = {
     regex.matcher(input).`match`(0, input.length, Option.DEFAULT) == input.size
   }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
 
   override def toString: String = escapeChar match {
     case '\\' => s"$left LIKEJoni $right"
@@ -194,10 +195,15 @@ case class LikeJoni(left: Expression, right: Expression, escapeChar: Char)
       })
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): LikeJoni =
+    copy(left = newLeft, right = newRight)
 }
 
 sealed abstract class MultiLikeJoniBase
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Predicate {
 
   protected def patterns: Seq[UTF8String]
 
@@ -208,6 +214,8 @@ sealed abstract class MultiLikeJoniBase
   override def dataType: DataType = BooleanType
 
   override def nullable: Boolean = true
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
 
   protected lazy val hasNull: Boolean = patterns.contains(null)
 
@@ -291,10 +299,14 @@ sealed abstract class LikeAllJoniBase extends MultiLikeJoniBase {
 
 case class LikeAllJoni(child: Expression, patterns: Seq[UTF8String]) extends LikeAllJoniBase {
   override def isNotSpecified: Boolean = false
+  override protected def withNewChildInternal(newChild: Expression): LikeAllJoni =
+    copy(child = newChild)
 }
 
 case class NotLikeAllJoni(child: Expression, patterns: Seq[UTF8String]) extends LikeAllJoniBase {
   override def isNotSpecified: Boolean = true
+  override protected def withNewChildInternal(newChild: Expression): NotLikeAllJoni =
+    copy(child = newChild)
 }
 
 /**
@@ -350,10 +362,14 @@ sealed abstract class LikeAnyJoniBase extends MultiLikeJoniBase {
 
 case class LikeAnyJoni(child: Expression, patterns: Seq[UTF8String]) extends LikeAnyJoniBase {
   override def isNotSpecified: Boolean = false
+  override protected def withNewChildInternal(newChild: Expression): LikeAnyJoni =
+    copy(child = newChild)
 }
 
 case class NotLikeAnyJoni(child: Expression, patterns: Seq[UTF8String]) extends LikeAnyJoniBase {
   override def isNotSpecified: Boolean = true
+  override protected def withNewChildInternal(newChild: Expression): NotLikeAnyJoni =
+    copy(child = newChild)
 }
 
 
@@ -447,4 +463,9 @@ case class RLikeJoni(left: Expression, right: Expression) extends StringRegexExp
       })
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): RLikeJoni =
+    copy(left = newLeft, right = newRight)
 }

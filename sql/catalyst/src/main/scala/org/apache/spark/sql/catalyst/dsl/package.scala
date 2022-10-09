@@ -107,9 +107,6 @@ package object dsl {
     def rlike(other: Expression): Predicate = RLike(expr, other)
     def likeAll(others: Expression*): Predicate =
       LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
-    def jlike(other: Expression, escapeChar: Char = '\\'): Expression =
-      LikeJoni(expr, other, escapeChar) // just for test
-    def jrlike(other: Expression): Expression = RLikeJoni(expr, other) // just for test
     def notLikeAll(others: Expression*): Predicate =
       NotLikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
     def likeAny(others: Expression*): Predicate =
@@ -120,17 +117,18 @@ package object dsl {
     def startsWith(other: Expression): Predicate = StartsWith(expr, other)
     def endsWith(other: Expression): Predicate = EndsWith(expr, other)
 
-    def jLike(other: Expression, escapeChar: Char = '\\'): Expression =
+    def jLike(other: Expression, escapeChar: Char = '\\'): Predicate =
       LikeJoni(expr, other, escapeChar) // just for test
-    def jRlike(other: Expression): Expression = RLikeJoni(expr, other) // just for test
-    def jLikeAll(others: Expression*): Expression =
+    def jRlike(other: Expression): Predicate = RLikeJoni(expr, other) // just for test
+    def jLikeAll(others: Expression*): Predicate =
       LikeAllJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String])) // just for test
-    def jNotLikeAll(others: Expression*): Expression =
+    def jNotLikeAll(others: Expression*): Predicate =
       NotLikeAllJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String])) // just for test
-    def jLikeAny(others: Expression*): Expression =
+    def jLikeAny(others: Expression*): Predicate =
       LikeAnyJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String])) // just for test
-    def jNotLikeAny(others: Expression*): Expression =
+    def jNotLikeAny(others: Expression*): Predicate =
       NotLikeAnyJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String])) // just for test
+
     def substr(pos: Expression, len: Expression = Literal(Int.MaxValue)): Expression =
       Substring(expr, pos, len)
     def substring(pos: Expression, len: Expression = Literal(Int.MaxValue)): Expression =

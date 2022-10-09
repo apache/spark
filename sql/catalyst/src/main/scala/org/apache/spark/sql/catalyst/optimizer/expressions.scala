@@ -811,11 +811,11 @@ object LikeSimplification extends Rule[LogicalPlan] {
       simplifyMultiLike(child, patterns, l)
     case l @ NotLikeAny(child, patterns) if CollapseProject.isCheap(child) =>
       simplifyMultiLike(child, patterns, l)
-    case l @ LikeJoni(input, Literal(utf, StringType), escapeChar) =>
-      if (utf == null) {
+    case l @ LikeJoni(input, Literal(pattern, StringType), escapeChar) =>
+      if (pattern == null) {
         Literal(null, BooleanType)
       } else {
-        simplifyLike(input, utf.toString, escapeChar).getOrElse(l)
+        simplifyLike(input, pattern.toString, escapeChar).getOrElse(l)
       }
 
     case l @ LikeAllJoni(child, patterns) if CollapseProject.isCheap(child) =>
