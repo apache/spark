@@ -113,7 +113,6 @@ class RegexpExpressionJoniSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkLiteralRow("a\nb" jLike _, "a_b", true)
     checkLiteralRow("ab" jLike _, "a%b", true)
     checkLiteralRow("a\nb" jLike _, "a%b", true)
-    checkLiteralRow("" jLike _, "", true)
 
     // empty input
     checkLiteralRow("" jLike _, "", true)
