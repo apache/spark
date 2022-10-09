@@ -75,7 +75,7 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
     }
   }
 
-  test("target partition exists") {
+  test("target partitions exist") {
     withNamespaceAndTable("ns", "tbl") { t =>
       createSinglePartTable(t)
       sql(s"INSERT INTO $t PARTITION (id = 2) SELECT 'def'")
@@ -83,7 +83,7 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       val errMsg = intercept[PartitionsAlreadyExistException] {
         sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
       }.getMessage
-      assert(errMsg.contains("Partition already exists"))
+      assert(errMsg.contains("partitions already exist"))
     }
   }
 
