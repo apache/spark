@@ -262,10 +262,11 @@ public abstract class BlockStoreClient implements Closeable {
    * @param host the host of the remote node.
    * @param port the port of the remote node.
    * @param shuffleId shuffle id.
+   * @param shuffleMergeId shuffle merge id.
    *
    * @since 3.4.0
    */
-  public boolean removeShuffleMerge(String host, int port, int shuffleId) {
+  public boolean removeShuffleMerge(String host, int port, int shuffleId, int shuffleMergeId) {
     throw new UnsupportedOperationException();
   }
 }

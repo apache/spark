@@ -227,9 +227,9 @@ public class ExternalBlockHandler extends RpcHandler
     } else if (msgObj instanceof RemoveShuffleMerge) {
       RemoveShuffleMerge msg = (RemoveShuffleMerge) msgObj;
       checkAuth(client, msg.appId);
-      logger.info("Remove shuffle merge data for application %s shuffle %d",
-          msg.appId, msg.shuffleId);
-      mergeManager.removeShuffleMerge(msg.appId, msg.shuffleId);
+      logger.info("Removing shuffle merge data for application {} shuffle {} shuffleMerge {}",
+          msg.appId, msg.shuffleId, msg.shuffleMergeId);
+      mergeManager.removeShuffleMerge(msg.appId, msg.shuffleId, msg.shuffleMergeId);
     } else if (msgObj instanceof DiagnoseCorruption) {
       DiagnoseCorruption msg = (DiagnoseCorruption) msgObj;
       checkAuth(client, msg.appId);

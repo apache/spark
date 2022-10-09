@@ -125,8 +125,10 @@ public interface MergedShuffleFileManager {
    * Remove shuffle merge data files.
    *
    * @param appId application ID
+   * @param shuffleId shuffle ID
+   * @param shuffleMergeId shuffle merge ID, -1 for all shuffle merges.
    */
-  void removeShuffleMerge(String appId, int shuffleId);
+  void removeShuffleMerge(String appId, int shuffleId, int shuffleMergeId);
 
   /**
    * Optionally close any resources associated the MergedShuffleFileManager, such as the

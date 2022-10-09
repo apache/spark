@@ -86,7 +86,7 @@ public class NoOpMergedShuffleFileManager implements MergedShuffleFileManager {
   }
 
   @Override
-  public void removeShuffleMerge(String appId, int shuffleId) {
+  public void removeShuffleMerge(String appId, int shuffleId, int shuffleMergeId) {
     throw new UnsupportedOperationException("Cannot handle shuffle block merge");
   }
 }

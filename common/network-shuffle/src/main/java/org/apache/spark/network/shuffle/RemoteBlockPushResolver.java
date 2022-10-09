@@ -397,7 +397,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   }
 
   @Override
-  public void removeShuffleMerge(String appId, int shuffleId) {
+  public void removeShuffleMerge(String appId, int shuffleId, int shuffleMergeId) {
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(appId);
     AppShuffleMergePartitionsInfo partitionsInfo = appShuffleInfo.shuffles.remove(shuffleId);
     if (partitionsInfo != null) {
@@ -667,9 +667,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         } else if (msg.shuffleMergeId > mergePartitionsInfo.shuffleMergeId) {
           // If no blocks pushed for the finalizeShuffleMerge shuffleMergeId then return
           // empty MergeStatuses but cleanup the older shuffleMergeId files.
+          Map<Integer, AppShufflePartitionInfo> shuffleMergePartitions =
+              mergePartitionsInfo.shuffleMergePartitions;
           submitCleanupTask(() ->
-              closeAndDeleteOutdatedPartitions(
-                  appAttemptShuffleMergeId, mergePartitionsInfo.shuffleMergePartitions));
+              closeAndDeleteOutdatedPartitions(appAttemptShuffleMergeId, shuffleMergePartitions));
         } else {
           // This block covers:
           //  1. finalization of determinate stage
@@ -677,14 +678,17 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           //  for which the message is received.
           shuffleMergePartitionsRef.set(mergePartitionsInfo.shuffleMergePartitions);
         }
+      } else {
+        mergePartitionsInfo = new AppShuffleMergePartitionsInfo(shuffleId, true);
       }
+      mergePartitionsInfo.setFinalized(true);
       // Update the DB for the finalized shuffle
       writeAppAttemptShuffleMergeInfoToDB(appAttemptShuffleMergeId);
       // Even when the mergePartitionsInfo is null, we mark the shuffle as finalized but the results
       // sent to the driver will be empty. This can happen when the service didn't receive any
       // blocks for the shuffle yet and the driver didn't wait for enough time to finalize the
       // shuffle.
-      return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);
+      return mergePartitionsInfo;
     });
     Map<Integer, AppShufflePartitionInfo> shuffleMergePartitions = shuffleMergePartitionsRef.get();
     MergeStatuses mergeStatuses;
@@ -719,7 +723,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                 "finalizing shuffle partition {}", msg.appId, msg.appAttemptId, msg.shuffleId,
                 msg.shuffleMergeId, partition.reduceId);
           } finally {
-            partition.closeAllFilesAndDeleteIfNeeded(false);
+            Boolean deleteFile = partition.mapTracker.getCardinality() == 0;
+            partition.closeAllFilesAndDeleteIfNeeded(deleteFile);
           }
         }
       }
@@ -1472,17 +1477,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    * required for the shuffles of indeterminate stages.
    */
   public static class AppShuffleMergePartitionsInfo {
-    // ConcurrentHashMap doesn't allow null for keys or values which is why this is required.
-    // Marker to identify finalized shuffle partitions.
-    private static final Map<Integer, AppShufflePartitionInfo> SHUFFLE_FINALIZED_MARKER =
-        Collections.emptyMap();
     private final int shuffleMergeId;
     private final Map<Integer, AppShufflePartitionInfo> shuffleMergePartitions;
+    private volatile Boolean finalized;
 
     public AppShuffleMergePartitionsInfo(int shuffleMergeId, boolean shuffleFinalized) {
       this.shuffleMergeId = shuffleMergeId;
-      this.shuffleMergePartitions = shuffleFinalized ? SHUFFLE_FINALIZED_MARKER :
-          new ConcurrentHashMap<>();
+      this.shuffleMergePartitions = new ConcurrentHashMap<>();
+      this.finalized = shuffleFinalized;
     }
 
     @VisibleForTesting
@@ -1490,8 +1492,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       return shuffleMergePartitions;
     }
 
-    public boolean isFinalized() {
-      return shuffleMergePartitions == SHUFFLE_FINALIZED_MARKER;
+    public synchronized void setFinalized(boolean finalized) {
+      this.finalized = finalized;
+    }
+
+    public synchronized boolean isFinalized() {
+      return this.finalized;
     }
   }
 
@@ -1701,9 +1707,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       try {
         if (dataChannel.isOpen()) {
           dataChannel.close();
-          if (delete) {
-            dataFile.delete();
-          }
+        }
+        if (delete) {
+          dataFile.delete();
         }
       } catch (IOException ioe) {
         logger.warn("Error closing data channel for {} reduceId {}",

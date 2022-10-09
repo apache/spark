@@ -32,10 +32,12 @@ import org.apache.spark.network.protocol.Encoders;
 public class RemoveShuffleMerge extends BlockTransferMessage {
   public final String appId;
   public final int shuffleId;
+  public final int shuffleMergeId;
 
-  public RemoveShuffleMerge(String appId, int shuffleId) {
+  public RemoveShuffleMerge(String appId, int shuffleId, int shuffleMergeId) {
     this.appId = appId;
     this.shuffleId = shuffleId;
+    this.shuffleMergeId = shuffleMergeId;
   }
 
   @Override
@@ -45,7 +47,7 @@ public class RemoveShuffleMerge extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(appId, shuffleId);
+    return Objects.hashCode(appId, shuffleId, shuffleMergeId);
   }
 
   @Override
@@ -53,6 +55,7 @@ public class RemoveShuffleMerge extends BlockTransferMessage {
     return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
       .append("appId", appId)
       .append("shuffleId", shuffleId)
+      .append("shuffleMergeId", shuffleMergeId)
       .toString();
   }
 
@@ -60,25 +63,29 @@ public class RemoveShuffleMerge extends BlockTransferMessage {
   public boolean equals(Object other) {
     if (other != null && other instanceof RemoveShuffleMerge) {
       RemoveShuffleMerge o = (RemoveShuffleMerge) other;
-      return shuffleId == o.shuffleId && Objects.equal(appId, o.appId);
+      return Objects.equal(appId, o.appId)
+        && shuffleId == o.shuffleId
+        && shuffleMergeId == o.shuffleMergeId;
     }
     return false;
   }
 
   @Override
   public int encodedLength() {
-    return Encoders.Strings.encodedLength(appId) + 4;
+    return Encoders.Strings.encodedLength(appId) + 4 + 4;
   }
 
   @Override
   public void encode(ByteBuf buf) {
     Encoders.Strings.encode(buf, appId);
     buf.writeInt(shuffleId);
+    buf.writeInt(shuffleMergeId);
   }
 
   public static RemoveShuffleMerge decode(ByteBuf buf) {
     String appId = Encoders.Strings.decode(buf);
     int shuffleId = buf.readInt();
-    return new RemoveShuffleMerge(appId, shuffleId);
+    int shuffleMergeId = buf.readInt();
+    return new RemoveShuffleMerge(appId, shuffleId, shuffleMergeId);
   }
 }
