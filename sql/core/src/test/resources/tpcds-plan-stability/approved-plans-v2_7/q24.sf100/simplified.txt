@@ -4,16 +4,16 @@ WholeStageCodegen (12)
       Exchange [c_last_name,c_first_name,s_store_name] #1
         WholeStageCodegen (11)
           Filter [paid]
-            Subquery #1
+            Subquery #2
               WholeStageCodegen (14)
                 HashAggregate [sum,count] [avg(netpaid),(0.05 * avg(netpaid)),sum,count]
                   InputAdapter
-                    Exchange #10
+                    Exchange #11
                       WholeStageCodegen (13)
                         HashAggregate [netpaid] [sum,count,sum,count]
                           HashAggregate [c_last_name,c_first_name,s_store_name,ca_state,s_state,i_color,i_current_price,i_manager_id,i_units,i_size,sum] [sum(UnscaledValue(ss_net_paid)),netpaid,sum]
                             InputAdapter
-                              Exchange [c_last_name,c_first_name,s_store_name,ca_state,s_state,i_color,i_current_price,i_manager_id,i_units,i_size] #11
+                              Exchange [c_last_name,c_first_name,s_store_name,ca_state,s_state,i_color,i_current_price,i_manager_id,i_units,i_size] #12
                                 WholeStageCodegen (12)
                                   HashAggregate [c_last_name,c_first_name,s_store_name,ca_state,s_state,i_color,i_current_price,i_manager_id,i_units,i_size,ss_net_paid] [sum,sum]
                                     Project [ss_net_paid,s_store_name,s_state,i_current_price,i_size,i_color,i_units,i_manager_id,c_first_name,c_last_name,ca_state]
@@ -22,7 +22,7 @@ WholeStageCodegen (12)
                                           WholeStageCodegen (9)
                                             Sort [ss_ticket_number,ss_item_sk]
                                               InputAdapter
-                                                Exchange [ss_ticket_number,ss_item_sk] #12
+                                                Exchange [ss_ticket_number,ss_item_sk] #13
                                                   WholeStageCodegen (8)
                                                     Project [s_store_name,s_state,ca_state,c_first_name,c_last_name,ss_item_sk,ss_ticket_number,ss_net_paid,i_current_price,i_size,i_color,i_units,i_manager_id]
                                                       SortMergeJoin [ss_item_sk,i_item_sk]
@@ -30,7 +30,7 @@ WholeStageCodegen (12)
                                                           WholeStageCodegen (5)
                                                             Sort [ss_item_sk]
                                                               InputAdapter
-                                                                Exchange [ss_item_sk] #13
+                                                                Exchange [ss_item_sk] #14
                                                                   WholeStageCodegen (4)
                                                                     Project [s_store_name,s_state,ca_state,c_first_name,c_last_name,ss_item_sk,ss_ticket_number,ss_net_paid]
                                                                       BroadcastHashJoin [s_store_sk,c_customer_sk,ss_store_sk,ss_customer_sk]
@@ -45,7 +45,7 @@ WholeStageCodegen (12)
                                                           WholeStageCodegen (7)
                                                             Sort [i_item_sk]
                                                               InputAdapter
-                                                                Exchange [i_item_sk] #14
+                                                                Exchange [i_item_sk] #15
                                                                   WholeStageCodegen (6)
                                                                     Filter [i_item_sk]
                                                                       ColumnarToRow
@@ -55,7 +55,7 @@ WholeStageCodegen (12)
                                           WholeStageCodegen (11)
                                             Sort [sr_ticket_number,sr_item_sk]
                                               InputAdapter
-                                                ReusedExchange [sr_item_sk,sr_ticket_number] #9
+                                                ReusedExchange [sr_item_sk,sr_ticket_number] #10
             HashAggregate [c_last_name,c_first_name,s_store_name,sum,isEmpty] [sum(netpaid),paid,sum,isEmpty]
               InputAdapter
                 Exchange [c_last_name,c_first_name,s_store_name] #2
@@ -106,11 +106,21 @@ WholeStageCodegen (12)
                                                                         Scan parquet spark_catalog.default.customer [c_customer_sk,c_current_addr_sk,c_first_name,c_last_name,c_birth_country]
                                                         Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid]
                                                           Filter [ss_ticket_number,ss_item_sk,ss_store_sk,ss_customer_sk]
+                                                            Subquery #1
+                                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 2313, 18504, 0, 0),bloomFilter,buf]
+                                                                Exchange #8
+                                                                  ObjectHashAggregate [i_item_sk] [buf,buf]
+                                                                    WholeStageCodegen (1)
+                                                                      Project [i_item_sk]
+                                                                        Filter [i_color,i_item_sk]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet spark_catalog.default.item [i_item_sk,i_color]
                                                             ColumnarToRow
                                                               InputAdapter
                                                                 Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid,ss_sold_date_sk]
                                                     InputAdapter
-                                                      BroadcastExchange #8
+                                                      BroadcastExchange #9
                                                         WholeStageCodegen (4)
                                                           Filter [i_color,i_item_sk]
                                                             ColumnarToRow
@@ -120,7 +130,7 @@ WholeStageCodegen (12)
                                       WholeStageCodegen (8)
                                         Sort [sr_ticket_number,sr_item_sk]
                                           InputAdapter
-                                            Exchange [sr_ticket_number,sr_item_sk] #9
+                                            Exchange [sr_ticket_number,sr_item_sk] #10
                                               WholeStageCodegen (7)
                                                 Project [sr_item_sk,sr_ticket_number]
                                                   Filter [sr_ticket_number,sr_item_sk]
