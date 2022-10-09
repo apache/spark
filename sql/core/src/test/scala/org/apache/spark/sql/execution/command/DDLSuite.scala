@@ -230,6 +230,16 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-40719: CTAS should respect TBLPROPERTIES during query execution") {
+    withTable("t") {
+      withTempDir { dir =>
+        sql(s"CREATE TABLE t USING PARQUET LOCATION '$dir' " +
+          "TBLPROPERTIES (parquet.compression 'zstd') AS SELECT 1")
+        assert(dir.listFiles().exists(f => f.isFile && f.getName.contains("zstd")))
+      }
+    }
+  }
 }
 
 trait DDLSuiteBase extends SQLTestUtils {

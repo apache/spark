@@ -237,7 +237,7 @@ case class CreateDataSourceTableAsSelectCommand(
       className = table.provider.get,
       partitionColumns = table.partitionColumnNames,
       bucketSpec = table.bucketSpec,
-      options = table.storage.properties ++ pathOption,
+      options = table.properties ++ table.storage.properties ++ pathOption,
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
