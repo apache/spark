@@ -301,15 +301,15 @@ abstract class SparkFunSuite
     assert(exception.getErrorClass === errorClass)
     sqlState.foreach(state => assert(exception.getSqlState === state))
     val expectedParameters = exception.getMessageParameters.asScala
-    if (matchPVals == true) {
+    if (matchPVals) {
       assert(expectedParameters.size === parameters.size)
       expectedParameters.foreach(
         exp => {
           val parm = parameters.getOrElse(exp._1,
             throw new IllegalArgumentException("Missing parameter" + exp._1))
           if (!exp._2.matches(parm)) {
-            throw new IllegalArgumentException("(" + exp._1 + ", " + exp._2 +
-              ") does not match: " + parm)
+            throw new IllegalArgumentException("For parameter '" + exp._1 + "' value '" + exp._2 +
+              "' does not match: " + parm)
           }
         }
       )

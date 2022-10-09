@@ -109,8 +109,16 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
+  def unpivotWithPivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
+    new ParseException("UNPIVOT cannot be used together with PIVOT in FROM clause", ctx)
+  }
+
   def lateralWithPivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0013", ctx)
+  }
+
+  def lateralWithUnpivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
+    new ParseException("LATERAL cannot be used together with UNPIVOT in FROM clause", ctx)
   }
 
   def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
