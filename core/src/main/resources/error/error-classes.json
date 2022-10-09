@@ -3153,7 +3153,7 @@
   },
   "_LEGACY_ERROR_TEMP_2152" : {
     "message" : [
-      "Error while decoding: <e>",
+      "Error while encoding: <e>",
       "<expressions>"
     ]
   },
