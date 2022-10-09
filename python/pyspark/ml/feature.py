@@ -6370,7 +6370,7 @@ class SkipGram(
         numThread: int = 1,
         sample: float = 0,
         pow: float = 0,
-        intermediateStorageLevel: str="MEMORY_AND_DISK",
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ):
         """
         __init__(self, \\*, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, \
@@ -6401,7 +6401,7 @@ class SkipGram(
         numThread: int = 1,
         sample: float = 0,
         pow: float = 0,
-        intermediateStorageLevel: str="MEMORY_AND_DISK",
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ) -> "SkipGram":
         """
         setParams(self, \\*, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, \
