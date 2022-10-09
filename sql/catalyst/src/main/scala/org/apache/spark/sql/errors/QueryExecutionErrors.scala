@@ -46,7 +46,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, TreeNode}
 import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode}
-import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Identifier, Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -1587,88 +1587,125 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
        """.stripMargin)
   }
 
-  def partitionColumnNotFoundInSchemaError(col: String, schema: StructType): Throwable = {
-    new RuntimeException(s"Partition column $col not found in schema $schema")
+  def partitionColumnNotFoundInSchemaError(
+      col: String, schema: StructType): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2201",
+      messageParameters = Map(
+        "col" -> col,
+        "schema" -> schema.toString()))
   }
 
   def stateNotDefinedOrAlreadyRemovedError(): Throwable = {
-    new NoSuchElementException("State is either not defined or has already been removed")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2202",
+      messageParameters = Map.empty,
+      cause = null)
   }
 
-  def cannotSetTimeoutDurationError(): Throwable = {
-    new UnsupportedOperationException(
-      "Cannot set timeout duration without enabling processing time timeout in " +
-        "[map|flatMap]GroupsWithState")
+  def cannotSetTimeoutDurationError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2203",
+      messageParameters = Map.empty)
   }
 
-  def cannotGetEventTimeWatermarkError(): Throwable = {
-    new UnsupportedOperationException(
-      "Cannot get event time watermark timestamp without setting watermark before " +
-        "[map|flatMap]GroupsWithState")
+  def cannotGetEventTimeWatermarkError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2204",
+      messageParameters = Map.empty)
   }
 
-  def cannotSetTimeoutTimestampError(): Throwable = {
-    new UnsupportedOperationException(
-      "Cannot set timeout timestamp without enabling event time timeout in " +
-        "[map|flatMapGroupsWithState")
+  def cannotSetTimeoutTimestampError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2205",
+      messageParameters = Map.empty)
   }
 
-  def batchMetadataFileNotFoundError(batchMetadataFile: Path): Throwable = {
-    new FileNotFoundException(s"Unable to find batch $batchMetadataFile")
+  def batchMetadataFileNotFoundError(batchMetadataFile: Path): SparkFileNotFoundException = {
+    new SparkFileNotFoundException(
+      errorClass = "_LEGACY_ERROR_TEMP_2206",
+      messageParameters = Map(
+        "batchMetadataFile" -> batchMetadataFile.toString()))
   }
 
   def multiStreamingQueriesUsingPathConcurrentlyError(
-      path: String, e: FileAlreadyExistsException): Throwable = {
-    new ConcurrentModificationException(
-      s"Multiple streaming queries are concurrently using $path", e)
+      path: String, e: FileAlreadyExistsException): SparkConcurrentModificationException = {
+    new SparkConcurrentModificationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2207",
+      messageParameters = Map(
+        "path" -> path),
+      cause = e)
   }
 
-  def addFilesWithAbsolutePathUnsupportedError(commitProtocol: String): Throwable = {
-    new UnsupportedOperationException(
-      s"$commitProtocol does not support adding files with an absolute path")
+  def addFilesWithAbsolutePathUnsupportedError(
+      commitProtocol: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2208",
+      messageParameters = Map(
+        "commitProtocol" -> commitProtocol))
   }
 
   def microBatchUnsupportedByDataSourceError(
       srcName: String,
       disabledSources: String,
-      table: Table): Throwable = {
-    new UnsupportedOperationException(s"""
-         |Data source $srcName does not support microbatch processing.
-         |
-         |Either the data source is disabled at
-         |SQLConf.get.DISABLED_V2_STREAMING_MICROBATCH_READERS.key (The disabled sources
-         |are [$disabledSources]) or the table $table does not have MICRO_BATCH_READ
-         |capability. Meanwhile, the fallback, data source v1, is not available."
-       """.stripMargin)
+      table: Table): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2209",
+      messageParameters = Map(
+        "srcName" -> srcName.toString(),
+        "disabledSources" -> disabledSources,
+        "table" -> table.toString()))
   }
 
-  def cannotExecuteStreamingRelationExecError(): Throwable = {
-    new UnsupportedOperationException("StreamingRelationExec cannot be executed")
+  def cannotExecuteStreamingRelationExecError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2210",
+      messageParameters = Map.empty)
   }
 
-  def invalidStreamingOutputModeError(outputMode: Option[OutputMode]): Throwable = {
-    new UnsupportedOperationException(s"Invalid output mode: $outputMode")
+  def invalidStreamingOutputModeError(
+      outputMode: Option[OutputMode]): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2211",
+      messageParameters = Map(
+        "outputMode" -> outputMode.toString()))
   }
 
   def invalidCatalogNameError(name: String): Throwable = {
-    new SparkException(s"Invalid catalog name: $name")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2212",
+      messageParameters = Map(
+        "name" -> name),
+      cause = null)
   }
 
   def catalogPluginClassNotFoundError(name: String): Throwable = {
-    new CatalogNotFoundException(
-      s"Catalog '$name' plugin class not found: spark.sql.catalog.$name is not defined")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2213",
+      messageParameters = Map(
+        "name" -> name),
+      cause = null)
   }
 
   def catalogPluginClassNotImplementedError(name: String, pluginClassName: String): Throwable = {
     new SparkException(
-      s"Plugin class for catalog '$name' does not implement CatalogPlugin: $pluginClassName")
+      errorClass = "_LEGACY_ERROR_TEMP_2214",
+      messageParameters = Map(
+        "name" -> name,
+        "pluginClassName" -> pluginClassName),
+      cause = null)
   }
 
   def catalogPluginClassNotFoundForCatalogError(
       name: String,
       pluginClassName: String,
       e: Exception): Throwable = {
-    new SparkException(s"Cannot find catalog plugin class for catalog '$name': $pluginClassName", e)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2215",
+      messageParameters = Map(
+        "name" -> name,
+        "pluginClassName" -> pluginClassName),
+      cause = e)
   }
 
   def catalogFailToFindPublicNoArgConstructorError(
@@ -1676,7 +1713,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       pluginClassName: String,
       e: Exception): Throwable = {
     new SparkException(
-      s"Failed to find public no-arg constructor for catalog '$name': $pluginClassName)", e)
+      errorClass = "_LEGACY_ERROR_TEMP_2216",
+      messageParameters = Map(
+        "name" -> name,
+        "pluginClassName" -> pluginClassName),
+      cause = e)
   }
 
   def catalogFailToCallPublicNoArgConstructorError(
@@ -1684,47 +1725,75 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       pluginClassName: String,
       e: Exception): Throwable = {
     new SparkException(
-      s"Failed to call public no-arg constructor for catalog '$name': $pluginClassName)", e)
+      errorClass = "_LEGACY_ERROR_TEMP_2217",
+      messageParameters = Map(
+        "name" -> name,
+        "pluginClassName" -> pluginClassName),
+      cause = e)
   }
 
   def cannotInstantiateAbstractCatalogPluginClassError(
       name: String,
       pluginClassName: String,
       e: Exception): Throwable = {
-    new SparkException("Cannot instantiate abstract catalog plugin class for " +
-      s"catalog '$name': $pluginClassName", e.getCause)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2218",
+      messageParameters = Map(
+        "name" -> name,
+        "pluginClassName" -> pluginClassName),
+      cause = e.getCause)
   }
 
   def failedToInstantiateConstructorForCatalogError(
       name: String,
       pluginClassName: String,
       e: Exception): Throwable = {
-    new SparkException("Failed during instantiating constructor for catalog " +
-      s"'$name': $pluginClassName", e.getCause)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2219",
+      messageParameters = Map(
+        "name" -> name,
+        "pluginClassName" -> pluginClassName),
+      cause = e.getCause)
   }
 
   def noSuchElementExceptionError(): Throwable = {
-    new NoSuchElementException
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2220",
+      messageParameters = Map.empty,
+      cause = null)
   }
 
   def noSuchElementExceptionError(key: String): Throwable = {
-    new NoSuchElementException(key)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2221",
+      messageParameters = Map(
+        "key" -> key),
+      cause = null)
   }
 
-  def cannotMutateReadOnlySQLConfError(): Throwable = {
-    new UnsupportedOperationException("Cannot mutate ReadOnlySQLConf.")
+  def cannotMutateReadOnlySQLConfError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2222",
+      messageParameters = Map.empty)
   }
 
-  def cannotCloneOrCopyReadOnlySQLConfError(): Throwable = {
-    new UnsupportedOperationException("Cannot clone/copy ReadOnlySQLConf.")
+  def cannotCloneOrCopyReadOnlySQLConfError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2223",
+      messageParameters = Map.empty)
   }
 
-  def cannotGetSQLConfInSchedulerEventLoopThreadError(): Throwable = {
-    new RuntimeException("Cannot get SQLConf inside scheduler event loop thread.")
+  def cannotGetSQLConfInSchedulerEventLoopThreadError(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2224",
+      messageParameters = Map.empty,
+      cause = null)
   }
 
-  def unsupportedOperationExceptionError(): Throwable = {
-    new UnsupportedOperationException
+  def unsupportedOperationExceptionError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2225",
+      messageParameters = Map.empty)
   }
 
   def nullLiteralsCannotBeCastedError(name: String): Throwable = {
