@@ -156,15 +156,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE)
   }
 
-  private def isProbablyShuffleJoin(left: LogicalPlan,
-      right: LogicalPlan, hint: JoinHint): Boolean = {
+  private def isProbablyShuffleJoin(filterApplicationSide: LogicalPlan, hint: JoinHint): Boolean = {
     !hintToBroadcastLeft(hint) && !hintToBroadcastRight(hint) &&
-      !canBroadcastBySize(left, conf) && !canBroadcastBySize(right, conf)
+      !canBroadcastBySize(filterApplicationSide, conf)
   }
 
   private def probablyHasShuffle(plan: LogicalPlan): Boolean = {
     plan.exists {
-      case Join(left, right, _, _, hint) => isProbablyShuffleJoin(left, right, hint)
+      case Join(left, _, _, _, hint) => isProbablyShuffleJoin(left, hint)
       case _: Aggregate => true
       case _: Window => true
       case _ => false
@@ -211,7 +210,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       hint: JoinHint): Boolean = {
     findExpressionAndTrackLineageDown(filterApplicationSideExp,
       filterApplicationSide).isDefined && isSelectiveFilterOverScan(filterCreationSide) &&
-      (isProbablyShuffleJoin(filterApplicationSide, filterCreationSide, hint) ||
+      (isProbablyShuffleJoin(filterApplicationSide, hint) ||
         probablyHasShuffle(filterApplicationSide)) &&
       satisfyByteSizeRequirement(filterApplicationSide)
   }

@@ -340,6 +340,16 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     }
   }
 
+  test("Runtime semi join reduction: relax the restrictions of broadcast join on bloom filter") {
+    // Filter creation side is 3362 bytes
+    // Filter application side scan is 3409 bytes
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "3362") {
+      assertRewroteSemiJoin("select * from bf2 join bf1 on bf2.c2 = bf1.c1 where bf1.a1 = 62")
+      assertDidNotRewriteSemiJoin("select * from bf2 join bf1 on bf2.c2 = bf1.c1")
+    }
+  }
+
   test("Runtime semi join reduction: two joins") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
