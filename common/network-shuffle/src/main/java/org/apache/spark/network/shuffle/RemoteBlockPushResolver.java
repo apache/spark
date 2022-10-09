@@ -57,6 +57,7 @@ import com.google.common.cache.Weigher;
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
 
+import org.apache.spark.network.shuffle.protocol.RemoveShuffleMerge;
 import org.roaringbitmap.RoaringBitmap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -397,19 +398,32 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   }
 
   @Override
-  public void removeShuffleMerge(String appId, int shuffleId, int shuffleMergeId) {
+  public void removeShuffleMerge(RemoveShuffleMerge msg) {
+    String appId = msg.appId;
+    int appAttemptId = msg.appAttemptId;
+    int shuffleId = msg.shuffleId;
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(appId);
-    AppShuffleMergePartitionsInfo partitionsInfo = appShuffleInfo.shuffles.remove(shuffleId);
-    logger.info("Start remove shuffle merge: app {} shuffleId {} shuffleMergeId {}",
-        appId, shuffleId, shuffleMergeId);
-    if (partitionsInfo != null) {
-      AppAttemptShuffleMergeId appAttemptShuffleMergeId =
-          new AppAttemptShuffleMergeId(
-              appId, appShuffleInfo.attemptId, shuffleId, partitionsInfo.shuffleMergeId);
-      submitCleanupTask(() ->
-          closeAndDeleteOutdatedPartitions(
-              appAttemptShuffleMergeId, partitionsInfo.shuffleMergePartitions));
+    if (appShuffleInfo.attemptId != appAttemptId) {
+      throw new IllegalArgumentException(
+          String.format("The attempt id %s in this RemoveShuffleMerge message does not match "
+                  + "with the current attempt id %s stored in shuffle service for application %s",
+              appAttemptId, appShuffleInfo.attemptId, appId));
     }
+
+    appShuffleInfo.shuffles.compute(shuffleId, (shuffleIdKey, partitionsInfo) -> {
+      if (null != partitionsInfo) {
+        submitCleanupTask(() -> {
+          closeAndDeleteOutdatedPartitions(
+              new AppAttemptShuffleMergeId(
+                  appId, appAttemptId, shuffleId, partitionsInfo.shuffleMergeId),
+              partitionsInfo.shuffleMergePartitions);
+          writeAppAttemptShuffleMergeInfoToDB(
+              new AppAttemptShuffleMergeId(
+                  appId, appAttemptId, shuffleId, msg.shuffleMergeId));
+        });
+      }
+      return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);
+    });
   }
 
   /**

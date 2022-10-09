@@ -2629,10 +2629,12 @@ private[spark] class DAGScheduler(
           runningStages.contains(stage)
       }.foreach { case (_, stage: ShuffleMapStage) =>
         configureShufflePushMergerLocations(stage)
-        logInfo(s"Shuffle merge enabled adaptively for $stage with shuffle" +
-          s" ${stage.shuffleDep.shuffleId} and shuffle merge" +
-          s" ${stage.shuffleDep.shuffleMergeId} with ${stage.shuffleDep.getMergerLocs.size}" +
-          s" merger locations")
+        if (stage.shuffleDep.getMergerLocs.nonEmpty) {
+          logInfo(s"Shuffle merge enabled adaptively for $stage with shuffle" +
+            s" ${stage.shuffleDep.shuffleId} and shuffle merge" +
+            s" ${stage.shuffleDep.shuffleMergeId} with ${stage.shuffleDep.getMergerLocs.size}" +
+            s" merger locations")
+        }
       }
     }
   }

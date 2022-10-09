@@ -26,6 +26,7 @@ import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
+import org.apache.spark.network.shuffle.protocol.RemoveShuffleMerge;
 
 /**
  * The MergedShuffleFileManager is used to process push based shuffle when enabled. It works
@@ -124,11 +125,9 @@ public interface MergedShuffleFileManager {
   /**
    * Remove shuffle merge data files.
    *
-   * @param appId application ID
-   * @param shuffleId shuffle ID
-   * @param shuffleMergeId shuffle merge ID, -1 for all shuffle merges.
+   * @param removeShuffleMerge Remove shuffle merge RPC
    */
-  void removeShuffleMerge(String appId, int shuffleId, int shuffleMergeId);
+  void removeShuffleMerge(RemoveShuffleMerge removeShuffleMerge);
 
   /**
    * Optionally close any resources associated the MergedShuffleFileManager, such as the
