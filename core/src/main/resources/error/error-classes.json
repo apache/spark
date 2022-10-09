@@ -3219,7 +3219,7 @@
   },
   "_LEGACY_ERROR_TEMP_2165" : {
     "message" : [
-      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>"
+      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2166" : {
