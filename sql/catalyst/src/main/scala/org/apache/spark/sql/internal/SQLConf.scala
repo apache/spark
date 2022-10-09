@@ -3950,6 +3950,23 @@ object SQLConf {
     .checkValues(ErrorMessageFormat.values.map(_.toString))
     .createWithDefault(ErrorMessageFormat.PRETTY.toString)
 
+  val ADAPTIVE_SHUFFLE_JOIN_STREAM_PARTITION_THRESHOLD =
+    buildConf("spark.sql.adaptive.shuffleHashJoin.streamPartitionThreshold")
+      .doc("Shuffled hash join is considered to have better performance than SMJ if partition " +
+        "size is larger than this.")
+      .version("3.4.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(0L)
+
+  val ADAPTIVE_SHUFFLE_JOIN_LARGE_STREAM_PARTITION_RATIO =
+    buildConf("spark.sql.adaptive.shuffleHashJoin.largeStreamPartitionRatio")
+      .doc(s"The proportion of partitions larger than " +
+        s"${ADAPTIVE_SHUFFLE_JOIN_STREAM_PARTITION_THRESHOLD}")
+      .version("3.4.0")
+      .doubleConf
+      .checkValue(_ >= 0, "The non-empty partition ratio must be positive number.")
+      .createWithDefault(0.8)
+
   /**
    * Holds information about keys that have been deprecated.
    *

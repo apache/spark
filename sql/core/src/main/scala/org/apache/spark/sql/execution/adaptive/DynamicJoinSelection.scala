@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, Join, JoinStrategyHint, LogicalPlan, NO_BROADCAST_HASH, PREFER_SHUFFLE_HASH, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -37,6 +38,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
 
+  val USER_DEFINED_HINT_TAG = TreeNodeTag[Boolean]("USER_DEFINED_HINT")
+
   private def hasManyEmptyPartitions(mapStats: MapOutputStatistics): Boolean = {
     val partitionCnt = mapStats.bytesByPartitionId.length
     val nonZeroCnt = mapStats.bytesByPartitionId.count(_ > 0)
@@ -44,18 +47,47 @@ object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
       (nonZeroCnt * 1.0 / partitionCnt) < conf.nonEmptyPartitionRatioForBroadcastJoin
   }
 
-  private def preferShuffledHashJoin(mapStats: MapOutputStatistics): Boolean = {
+  private def preferShuffledHashJoin(
+      mapStats: MapOutputStatistics,
+      streamedPlan: LogicalPlan): Boolean = {
     val maxShuffledHashJoinLocalMapThreshold =
       conf.getConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD)
-    val advisoryPartitionSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
-    advisoryPartitionSize <= maxShuffledHashJoinLocalMapThreshold &&
+    val streamPartitionThreshold =
+      conf.getConf(SQLConf.ADAPTIVE_SHUFFLE_JOIN_STREAM_PARTITION_THRESHOLD)
+    val largeStreamPartitionRatio =
+      conf.getConf(SQLConf.ADAPTIVE_SHUFFLE_JOIN_LARGE_STREAM_PARTITION_RATIO)
+    val broadcastJoinThreshold = conf.getConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD)
+    if (maxShuffledHashJoinLocalMapThreshold <= 0 || streamPartitionThreshold <= 0) {
+      return false
+    }
+    val streamIsLargeEnough =
+      streamedPlan match {
+        case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.isMaterialized
+          && stage.mapStats.isDefined =>
+          val stats = stage.mapStats.get
+          val largePartitionCount = stats.bytesByPartitionId.count(_ > streamPartitionThreshold)
+          val partitionCnt = stats.bytesByPartitionId.length
+          partitionCnt > 0 && largePartitionCount > 0 &&
+            (largePartitionCount * 1.0 / partitionCnt) > largeStreamPartitionRatio
+
+        case _ =>
+          false
+      }
+    if (!streamIsLargeEnough) {
+      return false
+    }
+    if (broadcastJoinThreshold <= 0) {
       mapStats.bytesByPartitionId.forall(_ <= maxShuffledHashJoinLocalMapThreshold)
+    } else {
+      maxShuffledHashJoinLocalMapThreshold <= broadcastJoinThreshold &&
+        mapStats.bytesByPartitionId.forall(_ <= maxShuffledHashJoinLocalMapThreshold)
+    }
   }
 
   private def selectJoinStrategy(
       join: Join,
       isLeft: Boolean): Option[JoinStrategyHint] = {
-    val plan = if (isLeft) join.left else join.right
+    val (plan, streamedPlan) = if (isLeft) (join.left, join.right) else (join.right, join.left)
     plan match {
       case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.isMaterialized
         && stage.mapStats.isDefined =>
@@ -89,13 +121,13 @@ object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
           false
         }
 
-        val preferShuffleHash = preferShuffledHashJoin(stage.mapStats.get)
+        val preferShuffleHash = preferShuffledHashJoin(stage.mapStats.get, streamedPlan)
         if (demoteBroadcastHash && preferShuffleHash) {
           Some(SHUFFLE_HASH)
-        } else if (demoteBroadcastHash) {
-          Some(NO_BROADCAST_HASH)
         } else if (preferShuffleHash) {
           Some(PREFER_SHUFFLE_HASH)
+        } else if (demoteBroadcastHash) {
+          Some(NO_BROADCAST_HASH)
         } else {
           None
         }
@@ -105,15 +137,21 @@ object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDown {
-    case j @ ExtractEquiJoinKeys(_, _, _, _, _, _, _, hint) =>
+    case j @ ExtractEquiJoinKeys(_, _, _, _, _, left, right, hint) =>
+      if (left.getTagValue(USER_DEFINED_HINT_TAG).isEmpty) {
+        left.setTagValue(USER_DEFINED_HINT_TAG, hint.leftHint.exists(_.strategy.isDefined))
+      }
+      if (right.getTagValue(USER_DEFINED_HINT_TAG).isEmpty) {
+        right.setTagValue(USER_DEFINED_HINT_TAG, hint.rightHint.exists(_.strategy.isDefined))
+      }
       var newHint = hint
-      if (!hint.leftHint.exists(_.strategy.isDefined)) {
+      if (!left.getTagValue(USER_DEFINED_HINT_TAG).getOrElse(false)) {
         selectJoinStrategy(j, true).foreach { strategy =>
           newHint = newHint.copy(leftHint =
             Some(hint.leftHint.getOrElse(HintInfo()).copy(strategy = Some(strategy))))
         }
       }
-      if (!hint.rightHint.exists(_.strategy.isDefined)) {
+      if (!right.getTagValue(USER_DEFINED_HINT_TAG).getOrElse(false)) {
         selectJoinStrategy(j, false).foreach { strategy =>
           newHint = newHint.copy(rightHint =
             Some(hint.rightHint.getOrElse(HintInfo()).copy(strategy = Some(strategy))))
