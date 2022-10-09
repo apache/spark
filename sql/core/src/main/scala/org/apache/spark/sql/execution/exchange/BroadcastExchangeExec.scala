@@ -120,7 +120,7 @@ case class BroadcastExchangeExec(
       // and only 70% of the slots can be used before growing in UnsafeHashedRelation,
       // here the limitation should not be over 341 million.
       (BytesToBytesMap.MAX_CAPACITY / 1.5).toLong
-    case _ => conf.maxBroadcastRows
+    case _ => 512000000
   }
 
   @transient

@@ -101,15 +101,9 @@ class BroadcastExchangeSuite extends SparkPlanTest
       assert(exception.getMessage.contains("Cannot broadcast the table that is larger than"))
     }
 
-
     withSQLConf(SQLConf.MAX_BROADCAST_TABLE_BYTES.key -> "1GB") {
       val exception = broadcastJoin(30000000)
       assert(exception.getMessage.contains("Cannot broadcast the table that is larger than"))
-    }
-
-    withSQLConf(SQLConf.MAX_BROADCAST_ROWS.key -> "1000") {
-      val exception = broadcastJoin(1000)
-      assert(exception.getMessage.contains("Cannot broadcast the table over 1000 rows:"))
     }
 
     def broadcastJoin(count: Int): ExecutionException = {

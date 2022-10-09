@@ -4362,8 +4362,6 @@ class SQLConf extends Serializable with Logging {
 
   def maxBroadcastTableBytes: Long = Math.min(getConf(MAX_BROADCAST_TABLE_BYTES), 8L << 30)
 
-  def maxBroadcastRows: Long = Math.min(getConf(MAX_BROADCAST_ROWS), 512000000)
-
   def limitInitialNumPartitions: Int = getConf(LIMIT_INITIAL_NUM_PARTITIONS)
 
   def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
