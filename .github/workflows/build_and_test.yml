@@ -152,7 +152,8 @@ jobs:
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10,
             mllib-local, mllib,
-            yarn, mesos, kubernetes, hadoop-cloud, spark-ganglia-lgpl
+            yarn, mesos, kubernetes, hadoop-cloud, spark-ganglia-lgpl,
+            connect
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
         excluded-tags: [""]
@@ -275,6 +276,8 @@ jobs:
       fromJson(needs.precondition.outputs.required).sparkr == 'true') &&
       inputs.branch == 'master'
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
     steps:
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v2
@@ -334,7 +337,7 @@ jobs:
           - >-
             pyspark-pandas-slow
           - >-
-            pyspark-sql-connect
+            pyspark-connect
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}

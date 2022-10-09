@@ -2909,6 +2909,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(sys.env.get("SPARK_ANSI_SQL_MODE").contains("true"))
 
+  val DOUBLE_QUOTED_IDENTIFIERS = buildConf("spark.sql.ansi.double_quoted_identifiers")
+    .doc("When true, Spark SQL reads literals enclosed in double quoted (\") as identifiers. " +
+      "When false they are read as string literals.")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val ENABLE_DEFAULT_COLUMNS =
     buildConf("spark.sql.defaultColumn.enabled")
       .internal()
@@ -3571,6 +3578,15 @@ object SQLConf {
       .internal()
       .doc("When true, grouping_id() returns int values instead of long values.")
       .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+   val LEGACY_GROUPING_ID_WITH_APPENDED_USER_GROUPBY =
+    buildConf("spark.sql.legacy.groupingIdWithAppendedUserGroupBy")
+      .internal()
+      .doc("When true, grouping_id() returns values based on grouping set columns plus " +
+        "user-given group-by expressions order like Spark 3.2.0, 3.2.1, 3.2.2, and 3.3.0.")
+      .version("3.2.3")
       .booleanConf
       .createWithDefault(false)
 
@@ -4576,6 +4592,8 @@ class SQLConf extends Serializable with Logging {
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
 
+  def doubleQuotedIdentifiers: Boolean = getConf(DOUBLE_QUOTED_IDENTIFIERS)
+
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>
       // For historical reason, the TimestampType maps to TIMESTAMP WITH LOCAL TIME ZONE
@@ -4656,6 +4674,9 @@ class SQLConf extends Serializable with Logging {
     getConf(LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK)
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
+
+  def groupingIdWithAppendedUserGroupByEnabled: Boolean =
+    getConf(SQLConf.LEGACY_GROUPING_ID_WITH_APPENDED_USER_GROUPBY)
 
   def metadataCacheTTL: Long = getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
 

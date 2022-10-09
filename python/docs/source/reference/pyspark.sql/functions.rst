@@ -176,6 +176,8 @@ Collection Functions
     explode_outer
     posexplode
     posexplode_outer
+    inline
+    inline_outer
     get
     get_json_object
     json_tuple

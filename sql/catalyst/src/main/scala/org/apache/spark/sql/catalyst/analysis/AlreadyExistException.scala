@@ -31,14 +31,22 @@ import org.apache.spark.sql.types.StructType
 class DatabaseAlreadyExistsException(db: String)
   extends NamespaceAlreadyExistsException(s"Database '$db' already exists")
 
-class NamespaceAlreadyExistsException(message: String) extends AnalysisException(message) {
+class NamespaceAlreadyExistsException(message: String)
+  extends AnalysisException(
+    message,
+    errorClass = Some("_LEGACY_ERROR_TEMP_1118"),
+    messageParameters = Map("msg" -> message)) {
   def this(namespace: Array[String]) = {
     this(s"Namespace '${namespace.quoted}' already exists")
   }
 }
 
 class TableAlreadyExistsException(message: String, cause: Option[Throwable] = None)
-  extends AnalysisException(message, cause = cause) {
+  extends AnalysisException(
+    message,
+    errorClass = Some("_LEGACY_ERROR_TEMP_1116"),
+    messageParameters = Map("msg" -> message),
+    cause = cause) {
   def this(db: String, table: String) = {
     this(s"Table or view '$table' already exists in database '$db'")
   }
@@ -71,7 +79,7 @@ class PartitionsAlreadyExistException(message: String) extends AnalysisException
 
   def this(tableName: String, partitionIdents: Seq[InternalRow], partitionSchema: StructType) = {
     this(s"The following partitions already exists in table $tableName:" +
-      partitionIdents.map(_.toSeq(partitionSchema).zip(partitionSchema.map(_.name))
+      partitionIdents.map(id => partitionSchema.map(_.name).zip(id.toSeq(partitionSchema))
         .map( kv => s"${kv._1} -> ${kv._2}").mkString(",")).mkString("\n===\n"))
   }
 }
