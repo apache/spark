@@ -721,13 +721,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           " `b` due to an overflow."
         var msg = intercept[SparkException] {
           sql(s"insert into t values($outOfRangeValue1)")
-        }.getCause.getMessage
+        }.getMessage
         assert(msg.contains(expectedMsg))
 
         val outOfRangeValue2 = (Int.MinValue - 1L).toString
         msg = intercept[SparkException] {
           sql(s"insert into t values($outOfRangeValue2)")
-        }.getCause.getMessage
+        }.getMessage
         assert(msg.contains(expectedMsg))
       }
     }
@@ -743,13 +743,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           "column `b` due to an overflow."
         var msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue1}D)")
-        }.getCause.getMessage
+        }.getMessage
         assert(msg.contains(expectedMsg))
 
         val outOfRangeValue2 = Math.nextDown(Long.MinValue)
         msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue2}D)")
-        }.getCause.getMessage
+        }.getMessage
         assert(msg.contains(expectedMsg))
       }
     }
@@ -765,7 +765,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           "\"DECIMAL(3,2)\" type column `b` due to an overflow."
         val msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue})")
-        }.getCause.getMessage
+        }.getMessage
         assert(msg.contains(expectedMsg))
       }
     }
@@ -1297,9 +1297,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         checkError(
           exception =
             intercept[AnalysisException](sql("insert into t (I) select true from (select 1)")),
-          errorClass = "UNRESOLVED_COLUMN",
-          errorSubClass = Some("WITH_SUGGESTION"),
-          parameters = Map("objectName" -> "`I`", "proposal" -> "`i`, `s`"))
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          sqlState = None,
+          parameters = Map("objectName" -> "`I`", "proposal" -> "`i`, `s`"),
+          context = ExpectedContext(
+            fragment = "insert into t (I)", start = 0, stop = 16))
       }
     }
   }
@@ -2033,10 +2035,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           }
 
           if (fastFail) {
-            assert(err.getCause.getMessage.contains("can not write to output file: " +
+            assert(err.getMessage.contains("can not write to output file: " +
               "org.apache.hadoop.fs.FileAlreadyExistsException"))
           } else {
-            assert(err.getCause.getMessage.contains("Task failed while writing rows"))
+            assert(err.getMessage.contains("Task failed while writing rows"))
           }
         }
       }
@@ -2089,19 +2091,29 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-33294: Add query resolved check before analyze InsertIntoDir") {
     withTempPath { path =>
-      val ex = intercept[AnalysisException] {
-        sql(
-          s"""
-            |INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET
-            |SELECT * FROM (
-            | SELECT c3 FROM (
-            |  SELECT c1, c2 from values(1,2) t(c1, c2)
-            |  )
-            |)
-          """.stripMargin)
-      }
-      assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
-      assert(ex.messageParameters.head == "`c3`")
+      val insert = s"INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""
+              |$insert
+              |SELECT * FROM (
+              | SELECT c3 FROM (
+              |  SELECT c1, c2 from values(1,2) t(c1, c2)
+              |  )
+              |)
+            """.stripMargin)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42000",
+        parameters = Map(
+          "objectName" -> "`c3`",
+          "proposal" ->
+            "`__auto_generated_subquery_name`.`c1`, `__auto_generated_subquery_name`.`c2`"),
+        context = ExpectedContext(
+          fragment = "c3",
+          start = insert.length + 26,
+          stop = insert.length + 27))
     }
   }
 
@@ -2191,10 +2203,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
           sql(s"alter table t add partition(part1=1, part2=1) location '${path.getAbsolutePath}'")
 
-          val e = intercept[SparkException] {
+          val e = intercept[IOException] {
             sql(s"insert into t partition(part1=1, part2=1) select 1")
-          }.getCause
-          assert(e.isInstanceOf[IOException])
+          }
           assert(e.getMessage.contains("Failed to rename"))
           assert(e.getMessage.contains("when committing files staged for absolute location"))
         }
@@ -2215,10 +2226,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             |partitioned by (part1, part2)
           """.stripMargin)
 
-        val e = intercept[SparkException] {
+        val e = intercept[IOException] {
           sql(s"insert overwrite table t partition(part1, part2) values (1, 1, 1)")
-        }.getCause
-        assert(e.isInstanceOf[IOException])
+        }
         assert(e.getMessage.contains("Failed to rename"))
         assert(e.getMessage.contains(
           "when committing files staged for overwriting dynamic partitions"))

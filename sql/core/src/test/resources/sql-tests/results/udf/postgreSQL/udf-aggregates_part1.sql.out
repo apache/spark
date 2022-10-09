@@ -475,7 +475,19 @@ having exists (select 1 from onek b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Found an aggregate function in a correlated predicate that has both outer and local references, which is not supported: sum(DISTINCT (outer(a.four) + b.four))
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
+  "messageParameters" : {
+    "function" : "sum(DISTINCT (outer(a.four) + b.four))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 114,
+    "stopIndex" : 142,
+    "fragment" : "sum(distinct a.four + b.four)"
+  } ]
+}
 
 
 -- !query
@@ -487,11 +499,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`o`.`unique1`",
     "proposal" : "`i`.`unique1`, `i`.`unique2`, `i`.`hundred`, `i`.`even`, `i`.`four`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 75,
+    "stopIndex" : 83,
+    "fragment" : "o.unique1"
+  } ]
 }

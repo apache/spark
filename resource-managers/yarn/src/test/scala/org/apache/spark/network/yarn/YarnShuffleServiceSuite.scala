@@ -88,6 +88,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     yarnConfig.set(YarnConfiguration.NM_LOCAL_DIRS, localDir.getAbsolutePath)
     yarnConfig.set("spark.shuffle.push.server.mergedShuffleFileManagerImpl",
       "org.apache.spark.network.shuffle.RemoteBlockPushResolver")
+    yarnConfig.set(SHUFFLE_SERVICE_DB_BACKEND.key, shuffleDBBackend().name())
 
     recoveryLocalDir = Utils.createTempDir()
     tempDir = Utils.createTempDir()
@@ -162,7 +163,6 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
       createMergeManager: (TransportConf, File) => MergedShuffleFileManager): YarnShuffleService = {
     val shuffleService = createYarnShuffleService(false)
     val dBBackend = shuffleDBBackend()
-    yarnConfig.set(SHUFFLE_SERVICE_DB_BACKEND.key, shuffleDBBackend().name())
     val transportConf = new TransportConf("shuffle", new HadoopConfigProvider(yarnConfig))
     val dbName = dBBackend.fileName(YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME)
     val testShuffleMergeManager = createMergeManager(
@@ -1114,4 +1114,8 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 @ExtendedLevelDBTest
 class YarnShuffleServiceWithLevelDBBackendSuite extends YarnShuffleServiceSuite {
   override protected def shuffleDBBackend(): DBBackend = DBBackend.LEVELDB
+}
+
+class YarnShuffleServiceWithRocksDBBackendSuite extends YarnShuffleServiceSuite {
+  override protected def shuffleDBBackend(): DBBackend = DBBackend.ROCKSDB
 }

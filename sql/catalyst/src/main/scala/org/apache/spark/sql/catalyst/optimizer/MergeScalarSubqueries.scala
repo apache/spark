@@ -210,6 +210,12 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
       cachedPlan: LogicalPlan): Option[(LogicalPlan, AttributeMap[Attribute])] = {
     checkIdenticalPlans(newPlan, cachedPlan).map(cachedPlan -> _).orElse(
       (newPlan, cachedPlan) match {
+        case (_, _) if newPlan.containsPattern(SCALAR_SUBQUERY_REFERENCE) ||
+          cachedPlan.containsPattern(SCALAR_SUBQUERY_REFERENCE) =>
+          // Subquery expressions with nested subquery expressions within are not supported for now.
+          // TODO: support this optimization by collecting the transitive subquery references in the
+          // new plan and recording them in order to suppress merging the new plan into those.
+          None
         case (np: Project, cp: Project) =>
           tryMergePlans(np.child, cp.child).map { case (mergedChild, outputMap) =>
             val (mergedProjectList, newOutputMap) =

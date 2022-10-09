@@ -120,13 +120,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`b`",
     "proposal" : "`count(1)`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 62,
+    "stopIndex" : 62,
+    "fragment" : "b"
+  } ]
 }
 
 
@@ -214,7 +220,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "3",
     "size" : "2"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 54,
+    "stopIndex" : 54,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -340,13 +353,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`b`",
     "proposal" : "`count(a)`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 62,
+    "stopIndex" : 62,
+    "fragment" : "b"
+  } ]
 }
 
 

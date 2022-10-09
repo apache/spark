@@ -120,9 +120,10 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
 
       assertAnalysisErrorClass(
         s"DESCRIBE $t invalid_col",
-        "UNRESOLVED_COLUMN",
-        "WITH_SUGGESTION",
-        Array("`invalid_col`", "`testcat`.`tbl`.`id`, `testcat`.`tbl`.`data`"))
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        Map(
+          "objectName" -> "`invalid_col`",
+          "proposal" -> "`testcat`.`tbl`.`id`, `testcat`.`tbl`.`data`"))
     }
   }
 
@@ -995,10 +996,10 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
 
       assertAnalysisErrorClass(
         s"SELECT ns1.ns2.ns3.tbl.id from $t",
-        "UNRESOLVED_COLUMN",
-        "WITH_SUGGESTION",
-        Array("`ns1`.`ns2`.`ns3`.`tbl`.`id`",
-          "`testcat`.`ns1`.`ns2`.`tbl`.`id`, `testcat`.`ns1`.`ns2`.`tbl`.`point`"))
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        Map(
+          "objectName" -> "`ns1`.`ns2`.`ns3`.`tbl`.`id`",
+          "proposal" -> "`testcat`.`ns1`.`ns2`.`tbl`.`id`, `testcat`.`ns1`.`ns2`.`tbl`.`point`"))
     }
   }
 
@@ -1536,8 +1537,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     }
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "TABLE_OPERATION",
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       sqlState = "0A000",
       parameters = Map("tableName" -> "`spark_catalog`.`default`.`tbl`",
         "operation" -> "REPLACE TABLE"))
@@ -1575,21 +1575,19 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       // UPDATE non-existing column
       assertAnalysisErrorClass(
         s"UPDATE $t SET dummy='abc'",
-        "UNRESOLVED_COLUMN",
-        "WITH_SUGGESTION",
-        Array(
-          "`dummy`",
-          "`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
-            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`"))
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        Map(
+          "objectName" -> "`dummy`",
+          "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
+            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")))
       assertAnalysisErrorClass(
         s"UPDATE $t SET name='abc' WHERE dummy=1",
-        "UNRESOLVED_COLUMN",
-        "WITH_SUGGESTION",
-        Array(
-          "`dummy`",
-          "`testcat`.`ns1`.`ns2`.`tbl`.`p`, " +
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        Map(
+          "objectName" -> "`dummy`",
+          "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, " +
             "`testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
-            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`"))
+            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")))
 
       // UPDATE is not implemented yet.
       val e = intercept[UnsupportedOperationException] {
@@ -2027,10 +2025,15 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       sql("USE testcat.ns1.ns2")
       check("tbl")
 
-      val ex = intercept[AnalysisException] {
-        sql(s"SELECT ns1.ns2.ns3.tbl.* from $t")
-      }
-      assert(ex.getMessage.contains("cannot resolve 'ns1.ns2.ns3.tbl.*"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT ns1.ns2.ns3.tbl.* from $t")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1051",
+        parameters = Map(
+          "targetString" -> "ns1.ns2.ns3.tbl",
+          "columns" -> "id, name"),
+        context = ExpectedContext(fragment = "ns1.ns2.ns3.tbl.*", start = 7, stop = 23))
     }
   }
 
@@ -2086,33 +2089,18 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
   }
 
   test("View commands are not supported in v2 catalogs") {
-    def validateViewCommand(
-        sql: String,
-        catalogName: String,
-        viewName: String,
-        cmdName: String): Unit = {
-      assertAnalysisError(
-        sql,
-        s"Cannot specify catalog `$catalogName` for view $viewName because view support " +
-          s"in v2 catalog has not been implemented yet. $cmdName expects a view.")
+    def validateViewCommand(sqlStatement: String): Unit = {
+      val e = intercept[AnalysisException](sql(sqlStatement))
+      checkError(
+        e,
+        errorClass = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
+        parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
     }
 
-    validateViewCommand("DROP VIEW testcat.v", "testcat", "v", "DROP VIEW")
-    validateViewCommand(
-      "ALTER VIEW testcat.v SET TBLPROPERTIES ('key' = 'val')",
-      "testcat",
-      "v",
-      "ALTER VIEW ... SET TBLPROPERTIES")
-    validateViewCommand(
-      "ALTER VIEW testcat.v UNSET TBLPROPERTIES ('key')",
-      "testcat",
-      "v",
-      "ALTER VIEW ... UNSET TBLPROPERTIES")
-    validateViewCommand(
-      "ALTER VIEW testcat.v AS SELECT 1",
-      "testcat",
-      "v",
-      "ALTER VIEW ... AS")
+    validateViewCommand("DROP VIEW testcat.v")
+    validateViewCommand("ALTER VIEW testcat.v SET TBLPROPERTIES ('key' = 'val')")
+    validateViewCommand("ALTER VIEW testcat.v UNSET TBLPROPERTIES ('key')")
+    validateViewCommand("ALTER VIEW testcat.v AS SELECT 1")
   }
 
   test("SPARK-33924: INSERT INTO .. PARTITION preserves the partition location") {
@@ -2350,10 +2338,23 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       )
       assert(e4.message.contains("is not a valid timestamp expression for time travel"))
 
-      val e5 = intercept[AnalysisException](
+    checkError(
+      exception = intercept[AnalysisException] {
         sql("SELECT * FROM t TIMESTAMP AS OF abs(true)").collect()
-      )
-      assert(e5.message.contains("cannot resolve 'abs(true)' due to data type mismatch"))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"abs(true)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"true\"",
+        "inputType" -> "\"BOOLEAN\"",
+        "requiredType" ->
+          "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")"),
+      context = ExpectedContext(
+        fragment = "abs(true)",
+        start = 32,
+        stop = 40))
 
       val e6 = intercept[AnalysisException](
         sql("SELECT * FROM parquet.`/the/path` VERSION AS OF 1")
@@ -2427,13 +2428,11 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
   private def assertAnalysisErrorClass(
       sqlStatement: String,
       expectedErrorClass: String,
-      expectedErrorSubClass: String,
-      expectedErrorMessageParameters: Array[String]): Unit = {
+      expectedErrorMessageParameters: Map[String, String]): Unit = {
     val ex = intercept[AnalysisException] {
       sql(sqlStatement)
     }
     assert(ex.getErrorClass == expectedErrorClass)
-    assert(ex.getErrorSubClass == expectedErrorSubClass)
     assert(ex.messageParameters.sameElements(expectedErrorMessageParameters))
   }
 

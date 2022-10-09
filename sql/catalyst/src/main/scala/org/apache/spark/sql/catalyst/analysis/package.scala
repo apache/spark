@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.errors.QueryErrorsBase
 
@@ -45,12 +45,16 @@ package object analysis {
       throw new AnalysisException(msg, t.origin.line, t.origin.startPosition)
     }
 
-    /** Fails the analysis at the point where a specific tree node was parsed. */
+    /** Fails the analysis at the point where a specific tree node was parsed with a given cause. */
     def failAnalysis(msg: String, cause: Throwable): Nothing = {
       throw new AnalysisException(msg, t.origin.line, t.origin.startPosition, cause = Some(cause))
     }
 
-    def failAnalysis(errorClass: String, messageParameters: Array[String]): Nothing = {
+    /**
+     * Fails the analysis at the point where a specific tree node was parsed using a provided
+     * error class and message parameters.
+     */
+    def failAnalysis(errorClass: String, messageParameters: Map[String, String]): Nothing = {
       throw new AnalysisException(
         errorClass = errorClass,
         messageParameters = messageParameters,
@@ -59,9 +63,8 @@ package object analysis {
 
     def dataTypeMismatch(expr: Expression, mismatch: DataTypeMismatch): Nothing = {
       throw new AnalysisException(
-        errorClass = "DATATYPE_MISMATCH",
-        errorSubClass = mismatch.errorSubClass,
-        messageParameters = toSQLExpr(expr) +: mismatch.messageParameters,
+        errorClass = s"DATATYPE_MISMATCH.${mismatch.errorSubClass}",
+        messageParameters = mismatch.messageParameters + ("sqlExpr" -> toSQLExpr(expr)),
         origin = t.origin)
     }
   }
@@ -70,7 +73,7 @@ package object analysis {
   def withPosition[A](t: TreeNode[_])(f: => A): A = {
     try f catch {
       case a: AnalysisException =>
-        throw a.withPosition(t.origin.line, t.origin.startPosition)
+        throw a.withPosition(t.origin)
     }
   }
 }

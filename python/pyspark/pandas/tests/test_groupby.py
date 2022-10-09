@@ -1080,7 +1080,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             with self.subTest(pdf=pdf):
                 psdf = ps.from_pandas(pdf)
 
-                actual = psdf.groupby("a")["b"].unique().sort_index().to_pandas()
+                actual = psdf.groupby("a")["b"].unique().sort_index()._to_pandas()
                 expect = pdf.groupby("a")["b"].unique().sort_index()
                 self.assert_eq(len(actual), len(expect))
                 for act, exp in zip(actual, expect):
@@ -1357,15 +1357,80 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         with self.assertRaises(TypeError):
             psdf.groupby("A")["C"].mean()
 
+    def test_quantile(self):
+        dfs = [
+            pd.DataFrame(
+                [["a", 1], ["a", 2], ["a", 3], ["b", 1], ["b", 3], ["b", 5]], columns=["key", "val"]
+            ),
+            pd.DataFrame(
+                [["a", True], ["a", True], ["a", False], ["b", True], ["b", True], ["b", False]],
+                columns=["key", "val"],
+            ),
+        ]
+        for df in dfs:
+            psdf = ps.from_pandas(df)
+            # q accept float and int between 0 and 1
+            for i in [0, 0.1, 0.5, 1]:
+                self.assert_eq(
+                    df.groupby("key").quantile(q=i, interpolation="lower"),
+                    psdf.groupby("key").quantile(q=i),
+                    almost=True,
+                )
+                self.assert_eq(
+                    df.groupby("key")["val"].quantile(q=i, interpolation="lower"),
+                    psdf.groupby("key")["val"].quantile(q=i),
+                    almost=True,
+                )
+            # raise ValueError when q not in [0, 1]
+            with self.assertRaises(ValueError):
+                psdf.groupby("key").quantile(q=1.1)
+            with self.assertRaises(ValueError):
+                psdf.groupby("key").quantile(q=-0.1)
+            with self.assertRaises(ValueError):
+                psdf.groupby("key").quantile(q=2)
+            with self.assertRaises(ValueError):
+                psdf.groupby("key").quantile(q=np.nan)
+            # raise TypeError when q type mismatch
+            with self.assertRaises(TypeError):
+                psdf.groupby("key").quantile(q="0.1")
+            # raise NotImplementedError when q is list like type
+            with self.assertRaises(NotImplementedError):
+                psdf.groupby("key").quantile(q=(0.1, 0.5))
+            with self.assertRaises(NotImplementedError):
+                psdf.groupby("key").quantile(q=[0.1, 0.5])
+
     def test_min(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.min())
+        self._test_stat_func(lambda groupby_obj: groupby_obj.min(min_count=2))
         self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=None))
         self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=True))
+        self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=True, min_count=2))
 
     def test_max(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.max())
+        self._test_stat_func(lambda groupby_obj: groupby_obj.max(min_count=2))
         self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=None))
         self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=True))
+        self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=True, min_count=2))
+
+    def test_sum(self):
+        pdf = pd.DataFrame(
+            {
+                "A": ["a", "a", "b", "a"],
+                "B": [1, 2, 1, 2],
+                "C": [-1.5, np.nan, -3.2, 0.1],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf.groupby("A").sum().sort_index(), psdf.groupby("A").sum().sort_index())
+        self.assert_eq(
+            pdf.groupby("A").sum(min_count=2).sort_index(),
+            psdf.groupby("A").sum(min_count=2).sort_index(),
+        )
+        self.assert_eq(
+            pdf.groupby("A").sum(min_count=3).sort_index(),
+            psdf.groupby("A").sum(min_count=3).sort_index(),
+        )
 
     def test_mad(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.mad())
@@ -1375,10 +1440,67 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         self._test_stat_func(lambda groupby_obj: groupby_obj.first(numeric_only=None))
         self._test_stat_func(lambda groupby_obj: groupby_obj.first(numeric_only=True))
 
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 2, 1, 2],
+                "B": [-1.5, np.nan, -3.2, 0.1],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            pdf.groupby("A").first().sort_index(), psdf.groupby("A").first().sort_index()
+        )
+        self.assert_eq(
+            pdf.groupby("A").first(min_count=1).sort_index(),
+            psdf.groupby("A").first(min_count=1).sort_index(),
+        )
+        self.assert_eq(
+            pdf.groupby("A").first(min_count=2).sort_index(),
+            psdf.groupby("A").first(min_count=2).sort_index(),
+        )
+
     def test_last(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.last())
         self._test_stat_func(lambda groupby_obj: groupby_obj.last(numeric_only=None))
         self._test_stat_func(lambda groupby_obj: groupby_obj.last(numeric_only=True))
+
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 2, 1, 2],
+                "B": [-1.5, np.nan, -3.2, 0.1],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf.groupby("A").last().sort_index(), psdf.groupby("A").last().sort_index())
+        self.assert_eq(
+            pdf.groupby("A").last(min_count=1).sort_index(),
+            psdf.groupby("A").last(min_count=1).sort_index(),
+        )
+        self.assert_eq(
+            pdf.groupby("A").last(min_count=2).sort_index(),
+            psdf.groupby("A").last(min_count=2).sort_index(),
+        )
+
+    def test_nth(self):
+        for n in [0, 1, 2, 128, -1, -2, -128]:
+            self._test_stat_func(lambda groupby_obj: groupby_obj.nth(n))
+
+        with self.assertRaisesRegex(NotImplementedError, "slice or list"):
+            self.psdf.groupby("B").nth(slice(0, 2))
+        with self.assertRaisesRegex(NotImplementedError, "slice or list"):
+            self.psdf.groupby("B").nth([0, 1, -1])
+        with self.assertRaisesRegex(TypeError, "Invalid index"):
+            self.psdf.groupby("B").nth("x")
+
+    def test_prod(self):
+        for n in [0, 1, 2, 128, -1, -2, -128]:
+            self._test_stat_func(lambda groupby_obj: groupby_obj.prod(min_count=n))
+            self._test_stat_func(
+                lambda groupby_obj: groupby_obj.prod(numeric_only=None, min_count=n)
+            )
+            self._test_stat_func(
+                lambda groupby_obj: groupby_obj.prod(numeric_only=True, min_count=n)
+            )
 
     def test_cumcount(self):
         pdf = pd.DataFrame(
@@ -2289,7 +2411,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         actual = psdf.groupby("d").apply(sum_with_acc_frame)
         actual.columns = ["d", "v"]
         self.assert_eq(
-            actual.to_pandas().sort_index(),
+            actual._to_pandas().sort_index(),
             pdf.groupby("d").apply(sum).sort_index().reset_index(drop=True),
         )
         self.assert_eq(acc.value, 2)
@@ -2300,7 +2422,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             return np.sum(x)
 
         self.assert_eq(
-            psdf.groupby("d")["v"].apply(sum_with_acc_series).to_pandas().sort_index(),
+            psdf.groupby("d")["v"].apply(sum_with_acc_series)._to_pandas().sort_index(),
             pdf.groupby("d")["v"].apply(sum).sort_index().reset_index(drop=True),
         )
         self.assert_eq(acc.value, 4)
@@ -3046,7 +3168,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
         psdf = ps.from_pandas(pdf)
 
-        for ddof in (0, 1):
+        for ddof in [-1, 0, 1, 2, 3]:
             # std
             self.assert_eq(
                 pdf.groupby("a").std(ddof=ddof).sort_index(),

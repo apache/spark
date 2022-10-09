@@ -21,9 +21,8 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartition
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ShowPartitions
-import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 
-class ShowPartitionsParserSuite extends AnalysisTest with QueryErrorsSuiteBase {
+class ShowPartitionsParserSuite extends AnalysisTest {
   test("SHOW PARTITIONS") {
     val commandName = "SHOW PARTITIONS"
     Seq(

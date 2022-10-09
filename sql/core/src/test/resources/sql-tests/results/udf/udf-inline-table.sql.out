@@ -130,7 +130,20 @@ select udf(a), udf(b) from values ("one", random_not_exist_func(1)), ("two", 2) 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: random_not_exist_func. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.random_not_exist_func.; line 1 pos 42
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "messageParameters" : {
+    "fullName" : "spark_catalog.default.random_not_exist_func",
+    "rawName" : "random_not_exist_func"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 43,
+    "stopIndex" : 66,
+    "fragment" : "random_not_exist_func(1)"
+  } ]
+}
 
 
 -- !query

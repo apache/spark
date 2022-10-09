@@ -179,4 +179,9 @@ SELECT count(testData.*) FROM testData
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-count(testData.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1021",
+  "messageParameters" : {
+    "targetString" : "testData"
+  }
+}

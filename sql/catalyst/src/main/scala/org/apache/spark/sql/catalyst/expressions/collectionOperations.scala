@@ -270,6 +270,9 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
         case (u: UnresolvedAttribute, _) => Literal(u.nameParts.last)
         case (e: NamedExpression, _) if e.resolved => Literal(e.name)
         case (e: NamedExpression, _) => NamePlaceholder
+        case (g: GetStructField, _) => Literal(g.extractFieldName)
+        case (g: GetArrayStructFields, _) => Literal(g.field.name)
+        case (g: GetMapValue, _) => Literal(g.key)
         case (_, idx) => Literal(idx.toString)
       })
   }
@@ -727,7 +730,7 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     val prepareMaps = ctx.splitExpressionsWithCurrentInputs(
       expressions = assignments,
       funcName = "getMapConcatInputs",
-      extraArguments = (s"MapData[]", argsName) :: ("boolean", hasNullName) :: Nil,
+      extraArguments = ("MapData[]", argsName) :: ("boolean", hasNullName) :: Nil,
       returnType = "boolean",
       makeSplitFunction = body =>
         s"""
@@ -3639,7 +3642,7 @@ case class ArrayDistinct(child: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
-      case f: TypeCheckResult.TypeCheckFailure => f
+      case f if f.isFailure => f
       case TypeCheckResult.TypeCheckSuccess =>
         TypeUtils.checkForOrderingExpr(elementType, s"function $prettyName")
     }

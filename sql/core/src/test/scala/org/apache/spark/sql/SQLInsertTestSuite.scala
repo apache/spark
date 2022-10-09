@@ -168,9 +168,12 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       checkError(
         exception =
           intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c4) values(1, 2, 3)")),
-        errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = Some("WITH_SUGGESTION"),
-        parameters = Map("objectName" -> "`c4`", "proposal" -> "`c1`, `c2`, `c3`"))
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map("objectName" -> "`c4`", "proposal" -> "`c1`, `c2`, `c3`"),
+        context = ExpectedContext(
+          fragment = "INSERT INTO t1 (c1, c2, c4)", start = 0, stop = 26
+        ))
     }
   }
 

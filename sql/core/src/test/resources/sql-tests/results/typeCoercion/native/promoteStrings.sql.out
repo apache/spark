@@ -78,13 +78,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 + CAST(1 AS BINARY))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"BINARY\""
-  }
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(1 + CAST(1 AS BINARY))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "'1' + cast('1' as binary)"
+  } ]
 }
 
 
@@ -95,13 +101,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 + CAST(1 AS BOOLEAN))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"BOOLEAN\""
-  }
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(1 + CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "'1' + cast(1 as boolean)"
+  } ]
 }
 
 
@@ -112,13 +124,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 + CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"TIMESTAMP\""
-  }
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(1 + CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "'1' + cast('2017-12-11 09:30:00.0' as timestamp)"
+  } ]
 }
 
 
@@ -128,7 +146,23 @@ SELECT '1' + cast('2017-12-11 09:30:00' as date)        FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(CAST('2017-12-11 09:30:00' AS DATE), CAST('1' AS DOUBLE))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST('1' AS DOUBLE)' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(CAST(2017-12-11 09:30:00 AS DATE), 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 48,
+    "fragment" : "'1' + cast('2017-12-11 09:30:00' as date)"
+  } ]
+}
 
 
 -- !query
@@ -202,13 +236,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 - CAST(1 AS BINARY))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"BINARY\""
-  }
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(1 - CAST(1 AS BINARY))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "'1' - cast('1' as binary)"
+  } ]
 }
 
 
@@ -219,13 +259,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 - CAST(1 AS BOOLEAN))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"BOOLEAN\""
-  }
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(1 - CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "'1' - cast(1 as boolean)"
+  } ]
 }
 
 
@@ -235,7 +281,23 @@ SELECT '1' - cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '('1' - CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, ''1'' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"(1 - CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "'1' - cast('2017-12-11 09:30:00.0' as timestamp)"
+  } ]
+}
 
 
 -- !query
@@ -317,13 +379,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 * CAST(1 AS BINARY))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"BINARY\""
-  }
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(1 * CAST(1 AS BINARY))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "'1' * cast('1' as binary)"
+  } ]
 }
 
 
@@ -334,13 +402,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 * CAST(1 AS BOOLEAN))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"BOOLEAN\""
-  }
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(1 * CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "'1' * cast(1 as boolean)"
+  } ]
 }
 
 
@@ -351,13 +425,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 * CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"TIMESTAMP\""
-  }
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(1 * CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "'1' * cast('2017-12-11 09:30:00.0' as timestamp)"
+  } ]
 }
 
 
@@ -368,13 +448,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 * CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"DATE\""
-  }
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(1 * CAST(2017-12-11 09:30:00 AS DATE))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 48,
+    "fragment" : "'1' * cast('2017-12-11 09:30:00' as date)"
+  } ]
 }
 
 
@@ -449,13 +535,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 / CAST(1 AS BINARY))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"BINARY\""
-  }
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(1 / CAST(1 AS BINARY))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "'1' / cast('1' as binary)"
+  } ]
 }
 
 
@@ -466,13 +558,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 / CAST(1 AS BOOLEAN))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"BOOLEAN\""
-  }
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(1 / CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "'1' / cast(1 as boolean)"
+  } ]
 }
 
 
@@ -483,13 +581,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 / CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"TIMESTAMP\""
-  }
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(1 / CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "'1' / cast('2017-12-11 09:30:00.0' as timestamp)"
+  } ]
 }
 
 
@@ -500,13 +604,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 / CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"DATE\""
-  }
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(1 / CAST(2017-12-11 09:30:00 AS DATE))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 48,
+    "fragment" : "'1' / cast('2017-12-11 09:30:00' as date)"
+  } ]
 }
 
 
@@ -581,13 +691,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 % CAST(1 AS BINARY))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"BINARY\""
-  }
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"(1 % CAST(1 AS BINARY))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "'1' % cast('1' as binary)"
+  } ]
 }
 
 
@@ -598,13 +714,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 % CAST(1 AS BOOLEAN))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"BOOLEAN\""
-  }
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(1 % CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "'1' % cast(1 as boolean)"
+  } ]
 }
 
 
@@ -615,13 +737,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 % CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"TIMESTAMP\""
-  }
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(1 % CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "'1' % cast('2017-12-11 09:30:00.0' as timestamp)"
+  } ]
 }
 
 
@@ -632,13 +760,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 % CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"DATE\""
-  }
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"(1 % CAST(2017-12-11 09:30:00 AS DATE))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 48,
+    "fragment" : "'1' % cast('2017-12-11 09:30:00' as date)"
+  } ]
 }
 
 
@@ -713,13 +847,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(1, CAST(1 AS BINARY))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"BINARY\""
-  }
+    "right" : "\"BINARY\"",
+    "sqlExpr" : "\"pmod(1, CAST(1 AS BINARY))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "pmod('1', cast('1' as binary))"
+  } ]
 }
 
 
@@ -730,13 +870,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(1, CAST(1 AS BOOLEAN))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"BOOLEAN\""
-  }
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"pmod(1, CAST(1 AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "pmod('1', cast(1 as boolean))"
+  } ]
 }
 
 
@@ -747,13 +893,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(1, CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"TIMESTAMP\""
-  }
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"pmod(1, CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 60,
+    "fragment" : "pmod('1', cast('2017-12-11 09:30:00.0' as timestamp))"
+  } ]
 }
 
 
@@ -764,13 +916,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(1, CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DOUBLE\"",
-    "right" : "\"DATE\""
-  }
+    "right" : "\"DATE\"",
+    "sqlExpr" : "\"pmod(1, CAST(2017-12-11 09:30:00 AS DATE))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "pmod('1', cast('2017-12-11 09:30:00' as date))"
+  } ]
 }
 
 
@@ -837,13 +995,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) + 1)\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) + 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('1' as binary)                        + '1'"
+  } ]
 }
 
 
@@ -854,13 +1018,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BOOLEAN) + 1)\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(1 AS BOOLEAN) + 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast(1 as boolean)                         + '1'"
+  } ]
 }
 
 
@@ -871,13 +1041,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + 1)\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00.0' as timestamp) + '1'"
+  } ]
 }
 
 
@@ -887,7 +1063,23 @@ SELECT cast('2017-12-11 09:30:00' as date)        + '1' FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(CAST('2017-12-11 09:30:00' AS DATE), CAST('1' AS DOUBLE))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST('1' AS DOUBLE)' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(CAST(2017-12-11 09:30:00 AS DATE), 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00' as date)        + '1'"
+  } ]
+}
 
 
 -- !query
@@ -953,13 +1145,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) - 1)\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) - 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('1' as binary)                        - '1'"
+  } ]
 }
 
 
@@ -970,13 +1168,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BOOLEAN) - 1)\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(1 AS BOOLEAN) - 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast(1 as boolean)                         - '1'"
+  } ]
 }
 
 
@@ -986,7 +1190,23 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) - '1' FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) - '1')' due to data type mismatch: argument 2 requires (timestamp or timestamp without time zone) type, however, ''1'' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) - 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00.0' as timestamp) - '1'"
+  } ]
+}
 
 
 -- !query
@@ -995,7 +1215,23 @@ SELECT cast('2017-12-11 09:30:00' as date)        - '1' FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(CAST('2017-12-11 09:30:00' AS DATE), CAST('1' AS DOUBLE))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST('1' AS DOUBLE)' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_sub(CAST(2017-12-11 09:30:00 AS DATE), 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00' as date)        - '1'"
+  } ]
+}
 
 
 -- !query
@@ -1061,13 +1297,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) * 1)\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) * 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('1' as binary)                        * '1'"
+  } ]
 }
 
 
@@ -1078,13 +1320,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BOOLEAN) * 1)\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(1 AS BOOLEAN) * 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast(1 as boolean)                         * '1'"
+  } ]
 }
 
 
@@ -1095,13 +1343,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) * 1)\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) * 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00.0' as timestamp) * '1'"
+  } ]
 }
 
 
@@ -1112,13 +1366,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) * 1)\"",
     "left" : "\"DATE\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) * 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00' as date)        * '1'"
+  } ]
 }
 
 
@@ -1185,13 +1445,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) / 1)\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) / 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('1' as binary)                        / '1'"
+  } ]
 }
 
 
@@ -1202,13 +1468,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BOOLEAN) / 1)\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(1 AS BOOLEAN) / 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast(1 as boolean)                         / '1'"
+  } ]
 }
 
 
@@ -1219,13 +1491,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) / 1)\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) / 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00.0' as timestamp) / '1'"
+  } ]
 }
 
 
@@ -1236,13 +1514,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) / 1)\"",
     "left" : "\"DATE\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) / 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00' as date)        / '1'"
+  } ]
 }
 
 
@@ -1309,13 +1593,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BINARY) % 1)\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(1 AS BINARY) % 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('1' as binary)                        % '1'"
+  } ]
 }
 
 
@@ -1326,13 +1616,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(1 AS BOOLEAN) % 1)\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(1 AS BOOLEAN) % 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast(1 as boolean)                         % '1'"
+  } ]
 }
 
 
@@ -1343,13 +1639,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) % 1)\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) % 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00.0' as timestamp) % '1'"
+  } ]
 }
 
 
@@ -1360,13 +1662,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) % 1)\"",
     "left" : "\"DATE\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) % 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "cast('2017-12-11 09:30:00' as date)        % '1'"
+  } ]
 }
 
 
@@ -1433,13 +1741,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS BINARY), 1)\"",
     "left" : "\"BINARY\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS BINARY), 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "pmod(cast('1' as binary), '1')"
+  } ]
 }
 
 
@@ -1450,13 +1764,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(1 AS BOOLEAN), 1)\"",
     "left" : "\"BOOLEAN\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"pmod(CAST(1 AS BOOLEAN), 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "pmod(cast(1 as boolean), '1')"
+  } ]
 }
 
 
@@ -1467,13 +1787,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP), 1)\"",
     "left" : "\"TIMESTAMP\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP), 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 60,
+    "fragment" : "pmod(cast('2017-12-11 09:30:00.0' as timestamp), '1')"
+  } ]
 }
 
 
@@ -1484,13 +1810,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00 AS DATE), 1)\"",
     "left" : "\"DATE\"",
-    "right" : "\"DOUBLE\""
-  }
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00 AS DATE), 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "pmod(cast('2017-12-11 09:30:00' as date), '1')"
+  } ]
 }
 
 

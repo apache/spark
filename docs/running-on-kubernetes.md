@@ -1275,6 +1275,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.trust.certificates</code></td>
+  <td><code>false</code></td>
+  <td>
+    If set to true then client can submit to kubernetes cluster only with token.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driver.connectionTimeout</code></td>
   <td><code>10000</code></td>
   <td>
@@ -1396,6 +1404,22 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.service.ipFamilyPolicy</code></td>
+  <td><code>SingleStack</code></td>
+  <td>
+    K8s IP Family Policy for Driver Service.
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.service.ipFamilies</code></td>
+  <td><code>IPv4</code></td>
+  <td>
+    A list of IP families for K8s Driver Service.
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driver.ownPersistentVolumeClaim</code></td>
   <td><code>true</code></td>
   <td>
@@ -1500,6 +1524,14 @@ See the [configuration page](configuration.html) for information on Spark config
     in order to allow API Server-side caching. This should be used carefully.
   </td>
   <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.eventProcessingInterval</code></td>
+  <td><code>1s</code></td>
+  <td>
+    Interval between successive inspection of executor events sent from the Kubernetes API.
+  </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.rollInterval</code></td>
@@ -1824,11 +1856,10 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-kubectl create namespace yunikorn
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.0.0
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.1.0 --create-namespace --set embedAdmissionController=false
 ```
 
-The above steps will install YuniKorn v1.0.0 on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.1.0 on an existing Kubernetes cluster.
 
 ##### Get started
 
@@ -1836,6 +1867,8 @@ Submit Spark jobs with the following extra options:
 
 ```bash
 --conf spark.kubernetes.scheduler.name=yunikorn
+--conf spark.kubernetes.driver.label.queue=root.default
+--conf spark.kubernetes.executor.label.queue=root.default
 --conf spark.kubernetes.driver.annotation.yunikorn.apache.org/app-id={{APP_ID}}
 --conf spark.kubernetes.executor.annotation.yunikorn.apache.org/app-id={{APP_ID}}
 ```

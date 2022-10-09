@@ -13,12 +13,20 @@ select timestamp '2019-01-01中文'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the TIMESTAMP value: 2019-01-01中文(line 1, pos 7)
-
-== SQL ==
-select timestamp '2019-01-01中文'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "2019-01-01中文",
+    "valueType" : "TIMESTAMP"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "timestamp '2019-01-01中文'"
+  } ]
+}
 
 
 -- !query
@@ -27,12 +35,20 @@ select timestamp'4294967297'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the TIMESTAMP value: 4294967297(line 1, pos 7)
-
-== SQL ==
-select timestamp'4294967297'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "4294967297",
+    "valueType" : "TIMESTAMP"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "timestamp'4294967297'"
+  } ]
+}
 
 
 -- !query
@@ -41,12 +57,20 @@ select timestamp'2021-01-01T12:30:4294967297.123456'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the TIMESTAMP value: 2021-01-01T12:30:4294967297.123456(line 1, pos 7)
-
-== SQL ==
-select timestamp'2021-01-01T12:30:4294967297.123456'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "2021-01-01T12:30:4294967297.123456",
+    "valueType" : "TIMESTAMP"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "timestamp'2021-01-01T12:30:4294967297.123456'"
+  } ]
+}
 
 
 -- !query
@@ -125,8 +149,14 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 61)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid value for SecondOfMinute (valid values 0 - 59): 61. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 61"
+  }
+}
 
 
 -- !query
@@ -150,8 +180,14 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 99.999999)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid value for SecondOfMinute (valid values 0 - 59): 99. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 99"
+  }
+}
 
 
 -- !query
@@ -159,8 +195,14 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 999.999999)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid value for SecondOfMinute (valid values 0 - 59): 999. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid value for SecondOfMinute (valid values 0 - 59): 999"
+  }
+}
 
 
 -- !query
@@ -339,10 +381,10 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"TIMESTAMP_NTZ\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"TIMESTAMP_NTZ\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -362,8 +404,8 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Text '2019-10-06 10:11:12.' could not be parsed at index 20",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '2019-10-06 10:11:12.' could not be parsed at index 20"
   }
 }
 
@@ -434,8 +476,8 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Text '2019-10-06 10:11:12.1234567PST' could not be parsed, unparsed text found at index 26",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '2019-10-06 10:11:12.1234567PST' could not be parsed, unparsed text found at index 26"
   }
 }
 
@@ -458,8 +500,8 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Text '223456 2019-10-06 10:11:12.123456PST' could not be parsed at index 27",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '223456 2019-10-06 10:11:12.123456PST' could not be parsed at index 27"
   }
 }
 
@@ -530,8 +572,8 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Text '12.1232019-10-06S10:11' could not be parsed at index 7",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '12.1232019-10-06S10:11' could not be parsed at index 7"
   }
 }
 
@@ -546,8 +588,8 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Text '12.1232019-10-06S10:11' could not be parsed at index 9",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '12.1232019-10-06S10:11' could not be parsed at index 9"
   }
 }
 
@@ -626,8 +668,8 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Invalid date 'February 29' as '1970' is not a leap year",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid date 'February 29' as '1970' is not a leap year"
   }
 }
 
@@ -735,13 +777,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_WRONG_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "messageParameters" : {
-    "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' + 1)\"",
+    "actualDataType" : "\"TIMESTAMP_NTZ\"",
     "inputType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
-    "actualDataType" : "\"TIMESTAMP_NTZ\""
-  }
+    "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' + 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "timestamp'2011-11-11 11:11:11' + '1'"
+  } ]
 }
 
 
@@ -752,13 +800,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_WRONG_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "messageParameters" : {
-    "sqlExpr" : "\"(1 + TIMESTAMP_NTZ '2011-11-11 11:11:11')\"",
+    "actualDataType" : "\"TIMESTAMP_NTZ\"",
     "inputType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
-    "actualDataType" : "\"TIMESTAMP_NTZ\""
-  }
+    "sqlExpr" : "\"(1 + TIMESTAMP_NTZ '2011-11-11 11:11:11')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "'1' + timestamp'2011-11-11 11:11:11'"
+  } ]
 }
 
 
@@ -769,13 +823,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL)\"",
     "left" : "\"TIMESTAMP_NTZ\"",
-    "right" : "\"VOID\""
-  }
+    "right" : "\"VOID\"",
+    "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 44,
+    "fragment" : "timestamp'2011-11-11 11:11:11' + null"
+  } ]
 }
 
 
@@ -786,13 +846,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "sqlExpr" : "\"(NULL + TIMESTAMP_NTZ '2011-11-11 11:11:11')\"",
     "left" : "\"VOID\"",
-    "right" : "\"TIMESTAMP_NTZ\""
-  }
+    "right" : "\"TIMESTAMP_NTZ\"",
+    "sqlExpr" : "\"(NULL + TIMESTAMP_NTZ '2011-11-11 11:11:11')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 44,
+    "fragment" : "null + timestamp'2011-11-11 11:11:11'"
+  } ]
 }
 
 
@@ -853,11 +919,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
   "messageParameters" : {
-    "pattern" : "'dd MM yyyy EEEEE'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'dd MM yyyy EEEEE'"
   }
 }
 

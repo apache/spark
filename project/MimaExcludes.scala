@@ -85,7 +85,22 @@ object MimaExcludes {
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI$default$3"),
 
     // [SPARK-36511][MINOR][SQL] Remove ColumnIOUtil
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.parquet.io.ColumnIOUtil")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.parquet.io.ColumnIOUtil"),
+
+    // [SPARK-40324][SQL] Provide query context in AnalysisException
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.AnalysisException.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.AnalysisException.withPosition"),
+
+    // [SPARK-40400][SQL] Pass error message parameters to exceptions as a map
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.AnalysisException.messageParameters"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.AnalysisException.copy$default$7"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.AnalysisException.copy"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.AnalysisException.this"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.SparkException.this"),
+
+    // [SPARK-37935][SQL] Eliminate separate error sub-classes fields
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkException.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.AnalysisException.this")
   )
 
   // Defulat exclude rules

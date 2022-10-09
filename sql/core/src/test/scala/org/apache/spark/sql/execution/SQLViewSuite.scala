@@ -885,11 +885,18 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sql("SELECT * FROM v1")
             }
             checkError(e,
-              errorClass = "UNRESOLVED_COLUMN",
-              errorSubClass = Some("WITH_SUGGESTION"),
+              errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+              sqlState = None,
               parameters = Map(
                 "objectName" -> "`C1`",
-                "proposal" -> "`spark_catalog`.`default`.`t`.`c1`"))
+                "proposal" -> "`spark_catalog`.`default`.`t`.`c1`"),
+              context = ExpectedContext(
+                objectType = "VIEW",
+                objectName = "spark_catalog.default.v1",
+                startIndex = 7,
+                stopIndex = 8,
+                fragment = "C1"
+              ))
           }
           withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
             checkAnswer(sql("SELECT * FROM v2"), Seq(Row(3), Row(2), Row(1)))
@@ -908,11 +915,18 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sql("SELECT * FROM v4")
             }
             checkError(e,
-              errorClass = "UNRESOLVED_COLUMN",
-              errorSubClass = Some("WITH_SUGGESTION"),
+              errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+              sqlState = None,
               parameters = Map(
                 "objectName" -> "`a`",
-                "proposal" -> "`spark_catalog`.`default`.`t`.`c1`"))
+                "proposal" -> "`spark_catalog`.`default`.`t`.`c1`"),
+              context = ExpectedContext(
+                objectType = "VIEW",
+                objectName = "spark_catalog.default.v4",
+                startIndex = 49,
+                stopIndex = 49,
+                fragment = "a"
+            ))
           }
           withSQLConf(ANSI_ENABLED.key -> "true") {
             val e = intercept[ArithmeticException] {
