@@ -52,7 +52,6 @@ import org.apache.spark.serializer.SerializerHelper
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleBlockPusher}
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
-import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * Spark executor, backed by a threadpool to run tasks.
@@ -665,13 +664,12 @@ private[spark] class Executor(
         val resultSize = serializedDirectResult.size
 
         // directSend = sending directly back to the driver
-        val serializedResult: ChunkedByteBuffer = {
+        val serializedResult: ByteBuffer = {
           if (maxResultSize > 0 && resultSize > maxResultSize) {
             logWarning(s"Finished $taskName. Result is larger than maxResultSize " +
               s"(${Utils.bytesToString(resultSize)} > ${Utils.bytesToString(maxResultSize)}), " +
               s"dropping it.")
-            SerializerHelper.serializeToChunkedBuffer(ser,
-              new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
+            ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
           } else if (resultSize > maxDirectResultSize) {
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
@@ -679,19 +677,18 @@ private[spark] class Executor(
               serializedDirectResult,
               StorageLevel.MEMORY_AND_DISK_SER)
             logInfo(s"Finished $taskName. $resultSize bytes result sent via BlockManager)")
-            SerializerHelper.serializeToChunkedBuffer(ser,
-              new IndirectTaskResult[Any](blockId, resultSize))
+            ser.serialize(new IndirectTaskResult[Any](blockId, resultSize))
           } else {
             logInfo(s"Finished $taskName. $resultSize bytes result sent to driver")
-            serializedDirectResult
+            // toByteBuffer is safe here, guarded by maxDirectResultSize
+            serializedDirectResult.toByteBuffer
           }
         }
 
         executorSource.SUCCEEDED_TASKS.inc(1L)
         setTaskFinishedAndClearInterruptStatus()
         plugins.foreach(_.onTaskSucceeded())
-        // toByteBuffer is safe here, guarded by maxDirectResultSize
-        execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult.toByteBuffer)
+        execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
       } catch {
         case t: TaskKilledException =>
           logInfo(s"Executor killed $taskName, reason: ${t.reason}")
