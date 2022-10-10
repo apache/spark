@@ -51,7 +51,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     }
 
     rel.getRelTypeCase match {
-      case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead, common)
+      case proto.Relation.RelTypeCase.UNRESOLVED_RELATION =>
+        transformReadRel(rel.getUnresolvedRelation, common)
       case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject, common)
       case proto.Relation.RelTypeCase.FILTER => transformFilter(rel.getFilter)
       case proto.Relation.RelTypeCase.FETCH => transformFetch(rel.getFetch)
@@ -82,19 +83,17 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   }
 
   private def transformReadRel(
-      rel: proto.Read,
+      rel: proto.UnresolvedRelation,
       common: Option[proto.RelationCommon]): LogicalPlan = {
-    val baseRelation = rel.getReadTypeCase match {
-      case proto.Read.ReadTypeCase.NAMED_TABLE =>
-        val child = UnresolvedRelation(rel.getNamedTable.getPartsList.asScala.toSeq)
-        if (common.nonEmpty && common.get.getAlias.nonEmpty) {
-          SubqueryAlias(identifier = common.get.getAlias, child = child)
-        } else {
-          child
-        }
-      case _ => throw InvalidPlanInput()
+    if (rel.getNamePartsCount == 0) {
+      throw InvalidPlanInput("Unresolved relation requires at least one name part")
     }
-    baseRelation
+    val child = UnresolvedRelation(rel.getNamePartsList.asScala.toSeq)
+    if (common.nonEmpty && common.get.getAlias.nonEmpty) {
+      SubqueryAlias(identifier = common.get.getAlias, child = child)
+    } else {
+      child
+    }
   }
 
   private def transformFilter(rel: proto.Filter): LogicalPlan = {

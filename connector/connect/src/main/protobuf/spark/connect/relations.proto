@@ -31,7 +31,7 @@ option java_package = "org.apache.spark.connect.proto";
 message Relation {
   RelationCommon common = 1;
   oneof rel_type {
-    Read read = 2;
+    UnresolvedRelation unresolved_relation = 2;
     Project project = 3;
     Filter filter = 4;
     Join join = 5;
@@ -60,16 +60,9 @@ message SQL {
   string query = 1;
 }
 
-// Relation that reads from a file / table or other data source. Does not have additional
-// inputs.
-message Read {
-  oneof read_type {
-    NamedTable named_table = 1;
-  }
-
-  message NamedTable {
-    repeated string parts = 1;
-  }
+// An unresolved relation. Does not have additional inputs.
+message UnresolvedRelation {
+  repeated string name_parts = 1;
 }
 
 // Projection of a bag of expressions for a given input relation.

@@ -37,10 +37,10 @@ trait SparkConnectPlanTest {
   def readRel: proto.Relation =
     proto.Relation
       .newBuilder()
-      .setRead(
-        proto.Read
+      .setUnresolvedRelation(
+        proto.UnresolvedRelation
           .newBuilder()
-          .setNamedTable(proto.Read.NamedTable.newBuilder().addParts("table"))
+          .addNameParts("table")
           .build())
       .build()
 }
@@ -81,24 +81,25 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Simple Read") {
-    val read = proto.Read.newBuilder().build()
+    val read = proto.UnresolvedRelation.newBuilder().build()
     // Invalid read without Table name.
-    intercept[InvalidPlanInput](transform(proto.Relation.newBuilder.setRead(read).build()))
+    intercept[InvalidPlanInput](
+      transform(proto.Relation.newBuilder.setUnresolvedRelation(read).build()))
     val readWithTable = read.toBuilder
-      .setNamedTable(proto.Read.NamedTable.newBuilder.addParts("name").build())
+      .addNameParts("name")
       .build()
-    val res = transform(proto.Relation.newBuilder.setRead(readWithTable).build())
+    val res = transform(proto.Relation.newBuilder.setUnresolvedRelation(readWithTable).build())
     assert(res !== null)
     assert(res.nodeName == "UnresolvedRelation")
   }
 
   test("Simple Project") {
-    val readWithTable = proto.Read.newBuilder()
-      .setNamedTable(proto.Read.NamedTable.newBuilder.addParts("name").build())
+    val readWithTable = proto.UnresolvedRelation.newBuilder()
+      .addNameParts("name")
       .build()
     val project =
       proto.Project.newBuilder()
-        .setInput(proto.Relation.newBuilder().setRead(readWithTable).build())
+        .setInput(proto.Relation.newBuilder().setUnresolvedRelation(readWithTable).build())
         .addExpressions(
           proto.Expression.newBuilder()
             .setUnresolvedStar(UnresolvedStar.newBuilder().build()).build()
