@@ -44,10 +44,11 @@ if have_pyarrow:
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
 class CogroupedMapInPandasTests(ReusedSQLTestCase):
+    @classmethod
     @property
-    def data1(self):
+    def data1(cls):
         return (
-            self.spark.range(10)
+            cls.spark.range(10)
             .toDF("id")
             .withColumn("ks", array([lit(i) for i in range(20, 30)]))
             .withColumn("k", explode(col("ks")))
@@ -55,10 +56,11 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             .drop("ks")
         )
 
+    @classmethod
     @property
-    def data2(self):
+    def data2(cls):
         return (
-            self.spark.range(10)
+            cls.spark.range(10)
             .toDF("id")
             .withColumn("ks", array([lit(i) for i in range(20, 30)]))
             .withColumn("k", explode(col("ks")))
@@ -79,7 +81,9 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
     def test_different_schemas(self):
         right = self.data2.withColumn("v3", lit("a"))
-        self._test_merge(self.data1, right, "id long, k int, v int, v2 int, v3 string")
+        self._test_merge(
+            self.data1, right, output_schema="id long, k int, v int, v2 int, v3 string"
+        )
 
     def test_different_keys(self):
         left = self.data1
@@ -128,26 +132,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         assert_frame_equal(expected, result)
 
     def test_empty_group_by(self):
-        left = self.data1
-        right = self.data2
-
-        def merge_pandas(lft, rgt):
-            return pd.merge(lft, rgt, on=["id", "k"])
-
-        result = (
-            left.groupby()
-            .cogroup(right.groupby())
-            .applyInPandas(merge_pandas, "id long, k int, v int, v2 int")
-            .sort(["id", "k"])
-            .toPandas()
-        )
-
-        left = left.toPandas()
-        right = right.toPandas()
-
-        expected = pd.merge(left, right, on=["id", "k"]).sort_values(by=["id", "k"])
-
-        assert_frame_equal(expected, result)
+        self._test_merge(self.data1, self.data2, by=[])
 
     def test_different_group_key_cardinality(self):
         left = self.data1
@@ -166,29 +151,15 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
                 )
 
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
-        left = self.data1
-        right = self.data2
-
-        def merge_pandas(lft, rgt):
-            return lft.size + rgt.size
-
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
                 PythonException,
                 "Return type of the user-defined function should be pandas.DataFrame, "
                 "but is <class 'numpy.int64'>",
             ):
-                (
-                    left.groupby("id")
-                    .cogroup(right.groupby("id"))
-                    .applyInPandas(merge_pandas, "id long, k int, v int, v2 int")
-                    .collect()
-                )
+                self._test_merge(fn=lambda lft, rgt: lft.size + rgt.size)
 
     def test_apply_in_pandas_returning_wrong_number_of_columns(self):
-        left = self.data1
-        right = self.data2
-
         def merge_pandas(lft, rgt):
             if 0 in lft["id"] and lft["id"][0] % 2 == 0:
                 lft["add"] = 0
@@ -202,18 +173,9 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
                 "Number of columns of the returned pandas.DataFrame "
                 "doesn't match specified schema. Expected: 4 Actual: 6",
             ):
-                (
-                    # merge_pandas returns two columns for even keys while we set schema to four
-                    left.groupby("id")
-                    .cogroup(right.groupby("id"))
-                    .applyInPandas(merge_pandas, "id long, k int, v int, v2 int")
-                    .collect()
-                )
+                self._test_merge(fn=merge_pandas)
 
     def test_apply_in_pandas_returning_empty_dataframe(self):
-        left = self.data1
-        right = self.data2
-
         def merge_pandas(lft, rgt):
             if 0 in lft["id"] and lft["id"][0] % 2 == 0:
                 return pd.DataFrame([])
@@ -221,27 +183,16 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
                 return pd.DataFrame([])
             return pd.merge(lft, rgt, on=["id", "k"])
 
-        result = (
-            left.groupby("id")
-            .cogroup(right.groupby("id"))
-            .applyInPandas(merge_pandas, "id long, k int, v int, v2 int")
-            .sort(["id", "k"])
-            .toPandas()
-        )
-
-        left = left.toPandas()
-        right = right.toPandas()
+        left = self.data1.toPandas()
+        right = self.data2.toPandas()
 
         expected = pd.merge(
             left[left["id"] % 2 != 0], right[right["id"] % 3 != 0], on=["id", "k"]
         ).sort_values(by=["id", "k"])
 
-        assert_frame_equal(expected, result)
+        self._test_merge(fn=merge_pandas, expected=expected)
 
     def test_apply_in_pandas_returning_empty_dataframe_and_wrong_number_of_columns(self):
-        left = self.data1
-        right = self.data2
-
         def merge_pandas(lft, rgt):
             if 0 in lft["id"] and lft["id"][0] % 2 == 0:
                 return pd.DataFrame([], columns=["id", "k"])
@@ -253,13 +204,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
                 "Number of columns of the returned pandas.DataFrame doesn't "
                 "match specified schema. Expected: 4 Actual: 2",
             ):
-                (
-                    # merge_pandas returns two columns for even keys while we set schema to four
-                    left.groupby("id")
-                    .cogroup(right.groupby("id"))
-                    .applyInPandas(merge_pandas, "id long, k int, v int, v2 int")
-                    .collect()
-                )
+                self._test_merge(fn=merge_pandas)
 
     def test_mixed_scalar_udfs_followed_by_cogrouby_apply(self):
         df = self.spark.range(0, 10).toDF("v1")
@@ -434,15 +379,23 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
         assert_frame_equal(expected, result)
 
-    @staticmethod
-    def _test_merge(left, right, output_schema="id long, k int, v int, v2 int"):
-        def merge_pandas(lft, rgt):
-            return pd.merge(lft, rgt, on=["id", "k"])
+    @classmethod
+    def _test_merge(
+        cls,
+        left=None,
+        right=None,
+        by=["id"],
+        fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
+        output_schema="id long, k int, v int, v2 int",
+        expected=None,
+    ):
+        left = cls.data1 if left is None else left
+        right = cls.data2 if right is None else right
 
         result = (
-            left.groupby("id")
-            .cogroup(right.groupby("id"))
-            .applyInPandas(merge_pandas, output_schema)
+            left.groupby(*by)
+            .cogroup(right.groupby(*by))
+            .applyInPandas(fn, output_schema)
             .sort(["id", "k"])
             .toPandas()
         )
@@ -450,7 +403,11 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         left = left.toPandas()
         right = right.toPandas()
 
-        expected = pd.merge(left, right, on=["id", "k"]).sort_values(by=["id", "k"])
+        expected = (
+            pd.merge(left, right, on=["id", "k"]).sort_values(by=["id", "k"])
+            if expected is None
+            else expected
+        )
 
         assert_frame_equal(expected, result)
 
