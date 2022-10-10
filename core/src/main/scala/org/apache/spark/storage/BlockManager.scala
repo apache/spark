@@ -185,7 +185,10 @@ private[spark] class BlockManager(
   extends BlockDataManager with BlockEvictionHandler with Logging {
 
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
-  private[spark] val externalShuffleServiceEnabled: Boolean = externalBlockStoreClient.isDefined
+  private[spark] val externalShuffleServiceEnabled: Boolean =
+    conf.get(config.SHUFFLE_SERVICE_ENABLED)
+  private[spark] val isSortShuffle: Boolean = shuffleManager
+    .isInstanceOf[org.apache.spark.shuffle.sort.SortShuffleManager]
   private val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER
 
   private val remoteReadNioBufferConversion =
@@ -521,7 +524,7 @@ private[spark] class BlockManager(
     // it needs the merge directories metadata which is provided by the local executor during
     // the registration with the ESS. Therefore, this registration should be prior to
     // the BlockManager registration. See SPARK-39647.
-    if (externalShuffleServiceEnabled) {
+    if (externalShuffleServiceEnabled && isSortShuffle) {
       logInfo(s"external shuffle service port = $externalShuffleServicePort")
       shuffleServerId = BlockManagerId(executorId, blockTransferService.hostName,
         externalShuffleServicePort)
@@ -544,7 +547,7 @@ private[spark] class BlockManager(
 
     blockManagerId = if (idFromMaster != null) idFromMaster else id
 
-    if (!externalShuffleServiceEnabled) {
+    if (!externalShuffleServiceEnabled || !isSortShuffle) {
       shuffleServerId = blockManagerId
     }
 

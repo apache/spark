@@ -330,7 +330,9 @@ object SparkEnv extends Logging {
       conf.get(BLOCK_MANAGER_PORT)
     }
 
-    val externalShuffleClient = if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
+    val isSortShuffle = shuffleManager
+      .isInstanceOf[org.apache.spark.shuffle.sort.SortShuffleManager]
+    val externalShuffleClient = if (conf.get(config.SHUFFLE_SERVICE_ENABLED) && isSortShuffle) {
       val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores)
       Some(new ExternalBlockStoreClient(transConf, securityManager,
         securityManager.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT)))
