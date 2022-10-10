@@ -111,7 +111,7 @@ class AlterTableAddPartitionSuite
         sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'" +
           " PARTITION (id=2) LOCATION 'loc1'")
       }.getMessage
-      assert(errMsg === s"The following partitions already exists in table $t:id -> 2")
+      assert(errMsg === s"The following partitions already exist in table $t:id -> 2")
 
       sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
         " PARTITION (id=2) LOCATION 'loc1'")
