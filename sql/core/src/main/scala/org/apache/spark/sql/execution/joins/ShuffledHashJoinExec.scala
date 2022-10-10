@@ -71,6 +71,8 @@ case class ShuffledHashJoinExec(
     case _ => false
   }
 
+  private var hashRelation: HashedRelation = null
+
   /**
    * This is called by generated Java class, should be public.
    */
@@ -88,6 +90,9 @@ case class ShuffledHashJoinExec(
       ignoresDuplicatedKey = ignoreDuplicatedKey)
     buildTime += NANOSECONDS.toMillis(System.nanoTime() - start)
     buildDataSize += relation.estimatedSize
+    hashRelation = relation
+    // cleanup build plan resource eagerly since all rows have been consumed
+    buildPlan.cleanupResources()
     // This relation is usually used until the end of task.
     context.addTaskCompletionListener[Unit](_ => relation.close())
     relation
@@ -586,6 +591,13 @@ case class ShuffledHashJoinExec(
        |$joinStreamSide
        |$filterBuildSide
      """.stripMargin
+  }
+
+  override protected[sql] def cleanupResources(): Unit = {
+    if (hashRelation != null) {
+      hashRelation.close()
+    }
+    super.cleanupResources()
   }
 
   override protected def withNewChildrenInternal(

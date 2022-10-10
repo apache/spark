@@ -117,6 +117,8 @@ case class SortExec(
       // figure out how many bytes we spilled for this operator.
       val spillSizeBefore = metrics.memoryBytesSpilled
       val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
+      // cleanup child's resource eagerly since all rows have been consumed
+      child.cleanupResources()
       sortTime += NANOSECONDS.toMillis(sorter.getSortTimeNanos)
       peakMemory += sorter.getPeakMemoryUsage
       spillSize += metrics.memoryBytesSpilled - spillSizeBefore
@@ -163,10 +165,13 @@ case class SortExec(
     val spillSize = metricTerm(ctx, "spillSize")
     val spillSizeBefore = ctx.freshName("spillSizeBefore")
     val sortTime = metricTerm(ctx, "sortTime")
+    val childReferenceObj = ctx.addReferenceObj("child", child)
+    val eagerCleanup = s"$childReferenceObj.cleanupResources();"
     s"""
        | if ($needToSort) {
        |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
        |   $addToSorterFuncName();
+       |   $eagerCleanup
        |   $sortedIterator = $sorterVariable.sort();
        |   $sortTime.add($sorterVariable.getSortTimeNanos() / $NANOS_PER_MILLIS);
        |   $peakMemory.add($sorterVariable.getPeakMemoryUsage());
