@@ -27,15 +27,14 @@ from typing import (
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.column import (
-    ColumnOrString,
     ColumnRef,
     Expression,
-    ExpressionOrString,
     SortOrder,
 )
 
 
 if TYPE_CHECKING:
+    from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString
     from pyspark.sql.connect.client import RemoteSparkSession
 
 
@@ -57,16 +56,16 @@ class LogicalPlan(object):
         return exp
 
     def to_attr_or_expression(
-        self, col: ColumnOrString, session: "RemoteSparkSession"
+        self, col: "ColumnOrString", session: Optional["RemoteSparkSession"]
     ) -> proto.Expression:
         """Returns either an instance of an unresolved attribute or the serialized
         expression value of the column."""
         if type(col) is str:
-            return self.unresolved_attr(cast(str, col))
+            return self.unresolved_attr(col)
         else:
             return cast(ColumnRef, col).to_plan(session)
 
-    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         ...
 
     def _verify(self, session: "RemoteSparkSession") -> bool:
@@ -81,7 +80,9 @@ class LogicalPlan(object):
 
         return test_plan == plan
 
-    def collect(self, session: "RemoteSparkSession" = None, debug: bool = False):
+    def collect(
+        self, session: Optional["RemoteSparkSession"] = None, debug: bool = False
+    ) -> proto.Plan:
         plan = proto.Plan()
         plan.root.CopyFrom(self.plan(session))
 
@@ -90,11 +91,14 @@ class LogicalPlan(object):
 
         return plan
 
-    def print(self, indent=0) -> str:
+    def print(self, indent: int = 0) -> str:
         ...
 
-    def _repr_html_(self):
+    def _repr_html_(self) -> str:
         ...
+
+    def _child_repr_(self) -> str:
+        return self._child._repr_html_() if self._child is not None else ""
 
 
 class Read(LogicalPlan):
@@ -102,15 +106,15 @@ class Read(LogicalPlan):
         super().__init__(None)
         self.table_name = table_name
 
-    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         plan = proto.Relation()
         plan.read.named_table.parts.extend(self.table_name.split("."))
         return plan
 
-    def print(self, indent=0) -> str:
+    def print(self, indent: int = 0) -> str:
         return f"{' ' * indent}<Read table_name={self.table_name}>\n"
 
-    def _repr_html_(self):
+    def _repr_html_(self) -> str:
         return f"""
         <ul>
             <li>
@@ -132,28 +136,28 @@ class Project(LogicalPlan):
 
     """
 
-    def __init__(self, child: Optional["LogicalPlan"], *columns: ExpressionOrString) -> None:
+    def __init__(self, child: Optional["LogicalPlan"], *columns: "ExpressionOrString") -> None:
         super().__init__(child)
         self._raw_columns = list(columns)
-        self.alias = None
+        self.alias: Optional[str] = None
         self._verify_expressions()
 
-    def _verify_expressions(self):
+    def _verify_expressions(self) -> None:
         """Ensures that all input arguments are instances of Expression."""
         for c in self._raw_columns:
             if not isinstance(c, Expression):
                 raise InputValidationError(f"Only Expressions can be used for projections: '{c}'.")
 
-    def withAlias(self, alias) -> LogicalPlan:
+    def withAlias(self, alias: str) -> LogicalPlan:
         self.alias = alias
         return self
 
-    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
         proj_exprs = [
             c.to_plan(session)
             if isinstance(c, Expression)
-            else self.unresolved_attr(*cast(str, c).split("."))
+            else self.unresolved_attr(*(c.split(".")))
             for c in self._raw_columns
         ]
         common = proto.RelationCommon()
@@ -166,17 +170,17 @@ class Project(LogicalPlan):
         plan.common.CopyFrom(common)
         return plan
 
-    def print(self, indent=0) -> str:
+    def print(self, indent: int = 0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
         return f"{' ' * indent}<Project cols={self._raw_columns}>\n{c_buf}"
 
-    def _repr_html_(self):
+    def _repr_html_(self) -> str:
         return f"""
         <ul>
             <li>
                 <b>Project</b><br />
                 Columns: {",".join([str(c) for c in self._raw_columns])}
-                {self._child._repr_html_()}
+                {self._child._repr_html_() if self._child is not None else ""}
             </li>
         </uL>
         """
@@ -187,24 +191,24 @@ class Filter(LogicalPlan):
         super().__init__(child)
         self.filter = filter
 
-    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
         plan.filter.input.CopyFrom(self._child.plan(session))
         plan.filter.condition.CopyFrom(self.filter.to_plan(session))
         return plan
 
-    def print(self, indent=0) -> str:
+    def print(self, indent: int = 0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
         return f"{' ' * indent}<Filter filter={self.filter}>\n{c_buf}"
 
-    def _repr_html_(self):
+    def _repr_html_(self) -> str:
         return f"""
         <ul>
             <li>
                 <b>Filter</b><br />
                 Condition: {self.filter}
-                {self._child._repr_html_()}
+                {self._child_repr_()}
             </li>
         </uL>
         """
@@ -216,25 +220,25 @@ class Limit(LogicalPlan):
         self.limit = limit
         self.offset = offset
 
-    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
         plan.fetch.input.CopyFrom(self._child.plan(session))
         plan.fetch.limit = self.limit
         return plan
 
-    def print(self, indent=0) -> str:
+    def print(self, indent: int = 0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
         return f"{' ' * indent}<Limit limit={self.limit} offset={self.offset}>\n{c_buf}"
 
-    def _repr_html_(self):
+    def _repr_html_(self) -> str:
         return f"""
         <ul>
             <li>
                 <b>Limit</b><br />
                 Limit: {self.limit} <br />
                 Offset: {self.offset} <br />
-                {self._child._repr_html_()}
+                {self._child_repr_()}
             </li>
         </uL>
         """
@@ -248,20 +252,19 @@ class Sort(LogicalPlan):
         self.columns = list(columns)
 
     def col_to_sort_field(
-        self, col: Union[SortOrder, ColumnRef, str], session: "RemoteSparkSession"
+        self, col: Union[SortOrder, ColumnRef, str], session: Optional["RemoteSparkSession"]
     ) -> proto.Sort.SortField:
         if type(col) is SortOrder:
-            so = cast(SortOrder, col)
             sf = proto.Sort.SortField()
-            sf.expression.CopyFrom(so.ref.to_plan(session))
+            sf.expression.CopyFrom(col.ref.to_plan(session))
             sf.direction = (
                 proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
-                if so.ascending
+                if col.ascending
                 else proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING
             )
             sf.nulls = (
                 proto.Sort.SortNulls.SORT_NULLS_FIRST
-                if not so.nullsLast
+                if not col.nullsLast
                 else proto.Sort.SortNulls.SORT_NULLS_LAST
             )
             return sf
@@ -269,38 +272,39 @@ class Sort(LogicalPlan):
             sf = proto.Sort.SortField()
             # Check string
             if type(col) is ColumnRef:
-                sf.expression.CopyFrom(cast(ColumnRef, col).to_plan(session))
+                sf.expression.CopyFrom(col.to_plan(session))
             else:
                 sf.expression.CopyFrom(self.unresolved_attr(cast(str, col)))
             sf.direction = proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
             sf.nulls = proto.Sort.SortNulls.SORT_NULLS_LAST
             return sf
 
-    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
         plan.sort.input.CopyFrom(self._child.plan(session))
         plan.sort.sort_fields.extend([self.col_to_sort_field(x, session) for x in self.columns])
         return plan
 
-    def print(self, indent=0) -> str:
+    def print(self, indent: int = 0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
         return f"{' ' * indent}<Sort columns={self.columns}>\n{c_buf}"
 
-    def _repr_html_(self):
+    def _repr_html_(self) -> str:
         return f"""
         <ul>
             <li>
                 <b>Sort</b><br />
                 {", ".join([str(c) for c in self.columns])}
-                {self._child._repr_html_()}
+                {self._child_repr_()}
             </li>
         </uL>
         """
 
 
 class Aggregate(LogicalPlan):
-    MeasuresType = Sequence[Tuple[ExpressionOrString, str]]
+    MeasureType = Tuple["ExpressionOrString", str]
+    MeasuresType = Sequence[MeasureType]
     OptMeasuresType = Optional[MeasuresType]
 
     def __init__(
@@ -313,7 +317,9 @@ class Aggregate(LogicalPlan):
         self.grouping_cols = grouping_cols
         self.measures = measures if measures is not None else []
 
-    def _convert_measure(self, m, session: "RemoteSparkSession"):
+    def _convert_measure(
+        self, m: MeasureType, session: Optional["RemoteSparkSession"]
+    ) -> proto.Aggregate.Measure:
         exp, fun = m
         measure = proto.Aggregate.Measure()
         measure.function.name = fun
@@ -323,7 +329,7 @@ class Aggregate(LogicalPlan):
             measure.function.arguments.append(cast(Expression, exp).to_plan(session))
         return measure
 
-    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
         groupings = [x.to_plan(session) for x in self.grouping_cols]
 
@@ -338,19 +344,19 @@ class Aggregate(LogicalPlan):
         agg.aggregate.grouping_sets.append(gs)
         return agg
 
-    def print(self, indent=0) -> str:
+    def print(self, indent: int = 0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
         return (
             f"{' ' * indent}<Sort columns={self.grouping_cols}"
             f"measures={self.measures}>\n{c_buf}"
         )
 
-    def _repr_html_(self):
+    def _repr_html_(self) -> str:
         return f"""
         <ul>
             <li>
                 <b>Aggregation</b><br />
-                {self._child._repr_html_()}
+                {self._child_repr_()}
             </li>
         </uL>
         """
@@ -361,8 +367,8 @@ class Join(LogicalPlan):
         self,
         left: Optional["LogicalPlan"],
         right: "LogicalPlan",
-        on: ColumnOrString,
-        how: proto.Join.JoinType = proto.Join.JoinType.JOIN_TYPE_INNER,
+        on: "ColumnOrString",
+        how: proto.Join.JoinType.ValueType = proto.Join.JoinType.JOIN_TYPE_INNER,
     ) -> None:
         super().__init__(left)
         self.left = cast(LogicalPlan, left)
@@ -372,14 +378,14 @@ class Join(LogicalPlan):
             how = proto.Join.JoinType.JOIN_TYPE_INNER
         self.how = how
 
-    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         rel = proto.Relation()
         rel.join.left.CopyFrom(self.left.plan(session))
         rel.join.right.CopyFrom(self.right.plan(session))
         rel.join.on.CopyFrom(self.to_attr_or_expression(self.on, session))
         return rel
 
-    def print(self, indent=0) -> str:
+    def print(self, indent: int = 0) -> str:
         i = " " * indent
         o = " " * (indent + LogicalPlan.INDENT)
         n = indent + LogicalPlan.INDENT * 2
@@ -388,7 +394,7 @@ class Join(LogicalPlan):
             f"left=\n{self.left.print(n)}\n{o}right=\n{self.right.print(n)}"
         )
 
-    def _repr_html_(self):
+    def _repr_html_(self) -> str:
         return f"""
         <ul>
             <li>
@@ -405,13 +411,14 @@ class UnionAll(LogicalPlan):
         super().__init__(child)
         self.other = other
 
-    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
         rel = proto.Relation()
         rel.union.inputs.extend([self._child.plan(session), self.other.plan(session)])
         rel.union.union_type = proto.Union.UnionType.UNION_TYPE_ALL
+        return rel
 
-    def print(self, indent=0) -> str:
+    def print(self, indent: int = 0) -> str:
         assert self._child is not None
         assert self.other is not None
 
@@ -443,12 +450,12 @@ class SQL(LogicalPlan):
         super().__init__(None)
         self._query = query
 
-    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         rel = proto.Relation()
         rel.sql.query = self._query
         return rel
 
-    def print(self, indent=0) -> str:
+    def print(self, indent: int = 0) -> str:
         i = " " * indent
         sub_query = self._query.replace("\n", "")[:50]
         return f"""{i}<SQL query='{sub_query}...'>"""

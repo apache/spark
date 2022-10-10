@@ -58,8 +58,7 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkThrowable](Seq("a" -> "b").toDF("i", "j").to(schema))
     checkError(
       exception = e,
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`non_exist`",
         "proposal" -> "`i`, `j`"))
@@ -161,8 +160,7 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = e,
-      errorClass = "UNRESOLVED_FIELD",
-      errorSubClass = Some("WITH_SUGGESTION"),
+      errorClass = "UNRESOLVED_FIELD.WITH_SUGGESTION",
       parameters = Map(
         "fieldName" -> "`non_exist`",
         "columnPath" -> "`struct`",

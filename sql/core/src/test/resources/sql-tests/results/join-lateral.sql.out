@@ -163,8 +163,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE",
-  "errorSubClass" : "LATERAL_NATURAL_JOIN",
+  "errorClass" : "UNSUPPORTED_FEATURE.LATERAL_NATURAL_JOIN",
   "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
@@ -183,8 +182,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE",
-  "errorSubClass" : "LATERAL_JOIN_USING",
+  "errorClass" : "UNSUPPORTED_FEATURE.LATERAL_JOIN_USING",
   "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
@@ -292,8 +290,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITHOUT_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t2`.`c1`"
@@ -331,8 +328,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
-  "errorSubClass" : "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
   "messageParameters" : {
     "treeNode" : "LateralJoin lateral-subquery#x [c1#x && c2#x], Inner\n:  +- SubqueryAlias __auto_generated_subquery_name\n:     +- Project [(cast((outer(c1#x) + outer(c2#x)) as double) + rand(0)) AS c3#x]\n:        +- OneRowRelation\n+- SubqueryAlias spark_catalog.default.t1\n   +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
   },
@@ -353,8 +349,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
-  "errorSubClass" : "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
   "messageParameters" : {
     "treeNode" : "LateralJoin lateral-subquery#x [], Inner\n:  +- SubqueryAlias __auto_generated_subquery_name\n:     +- Project [rand(0) AS rand(0)#x]\n:        +- SubqueryAlias spark_catalog.default.t2\n:           +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])\n:              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n:                 +- LocalRelation [col1#x, col2#x]\n+- SubqueryAlias spark_catalog.default.t1\n   +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
   },
@@ -375,8 +370,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
-  "errorSubClass" : "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.LATERAL_JOIN_CONDITION_NON_DETERMINISTIC",
   "messageParameters" : {
     "condition" : "((CAST(spark_catalog.default.t1.c1 AS DOUBLE) + rand(0)) = CAST(s.c1 AS DOUBLE))"
   },
@@ -452,8 +446,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITHOUT_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t1`.`c1`"
@@ -475,8 +468,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITHOUT_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`c2`"
@@ -516,8 +508,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t1`.`c1`",

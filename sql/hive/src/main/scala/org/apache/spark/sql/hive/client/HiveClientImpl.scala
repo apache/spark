@@ -635,7 +635,11 @@ private[hive] class HiveClientImpl(
       ignoreIfExists: Boolean): Unit = withHiveState {
     def replaceExistException(e: Throwable): Unit = e match {
       case _: HiveException if e.getCause.isInstanceOf[AlreadyExistsException] =>
-        throw new PartitionsAlreadyExistException(db, table, parts.map(_.spec))
+        val t = shim.getTable(client, db, table)
+        val exists = parts.filter { part =>
+          shim.getPartition(client, t, part.spec.asJava, forceCreate = false) != null
+        }
+        throw new PartitionsAlreadyExistException(db, table, exists.map(_.spec))
       case _ => throw e
     }
     try {
