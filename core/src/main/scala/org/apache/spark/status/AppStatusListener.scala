@@ -677,8 +677,9 @@ private[spark] class AppStatusListener(
           Some(new v1.FailureReason(e.getClass.getSimpleName,
             e.reason.getOrElse(""), e.toErrorString))
         case e: FetchFailed =>
-          parseErrorMessage(e.message)
-            .map(f => new v1.FailureReason(e.getClass.getSimpleName, f.message, f.stackTrace))
+          // remove reduceId an message so tasks from different reducers could be grouped together
+          val msg = e.toErrorString.split(", reduceId").head + ")"
+          Some(new FailureReason(e.getClass.getSimpleName, msg, e.toErrorString))
         case e: TaskFailedReason =>
           Some(new v1.FailureReason(e.getClass.getSimpleName, e.toErrorString, e.toErrorString))
         case _ =>
@@ -1441,21 +1442,6 @@ private[spark] class AppStatusListener(
     } else {
       0L
     }
-  }
-
-  private def parseErrorMessage(errorMessage: String): Option[FailureReason] = {
-    errorMessage.split("\\r?\\n")
-      .find(s => s.contains("Exception") || s.contains("Error"))
-      .map(s => s.split("(?<=Exception|Error): "))
-      .flatMap(s => {
-        if (s.last.endsWith("Exception") || s.last.endsWith("Error")) {
-          Some(new v1.FailureReason(s.last, "", errorMessage))
-        } else if (s.length == 1) {
-          None
-        } else {
-          Some(new v1.FailureReason(s(s.length - 2), s.last, errorMessage))
-        }
-      })
   }
 
   private def onMiscellaneousProcessAdded(

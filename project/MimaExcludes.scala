@@ -42,6 +42,9 @@ object MimaExcludes {
     // [SPARK-39110] Show metrics properties in HistoryServer environment tab
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationEnvironmentInfo.this"),
 
+    // [SPARK-32288][UI] Add failure summary for failed tasks in stage page
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.this"),
+
     // [SPARK-38775][ML] Cleanup validation functions
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.PredictionModel.extractInstances"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.Predictor.extractInstances"),
