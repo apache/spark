@@ -34,6 +34,7 @@ class InMemoryRowLevelOperationTable(
     properties: util.Map[String, String])
   extends InMemoryTable(name, schema, partitioning, properties) with SupportsRowLevelOperations {
 
+  // used in row-level operation tests to verify replaced partitions
   var replacedPartitions: Seq[Seq[Any]] = Seq.empty
 
   override def newRowLevelOperationBuilder(
