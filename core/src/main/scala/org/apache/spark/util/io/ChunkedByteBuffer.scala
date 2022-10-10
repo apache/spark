@@ -44,7 +44,7 @@ import org.apache.spark.util.Utils
  */
 private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Externalizable {
   require(chunks != null, "chunks must not be null")
-  require(!chunks.contains(null), "chunks must not be null")
+  require(!chunks.contains(null), "chunks must not contain null")
   require(chunks.forall(_.position() == 0), "chunks' positions must be 0")
 
   // Chunk size in bytes
