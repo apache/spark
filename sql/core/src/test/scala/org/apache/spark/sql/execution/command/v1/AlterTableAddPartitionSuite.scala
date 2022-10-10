@@ -148,7 +148,7 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
           " PARTITION (id=2) LOCATION 'loc1'")
       }.getMessage
       assert(errMsg ===
-      """The following partitions already exists in table 'tbl' database 'ns':
+      """The following partitions already exist in table 'tbl' database 'ns':
         |Map(id -> 2)""".stripMargin)
 
       sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +

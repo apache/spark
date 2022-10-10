@@ -134,7 +134,7 @@
     </dependency>
     <dependency>
       <groupId>io.grpc</groupId>
-      <artifactId>grpc-netty-shaded</artifactId>
+      <artifactId>grpc-netty</artifactId>
       <version>${io.grpc.version}</version>
     </dependency>
     <dependency>
@@ -151,6 +151,24 @@
       <groupId>io.grpc</groupId>
       <artifactId>grpc-stub</artifactId>
       <version>${io.grpc.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-codec-http2</artifactId>
+      <version>${netty.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-handler-proxy</artifactId>
+      <version>${netty.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-transport-native-unix-common</artifactId>
+      <version>${netty.version}</version>
+      <scope>provided</scope>
     </dependency>
     <dependency> <!-- necessary for Java 9+ -->
       <groupId>org.apache.tomcat</groupId>
