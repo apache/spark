@@ -18,10 +18,10 @@
 package org.apache.spark.deploy
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
-import java.net.{InetAddress, UnknownHostException}
+import java.net.InetAddress
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
-import java.util.{Arrays, Date, Locale, Map => JMap}
+import java.util.{Arrays, Date, Locale}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
@@ -490,7 +490,10 @@ private[spark] object SparkHadoopUtil extends Logging {
     // Note: this null check is around more than just access to the "conf" object to maintain
     // the behavior of the old implementation of this code, for backwards compatibility.
     if (conf != null) {
-      appendS3CredentialsFromEnvironment(hadoopConf, System.getenv)
+      appendS3CredentialsFromEnvironment(hadoopConf,
+        System.getenv(ENV_VAR_AWS_ACCESS_KEY),
+        System.getenv(ENV_VAR_AWS_SECRET_KEY),
+        System.getenv(ENV_VAR_AWS_SESSION_TOKEN))
       appendHiveConfigs(hadoopConf)
       appendSparkHadoopConfigs(conf, hadoopConf)
       appendSparkHiveConfigs(conf, hadoopConf)
@@ -508,17 +511,19 @@ private[spark] object SparkHadoopUtil extends Logging {
    * on which it was set. This can help debug propagation issues.
    *
    * @param hadoopConf configuration to patch
-   * @param env environment.
+   * @param keyId key ID or null
+   * @param accessKey secret key
+   * @param sessionToken session token.
    */
   // Exposed for testing
   private[deploy] def appendS3CredentialsFromEnvironment(
       hadoopConf: Configuration,
-      env: JMap[String, String]): Unit = {
-    val keyId = env.get(ENV_VAR_AWS_ACCESS_KEY)
-    val accessKey = env.get(ENV_VAR_AWS_SECRET_KEY)
+      keyId: String,
+      accessKey: String,
+      sessionToken: String): Unit = {
     if (keyId != null && accessKey != null) {
       // source prefix string; will have environment variable added
-      val source = SOURCE_SPARK + " on " + getLocalHostname + " from "
+      val source = SOURCE_SPARK + " on " + InetAddress.getLocalHost.toString + " from "
       hadoopConf.set("fs.s3.awsAccessKeyId", keyId, source +
         ENV_VAR_AWS_ACCESS_KEY)
       hadoopConf.set("fs.s3n.awsAccessKeyId", keyId, source +
@@ -532,10 +537,11 @@ private[spark] object SparkHadoopUtil extends Logging {
       hadoopConf.set("fs.s3a.secret.key", accessKey, source +
         ENV_VAR_AWS_SECRET_KEY)
 
-      val sessionToken = env.get(ENV_VAR_AWS_SESSION_TOKEN)
+
+      // look for session token if the other variables were set
       if (sessionToken != null) {
-        hadoopConf.set("fs.s3a.session.token", sessionToken, source +
-          ENV_VAR_AWS_SESSION_TOKEN)
+        hadoopConf.set("fs.s3a.session.token", sessionToken,
+          source + ENV_VAR_AWS_SESSION_TOKEN)
       }
     }
   }
@@ -588,25 +594,7 @@ private[spark] object SparkHadoopUtil extends Logging {
   private def appendSparkHiveConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
     // Copy any "spark.hive.foo=bar" spark properties into conf as "hive.foo=bar"
     for ((key, value) <- conf.getAll if key.startsWith("spark.hive.")) {
-      hadoopConf.set(key.substring("spark.".length), value,
-        SOURCE_SPARK_HIVE)
-    }
-  }
-
-  /**
-   * Return a hostname without throwing an exception if the system
-   * does not know its own name.
-   * The returned hostname string format is "hostname/ip address",
-   *
-   * @return hostname or "unknown/0.0.0.0"
-   */
-  private def getLocalHostname: String = {
-    try
-      InetAddress.getLocalHost.toString
-    catch {
-      // this surfaces on machines with serious networking issues
-      // which are therefore unlikely to be able to deploy spark.
-      case _: UnknownHostException => "unknown/0.0.0.0"
+      hadoopConf.set(key.substring("spark.".length), value, SOURCE_SPARK_HIVE)
     }
   }
 
