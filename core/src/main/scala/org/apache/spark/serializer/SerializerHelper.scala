@@ -26,8 +26,8 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
 
 private[spark] object SerializerHelper extends Logging {
   def serializeToChunkedBuffer[T: ClassTag](
-    serializerInstance: SerializerInstance,
-    t: T): ChunkedByteBuffer = {
+      serializerInstance: SerializerInstance,
+      t: T): ChunkedByteBuffer = {
     val cbbos = new ChunkedByteBufferOutputStream(1024 * 1024, ByteBuffer.allocate)
     val out = serializerInstance.serializeStream(cbbos)
     out.writeObject(t)
@@ -35,9 +35,10 @@ private[spark] object SerializerHelper extends Logging {
     cbbos.close()
     cbbos.toChunkedByteBuffer
   }
+
   def deserializeFromChunkedBuffer[T: ClassTag](
-    serializerInstance: SerializerInstance,
-    bytes: ChunkedByteBuffer): T = {
+      serializerInstance: SerializerInstance,
+      bytes: ChunkedByteBuffer): T = {
     val in = serializerInstance.deserializeStream(bytes.toInputStream())
     in.readObject()
   }

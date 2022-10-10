@@ -96,8 +96,8 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
    */
   def writeToStream(out: OutputStream): Unit = {
     var buffer: Array[Byte] = null
-    val bufferLen = 1024 * 1024;
-    chunks.foreach(chunk => {
+    val bufferLen = 1024 * 1024
+    chunks.foreach { chunk => {
       if (chunk.hasArray) {
         // zero copy if the bytebuffer is backed by array
         out.write(chunk.array(), chunk.arrayOffset(), chunk.limit())
@@ -116,7 +116,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
         }
         chunk.position(originalPos)
       }
-    })
+    }}
   }
 
   /**
@@ -128,8 +128,8 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
     chunks.foreach(buffer => out.writeInt(buffer.limit()))
     chunks.foreach(buffer => out.writeBoolean(buffer.isDirect))
     var buffer: Array[Byte] = null
-    val bufferLen = 1024 * 1024;
-    chunks.foreach(chunk => {
+    val bufferLen = 1024 * 1024
+    chunks.foreach { chunk => {
       if (chunk.hasArray) {
         // zero copy if the bytebuffer is backed by array
         out.write(chunk.array(), chunk.arrayOffset(), chunk.limit())
@@ -148,7 +148,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
         }
         chunk.position(originalPos)
       }
-    })
+    }}
   }
 
   override def readExternal(in: ObjectInput): Unit = {
@@ -165,7 +165,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
       null
     }
 
-    indices.foreach(i => {
+    indices.foreach { i => {
       val chunkSize = chunksSize(i)
       chunks(i) = if (chunksDirect(i)) {
         val buffer = ByteBuffer.allocateDirect(chunkSize)
@@ -184,7 +184,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
         in.readFully(arr, 0, chunkSize)
         ByteBuffer.wrap(arr)
       }
-    })
+    }}
     this.chunks = chunks
     this._size = chunks.map(_.limit().toLong).sum
   }
@@ -311,6 +311,33 @@ private[spark] object ChunkedByteBuffer {
       out.close()
     }
     out.toChunkedByteBuffer
+  }
+
+  private def writeBufferToDest(buffer: ChunkedByteBuffer, writer: (Array[Byte], Int, Int) => ()) {
+//    buffer.chunks
+    var buffer: Array[Byte] = null
+    val bufferLen = 1024 * 1024
+
+//    buffer.chunks.foreach { chunk => {
+//      if (chunk.hasArray) {
+//        // zero copy if the bytebuffer is backed by array
+//        out.write(chunk.array(), chunk.arrayOffset(), chunk.limit())
+//      } else {
+//        // fallback to copy approach
+//        if (buffer == null) {
+//          buffer = new Array[Byte](bufferLen)
+//        }
+//        val originalPos = chunk.position()
+//        chunk.rewind()
+//        var bytesToRead = Math.min(chunk.remaining(), bufferLen)
+//        while (bytesToRead > 0) {
+//          chunk.get(buffer, 0, bytesToRead)
+//          out.write(buffer, 0, bytesToRead)
+//          bytesToRead = Math.min(chunk.remaining(), bufferLen)
+//        }
+//        chunk.position(originalPos)
+//      }
+//    }}
   }
 }
 
