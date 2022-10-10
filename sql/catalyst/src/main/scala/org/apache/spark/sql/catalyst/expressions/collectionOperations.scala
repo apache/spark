@@ -72,7 +72,7 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
         DataTypeMismatch(
           errorSubClass = "BINARY_ARRAY_DIFF_TYPES",
           messageParameters = Map(
-            "function" -> prettyName,
+            "functionName" -> prettyName,
             "arrayType" -> toSQLType(ArrayType),
             "leftType" -> toSQLType(left.dataType),
             "rightType" -> toSQLType(right.dataType)

@@ -91,8 +91,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "DATA_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
     "dataType" : "(\"MAP<TINYINT, TINYINT>\" or \"MAP<ARRAY<STRING>, ARRAY<STRING>>\")",
     "functionName" : "function map_concat",
@@ -117,8 +116,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "DATA_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
     "dataType" : "(\"MAP<BOOLEAN, BOOLEAN>\" or \"MAP<INT, INT>\")",
     "functionName" : "function map_concat",
@@ -143,8 +141,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "DATA_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
     "dataType" : "(\"MAP<INT, INT>\" or \"MAP<STRUCT<col1: STRING, col2: INT>, STRUCT<col1: STRING, col2: INT>>\")",
     "functionName" : "function map_concat",
@@ -169,8 +166,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "DATA_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
     "dataType" : "(\"MAP<STRUCT<col1: STRING, col2: INT>, STRUCT<col1: STRING, col2: INT>>\" or \"MAP<ARRAY<STRING>, ARRAY<STRING>>\")",
     "functionName" : "function map_concat",
@@ -195,8 +191,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "DATA_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
     "dataType" : "(\"MAP<INT, INT>\" or \"MAP<ARRAY<STRING>, ARRAY<STRING>>\")",
     "functionName" : "function map_concat",
