@@ -722,8 +722,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
     assertAnalysisErrorClass(
       inputPlan = plan2,
-      expectedErrorClass = "DATATYPE_MISMATCH",
-      expectedErrorSubClass = "INVALID_ORDERING_TYPE",
+      expectedErrorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
       expectedMessageParameters = Map(
         "functionName" -> "EqualTo",
         "dataType" -> "\"MAP<STRING, STRING>\"",
