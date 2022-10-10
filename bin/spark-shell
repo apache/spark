@@ -43,8 +43,8 @@ Scala REPL options:
 # has its own class loader, and any additional classpath specified
 # through spark.driver.extraClassPath is not automatically propagated.
 SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Dscala.usejavacp=true"
-# SPARK-40729:  After Java 18, `MethodHandleAccessor` is used by default
-# instead of `UnsafeFieldAccessor`(`JEP 416: Reimplement Core Reflection with Method Handles`),
+# SPARK-40729: `MethodHandleAccessor` is used by default
+# instead of `UnsafeFieldAccessor` after `JEP 416: Reimplement Core Reflection with Method Handles`,
 # this will lead to the bad case described in SPARK-40729 in the spark-shell,
 # enable the old implementation via `-Djdk.reflect.useDirectMethodHandle=false` as a workaround.
 SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Djdk.reflect.useDirectMethodHandle=false"
