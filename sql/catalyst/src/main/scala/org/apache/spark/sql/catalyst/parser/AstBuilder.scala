@@ -900,10 +900,18 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       withJoinRelations(join, relation)
     }
     if (ctx.pivotClause() != null) {
+      if (ctx.unpivotClause() != null) {
+        throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
+      }
       if (!ctx.lateralView.isEmpty) {
         throw QueryParsingErrors.lateralWithPivotInFromClauseNotAllowedError(ctx)
       }
       withPivot(ctx.pivotClause, from)
+    } else if (ctx.unpivotClause() != null) {
+      if (!ctx.lateralView.isEmpty) {
+        throw QueryParsingErrors.lateralWithUnpivotInFromClauseNotAllowedError(ctx)
+      }
+      withUnpivot(ctx.unpivotClause, from)
     } else {
       ctx.lateralView.asScala.foldLeft(from)(withGenerate)
     }
@@ -1104,6 +1112,98 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   }
 
   /**
+   * Add an [[Unpivot]] to a logical plan.
+   */
+  private def withUnpivot(
+      ctx: UnpivotClauseContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    // this is needed to create unpivot and to filter unpivot for nulls further down
+    val valueColumnNames =
+      Option(ctx.unpivotOperator().unpivotSingleValueColumnClause())
+        .map(_.unpivotValueColumn().identifier().getText)
+        .map(Seq(_))
+      .getOrElse(
+        Option(ctx.unpivotOperator().unpivotMultiValueColumnClause())
+          .map(_.unpivotValueColumns.asScala.map(_.identifier().getText).toSeq)
+          .get
+      )
+
+    val unpivot = if (ctx.unpivotOperator().unpivotSingleValueColumnClause() != null) {
+      val unpivotClause = ctx.unpivotOperator().unpivotSingleValueColumnClause()
+      val variableColumnName = unpivotClause.unpivotNameColumn().identifier().getText
+      val (unpivotColumns, unpivotAliases) =
+        unpivotClause.unpivotColumns.asScala.map(visitUnpivotColumnAndAlias).toSeq.unzip
+
+      Unpivot(
+        None,
+        Some(unpivotColumns.map(Seq(_))),
+        Some(unpivotAliases),
+        variableColumnName,
+        valueColumnNames,
+        query
+      )
+    } else {
+      val unpivotClause = ctx.unpivotOperator().unpivotMultiValueColumnClause()
+      val variableColumnName = unpivotClause.unpivotNameColumn().identifier().getText
+      val (unpivotColumns, unpivotAliases) =
+        unpivotClause.unpivotColumnSets.asScala.map(visitUnpivotColumnSet).toSeq.unzip
+
+      Unpivot(
+        None,
+        Some(unpivotColumns),
+        Some(unpivotAliases),
+        variableColumnName,
+        valueColumnNames,
+        query
+      )
+    }
+
+    // exclude null values by default
+    val filtered = if (ctx.nullOperator == null || ctx.nullOperator.EXCLUDE() != null) {
+      Filter(IsNotNull(Coalesce(valueColumnNames.map(UnresolvedAttribute(_)))), unpivot)
+    } else {
+      unpivot
+    }
+
+    // alias unpivot result
+    if (ctx.identifier() != null) {
+      val alias = ctx.identifier().getText
+      SubqueryAlias(alias, filtered)
+    } else {
+      filtered
+    }
+  }
+
+  /**
+   * Create an Unpivot column.
+   */
+  override def visitUnpivotColumn(ctx: UnpivotColumnContext): NamedExpression = withOrigin(ctx) {
+    UnresolvedAlias(UnresolvedAttribute(visitMultipartIdentifier(ctx.multipartIdentifier)))
+  }
+
+  /**
+   * Create an Unpivot column.
+   */
+  override def visitUnpivotColumnAndAlias(ctx: UnpivotColumnAndAliasContext):
+  (NamedExpression, Option[String]) = withOrigin(ctx) {
+    val attr = visitUnpivotColumn(ctx.unpivotColumn())
+    val alias = Option(ctx.unpivotAlias()).map(_.identifier().getText)
+    (attr, alias)
+  }
+
+  /**
+   * Create an Unpivot struct column with or without an alias.
+   * Each struct field is renamed to the respective value column name.
+   */
+  override def visitUnpivotColumnSet(ctx: UnpivotColumnSetContext):
+  (Seq[NamedExpression], Option[String]) =
+    withOrigin(ctx) {
+      val exprs = ctx.unpivotColumns.asScala.map(visitUnpivotColumn).toSeq
+      val alias = Option(ctx.unpivotAlias()).map(_.identifier().getText)
+      (exprs, alias)
+    }
+
+  /**
    * Add a [[Generate]] (Lateral View) to a logical plan.
    */
   private def withGenerate(
@@ -1285,10 +1385,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     if (ctx != null) {
       if (ctx.INTEGER_VALUE != null) {
         Some(ctx.INTEGER_VALUE().getText)
-      } else if (ctx.DOUBLEQUOTED_STRING() != null) {
-        Option(ctx.DOUBLEQUOTED_STRING()).map(string)
       } else {
-        Option(ctx.STRING()).map(string)
+        Option(string(visitStringLit(ctx.stringLit())))
       }
     } else {
       None
@@ -2614,14 +2712,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         assert(units.length == values.length)
         val kvs = units.indices.map { i =>
           val u = units(i).getText
-          val v = if (values(i).STRING() != null || values(i).DOUBLEQUOTED_STRING() != null) {
-            val value = string(if (values(i).STRING() != null) {
-              values(i).STRING()
-            }
-            else {
-              values(i).DOUBLEQUOTED_STRING()
-            }
-            )
+          val v = if (values(i).stringLit() != null) {
+            val value = string(visitStringLit(values(i).stringLit()))
             // SPARK-32840: For invalid cases, e.g. INTERVAL '1 day 2' hour,
             // INTERVAL 'interval 1' day, we need to check ahead before they are concatenated with
             // units and become valid ones, e.g. '1 day 2 hour'.
@@ -2659,12 +2751,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitUnitToUnitInterval(ctx: UnitToUnitIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
-      val value = Option(if (ctx.intervalValue.STRING != null) {
-        ctx.intervalValue.STRING
-      } else {
-        ctx.intervalValue.DOUBLEQUOTED_STRING
-      }
-      ).map(string).map { interval =>
+      val value = Option(ctx.intervalValue().stringLit()).map(s => string(visitStringLit(s)))
+        .map { interval =>
         if (ctx.intervalValue().MINUS() == null) {
           interval
         } else if (interval.startsWith("-")) {
@@ -4605,13 +4693,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   }
 
   override def visitComment (ctx: CommentContext): String = {
-    if (ctx.STRING() != null) {
-      string(ctx.STRING)
-    } else if (ctx.DOUBLEQUOTED_STRING() != null) {
-      string(ctx.DOUBLEQUOTED_STRING())
-    } else {
-      ""
-    }
+    Option(ctx.stringLit()).map(s => string(visitStringLit(s))).getOrElse("")
   }
 
   /**

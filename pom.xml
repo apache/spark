@@ -100,7 +100,7 @@
     <module>connector/kafka-0-10-assembly</module>
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
-    <module>connect</module>
+    <module>connector/connect</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -113,7 +113,7 @@
     <maven.version>3.8.6</maven.version>
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <slf4j.version>1.7.36</slf4j.version>
+    <slf4j.version>2.0.3</slf4j.version>
     <log4j.version>2.19.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.4</hadoop.version>
@@ -135,7 +135,7 @@
     <parquet.version>1.12.3</parquet.version>
     <orc.version>1.8.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>9.4.48.v20220622</jetty.version>
+    <jetty.version>9.4.49.v20220914</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
     <ivy.version>2.5.0</ivy.version>
@@ -196,9 +196,9 @@
     <!-- Please don't upgrade the version to 4.10+, it depends on JDK 11 -->
     <antlr4.version>4.9.3</antlr4.version>
     <jpam.version>1.1</jpam.version>
-    <selenium.version>4.2.2</selenium.version>
-    <htmlunit-driver.version>3.62.0</htmlunit-driver.version>
-    <htmlunit.version>2.62.0</htmlunit.version>
+    <selenium.version>4.4.0</selenium.version>
+    <htmlunit-driver.version>3.64.0</htmlunit-driver.version>
+    <htmlunit.version>2.64.0</htmlunit.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.5.0</commons-cli.version>
@@ -400,7 +400,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>scalacheck-1-16_${scala.binary.version}</artifactId>
+      <artifactId>scalacheck-1-17_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -410,7 +410,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>selenium-4-2_${scala.binary.version}</artifactId>
+      <artifactId>selenium-4-4_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -756,7 +756,7 @@
 
       <dependency>
         <groupId>org.apache.logging.log4j</groupId>
-        <artifactId>log4j-slf4j-impl</artifactId>
+        <artifactId>log4j-slf4j2-impl</artifactId>
         <version>${log4j.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
@@ -1151,25 +1151,25 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.13</version>
+        <version>3.2.14</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>scalacheck-1-16_${scala.binary.version}</artifactId>
-        <version>3.2.13.0</version>
+        <artifactId>scalacheck-1-17_${scala.binary.version}</artifactId>
+        <version>3.2.14.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>mockito-4-6_${scala.binary.version}</artifactId>
-        <version>3.2.13.0</version>
+        <version>3.2.14.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>selenium-4-2_${scala.binary.version}</artifactId>
-        <version>3.2.13.0</version>
+        <artifactId>selenium-4-4_${scala.binary.version}</artifactId>
+        <version>3.2.14.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>

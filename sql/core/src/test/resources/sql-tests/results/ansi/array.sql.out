@@ -409,8 +409,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
     "inputSql" : "\"map(a, 1, b, 2)\"",
     "inputType" : "\"MAP<STRING, INT>\"",

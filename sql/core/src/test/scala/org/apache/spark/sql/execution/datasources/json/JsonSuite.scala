@@ -3045,8 +3045,7 @@ abstract class JsonSuite
               exception = intercept[AnalysisException] {
                 readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
               },
-              errorClass = "UNRESOLVED_COLUMN",
-              errorSubClass = Some("WITH_SUGGESTION"),
+              errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
               parameters = Map("objectName" -> "`AAA`", "proposal" -> "`BBB`, `aaa`"))
             // Schema inferring
             val readback2 = spark.read.json(path.getCanonicalPath)
