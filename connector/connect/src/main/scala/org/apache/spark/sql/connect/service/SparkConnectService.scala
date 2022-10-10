@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import com.google.common.base.Ticker
 import com.google.common.cache.CacheBuilder
 import io.grpc.{Server, Status}
-import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder
+import io.grpc.netty.NettyServerBuilder
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 
@@ -48,10 +48,8 @@ import org.apache.spark.sql.execution.ExtendedMode
  */
 @Unstable
 @Since("3.4.0")
-class SparkConnectService(
-    debug: Boolean)
-  extends SparkConnectServiceGrpc.SparkConnectServiceImplBase
-  with Logging {
+class SparkConnectService(debug: Boolean)
+  extends SparkConnectServiceGrpc.SparkConnectServiceImplBase with Logging {
 
   /**
    * This is the main entry method for Spark Connect and all calls to execute a plan.
