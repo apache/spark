@@ -161,11 +161,13 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proto.Relation.newBuilder.setJoin(proto.Join.newBuilder.setLeft(readRel)).build()
     intercept[AssertionError](transform(incompleteJoin))
 
-    // default join type is inner
-    val simpleJoin2 = proto.Relation.newBuilder
-      .setJoin(proto.Join.newBuilder.setLeft(readRel).setRight(readRel))
-      .build()
-    transform(simpleJoin2)
+    // Join type JOIN_TYPE_UNSPECIFIED is not supported.
+    intercept[InvalidPlanInput] {
+      val simpleJoin = proto.Relation.newBuilder
+        .setJoin(proto.Join.newBuilder.setLeft(readRel).setRight(readRel))
+        .build()
+      transform(simpleJoin)
+    }
 
     // Construct a simple Join.
     val unresolvedAttribute = proto.Expression
