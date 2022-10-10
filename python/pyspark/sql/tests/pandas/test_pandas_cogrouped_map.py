@@ -151,13 +151,11 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
                 )
 
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(
-                PythonException,
-                "Return type of the user-defined function should be pandas.DataFrame, "
-                "but is <class 'numpy.int64'>",
-            ):
-                self._test_merge(fn=lambda lft, rgt: lft.size + rgt.size)
+        self._test_merge_error(
+            fn=lambda lft, rgt: lft.size + rgt.size,
+            error_class=PythonException,
+            error_message_regex="Return type of the user-defined function "
+                                "should be pandas.DataFrame, but is <class 'numpy.int64'>")
 
     def test_apply_in_pandas_returning_wrong_number_of_columns(self):
         def merge_pandas(lft, rgt):
@@ -167,13 +165,11 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
                 rgt["more"] = 1
             return pd.merge(lft, rgt, on=["id", "k"])
 
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(
-                PythonException,
-                "Number of columns of the returned pandas.DataFrame "
-                "doesn't match specified schema. Expected: 4 Actual: 6",
-            ):
-                self._test_merge(fn=merge_pandas)
+        self._test_merge_error(
+            fn=merge_pandas,
+            error_class=PythonException,
+            error_message_regex="Number of columns of the returned pandas.DataFrame "
+                                "doesn't match specified schema. Expected: 4 Actual: 6")
 
     def test_apply_in_pandas_returning_empty_dataframe(self):
         def merge_pandas(lft, rgt):
@@ -198,13 +194,11 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
                 return pd.DataFrame([], columns=["id", "k"])
             return pd.merge(lft, rgt, on=["id", "k"])
 
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(
-                PythonException,
-                "Number of columns of the returned pandas.DataFrame doesn't "
-                "match specified schema. Expected: 4 Actual: 2",
-            ):
-                self._test_merge(fn=merge_pandas)
+        self._test_merge_error(
+            fn=merge_pandas,
+            error_class=PythonException,
+            error_message_regex="Number of columns of the returned pandas.DataFrame doesn't "
+                                "match specified schema. Expected: 4 Actual: 2")
 
     def test_mixed_scalar_udfs_followed_by_cogrouby_apply(self):
         df = self.spark.range(0, 10).toDF("v1")
@@ -257,23 +251,18 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
     def test_wrong_return_type(self):
         # Test that we get a sensible exception invalid values passed to apply
-        left = self.data1
-        right = self.data2
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(
-                NotImplementedError, "Invalid return type.*ArrayType.*TimestampType"
-            ):
-                left.groupby("id").cogroup(right.groupby("id")).applyInPandas(
-                    lambda l, r: l, "id long, v array<timestamp>"
-                )
+        self._test_merge_error(
+            fn=lambda l, r: l,
+            output_schema="id long, v array<timestamp>",
+            error_class=NotImplementedError,
+            error_message_regex="Invalid return type.*ArrayType.*TimestampType")
 
     def test_wrong_args(self):
-        left = self.data1
-        right = self.data2
-        with self.assertRaisesRegex(ValueError, "Invalid function"):
-            left.groupby("id").cogroup(right.groupby("id")).applyInPandas(
-                lambda: 1, StructType([StructField("d", DoubleType())])
-            )
+        self._test_merge_error(
+            fn=lambda: 1,
+            output_schema=StructType([StructField("d", DoubleType())]),
+            error_class=ValueError,
+            error_message_regex="Invalid function")
 
     def test_case_insensitive_grouping_column(self):
         # SPARK-31915: case-insensitive grouping column should work.
@@ -387,7 +376,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         by=["id"],
         fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
         output_schema="id long, k int, v int, v2 int",
-        expected=None,
+        expected=None
     ):
         left = cls.data1 if left is None else left
         right = cls.data2 if right is None else right
@@ -410,6 +399,21 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         )
 
         assert_frame_equal(expected, result)
+
+    def _test_merge_error(
+            self,
+            error_class,
+            error_message_regex,
+            left=None,
+            right=None,
+            by=["id"],
+            fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
+            output_schema="id long, k int, v int, v2 int",
+
+    ):
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(error_class, error_message_regex):
+                self._test_merge(left, right, by, fn, output_schema)
 
 
 if __name__ == "__main__":
