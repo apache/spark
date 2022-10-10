@@ -74,10 +74,11 @@ if have_pyarrow:
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
 class GroupedMapInPandasTests(ReusedSQLTestCase):
+    @classmethod
     @property
-    def data(self):
+    def data(cls):
         return (
-            self.spark.range(10)
+            cls.spark.range(10)
             .toDF("id")
             .withColumn("vs", array([lit(i) for i in range(20, 30)]))
             .withColumn("v", explode(col("vs")))
@@ -269,43 +270,30 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         expected = expected.assign(norm=expected.norm.astype("float64"))
         assert_frame_equal(expected, result)
 
-    def _do_test_apply_in_pandas(self, f):
-        df = self.data
-
-        result = (
-            df.groupby("id")
-            .applyInPandas(f, schema="id integer, mean double")
-            .sort("id", "mean")
-            .collect()
-        )
-        expected = df.select("id").distinct().withColumn("mean", lit(24.5)).collect()
-
-        self.assertEqual(expected, result)
-
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
-                    PythonException,
-                    "Return type of the user-defined function should be pandas.DataFrame, "
-                    "but is <class 'tuple'>",
+                PythonException,
+                "Return type of the user-defined function should be pandas.DataFrame, "
+                "but is <class 'tuple'>",
             ):
-                self._do_test_apply_in_pandas(lambda key, pdf: key)
+                self._test_apply_in_pandas(lambda key, pdf: key)
 
     @staticmethod
     def stats_with_column_names(key, pdf):
         # order of column can be different to applyInPandas schema when column names are given
-        return pd.DataFrame([(pdf.v.mean(), ) + key], columns=["mean", "id"])
+        return pd.DataFrame([(pdf.v.mean(),) + key], columns=["mean", "id"])
 
     @staticmethod
     def stats_with_no_column_names(key, pdf):
         # columns must be in order of applyInPandas schema when no columns given
-        return pd.DataFrame([key + (pdf.v.mean(), )])
+        return pd.DataFrame([key + (pdf.v.mean(),)])
 
     def test_apply_in_pandas_returning_column_names(self):
-        self._do_test_apply_in_pandas(GroupedMapInPandasTests.stats_with_column_names)
+        self._test_apply_in_pandas(GroupedMapInPandasTests.stats_with_column_names)
 
     def test_apply_in_pandas_returning_no_column_names(self):
-        self._do_test_apply_in_pandas(GroupedMapInPandasTests.stats_with_no_column_names)
+        self._test_apply_in_pandas(GroupedMapInPandasTests.stats_with_no_column_names)
 
     def test_apply_in_pandas_returning_column_names_sometimes(self):
         def stats(key, pdf):
@@ -314,7 +302,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             else:
                 return GroupedMapInPandasTests.stats_with_no_column_names(key, pdf)
 
-        self._do_test_apply_in_pandas(stats)
+        self._test_apply_in_pandas(stats)
 
     def test_apply_in_pandas_returning_wrong_column_names(self):
         with QuietTest(self.sc):
@@ -323,66 +311,43 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                 "Column names of the returned pandas.DataFrame do not match specified schema. "
                 "Missing: mean Unexpected: median, std",
             ):
-                self._do_test_apply_in_pandas(
-                    lambda key, pdf: pd.DataFrame([key + (pdf.v.median(), pdf.v.std())],
-                                                  columns=["id", "median", "std"]))
+                self._test_apply_in_pandas(
+                    lambda key, pdf: pd.DataFrame(
+                        [key + (pdf.v.median(), pdf.v.std())], columns=["id", "median", "std"]
+                    )
+                )
 
     def test_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
-                    PythonException,
-                    "Number of columns of the returned pandas.DataFrame doesn't match "
-                    "specified schema. Expected: 2 Actual: 3",
+                PythonException,
+                "Number of columns of the returned pandas.DataFrame doesn't match "
+                "specified schema. Expected: 2 Actual: 3",
             ):
-                self._do_test_apply_in_pandas(
-                    lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(), pdf.v.std())]))
-
-    def _do_test_apply_in_pandas_returning_empty_dataframe(self, empty_df):
-        """ Tests some returned DataFrames are empty. """
-        df = self.data
-
-        def stats(key, pdf):
-            if key[0] % 2 == 0:
-                return GroupedMapInPandasTests.stats_with_no_column_names(key, pdf)
-            return empty_df
-
-        result = (
-            df.groupby("id")
-            .applyInPandas(stats, schema="id integer, mean double")
-            .sort("id", "mean")
-            .collect()
-        )
-
-        actual_ids = {row[0] for row in result}
-        expected_ids = {row[0] for row in self.data.collect() if row[0] % 2 == 0}
-        self.assertSetEqual(expected_ids, actual_ids)
-        self.assertEqual(len(expected_ids), len(result))
-        for row in result:
-            self.assertEqual(24.5, row[1])
-
-    def _do_test_apply_in_pandas_returning_empty_dataframe_error(self, empty_df, error):
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(PythonException, error):
-                self._do_test_apply_in_pandas_returning_empty_dataframe(empty_df)
+                self._test_apply_in_pandas(
+                    lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(), pdf.v.std())])
+                )
 
     def test_apply_in_pandas_returning_empty_dataframe_with_column_names(self):
-        self._do_test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame(columns=["mean", "id"]))
+        self._test_apply_in_pandas_returning_empty_dataframe(
+            pd.DataFrame(columns=["mean", "id"])
+        )
 
     def test_apply_in_pandas_returning_empty_dataframe_with_wrong_column_names(self):
-        self._do_test_apply_in_pandas_returning_empty_dataframe_error(
+        self._test_apply_in_pandas_returning_empty_dataframe_error(
             pd.DataFrame(columns=["id", "median", "std"]),
             "Column names of the returned pandas.DataFrame "
-            "do not match specified schema. Missing: mean Unexpected: median, std"
+            "do not match specified schema. Missing: mean Unexpected: median, std",
         )
 
     def test_apply_in_pandas_returning_empty_dataframe_without_column_names(self):
-        self._do_test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame())
+        self._test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame())
 
     def test_apply_in_pandas_returning_empty_dataframe_without_column_names_and_wrong_amount(self):
-        self._do_test_apply_in_pandas_returning_empty_dataframe_error(
+        self._test_apply_in_pandas_returning_empty_dataframe_error(
             pd.DataFrame(columns=[0, 1, 2]),
             "Number of columns of the returned pandas.DataFrame "
-            "doesn't match specified schema. Expected: 2 Actual: 3"
+            "doesn't match specified schema. Expected: 2 Actual: 3",
         )
 
     def test_datatype_string(self):
@@ -608,9 +573,10 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             with QuietTest(self.sc):
                 with self.assertRaisesRegex(
-                        PythonException,
-                        "RuntimeError: Column names of the returned pandas.DataFrame do not match "
-                        "specified schema. Missing: id Unexpected: iid"):
+                    PythonException,
+                    "RuntimeError: Column names of the returned pandas.DataFrame do not match "
+                    "specified schema. Missing: id Unexpected: iid",
+                ):
                     grouped_df.apply(column_name_typo).collect()
                 with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
                     grouped_df.apply(invalid_positional_types).collect()
@@ -782,6 +748,48 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             .first()
         )
         self.assertEqual(row.asDict(), Row(column=1, score=0.5).asDict())
+
+    @classmethod
+    def _test_apply_in_pandas(cls, f):
+        df = cls.data
+
+        result = (
+            df.groupby("id")
+            .applyInPandas(f, schema="id long, mean double")
+            .sort("id", "mean")
+            .toPandas()
+        )
+        expected = df.select("id").distinct().withColumn("mean", lit(24.5)).toPandas()
+
+        assert_frame_equal(expected, result)
+
+    def _test_apply_in_pandas_returning_empty_dataframe(self, empty_df):
+        """Tests some returned DataFrames are empty."""
+        df = self.data
+
+        def stats(key, pdf):
+            if key[0] % 2 == 0:
+                return GroupedMapInPandasTests.stats_with_no_column_names(key, pdf)
+            return empty_df
+
+        result = (
+            df.groupby("id")
+                .applyInPandas(stats, schema="id long, mean double")
+                .sort("id", "mean")
+                .collect()
+        )
+
+        actual_ids = {row[0] for row in result}
+        expected_ids = {row[0] for row in self.data.collect() if row[0] % 2 == 0}
+        self.assertSetEqual(expected_ids, actual_ids)
+        self.assertEqual(len(expected_ids), len(result))
+        for row in result:
+            self.assertEqual(24.5, row[1])
+
+    def _test_apply_in_pandas_returning_empty_dataframe_error(self, empty_df, error):
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(PythonException, error):
+                self._test_apply_in_pandas_returning_empty_dataframe(empty_df)
 
 
 if __name__ == "__main__":
