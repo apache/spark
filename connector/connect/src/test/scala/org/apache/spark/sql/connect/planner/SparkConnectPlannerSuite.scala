@@ -225,7 +225,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
               .addArguments(unresolvedAttribute))
             .build()).asJava)
       .addGroupingSets(proto.Aggregate.GroupingSet.newBuilder
-        .addAggregateExpressions(unresolvedAttribute)
+        .addGroupingExpressions(unresolvedAttribute)
         .build())
       .build()
 

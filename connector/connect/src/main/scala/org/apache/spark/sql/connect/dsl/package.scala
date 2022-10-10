@@ -69,13 +69,13 @@ package object dsl {
       }
 
       def groupBy(
-        groupingExprs: proto.Expression*)(aggregateExprs: proto.Expression*): proto.Relation = {
+          groupingExprs: proto.Expression*)(aggregateExprs: proto.Expression*): proto.Relation = {
         val agg = proto.Aggregate.newBuilder()
         agg.setInput(logicalPlan)
 
         val groupingSet = proto.Aggregate.GroupingSet.newBuilder()
         for (groupingExpr <- groupingExprs) {
-          groupingSet.addAggregateExpressions(groupingExpr)
+          groupingSet.addGroupingExpressions(groupingExpr)
         }
         agg.addGroupingSets(groupingSet)
 

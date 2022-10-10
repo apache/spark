@@ -138,7 +138,7 @@ message Aggregate {
   repeated Measure measures = 3;
 
   message GroupingSet {
-    repeated Expression aggregate_expressions = 1;
+    repeated Expression grouping_expressions = 1;
   }
 
   message Measure {

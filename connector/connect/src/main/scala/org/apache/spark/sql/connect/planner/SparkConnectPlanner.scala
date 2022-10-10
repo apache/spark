@@ -273,8 +273,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     assert(rel.getGroupingSetsCount == 1, "Only one grouping set is supported")
 
     val groupingSet = rel.getGroupingSetsList.asScala.take(1)
-    val ge = groupingSet
-      .flatMap(f => f.getAggregateExpressionsList.asScala)
+    val groupingExprs = groupingSet
+      .flatMap(f => f.getGroupingExpressionsList.asScala)
       .map(transformExpression)
       .map {
         case x @ UnresolvedAttribute(_) => x
@@ -283,7 +283,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
     logical.Aggregate(
       child = transformRelation(rel.getInput),
-      groupingExpressions = ge.toSeq,
+      groupingExpressions = groupingExprs.toSeq,
       aggregateExpressions = rel.getMeasuresList.asScala.map(transformAggregateExpression).toSeq)
   }
 
