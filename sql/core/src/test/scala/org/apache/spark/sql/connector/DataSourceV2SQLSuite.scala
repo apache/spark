@@ -120,8 +120,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
 
       assertAnalysisErrorClass(
         s"DESCRIBE $t invalid_col",
-        "UNRESOLVED_COLUMN",
-        "WITH_SUGGESTION",
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         Map(
           "objectName" -> "`invalid_col`",
           "proposal" -> "`testcat`.`tbl`.`id`, `testcat`.`tbl`.`data`"))
@@ -997,8 +996,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
 
       assertAnalysisErrorClass(
         s"SELECT ns1.ns2.ns3.tbl.id from $t",
-        "UNRESOLVED_COLUMN",
-        "WITH_SUGGESTION",
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         Map(
           "objectName" -> "`ns1`.`ns2`.`ns3`.`tbl`.`id`",
           "proposal" -> "`testcat`.`ns1`.`ns2`.`tbl`.`id`, `testcat`.`ns1`.`ns2`.`tbl`.`point`"))
@@ -1539,8 +1537,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     }
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "TABLE_OPERATION",
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       sqlState = "0A000",
       parameters = Map("tableName" -> "`spark_catalog`.`default`.`tbl`",
         "operation" -> "REPLACE TABLE"))
@@ -1578,16 +1575,14 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       // UPDATE non-existing column
       assertAnalysisErrorClass(
         s"UPDATE $t SET dummy='abc'",
-        "UNRESOLVED_COLUMN",
-        "WITH_SUGGESTION",
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         Map(
           "objectName" -> "`dummy`",
           "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
             "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")))
       assertAnalysisErrorClass(
         s"UPDATE $t SET name='abc' WHERE dummy=1",
-        "UNRESOLVED_COLUMN",
-        "WITH_SUGGESTION",
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         Map(
           "objectName" -> "`dummy`",
           "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, " +
@@ -2347,8 +2342,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       exception = intercept[AnalysisException] {
         sql("SELECT * FROM t TIMESTAMP AS OF abs(true)").collect()
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"abs(true)\"",
@@ -2434,13 +2428,11 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
   private def assertAnalysisErrorClass(
       sqlStatement: String,
       expectedErrorClass: String,
-      expectedErrorSubClass: String,
       expectedErrorMessageParameters: Map[String, String]): Unit = {
     val ex = intercept[AnalysisException] {
       sql(sqlStatement)
     }
     assert(ex.getErrorClass == expectedErrorClass)
-    assert(ex.getErrorSubClass == expectedErrorSubClass)
     assert(ex.messageParameters.sameElements(expectedErrorMessageParameters))
   }
 

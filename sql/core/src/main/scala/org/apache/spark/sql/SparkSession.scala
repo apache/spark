@@ -294,7 +294,7 @@ class SparkSession private(
   /**
    * Creates a new [[Dataset]] of type T containing zero elements.
    *
-   * @return 2.0.0
+   * @since 2.0.0
    */
   def emptyDataset[T: Encoder]: Dataset[T] = {
     val encoder = implicitly[Encoder[T]]

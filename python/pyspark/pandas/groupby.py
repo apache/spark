@@ -405,16 +405,22 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         return self._reduce_for_stat_function(F.count)
 
-    # TODO: We should fix See Also when Series implementation is finished.
-    def first(self, numeric_only: Optional[bool] = False) -> FrameLike:
+    def first(self, numeric_only: Optional[bool] = False, min_count: int = -1) -> FrameLike:
         """
         Compute first of group values.
+
+        .. versionadded:: 3.3.0
 
         Parameters
         ----------
         numeric_only : bool, default False
             Include only float, int, boolean columns. If None, will attempt to use
             everything, then use only numeric data.
+
+            .. versionadded:: 3.4.0
+        min_count : int, default -1
+            The required number of valid values to perform the operation. If fewer
+            than ``min_count`` non-NA values are present the result will be NA.
 
             .. versionadded:: 3.4.0
 
@@ -426,12 +432,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Examples
         --------
         >>> df = ps.DataFrame({"A": [1, 2, 1, 2], "B": [True, False, False, True],
-        ...                    "C": [3, 3, 4, 4], "D": ["a", "b", "b", "a"]})
+        ...                    "C": [3, 3, 4, 4], "D": ["a", "b", "a", "a"]})
         >>> df
            A      B  C  D
         0  1   True  3  a
         1  2  False  3  b
-        2  1  False  4  b
+        2  1  False  4  a
         3  2   True  4  a
 
         >>> df.groupby("A").first().sort_index()
@@ -447,21 +453,55 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         A
         1   True  3
         2  False  3
+
+        >>> df.groupby("D").first().sort_index()
+           A      B  C
+        D
+        a  1   True  3
+        b  2  False  3
+
+        >>> df.groupby("D").first(min_count=3).sort_index()
+             A     B    C
+        D
+        a  1.0  True  3.0
+        b  NaN  None  NaN
         """
+        if not isinstance(min_count, int):
+            raise TypeError("min_count must be integer")
+
+        if min_count > 0:
+
+            def first(col: Column) -> Column:
+                return F.when(
+                    F.count(F.when(~F.isnull(col), F.lit(0))) < min_count, F.lit(None)
+                ).otherwise(F.first(col, ignorenulls=True))
+
+        else:
+
+            def first(col: Column) -> Column:
+                return F.first(col, ignorenulls=True)
+
         return self._reduce_for_stat_function(
-            lambda col: F.first(col, ignorenulls=True),
+            first,
             accepted_spark_types=(NumericType, BooleanType) if numeric_only else None,
         )
 
-    def last(self, numeric_only: Optional[bool] = False) -> FrameLike:
+    def last(self, numeric_only: Optional[bool] = False, min_count: int = -1) -> FrameLike:
         """
         Compute last of group values.
+
+        .. versionadded:: 3.3.0
 
         Parameters
         ----------
         numeric_only : bool, default False
             Include only float, int, boolean columns. If None, will attempt to use
             everything, then use only numeric data.
+
+            .. versionadded:: 3.4.0
+        min_count : int, default -1
+            The required number of valid values to perform the operation. If fewer
+            than ``min_count`` non-NA values are present the result will be NA.
 
             .. versionadded:: 3.4.0
 
@@ -473,11 +513,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Examples
         --------
         >>> df = ps.DataFrame({"A": [1, 2, 1, 2], "B": [True, False, False, True],
-        ...                    "C": [3, 3, 4, 4], "D": ["a", "b", "b", "a"]})
+        ...                    "C": [3, 3, 4, 4], "D": ["a", "a", "b", "a"]})
         >>> df
            A      B  C  D
         0  1   True  3  a
-        1  2  False  3  b
+        1  2  False  3  a
         2  1  False  4  b
         3  2   True  4  a
 
@@ -494,9 +534,36 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         A
         1  False  4
         2   True  4
+
+        >>> df.groupby("D").last().sort_index()
+           A      B  C
+        D
+        a  2   True  4
+        b  1  False  4
+
+        >>> df.groupby("D").last(min_count=3).sort_index()
+             A     B    C
+        D
+        a  2.0  True  4.0
+        b  NaN  None  NaN
         """
+        if not isinstance(min_count, int):
+            raise TypeError("min_count must be integer")
+
+        if min_count > 0:
+
+            def last(col: Column) -> Column:
+                return F.when(
+                    F.count(F.when(~F.isnull(col), F.lit(0))) < min_count, F.lit(None)
+                ).otherwise(F.last(col, ignorenulls=True))
+
+        else:
+
+            def last(col: Column) -> Column:
+                return F.last(col, ignorenulls=True)
+
         return self._reduce_for_stat_function(
-            lambda col: F.last(col, ignorenulls=True),
+            last,
             accepted_spark_types=(NumericType, BooleanType) if numeric_only else None,
         )
 
@@ -806,28 +873,92 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             bool_to_numeric=True,
         )
 
-    def sum(self) -> FrameLike:
+    def sum(self, numeric_only: Optional[bool] = True, min_count: int = 0) -> FrameLike:
         """
         Compute sum of group values
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        numeric_only : bool, default False
+            Include only float, int, boolean columns. If None, will attempt to use
+            everything, then use only numeric data.
+            It takes no effect since only numeric columns can be support here.
+
+            .. versionadded:: 3.4.0
+        min_count : int, default 0
+            The required number of valid values to perform the operation.
+            If fewer than min_count non-NA values are present the result will be NA.
+
+            .. versionadded:: 3.4.0
 
         Examples
         --------
         >>> df = ps.DataFrame({"A": [1, 2, 1, 2], "B": [True, False, False, True],
-        ...                    "C": [3, 4, 3, 4], "D": ["a", "b", "b", "a"]})
+        ...                    "C": [3, 4, 3, 4], "D": ["a", "a", "b", "a"]})
 
-        >>> df.groupby("A").sum()
+        >>> df.groupby("A").sum().sort_index()
            B  C
         A
         1  1  6
         2  1  8
+
+        >>> df.groupby("D").sum().sort_index()
+           A  B   C
+        D
+        a  5  2  11
+        b  1  0   3
+
+        >>> df.groupby("D").sum(min_count=3).sort_index()
+             A    B     C
+        D
+        a  5.0  2.0  11.0
+        b  NaN  NaN   NaN
+
+        Notes
+        -----
+        There is a behavior difference between pandas-on-Spark and pandas:
+
+        * when there is a non-numeric aggregation column, it will be ignored
+            even if `numeric_only` is False.
 
         See Also
         --------
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
+        if numeric_only is not None and not isinstance(numeric_only, bool):
+            raise TypeError("numeric_only must be None or bool")
+        if not isinstance(min_count, int):
+            raise TypeError("min_count must be integer")
+
+        if numeric_only is not None and not numeric_only:
+            unsupported = [
+                col.name
+                for col in self._agg_columns
+                if not isinstance(col.spark.data_type, (NumericType, BooleanType))
+            ]
+            if len(unsupported) > 0:
+                log_advice(
+                    "GroupBy.sum() can only support numeric and bool columns even if"
+                    f"numeric_only=False, skip unsupported columns: {unsupported}"
+                )
+
+        if min_count > 0:
+
+            def sum(col: Column) -> Column:
+                return F.when(
+                    F.count(F.when(~F.isnull(col), F.lit(0))) < min_count, F.lit(None)
+                ).otherwise(F.sum(col))
+
+        else:
+
+            def sum(col: Column) -> Column:
+                return F.sum(col)
+
         return self._reduce_for_stat_function(
-            F.sum, accepted_spark_types=(NumericType,), bool_to_numeric=True
+            sum, accepted_spark_types=(NumericType,), bool_to_numeric=True
         )
 
     # TODO: sync the doc.
@@ -1148,7 +1279,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             Include only float, int, boolean columns. If None, will attempt to use
             everything, then use only numeric data.
 
-        min_count: int, default 0
+        min_count : int, default 0
             The required number of valid values to perform the operation.
             If fewer than min_count non-NA values are present the result will be NA.
 

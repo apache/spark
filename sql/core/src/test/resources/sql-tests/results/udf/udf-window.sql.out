@@ -59,8 +59,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
   "messageParameters" : {
     "expectedType" : "\"INT\"",
     "exprType" : "\"BIGINT\"",
@@ -205,8 +204,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "SPECIFIED_WINDOW_FRAME_INVALID_BOUND",
+  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_INVALID_BOUND",
   "messageParameters" : {
     "lower" : "\"UNBOUNDED FOLLOWING\"",
     "sqlExpr" : "\"ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING\"",
@@ -230,8 +228,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "RANGE_FRAME_WITHOUT_ORDER",
+  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
   "messageParameters" : {
     "sqlExpr" : "\"(PARTITION BY udf(cate) RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)\""
   },
@@ -253,8 +250,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "RANGE_FRAME_MULTI_ORDER",
+  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
   "messageParameters" : {
     "orderSpec" : "cast(udf(cast(val#x as string)) as int) ASC NULLS FIRST,cate#x ASC NULLS FIRST",
     "sqlExpr" : "\"(PARTITION BY udf(cate) ORDER BY udf(val) ASC NULLS FIRST, cate ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)\""
@@ -277,8 +273,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "RANGE_FRAME_INVALID_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
   "messageParameters" : {
     "orderSpecType" : "\"TIMESTAMP\"",
     "sqlExpr" : "\"(PARTITION BY udf(cate) ORDER BY current_timestamp() ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)\"",
@@ -302,8 +297,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON",
+  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON",
   "messageParameters" : {
     "comparison" : "less than or equal",
     "sqlExpr" : "\"RANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING\""

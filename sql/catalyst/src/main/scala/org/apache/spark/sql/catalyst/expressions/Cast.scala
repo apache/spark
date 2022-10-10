@@ -2267,7 +2267,7 @@ case class Cast(
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
             val errorContext = getContextOrNullCode(ctx)
-            s"throw QueryExecutionErrors.invalidInputInCastToNumberError(" +
+            "throw QueryExecutionErrors.invalidInputInCastToNumberError(" +
               s"org.apache.spark.sql.types.FloatType$$.MODULE$$,$c, $errorContext);"
           } else {
             s"$evNull = true;"
@@ -2305,7 +2305,7 @@ case class Cast(
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
             val errorContext = getContextOrNullCode(ctx)
-            s"throw QueryExecutionErrors.invalidInputInCastToNumberError(" +
+            "throw QueryExecutionErrors.invalidInputInCastToNumberError(" +
               s"org.apache.spark.sql.types.DoubleType$$.MODULE$$, $c, $errorContext);"
           } else {
             s"$evNull = true;"

@@ -50,7 +50,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils.stringToURI
@@ -635,7 +635,11 @@ private[hive] class HiveClientImpl(
       ignoreIfExists: Boolean): Unit = withHiveState {
     def replaceExistException(e: Throwable): Unit = e match {
       case _: HiveException if e.getCause.isInstanceOf[AlreadyExistsException] =>
-        throw new PartitionsAlreadyExistException(db, table, parts.map(_.spec))
+        val t = shim.getTable(client, db, table)
+        val exists = parts.filter { part =>
+          shim.getPartition(client, t, part.spec.asJava, forceCreate = false) != null
+        }
+        throw new PartitionsAlreadyExistException(db, table, exists.map(_.spec))
       case _ => throw e
     }
     try {
@@ -703,7 +707,7 @@ private[hive] class HiveClientImpl(
     hiveTable.setOwner(userName)
     specs.zip(newSpecs).foreach { case (oldSpec, newSpec) =>
       if (shim.getPartition(client, hiveTable, newSpec.asJava, false) != null) {
-        throw new PartitionAlreadyExistsException(db, table, newSpec)
+        throw new PartitionsAlreadyExistException(db, table, newSpec)
       }
       val hivePart = getPartitionOption(rawHiveTable, oldSpec)
         .map { p => toHivePartition(p.copy(spec = newSpec), hiveTable) }

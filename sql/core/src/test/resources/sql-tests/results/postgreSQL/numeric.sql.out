@@ -3581,10 +3581,13 @@ INSERT INTO num_exp_power_10_ln VALUES (7,1716699575118597095.423308199106402476
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-decimal can only support precision up to 38
-== SQL ==
-INSERT INTO num_exp_power_10_ln VALUES (7,1716699575118597095.42330819910640247627)
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1229",
+  "messageParameters" : {
+    "decimalType" : "decimal",
+    "precision" : "38"
+  }
+}
 
 
 -- !query

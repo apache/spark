@@ -237,7 +237,7 @@ case class BroadcastHashJoinExec(
            |${consume(ctx, input)}
          """.stripMargin
       } else if (broadcastRelation.value == HashedRelationWithAllNullKeys) {
-        s"""
+        """
            |// If the right side contains any all-null key, NAAJ simply returns Nothing.
          """.stripMargin
       } else {
