@@ -659,13 +659,13 @@ object SparkConnect {
     (assembly / assemblyPackageScala / assembleArtifact) := false,
 
     // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`,`jsr305-*.jar` and
-    // `unused-1.0.0.jar` from assembly.
+    // `netty-*.jar` and `unused-1.0.0.jar` from assembly.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
       cp filter { v =>
         val name = v.data.getName
         name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
-          name.startsWith("jsr305-") || name == "unused-1.0.0.jar"
+          name.startsWith("jsr305-") || name.startsWith("netty-") || name == "unused-1.0.0.jar"
       }
     },
 
