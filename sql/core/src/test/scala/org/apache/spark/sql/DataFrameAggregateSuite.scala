@@ -915,8 +915,7 @@ class DataFrameAggregateSuite extends QueryTest
       }
       checkError(
         exception = error,
-        errorClass = "DATATYPE_MISMATCH",
-        errorSubClass = "INVALID_ORDERING_TYPE",
+        errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
         sqlState = None,
         parameters = Map(
           "functionName" -> "function max_by",
@@ -986,8 +985,7 @@ class DataFrameAggregateSuite extends QueryTest
       }
       checkError(
         exception = error,
-        errorClass = "DATATYPE_MISMATCH",
-        errorSubClass = "INVALID_ORDERING_TYPE",
+        errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
         sqlState = None,
         parameters = Map(
           "functionName" -> "function min_by",

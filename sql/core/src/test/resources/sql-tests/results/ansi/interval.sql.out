@@ -3606,8 +3606,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "DATA_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
     "dataType" : "(\"INTERVAL MONTH\" or \"INTERVAL DAY\")",
     "functionName" : "function array",
@@ -3646,8 +3645,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "DATA_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
     "dataType" : "(\"INTERVAL MONTH\" or \"INTERVAL DAY\")",
     "functionName" : "function coalesce",
