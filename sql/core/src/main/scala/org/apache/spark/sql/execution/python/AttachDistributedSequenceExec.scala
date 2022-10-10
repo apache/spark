@@ -76,6 +76,7 @@ case class AttachDistributedSequenceExec(
       // zipWithIndex launches a Spark job when #partition > 1
       this.synchronized {
         cached = childRDD.map(_.copy()).persist(storageLevel)
+          .setName(s"Temporary RDD cached in AttachDistributedSequenceExec($id)")
       }
       cached
     } else {

@@ -17,6 +17,7 @@
 
 import pandas as pd
 
+from pyspark.sql import functions as F
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
@@ -37,6 +38,31 @@ class DefaultIndexTest(PandasOnSparkTestCase):
             sdf = self.spark.range(1000)
             pdf = ps.DataFrame(sdf)._to_pandas()
             self.assertEqual(len(set(pdf.index)), len(pdf))
+
+    def test_index_distributed_sequence_cleanup(self):
+        with ps.option_context(
+            "compute.default_index_type", "distributed-sequence"
+        ), ps.option_context("compute.ops_on_diff_frames", True):
+            for storage_level in ["NONE", "DISK_ONLY_2", "MEMORY_AND_DISK_SER"]:
+                with ps.option_context(
+                    "compute.distributed_sequence_index_storage_level", storage_level
+                ):
+                    num_cached = len(self.spark._jsc.getPersistentRDDs())
+
+                    psdf1 = (
+                        self.spark.range(0, 100, 1, 10)
+                        .withColumn("Key", F.col("id") % 33)
+                        .pandas_api()
+                    )
+
+                    psdf2 = psdf1["Key"].reset_index()
+                    psdf2["index"] = (psdf2.groupby(["Key"]).cumcount() == 0).astype(int)
+                    psdf2["index"] = psdf2["index"].cumsum()
+
+                    psdf3 = ps.merge(psdf1, psdf2, how="inner", left_on=["Key"], right_on=["Key"])
+                    _ = len(psdf3)
+
+                    self.assertEqual(len(self.spark._jsc.getPersistentRDDs()), num_cached)
 
 
 if __name__ == "__main__":
