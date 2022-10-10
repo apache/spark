@@ -3961,7 +3961,7 @@ object SQLConf {
   val ADAPTIVE_SHUFFLE_JOIN_LARGE_STREAM_PARTITION_RATIO =
     buildConf("spark.sql.adaptive.shuffleHashJoin.largeStreamPartitionRatio")
       .doc(s"The proportion of partitions larger than " +
-        s"${ADAPTIVE_SHUFFLE_JOIN_STREAM_PARTITION_THRESHOLD}")
+        s"${ADAPTIVE_SHUFFLE_JOIN_STREAM_PARTITION_THRESHOLD.key}")
       .version("3.4.0")
       .doubleConf
       .checkValue(_ >= 0, "The non-empty partition ratio must be positive number.")
