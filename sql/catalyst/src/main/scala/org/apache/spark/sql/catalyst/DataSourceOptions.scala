@@ -32,7 +32,6 @@ trait DataSourceOptions {
    * Register a new Option.
    */
   protected def newOption(name: String): String = {
-    // Register both of the options
     validOptions += (name -> None)
     name
   }
@@ -49,7 +48,7 @@ trait DataSourceOptions {
   }
 
   /**
-   * @return All valid file source options
+   * @return All data source options and their alternatives if any
    */
   def getAllOptions: scala.collection.Set[String] = validOptions.keySet
 
