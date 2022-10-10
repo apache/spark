@@ -42,8 +42,7 @@ class UnpivotParserSuite extends AnalysisTest {
         None,
         "col",
         Seq("val"),
-        table("t")
-      )
+        table("t"))
         .where(coalesce($"val").isNotNull)
         .select(star())
     )
@@ -63,8 +62,7 @@ class UnpivotParserSuite extends AnalysisTest {
             Some(Seq(Some("A"), None)),
             "col",
             Seq("val"),
-            table("t")
-          )
+            table("t"))
             .where(coalesce($"val").isNotNull)
             .select(star())
         )
@@ -81,8 +79,7 @@ class UnpivotParserSuite extends AnalysisTest {
         None,
         "col",
         Seq("val1", "val2"),
-        table("t")
-      )
+        table("t"))
         .where(coalesce($"val1", $"val2").isNotNull)
         .select(star())
     )
@@ -105,8 +102,7 @@ class UnpivotParserSuite extends AnalysisTest {
             Some(Seq(Some("first"), None)),
             "col",
             Seq("val1", "val2"),
-            table("t")
-          )
+            table("t"))
             .where(coalesce($"val1", $"val2").isNotNull)
             .select(star())
         )
@@ -139,8 +135,7 @@ class UnpivotParserSuite extends AnalysisTest {
             None,
             "col",
             Seq("val"),
-            table("t")
-          )
+            table("t"))
             .where(coalesce($"val").isNotNull)
             .subquery("up")
             .select(star("up"))
