@@ -64,222 +64,222 @@ Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_dat
 
 (3) Filter [codegen id : 4]
 Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
-Condition : ((isnotnull(ws_ship_hdemo_sk#2) AND isnotnull(ws_sold_time_sk#1)) AND isnotnull(ws_web_page_sk#3))
+Condition : (((((isnotnull(ws_ship_hdemo_sk#2) AND isnotnull(ws_sold_time_sk#1)) AND isnotnull(ws_web_page_sk#3)) AND might_contain(Subquery scalar-subquery#5, [id=#6], xxhash64(ws_web_page_sk#3, 42))) AND might_contain(Subquery scalar-subquery#7, [id=#8], xxhash64(ws_ship_hdemo_sk#2, 42))) AND might_contain(Subquery scalar-subquery#9, [id=#10], xxhash64(ws_sold_time_sk#1, 42)))
 
 (4) Project [codegen id : 4]
 Output [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
 Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 
 (5) Scan parquet spark_catalog.default.web_page
-Output [2]: [wp_web_page_sk#5, wp_char_count#6]
+Output [2]: [wp_web_page_sk#11, wp_char_count#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_page]
 PushedFilters: [IsNotNull(wp_char_count), GreaterThanOrEqual(wp_char_count,5000), LessThanOrEqual(wp_char_count,5200), IsNotNull(wp_web_page_sk)]
 ReadSchema: struct<wp_web_page_sk:int,wp_char_count:int>
 
 (6) ColumnarToRow [codegen id : 1]
-Input [2]: [wp_web_page_sk#5, wp_char_count#6]
+Input [2]: [wp_web_page_sk#11, wp_char_count#12]
 
 (7) Filter [codegen id : 1]
-Input [2]: [wp_web_page_sk#5, wp_char_count#6]
-Condition : (((isnotnull(wp_char_count#6) AND (wp_char_count#6 >= 5000)) AND (wp_char_count#6 <= 5200)) AND isnotnull(wp_web_page_sk#5))
+Input [2]: [wp_web_page_sk#11, wp_char_count#12]
+Condition : (((isnotnull(wp_char_count#12) AND (wp_char_count#12 >= 5000)) AND (wp_char_count#12 <= 5200)) AND isnotnull(wp_web_page_sk#11))
 
 (8) Project [codegen id : 1]
-Output [1]: [wp_web_page_sk#5]
-Input [2]: [wp_web_page_sk#5, wp_char_count#6]
+Output [1]: [wp_web_page_sk#11]
+Input [2]: [wp_web_page_sk#11, wp_char_count#12]
 
 (9) BroadcastExchange
-Input [1]: [wp_web_page_sk#5]
+Input [1]: [wp_web_page_sk#11]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
 
 (10) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_web_page_sk#3]
-Right keys [1]: [wp_web_page_sk#5]
+Right keys [1]: [wp_web_page_sk#11]
 Join type: Inner
 Join condition: None
 
 (11) Project [codegen id : 4]
 Output [2]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2]
-Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, wp_web_page_sk#5]
+Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, wp_web_page_sk#11]
 
 (12) Scan parquet spark_catalog.default.household_demographics
-Output [2]: [hd_demo_sk#7, hd_dep_count#8]
+Output [2]: [hd_demo_sk#13, hd_dep_count#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
 PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,6), IsNotNull(hd_demo_sk)]
 ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
 
 (13) ColumnarToRow [codegen id : 2]
-Input [2]: [hd_demo_sk#7, hd_dep_count#8]
+Input [2]: [hd_demo_sk#13, hd_dep_count#14]
 
 (14) Filter [codegen id : 2]
-Input [2]: [hd_demo_sk#7, hd_dep_count#8]
-Condition : ((isnotnull(hd_dep_count#8) AND (hd_dep_count#8 = 6)) AND isnotnull(hd_demo_sk#7))
+Input [2]: [hd_demo_sk#13, hd_dep_count#14]
+Condition : ((isnotnull(hd_dep_count#14) AND (hd_dep_count#14 = 6)) AND isnotnull(hd_demo_sk#13))
 
 (15) Project [codegen id : 2]
-Output [1]: [hd_demo_sk#7]
-Input [2]: [hd_demo_sk#7, hd_dep_count#8]
+Output [1]: [hd_demo_sk#13]
+Input [2]: [hd_demo_sk#13, hd_dep_count#14]
 
 (16) BroadcastExchange
-Input [1]: [hd_demo_sk#7]
+Input [1]: [hd_demo_sk#13]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
 
 (17) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_ship_hdemo_sk#2]
-Right keys [1]: [hd_demo_sk#7]
+Right keys [1]: [hd_demo_sk#13]
 Join type: Inner
 Join condition: None
 
 (18) Project [codegen id : 4]
 Output [1]: [ws_sold_time_sk#1]
-Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, hd_demo_sk#7]
+Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, hd_demo_sk#13]
 
 (19) Scan parquet spark_catalog.default.time_dim
-Output [2]: [t_time_sk#9, t_hour#10]
+Output [2]: [t_time_sk#15, t_hour#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,8), LessThanOrEqual(t_hour,9), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_hour:int>
 
 (20) ColumnarToRow [codegen id : 3]
-Input [2]: [t_time_sk#9, t_hour#10]
+Input [2]: [t_time_sk#15, t_hour#16]
 
 (21) Filter [codegen id : 3]
-Input [2]: [t_time_sk#9, t_hour#10]
-Condition : (((isnotnull(t_hour#10) AND (t_hour#10 >= 8)) AND (t_hour#10 <= 9)) AND isnotnull(t_time_sk#9))
+Input [2]: [t_time_sk#15, t_hour#16]
+Condition : (((isnotnull(t_hour#16) AND (t_hour#16 >= 8)) AND (t_hour#16 <= 9)) AND isnotnull(t_time_sk#15))
 
 (22) Project [codegen id : 3]
-Output [1]: [t_time_sk#9]
-Input [2]: [t_time_sk#9, t_hour#10]
+Output [1]: [t_time_sk#15]
+Input [2]: [t_time_sk#15, t_hour#16]
 
 (23) BroadcastExchange
-Input [1]: [t_time_sk#9]
+Input [1]: [t_time_sk#15]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
 
 (24) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_sold_time_sk#1]
-Right keys [1]: [t_time_sk#9]
+Right keys [1]: [t_time_sk#15]
 Join type: Inner
 Join condition: None
 
 (25) Project [codegen id : 4]
 Output: []
-Input [2]: [ws_sold_time_sk#1, t_time_sk#9]
+Input [2]: [ws_sold_time_sk#1, t_time_sk#15]
 
 (26) HashAggregate [codegen id : 4]
 Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#11]
-Results [1]: [count#12]
+Aggregate Attributes [1]: [count#17]
+Results [1]: [count#18]
 
 (27) Exchange
-Input [1]: [count#12]
+Input [1]: [count#18]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=4]
 
 (28) HashAggregate [codegen id : 10]
-Input [1]: [count#12]
+Input [1]: [count#18]
 Keys: []
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#13]
-Results [1]: [count(1)#13 AS amc#14]
+Aggregate Attributes [1]: [count(1)#19]
+Results [1]: [count(1)#19 AS amc#20]
 
 (29) Scan parquet spark_catalog.default.web_sales
-Output [4]: [ws_sold_time_sk#15, ws_ship_hdemo_sk#16, ws_web_page_sk#17, ws_sold_date_sk#18]
+Output [4]: [ws_sold_time_sk#21, ws_ship_hdemo_sk#22, ws_web_page_sk#23, ws_sold_date_sk#24]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)]
 ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
 
 (30) ColumnarToRow [codegen id : 8]
-Input [4]: [ws_sold_time_sk#15, ws_ship_hdemo_sk#16, ws_web_page_sk#17, ws_sold_date_sk#18]
+Input [4]: [ws_sold_time_sk#21, ws_ship_hdemo_sk#22, ws_web_page_sk#23, ws_sold_date_sk#24]
 
 (31) Filter [codegen id : 8]
-Input [4]: [ws_sold_time_sk#15, ws_ship_hdemo_sk#16, ws_web_page_sk#17, ws_sold_date_sk#18]
-Condition : ((isnotnull(ws_ship_hdemo_sk#16) AND isnotnull(ws_sold_time_sk#15)) AND isnotnull(ws_web_page_sk#17))
+Input [4]: [ws_sold_time_sk#21, ws_ship_hdemo_sk#22, ws_web_page_sk#23, ws_sold_date_sk#24]
+Condition : (((((isnotnull(ws_ship_hdemo_sk#22) AND isnotnull(ws_sold_time_sk#21)) AND isnotnull(ws_web_page_sk#23)) AND might_contain(ReusedSubquery Subquery scalar-subquery#5, [id=#6], xxhash64(ws_web_page_sk#23, 42))) AND might_contain(ReusedSubquery Subquery scalar-subquery#7, [id=#8], xxhash64(ws_ship_hdemo_sk#22, 42))) AND might_contain(Subquery scalar-subquery#25, [id=#26], xxhash64(ws_sold_time_sk#21, 42)))
 
 (32) Project [codegen id : 8]
-Output [3]: [ws_sold_time_sk#15, ws_ship_hdemo_sk#16, ws_web_page_sk#17]
-Input [4]: [ws_sold_time_sk#15, ws_ship_hdemo_sk#16, ws_web_page_sk#17, ws_sold_date_sk#18]
+Output [3]: [ws_sold_time_sk#21, ws_ship_hdemo_sk#22, ws_web_page_sk#23]
+Input [4]: [ws_sold_time_sk#21, ws_ship_hdemo_sk#22, ws_web_page_sk#23, ws_sold_date_sk#24]
 
 (33) ReusedExchange [Reuses operator id: 9]
-Output [1]: [wp_web_page_sk#19]
+Output [1]: [wp_web_page_sk#27]
 
 (34) BroadcastHashJoin [codegen id : 8]
-Left keys [1]: [ws_web_page_sk#17]
-Right keys [1]: [wp_web_page_sk#19]
+Left keys [1]: [ws_web_page_sk#23]
+Right keys [1]: [wp_web_page_sk#27]
 Join type: Inner
 Join condition: None
 
 (35) Project [codegen id : 8]
-Output [2]: [ws_sold_time_sk#15, ws_ship_hdemo_sk#16]
-Input [4]: [ws_sold_time_sk#15, ws_ship_hdemo_sk#16, ws_web_page_sk#17, wp_web_page_sk#19]
+Output [2]: [ws_sold_time_sk#21, ws_ship_hdemo_sk#22]
+Input [4]: [ws_sold_time_sk#21, ws_ship_hdemo_sk#22, ws_web_page_sk#23, wp_web_page_sk#27]
 
 (36) ReusedExchange [Reuses operator id: 16]
-Output [1]: [hd_demo_sk#20]
+Output [1]: [hd_demo_sk#28]
 
 (37) BroadcastHashJoin [codegen id : 8]
-Left keys [1]: [ws_ship_hdemo_sk#16]
-Right keys [1]: [hd_demo_sk#20]
+Left keys [1]: [ws_ship_hdemo_sk#22]
+Right keys [1]: [hd_demo_sk#28]
 Join type: Inner
 Join condition: None
 
 (38) Project [codegen id : 8]
-Output [1]: [ws_sold_time_sk#15]
-Input [3]: [ws_sold_time_sk#15, ws_ship_hdemo_sk#16, hd_demo_sk#20]
+Output [1]: [ws_sold_time_sk#21]
+Input [3]: [ws_sold_time_sk#21, ws_ship_hdemo_sk#22, hd_demo_sk#28]
 
 (39) Scan parquet spark_catalog.default.time_dim
-Output [2]: [t_time_sk#21, t_hour#22]
+Output [2]: [t_time_sk#29, t_hour#30]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,19), LessThanOrEqual(t_hour,20), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_hour:int>
 
 (40) ColumnarToRow [codegen id : 7]
-Input [2]: [t_time_sk#21, t_hour#22]
+Input [2]: [t_time_sk#29, t_hour#30]
 
 (41) Filter [codegen id : 7]
-Input [2]: [t_time_sk#21, t_hour#22]
-Condition : (((isnotnull(t_hour#22) AND (t_hour#22 >= 19)) AND (t_hour#22 <= 20)) AND isnotnull(t_time_sk#21))
+Input [2]: [t_time_sk#29, t_hour#30]
+Condition : (((isnotnull(t_hour#30) AND (t_hour#30 >= 19)) AND (t_hour#30 <= 20)) AND isnotnull(t_time_sk#29))
 
 (42) Project [codegen id : 7]
-Output [1]: [t_time_sk#21]
-Input [2]: [t_time_sk#21, t_hour#22]
+Output [1]: [t_time_sk#29]
+Input [2]: [t_time_sk#29, t_hour#30]
 
 (43) BroadcastExchange
-Input [1]: [t_time_sk#21]
+Input [1]: [t_time_sk#29]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
 
 (44) BroadcastHashJoin [codegen id : 8]
-Left keys [1]: [ws_sold_time_sk#15]
-Right keys [1]: [t_time_sk#21]
+Left keys [1]: [ws_sold_time_sk#21]
+Right keys [1]: [t_time_sk#29]
 Join type: Inner
 Join condition: None
 
 (45) Project [codegen id : 8]
 Output: []
-Input [2]: [ws_sold_time_sk#15, t_time_sk#21]
+Input [2]: [ws_sold_time_sk#21, t_time_sk#29]
 
 (46) HashAggregate [codegen id : 8]
 Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#23]
-Results [1]: [count#24]
+Aggregate Attributes [1]: [count#31]
+Results [1]: [count#32]
 
 (47) Exchange
-Input [1]: [count#24]
+Input [1]: [count#32]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6]
 
 (48) HashAggregate [codegen id : 9]
-Input [1]: [count#24]
+Input [1]: [count#32]
 Keys: []
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#25]
-Results [1]: [count(1)#25 AS pmc#26]
+Aggregate Attributes [1]: [count(1)#33]
+Results [1]: [count(1)#33 AS pmc#34]
 
 (49) BroadcastExchange
-Input [1]: [pmc#26]
+Input [1]: [pmc#34]
 Arguments: IdentityBroadcastMode, [plan_id=7]
 
 (50) BroadcastNestedLoopJoin [codegen id : 10]
@@ -287,6 +287,197 @@ Join type: Inner
 Join condition: None
 
 (51) Project [codegen id : 10]
-Output [1]: [(cast(amc#14 as decimal(15,4)) / cast(pmc#26 as decimal(15,4))) AS am_pm_ratio#27]
-Input [2]: [amc#14, pmc#26]
+Output [1]: [(cast(amc#20 as decimal(15,4)) / cast(pmc#34 as decimal(15,4))) AS am_pm_ratio#35]
+Input [2]: [amc#20, pmc#34]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#5, [id=#6]
+ObjectHashAggregate (58)
++- Exchange (57)
+   +- ObjectHashAggregate (56)
+      +- * Project (55)
+         +- * Filter (54)
+            +- * ColumnarToRow (53)
+               +- Scan parquet spark_catalog.default.web_page (52)
+
+
+(52) Scan parquet spark_catalog.default.web_page
+Output [2]: [wp_web_page_sk#11, wp_char_count#12]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/web_page]
+PushedFilters: [IsNotNull(wp_char_count), GreaterThanOrEqual(wp_char_count,5000), LessThanOrEqual(wp_char_count,5200), IsNotNull(wp_web_page_sk)]
+ReadSchema: struct<wp_web_page_sk:int,wp_char_count:int>
+
+(53) ColumnarToRow [codegen id : 1]
+Input [2]: [wp_web_page_sk#11, wp_char_count#12]
+
+(54) Filter [codegen id : 1]
+Input [2]: [wp_web_page_sk#11, wp_char_count#12]
+Condition : (((isnotnull(wp_char_count#12) AND (wp_char_count#12 >= 5000)) AND (wp_char_count#12 <= 5200)) AND isnotnull(wp_web_page_sk#11))
+
+(55) Project [codegen id : 1]
+Output [1]: [wp_web_page_sk#11]
+Input [2]: [wp_web_page_sk#11, wp_char_count#12]
+
+(56) ObjectHashAggregate
+Input [1]: [wp_web_page_sk#11]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(wp_web_page_sk#11, 42), 50, 400, 0, 0)]
+Aggregate Attributes [1]: [buf#36]
+Results [1]: [buf#37]
+
+(57) Exchange
+Input [1]: [buf#37]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=8]
+
+(58) ObjectHashAggregate
+Input [1]: [buf#37]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(wp_web_page_sk#11, 42), 50, 400, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(wp_web_page_sk#11, 42), 50, 400, 0, 0)#38]
+Results [1]: [bloom_filter_agg(xxhash64(wp_web_page_sk#11, 42), 50, 400, 0, 0)#38 AS bloomFilter#39]
+
+Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#7, [id=#8]
+ObjectHashAggregate (65)
++- Exchange (64)
+   +- ObjectHashAggregate (63)
+      +- * Project (62)
+         +- * Filter (61)
+            +- * ColumnarToRow (60)
+               +- Scan parquet spark_catalog.default.household_demographics (59)
+
+
+(59) Scan parquet spark_catalog.default.household_demographics
+Output [2]: [hd_demo_sk#13, hd_dep_count#14]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/household_demographics]
+PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,6), IsNotNull(hd_demo_sk)]
+ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
+
+(60) ColumnarToRow [codegen id : 1]
+Input [2]: [hd_demo_sk#13, hd_dep_count#14]
+
+(61) Filter [codegen id : 1]
+Input [2]: [hd_demo_sk#13, hd_dep_count#14]
+Condition : ((isnotnull(hd_dep_count#14) AND (hd_dep_count#14 = 6)) AND isnotnull(hd_demo_sk#13))
+
+(62) Project [codegen id : 1]
+Output [1]: [hd_demo_sk#13]
+Input [2]: [hd_demo_sk#13, hd_dep_count#14]
+
+(63) ObjectHashAggregate
+Input [1]: [hd_demo_sk#13]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(hd_demo_sk#13, 42), 720, 5760, 0, 0)]
+Aggregate Attributes [1]: [buf#40]
+Results [1]: [buf#41]
+
+(64) Exchange
+Input [1]: [buf#41]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=9]
+
+(65) ObjectHashAggregate
+Input [1]: [buf#41]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#13, 42), 720, 5760, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#13, 42), 720, 5760, 0, 0)#42]
+Results [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#13, 42), 720, 5760, 0, 0)#42 AS bloomFilter#43]
+
+Subquery:3 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#9, [id=#10]
+ObjectHashAggregate (72)
++- Exchange (71)
+   +- ObjectHashAggregate (70)
+      +- * Project (69)
+         +- * Filter (68)
+            +- * ColumnarToRow (67)
+               +- Scan parquet spark_catalog.default.time_dim (66)
+
+
+(66) Scan parquet spark_catalog.default.time_dim
+Output [2]: [t_time_sk#15, t_hour#16]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/time_dim]
+PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,8), LessThanOrEqual(t_hour,9), IsNotNull(t_time_sk)]
+ReadSchema: struct<t_time_sk:int,t_hour:int>
+
+(67) ColumnarToRow [codegen id : 1]
+Input [2]: [t_time_sk#15, t_hour#16]
+
+(68) Filter [codegen id : 1]
+Input [2]: [t_time_sk#15, t_hour#16]
+Condition : (((isnotnull(t_hour#16) AND (t_hour#16 >= 8)) AND (t_hour#16 <= 9)) AND isnotnull(t_time_sk#15))
+
+(69) Project [codegen id : 1]
+Output [1]: [t_time_sk#15]
+Input [2]: [t_time_sk#15, t_hour#16]
+
+(70) ObjectHashAggregate
+Input [1]: [t_time_sk#15]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(t_time_sk#15, 42), 3757, 30056, 0, 0)]
+Aggregate Attributes [1]: [buf#44]
+Results [1]: [buf#45]
+
+(71) Exchange
+Input [1]: [buf#45]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
+
+(72) ObjectHashAggregate
+Input [1]: [buf#45]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(t_time_sk#15, 42), 3757, 30056, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(t_time_sk#15, 42), 3757, 30056, 0, 0)#46]
+Results [1]: [bloom_filter_agg(xxhash64(t_time_sk#15, 42), 3757, 30056, 0, 0)#46 AS bloomFilter#47]
+
+Subquery:4 Hosting operator id = 31 Hosting Expression = ReusedSubquery Subquery scalar-subquery#5, [id=#6]
+
+Subquery:5 Hosting operator id = 31 Hosting Expression = ReusedSubquery Subquery scalar-subquery#7, [id=#8]
+
+Subquery:6 Hosting operator id = 31 Hosting Expression = Subquery scalar-subquery#25, [id=#26]
+ObjectHashAggregate (79)
++- Exchange (78)
+   +- ObjectHashAggregate (77)
+      +- * Project (76)
+         +- * Filter (75)
+            +- * ColumnarToRow (74)
+               +- Scan parquet spark_catalog.default.time_dim (73)
+
+
+(73) Scan parquet spark_catalog.default.time_dim
+Output [2]: [t_time_sk#29, t_hour#30]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/time_dim]
+PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,19), LessThanOrEqual(t_hour,20), IsNotNull(t_time_sk)]
+ReadSchema: struct<t_time_sk:int,t_hour:int>
+
+(74) ColumnarToRow [codegen id : 1]
+Input [2]: [t_time_sk#29, t_hour#30]
+
+(75) Filter [codegen id : 1]
+Input [2]: [t_time_sk#29, t_hour#30]
+Condition : (((isnotnull(t_hour#30) AND (t_hour#30 >= 19)) AND (t_hour#30 <= 20)) AND isnotnull(t_time_sk#29))
+
+(76) Project [codegen id : 1]
+Output [1]: [t_time_sk#29]
+Input [2]: [t_time_sk#29, t_hour#30]
+
+(77) ObjectHashAggregate
+Input [1]: [t_time_sk#29]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(t_time_sk#29, 42), 3757, 30056, 0, 0)]
+Aggregate Attributes [1]: [buf#48]
+Results [1]: [buf#49]
+
+(78) Exchange
+Input [1]: [buf#49]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=11]
+
+(79) ObjectHashAggregate
+Input [1]: [buf#49]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(t_time_sk#29, 42), 3757, 30056, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(t_time_sk#29, 42), 3757, 30056, 0, 0)#50]
+Results [1]: [bloom_filter_agg(xxhash64(t_time_sk#29, 42), 3757, 30056, 0, 0)#50 AS bloomFilter#51]
+
 

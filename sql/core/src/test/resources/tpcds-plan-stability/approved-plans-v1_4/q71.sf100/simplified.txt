@@ -26,6 +26,26 @@ WholeStageCodegen (11)
                                   Project [ws_ext_sales_price,ws_item_sk,ws_sold_time_sk]
                                     BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
                                       Filter [ws_item_sk,ws_sold_time_sk]
+                                        Subquery #2
+                                          ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 2056, 16448, 0, 0),bloomFilter,buf]
+                                            Exchange #5
+                                              ObjectHashAggregate [i_item_sk] [buf,buf]
+                                                WholeStageCodegen (1)
+                                                  Project [i_item_sk]
+                                                    Filter [i_manager_id,i_item_sk]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet spark_catalog.default.item [i_item_sk,i_manager_id]
+                                        Subquery #3
+                                          ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(t_time_sk, 42), 48001, 384008, 0, 0),bloomFilter,buf]
+                                            Exchange #6
+                                              ObjectHashAggregate [t_time_sk] [buf,buf]
+                                                WholeStageCodegen (1)
+                                                  Project [t_time_sk]
+                                                    Filter [t_meal_time,t_time_sk]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet spark_catalog.default.time_dim [t_time_sk,t_meal_time]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet spark_catalog.default.web_sales [ws_sold_time_sk,ws_item_sk,ws_ext_sales_price,ws_sold_date_sk]
@@ -43,6 +63,8 @@ WholeStageCodegen (11)
                                   Project [cs_ext_sales_price,cs_item_sk,cs_sold_time_sk]
                                     BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                                       Filter [cs_item_sk,cs_sold_time_sk]
+                                        ReusedSubquery [bloomFilter] #2
+                                        ReusedSubquery [bloomFilter] #3
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet spark_catalog.default.catalog_sales [cs_sold_time_sk,cs_item_sk,cs_ext_sales_price,cs_sold_date_sk]
@@ -53,6 +75,8 @@ WholeStageCodegen (11)
                                   Project [ss_ext_sales_price,ss_item_sk,ss_sold_time_sk]
                                     BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                       Filter [ss_item_sk,ss_sold_time_sk]
+                                        ReusedSubquery [bloomFilter] #2
+                                        ReusedSubquery [bloomFilter] #3
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet spark_catalog.default.store_sales [ss_sold_time_sk,ss_item_sk,ss_ext_sales_price,ss_sold_date_sk]
@@ -60,7 +84,7 @@ WholeStageCodegen (11)
                                       InputAdapter
                                         ReusedExchange [d_date_sk] #4
                         InputAdapter
-                          BroadcastExchange #5
+                          BroadcastExchange #7
                             WholeStageCodegen (8)
                               Project [t_time_sk,t_hour,t_minute]
                                 Filter [t_meal_time,t_time_sk]

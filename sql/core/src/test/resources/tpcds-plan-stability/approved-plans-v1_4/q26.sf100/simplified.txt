@@ -14,6 +14,26 @@ TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
                           Project [cs_item_sk,cs_promo_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_sold_date_sk]
                             BroadcastHashJoin [cs_bill_cdemo_sk,cd_demo_sk]
                               Filter [cs_bill_cdemo_sk,cs_item_sk,cs_promo_sk]
+                                Subquery #2
+                                  ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(cd_demo_sk, 42), 27440, 219520, 0, 0),bloomFilter,buf]
+                                    Exchange #3
+                                      ObjectHashAggregate [cd_demo_sk] [buf,buf]
+                                        WholeStageCodegen (1)
+                                          Project [cd_demo_sk]
+                                            Filter [cd_gender,cd_marital_status,cd_education_status,cd_demo_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_education_status]
+                                Subquery #3
+                                  ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(p_promo_sk, 42), 1000, 8000, 0, 0),bloomFilter,buf]
+                                    Exchange #4
+                                      ObjectHashAggregate [p_promo_sk] [buf,buf]
+                                        WholeStageCodegen (1)
+                                          Project [p_promo_sk]
+                                            Filter [p_channel_email,p_channel_event,p_promo_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet spark_catalog.default.promotion [p_promo_sk,p_channel_email,p_channel_event]
                                 ColumnarToRow
                                   InputAdapter
                                     Scan parquet spark_catalog.default.catalog_sales [cs_bill_cdemo_sk,cs_item_sk,cs_promo_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_sold_date_sk]
@@ -26,7 +46,7 @@ TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
                                                   InputAdapter
                                                     Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]
                               InputAdapter
-                                BroadcastExchange #3
+                                BroadcastExchange #5
                                   WholeStageCodegen (1)
                                     Project [cd_demo_sk]
                                       Filter [cd_gender,cd_marital_status,cd_education_status,cd_demo_sk]
@@ -34,7 +54,7 @@ TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
                                           InputAdapter
                                             Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_education_status]
                           InputAdapter
-                            BroadcastExchange #4
+                            BroadcastExchange #6
                               WholeStageCodegen (2)
                                 Project [p_promo_sk]
                                   Filter [p_channel_email,p_channel_event,p_promo_sk]
@@ -44,7 +64,7 @@ TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
                       InputAdapter
                         ReusedExchange [d_date_sk] #2
                   InputAdapter
-                    BroadcastExchange #5
+                    BroadcastExchange #7
                       WholeStageCodegen (4)
                         Filter [i_item_sk]
                           ColumnarToRow

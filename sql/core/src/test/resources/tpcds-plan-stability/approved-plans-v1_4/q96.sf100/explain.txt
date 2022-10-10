@@ -41,123 +41,264 @@ Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_sold_date_sk#4]
 
 (3) Filter [codegen id : 4]
 Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_sold_date_sk#4]
-Condition : ((isnotnull(ss_hdemo_sk#2) AND isnotnull(ss_sold_time_sk#1)) AND isnotnull(ss_store_sk#3))
+Condition : (((((isnotnull(ss_hdemo_sk#2) AND isnotnull(ss_sold_time_sk#1)) AND isnotnull(ss_store_sk#3)) AND might_contain(Subquery scalar-subquery#5, [id=#6], xxhash64(ss_sold_time_sk#1, 42))) AND might_contain(Subquery scalar-subquery#7, [id=#8], xxhash64(ss_store_sk#3, 42))) AND might_contain(Subquery scalar-subquery#9, [id=#10], xxhash64(ss_hdemo_sk#2, 42)))
 
 (4) Project [codegen id : 4]
 Output [3]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3]
 Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_sold_date_sk#4]
 
 (5) Scan parquet spark_catalog.default.time_dim
-Output [3]: [t_time_sk#5, t_hour#6, t_minute#7]
+Output [3]: [t_time_sk#11, t_hour#12, t_minute#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), IsNotNull(t_minute), EqualTo(t_hour,20), GreaterThanOrEqual(t_minute,30), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int>
 
 (6) ColumnarToRow [codegen id : 1]
-Input [3]: [t_time_sk#5, t_hour#6, t_minute#7]
+Input [3]: [t_time_sk#11, t_hour#12, t_minute#13]
 
 (7) Filter [codegen id : 1]
-Input [3]: [t_time_sk#5, t_hour#6, t_minute#7]
-Condition : ((((isnotnull(t_hour#6) AND isnotnull(t_minute#7)) AND (t_hour#6 = 20)) AND (t_minute#7 >= 30)) AND isnotnull(t_time_sk#5))
+Input [3]: [t_time_sk#11, t_hour#12, t_minute#13]
+Condition : ((((isnotnull(t_hour#12) AND isnotnull(t_minute#13)) AND (t_hour#12 = 20)) AND (t_minute#13 >= 30)) AND isnotnull(t_time_sk#11))
 
 (8) Project [codegen id : 1]
-Output [1]: [t_time_sk#5]
-Input [3]: [t_time_sk#5, t_hour#6, t_minute#7]
+Output [1]: [t_time_sk#11]
+Input [3]: [t_time_sk#11, t_hour#12, t_minute#13]
 
 (9) BroadcastExchange
-Input [1]: [t_time_sk#5]
+Input [1]: [t_time_sk#11]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
 
 (10) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_sold_time_sk#1]
-Right keys [1]: [t_time_sk#5]
+Right keys [1]: [t_time_sk#11]
 Join type: Inner
 Join condition: None
 
 (11) Project [codegen id : 4]
 Output [2]: [ss_hdemo_sk#2, ss_store_sk#3]
-Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, t_time_sk#5]
+Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, t_time_sk#11]
 
 (12) Scan parquet spark_catalog.default.store
-Output [2]: [s_store_sk#8, s_store_name#9]
+Output [2]: [s_store_sk#14, s_store_name#15]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_store_name), EqualTo(s_store_name,ese), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string>
 
 (13) ColumnarToRow [codegen id : 2]
-Input [2]: [s_store_sk#8, s_store_name#9]
+Input [2]: [s_store_sk#14, s_store_name#15]
 
 (14) Filter [codegen id : 2]
-Input [2]: [s_store_sk#8, s_store_name#9]
-Condition : ((isnotnull(s_store_name#9) AND (s_store_name#9 = ese)) AND isnotnull(s_store_sk#8))
+Input [2]: [s_store_sk#14, s_store_name#15]
+Condition : ((isnotnull(s_store_name#15) AND (s_store_name#15 = ese)) AND isnotnull(s_store_sk#14))
 
 (15) Project [codegen id : 2]
-Output [1]: [s_store_sk#8]
-Input [2]: [s_store_sk#8, s_store_name#9]
+Output [1]: [s_store_sk#14]
+Input [2]: [s_store_sk#14, s_store_name#15]
 
 (16) BroadcastExchange
-Input [1]: [s_store_sk#8]
+Input [1]: [s_store_sk#14]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
 
 (17) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#3]
-Right keys [1]: [s_store_sk#8]
+Right keys [1]: [s_store_sk#14]
 Join type: Inner
 Join condition: None
 
 (18) Project [codegen id : 4]
 Output [1]: [ss_hdemo_sk#2]
-Input [3]: [ss_hdemo_sk#2, ss_store_sk#3, s_store_sk#8]
+Input [3]: [ss_hdemo_sk#2, ss_store_sk#3, s_store_sk#14]
 
 (19) Scan parquet spark_catalog.default.household_demographics
-Output [2]: [hd_demo_sk#10, hd_dep_count#11]
+Output [2]: [hd_demo_sk#16, hd_dep_count#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
 PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,7), IsNotNull(hd_demo_sk)]
 ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
 
 (20) ColumnarToRow [codegen id : 3]
-Input [2]: [hd_demo_sk#10, hd_dep_count#11]
+Input [2]: [hd_demo_sk#16, hd_dep_count#17]
 
 (21) Filter [codegen id : 3]
-Input [2]: [hd_demo_sk#10, hd_dep_count#11]
-Condition : ((isnotnull(hd_dep_count#11) AND (hd_dep_count#11 = 7)) AND isnotnull(hd_demo_sk#10))
+Input [2]: [hd_demo_sk#16, hd_dep_count#17]
+Condition : ((isnotnull(hd_dep_count#17) AND (hd_dep_count#17 = 7)) AND isnotnull(hd_demo_sk#16))
 
 (22) Project [codegen id : 3]
-Output [1]: [hd_demo_sk#10]
-Input [2]: [hd_demo_sk#10, hd_dep_count#11]
+Output [1]: [hd_demo_sk#16]
+Input [2]: [hd_demo_sk#16, hd_dep_count#17]
 
 (23) BroadcastExchange
-Input [1]: [hd_demo_sk#10]
+Input [1]: [hd_demo_sk#16]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
 
 (24) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_hdemo_sk#2]
-Right keys [1]: [hd_demo_sk#10]
+Right keys [1]: [hd_demo_sk#16]
 Join type: Inner
 Join condition: None
 
 (25) Project [codegen id : 4]
 Output: []
-Input [2]: [ss_hdemo_sk#2, hd_demo_sk#10]
+Input [2]: [ss_hdemo_sk#2, hd_demo_sk#16]
 
 (26) HashAggregate [codegen id : 4]
 Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#12]
-Results [1]: [count#13]
+Aggregate Attributes [1]: [count#18]
+Results [1]: [count#19]
 
 (27) Exchange
-Input [1]: [count#13]
+Input [1]: [count#19]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=4]
 
 (28) HashAggregate [codegen id : 5]
-Input [1]: [count#13]
+Input [1]: [count#19]
 Keys: []
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#14]
-Results [1]: [count(1)#14 AS count(1)#15]
+Aggregate Attributes [1]: [count(1)#20]
+Results [1]: [count(1)#20 AS count(1)#21]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#5, [id=#6]
+ObjectHashAggregate (35)
++- Exchange (34)
+   +- ObjectHashAggregate (33)
+      +- * Project (32)
+         +- * Filter (31)
+            +- * ColumnarToRow (30)
+               +- Scan parquet spark_catalog.default.time_dim (29)
+
+
+(29) Scan parquet spark_catalog.default.time_dim
+Output [3]: [t_time_sk#11, t_hour#12, t_minute#13]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/time_dim]
+PushedFilters: [IsNotNull(t_hour), IsNotNull(t_minute), EqualTo(t_hour,20), GreaterThanOrEqual(t_minute,30), IsNotNull(t_time_sk)]
+ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int>
+
+(30) ColumnarToRow [codegen id : 1]
+Input [3]: [t_time_sk#11, t_hour#12, t_minute#13]
+
+(31) Filter [codegen id : 1]
+Input [3]: [t_time_sk#11, t_hour#12, t_minute#13]
+Condition : ((((isnotnull(t_hour#12) AND isnotnull(t_minute#13)) AND (t_hour#12 = 20)) AND (t_minute#13 >= 30)) AND isnotnull(t_time_sk#11))
+
+(32) Project [codegen id : 1]
+Output [1]: [t_time_sk#11]
+Input [3]: [t_time_sk#11, t_hour#12, t_minute#13]
+
+(33) ObjectHashAggregate
+Input [1]: [t_time_sk#11]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(t_time_sk#11, 42), 1699, 13592, 0, 0)]
+Aggregate Attributes [1]: [buf#22]
+Results [1]: [buf#23]
+
+(34) Exchange
+Input [1]: [buf#23]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
+
+(35) ObjectHashAggregate
+Input [1]: [buf#23]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(t_time_sk#11, 42), 1699, 13592, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(t_time_sk#11, 42), 1699, 13592, 0, 0)#24]
+Results [1]: [bloom_filter_agg(xxhash64(t_time_sk#11, 42), 1699, 13592, 0, 0)#24 AS bloomFilter#25]
+
+Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#7, [id=#8]
+ObjectHashAggregate (42)
++- Exchange (41)
+   +- ObjectHashAggregate (40)
+      +- * Project (39)
+         +- * Filter (38)
+            +- * ColumnarToRow (37)
+               +- Scan parquet spark_catalog.default.store (36)
+
+
+(36) Scan parquet spark_catalog.default.store
+Output [2]: [s_store_sk#14, s_store_name#15]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store]
+PushedFilters: [IsNotNull(s_store_name), EqualTo(s_store_name,ese), IsNotNull(s_store_sk)]
+ReadSchema: struct<s_store_sk:int,s_store_name:string>
+
+(37) ColumnarToRow [codegen id : 1]
+Input [2]: [s_store_sk#14, s_store_name#15]
+
+(38) Filter [codegen id : 1]
+Input [2]: [s_store_sk#14, s_store_name#15]
+Condition : ((isnotnull(s_store_name#15) AND (s_store_name#15 = ese)) AND isnotnull(s_store_sk#14))
+
+(39) Project [codegen id : 1]
+Output [1]: [s_store_sk#14]
+Input [2]: [s_store_sk#14, s_store_name#15]
+
+(40) ObjectHashAggregate
+Input [1]: [s_store_sk#14]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(s_store_sk#14, 42), 41, 328, 0, 0)]
+Aggregate Attributes [1]: [buf#26]
+Results [1]: [buf#27]
+
+(41) Exchange
+Input [1]: [buf#27]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6]
+
+(42) ObjectHashAggregate
+Input [1]: [buf#27]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(s_store_sk#14, 42), 41, 328, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(s_store_sk#14, 42), 41, 328, 0, 0)#28]
+Results [1]: [bloom_filter_agg(xxhash64(s_store_sk#14, 42), 41, 328, 0, 0)#28 AS bloomFilter#29]
+
+Subquery:3 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#9, [id=#10]
+ObjectHashAggregate (49)
++- Exchange (48)
+   +- ObjectHashAggregate (47)
+      +- * Project (46)
+         +- * Filter (45)
+            +- * ColumnarToRow (44)
+               +- Scan parquet spark_catalog.default.household_demographics (43)
+
+
+(43) Scan parquet spark_catalog.default.household_demographics
+Output [2]: [hd_demo_sk#16, hd_dep_count#17]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/household_demographics]
+PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,7), IsNotNull(hd_demo_sk)]
+ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
+
+(44) ColumnarToRow [codegen id : 1]
+Input [2]: [hd_demo_sk#16, hd_dep_count#17]
+
+(45) Filter [codegen id : 1]
+Input [2]: [hd_demo_sk#16, hd_dep_count#17]
+Condition : ((isnotnull(hd_dep_count#17) AND (hd_dep_count#17 = 7)) AND isnotnull(hd_demo_sk#16))
+
+(46) Project [codegen id : 1]
+Output [1]: [hd_demo_sk#16]
+Input [2]: [hd_demo_sk#16, hd_dep_count#17]
+
+(47) ObjectHashAggregate
+Input [1]: [hd_demo_sk#16]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(hd_demo_sk#16, 42), 720, 5760, 0, 0)]
+Aggregate Attributes [1]: [buf#30]
+Results [1]: [buf#31]
+
+(48) Exchange
+Input [1]: [buf#31]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=7]
+
+(49) ObjectHashAggregate
+Input [1]: [buf#31]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#16, 42), 720, 5760, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#16, 42), 720, 5760, 0, 0)#32]
+Results [1]: [bloom_filter_agg(xxhash64(hd_demo_sk#16, 42), 720, 5760, 0, 0)#32 AS bloomFilter#33]
+
 

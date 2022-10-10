@@ -20,6 +20,16 @@ TakeOrderedAndProject [total_sales,i_manufact_id]
                                       Project [ss_item_sk,ss_addr_sk,ss_ext_sales_price]
                                         BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                           Filter [ss_addr_sk,ss_item_sk]
+                                            Subquery #2
+                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 161645, 1293160, 0, 0),bloomFilter,buf]
+                                                Exchange #4
+                                                  ObjectHashAggregate [ca_address_sk] [buf,buf]
+                                                    WholeStageCodegen (1)
+                                                      Project [ca_address_sk]
+                                                        Filter [ca_gmt_offset,ca_address_sk]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_gmt_offset]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_addr_sk,ss_ext_sales_price,ss_sold_date_sk]
@@ -34,7 +44,7 @@ TakeOrderedAndProject [total_sales,i_manufact_id]
                                           InputAdapter
                                             ReusedExchange [d_date_sk] #3
                                       InputAdapter
-                                        BroadcastExchange #4
+                                        BroadcastExchange #5
                                           WholeStageCodegen (3)
                                             BroadcastHashJoin [i_manufact_id,i_manufact_id]
                                               Filter [i_item_sk]
@@ -42,7 +52,7 @@ TakeOrderedAndProject [total_sales,i_manufact_id]
                                                   InputAdapter
                                                     Scan parquet spark_catalog.default.item [i_item_sk,i_manufact_id]
                                               InputAdapter
-                                                BroadcastExchange #5
+                                                BroadcastExchange #6
                                                   WholeStageCodegen (2)
                                                     Project [i_manufact_id]
                                                       Filter [i_category]
@@ -50,7 +60,7 @@ TakeOrderedAndProject [total_sales,i_manufact_id]
                                                           InputAdapter
                                                             Scan parquet spark_catalog.default.item [i_category,i_manufact_id]
                                   InputAdapter
-                                    BroadcastExchange #6
+                                    BroadcastExchange #7
                                       WholeStageCodegen (4)
                                         Project [ca_address_sk]
                                           Filter [ca_gmt_offset,ca_address_sk]
@@ -60,7 +70,7 @@ TakeOrderedAndProject [total_sales,i_manufact_id]
                   WholeStageCodegen (12)
                     HashAggregate [i_manufact_id,sum] [sum(UnscaledValue(cs_ext_sales_price)),total_sales,sum]
                       InputAdapter
-                        Exchange [i_manufact_id] #7
+                        Exchange [i_manufact_id] #8
                           WholeStageCodegen (11)
                             HashAggregate [i_manufact_id,cs_ext_sales_price] [sum,sum]
                               Project [cs_ext_sales_price,i_manufact_id]
@@ -70,6 +80,7 @@ TakeOrderedAndProject [total_sales,i_manufact_id]
                                       Project [cs_bill_addr_sk,cs_item_sk,cs_ext_sales_price]
                                         BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                                           Filter [cs_bill_addr_sk,cs_item_sk]
+                                            ReusedSubquery [bloomFilter] #2
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet spark_catalog.default.catalog_sales [cs_bill_addr_sk,cs_item_sk,cs_ext_sales_price,cs_sold_date_sk]
@@ -77,13 +88,13 @@ TakeOrderedAndProject [total_sales,i_manufact_id]
                                           InputAdapter
                                             ReusedExchange [d_date_sk] #3
                                       InputAdapter
-                                        ReusedExchange [i_item_sk,i_manufact_id] #4
+                                        ReusedExchange [i_item_sk,i_manufact_id] #5
                                   InputAdapter
-                                    ReusedExchange [ca_address_sk] #6
+                                    ReusedExchange [ca_address_sk] #7
                   WholeStageCodegen (18)
                     HashAggregate [i_manufact_id,sum] [sum(UnscaledValue(ws_ext_sales_price)),total_sales,sum]
                       InputAdapter
-                        Exchange [i_manufact_id] #8
+                        Exchange [i_manufact_id] #9
                           WholeStageCodegen (17)
                             HashAggregate [i_manufact_id,ws_ext_sales_price] [sum,sum]
                               Project [ws_ext_sales_price,i_manufact_id]
@@ -93,6 +104,7 @@ TakeOrderedAndProject [total_sales,i_manufact_id]
                                       Project [ws_item_sk,ws_bill_addr_sk,ws_ext_sales_price]
                                         BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
                                           Filter [ws_bill_addr_sk,ws_item_sk]
+                                            ReusedSubquery [bloomFilter] #2
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet spark_catalog.default.web_sales [ws_item_sk,ws_bill_addr_sk,ws_ext_sales_price,ws_sold_date_sk]
@@ -100,6 +112,6 @@ TakeOrderedAndProject [total_sales,i_manufact_id]
                                           InputAdapter
                                             ReusedExchange [d_date_sk] #3
                                       InputAdapter
-                                        ReusedExchange [i_item_sk,i_manufact_id] #4
+                                        ReusedExchange [i_item_sk,i_manufact_id] #5
                                   InputAdapter
-                                    ReusedExchange [ca_address_sk] #6
+                                    ReusedExchange [ca_address_sk] #7
