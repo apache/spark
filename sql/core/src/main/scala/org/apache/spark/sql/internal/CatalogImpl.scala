@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, TableSpec, View}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, LogicalPlan, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, TableSpec, View}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, FunctionCatalog, Identifier, SupportsNamespaces, Table => V2Table, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -801,17 +801,19 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     // Temporary and global temporary views are not supposed to be put into the relation cache
     // since they are tracked separately. V1 and V2 plans are cache invalidated accordingly.
-    relation.foreach {
-      case v: View if !v.isTempView =>
-        sessionCatalog.invalidateCachedTable(v.desc.identifier)
+    def invalidateCache(plan: LogicalPlan): Unit = plan match {
+      case v: View =>
+        if (!v.isTempView) sessionCatalog.invalidateCachedTable(v.desc.identifier)
       case r: LogicalRelation =>
         sessionCatalog.invalidateCachedTable(r.catalogTable.get.identifier)
       case h: HiveTableRelation =>
         sessionCatalog.invalidateCachedTable(h.tableMeta.identifier)
       case r: DataSourceV2Relation =>
         r.catalog.get.asTableCatalog.invalidateTable(r.identifier.get)
-      case _ =>
+      case _ => plan.children.foreach(invalidateCache)
     }
+    invalidateCache(relation)
+
     // Re-caches the logical plan of the relation.
     // Note this is a no-op for the relation itself if it's not cached, but will clear all
     // caches referencing this relation. If this relation is cached as an InMemoryRelation,
