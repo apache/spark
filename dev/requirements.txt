@@ -50,5 +50,5 @@ black==22.6.0
 grpcio==1.48.1
 protobuf==4.21.6
 
-# Spark Connect (optional)
+# Spark Connect python proto generation plugin (optional)
 mypy-protobuf
