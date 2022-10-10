@@ -21,7 +21,7 @@ import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 
 /**
@@ -71,8 +71,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       (JoinType.JOIN_TYPE_FULL_OUTER, FullOuter),
       (JoinType.JOIN_TYPE_LEFT_ANTI, LeftAnti),
       (JoinType.JOIN_TYPE_LEFT_SEMI, LeftSemi),
-      (JoinType.JOIN_TYPE_INNER, Inner),
-      (JoinType.JOIN_TYPE_CROSS, Cross))) {
+      (JoinType.JOIN_TYPE_INNER, Inner))) {
       val connectPlan3 = {
         import org.apache.spark.sql.connect.dsl.plans._
         transform(connectTestRelation.join(connectTestRelation2, t))

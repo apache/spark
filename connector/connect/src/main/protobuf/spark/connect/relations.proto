@@ -98,14 +98,12 @@ message Join {
   JoinType join_type = 4;
 
   enum JoinType {
-    JOIN_TYPE_UNSPECIFIED = 0;
-    JOIN_TYPE_INNER = 1;
-    JOIN_TYPE_FULL_OUTER = 2;
-    JOIN_TYPE_LEFT_OUTER = 3;
-    JOIN_TYPE_RIGHT_OUTER = 4;
-    JOIN_TYPE_LEFT_ANTI = 5;
-    JOIN_TYPE_LEFT_SEMI = 6;
-    JOIN_TYPE_CROSS = 7;
+    JOIN_TYPE_INNER = 0;
+    JOIN_TYPE_FULL_OUTER = 1;
+    JOIN_TYPE_LEFT_OUTER = 2;
+    JOIN_TYPE_RIGHT_OUTER = 3;
+    JOIN_TYPE_LEFT_ANTI = 4;
+    JOIN_TYPE_LEFT_SEMI = 5;
   }
 }
 

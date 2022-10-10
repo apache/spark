@@ -25,7 +25,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
-import org.apache.spark.sql.catalyst.plans.{logical, Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.types._
 
@@ -229,7 +229,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     logical.Join(
       left = transformRelation(rel.getLeft),
       right = transformRelation(rel.getRight),
-      joinType = transformJoinType(rel.getJoinType),
+      joinType = transformJoinType(
+        if (rel.getJoinType != null) rel.getJoinType else proto.Join.JoinType.JOIN_TYPE_INNER),
       condition = joinCondition,
       hint = logical.JoinHint.NONE)
   }
@@ -241,7 +242,6 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Join.JoinType.JOIN_TYPE_FULL_OUTER => FullOuter
       case proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER => LeftOuter
       case proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER => RightOuter
-      case proto.Join.JoinType.JOIN_TYPE_CROSS => Cross
       case proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI => LeftSemi
       case _ => throw InvalidPlanInput(s"Join type ${t} is not supported")
     }
