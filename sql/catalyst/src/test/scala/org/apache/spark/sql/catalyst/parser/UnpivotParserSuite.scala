@@ -163,5 +163,33 @@ class UnpivotParserSuite extends AnalysisTest {
     }
   }
 
-  // TODO: include and exclude nulls
+  test("unpivot - exclude nulls") {
+    assertEqual(
+      "SELECT * FROM t UNPIVOT EXCLUDE NULLS (val FOR col in (a, b))",
+      Unpivot(
+        None,
+        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        None,
+        "col",
+        Seq("val"),
+        table("t"))
+        .where(coalesce($"val").isNotNull)
+        .select(star())
+    )
+  }
+
+  test("unpivot - include nulls") {
+    assertEqual(
+      "SELECT * FROM t UNPIVOT INCLUDE NULLS (val FOR col in (a, b))",
+      Unpivot(
+        None,
+        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        None,
+        "col",
+        Seq("val"),
+        table("t"))
+        .select(star())
+    )
+  }
+
 }
