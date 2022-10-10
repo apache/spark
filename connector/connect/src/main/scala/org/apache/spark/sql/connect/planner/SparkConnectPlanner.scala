@@ -270,11 +270,9 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   private def transformAggregate(rel: proto.Aggregate): LogicalPlan = {
     assert(rel.hasInput)
-    assert(rel.getGroupingSetsCount == 1, "Only one grouping set is supported")
 
-    val groupingSet = rel.getGroupingSetsList.asScala.take(1)
-    val groupingExprs = groupingSet
-      .flatMap(f => f.getGroupingExpressionsList.asScala)
+    val groupingExprs =
+      rel.getGroupingExpressionsList.asScala
       .map(transformExpression)
       .map {
         case x @ UnresolvedAttribute(_) => x
@@ -284,16 +282,17 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     logical.Aggregate(
       child = transformRelation(rel.getInput),
       groupingExpressions = groupingExprs.toSeq,
-      aggregateExpressions = rel.getMeasuresList.asScala.map(transformAggregateExpression).toSeq)
+      aggregateExpressions =
+        rel.getResultExpressionsList.asScala.map(transformAggregateExpression).toSeq)
   }
 
   private def transformAggregateExpression(
-      exp: proto.Aggregate.Measure): expressions.NamedExpression = {
-    val fun = exp.getFunction.getName
+      exp: proto.Aggregate.AggregateFunction): expressions.NamedExpression = {
+    val fun = exp.getName
     UnresolvedAlias(
       UnresolvedFunction(
         name = fun,
-        arguments = exp.getFunction.getArgumentsList.asScala.map(transformExpression).toSeq,
+        arguments = exp.getArgumentsList.asScala.map(transformExpression).toSeq,
         isDistinct = false))
   }
 

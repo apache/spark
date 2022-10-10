@@ -217,16 +217,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val agg = proto.Aggregate.newBuilder
       .setInput(readRel)
-      .addAllMeasures(
-        Seq(
-          proto.Aggregate.Measure.newBuilder
-            .setFunction(proto.Aggregate.AggregateFunction.newBuilder
-              .setName("sum")
-              .addArguments(unresolvedAttribute))
-            .build()).asJava)
-      .addGroupingSets(proto.Aggregate.GroupingSet.newBuilder
-        .addGroupingExpressions(unresolvedAttribute)
-        .build())
+      .addResultExpressions(
+        proto.Aggregate.AggregateFunction.newBuilder
+          .setName("sum")
+          .addArguments(unresolvedAttribute))
+      .addGroupingExpressions(unresolvedAttribute)
       .build()
 
     val res = transform(proto.Relation.newBuilder.setAggregate(agg).build())

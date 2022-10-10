@@ -73,12 +73,9 @@ package object dsl {
         val agg = proto.Aggregate.newBuilder()
         agg.setInput(logicalPlan)
 
-        val groupingSet = proto.Aggregate.GroupingSet.newBuilder()
         for (groupingExpr <- groupingExprs) {
-          groupingSet.addGroupingExpressions(groupingExpr)
+          agg.addGroupingExpressions(groupingExpr)
         }
-        agg.addGroupingSets(groupingSet)
-
         // TODO: support aggregateExprs, which is blocked by supporting any builtin function
         // resolution only by name in the analyzer.
         proto.Relation.newBuilder().setAggregate(agg.build()).build()
