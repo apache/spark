@@ -328,10 +328,11 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                     lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(), pdf.v.std())])
                 )
 
+    def test_apply_in_pandas_returning_empty_dataframe_without_columns(self):
+        self._test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame())
+
     def test_apply_in_pandas_returning_empty_dataframe_with_column_names(self):
-        self._test_apply_in_pandas_returning_empty_dataframe(
-            pd.DataFrame(columns=["mean", "id"])
-        )
+        self._test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame(columns=["mean", "id"]))
 
     def test_apply_in_pandas_returning_empty_dataframe_with_wrong_column_names(self):
         self._test_apply_in_pandas_returning_empty_dataframe_error(
@@ -340,10 +341,10 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             "do not match specified schema. Missing: mean Unexpected: median, std",
         )
 
-    def test_apply_in_pandas_returning_empty_dataframe_without_column_names(self):
-        self._test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame())
+    def test_apply_in_pandas_returning_empty_dataframe_with_no_column_names(self):
+        self._test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame(columns=[0, 1]))
 
-    def test_apply_in_pandas_returning_empty_dataframe_without_column_names_and_wrong_amount(self):
+    def test_apply_in_pandas_returning_empty_dataframe_with_no_column_names_and_wrong_amount(self):
         self._test_apply_in_pandas_returning_empty_dataframe_error(
             pd.DataFrame(columns=[0, 1, 2]),
             "Number of columns of the returned pandas.DataFrame "
@@ -774,9 +775,9 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
 
         result = (
             df.groupby("id")
-                .applyInPandas(stats, schema="id long, mean double")
-                .sort("id", "mean")
-                .collect()
+            .applyInPandas(stats, schema="id long, mean double")
+            .sort("id", "mean")
+            .collect()
         )
 
         actual_ids = {row[0] for row in result}

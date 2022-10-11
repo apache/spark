@@ -155,9 +155,31 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             fn=lambda lft, rgt: lft.size + rgt.size,
             error_class=PythonException,
             error_message_regex="Return type of the user-defined function "
-                                "should be pandas.DataFrame, but is <class 'numpy.int64'>")
+            "should be pandas.DataFrame, but is <class 'numpy.int64'>",
+        )
 
-    def test_apply_in_pandas_returning_wrong_number_of_columns(self):
+    def test_apply_in_pandas_returning_column_names(self):
+        self._test_merge(fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]))
+
+    def test_apply_in_pandas_returning_no_column_names(self):
+        def merge_pandas(lft, rgt):
+            res = pd.merge(lft, rgt, on=["id", "k"])
+            res.columns = range(res.columns.size)
+            return res
+
+        self._test_merge(fn=merge_pandas)
+
+    def test_apply_in_pandas_returning_column_names_sometimes(self):
+        def merge_pandas(lft, rgt):
+            res = pd.merge(lft, rgt, on=["id", "k"])
+            if 0 in lft["id"] and lft["id"][0] % 2 == 0:
+                return res
+            res.columns = range(res.columns.size)
+            return res
+
+        self._test_merge(fn=merge_pandas)
+
+    def test_apply_in_pandas_returning_wrong_column_names(self):
         def merge_pandas(lft, rgt):
             if 0 in lft["id"] and lft["id"][0] % 2 == 0:
                 lft["add"] = 0
@@ -168,37 +190,86 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         self._test_merge_error(
             fn=merge_pandas,
             error_class=PythonException,
-            error_message_regex="Number of columns of the returned pandas.DataFrame "
-                                "doesn't match specified schema. Expected: 4 Actual: 6")
+            error_message_regex="Column names of the returned pandas.DataFrame "
+            "do not match specified schema. Unexpected: add, more",
+        )
 
-    def test_apply_in_pandas_returning_empty_dataframe(self):
+    def test_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
         def merge_pandas(lft, rgt):
             if 0 in lft["id"] and lft["id"][0] % 2 == 0:
-                return pd.DataFrame([])
+                lft[3] = 0
             if 0 in rgt["id"] and rgt["id"][0] % 3 == 0:
-                return pd.DataFrame([])
+                rgt[3] = 1
+            res = pd.merge(lft, rgt, on=["id", "k"])
+            res.columns = range(res.columns.size)
+            return res
+
+        self._test_merge_error(
+            fn=merge_pandas,
+            error_class=PythonException,
+            error_message_regex="Number of columns of the returned pandas.DataFrame "
+            "doesn't match specified schema. Expected: 4 Actual: 6",
+        )
+
+    def test_apply_in_pandas_returning_empty_dataframe_without_columns(self):
+        def merge_pandas(lft, rgt):
+            if 0 in lft["id"] and lft["id"][0] % 2 == 0:
+                return pd.DataFrame()
+            if 0 in rgt["id"] and rgt["id"][0] % 3 == 0:
+                return pd.DataFrame()
             return pd.merge(lft, rgt, on=["id", "k"])
 
-        left = self.data1.toPandas()
-        right = self.data2.toPandas()
+        self._test_merge_empty(fn=merge_pandas)
 
-        expected = pd.merge(
-            left[left["id"] % 2 != 0], right[right["id"] % 3 != 0], on=["id", "k"]
-        ).sort_values(by=["id", "k"])
-
-        self._test_merge(fn=merge_pandas, expected=expected)
-
-    def test_apply_in_pandas_returning_empty_dataframe_and_wrong_number_of_columns(self):
+    def test_apply_in_pandas_returning_empty_dataframe_with_column_names(self):
         def merge_pandas(lft, rgt):
             if 0 in lft["id"] and lft["id"][0] % 2 == 0:
-                return pd.DataFrame([], columns=["id", "k"])
+                return pd.DataFrame(columns=["id", "k", "v", "v2"])
+            if 0 in rgt["id"] and rgt["id"][0] % 3 == 0:
+                return pd.DataFrame(columns=["id", "k", "v", "v2"])
+            return pd.merge(lft, rgt, on=["id", "k"])
+
+        self._test_merge_empty(fn=merge_pandas)
+
+    def test_apply_in_pandas_returning_empty_dataframe_with_wrong_column_names(self):
+        def merge_pandas(lft, rgt):
+            if 0 in lft["id"] and lft["id"][0] % 2 == 0:
+                return pd.DataFrame(columns=["id", "k", "x"])
+            if 0 in rgt["id"] and rgt["id"][0] % 3 == 0:
+                return pd.DataFrame(columns=["id", "k", "x"])
+            return pd.merge(lft, rgt, on=["id", "k"])
+
+        self._test_merge_error(
+            fn=merge_pandas,
+            error_class=PythonException,
+            error_message_regex="Column names of the returned pandas.DataFrame "
+            "do not match specified schema. Missing: v, v2 Unexpected: x",
+        )
+
+    def test_apply_in_pandas_returning_empty_dataframe_without_column_names(self):
+        def merge_pandas(lft, rgt):
+            if 0 in lft["id"] and lft["id"][0] % 2 == 0:
+                return pd.DataFrame(columns=[0, 1, 2, 3])
+            if 0 in rgt["id"] and rgt["id"][0] % 3 == 0:
+                return pd.DataFrame(columns=[0, 1, 2, 3])
+            return pd.merge(lft, rgt, on=["id", "k"])
+
+        self._test_merge_empty(fn=merge_pandas)
+
+    def test_apply_in_pandas_returning_empty_dataframe_without_column_names_and_wrong_amount(self):
+        def merge_pandas(lft, rgt):
+            if 0 in lft["id"] and lft["id"][0] % 2 == 0:
+                return pd.DataFrame(columns=[0, 1, 2])
+            if 0 in rgt["id"] and rgt["id"][0] % 3 == 0:
+                return pd.DataFrame(columns=[0, 1, 2])
             return pd.merge(lft, rgt, on=["id", "k"])
 
         self._test_merge_error(
             fn=merge_pandas,
             error_class=PythonException,
             error_message_regex="Number of columns of the returned pandas.DataFrame doesn't "
-                                "match specified schema. Expected: 4 Actual: 2")
+            "match specified schema. Expected: 4 Actual: 3",
+        )
 
     def test_mixed_scalar_udfs_followed_by_cogrouby_apply(self):
         df = self.spark.range(0, 10).toDF("v1")
@@ -255,14 +326,16 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             fn=lambda l, r: l,
             output_schema="id long, v array<timestamp>",
             error_class=NotImplementedError,
-            error_message_regex="Invalid return type.*ArrayType.*TimestampType")
+            error_message_regex="Invalid return type.*ArrayType.*TimestampType",
+        )
 
     def test_wrong_args(self):
-        self._test_merge_error(
+        self.__test_merge_error(
             fn=lambda: 1,
             output_schema=StructType([StructField("d", DoubleType())]),
             error_class=ValueError,
-            error_message_regex="Invalid function")
+            error_message_regex="Invalid function",
+        )
 
     def test_case_insensitive_grouping_column(self):
         # SPARK-31915: case-insensitive grouping column should work.
@@ -368,18 +441,42 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
         assert_frame_equal(expected, result)
 
-    @classmethod
+    def _test_merge_empty(self, fn):
+        left = self.data1.toPandas()
+        right = self.data2.toPandas()
+
+        expected = pd.merge(
+            left[left["id"] % 2 != 0], right[right["id"] % 3 != 0], on=["id", "k"]
+        ).sort_values(by=["id", "k"])
+
+        self._test_merge(self.data1, self.data2, fn=fn, expected=expected)
+
     def _test_merge(
-        cls,
+        self,
         left=None,
         right=None,
         by=["id"],
         fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
         output_schema="id long, k int, v int, v2 int",
-        expected=None
+        expected=None,
     ):
-        left = cls.data1 if left is None else left
-        right = cls.data2 if right is None else right
+        with self.subTest("without key"):
+            self.__test_merge(left, right, by, fn, output_schema, expected)
+        with self.subTest("with key"):
+            f = lambda key, lft, rgt: fn(lft, rgt)
+            self.__test_merge(left, right, by, f, output_schema, expected)
+
+    def __test_merge(
+        self,
+        left=None,
+        right=None,
+        by=["id"],
+        fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
+        output_schema="id long, k int, v int, v2 int",
+        expected=None,
+    ):
+        left = self.data1 if left is None else left
+        right = self.data2 if right is None else right
 
         result = (
             left.groupby(*by)
@@ -401,19 +498,50 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         assert_frame_equal(expected, result)
 
     def _test_merge_error(
-            self,
-            error_class,
-            error_message_regex,
-            left=None,
-            right=None,
-            by=["id"],
-            fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
-            output_schema="id long, k int, v int, v2 int",
+        self,
+        error_class,
+        error_message_regex,
+        left=None,
+        right=None,
+        by=["id"],
+        fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
+        output_schema="id long, k int, v int, v2 int",
+    ):
+        with self.subTest("without key"):
+            self.__test_merge_error(
+                left=left,
+                right=right,
+                by=by,
+                fn=fn,
+                output_schema=output_schema,
+                error_class=error_class,
+                error_message_regex=error_message_regex,
+            )
+        with self.subTest("with key"):
+            f = lambda key, lft, rgt: fn(lft, rgt)
+            self.__test_merge_error(
+                left=left,
+                right=right,
+                by=by,
+                fn=f,
+                output_schema=output_schema,
+                error_class=error_class,
+                error_message_regex=error_message_regex,
+            )
 
+    def __test_merge_error(
+        self,
+        error_class,
+        error_message_regex,
+        left=None,
+        right=None,
+        by=["id"],
+        fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
+        output_schema="id long, k int, v int, v2 int",
     ):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(error_class, error_message_regex):
-                self._test_merge(left, right, by, fn, output_schema)
+                self.__test_merge(left, right, by, fn, output_schema)
 
 
 if __name__ == "__main__":
