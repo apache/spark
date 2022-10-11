@@ -20,7 +20,7 @@ from typing import cast
 
 from pyspark.sql.functions import array, explode, col, lit, udf, pandas_udf
 from pyspark.sql.types import DoubleType, StructType, StructField, Row
-from pyspark.sql.utils import PythonException
+from pyspark.sql.utils import IllegalArgumentException, PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -129,12 +129,17 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         left = self.data1
         right = self.data2
 
+        def merge_pandas(lft, _):
+            return lft
+
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
-                AssertionError,
-                "Cogroup keys must have same size: 2 != 1",
+                IllegalArgumentException,
+                "requirement failed: Cogroup keys must have same size: 2 != 1",
             ):
-                (left.groupby("id", "k").cogroup(right.groupby("id")))
+                (left.groupby("id", "k").cogroup(right.groupby("id"))).applyInPandas(
+                    merge_pandas, "id long, k int, v int"
+                )
 
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
         left = self.data1

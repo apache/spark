@@ -366,10 +366,6 @@ class PandasCogroupedOps:
     """
 
     def __init__(self, gd1: "GroupedData", gd2: "GroupedData"):
-        gel1 = gd1._jgd.groupingExprs().length()
-        gel2 = gd2._jgd.groupingExprs().length()
-        assert gel1 == gel2, f"Cogroup keys must have same size: {gel1} != {gel2}"
-
         self._gd1 = gd1
         self._gd2 = gd2
 
