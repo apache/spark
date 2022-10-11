@@ -612,8 +612,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",
@@ -638,8 +637,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",
@@ -664,8 +662,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",
@@ -690,8 +687,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",
@@ -716,8 +712,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",
@@ -742,8 +737,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",
@@ -768,8 +762,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",
@@ -794,8 +787,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
     "configVal" : "'false'",

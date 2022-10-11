@@ -607,8 +607,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df3.selectExpr("array_sort(a)").collect()
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"array_sort(a, lambdafunction((IF(((left IS NULL) AND (right IS NULL)), 0, (IF((left IS NULL), 1, (IF((right IS NULL), -1, (IF((left < right), -1, (IF((left > right), 1, 0)))))))))), left, right))\"",
@@ -2591,8 +2590,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkError(
       exception = intercept[AnalysisException](df.selectExpr("transform(i, x -> x)")),
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"transform(i, lambdafunction(x, x))\"",
@@ -2608,8 +2606,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception =
         intercept[AnalysisException](df.selectExpr("transform(a, x -> x)")),
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = "WITH_SUGGESTION",
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
       context = ExpectedContext(
@@ -2677,8 +2674,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("map_filter(i, (k, v) -> k > v)")
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"map_filter(i, lambdafunction((k > v), k, v))\"",
@@ -2695,8 +2691,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(map_filter(col("i"), (k, v) => k > v))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       matchPVals = true,
       parameters = Map(
         "sqlExpr" -> """"map_filter\(i, lambdafunction\(\(x_\d+ > y_\d+\), x_\d+, y_\d+\)\)"""",
@@ -2708,8 +2703,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception =
         intercept[AnalysisException](df.selectExpr("map_filter(a, (k, v) -> k > v)")),
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = "WITH_SUGGESTION",
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
       context = ExpectedContext(
@@ -2856,8 +2850,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("filter(i, x -> x)")
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"filter(i, lambdafunction(x, x))\"",
@@ -2874,8 +2867,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(filter(col("i"), x => x))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       matchPVals = true,
       parameters = Map(
         "sqlExpr" -> """"filter\(i, lambdafunction\(x_\d+, x_\d+\)\)"""",
@@ -2888,8 +2880,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("filter(s, x -> x)")
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"filter(s, lambdafunction(namedlambdavariable(), namedlambdavariable()))\"",
         "paramIndex" -> "2",
@@ -2901,8 +2892,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(filter(col("s"), x => x))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"filter(s, lambdafunction(namedlambdavariable(), namedlambdavariable()))\"",
         "paramIndex" -> "2",
@@ -2913,8 +2903,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception =
         intercept[AnalysisException](df.selectExpr("filter(a, x -> x)")),
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = "WITH_SUGGESTION",
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
       context = ExpectedContext(
@@ -3033,8 +3022,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("exists(i, x -> x)")
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"exists(i, lambdafunction(x, x))\"",
@@ -3051,8 +3039,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(exists(col("i"), x => x))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       matchPVals = true,
       parameters = Map(
         "sqlExpr" -> """"exists\(i, lambdafunction\(x_\d+, x_\d+\)\)"""",
@@ -3065,8 +3052,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("exists(s, x -> x)")
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"exists(s, lambdafunction(namedlambdavariable(), namedlambdavariable()))\"",
         "paramIndex" -> "2",
@@ -3078,8 +3064,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(exists(df("s"), x => x))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"exists(s, lambdafunction(namedlambdavariable(), namedlambdavariable()))\"",
         "paramIndex" -> "2",
@@ -3088,10 +3073,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "requiredType" -> "\"BOOLEAN\""))
 
     checkError(
-      exception =
-        intercept[AnalysisException](df.selectExpr("exists(a, x -> x)")),
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = "WITH_SUGGESTION",
+      exception = intercept[AnalysisException](df.selectExpr("exists(a, x -> x)")),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
       context = ExpectedContext(
@@ -3224,8 +3207,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("forall(i, x -> x)")
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"forall(i, lambdafunction(x, x))\"",
@@ -3242,8 +3224,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(forall(col("i"), x => x))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       matchPVals = true,
       parameters = Map(
         "sqlExpr" -> """"forall\(i, lambdafunction\(x_\d+, x_\d+\)\)"""",
@@ -3256,8 +3237,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("forall(s, x -> x)")
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"forall(s, lambdafunction(namedlambdavariable(), namedlambdavariable()))\"",
         "paramIndex" -> "2",
@@ -3269,8 +3249,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(forall(col("s"), x => x))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"forall(s, lambdafunction(namedlambdavariable(), namedlambdavariable()))\"",
         "paramIndex" -> "2",
@@ -3280,8 +3259,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkError(
       exception = intercept[AnalysisException](df.selectExpr("forall(a, x -> x)")),
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = "WITH_SUGGESTION",
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
       context = ExpectedContext(
@@ -3291,8 +3269,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkError(
       exception = intercept[AnalysisException](df.select(forall(col("a"), x => x))),
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
   }
 
@@ -3451,8 +3428,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("aggregate(i, 0, (acc, x) -> x)")
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> """"aggregate(i, 0, lambdafunction(x, acc, x), lambdafunction(id, id))"""",
@@ -3470,8 +3446,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(aggregate(col("i"), lit(0), (_, x) => x))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       matchPVals = true,
       parameters = Map(
         "sqlExpr" -> """"aggregate\(i, 0, lambdafunction\(y_\d+, x_\d+, y_\d+\), lambdafunction\(x_\d+, x_\d+\)\)"""",
@@ -3494,8 +3469,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception =
         intercept[AnalysisException](df.selectExpr("aggregate(a, 0, (acc, x) -> x)")),
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = "WITH_SUGGESTION",
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
       context = ExpectedContext(
@@ -3576,8 +3550,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("map_zip_with(i, mis, (x, y, z) -> concat(x, y, z))")
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"map_zip_with(i, mis, lambdafunction(concat(x, y, z), x, y, z))\"",
@@ -3594,8 +3567,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(map_zip_with(col("i"), col("mis"), (x, y, z) => concat(x, y, z)))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       matchPVals = true,
       parameters = Map(
         "sqlExpr" -> """"map_zip_with\(i, mis, lambdafunction\(concat\(x_\d+, y_\d+, z_\d+\), x_\d+, y_\d+, z_\d+\)\)"""",
@@ -3608,8 +3580,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("map_zip_with(mis, i, (x, y, z) -> concat(x, y, z))")
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"map_zip_with(mis, i, lambdafunction(concat(x, y, z), x, y, z))\"",
@@ -3626,8 +3597,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(map_zip_with(col("mis"), col("i"), (x, y, z) => concat(x, y, z)))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       matchPVals = true,
       parameters = Map(
         "sqlExpr" -> """"map_zip_with\(mis, i, lambdafunction\(concat\(x_\d+, y_\d+, z_\d+\), x_\d+, y_\d+, z_\d+\)\)"""",
@@ -3771,8 +3741,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         dfExample2.selectExpr("transform_keys(j, (k, v) -> k + 1)")
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"transform_keys(j, lambdafunction((k + 1), k, v))\"",
@@ -4018,8 +3987,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           dfExample3.selectExpr("transform_values(x, (k, v) -> k + 1)")
         },
-        errorClass = "DATATYPE_MISMATCH",
-        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         sqlState = None,
         parameters = Map(
           "sqlExpr" -> "\"transform_values(x, lambdafunction((k + 1), k, v))\"",
@@ -4036,8 +4004,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           dfExample3.select(transform_values(col("x"), (k, v) => k + 1))
         },
-        errorClass = "DATATYPE_MISMATCH",
-        errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         matchPVals = true,
         parameters = Map(
           "sqlExpr" ->
@@ -4125,8 +4092,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("zip_with(i, a2, (acc, x) -> x)")
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"zip_with(i, a2, lambdafunction(x, acc, x))\"",
@@ -4143,8 +4109,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(zip_with(df("i"), df("a2"), (_, x) => x))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       matchPVals = true,
       parameters = Map(
         "sqlExpr" ->
@@ -4157,8 +4122,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception =
         intercept[AnalysisException](df.selectExpr("zip_with(a1, a, (acc, x) -> x)")),
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = "WITH_SUGGESTION",
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map("objectName" -> "`a`", "proposal" -> "`a1`, `a2`, `i`"),
       context = ExpectedContext(
