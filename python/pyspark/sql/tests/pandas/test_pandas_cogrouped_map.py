@@ -458,12 +458,14 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         output_schema="id long, k int, v int, v2 int",
         expected=None,
     ):
+        def fn_with_key(_, lft, rgt):
+            return fn(lft, rgt)
+
         # Test fn with and without key argument
         with self.subTest("without key"):
             self.__test_merge(left, right, by, fn, output_schema, expected)
         with self.subTest("with key"):
-            f = lambda key, lft, rgt: fn(lft, rgt)
-            self.__test_merge(left, right, by, f, output_schema, expected)
+            self.__test_merge(left, right, by, fn_with_key, output_schema, expected)
 
     def __test_merge(
         self,
@@ -507,6 +509,9 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
         output_schema="id long, k int, v int, v2 int",
     ):
+        def fn_with_key(_, lft, rgt):
+            return fn(lft, rgt)
+
         # Test fn with and without key argument
         with self.subTest("without key"):
             self.__test_merge_error(
@@ -519,12 +524,11 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
                 error_message_regex=error_message_regex,
             )
         with self.subTest("with key"):
-            f = lambda key, lft, rgt: fn(lft, rgt)
             self.__test_merge_error(
                 left=left,
                 right=right,
                 by=by,
-                fn=f,
+                fn=fn_with_key,
                 output_schema=output_schema,
                 error_class=error_class,
                 error_message_regex=error_message_regex,
