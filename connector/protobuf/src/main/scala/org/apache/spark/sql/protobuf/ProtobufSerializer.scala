@@ -192,8 +192,6 @@ private[sql] class ProtobufSerializer(
             i += 1
           }
           list
-      case (_: YearMonthIntervalType, INT) =>
-        (getter, ordinal) => getter.getInt(ordinal)
 
       case (DayTimeIntervalType(startField, endField), MESSAGE) =>
         (getter, ordinal) =>

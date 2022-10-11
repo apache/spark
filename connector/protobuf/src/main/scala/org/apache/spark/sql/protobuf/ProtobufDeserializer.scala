@@ -166,9 +166,6 @@ private[sql] class ProtobufDeserializer(
       case (BOOLEAN, BooleanType) =>
         (updater, ordinal, value) => updater.setBoolean(ordinal, value.asInstanceOf[Boolean])
 
-      case (BOOLEAN, ArrayType(BooleanType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, BooleanType, containsNull)
-
       case (INT, IntegerType) =>
         (updater, ordinal, value) => updater.setInt(ordinal, value.asInstanceOf[Int])
 
@@ -178,26 +175,18 @@ private[sql] class ProtobufDeserializer(
       case (INT, ShortType) =>
         (updater, ordinal, value) => updater.setShort(ordinal, value.asInstanceOf[Short])
 
-      case (INT, ArrayType(IntegerType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, IntegerType, containsNull)
+      case  (BOOLEAN | INT | FLOAT | DOUBLE | LONG | STRING | ENUM | BYTE_STRING,
+      ArrayType(dataType: DataType, containsNull)) if protoType.isRepeated =>
+        newArrayWriter(protoType, protoPath, catalystPath, dataType, containsNull)
 
       case (LONG, LongType) =>
         (updater, ordinal, value) => updater.setLong(ordinal, value.asInstanceOf[Long])
 
-      case (LONG, ArrayType(LongType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, LongType, containsNull)
-
       case (FLOAT, FloatType) =>
         (updater, ordinal, value) => updater.setFloat(ordinal, value.asInstanceOf[Float])
 
-      case (FLOAT, ArrayType(FloatType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, FloatType, containsNull)
-
       case (DOUBLE, DoubleType) =>
         (updater, ordinal, value) => updater.setDouble(ordinal, value.asInstanceOf[Double])
-
-      case (DOUBLE, ArrayType(DoubleType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, DoubleType, containsNull)
 
       case (STRING, StringType) =>
         (updater, ordinal, value) =>
@@ -206,9 +195,6 @@ private[sql] class ProtobufDeserializer(
           }
           updater.set(ordinal, str)
 
-      case (STRING, ArrayType(StringType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, StringType, containsNull)
-
       case (BYTE_STRING, BinaryType) =>
         (updater, ordinal, value) =>
           val byte_array = value match {
@@ -216,9 +202,6 @@ private[sql] class ProtobufDeserializer(
             case _ => throw new Exception("Invalid ByteString format")
           }
           updater.set(ordinal, byte_array)
-
-      case (BYTE_STRING, ArrayType(BinaryType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, BinaryType, containsNull)
 
       case (MESSAGE, MapType(keyType, valueType, valueContainsNull)) =>
         newMapWriter(protoType, protoPath, catalystPath, keyType, valueType, valueContainsNull)
@@ -243,9 +226,6 @@ private[sql] class ProtobufDeserializer(
           val micros = DateTimeUtils.millisToMicros(seconds * 1000)
           updater.setLong(ordinal, micros + TimeUnit.NANOSECONDS.toMicros(nanoSeconds))
 
-      case (INT, _: YearMonthIntervalType) => (updater, ordinal, value) =>
-        updater.setInt(ordinal, value.asInstanceOf[Int])
-
       case (MESSAGE, st: StructType) =>
         val writeRecord = getRecordWriter(
           protoType.getMessageType,
@@ -263,9 +243,6 @@ private[sql] class ProtobufDeserializer(
 
       case (ENUM, StringType) =>
         (updater, ordinal, value) => updater.set(ordinal, UTF8String.fromString(value.toString))
-
-      case (ENUM, ArrayType(StringType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, StringType, containsNull)
 
       case _ => throw new IncompatibleSchemaException(incompatibleMsg)
     }
