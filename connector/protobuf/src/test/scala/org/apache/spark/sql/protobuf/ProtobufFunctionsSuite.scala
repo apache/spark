@@ -17,6 +17,7 @@
 package org.apache.spark.sql.protobuf
 
 import java.sql.Timestamp
+import java.time.Duration
 
 import scala.collection.JavaConverters._
 
@@ -27,7 +28,7 @@ import org.apache.spark.sql.functions.{lit, struct}
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, StringType, StructField, StructType, TimestampType}
 
 class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Serializable {
 
@@ -537,7 +538,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
     assert(resultFrom.except(resultToFrom).isEmpty)
   }
 
-  test("to_protobuf timestamp example") {
+  test("Handle TimestampType between to_protobuf and from_protobuf") {
     val schema = StructType(
       StructField("timeStampMsg",
         StructType(
@@ -571,5 +572,45 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       === inputDf.select("timeStampMsg.key").take(1).toSeq(0).get(0))
     assert(fromProtoDf.select("timeStampMsg.stmp").take(1).toSeq(0).get(0)
       === inputDf.select("timeStampMsg.stmp").take(1).toSeq(0).get(0))
+  }
+
+  test("Handle DayTimeIntervalType between to_protobuf and from_protobuf") {
+    val schema = StructType(
+      StructField("durationMsg",
+        StructType(
+          StructField("key", StringType, nullable = true) ::
+            StructField("duration",
+              DayTimeIntervalType.defaultConcreteType, nullable = true) :: Nil
+        ),
+        nullable = true
+      ) :: Nil
+    )
+
+    val inputDf = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(Row("key1",
+          Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)
+        ))
+      )),
+      schema
+    )
+
+    val toProtoDf = inputDf
+      .select(functions.to_protobuf($"durationMsg", testFileDesc, "durationMsg") as 'to_proto)
+
+    val fromProtoDf = toProtoDf
+      .select(functions.from_protobuf($"to_proto", testFileDesc, "durationMsg") as 'durationMsg)
+    fromProtoDf.show(truncate = false)
+
+    val actualFields = fromProtoDf.schema.fields.toList
+    val expectedFields = inputDf.schema.fields.toList
+
+    assert(actualFields.size === expectedFields.size)
+    assert(actualFields === expectedFields)
+    assert(fromProtoDf.select("durationMsg.key").take(1).toSeq(0).get(0)
+      === inputDf.select("durationMsg.key").take(1).toSeq(0).get(0))
+    assert(fromProtoDf.select("durationMsg.duration").take(1).toSeq(0).get(0)
+      === inputDf.select("durationMsg.duration").take(1).toSeq(0).get(0))
+
   }
 }

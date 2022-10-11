@@ -233,6 +233,19 @@ private[sql] class ProtobufDeserializer(
           val micros = DateTimeUtils.millisToMicros(seconds * 1000)
           updater.setLong(ordinal, micros + TimeUnit.NANOSECONDS.toMicros(nanoSeconds))
 
+      case (MESSAGE, DayTimeIntervalType(startField, endField)) =>
+        (updater, ordinal, value) =>
+          val secondsField = protoType.getMessageType.getFields.get(0)
+          val nanoSecondsField = protoType.getMessageType.getFields.get(1)
+          val message = value.asInstanceOf[DynamicMessage]
+          val seconds = message.getField(secondsField).asInstanceOf[Long]
+          val nanoSeconds = message.getField(nanoSecondsField).asInstanceOf[Int]
+          val micros = DateTimeUtils.millisToMicros(seconds * 1000)
+          updater.setLong(ordinal, micros + TimeUnit.NANOSECONDS.toMicros(nanoSeconds))
+
+      case (INT, _: YearMonthIntervalType) => (updater, ordinal, value) =>
+        updater.setInt(ordinal, value.asInstanceOf[Int])
+
       case (MESSAGE, st: StructType) =>
         val writeRecord = getRecordWriter(
           protoType.getMessageType,

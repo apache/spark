@@ -18,14 +18,15 @@ package org.apache.spark.sql.protobuf
 
 import scala.collection.JavaConverters._
 
-import com.google.protobuf.{DynamicMessage, Timestamp}
+import com.google.protobuf.{Duration, DynamicMessage, Timestamp}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils.{toFieldStr, ProtoMatchedField}
 import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
@@ -194,8 +195,26 @@ private[sql] class ProtobufSerializer(
       case (_: YearMonthIntervalType, INT) =>
         (getter, ordinal) => getter.getInt(ordinal)
 
-      case (_: DayTimeIntervalType, LONG) =>
-        (getter, ordinal) => getter.getLong(ordinal)
+      case (DayTimeIntervalType(startField, endField), MESSAGE) =>
+        (getter, ordinal) =>
+          val dayTimeIntervalString =
+            IntervalUtils.toDayTimeIntervalString(getter.getLong(ordinal)
+              , ANSI_STYLE, startField, endField)
+          val calendarInterval = IntervalUtils.fromIntervalString(dayTimeIntervalString)
+
+          val millis = DateTimeUtils.microsToMillis(calendarInterval.microseconds)
+          val duration = Duration.newBuilder()
+            .setSeconds((millis / 1000))
+            .setNanos(((millis % 1000) * 1000000).toInt)
+
+          if (duration.getSeconds < 0 && duration.getNanos > 0) {
+            duration.setSeconds(duration.getSeconds + 1)
+            duration.setNanos(duration.getNanos - 1000000000)
+          } else if (duration.getSeconds > 0 && duration.getNanos < 0) {
+            duration.setSeconds(duration.getSeconds - 1)
+            duration.setNanos(duration.getNanos + 1000000000)
+          }
+          duration.build()
 
       case _ =>
         throw new IncompatibleSchemaException(

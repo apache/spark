@@ -168,20 +168,23 @@ message requiredMsg {
   int32 col_3 = 4;
 }
 
+// https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/timestamp.proto
 message Timestamp {
-  // Represents seconds of UTC time since Unix epoch
-  // 1970-01-01T00:00:00Z. Must be from 0001-01-01T00:00:00Z to
-  // 9999-12-31T23:59:59Z inclusive.
   int64 seconds = 1;
-
-  // Non-negative fractions of a second at nanosecond resolution. Negative
-  // second values with fractions must still have non-negative nanos values
-  // that count forward in time. Must be from 0 to 999,999,999
-  // inclusive.
   int32 nanos = 2;
 }
 
 message timeStampMsg {
   string key = 1;
   Timestamp stmp = 2;
+}
+// https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/duration.proto
+message Duration {
+  int64 seconds = 1;
+  int32 nanos = 2;
+}
+
+message durationMsg {
+  string key = 1;
+  Duration duration = 2;
 }
