@@ -33,6 +33,7 @@ license: |
     - Valid Base64 string should include symbols from in base64 alphabet (A-Za-z0-9+/), optional padding (`=`), and optional whitespaces. Whitespaces are skipped in conversion except when they are preceded by padding symbol(s). If padding is present it should conclude the string and follow rules described in RFC 4648 § 4.
     - Valid hexadecimal strings should include only allowed symbols (0-9A-Fa-f).
     - Valid values for `fmt` are case-insensitive `hex`, `base64`, `utf-8`, `utf8`.
+  - Since Spark 3.4, Spark throws only `PartitionsAlreadyExistException` when it creates partitions but some of them exist already. In Spark 3.3 or earlier, Spark can throw either `PartitionsAlreadyExistException` or `PartitionAlreadyExistsException`.
 
 ## Upgrading from Spark SQL 3.2 to 3.3
 

@@ -2949,7 +2949,7 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case ExecutorLost(execId, reason) =>
       val workerHost = reason match {
         case ExecutorProcessLost(_, workerHost, _) => workerHost
-        case ExecutorDecommission(workerHost) => workerHost
+        case ExecutorDecommission(workerHost, _) => workerHost
         case _ => None
       }
       dagScheduler.handleExecutorLost(execId, workerHost)
