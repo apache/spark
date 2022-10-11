@@ -904,7 +904,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         return self._reduce_for_stat_function(
             F.sum,
-            accepted_spark_types=(NumericType,),
+            accepted_spark_types=(NumericType, BooleanType),
             bool_to_numeric=True,
             min_count=min_count,
         )
