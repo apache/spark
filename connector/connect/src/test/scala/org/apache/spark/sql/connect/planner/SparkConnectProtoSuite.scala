@@ -33,13 +33,9 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   lazy val connectTestRelation = createLocalRelationProto(Seq($"id".int, $"name".string))
 
-<<<<<<< HEAD
   lazy val connectTestRelation2 = createLocalRelationProto(Seq($"key".int, $"value".int))
 
-  lazy val sparkTestRelation: LocalRelation = LocalRelation($"id".int)
-=======
   lazy val sparkTestRelation: LocalRelation = LocalRelation($"id".int, $"name".string)
->>>>>>> 00ab1f078a ([SPARK-40707] Add groupby to connect DSL and test more than one grouping expressions)
 
   lazy val sparkTestRelation2: LocalRelation = LocalRelation($"key".int, $"value".int)
 
