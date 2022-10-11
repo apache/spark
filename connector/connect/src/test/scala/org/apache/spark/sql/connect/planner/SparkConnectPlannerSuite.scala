@@ -161,7 +161,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proto.Relation.newBuilder.setJoin(proto.Join.newBuilder.setLeft(readRel)).build()
     intercept[AssertionError](transform(incompleteJoin))
 
-    // Cartesian Product not supported.
+    // Join type JOIN_TYPE_UNSPECIFIED is not supported.
     intercept[InvalidPlanInput] {
       val simpleJoin = proto.Relation.newBuilder
         .setJoin(proto.Join.newBuilder.setLeft(readRel).setRight(readRel))
@@ -185,7 +185,12 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val simpleJoin = proto.Relation.newBuilder
       .setJoin(
-        proto.Join.newBuilder.setLeft(readRel).setRight(readRel).setOn(joinCondition).build())
+        proto.Join.newBuilder
+          .setLeft(readRel)
+          .setRight(readRel)
+          .setJoinType(proto.Join.JoinType.JOIN_TYPE_INNER)
+          .setJoinCondition(joinCondition)
+          .build())
       .build()
 
     val res = transform(simpleJoin)
