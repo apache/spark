@@ -3427,4 +3427,6 @@
   "_LEGACY_ERROR_TEMP_2282" : {
     "message" : [
       "Drop namespace restrict is not supported"
+    ]
+  }
 }
