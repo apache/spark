@@ -30,7 +30,6 @@ import org.mockito.Mockito.{mock, when}
 import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
-import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
@@ -329,9 +328,9 @@ class QueryExecutionErrorsSuite
           .load(path.getAbsolutePath).select($"money").collect()
       }
     }
-    assert(e1.getCause.isInstanceOf[QueryExecutionException])
+    assert(e1.getCause.isInstanceOf[SparkException])
 
-    val e2 = e1.getCause.asInstanceOf[QueryExecutionException]
+    val e2 = e1.getCause.asInstanceOf[SparkException]
     assert(e2.getCause.isInstanceOf[SparkException])
 
     val e3 = e2.getCause.asInstanceOf[SparkException]
