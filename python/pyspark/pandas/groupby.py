@@ -903,7 +903,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 )
 
         return self._reduce_for_stat_function(
-            F.sum, accepted_spark_types=(NumericType,), bool_to_numeric=True, min_count=min_count
+            F.sum,
+            accepted_spark_types=(NumericType,),
+            bool_to_numeric=True,
+            min_count=min_count,
         )
 
     # TODO: sync the doc.
@@ -1274,6 +1277,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             lambda col: SF.product(col, True),
             accepted_spark_types=(NumericType, BooleanType),
             bool_to_numeric=True,
+            min_count=min_count,
         )
 
     def all(self, skipna: bool = True) -> FrameLike:
