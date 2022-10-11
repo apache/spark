@@ -81,6 +81,15 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
   }
 
+  test("column alias") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.select("id".protoAttr.as("id2")))
+    }
+    val sparkPlan = sparkTestRelation.select($"id".as("id2"))
+  }
+
   test("Aggregate with more than 1 grouping expressions") {
     val connectPlan = {
       import org.apache.spark.sql.connect.dsl.expressions._

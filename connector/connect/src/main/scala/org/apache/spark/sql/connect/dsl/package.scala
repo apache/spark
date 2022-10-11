@@ -40,6 +40,11 @@ package object dsl {
               .build())
           .build()
     }
+
+    implicit class DslExpression(val expr: proto.Expression) {
+      def as(alias: String): proto.Expression = proto.Expression.newBuilder().setAlias(
+        proto.Expression.Alias.newBuilder().setName(alias).setExpr(expr)).build()
+    }
   }
 
   object plans { // scalastyle:ignore
