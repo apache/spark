@@ -35,6 +35,7 @@ message Expression {
     UnresolvedFunction unresolved_function = 3;
     ExpressionString expression_string = 4;
     UnresolvedStar unresolved_star = 5;
+    Alias alias = 6;
   }
 
   message Literal {
@@ -165,5 +166,10 @@ message Expression {
   message QualifiedAttribute {
     string name = 1;
     DataType type = 2;
+  }
+
+  message Alias {
+    Expression expr = 1;
+    string name = 2;
   }
 }

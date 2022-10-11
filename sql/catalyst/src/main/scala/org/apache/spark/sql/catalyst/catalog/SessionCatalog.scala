@@ -1784,11 +1784,11 @@ class SessionCatalog(
   }
 
   /**
-   * List all registered functions in a database with the given pattern.
+   * List all built-in and temporary functions with the given pattern.
    */
-  private def listRegisteredFunctions(db: String, pattern: String): Seq[FunctionIdentifier] = {
+  private def listBuiltinAndTempFunctions(pattern: String): Seq[FunctionIdentifier] = {
     val functions = (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
-      .filter(_.database.forall(_ == db))
+      .filter(_.database.isEmpty)
     StringUtils.filterPattern(functions.map(_.unquotedString), pattern).map { f =>
       // In functionRegistry, function names are stored as an unquoted format.
       Try(parser.parseFunctionIdentifier(f)) match {
@@ -1817,7 +1817,7 @@ class SessionCatalog(
     requireDbExists(dbName)
     val dbFunctions = externalCatalog.listFunctions(dbName, pattern).map { f =>
       FunctionIdentifier(f, Some(dbName)) }
-    val loadedFunctions = listRegisteredFunctions(db, pattern)
+    val loadedFunctions = listBuiltinAndTempFunctions(pattern)
     val functions = dbFunctions ++ loadedFunctions
     // The session catalog caches some persistent functions in the FunctionRegistry
     // so there can be duplicates.

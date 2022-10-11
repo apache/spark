@@ -45,6 +45,7 @@ import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
 @Experimental
 public interface SupportsAtomicPartitionManagement extends SupportsPartitionManagement {
 
+  @SuppressWarnings("unchecked")
   @Override
   default void createPartition(
       InternalRow ident,
