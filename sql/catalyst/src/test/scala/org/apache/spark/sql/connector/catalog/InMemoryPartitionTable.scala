@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
@@ -51,7 +51,7 @@ class InMemoryPartitionTable(
       ident: InternalRow,
       properties: util.Map[String, String]): Unit = {
     if (memoryTablePartitions.containsKey(ident)) {
-      throw new PartitionAlreadyExistsException(name, ident, partitionSchema)
+      throw new PartitionsAlreadyExistException(name, ident, partitionSchema)
     } else {
       createPartitionKey(ident.toSeq(schema))
       memoryTablePartitions.put(ident, properties)
@@ -111,7 +111,7 @@ class InMemoryPartitionTable(
 
   override def renamePartition(from: InternalRow, to: InternalRow): Boolean = {
     if (memoryTablePartitions.containsKey(to)) {
-      throw new PartitionAlreadyExistsException(name, to, partitionSchema)
+      throw new PartitionsAlreadyExistException(name, to, partitionSchema)
     } else {
       val partValue = memoryTablePartitions.remove(from)
       if (partValue == null) {

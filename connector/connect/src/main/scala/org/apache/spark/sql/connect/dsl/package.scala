@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect
 import scala.collection.JavaConverters._
 
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 
 /**
@@ -50,6 +51,21 @@ package object dsl {
             .addAllExpressions(exprs.toIterable.asJava)
             .build()
         ).build()
+      }
+
+      def join(
+          otherPlan: proto.Relation,
+          joinType: JoinType = JoinType.JOIN_TYPE_INNER,
+          condition: Option[proto.Expression] = None): proto.Relation = {
+        val relation = proto.Relation.newBuilder()
+        val join = proto.Join.newBuilder()
+        join.setLeft(logicalPlan)
+          .setRight(otherPlan)
+          .setJoinType(joinType)
+        if (condition.isDefined) {
+          join.setJoinCondition(condition.get)
+        }
+        relation.setJoin(join).build()
       }
     }
   }
