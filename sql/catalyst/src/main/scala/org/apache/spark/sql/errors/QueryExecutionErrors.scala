@@ -1002,7 +1002,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def emptyOptionError(optionName: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2080",
-      errorSubClass = None,
       messageParameters = Map("optionName" -> optionName))
   }
 
@@ -1040,7 +1039,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def nestedArraysUnsupportedError(): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2085",
-      errorSubClass = None,
       messageParameters = Map.empty)
   }
 
