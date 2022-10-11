@@ -45,11 +45,6 @@ trait SparkConnectPlanTest {
       .build()
 }
 
-trait SparkConnectSessionTest {
-  protected var spark: SparkSession
-
-}
-
 /**
  * This is a rudimentary test class for SparkConnect. The main goal of these basic tests is to
  * ensure that the transformation from Proto to LogicalPlan works and that the right nodes are
@@ -222,16 +217,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val agg = proto.Aggregate.newBuilder
       .setInput(readRel)
-      .addAllMeasures(
-        Seq(
-          proto.Aggregate.Measure.newBuilder
-            .setFunction(proto.Aggregate.AggregateFunction.newBuilder
-              .setName("sum")
-              .addArguments(unresolvedAttribute))
-            .build()).asJava)
-      .addGroupingSets(proto.Aggregate.GroupingSet.newBuilder
-        .addAggregateExpressions(unresolvedAttribute)
-        .build())
+      .addResultExpressions(
+        proto.Aggregate.AggregateFunction.newBuilder
+          .setName("sum")
+          .addArguments(unresolvedAttribute))
+      .addGroupingExpressions(unresolvedAttribute)
       .build()
 
     val res = transform(proto.Relation.newBuilder.setAggregate(agg).build())
