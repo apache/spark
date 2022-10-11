@@ -49,7 +49,7 @@ RUN pypy3 -m pip install numpy 'pandas<=1.5.0' scipy coverage matplotlib
 
 RUN $APT_INSTALL gnupg ca-certificates pandoc
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list
-RUN gpg --keyserver keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
+RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
 RUN gpg -a --export E084DAB9 | apt-key add -
 RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/'
 RUN apt update
@@ -65,3 +65,6 @@ RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='ht
 
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
+
+# Add Python deps for Spark Connect.
+RUN python3.9 -m pip install grpcio protobuf

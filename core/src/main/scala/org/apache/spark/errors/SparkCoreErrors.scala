@@ -20,9 +20,12 @@ package org.apache.spark.errors
 import java.io.IOException
 import java.util.concurrent.TimeoutException
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkException, TaskNotSerializableException}
+import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, UnrecognizedBlockId}
@@ -317,12 +320,24 @@ private[spark] object SparkCoreErrors {
   }
 
   def graphiteSinkInvalidProtocolError(invalidProtocol: String): Throwable = {
-    new SparkException(errorClass = "GRAPHITE_SINK_INVALID_PROTOCOL",
-      messageParameters = Array(invalidProtocol), cause = null)
+    new SparkException(
+      errorClass = "GRAPHITE_SINK_INVALID_PROTOCOL",
+      messageParameters = Map("protocol" -> invalidProtocol),
+      cause = null)
   }
 
   def graphiteSinkPropertyMissingError(missingProperty: String): Throwable = {
-    new SparkException(errorClass = "GRAPHITE_SINK_PROPERTY_MISSING",
-      messageParameters = Array(missingProperty), cause = null)
+    new SparkException(
+      errorClass = "GRAPHITE_SINK_PROPERTY_MISSING",
+      messageParameters = Map("property" -> missingProperty),
+      cause = null)
+  }
+
+  def outOfMemoryError(requestedBytes: Long, receivedBytes: Long): OutOfMemoryError = {
+    new SparkOutOfMemoryError(
+      "UNABLE_TO_ACQUIRE_MEMORY",
+      Map(
+        "requestedBytes" -> requestedBytes.toString,
+        "receivedBytes" -> receivedBytes.toString).asJava)
   }
 }

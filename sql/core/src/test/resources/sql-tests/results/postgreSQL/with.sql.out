@@ -346,12 +346,19 @@ create table foo (with baz)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-DataType baz is not supported.(line 1, pos 23)
-
-== SQL ==
-create table foo (with baz)
------------------------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0030",
+  "messageParameters" : {
+    "dataType" : "baz"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 26,
+    "fragment" : "baz"
+  } ]
+}
 
 
 -- !query
@@ -360,12 +367,19 @@ create table foo (with ordinality)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-DataType ordinality is not supported.(line 1, pos 23)
-
-== SQL ==
-create table foo (with ordinality)
------------------------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0030",
+  "messageParameters" : {
+    "dataType" : "ordinality"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 33,
+    "fragment" : "ordinality"
+  } ]
+}
 
 
 -- !query

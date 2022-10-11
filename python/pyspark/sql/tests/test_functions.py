@@ -49,6 +49,7 @@ from pyspark.sql.functions import (
     date_sub,
     add_months,
     array_repeat,
+    arrays_zip,
     size,
     slice,
     least,
@@ -57,6 +58,14 @@ from pyspark.sql.functions import (
     hypot,
     pow,
     pmod,
+    map_from_arrays,
+    map_contains_key,
+    map_keys,
+    map_values,
+    map_entries,
+    map_concat,
+    map_from_entries,
+    expr,
 )
 from pyspark.sql import functions
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
@@ -144,6 +153,22 @@ class FunctionsTests(ReusedSQLTestCase):
 
         result = [tuple(x) for x in data.select(explode_outer("mapfield")).collect()]
         self.assertEqual(result, [("a", "b"), (None, None), (None, None)])
+
+    def test_inline(self):
+        from pyspark.sql.functions import inline, inline_outer
+
+        d = [
+            Row(structlist=[Row(b=1, c=2), Row(b=3, c=4)]),
+            Row(structlist=[Row(b=None, c=5), None]),
+            Row(structlist=[]),
+        ]
+        data = self.spark.createDataFrame(d)
+
+        result = [tuple(x) for x in data.select(inline(data.structlist)).collect()]
+        self.assertEqual(result, [(1, 2), (3, 4), (None, 5), (None, None)])
+
+        result = [tuple(x) for x in data.select(inline_outer(data.structlist)).collect()]
+        self.assertEqual(result, [(1, 2), (3, 4), (None, 5), (None, None), (None, None)])
 
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
@@ -494,18 +519,18 @@ class FunctionsTests(ReusedSQLTestCase):
         exprs = [col("x"), "x"]
 
         for fun in funs:
-            for expr in exprs:
-                res = fun(expr)
+            for _expr in exprs:
+                res = fun(_expr)
                 self.assertIsInstance(res, Column)
                 self.assertIn(f"""'x {fun.__name__.replace("_", " ").upper()}'""", str(res))
 
-        for expr in exprs:
-            res = functions.asc(expr)
+        for _expr in exprs:
+            res = functions.asc(_expr)
             self.assertIsInstance(res, Column)
             self.assertIn("""'x ASC NULLS FIRST'""", str(res))
 
-        for expr in exprs:
-            res = functions.desc(expr)
+        for _expr in exprs:
+            res = functions.desc(_expr)
             self.assertIsInstance(res, Column)
             self.assertIn("""'x DESC NULLS LAST'""", str(res))
 
@@ -1008,27 +1033,36 @@ class FunctionsTests(ReusedSQLTestCase):
         )
 
     @unittest.skipIf(not have_numpy, "NumPy not installed")
+    def test_lit_np_scalar(self):
+        import numpy as np
+        from pyspark.sql.functions import lit
+
+        dtype_to_spark_dtypes = [
+            (np.int8, [("CAST(1 AS TINYINT)", "tinyint")]),
+            (np.int16, [("CAST(1 AS SMALLINT)", "smallint")]),
+            (np.int32, [("CAST(1 AS INT)", "int")]),
+            (np.int64, [("CAST(1 AS BIGINT)", "bigint")]),
+            (np.float32, [("CAST(1.0 AS FLOAT)", "float")]),
+            (np.float64, [("CAST(1.0 AS DOUBLE)", "double")]),
+            (np.bool_, [("true", "boolean")]),
+        ]
+        for dtype, spark_dtypes in dtype_to_spark_dtypes:
+            self.assertEqual(self.spark.range(1).select(lit(dtype(1))).dtypes, spark_dtypes)
+
+    @unittest.skipIf(not have_numpy, "NumPy not installed")
     def test_np_scalar_input(self):
         import numpy as np
         from pyspark.sql.functions import array_contains, array_position
 
         df = self.spark.createDataFrame([([1, 2, 3],), ([],)], ["data"])
         for dtype in [np.int8, np.int16, np.int32, np.int64]:
-            self.assertEqual(df.select(lit(dtype(1))).dtypes, [("1", "int")])
             res = df.select(array_contains(df.data, dtype(1)).alias("b")).collect()
             self.assertEqual([Row(b=True), Row(b=False)], res)
             res = df.select(array_position(df.data, dtype(1)).alias("c")).collect()
             self.assertEqual([Row(c=1), Row(c=0)], res)
 
-        # java.lang.Integer max: 2147483647
-        max_int = 2147483647
-        # Convert int to bigint automatically
-        self.assertEqual(df.select(lit(np.int32(max_int))).dtypes, [("2147483647", "int")])
-        self.assertEqual(df.select(lit(np.int64(max_int + 1))).dtypes, [("2147483648", "bigint")])
-
         df = self.spark.createDataFrame([([1.0, 2.0, 3.0],), ([],)], ["data"])
         for dtype in [np.float32, np.float64]:
-            self.assertEqual(df.select(lit(dtype(1))).dtypes, [("1.0", "double")])
             res = df.select(array_contains(df.data, dtype(1)).alias("b")).collect()
             self.assertEqual([Row(b=True), Row(b=False)], res)
             res = df.select(array_position(df.data, dtype(1)).alias("c")).collect()
@@ -1062,6 +1096,43 @@ class FunctionsTests(ReusedSQLTestCase):
         df = self.spark.range(1).select(*(func(1.1, 8) for func in funcs))
         for a, e in zip(df.first(), expected):
             self.assertAlmostEqual(a, e, 5)
+
+    def test_map_functions(self):
+        # SPARK-38496: Check basic functionality of all "map" type related functions
+        expected = {"a": 1, "b": 2}
+        expected2 = {"c": 3, "d": 4}
+        df = self.spark.createDataFrame(
+            [(list(expected.keys()), list(expected.values()))], ["k", "v"]
+        )
+        actual = (
+            df.select(
+                expr("map('c', 3, 'd', 4) as dict2"),
+                map_from_arrays(df.k, df.v).alias("dict"),
+                "*",
+            )
+            .select(
+                map_contains_key("dict", "a").alias("one"),
+                map_contains_key("dict", "d").alias("not_exists"),
+                map_keys("dict").alias("keys"),
+                map_values("dict").alias("values"),
+                map_entries("dict").alias("items"),
+                "*",
+            )
+            .select(
+                map_concat("dict", "dict2").alias("merged"),
+                map_from_entries(arrays_zip("keys", "values")).alias("from_items"),
+                "*",
+            )
+            .first()
+        )
+        self.assertEqual(expected, actual["dict"])
+        self.assertTrue(actual["one"])
+        self.assertFalse(actual["not_exists"])
+        self.assertEqual(list(expected.keys()), actual["keys"])
+        self.assertEqual(list(expected.values()), actual["values"])
+        self.assertEqual(expected, dict(actual["items"]))
+        self.assertEqual({**expected, **expected2}, dict(actual["merged"]))
+        self.assertEqual(expected, actual["from_items"])
 
 
 if __name__ == "__main__":

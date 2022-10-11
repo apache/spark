@@ -1080,7 +1080,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             with self.subTest(pdf=pdf):
                 psdf = ps.from_pandas(pdf)
 
-                actual = psdf.groupby("a")["b"].unique().sort_index().to_pandas()
+                actual = psdf.groupby("a")["b"].unique().sort_index()._to_pandas()
                 expect = pdf.groupby("a")["b"].unique().sort_index()
                 self.assert_eq(len(actual), len(expect))
                 for act, exp in zip(actual, expect):
@@ -1401,13 +1401,36 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
     def test_min(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.min())
+        self._test_stat_func(lambda groupby_obj: groupby_obj.min(min_count=2))
         self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=None))
         self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=True))
+        self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=True, min_count=2))
 
     def test_max(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.max())
+        self._test_stat_func(lambda groupby_obj: groupby_obj.max(min_count=2))
         self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=None))
         self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=True))
+        self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=True, min_count=2))
+
+    def test_sum(self):
+        pdf = pd.DataFrame(
+            {
+                "A": ["a", "a", "b", "a"],
+                "B": [1, 2, 1, 2],
+                "C": [-1.5, np.nan, -3.2, 0.1],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf.groupby("A").sum().sort_index(), psdf.groupby("A").sum().sort_index())
+        self.assert_eq(
+            pdf.groupby("A").sum(min_count=2).sort_index(),
+            psdf.groupby("A").sum(min_count=2).sort_index(),
+        )
+        self.assert_eq(
+            pdf.groupby("A").sum(min_count=3).sort_index(),
+            psdf.groupby("A").sum(min_count=3).sort_index(),
+        )
 
     def test_mad(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.mad())
@@ -1417,10 +1440,46 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         self._test_stat_func(lambda groupby_obj: groupby_obj.first(numeric_only=None))
         self._test_stat_func(lambda groupby_obj: groupby_obj.first(numeric_only=True))
 
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 2, 1, 2],
+                "B": [-1.5, np.nan, -3.2, 0.1],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            pdf.groupby("A").first().sort_index(), psdf.groupby("A").first().sort_index()
+        )
+        self.assert_eq(
+            pdf.groupby("A").first(min_count=1).sort_index(),
+            psdf.groupby("A").first(min_count=1).sort_index(),
+        )
+        self.assert_eq(
+            pdf.groupby("A").first(min_count=2).sort_index(),
+            psdf.groupby("A").first(min_count=2).sort_index(),
+        )
+
     def test_last(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.last())
         self._test_stat_func(lambda groupby_obj: groupby_obj.last(numeric_only=None))
         self._test_stat_func(lambda groupby_obj: groupby_obj.last(numeric_only=True))
+
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 2, 1, 2],
+                "B": [-1.5, np.nan, -3.2, 0.1],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf.groupby("A").last().sort_index(), psdf.groupby("A").last().sort_index())
+        self.assert_eq(
+            pdf.groupby("A").last(min_count=1).sort_index(),
+            psdf.groupby("A").last(min_count=1).sort_index(),
+        )
+        self.assert_eq(
+            pdf.groupby("A").last(min_count=2).sort_index(),
+            psdf.groupby("A").last(min_count=2).sort_index(),
+        )
 
     def test_nth(self):
         for n in [0, 1, 2, 128, -1, -2, -128]:
@@ -1432,6 +1491,38 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             self.psdf.groupby("B").nth([0, 1, -1])
         with self.assertRaisesRegex(TypeError, "Invalid index"):
             self.psdf.groupby("B").nth("x")
+
+    def test_prod(self):
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 2, 1, 2, 1],
+                "B": [3.1, 4.1, 4.1, 3.1, 0.1],
+                "C": ["a", "b", "b", "a", "c"],
+                "D": [True, False, False, True, False],
+                "E": [-1, -2, 3, -4, -2],
+                "F": [-1.5, np.nan, -3.2, 0.1, 0],
+                "G": [np.nan, np.nan, np.nan, np.nan, np.nan],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        for n in [0, 1, 2, 128, -1, -2, -128]:
+            self._test_stat_func(
+                lambda groupby_obj: groupby_obj.prod(min_count=n), check_exact=False
+            )
+            self._test_stat_func(
+                lambda groupby_obj: groupby_obj.prod(numeric_only=None, min_count=n),
+                check_exact=False,
+            )
+            self._test_stat_func(
+                lambda groupby_obj: groupby_obj.prod(numeric_only=True, min_count=n),
+                check_exact=False,
+            )
+            self.assert_eq(
+                pdf.groupby("A").prod(min_count=n).sort_index(),
+                psdf.groupby("A").prod(min_count=n).sort_index(),
+                almost=True,
+            )
 
     def test_cumcount(self):
         pdf = pd.DataFrame(
@@ -2342,7 +2433,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         actual = psdf.groupby("d").apply(sum_with_acc_frame)
         actual.columns = ["d", "v"]
         self.assert_eq(
-            actual.to_pandas().sort_index(),
+            actual._to_pandas().sort_index(),
             pdf.groupby("d").apply(sum).sort_index().reset_index(drop=True),
         )
         self.assert_eq(acc.value, 2)
@@ -2353,7 +2444,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             return np.sum(x)
 
         self.assert_eq(
-            psdf.groupby("d")["v"].apply(sum_with_acc_series).to_pandas().sort_index(),
+            psdf.groupby("d")["v"].apply(sum_with_acc_series)._to_pandas().sort_index(),
             pdf.groupby("d")["v"].apply(sum).sort_index().reset_index(drop=True),
         )
         self.assert_eq(acc.value, 4)
@@ -3099,7 +3190,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
         psdf = ps.from_pandas(pdf)
 
-        for ddof in (0, 1):
+        for ddof in [-1, 0, 1, 2, 3]:
             # std
             self.assert_eq(
                 pdf.groupby("a").std(ddof=ddof).sort_index(),

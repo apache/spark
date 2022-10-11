@@ -83,10 +83,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -124,10 +124,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -488,10 +488,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'invalid_length'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -513,10 +513,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'invalid_length'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -758,7 +758,21 @@ select decode()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function decode. Expected: 2; Found: 0; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "messageParameters" : {
+    "actualNumber" : "0",
+    "expectedInfo" : "2",
+    "name" : "decode"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "decode()"
+  } ]
+}
 
 
 -- !query
@@ -767,7 +781,21 @@ select decode(encode('abc', 'utf-8'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function decode. Expected: 2; Found: 1; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "messageParameters" : {
+    "actualNumber" : "1",
+    "expectedInfo" : "2",
+    "name" : "decode"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "decode(encode('abc', 'utf-8'))"
+  } ]
+}
 
 
 -- !query
@@ -1187,10 +1215,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "' ab cdef= = '",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "' ab cdef= = '",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1214,10 +1242,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'a'",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'a'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1231,10 +1259,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'a?'",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'a?'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1248,10 +1276,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'abcde'",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'abcde'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1265,10 +1293,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'abcd='",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'abcd='",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1282,10 +1310,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'a==='",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'a==='",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1299,10 +1327,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'ab==f'",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'ab==f'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1389,10 +1417,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'GG'",
     "fmt" : "'HEX'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'GG'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1406,10 +1434,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'01 AF'",
     "fmt" : "'HEX'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'01 AF'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1431,10 +1459,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "' ab cdef= = '",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "' ab cdef= = '",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1448,10 +1476,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "' ab cdef= = '",
     "fmt" : "'HEX'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "' ab cdef= = '",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1511,4 +1539,12 @@ select to_binary('abc', 'invalidFormat')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid value for the 'format' parameter of function 'to_binary': invalidformat. The value has to be a case-insensitive string literal of 'hex', 'utf-8', 'utf8', or 'base64'.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1101",
+  "messageParameters" : {
+    "argName" : "format",
+    "endingMsg" : " The value has to be a case-insensitive string literal of 'hex', 'utf-8', 'utf8', or 'base64'.",
+    "funcName" : "to_binary",
+    "invalidValue" : "invalidformat"
+  }
+}

@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.command
 import java.time.{Duration, Period}
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -164,23 +163,6 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
       }.getMessage
       assert(errMsg.contains("Partition spec is invalid. " +
         "The spec (part0) must match the partition spec (part0, part1)"))
-    }
-  }
-
-  test("partition already exists") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      sql(s"ALTER TABLE $t ADD PARTITION (id=2) LOCATION 'loc1'")
-
-      val errMsg = intercept[PartitionsAlreadyExistException] {
-        sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'" +
-          " PARTITION (id=2) LOCATION 'loc1'")
-      }.getMessage
-      assert(errMsg.contains("The following partitions already exists"))
-
-      sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
-        " PARTITION (id=2) LOCATION 'loc1'")
-      checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
     }
   }
 

@@ -1470,6 +1470,11 @@ private[spark] object Client extends Logging {
       addClasspathEntry(getClusterPath(sparkConf, cp), env)
     }
 
+    val cpSet = extraClassPath match {
+      case Some(classPath) if Utils.isTesting => classPath.split(File.pathSeparator).toSet
+      case _ => Set.empty[String]
+    }
+
     addClasspathEntry(Environment.PWD.$$(), env)
 
     addClasspathEntry(Environment.PWD.$$() + Path.SEPARATOR + LOCALIZED_CONF_DIR, env)
@@ -1513,7 +1518,13 @@ private[spark] object Client extends Logging {
     }
 
     sys.env.get(ENV_DIST_CLASSPATH).foreach { cp =>
-      addClasspathEntry(getClusterPath(sparkConf, cp), env)
+      // SPARK-40635: during the test, add a jar de-duplication process to avoid
+      // that the startup command can't be executed due to the too long classpath.
+      val newCp = if (Utils.isTesting) {
+        cp.split(File.pathSeparator)
+          .filterNot(cpSet.contains).mkString(File.pathSeparator)
+      } else cp
+      addClasspathEntry(getClusterPath(sparkConf, newCp), env)
     }
 
     // Add the localized Hadoop config at the end of the classpath, in case it contains other

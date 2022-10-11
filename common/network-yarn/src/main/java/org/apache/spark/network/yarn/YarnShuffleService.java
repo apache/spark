@@ -60,6 +60,7 @@ import org.apache.spark.network.sasl.ShuffleSecretManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.ExternalBlockHandler;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.yarn.util.HadoopConfigProvider;
 
@@ -129,6 +130,10 @@ public class YarnShuffleService extends AuxiliaryService {
   // Whether failure during service initialization should stop the NM.
   @VisibleForTesting
   static final String STOP_ON_FAILURE_KEY = "spark.yarn.shuffle.stopOnFailure";
+
+  @VisibleForTesting
+  static final String INTEGRATION_TESTING = "spark.yarn.shuffle.testing";
+
   private static final boolean DEFAULT_STOP_ON_FAILURE = false;
 
   // just for testing when you want to find an open port
@@ -236,6 +241,10 @@ public class YarnShuffleService extends AuxiliaryService {
     super.serviceInit(_conf);
 
     boolean stopOnFailure = _conf.getBoolean(STOP_ON_FAILURE_KEY, DEFAULT_STOP_ON_FAILURE);
+
+    if (_recoveryPath == null && _conf.getBoolean(INTEGRATION_TESTING, false)) {
+      _recoveryPath = new Path(JavaUtils.createTempDir().toURI());
+    }
 
     if (_recoveryPath != null) {
       String dbBackendName = _conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND,

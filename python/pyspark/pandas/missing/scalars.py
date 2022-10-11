@@ -21,7 +21,7 @@ def _unsupported_scalar(scalar_name):
     return PandasNotImplementedError(class_name="ps", scalar_name=scalar_name)
 
 
-class _MissingPandasLikeScalars:
+class MissingPandasLikeScalars:
     Timestamp = _unsupported_scalar("Timestamp")
     Timedelta = _unsupported_scalar("Timedelta")
     Period = _unsupported_scalar("Period")

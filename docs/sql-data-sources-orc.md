@@ -154,6 +154,24 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
     <td>2.3.0</td>
   </tr>
   <tr>
+    <td><code>spark.sql.orc.columnarReaderBatchSize</code></td>
+    <td><code>4096</code></td>
+    <td>
+      The number of rows to include in an orc vectorized reader batch. The number should 
+      be carefully chosen to minimize overhead and avoid OOMs in reading data.
+    </td>
+    <td>2.4.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.orc.columnarWriterBatchSize</code></td>
+    <td><code>1024</code></td>
+    <td>
+      The number of rows to include in an orc vectorized writer batch. The number should 
+      be carefully chosen to minimize overhead and avoid OOMs in writing data.
+    </td>
+    <td>3.4.0</td>
+  </tr>
+  <tr>
     <td><code>spark.sql.orc.enableNestedColumnVectorizedReader</code></td>
     <td><code>false</code></td>
     <td>
@@ -162,6 +180,25 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
       <code>false</code>, this is ignored.
     </td>
     <td>3.2.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.orc.filterPushdown</code></td>
+    <td><code>true</code></td>
+    <td>
+      When true, enable filter pushdown for ORC files.
+    </td>
+    <td>1.4.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.orc.aggregatePushdown</code></td>
+    <td><code>false</code></td>
+    <td>
+      If true, aggregates will be pushed down to ORC for optimization. Support MIN, MAX and 
+      COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date 
+      type. For COUNT, support all data types. If statistics is missing from any ORC file 
+      footer, exception would be thrown.
+    </td>
+    <td>3.3.0</td>
   </tr>
   <tr>
   <td><code>spark.sql.orc.mergeSchema</code></td>

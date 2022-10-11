@@ -21,8 +21,11 @@ class YuniKornSuite extends KubernetesSuite {
 
   override protected def setUpTest(): Unit = {
     super.setUpTest()
+    val namespace = sparkAppConf.get("spark.kubernetes.namespace")
     sparkAppConf
       .set("spark.kubernetes.scheduler.name", "yunikorn")
+      .set("spark.kubernetes.driver.label.queue", "root." + namespace)
+      .set("spark.kubernetes.executor.label.queue", "root." + namespace)
       .set("spark.kubernetes.driver.annotation.yunikorn.apache.org/app-id", "{{APP_ID}}")
       .set("spark.kubernetes.executor.annotation.yunikorn.apache.org/app-id", "{{APP_ID}}")
   }

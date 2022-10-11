@@ -295,7 +295,7 @@ case class AttributeReference(
     h
   }
 
-  override lazy val preCanonicalized: Expression = {
+  override lazy val canonicalized: Expression = {
     AttributeReference("none", dataType)(exprId)
   }
 

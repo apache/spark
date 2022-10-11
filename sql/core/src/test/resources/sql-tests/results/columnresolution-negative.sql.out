@@ -159,8 +159,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`db1`.`t1`.`i1`",
@@ -169,9 +168,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 34,
-    "fragment" : "SELECT db1.t1.i1 FROM t1, mydb2.t1"
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "db1.t1.i1"
   } ]
 }
 
@@ -199,8 +198,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`mydb1`.`t1`",
@@ -209,9 +207,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 23,
-    "fragment" : "SELECT mydb1.t1 FROM t1"
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "mydb1.t1"
   } ]
 }
 
@@ -222,7 +220,20 @@ SELECT t1.x.y.* FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't1.x.y.*' given input columns 'i1'; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1051",
+  "messageParameters" : {
+    "columns" : "i1",
+    "targetString" : "t1.x.y"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "t1.x.y.*"
+  } ]
+}
 
 
 -- !query
@@ -232,8 +243,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t1`",
@@ -242,9 +252,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 23,
-    "fragment" : "SELECT t1 FROM mydb1.t1"
+    "startIndex" : 8,
+    "stopIndex" : 9,
+    "fragment" : "t1"
   } ]
 }
 
@@ -264,8 +274,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`mydb1`.`t1`.`i1`",
@@ -274,9 +283,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 26,
-    "fragment" : "SELECT mydb1.t1.i1 FROM t1"
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "mydb1.t1.i1"
   } ]
 }
 

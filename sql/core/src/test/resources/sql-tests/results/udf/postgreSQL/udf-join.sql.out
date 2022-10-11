@@ -3274,8 +3274,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`y`.`f1`",
@@ -3284,9 +3283,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 91,
-    "fragment" : "select * from\n  int8_tbl x join (int4_tbl x cross join int4_tbl y) j on udf(q1) = udf(y.f1)"
+    "startIndex" : 87,
+    "stopIndex" : 90,
+    "fragment" : "y.f1"
   } ]
 }
 
@@ -3308,8 +3307,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t1`.`uunique1`",
@@ -3318,9 +3316,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 77,
-    "fragment" : "select udf(t1.uunique1) from\n  tenk1 t1 join tenk2 t2 on t1.two = udf(t2.two)"
+    "startIndex" : 12,
+    "stopIndex" : 22,
+    "fragment" : "t1.uunique1"
   } ]
 }
 
@@ -3333,8 +3331,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t2`.`uunique1`",
@@ -3343,9 +3340,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 82,
-    "fragment" : "select udf(udf(t2.uunique1)) from\n  tenk1 t1 join tenk2 t2 on udf(t1.two) = t2.two"
+    "startIndex" : 16,
+    "stopIndex" : 26,
+    "fragment" : "t2.uunique1"
   } ]
 }
 
@@ -3358,8 +3355,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`uunique1`",
@@ -3368,9 +3364,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 79,
-    "fragment" : "select udf(uunique1) from\n  tenk1 t1 join tenk2 t2 on udf(t1.two) = udf(t2.two)"
+    "startIndex" : 12,
+    "stopIndex" : 19,
+    "fragment" : "uunique1"
   } ]
 }
 
@@ -3573,8 +3569,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITHOUT_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`f1`"
@@ -3582,9 +3577,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 68,
-    "fragment" : "select udf(udf(f1,g)) from int4_tbl a, (select udf(udf(f1)) as g) ss"
+    "startIndex" : 56,
+    "stopIndex" : 57,
+    "fragment" : "f1"
   } ]
 }
 
@@ -3596,8 +3591,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITHOUT_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`a`.`f1`"
@@ -3605,9 +3599,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 55,
-    "fragment" : "select udf(f1,g) from int4_tbl a, (select a.f1 as g) ss"
+    "startIndex" : 43,
+    "stopIndex" : 46,
+    "fragment" : "a.f1"
   } ]
 }
 
@@ -3619,8 +3613,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITHOUT_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`f1`"
@@ -3628,9 +3621,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 73,
-    "fragment" : "select udf(udf(f1,g)) from int4_tbl a cross join (select udf(f1) as g) ss"
+    "startIndex" : 62,
+    "stopIndex" : 63,
+    "fragment" : "f1"
   } ]
 }
 
@@ -3642,8 +3635,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITHOUT_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`a`.`f1`"
@@ -3651,9 +3643,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 75,
-    "fragment" : "select udf(f1,g) from int4_tbl a cross join (select udf(udf(a.f1)) as g) ss"
+    "startIndex" : 61,
+    "stopIndex" : 64,
+    "fragment" : "a.f1"
   } ]
 }
 

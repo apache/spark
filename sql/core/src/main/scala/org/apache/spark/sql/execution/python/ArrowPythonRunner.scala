@@ -34,8 +34,8 @@ class ArrowPythonRunner(
     protected override val timeZoneId: String,
     protected override val workerConf: Map[String, String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](funcs, evalType, argOffsets)
-  with PythonArrowInput
-  with PythonArrowOutput {
+  with BasicPythonArrowInput
+  with BasicPythonArrowOutput {
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 

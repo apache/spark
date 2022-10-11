@@ -105,14 +105,16 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
         exception = intercept[AnalysisException] {
           sql(query).collect()
         },
-        errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = "WITH_SUGGESTION",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42000",
         parameters = Map(
           "objectName" -> "`key1`",
           "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`, `test_catalog`.`ns`.`tbl`.`col`"),
         context = ExpectedContext(
-          fragment = query, start = 0, stop = 28))
+          fragment = query,
+          start = 0,
+          stop = query.length -1)
+      )
     }
   }
 
@@ -134,14 +136,15 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           exception = intercept[AnalysisException] {
             sql(query).collect()
           },
-          errorClass = "UNRESOLVED_COLUMN",
-          errorSubClass = "WITH_SUGGESTION",
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
           sqlState = "42000",
           parameters = Map(
             "objectName" -> "`KEY`",
             "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`"),
           context = ExpectedContext(
-            fragment = query, start = 0, stop = 27))
+            fragment = query,
+            start = 0,
+            stop = query.length - 1))
       }
     }
   }

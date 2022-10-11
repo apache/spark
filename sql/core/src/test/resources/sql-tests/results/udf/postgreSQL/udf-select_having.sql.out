@@ -150,8 +150,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`a`",
@@ -160,9 +159,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 50,
-    "fragment" : "SELECT 1 AS one FROM test_having HAVING udf(a) > 1"
+    "startIndex" : 45,
+    "stopIndex" : 45,
+    "fragment" : "a"
   } ]
 }
 

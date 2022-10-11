@@ -2221,6 +2221,14 @@ package object config {
       .checkValue(_ >= 0, "needs to be a non-negative value")
       .createWithDefault(5)
 
+  private[spark] val STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE =
+    ConfigBuilder("spark.stage.ignoreDecommissionFetchFailure")
+      .doc("Whether ignore stage fetch failure caused by executor decommission when " +
+        "count spark.stage.maxConsecutiveAttempts")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
     ConfigBuilder("spark.shuffle.push.enabled")
       .doc("Set to true to enable push-based shuffle on the client side and this works in " +
@@ -2327,7 +2335,18 @@ package object config {
         " shuffle is enabled.")
       .version("3.3.0")
       .intConf
-      .createWithDefault(3)
+      .createWithDefault(8)
+
+  private[spark] val PUSH_SHUFFLE_FINALIZE_RPC_THREADS =
+    ConfigBuilder("spark.shuffle.push.sendFinalizeRPCThreads")
+      .internal()
+      .doc("Number of threads used by the driver to send finalize shuffle RPC to mergers" +
+        " location and then get MergeStatus. The thread will run for up to " +
+        " PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT. The merger ESS may open too many files" +
+        " if the finalize rpc is not received.")
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(8)
 
   private[spark] val PUSH_BASED_SHUFFLE_SIZE_MIN_SHUFFLE_SIZE_TO_WAIT =
     ConfigBuilder("spark.shuffle.push.minShuffleSizeToWait")

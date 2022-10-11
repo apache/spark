@@ -727,8 +727,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception =
         intercept[AnalysisException](df.select(myUdf(Column("col")))),
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`b`",
         "proposal" -> "`a`"))
