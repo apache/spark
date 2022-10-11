@@ -16,13 +16,16 @@
  */
 package org.apache.spark.sql.protobuf
 
+import java.util.concurrent.TimeUnit
+
 import com.google.protobuf.{ByteString, DynamicMessage, Message}
 import com.google.protobuf.Descriptors._
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
 
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils.ProtoMatchedField
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils.toFieldStr
@@ -88,8 +91,7 @@ private[sql] class ProtobufDeserializer(
         val element = iterator.next()
         if (element == null) {
           if (!containsNull) {
-            throw new RuntimeException(
-              s"Array value at path ${toFieldStr(protoElementPath)} is not allowed to be null")
+            throw QueryCompilationErrors.nullableArrayOrMapElementError(protoElementPath)
           } else {
             elementUpdater.setNullAt(i)
           }
@@ -127,9 +129,7 @@ private[sql] class ProtobufDeserializer(
             keyWriter(keyUpdater, i, field.getField(keyField))
             if (field.getField(valueField) == null) {
               if (!valueContainsNull) {
-                throw new RuntimeException(
-                  s"Map value at path ${toFieldStr(protoPath :+ "value")}" +
-                    s" is not allowed to be null")
+                throw QueryCompilationErrors.nullableArrayOrMapElementError(protoPath)
               } else {
                 valueUpdater.setNullAt(i)
               }
@@ -222,6 +222,16 @@ private[sql] class ProtobufDeserializer(
 
       case (MESSAGE, MapType(keyType, valueType, valueContainsNull)) =>
         newMapWriter(protoType, protoPath, catalystPath, keyType, valueType, valueContainsNull)
+
+      case (MESSAGE, TimestampType) =>
+        (updater, ordinal, value) =>
+          val secondsField = protoType.getMessageType.getFields.get(0)
+          val nanoSecondsField = protoType.getMessageType.getFields.get(1)
+          val message = value.asInstanceOf[DynamicMessage]
+          val seconds = message.getField(secondsField).asInstanceOf[Long]
+          val nanoSeconds = message.getField(nanoSecondsField).asInstanceOf[Int]
+          val micros = DateTimeUtils.millisToMicros(seconds * 1000)
+          updater.setLong(ordinal, micros + TimeUnit.NANOSECONDS.toMicros(nanoSeconds))
 
       case (MESSAGE, st: StructType) =>
         val writeRecord = getRecordWriter(

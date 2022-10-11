@@ -18,9 +18,9 @@ package org.apache.spark.sql.protobuf
 
 import scala.collection.JavaConverters._
 
+import com.google.protobuf.{DynamicMessage, Timestamp}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
-import com.google.protobuf.DynamicMessage
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -120,27 +120,13 @@ private[sql] class ProtobufSerializer(
       case (DateType, INT) =>
         (getter, ordinal) => getter.getInt(ordinal)
 
-      case (TimestampType, LONG) =>
-        fieldDescriptor.getContainingType match {
-          // For backward compatibility, if the Protobuf type is Long and it is not logical type
-          // (the `null` case), output the timestamp value as with millisecond precision.
-          case null => (getter, ordinal) => DateTimeUtils.microsToMillis(getter.getLong(ordinal))
-          case other =>
-            throw new IncompatibleSchemaException(errorPrefix +
-              s"SQL type ${TimestampType.sql} cannot be converted to Protobuf logical type $other")
-        }
-
-      case (TimestampNTZType, LONG) =>
-        fieldDescriptor.getContainingType match {
-          // To keep consistent with TimestampType, if the Protobuf type is Long and it is not
-          // logical type (the `null` case), output the TimestampNTZ as long value
-          // in millisecond precision.
-          case null => (getter, ordinal) => DateTimeUtils.microsToMillis(getter.getLong(ordinal))
-          case other =>
-            throw new IncompatibleSchemaException(errorPrefix +
-              s"SQL type ${TimestampNTZType.sql} cannot be converted " +
-              s"to Protobuf logical type $other")
-        }
+      case (TimestampType, MESSAGE) =>
+        (getter, ordinal) =>
+          val millis = DateTimeUtils.microsToMillis(getter.getLong(ordinal))
+          Timestamp.newBuilder()
+            .setSeconds((millis / 1000))
+            .setNanos(((millis % 1000) * 1000000).toInt)
+            .build()
 
       case (ArrayType(et, containsNull), _) =>
         val elementConverter =

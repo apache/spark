@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.protobuf
 
+import java.sql.Timestamp
+
 import scala.collection.JavaConverters._
 
 import com.google.protobuf.{ByteString, DynamicMessage}
@@ -25,7 +27,7 @@ import org.apache.spark.sql.functions.{lit, struct}
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimestampType}
 
 class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Serializable {
 
@@ -533,5 +535,41 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       .where("sample.string_value == \"slam\"")
 
     assert(resultFrom.except(resultToFrom).isEmpty)
+  }
+
+  test("to_protobuf timestamp example") {
+    val schema = StructType(
+      StructField("timeStampMsg",
+        StructType(
+          StructField("key", StringType, nullable = true) ::
+            StructField("stmp", TimestampType, nullable = true) :: Nil
+        ),
+        nullable = true
+      ) :: Nil
+    )
+
+    val inputDf = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(Row("key1", Timestamp.valueOf("2016-05-09 10:12:43.999")))
+      )),
+      schema
+    )
+
+    val toProtoDf = inputDf
+      .select(functions.to_protobuf($"timeStampMsg", testFileDesc, "timeStampMsg") as 'to_proto)
+
+    val fromProtoDf = toProtoDf
+      .select(functions.from_protobuf($"to_proto", testFileDesc, "timeStampMsg") as 'timeStampMsg)
+    fromProtoDf.show(truncate = false)
+
+    val actualFields = fromProtoDf.schema.fields.toList
+    val expectedFields = inputDf.schema.fields.toList
+
+    assert(actualFields.size === expectedFields.size)
+    assert(actualFields === expectedFields)
+    assert(fromProtoDf.select("timeStampMsg.key").take(1).toSeq(0).get(0)
+      === inputDf.select("timeStampMsg.key").take(1).toSeq(0).get(0))
+    assert(fromProtoDf.select("timeStampMsg.stmp").take(1).toSeq(0).get(0)
+      === inputDf.select("timeStampMsg.stmp").take(1).toSeq(0).get(0))
   }
 }
