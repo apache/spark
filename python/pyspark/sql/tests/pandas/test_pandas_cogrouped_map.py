@@ -44,11 +44,10 @@ if have_pyarrow:
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
 class CogroupedMapInPandasTests(ReusedSQLTestCase):
-    @classmethod
     @property
-    def data1(cls):
+    def data1(self):
         return (
-            cls.spark.range(10)
+            self.spark.range(10)
             .toDF("id")
             .withColumn("ks", array([lit(i) for i in range(20, 30)]))
             .withColumn("k", explode(col("ks")))
@@ -56,11 +55,10 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             .drop("ks")
         )
 
-    @classmethod
     @property
-    def data2(cls):
+    def data2(self):
         return (
-            cls.spark.range(10)
+            self.spark.range(10)
             .toDF("id")
             .withColumn("ks", array([lit(i) for i in range(20, 30)]))
             .withColumn("k", explode(col("ks")))
@@ -460,6 +458,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         output_schema="id long, k int, v int, v2 int",
         expected=None,
     ):
+        # Test fn with and without key argument
         with self.subTest("without key"):
             self.__test_merge(left, right, by, fn, output_schema, expected)
         with self.subTest("with key"):
@@ -475,6 +474,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         output_schema="id long, k int, v int, v2 int",
         expected=None,
     ):
+        # Test fn as is, cf. _test_merge
         left = self.data1 if left is None else left
         right = self.data2 if right is None else right
 
@@ -507,6 +507,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
         output_schema="id long, k int, v int, v2 int",
     ):
+        # Test fn with and without key argument
         with self.subTest("without key"):
             self.__test_merge_error(
                 left=left,
@@ -539,6 +540,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         fn=lambda lft, rgt: pd.merge(lft, rgt, on=["id", "k"]),
         output_schema="id long, k int, v int, v2 int",
     ):
+        # Test fn as is, cf. _test_merge_error
         with QuietTest(self.sc):
             with self.assertRaisesRegex(error_class, error_message_regex):
                 self.__test_merge(left, right, by, fn, output_schema)

@@ -74,11 +74,10 @@ if have_pyarrow:
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
 class GroupedMapInPandasTests(ReusedSQLTestCase):
-    @classmethod
     @property
-    def data(cls):
+    def data(self):
         return (
-            cls.spark.range(10)
+            self.spark.range(10)
             .toDF("id")
             .withColumn("vs", array([lit(i) for i in range(20, 30)]))
             .withColumn("v", explode(col("vs")))
@@ -750,9 +749,8 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         )
         self.assertEqual(row.asDict(), Row(column=1, score=0.5).asDict())
 
-    @classmethod
-    def _test_apply_in_pandas(cls, f):
-        df = cls.data
+    def _test_apply_in_pandas(self, f):
+        df = self.data
 
         result = (
             df.groupby("id")
