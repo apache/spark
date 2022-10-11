@@ -1,0 +1,39 @@
+================================================================================================
+Regex rlike
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_342-8u342-b07-0ubuntu1~18.04-b07 on Linux 5.4.0-126-generic
+Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz
+Regex rlike:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Regex rlike java wholestage off                    1089           1093           6          0.9        1088.7       1.0X
+Regex rlike java wholestage on                     1006           1012           7          1.0        1006.3       1.1X
+Regex rlike joni wholestage off                     424            446          31          2.4         424.4       2.6X
+Regex rlike joni wholestage on                      369            373           5          2.7         368.6       3.0X
+
+
+================================================================================================
+Regex like by regex-benchmark-input-text.txt
+================================================================================================
+OpenJDK 64-Bit Server VM 1.8.0_342-8u342-b07-0ubuntu1~18.04-b07 on Linux 5.4.0-126-generic
+Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz
+Regex rlike by input-text.txt:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------
+Regex rlike by input-text.txt java wholestage off           1184           1213          40          0.8        1184.3       1.0X
+Regex rlike by input-text.txt java wholestage on             943            961          14          1.1         942.8       1.3X
+Regex rlike by input-text.txt joni wholestage off            925            925           0          1.1         924.8       1.3X
+Regex rlike by input-text.txt joni wholestage on             779            791          10          1.3         778.9       1.5X
+
+
+================================================================================================
+Regex like
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_342-8u342-b07-0ubuntu1~18.04-b07 on Linux 5.4.0-126-generic
+Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz
+Regex like:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Regex like java wholestage off                      491            498          10          2.0         491.3       1.0X
+Regex like java wholestage on                       453            461           8          2.2         452.8       1.1X
+Regex like joni wholestage off                      390            394           5          2.6         390.1       1.3X
+Regex like joni wholestage on                       352            360           7          2.8         352.4       1.4X
