@@ -2274,6 +2274,8 @@ abstract class AvroSuite
   }
 
   test("SPARK-40667: validate Avro Options") {
+    assert(AvroOptions.getAllOptions.size == 9)
+    // Please add validation on any new Avro options here
     assert(AvroOptions.isValidOption("ignoreExtension"))
     assert(AvroOptions.isValidOption("mode"))
     assert(AvroOptions.isValidOption("recordName"))

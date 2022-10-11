@@ -582,6 +582,8 @@ abstract class OrcSuite
   }
 
   test("SPARK-40667: validate Orc Options") {
+    assert(OrcOptions.getAllOptions.size == 3)
+    // Please add validation on any new Orc options here
     assert(OrcOptions.isValidOption("mergeSchema"))
     assert(OrcOptions.isValidOption("orc.compress"))
     assert(OrcOptions.isValidOption("compression"))

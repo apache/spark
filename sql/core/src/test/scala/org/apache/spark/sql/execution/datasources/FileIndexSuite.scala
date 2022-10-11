@@ -539,6 +539,18 @@ class FileIndexSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-40667: validate FileIndex Options") {
+    assert(FileIndexOptions.getAllOptions.size == 7)
+    // Please add validation on any new FileIndex options here
+    assert(FileIndexOptions.isValidOption("ignoreMissingFiles"))
+    assert(FileIndexOptions.isValidOption("timeZone"))
+    assert(FileIndexOptions.isValidOption("recursiveFileLookup"))
+    assert(FileIndexOptions.isValidOption("basePath"))
+    assert(FileIndexOptions.isValidOption("modifiedbefore"))
+    assert(FileIndexOptions.isValidOption("modifiedafter"))
+    assert(FileIndexOptions.isValidOption("pathglobfilter"))
+  }
 }
 
 object DeletionRaceFileSystem {
