@@ -1075,7 +1075,7 @@ abstract class AvroSuite
           .save(s"$tempDir/${UUID.randomUUID()}")
       }.getMessage
       assert(message.contains("Caused by: java.lang.NullPointerException: "))
-      assert(message.contains("null in string in field Name"))
+      assert(message.contains("null value for (non-nullable) string at test_schema.Name"))
     }
   }
 
