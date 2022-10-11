@@ -17,6 +17,7 @@
 
 package org.apache.hive.service.cli.operation;
 import java.io.CharArrayWriter;
+import java.io.Serializable;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -265,7 +266,7 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
     Map<String, Appender> appenders = root.getAppenders();
     for (Appender ap : appenders.values()) {
       if (ap.getClass().equals(ConsoleAppender.class)) {
-        Layout l = ap.getLayout();
+        Layout<? extends Serializable> l = ap.getLayout();
         if (l instanceof StringLayout) {
           layout = (StringLayout) l;
           break;
