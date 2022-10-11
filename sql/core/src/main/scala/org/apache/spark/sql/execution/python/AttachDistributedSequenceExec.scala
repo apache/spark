@@ -74,10 +74,8 @@ case class AttachDistributedSequenceExec(
     )
     val cachedRDD = if (childRDD.getNumPartitions > 1 && storageLevel != StorageLevel.NONE) {
       // zipWithIndex launches a Spark job when #partition > 1
-      this.synchronized {
-        cached = childRDD.map(_.copy()).persist(storageLevel)
-          .setName(s"Temporary RDD cached in AttachDistributedSequenceExec($id)")
-      }
+      cached = childRDD.map(_.copy()).persist(storageLevel)
+        .setName(s"Temporary RDD cached in AttachDistributedSequenceExec($id)")
       cached
     } else {
       childRDD
@@ -98,11 +96,9 @@ case class AttachDistributedSequenceExec(
   }
 
   override protected[sql] def cleanupResources(): Unit = {
-    this.synchronized {
-      if (cached != null && cached.getStorageLevel != StorageLevel.NONE) {
-        logWarning(s"clean up cached RDD(${cached.id}) in AttachDistributedSequenceExec($id)")
-        cached.unpersist(blocking = false)
-      }
+    if (cached != null && cached.getStorageLevel != StorageLevel.NONE) {
+      logWarning(s"clean up cached RDD(${cached.id}) in AttachDistributedSequenceExec($id)")
+      cached.unpersist(blocking = false)
     }
     super.cleanupResources()
   }
