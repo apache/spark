@@ -4,15 +4,8 @@ SELECT 1 FROM "not_exist"
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "error" : "'\"not_exist\"'",
-    "hint" : ""
-  }
-}
+org.apache.spark.sql.AnalysisException
+Table or view not found: not_exist; line 1 pos 14
 
 
 -- !query
@@ -20,15 +13,8 @@ USE SCHEMA "not_exist"
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "error" : "'\"not_exist\"'",
-    "hint" : ""
-  }
-}
+org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
+Database 'not_exist' not found
 
 
 -- !query
@@ -36,15 +22,8 @@ ALTER TABLE "not_exist" ADD COLUMN not_exist int
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "error" : "'\"not_exist\"'",
-    "hint" : ""
-  }
-}
+org.apache.spark.sql.AnalysisException
+Table not found: not_exist; line 1 pos 12
 
 
 -- !query
@@ -52,15 +31,8 @@ ALTER TABLE not_exist ADD COLUMN "not_exist" int
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "error" : "'\"not_exist\"'",
-    "hint" : ""
-  }
-}
+org.apache.spark.sql.AnalysisException
+Table not found: not_exist; line 1 pos 12
 
 
 -- !query
@@ -68,15 +40,8 @@ SELECT 1 AS "not_exist" FROM not_exist
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "error" : "'\"not_exist\"'",
-    "hint" : ""
-  }
-}
+org.apache.spark.sql.AnalysisException
+Table or view not found: not_exist; line 1 pos 29
 
 
 -- !query
@@ -84,15 +49,8 @@ SELECT 1 FROM not_exist AS X("hello")
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "error" : "'\"hello\"'",
-    "hint" : ""
-  }
-}
+org.apache.spark.sql.AnalysisException
+Table or view not found: not_exist; line 1 pos 14
 
 
 -- !query
@@ -100,14 +58,20 @@ SELECT "not_exist"()
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
   "messageParameters" : {
-    "error" : "'\"not_exist\"'",
-    "hint" : ""
-  }
+    "fullName" : "spark_catalog.default.not_exist",
+    "rawName" : "not_exist"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "\"not_exist\"()"
+  } ]
 }
 
 
@@ -116,14 +80,19 @@ SELECT "not_exist".not_exist()
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1243",
   "messageParameters" : {
-    "error" : "'\"not_exist\"'",
-    "hint" : ""
-  }
+    "rawName" : "not_exist.not_exist"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "\"not_exist\".not_exist()"
+  } ]
 }
 
 
@@ -227,9 +196,23 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT "hello"
 -- !query schema
-struct<hello:string>
+struct<>
 -- !query output
-hello
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`hello`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 14,
+    "fragment" : "\"hello\""
+  } ]
+}
 
 
 -- !query
@@ -237,7 +220,15 @@ CREATE TEMPORARY VIEW v(c1 COMMENT "hello") AS SELECT 1
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'\"hello\"'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -245,15 +236,29 @@ DROP VIEW v
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1115",
+  "messageParameters" : {
+    "msg" : "Table spark_catalog.default.v not found"
+  }
+}
 
 
 -- !query
 SELECT INTERVAL "1" YEAR
 -- !query schema
-struct<INTERVAL '1' YEAR:interval year>
+struct<>
 -- !query output
-1-0
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'\"1\"'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -293,15 +298,7 @@ CREATE SCHEMA "myschema"
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "error" : "'\"myschema\"'",
-    "hint" : ""
-  }
-}
+
 
 
 -- !query
@@ -310,31 +307,15 @@ CREATE TEMPORARY VIEW "myview"("c1") AS
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "error" : "'\"myview\"'",
-    "hint" : ""
-  }
-}
+
 
 
 -- !query
 SELECT "a1" AS "a2" FROM "myview" AS "atab"("a1")
 -- !query schema
-struct<>
+struct<a2:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "error" : "'\"a2\"'",
-    "hint" : ""
-  }
-}
+1
 
 
 -- !query
@@ -342,15 +323,7 @@ DROP TABLE "myview"
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "error" : "'\"myview\"'",
-    "hint" : ""
-  }
-}
+
 
 
 -- !query
@@ -358,12 +331,4 @@ DROP SCHEMA "myschema"
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "error" : "'\"myschema\"'",
-    "hint" : ""
-  }
-}
+
