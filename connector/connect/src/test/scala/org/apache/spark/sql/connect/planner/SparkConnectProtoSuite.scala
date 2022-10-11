@@ -81,6 +81,16 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
   }
 
+  test("column alias") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.select("id".protoAttr.as("id2")))
+    }
+    val sparkPlan = sparkTestRelation.select($"id".as("id2"))
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
   private def createLocalRelationProto(attrs: Seq[AttributeReference]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
     // TODO: set data types for each local relation attribute one proto supports data type.

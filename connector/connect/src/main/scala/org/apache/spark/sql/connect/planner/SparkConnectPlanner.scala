@@ -24,7 +24,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.types._
@@ -133,6 +133,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
         transformUnresolvedExpression(exp)
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION =>
         transformScalarFunction(exp.getUnresolvedFunction)
+      case proto.Expression.ExprTypeCase.ALIAS => transformAlias(exp.getAlias)
       case _ => throw InvalidPlanInput()
     }
   }
@@ -207,6 +208,10 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case _ =>
         lookupFunction(funName, fun.getArgumentsList.asScala.map(transformExpression).toSeq)
     }
+  }
+
+  private def transformAlias(alias: proto.Expression.Alias): Expression = {
+    Alias(transformExpression(alias.getExpr), alias.getName)()
   }
 
   private def transformUnion(u: proto.Union): LogicalPlan = {
