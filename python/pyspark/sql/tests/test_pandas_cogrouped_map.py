@@ -132,7 +132,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
                 AssertionError,
-                "group keys must have same size: 2 != 1",
+                "Cogroup keys must have same size: 2 != 1",
             ):
                 (left.groupby("id", "k").cogroup(right.groupby("id")))
 
