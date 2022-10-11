@@ -46,7 +46,9 @@ PyGithub
 # pandas API on Spark Code formatter.
 black==22.6.0
 
-# Spark Connect
+# Spark Connect (required)
 grpcio==1.48.1
 protobuf==4.21.6
+
+# Spark Connect python proto generation plugin (optional)
 mypy-protobuf
