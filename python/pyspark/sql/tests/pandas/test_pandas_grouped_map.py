@@ -327,28 +327,8 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                     lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(), pdf.v.std())])
                 )
 
-    def test_apply_in_pandas_returning_empty_dataframe_without_columns(self):
+    def test_apply_in_pandas_returning_empty_dataframe(self):
         self._test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame())
-
-    def test_apply_in_pandas_returning_empty_dataframe_with_column_names(self):
-        self._test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame(columns=["mean", "id"]))
-
-    def test_apply_in_pandas_returning_empty_dataframe_with_wrong_column_names(self):
-        self._test_apply_in_pandas_returning_empty_dataframe_error(
-            pd.DataFrame(columns=["id", "median", "std"]),
-            "Column names of the returned pandas.DataFrame "
-            "do not match specified schema. Missing: mean Unexpected: median, std",
-        )
-
-    def test_apply_in_pandas_returning_empty_dataframe_with_no_column_names(self):
-        self._test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame(columns=[0, 1]))
-
-    def test_apply_in_pandas_returning_empty_dataframe_with_no_column_names_and_wrong_amount(self):
-        self._test_apply_in_pandas_returning_empty_dataframe_error(
-            pd.DataFrame(columns=[0, 1, 2]),
-            "Number of columns of the returned pandas.DataFrame "
-            "doesn't match specified schema. Expected: 2 Actual: 3",
-        )
 
     def test_datatype_string(self):
         df = self.data

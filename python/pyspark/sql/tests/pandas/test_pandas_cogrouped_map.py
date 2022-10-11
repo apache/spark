@@ -209,7 +209,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             "doesn't match specified schema. Expected: 4 Actual: 6",
         )
 
-    def test_apply_in_pandas_returning_empty_dataframe_without_columns(self):
+    def test_apply_in_pandas_returning_empty_dataframe(self):
         def merge_pandas(lft, rgt):
             if 0 in lft["id"] and lft["id"][0] % 2 == 0:
                 return pd.DataFrame()
@@ -218,56 +218,6 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             return pd.merge(lft, rgt, on=["id", "k"])
 
         self._test_merge_empty(fn=merge_pandas)
-
-    def test_apply_in_pandas_returning_empty_dataframe_with_column_names(self):
-        def merge_pandas(lft, rgt):
-            if 0 in lft["id"] and lft["id"][0] % 2 == 0:
-                return pd.DataFrame(columns=["id", "k", "v", "v2"])
-            if 0 in rgt["id"] and rgt["id"][0] % 3 == 0:
-                return pd.DataFrame(columns=["id", "k", "v", "v2"])
-            return pd.merge(lft, rgt, on=["id", "k"])
-
-        self._test_merge_empty(fn=merge_pandas)
-
-    def test_apply_in_pandas_returning_empty_dataframe_with_wrong_column_names(self):
-        def merge_pandas(lft, rgt):
-            if 0 in lft["id"] and lft["id"][0] % 2 == 0:
-                return pd.DataFrame(columns=["id", "k", "x"])
-            if 0 in rgt["id"] and rgt["id"][0] % 3 == 0:
-                return pd.DataFrame(columns=["id", "k", "x"])
-            return pd.merge(lft, rgt, on=["id", "k"])
-
-        self._test_merge_error(
-            fn=merge_pandas,
-            error_class=PythonException,
-            error_message_regex="Column names of the returned pandas.DataFrame "
-            "do not match specified schema. Missing: v, v2 Unexpected: x",
-        )
-
-    def test_apply_in_pandas_returning_empty_dataframe_without_column_names(self):
-        def merge_pandas(lft, rgt):
-            if 0 in lft["id"] and lft["id"][0] % 2 == 0:
-                return pd.DataFrame(columns=[0, 1, 2, 3])
-            if 0 in rgt["id"] and rgt["id"][0] % 3 == 0:
-                return pd.DataFrame(columns=[0, 1, 2, 3])
-            return pd.merge(lft, rgt, on=["id", "k"])
-
-        self._test_merge_empty(fn=merge_pandas)
-
-    def test_apply_in_pandas_returning_empty_dataframe_without_column_names_and_wrong_amount(self):
-        def merge_pandas(lft, rgt):
-            if 0 in lft["id"] and lft["id"][0] % 2 == 0:
-                return pd.DataFrame(columns=[0, 1, 2])
-            if 0 in rgt["id"] and rgt["id"][0] % 3 == 0:
-                return pd.DataFrame(columns=[0, 1, 2])
-            return pd.merge(lft, rgt, on=["id", "k"])
-
-        self._test_merge_error(
-            fn=merge_pandas,
-            error_class=PythonException,
-            error_message_regex="Number of columns of the returned pandas.DataFrame doesn't "
-            "match specified schema. Expected: 4 Actual: 3",
-        )
 
     def test_mixed_scalar_udfs_followed_by_cogrouby_apply(self):
         df = self.spark.range(0, 10).toDF("v1")
