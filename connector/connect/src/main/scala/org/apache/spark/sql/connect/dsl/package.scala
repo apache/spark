@@ -33,9 +33,11 @@ package object dsl {
       val identifier = CatalystSqlParser.parseMultipartIdentifier(s)
 
       def protoAttr: proto.Expression =
-        proto.Expression.newBuilder()
+        proto.Expression
+          .newBuilder()
           .setUnresolvedAttribute(
-            proto.Expression.UnresolvedAttribute.newBuilder()
+            proto.Expression.UnresolvedAttribute
+              .newBuilder()
               .addAllParts(identifier.asJava)
               .build())
           .build()
@@ -47,15 +49,53 @@ package object dsl {
     }
   }
 
+  object commands { // scalastyle:ignore
+    implicit class DslCommands(val logicalPlan: proto.Relation) {
+      def write(
+          format: Option[String] = None,
+          path: Option[String] = None,
+          tableName: Option[String] = None,
+          mode: Option[String] = None,
+          sortByColumns: Seq[String] = Seq.empty,
+          partitionByCols: Seq[String] = Seq.empty,
+          bucketByCols: Seq[String] = Seq.empty,
+          numBuckets: Option[Int] = None): proto.Command = {
+        val writeOp = proto.WriteOperation.newBuilder()
+        format.foreach(writeOp.setFormat(_))
+        mode.foreach(writeOp.setMode(_))
+
+        if (tableName.nonEmpty) {
+          tableName.foreach(writeOp.setTableName(_))
+        } else {
+          path.foreach(writeOp.setPath(_))
+        }
+        sortByColumns.foreach(writeOp.addSortColumnNames(_))
+        partitionByCols.foreach(writeOp.addPartitionByColumns(_))
+
+        if (numBuckets.nonEmpty && bucketByCols.nonEmpty) {
+          val op = proto.WriteOperation.BucketBy.newBuilder()
+          numBuckets.foreach(op.setBucketCount(_))
+          bucketByCols.foreach(op.addColumns(_))
+          writeOp.setBucketBy(op.build())
+        }
+        writeOp.setInput(logicalPlan)
+        proto.Command.newBuilder().setWriteOperation(writeOp.build()).build()
+      }
+    }
+  }
+
   object plans { // scalastyle:ignore
     implicit class DslLogicalPlan(val logicalPlan: proto.Relation) {
       def select(exprs: proto.Expression*): proto.Relation = {
-        proto.Relation.newBuilder().setProject(
-          proto.Project.newBuilder()
-            .setInput(logicalPlan)
-            .addAllExpressions(exprs.toIterable.asJava)
-            .build()
-        ).build()
+        proto.Relation
+          .newBuilder()
+          .setProject(
+            proto.Project
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllExpressions(exprs.toIterable.asJava)
+              .build())
+          .build()
       }
 
       def join(

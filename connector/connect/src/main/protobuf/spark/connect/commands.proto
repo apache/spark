@@ -17,6 +17,8 @@
 
 syntax = 'proto3';
 
+import "spark/connect/expressions.proto";
+import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 
 package spark.connect;
@@ -29,6 +31,7 @@ option java_package = "org.apache.spark.connect.proto";
 message Command {
   oneof command_type {
     CreateScalarFunction create_function = 1;
+    WriteOperation write_operation = 2;
   }
 }
 
@@ -60,5 +63,31 @@ message CreateScalarFunction {
     FUNCTION_LANGUAGE_SQL = 1;
     FUNCTION_LANGUAGE_PYTHON = 2;
     FUNCTION_LANGUAGE_SCALA = 3;
+  }
+}
+
+// As writes are not directly handled during analysis and planning, they are modeled as commands.
+message WriteOperation {
+  Relation input = 1;
+  string format = 2;
+
+  oneof save_type {
+    string path = 3;
+    string table_name = 4;
+  }
+  string mode = 5;
+  repeated string sortColumnNames = 6;
+  repeated string partitionByColumns = 7;
+  BucketBy bucketBy = 8;
+  repeated WriteOptions options = 9;
+
+  message BucketBy {
+    repeated string columns = 1;
+    int32 bucketCount = 2;
+  }
+
+  message WriteOptions {
+    string key = 1;
+    string value = 2;
   }
 }
