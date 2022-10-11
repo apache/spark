@@ -77,8 +77,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   }
 
   private def transformAttribute(exp: proto.Expression.QualifiedAttribute): Attribute = {
-    // TODO: use data type from the proto.
-    AttributeReference(exp.getName, IntegerType)()
+    AttributeReference(exp.getName, DataTypeProtoConverter.toCatalystType(exp.getType))()
   }
 
   private def transformReadRel(
@@ -271,11 +270,9 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   private def transformAggregate(rel: proto.Aggregate): LogicalPlan = {
     assert(rel.hasInput)
-    assert(rel.getGroupingSetsCount == 1, "Only one grouping set is supported")
 
-    val groupingSet = rel.getGroupingSetsList.asScala.take(1)
-    val ge = groupingSet
-      .flatMap(f => f.getAggregateExpressionsList.asScala)
+    val groupingExprs =
+      rel.getGroupingExpressionsList.asScala
       .map(transformExpression)
       .map {
         case x @ UnresolvedAttribute(_) => x
@@ -284,18 +281,18 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
     logical.Aggregate(
       child = transformRelation(rel.getInput),
-      groupingExpressions = ge.toSeq,
+      groupingExpressions = groupingExprs.toSeq,
       aggregateExpressions =
-        (rel.getMeasuresList.asScala.map(transformAggregateExpression) ++ ge).toSeq)
+        rel.getResultExpressionsList.asScala.map(transformAggregateExpression).toSeq)
   }
 
   private def transformAggregateExpression(
-      exp: proto.Aggregate.Measure): expressions.NamedExpression = {
-    val fun = exp.getFunction.getName
+      exp: proto.Aggregate.AggregateFunction): expressions.NamedExpression = {
+    val fun = exp.getName
     UnresolvedAlias(
       UnresolvedFunction(
         name = fun,
-        arguments = exp.getFunction.getArgumentsList.asScala.map(transformExpression).toSeq,
+        arguments = exp.getArgumentsList.asScala.map(transformExpression).toSeq,
         isDistinct = false))
   }
 

@@ -130,22 +130,8 @@ message Fetch {
 // Relation of type [[Aggregate]].
 message Aggregate {
   Relation input = 1;
-
-  // Grouping sets are used in rollups
-  repeated GroupingSet grouping_sets = 2;
-
-  // Measures
-  repeated Measure measures = 3;
-
-  message GroupingSet {
-    repeated Expression aggregate_expressions = 1;
-  }
-
-  message Measure {
-    AggregateFunction function = 1;
-    // Conditional filter for SUM(x FILTER WHERE x < 10)
-    Expression filter = 2;
-  }
+  repeated Expression grouping_expressions = 2;
+  repeated AggregateFunction result_expressions = 3;
 
   message AggregateFunction {
     string name = 1;

@@ -31,11 +31,11 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
  */
 class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
-  lazy val connectTestRelation = createLocalRelationProto(Seq($"id".int))
+  lazy val connectTestRelation = createLocalRelationProto(Seq($"id".int, $"name".string))
 
   lazy val connectTestRelation2 = createLocalRelationProto(Seq($"key".int, $"value".int))
 
-  lazy val sparkTestRelation: LocalRelation = LocalRelation($"id".int)
+  lazy val sparkTestRelation: LocalRelation = LocalRelation($"id".int, $"name".string)
 
   lazy val sparkTestRelation2: LocalRelation = LocalRelation($"key".int, $"value".int)
 
@@ -81,12 +81,23 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
   }
 
+  test("Aggregate with more than 1 grouping expressions") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.groupBy("id".protoAttr, "name".protoAttr)())
+    }
+    val sparkPlan = sparkTestRelation.groupBy($"id", $"name")()
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
   private def createLocalRelationProto(attrs: Seq[AttributeReference]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
-    // TODO: set data types for each local relation attribute one proto supports data type.
     for (attr <- attrs) {
       localRelationBuilder.addAttributes(
-        proto.Expression.QualifiedAttribute.newBuilder().setName(attr.name).build()
+        proto.Expression.QualifiedAttribute.newBuilder()
+          .setName(attr.name)
+          .setType(DataTypeProtoConverter.toConnectProtoType(attr.dataType))
       )
     }
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
