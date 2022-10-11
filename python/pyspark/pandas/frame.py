@@ -1501,7 +1501,6 @@ class DataFrame(Frame, Generic[T]):
         sdf = internal.spark_frame
         index_1_col_name = verify_temp_column_name(sdf, "__corr_index_1_temp_column__")
         index_2_col_name = verify_temp_column_name(sdf, "__corr_index_2_temp_column__")
-        tuple_col_name = verify_temp_column_name(sdf, "__corr_tuple_temp_column__")
 
         # simple dataset
         # +---+---+----+
@@ -1539,16 +1538,7 @@ class DataFrame(Frame, Generic[T]):
         # |                  1|                  2|               null|               null|
         # |                  2|                  2|               null|               null|
         # +-------------------+-------------------+-------------------+-------------------+
-        sdf = sdf.select(F.explode(F.array(*pair_scols)).alias(tuple_col_name)).select(
-            F.col(f"{tuple_col_name}.{index_1_col_name}").alias(index_1_col_name),
-            F.col(f"{tuple_col_name}.{index_2_col_name}").alias(index_2_col_name),
-            F.col(f"{tuple_col_name}.{CORRELATION_VALUE_1_COLUMN}").alias(
-                CORRELATION_VALUE_1_COLUMN
-            ),
-            F.col(f"{tuple_col_name}.{CORRELATION_VALUE_2_COLUMN}").alias(
-                CORRELATION_VALUE_2_COLUMN
-            ),
-        )
+        sdf = sdf.select(F.inline(F.array(*pair_scols)))
 
         sdf = compute(sdf=sdf, groupKeys=[index_1_col_name, index_2_col_name], method=method)
         if method == "kendall":
@@ -1580,8 +1570,9 @@ class DataFrame(Frame, Generic[T]):
         # |                  2|                  0|            null|
         # +-------------------+-------------------+----------------+
 
+        auxiliary_col_name = verify_temp_column_name(sdf, "__corr_auxiliary_temp_column__")
         sdf = sdf.withColumn(
-            tuple_col_name,
+            auxiliary_col_name,
             F.explode(
                 F.when(
                     F.col(index_1_col_name) == F.col(index_2_col_name),
@@ -1589,10 +1580,10 @@ class DataFrame(Frame, Generic[T]):
                 ).otherwise(F.lit([0, 1]))
             ),
         ).select(
-            F.when(F.col(tuple_col_name) == 0, F.col(index_1_col_name))
+            F.when(F.col(auxiliary_col_name) == 0, F.col(index_1_col_name))
             .otherwise(F.col(index_2_col_name))
             .alias(index_1_col_name),
-            F.when(F.col(tuple_col_name) == 0, F.col(index_2_col_name))
+            F.when(F.col(auxiliary_col_name) == 0, F.col(index_2_col_name))
             .otherwise(F.col(index_1_col_name))
             .alias(index_2_col_name),
             F.col(CORRELATION_CORR_OUTPUT_COLUMN),
@@ -1619,9 +1610,9 @@ class DataFrame(Frame, Generic[T]):
         )
 
         for i in range(0, num_scols):
-            sdf = sdf.withColumn(tuple_col_name, F.get(F.col(array_col_name), i)).withColumn(
+            sdf = sdf.withColumn(auxiliary_col_name, F.get(F.col(array_col_name), i)).withColumn(
                 numeric_col_names[i],
-                F.col(f"{tuple_col_name}.{CORRELATION_CORR_OUTPUT_COLUMN}"),
+                F.col(f"{auxiliary_col_name}.{CORRELATION_CORR_OUTPUT_COLUMN}"),
             )
 
         index_col_names: List[str] = []

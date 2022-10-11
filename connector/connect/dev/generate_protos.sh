@@ -16,7 +16,7 @@
 #
 set -ex
 
-SPARK_HOME="$(cd "`dirname $0`"/../..; pwd)"
+SPARK_HOME="$(cd "`dirname $0`"/../../..; pwd)"
 cd "$SPARK_HOME"
 
 pushd connector/connect/src/main

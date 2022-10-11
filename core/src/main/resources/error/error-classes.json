@@ -3265,6 +3265,135 @@
       "Expected exactly one path to be specified, but got: <paths>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_2051" : {
+    "message" : [
+      "Failed to find data source: <provider>. Please find packages at https://spark.apache.org/third-party-projects.html"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2052" : {
+    "message" : [
+      "<className> was removed in Spark 2.0. Please check if your library is compatible with Spark 2.0"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2053" : {
+    "message" : [
+      "buildReader is not supported for <format>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2054" : {
+    "message" : [
+      "Task failed while writing rows."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2055" : {
+    "message" : [
+      "<message>",
+      "It is possible the underlying files have been updated. You can explicitly invalidate the cache in Spark by running 'REFRESH TABLE tableName' command in SQL or by recreating the Dataset/DataFrame involved."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2056" : {
+    "message" : [
+      "Unable to clear output directory <staticPrefixPath> prior to writing to it"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2057" : {
+    "message" : [
+      "Unable to clear partition directory <path> prior to writing to it"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2058" : {
+    "message" : [
+      "Failed to cast value `<value>` to `<dataType>` for partition column `<columnName>`"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2059" : {
+    "message" : [
+      "End of stream"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2060" : {
+    "message" : [
+      "The fallback v1 relation reports inconsistent schema:",
+      "Schema of v2 scan: <v2Schema>",
+      "Schema of v1 relation: <v1Schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2061" : {
+    "message" : [
+      "No records should be returned from EmptyDataReader"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2062" : {
+    "message" : [
+      "<message>",
+      "It is possible the underlying files have been updated. You can explicitly invalidate the cache in Spark by recreating the Dataset/DataFrame involved."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2063" : {
+    "message" : [
+      "Parquet column cannot be converted in file <filePath>. Column: <column>, Expected: <logicalType>, Found: <physicalType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2064" : {
+    "message" : [
+      "Encountered error while reading file <path>. Details:"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2065" : {
+    "message" : [
+      "Cannot create columnar reader."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2066" : {
+    "message" : [
+      "Invalid namespace name: <namespace>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2067" : {
+    "message" : [
+      "Unsupported partition transform: <transform>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2068" : {
+    "message" : [
+      "Missing database location"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2069" : {
+    "message" : [
+      "Cannot remove reserved property: <property>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2070" : {
+    "message" : [
+      "Writing job failed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2071" : {
+    "message" : [
+      "Commit denied for partition <partId> (task <taskId>, attempt <attemptId>, stage <stageId>.<stageAttempt>)"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2072" : {
+    "message" : [
+      "Table implementation does not support writes: <ident>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2073" : {
+    "message" : [
+      "Cannot create JDBC table with partition"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2074" : {
+    "message" : [
+      "user-specified schema"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2075" : {
+    "message" : [
+      "Write is not supported for binary file data source"
+    ]
+  },
   "_LEGACY_ERROR_TEMP_2276" : {
     "message" : [
       "Hive table <tableName> with ANSI intervals is not supported"
@@ -3298,6 +3427,4 @@
   "_LEGACY_ERROR_TEMP_2282" : {
     "message" : [
       "Drop namespace restrict is not supported"
-    ]
-  }
 }
