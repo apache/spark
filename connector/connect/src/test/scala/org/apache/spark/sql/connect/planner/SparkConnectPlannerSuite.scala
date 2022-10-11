@@ -54,10 +54,12 @@ trait SparkConnectPlanTest {
    */
   def createLocalRelationProto(attrs: Seq[AttributeReference]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
-    // TODO: set data types for each local relation attribute one proto supports data type.
     for (attr <- attrs) {
       localRelationBuilder.addAttributes(
-        proto.Expression.QualifiedAttribute.newBuilder().setName(attr.name).build())
+        proto.Expression.QualifiedAttribute
+          .newBuilder()
+          .setName(attr.name)
+          .setType(DataTypeProtoConverter.toConnectProtoType(attr.dataType)))
     }
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
   }
