@@ -3418,7 +3418,21 @@ SELECT array(INTERVAL 1 MONTH, INTERVAL 20 DAYS)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(INTERVAL '1' MONTH, INTERVAL '20' DAY)' due to data type mismatch: input to function array should all be the same type, but it's [interval month, interval day]; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "messageParameters" : {
+    "dataType" : "(\"INTERVAL MONTH\" or \"INTERVAL DAY\")",
+    "functionName" : "function array",
+    "sqlExpr" : "\"array(INTERVAL '1' MONTH, INTERVAL '20' DAY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 48,
+    "fragment" : "array(INTERVAL 1 MONTH, INTERVAL 20 DAYS)"
+  } ]
+}
 
 
 -- !query
@@ -3443,7 +3457,21 @@ SELECT coalesce(INTERVAL 1 MONTH, INTERVAL 20 DAYS)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'coalesce(INTERVAL '1' MONTH, INTERVAL '20' DAY)' due to data type mismatch: input to function coalesce should all be the same type, but it's [interval month, interval day]; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "messageParameters" : {
+    "dataType" : "(\"INTERVAL MONTH\" or \"INTERVAL DAY\")",
+    "functionName" : "function coalesce",
+    "sqlExpr" : "\"coalesce(INTERVAL '1' MONTH, INTERVAL '20' DAY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 51,
+    "fragment" : "coalesce(INTERVAL 1 MONTH, INTERVAL 20 DAYS)"
+  } ]
+}
 
 
 -- !query
