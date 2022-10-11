@@ -22,13 +22,14 @@ import java.nio.file.{Files, Paths}
 import java.util.UUID
 
 import org.apache.commons.io.FileUtils
+
+import org.apache.spark.{SparkClassNotFoundException, SparkFunSuite}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.connect.command.{InvalidCommandInput, SparkConnectCommandPlanner}
 import org.apache.spark.sql.connect.dsl.commands._
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.{SparkClassNotFoundException, SparkFunSuite}
 
 class SparkConnectCommandPlannerSuite
     extends SparkFunSuite
