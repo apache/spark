@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.StringType
 @Since("3.4.0")
 class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) {
 
-  lazy val pythonVersion =
+  lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
   def process(): Unit = {
@@ -59,7 +59,7 @@ class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) 
       cf.getSerializedFunction.toByteArray,
       Maps.newHashMap(),
       Lists.newArrayList(),
-      pythonVersion,
+      pythonExec,
       "3.9", // TODO(SPARK-40532) This needs to be an actual Python version.
       Lists.newArrayList(),
       null)

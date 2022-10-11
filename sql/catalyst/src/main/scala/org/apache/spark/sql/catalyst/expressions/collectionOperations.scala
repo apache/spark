@@ -24,7 +24,9 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext, UnaryLike}
@@ -66,9 +68,16 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
     (left.dataType, right.dataType) match {
       case (ArrayType(e1, _), ArrayType(e2, _)) if e1.sameType(e2) =>
         TypeCheckResult.TypeCheckSuccess
-      case _ => TypeCheckResult.TypeCheckFailure(s"input to function $prettyName should have " +
-        s"been two ${ArrayType.simpleString}s with same element type, but it's " +
-        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}]")
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "BINARY_ARRAY_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> prettyName,
+            "arrayType" -> toSQLType(ArrayType),
+            "leftType" -> toSQLType(left.dataType),
+            "rightType" -> toSQLType(right.dataType)
+          )
+        )
     }
   }
 
@@ -229,12 +238,21 @@ case class MapContainsKey(left: Expression, right: Expression)
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
       case (_, NullType) =>
-        TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
+        DataTypeMismatch(
+          errorSubClass = "NULL_TYPE",
+          Map("functionName" -> prettyName))
       case (MapType(kt, _, _), dt) if kt.sameType(dt) =>
         TypeUtils.checkForOrderingExpr(kt, s"function $prettyName")
-      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
-        s"been ${MapType.simpleString} followed by a value with same key type, but it's " +
-        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "MAP_CONTAINS_KEY_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> prettyName,
+            "dataType" -> toSQLType(MapType),
+            "leftType" -> toSQLType(left.dataType),
+            "rightType" -> toSQLType(right.dataType)
+          )
+        )
     }
   }
 
@@ -663,9 +681,13 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
   override def checkInputDataTypes(): TypeCheckResult = {
     val funcName = s"function $prettyName"
     if (children.exists(!_.dataType.isInstanceOf[MapType])) {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to $funcName should all be of type map, but it's " +
-          children.map(_.dataType.catalogString).mkString("[", ", ", "]"))
+      DataTypeMismatch(
+        errorSubClass = "MAP_CONCAT_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> funcName,
+          "dataType" -> children.map(_.dataType).map(toSQLType).mkString("[", ", ", "]")
+        )
+      )
     } else {
       val sameTypeCheck = TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), funcName)
       if (sameTypeCheck.isFailure) {
@@ -801,8 +823,15 @@ case class MapFromEntries(child: Expression) extends UnaryExpression with NullIn
   override def checkInputDataTypes(): TypeCheckResult = dataTypeDetails match {
     case Some((mapType, _, _)) =>
       TypeUtils.checkForMapKeyType(mapType.keyType)
-    case None => TypeCheckResult.TypeCheckFailure(s"'${child.sql}' is of " +
-      s"${child.dataType.catalogString} type. $prettyName accepts only arrays of pair structs.")
+    case None =>
+      DataTypeMismatch(
+        errorSubClass = "MAP_FROM_ENTRIES_WRONG_TYPE",
+        messageParameters = Map(
+          "functionName" -> prettyName,
+          "childExpr" -> toSQLExpr(child),
+          "childType" -> toSQLType(child.dataType)
+        )
+      )
   }
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)

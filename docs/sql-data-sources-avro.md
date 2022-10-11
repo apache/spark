@@ -371,6 +371,14 @@ Configuration of Avro can be done using the `setConf` method on SparkSession or 
     </td>
     <td>3.0.0</td>
   </tr>
+  <tr>
+    <td>spark.sql.avro.filterPushdown.enabled</td>
+    <td>true</td>
+    <td>
+      When true, enable filter pushdown to Avro datasource.
+    </td>
+    <td>3.1.0</td>
+  </tr>
 </table>
 
 ## Compatibility with Databricks spark-avro
