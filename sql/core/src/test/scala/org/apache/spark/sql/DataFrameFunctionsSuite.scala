@@ -4236,7 +4236,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       ("least", (df: DataFrame) => df.selectExpr("least()")) :: Nil
     funcsMustHaveAtLeastTwoArgs.foreach { case (name, func) =>
       val errMsg = intercept[AnalysisException] { func(df) }.getMessage
-      assert(errMsg.contains(s"input to function $name requires at least two arguments"))
+      assert(errMsg.contains("wrong number of parameters"))
     }
   }
 
