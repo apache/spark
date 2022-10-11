@@ -47,7 +47,7 @@ class DefaultIndexTest(PandasOnSparkTestCase):
                 with ps.option_context(
                     "compute.distributed_sequence_index_storage_level", storage_level
                 ):
-                    num_cached = len(self.spark._jsc.getPersistentRDDs())
+                    cached_rdd_ids = [rdd_id for rdd_id in self.spark._jsc.getPersistentRDDs()]
 
                     psdf1 = (
                         self.spark.range(0, 100, 1, 10)
@@ -62,7 +62,13 @@ class DefaultIndexTest(PandasOnSparkTestCase):
                     psdf3 = ps.merge(psdf1, psdf2, how="inner", left_on=["Key"], right_on=["Key"])
                     _ = len(psdf3)
 
-                    self.assertEqual(len(self.spark._jsc.getPersistentRDDs()), num_cached)
+                    # no newly cached rdd
+                    self.assertTrue(
+                        all(
+                            rdd_id in cached_rdd_ids
+                            for rdd_id in self.spark._jsc.getPersistentRDDs()
+                        )
+                    )
 
 
 if __name__ == "__main__":
