@@ -3433,5 +3433,130 @@
     "message" : [
       "Write is not supported for binary file data source"
     ]
+  },
+  "_LEGACY_ERROR_TEMP_2076" : {
+    "message" : [
+      "The length of <path> is <len>, which exceeds the max length allowed: <maxLength>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2077" : {
+    "message" : [
+      "Unsupported field name: <fieldName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2078" : {
+    "message" : [
+      "Both '<jdbcTableName>' and '<jdbcQueryString>' can not be specified at the same time."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2079" : {
+    "message" : [
+      "Option '<jdbcTableName>' or '<jdbcQueryString>' is required."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2080" : {
+    "message" : [
+      "Option `<optionName>` can not be empty."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2081" : {
+    "message" : [
+      "Invalid value `<value>` for parameter `<jdbcTxnIsolationLevel>`. This can be `NONE`, `READ_UNCOMMITTED`, `READ_COMMITTED`, `REPEATABLE_READ` or `SERIALIZABLE`."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2082" : {
+    "message" : [
+      "Can't get JDBC type for <catalogString>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2083" : {
+    "message" : [
+      "Unsupported type <content>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2084" : {
+    "message" : [
+      "Unsupported array element type <catalogString> based on binary"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2085" : {
+    "message" : [
+      "Nested arrays unsupported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2086" : {
+    "message" : [
+      "Can't translate non-null value for field <pos>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2087" : {
+    "message" : [
+      "Invalid value `<n>` for parameter `<jdbcNumPartitions>` in table writing via JDBC. The minimum value is 1."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2088" : {
+    "message" : [
+      "<dataType> is not supported yet."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2089" : {
+    "message" : [
+      "DataType: <catalogString>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2090" : {
+    "message" : [
+      "The input filter of <owner> should be fully convertible."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2091" : {
+    "message" : [
+      "Could not read footer for file: <file>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2092" : {
+    "message" : [
+      "Could not read footer for file: <file>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2093" : {
+    "message" : [
+      "Found duplicate field(s) \"<requiredFieldName>\": <matchedOrcFields> in case-insensitive mode"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2094" : {
+    "message" : [
+      "Found duplicate field(s) \"<requiredId>\": <matchedFields> in id mapping mode"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2095" : {
+    "message" : [
+      "Failed to merge incompatible schemas <left> and <right>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2096" : {
+    "message" : [
+      "<ddl> is not supported temporarily."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2097" : {
+    "message" : [
+      "Could not execute broadcast in <timeout> secs. You can increase the timeout for broadcasts via <broadcastTimeout> or disable broadcast join by setting <autoBroadcastJoinThreshold> to -1"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2098" : {
+    "message" : [
+      "Could not compare cost with <cost>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2099" : {
+    "message" : [
+      "Unsupported data type: <dt>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2100" : {
+    "message" : [
+      "not support type: <dataType>"
+    ]
   }
 }
