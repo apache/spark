@@ -77,7 +77,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   }
 
   private def transformAttribute(exp: proto.Expression.QualifiedAttribute): Attribute = {
-    AttributeReference(exp.getName, TypeProtoConverter.toCatalystType(exp.getType))()
+    AttributeReference(exp.getName, DataTypeProtoConverter.toCatalystType(exp.getType))()
   }
 
   private def transformReadRel(

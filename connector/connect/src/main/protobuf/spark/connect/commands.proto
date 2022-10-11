@@ -44,8 +44,8 @@ message CreateScalarFunction {
   repeated string parts = 1;
   FunctionLanguage language = 2;
   bool temporary = 3;
-  repeated Type argument_types = 4;
-  Type return_type = 5;
+  repeated DataType argument_types = 4;
+  DataType return_type = 5;
 
   // How the function body is defined:
   oneof function_definition {

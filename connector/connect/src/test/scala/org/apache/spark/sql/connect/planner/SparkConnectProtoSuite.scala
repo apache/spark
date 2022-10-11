@@ -97,7 +97,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       localRelationBuilder.addAttributes(
         proto.Expression.QualifiedAttribute.newBuilder()
           .setName(attr.name)
-          .setType(TypeProtoConverter.toConnectProtoType(attr.dataType))
+          .setType(DataTypeProtoConverter.toConnectProtoType(attr.dataType))
       )
     }
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
