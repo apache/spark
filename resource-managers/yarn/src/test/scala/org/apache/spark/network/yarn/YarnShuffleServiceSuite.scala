@@ -323,7 +323,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     val dataFileReload3Again =
       ShuffleTestAccessor.getMergedShuffleDataFile(mergeManager3, partitionId3, 1)
-    dataFileReload3Again.length() should be ((4 * 5 + 1) * DUMMY_BLOCK_DATA.length)
+    dataFileReload3Again.length() should be (0)
     s3.stop()
   }
 
