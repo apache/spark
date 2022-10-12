@@ -425,7 +425,7 @@ private[spark] object SparkHadoopUtil extends Logging {
    * Source for configuration options set by spark when another source is
    * not explicitly declared.
    */
-  private[deploy] val SOURCE_SPARK = "Set by Spark"
+  private[spark] val SOURCE_SPARK = "Set by Spark"
 
   /**
    * Source for configuration options with `spark.hadoop.` prefix copied
@@ -524,19 +524,12 @@ private[spark] object SparkHadoopUtil extends Logging {
     if (keyId != null && accessKey != null) {
       // source prefix string; will have environment variable added
       val source = SOURCE_SPARK + " on " + InetAddress.getLocalHost.toString + " from "
-      hadoopConf.set("fs.s3.awsAccessKeyId", keyId, source +
-        ENV_VAR_AWS_ACCESS_KEY)
-      hadoopConf.set("fs.s3n.awsAccessKeyId", keyId, source +
-        ENV_VAR_AWS_ACCESS_KEY)
-      hadoopConf.set("fs.s3a.access.key", keyId, source +
-        ENV_VAR_AWS_ACCESS_KEY)
-      hadoopConf.set("fs.s3.awsSecretAccessKey", accessKey, source +
-        ENV_VAR_AWS_SECRET_KEY)
-      hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey, source +
-        ENV_VAR_AWS_SECRET_KEY)
-      hadoopConf.set("fs.s3a.secret.key", accessKey, source +
-        ENV_VAR_AWS_SECRET_KEY)
-
+      hadoopConf.set("fs.s3.awsAccessKeyId", keyId, source + ENV_VAR_AWS_ACCESS_KEY)
+      hadoopConf.set("fs.s3n.awsAccessKeyId", keyId, source + ENV_VAR_AWS_ACCESS_KEY)
+      hadoopConf.set("fs.s3a.access.key", keyId, source + ENV_VAR_AWS_ACCESS_KEY)
+      hadoopConf.set("fs.s3.awsSecretAccessKey", accessKey, source + ENV_VAR_AWS_SECRET_KEY)
+      hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey, source + ENV_VAR_AWS_SECRET_KEY)
+      hadoopConf.set("fs.s3a.secret.key", accessKey, source + ENV_VAR_AWS_SECRET_KEY)
 
       // look for session token if the other variables were set
       if (sessionToken != null) {
@@ -611,7 +604,7 @@ private[spark] object SparkHadoopUtil extends Logging {
   def propertySources(hadoopConf: Configuration, key: String): String = {
     val sources = hadoopConf.getPropertySources(key)
     if (sources != null && sources.nonEmpty) {
-      sources.mkString("," )
+      sources.mkString(",")
     } else {
       ""
     }

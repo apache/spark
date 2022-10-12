@@ -39,8 +39,7 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     assertConfigMatches(hadoopConf, "orc.filterPushdown", "true", SOURCE_SPARK_HADOOP)
     assertConfigMatches(hadoopConf, "fs.s3a.downgrade.syncable.exceptions", "true",
       SET_TO_DEFAULT_VALUES)
-    assertConfigMatches(hadoopConf, "fs.s3a.endpoint", "s3.amazonaws.com",
-      SET_TO_DEFAULT_VALUES)
+    assertConfigMatches(hadoopConf, "fs.s3a.endpoint", "s3.amazonaws.com", SET_TO_DEFAULT_VALUES)
   }
 
   /**
@@ -94,8 +93,7 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     val hadoopConf = new Configuration(false)
     sc.set("spark.hive.hiveoption", "value")
     new SparkHadoopUtil().appendS3AndSparkHadoopHiveConfigurations(sc, hadoopConf)
-    assertConfigMatches(hadoopConf, "hive.hiveoption", "value",
-      SOURCE_SPARK_HIVE)
+    assertConfigMatches(hadoopConf, "hive.hiveoption", "value", SOURCE_SPARK_HIVE)
   }
 
   /**
@@ -170,8 +168,7 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     val v = hadoopConf.get(key)
     // get the source list
     val origin = SparkHadoopUtil.propertySources(hadoopConf, key)
-    assert(origin.nonEmpty,
-      s"Sources are missing for '$key' with value '$v'")
+    assert(origin.nonEmpty, s"Sources are missing for '$key' with value '$v'")
     assert(origin.contains(expectedSource),
       s"Expected source $key with value $v: and source $origin to contain $expectedSource")
   }
