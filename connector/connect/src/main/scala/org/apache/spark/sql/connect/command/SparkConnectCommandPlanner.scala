@@ -99,7 +99,7 @@ class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) 
     val dataset = Dataset.ofRows(session, logicalPlan = plan)
 
     val w = dataset.write
-    if (writeOperation.getMode != null) {
+    if (writeOperation.getMode != proto.WriteOperation.SaveMode.SAVE_MODE_UNSPECIFIED) {
       w.mode(DataTypeProtoConverter.toSaveMode(writeOperation.getMode))
     }
 
