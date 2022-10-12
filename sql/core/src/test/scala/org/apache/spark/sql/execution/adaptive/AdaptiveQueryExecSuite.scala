@@ -2046,7 +2046,6 @@ class AdaptiveQueryExecSuite
       // right size: 480B, MapOutputStatistics in ShuffleQueryStageExec [416, 258, 252]
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "450",
-        SQLConf.ADAPTIVE_SHUFFLE_JOIN_STREAM_PARTITION_THRESHOLD.key -> "100",
         SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
         // check default value ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD = 0
           checkJoinStrategy(false)

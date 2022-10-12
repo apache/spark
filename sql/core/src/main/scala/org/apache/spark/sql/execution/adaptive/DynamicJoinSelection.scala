@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, Join, JoinStrategyHint, LogicalPlan, NO_BROADCAST_HASH, PREFER_SHUFFLE_HASH, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.execution.CoalescedPartitionSpec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -49,38 +50,27 @@ object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
 
   private def preferShuffledHashJoin(
       mapStats: MapOutputStatistics,
-      streamedPlan: LogicalPlan): Boolean = {
+      streamedStats: MapOutputStatistics): Boolean = {
     val maxShuffledHashJoinLocalMapThreshold =
       conf.getConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD)
-    val streamPartitionThreshold =
-      conf.getConf(SQLConf.ADAPTIVE_SHUFFLE_JOIN_STREAM_PARTITION_THRESHOLD)
-    val largeStreamPartitionRatio =
-      conf.getConf(SQLConf.ADAPTIVE_SHUFFLE_JOIN_LARGE_STREAM_PARTITION_RATIO)
-    val broadcastJoinThreshold = conf.getConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD)
-    if (maxShuffledHashJoinLocalMapThreshold <= 0 || streamPartitionThreshold <= 0) {
+    if (maxShuffledHashJoinLocalMapThreshold <= 0) {
       return false
     }
-    val streamIsLargeEnough =
-      streamedPlan match {
-        case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.isMaterialized
-          && stage.mapStats.isDefined =>
-          val stats = stage.mapStats.get
-          val largePartitionCount = stats.bytesByPartitionId.count(_ > streamPartitionThreshold)
-          val partitionCnt = stats.bytesByPartitionId.length
-          partitionCnt > 0 && largePartitionCount > 0 &&
-            (largePartitionCount * 1.0 / partitionCnt) > largeStreamPartitionRatio
 
-        case _ =>
-          false
-      }
-    if (!streamIsLargeEnough) {
-      return false
-    }
-    if (broadcastJoinThreshold <= 0) {
+    val newPartitionSpecs = ShufflePartitionsUtil.coalescePartitions(
+      Seq(Some(mapStats), Some(streamedStats)),
+      Seq(None, None),
+      advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),
+      minNumPartitions = 0,
+      minPartitionSize = 0)
+    if (newPartitionSpecs.isEmpty) {
       mapStats.bytesByPartitionId.forall(_ <= maxShuffledHashJoinLocalMapThreshold)
     } else {
-      maxShuffledHashJoinLocalMapThreshold <= broadcastJoinThreshold &&
-        mapStats.bytesByPartitionId.forall(_ <= maxShuffledHashJoinLocalMapThreshold)
+      newPartitionSpecs.head.forall {
+        case p: CoalescedPartitionSpec if p.dataSize.isDefined =>
+          p.dataSize.get <= maxShuffledHashJoinLocalMapThreshold
+        case _ => false
+      }
     }
   }
 
@@ -121,7 +111,13 @@ object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
           false
         }
 
-        val preferShuffleHash = preferShuffledHashJoin(stage.mapStats.get, streamedPlan)
+        val preferShuffleHash = streamedPlan match {
+          case LogicalQueryStage(_, streamedStage: ShuffleQueryStageExec)
+            if streamedStage.isMaterialized && streamedStage.mapStats.isDefined =>
+            preferShuffledHashJoin(stage.mapStats.get, streamedStage.mapStats.get)
+
+          case _ => false
+        }
         if (demoteBroadcastHash && preferShuffleHash) {
           Some(SHUFFLE_HASH)
         } else if (preferShuffleHash) {
