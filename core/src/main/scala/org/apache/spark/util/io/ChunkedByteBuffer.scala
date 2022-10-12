@@ -102,7 +102,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
     var buffer: Array[Byte] = null
     val bufferLen = ChunkedByteBuffer.COPY_BUFFER_LEN
 
-    chunks.foreach { chunk => {
+    getChunks().foreach { chunk => {
       if (chunk.hasArray) {
         // zero copy if the bytebuffer is backed by bytes array
         out.write(chunk.array(), chunk.arrayOffset(), chunk.limit())
@@ -111,15 +111,12 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
         if (buffer == null) {
           buffer = new Array[Byte](bufferLen)
         }
-        val originalPos = chunk.position()
-        chunk.rewind()
         var bytesToRead = Math.min(chunk.remaining(), bufferLen)
         while (bytesToRead > 0) {
           chunk.get(buffer, 0, bytesToRead)
           out.write(buffer, 0, bytesToRead)
           bytesToRead = Math.min(chunk.remaining(), bufferLen)
         }
-        chunk.position(originalPos)
       }
     }}
   }
