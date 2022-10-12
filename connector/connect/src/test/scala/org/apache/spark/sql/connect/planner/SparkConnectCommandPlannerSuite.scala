@@ -25,7 +25,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{SparkClassNotFoundException, SparkFunSuite}
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.connect.command.{InvalidCommandInput, SparkConnectCommandPlanner}
 import org.apache.spark.sql.connect.dsl.commands._
@@ -153,4 +153,20 @@ class SparkConnectCommandPlannerSuite
       spark.sql(s"select count(*) from ${name}").collect()
     }
   }
+
+  test("SaveMode conversion tests") {
+    assertThrows[IllegalArgumentException](
+      DataTypeProtoConverter.toSaveMode(proto.WriteOperation.SaveMode.SAVE_MODE_UNSPECIFIED))
+
+    val combinations = Seq(
+      (SaveMode.Append, proto.WriteOperation.SaveMode.SAVE_MODE_APPEND),
+      (SaveMode.Ignore, proto.WriteOperation.SaveMode.SAVE_MODE_IGNORE),
+      (SaveMode.Overwrite, proto.WriteOperation.SaveMode.SAVE_MODE_OVERWRITE),
+      (SaveMode.ErrorIfExists, proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS))
+    combinations.foreach { a =>
+      assert(DataTypeProtoConverter.toSaveModeProto(a._1) == a._2)
+      assert(DataTypeProtoConverter.toSaveMode(a._2) == a._1)
+    }
+  }
+
 }

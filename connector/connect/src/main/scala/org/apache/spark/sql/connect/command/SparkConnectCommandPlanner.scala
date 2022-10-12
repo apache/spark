@@ -26,7 +26,7 @@ import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.WriteOperation
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.planner.{DataTypeProtoConverter, SparkConnectPlanner}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.types.StringType
 
@@ -99,8 +99,12 @@ class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) 
     val dataset = Dataset.ofRows(session, logicalPlan = plan)
 
     val w = dataset.write
+    if (writeOperation.getMode != null) {
+      w.mode(DataTypeProtoConverter.toSaveMode(writeOperation.getMode))
+    }
+
     if (writeOperation.getOptionsCount > 0) {
-      writeOperation.getOptionsList.asScala.foreach(x => w.option(x.getKey, x.getValue))
+      writeOperation.getOptionsMap.asScala.foreach { case (key, value) => w.option(key, value) }
     }
 
     if (writeOperation.getSortColumnNamesCount > 0) {

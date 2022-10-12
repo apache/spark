@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.planner
 
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 
 /**
@@ -41,6 +42,30 @@ object DataTypeProtoConverter {
         proto.DataType.newBuilder().setString(proto.DataType.String.getDefaultInstance).build()
       case _ =>
         throw InvalidPlanInput(s"Does not support convert ${t.typeName} to connect proto types.")
+    }
+  }
+
+  def toSaveMode(mode: proto.WriteOperation.SaveMode): SaveMode = {
+    mode match {
+      case proto.WriteOperation.SaveMode.SAVE_MODE_APPEND => SaveMode.Append
+      case proto.WriteOperation.SaveMode.SAVE_MODE_IGNORE => SaveMode.Ignore
+      case proto.WriteOperation.SaveMode.SAVE_MODE_OVERWRITE => SaveMode.Overwrite
+      case proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS => SaveMode.ErrorIfExists
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Cannot convert from WriteOperaton.SaveMode to Spark SaveMode: ${mode.getNumber}")
+    }
+  }
+
+  def toSaveModeProto(mode: SaveMode): proto.WriteOperation.SaveMode = {
+    mode match {
+      case SaveMode.Append => proto.WriteOperation.SaveMode.SAVE_MODE_APPEND
+      case SaveMode.Ignore => proto.WriteOperation.SaveMode.SAVE_MODE_IGNORE
+      case SaveMode.Overwrite => proto.WriteOperation.SaveMode.SAVE_MODE_OVERWRITE
+      case SaveMode.ErrorIfExists => proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Cannot convert from SaveMode to WriteOperation.SaveMode: ${mode.name()}")
     }
   }
 }

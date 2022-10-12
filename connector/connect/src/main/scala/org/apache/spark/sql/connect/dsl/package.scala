@@ -20,7 +20,9 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 
 /**
  * A collection of implicit conversions that create a DSL for constructing connect protos.
@@ -44,8 +46,10 @@ package object dsl {
     }
 
     implicit class DslExpression(val expr: proto.Expression) {
-      def as(alias: String): proto.Expression = proto.Expression.newBuilder().setAlias(
-        proto.Expression.Alias.newBuilder().setName(alias).setExpr(expr)).build()
+      def as(alias: String): proto.Expression = proto.Expression
+        .newBuilder()
+        .setAlias(proto.Expression.Alias.newBuilder().setName(alias).setExpr(expr))
+        .build()
     }
   }
 
@@ -62,7 +66,11 @@ package object dsl {
           numBuckets: Option[Int] = None): proto.Command = {
         val writeOp = proto.WriteOperation.newBuilder()
         format.foreach(writeOp.setFormat(_))
-        mode.foreach(writeOp.setMode(_))
+
+        mode
+          .map(SaveMode.valueOf(_))
+          .map(DataTypeProtoConverter.toSaveModeProto(_))
+          .foreach(writeOp.setMode(_))
 
         if (tableName.nonEmpty) {
           tableName.foreach(writeOp.setTableName(_))
@@ -104,7 +112,8 @@ package object dsl {
           condition: Option[proto.Expression] = None): proto.Relation = {
         val relation = proto.Relation.newBuilder()
         val join = proto.Join.newBuilder()
-        join.setLeft(logicalPlan)
+        join
+          .setLeft(logicalPlan)
           .setRight(otherPlan)
           .setJoinType(joinType)
         if (condition.isDefined) {
@@ -113,8 +122,8 @@ package object dsl {
         relation.setJoin(join).build()
       }
 
-      def groupBy(
-          groupingExprs: proto.Expression*)(aggregateExprs: proto.Expression*): proto.Relation = {
+      def groupBy(groupingExprs: proto.Expression*)(
+          aggregateExprs: proto.Expression*): proto.Relation = {
         val agg = proto.Aggregate.newBuilder()
         agg.setInput(logicalPlan)
 
