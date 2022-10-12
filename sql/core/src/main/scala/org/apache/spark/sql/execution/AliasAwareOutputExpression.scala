@@ -48,6 +48,17 @@ trait AliasAwareOutputExpression extends UnaryExecNode {
 
   protected def hasAlias: Boolean = aliasMap.nonEmpty
 
+  // Extract partitioning from children's output expressions. For example:
+  // +- Project [c1#2, upper(c1#2) AS _groupingexpression#5]
+  //    +- Exchange hashpartitioning(upper_value#3, 200)
+  //       +- Project [value#1 AS c1#2, upper(value#1) AS upper_value#3]
+  // nonAttributeAliasesMap is: upper_value#3 -> upper(value#1)
+  // attributeAliasesMap is:    value#1 -> c1#2
+  // current partitioning is:   hashpartitioning(upper_value#3, 200)
+  // The extract steps:
+  //   1. Transform current partitioning to hashpartitioning(upper(value#1), 200)
+  //   2. Then transform it to hashpartitioning(upper(c1#2), 200)
+  //   3. Then normalize it to hashpartitioning(upper(_groupingexpression#5), 200)
   protected def extractFromChildren(exp: Expression): Expression = {
     exp.transformDown {
       case a: Attribute => nonAttributeAliasesMap.getOrElse(a.canonicalized, a)

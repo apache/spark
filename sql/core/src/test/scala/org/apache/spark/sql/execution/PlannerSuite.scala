@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_COL, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.functions._
@@ -1098,8 +1098,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         val projects = collect(planned) { case p: ProjectExec => p }
         assert(projects.exists(_.outputOrdering match {
           case Seq(SortOrder(_, Ascending, NullsFirst, sameOrderExprs)) =>
-            sameOrderExprs.size == 1 && sameOrderExprs.head.isInstanceOf[AttributeReference] &&
-              sameOrderExprs.head.asInstanceOf[AttributeReference].name == "t2id"
+            sameOrderExprs.nonEmpty && sameOrderExprs.head.isInstanceOf[AttributeReference] &&
+              sameOrderExprs.exists(_.asInstanceOf[AttributeReference].name == "t2id")
           case _ => false
         }))
       }
@@ -1309,6 +1309,104 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
     assert(topKs.size == 1)
     assert(sorts.isEmpty)
+  }
+
+  test("SPARK-40764: Extract partitioning from children's output expressions") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t1", "t2") {
+        Seq("a").toDF().createTempView("t1")
+        Seq("A").toDF().createTempView("t2")
+        val case1 =
+          """
+            |SELECT Upper(tmp.value),
+            |       Max(tmp.value)
+            |FROM   (SELECT value,
+            |               Upper(value) AS upper_value
+            |        FROM   t1) tmp
+            |       JOIN t2
+            |         ON tmp.upper_value = t2.value
+            |GROUP  BY Upper(tmp.value)
+          """.stripMargin
+
+        val case2 =
+          """
+            |SELECT upper(tmp1.c1),
+            |       max(tmp1.c1)
+            |FROM   (SELECT value AS c1,
+            |               Upper(value) AS upper_value
+            |        FROM   t1) tmp1
+            |       JOIN (SELECT value AS c2 FROM t2) tmp2
+            |         ON tmp1.upper_value = tmp2.c2
+            |GROUP  BY upper(tmp1.c1)
+          """.stripMargin
+
+        Seq(case1, case2).foreach { sqlStr =>
+          val df = sql(sqlStr)
+
+          val numShuffles = collect(df.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }
+          val numSorts = collect(df.queryExecution.executedPlan) {
+            case e: SortExec => e
+          }
+          // before: numShuffles is 3, numSorts is 4
+          assert(numShuffles.size === 2)
+          assert(numSorts.size === 2)
+        }
+      }
+    }
+  }
+
+  test("SPARK-40764: Extract partitioning from reused exchange") {
+    withTable("web_sales", "date_dim") {
+      spark.sql(
+        """
+          |CREATE TABLE web_sales
+          |  (
+          |     ws_item_sk      INT,
+          |     ws_sales_price  DECIMAL(7, 2),
+          |     ws_sold_date_sk INT
+          |  ) using parquet
+        """.stripMargin)
+      spark.sql("CREATE TABLE date_dim(d_date_sk INT, d_date DATE) using parquet")
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val df = sql(
+          """
+            |WITH web_tv
+            |     AS (SELECT ws_item_sk           item_sk,
+            |                d_date,
+            |                sum(ws_sales_price)  sumws,
+            |                row_number() OVER (partition BY ws_item_sk ORDER BY d_date) rk
+            |         FROM   web_sales,
+            |                date_dim
+            |         WHERE  ws_sold_date_sk = d_date_sk
+            |         GROUP  BY ws_item_sk,
+            |                   d_date)
+            |SELECT v1.item_sk,
+            |       v1.sumws,
+            |       Sum(v2.sumws) cume_sales
+            |FROM   web_tv v1,
+            |       web_tv v2
+            |WHERE  v1.item_sk = v2.item_sk
+            |       AND v1.rk >= v2.rk
+            |GROUP  BY v1.item_sk,
+            |          v1.sumws
+          """.stripMargin)
+
+        val numShuffles = collect(df.queryExecution.executedPlan) {
+          case e: ShuffleExchangeExec => e
+        }
+        val numSorts = collect(df.queryExecution.executedPlan) {
+          case e: SortExec => e
+        }
+        // before: numShuffles is 6, numSorts is 6
+        assert(numShuffles.size === 5)
+        assert(numSorts.size === 5)
+
+        assert(ValidateRequirements.validate(df.queryExecution.executedPlan))
+      }
+    }
   }
 }
 
