@@ -24,15 +24,14 @@ import java.nio.channels.WritableByteChannel
 import com.google.common.io.ByteStreams
 import com.google.common.primitives.UnsignedBytes
 import org.apache.commons.io.IOUtils
-import org.apache.spark.SparkEnv
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.config
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.util.{ByteArrayWritableChannel, LimitedInputStream}
 import org.apache.spark.storage.{EncryptedManagedBuffer, StorageUtils}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
-import org.apache.spark.util.io.ChunkedByteBuffer.writeBufferToDest
 
 /**
  * Read-only byte buffer which is physically stored as multiple chunks rather than a single
@@ -96,9 +95,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
    * write to stream with zero copy if possible
    */
   def writeToStream(out: OutputStream): Unit = {
-    var buffer: Array[Byte] = null
-    val bufferLen = 1024 * 1024
-    writeBufferToDest(this, out.write)
+    ChunkedByteBuffer.writeBufferToDest(this, out.write)
   }
 
   /**
@@ -109,7 +106,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
     out.writeInt(chunks.length)
     chunks.foreach(buffer => out.writeInt(buffer.limit()))
     chunks.foreach(buffer => out.writeBoolean(buffer.isDirect))
-    writeBufferToDest(this, out.write)
+    ChunkedByteBuffer.writeBufferToDest(this, out.write)
   }
 
   override def readExternal(in: ObjectInput): Unit = {
@@ -119,7 +116,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
     val chunksDirect = indices.map(_ => in.readBoolean())
     val chunks = new Array[ByteBuffer](chunksNum)
 
-    val copyBufferLen = 1024 * 1024
+    val copyBufferLen = ChunkedByteBuffer.COPY_BUFFER_LEN
     val copyBuffer: Array[Byte] = if (chunksDirect.exists(identity)) {
       new Array[Byte](copyBufferLen)
     } else {
@@ -238,6 +235,8 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
 
 private[spark] object ChunkedByteBuffer {
 
+  val COPY_BUFFER_LEN: Int = 1024 * 1024
+
   def fromManagedBuffer(data: ManagedBuffer): ChunkedByteBuffer = {
     data match {
       case f: FileSegmentManagedBuffer =>
@@ -285,7 +284,7 @@ private[spark] object ChunkedByteBuffer {
       src: ChunkedByteBuffer,
       write: (Array[Byte], Int, Int) => Unit): Unit = {
     var buffer: Array[Byte] = null
-    val bufferLen = 1024 * 1024
+    val bufferLen = COPY_BUFFER_LEN
 
     src.chunks.foreach { chunk => {
       if (chunk.hasArray) {
