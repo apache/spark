@@ -78,28 +78,6 @@ class ChunkedByteBufferSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
-  test("writeToStream()") {
-    val byteArray = (0 until 1024 * 1024 * 2).map(_.toByte).toArray
-    val chunkedByteBuffer = new ChunkedByteBuffer(Array(ByteBuffer.wrap(byteArray)))
-    val baos = new ByteArrayOutputStream()
-    chunkedByteBuffer.writeToStream(baos)
-    assert(baos.toByteArray.sameElements(byteArray))
-    assert(chunkedByteBuffer.chunks.forall(_.position() == 0))
-  }
-
-  test("writeToStream() should handle off-heap ByteBuffer properly") {
-    val byteArray = (0 until 1024 * 1024 * 2).map(_.toByte).toArray
-    val offHeapBuffer = ByteBuffer.allocateDirect(1024 * 1024 * 2)
-    offHeapBuffer.rewind()
-    offHeapBuffer.put(byteArray)
-    offHeapBuffer.rewind()
-    val chunkedByteBuffer = new ChunkedByteBuffer(Array(offHeapBuffer))
-    val baos = new ByteArrayOutputStream()
-    chunkedByteBuffer.writeToStream(baos)
-    assert(baos.toByteArray.sameElements(byteArray))
-    assert(chunkedByteBuffer.chunks.forall(_.position() == 0))
-  }
-
   test("Externalizable: writeExternal() and readExternal()") {
     // intentionally generate arrays of different len, in order to verify the chunks layout
     // is preserved after ser/deser

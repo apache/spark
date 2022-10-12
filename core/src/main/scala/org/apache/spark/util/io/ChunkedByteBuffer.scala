@@ -92,13 +92,6 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
   }
 
   /**
-   * write to stream with zero copy if possible
-   */
-  def writeToStream(out: OutputStream): Unit = {
-    ChunkedByteBuffer.writeBufferToDest(this, out.write)
-  }
-
-  /**
    * write to ObjectOutput with zero copy if possible
    */
   override def writeExternal(out: ObjectOutput): Unit = {
@@ -106,7 +99,29 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
     out.writeInt(chunks.length)
     chunks.foreach(buffer => out.writeInt(buffer.limit()))
     chunks.foreach(buffer => out.writeBoolean(buffer.isDirect))
-    ChunkedByteBuffer.writeBufferToDest(this, out.write)
+    var buffer: Array[Byte] = null
+    val bufferLen = ChunkedByteBuffer.COPY_BUFFER_LEN
+
+    chunks.foreach { chunk => {
+      if (chunk.hasArray) {
+        // zero copy if the bytebuffer is backed by bytes array
+        out.write(chunk.array(), chunk.arrayOffset(), chunk.limit())
+      } else {
+        // fallback to copy approach
+        if (buffer == null) {
+          buffer = new Array[Byte](bufferLen)
+        }
+        val originalPos = chunk.position()
+        chunk.rewind()
+        var bytesToRead = Math.min(chunk.remaining(), bufferLen)
+        while (bytesToRead > 0) {
+          chunk.get(buffer, 0, bytesToRead)
+          out.write(buffer, 0, bytesToRead)
+          bytesToRead = Math.min(chunk.remaining(), bufferLen)
+        }
+        chunk.position(originalPos)
+      }
+    }}
   }
 
   override def readExternal(in: ObjectInput): Unit = {
@@ -271,41 +286,6 @@ private[spark] object ChunkedByteBuffer {
       out.close()
     }
     out.toChunkedByteBuffer
-  }
-
-  /**
-   * util function writing ChunkedByteBuffer to destination with zero copy if possible(when
-   * ChunkedByteBuffer is backed by bytes array)
-   * @param src ChunkedByteBuffer as src
-   * @param write write function writing data to destination, following the semantic of
-   *              java.io.outputStream.write(buffer Array[Byte], off Int, len Int)
-   */
-  private def writeBufferToDest(
-      src: ChunkedByteBuffer,
-      write: (Array[Byte], Int, Int) => Unit): Unit = {
-    var buffer: Array[Byte] = null
-    val bufferLen = COPY_BUFFER_LEN
-
-    src.chunks.foreach { chunk => {
-      if (chunk.hasArray) {
-        // zero copy if the bytebuffer is backed by bytes array
-        write(chunk.array(), chunk.arrayOffset(), chunk.limit())
-      } else {
-        // fallback to copy approach
-        if (buffer == null) {
-          buffer = new Array[Byte](bufferLen)
-        }
-        val originalPos = chunk.position()
-        chunk.rewind()
-        var bytesToRead = Math.min(chunk.remaining(), bufferLen)
-        while (bytesToRead > 0) {
-          chunk.get(buffer, 0, bytesToRead)
-          write(buffer, 0, bytesToRead)
-          bytesToRead = Math.min(chunk.remaining(), bufferLen)
-        }
-        chunk.position(originalPos)
-      }
-    }}
   }
 }
 
