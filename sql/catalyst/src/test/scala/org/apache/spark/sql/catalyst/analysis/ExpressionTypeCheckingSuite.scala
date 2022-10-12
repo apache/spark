@@ -83,6 +83,16 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       parameters = messageParameters)
   }
 
+  def assertErrorForWrongNumParameters(
+      expr: Expression, messageParameters: Map[String, String]): Unit = {
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(expr)
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      parameters = messageParameters)
+  }
+
   def assertForWrongType(expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
       exception = intercept[AnalysisException] {
@@ -526,9 +536,24 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
 
   test("check types for Greatest/Least") {
     for (operator <- Seq[(Seq[Expression] => Expression)](Greatest, Least)) {
-      assertError(operator(Seq($"booleanField")), "requires at least two arguments")
-      assertError(operator(Seq($"intField", $"stringField")),
-        "should all have the same type")
+      val expr1 = operator(Seq($"booleanField"))
+      assertErrorForWrongNumParameters(
+        expr = expr1,
+        messageParameters = Map(
+          "sqlExpr" -> toSQLExpr(expr1),
+          "actualNum" -> "1")
+      )
+
+      val expr2 = operator(Seq($"intField", $"stringField"))
+      assertErrorForDataDifferingTypes(
+        expr = expr2,
+        messageParameters = Map(
+          "sqlExpr" -> toSQLExpr(expr2),
+          "functionName" -> toSQLId(expr2.prettyName),
+          "dataType" -> "[\"INT\", \"STRING\"]"
+        )
+      )
+
       val expr3 = operator(Seq($"mapField", $"mapField"))
       assertErrorForOrderingTypes(
         expr = expr3,
