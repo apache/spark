@@ -150,7 +150,7 @@ def _test() -> None:
     import sys
     from pyspark.testing.utils import search_jar
 
-    protobuf_jar = search_jar("connector/protobuf", "spark-protobuf", "spark-protobuf")
+    protobuf_jar = search_jar("connector/protobuf", "spark-protobuf-assembly-", "spark-protobuf")
     if protobuf_jar is None:
         print(
             "Skipping all Protobuf Python tests as the optional Protobuf project was "

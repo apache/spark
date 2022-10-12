@@ -282,6 +282,17 @@ connect = Module(
     ],
 )
 
+protobuf = Module(
+    name="protobuf",
+    dependencies=[sql],
+    source_file_regexes=[
+        "connector/protobuf",
+    ],
+    sbt_test_goals=[
+        "protobuf/test",
+    ],
+)
+
 sketch = Module(
     name="sketch",
     dependencies=[tags],
@@ -423,7 +434,7 @@ pyspark_core = Module(
 
 pyspark_sql = Module(
     name="pyspark-sql",
-    dependencies=[pyspark_core, hive, avro],
+    dependencies=[pyspark_core, hive, avro, protobuf],
     source_file_regexes=["python/pyspark/sql"],
     python_test_goals=[
         # doctests
@@ -443,6 +454,7 @@ pyspark_sql = Module(
         "pyspark.sql.udf",
         "pyspark.sql.window",
         "pyspark.sql.avro.functions",
+        "pyspark.sql.protobuf.functions",
         "pyspark.sql.pandas.conversion",
         "pyspark.sql.pandas.map_ops",
         "pyspark.sql.pandas.group_ops",
