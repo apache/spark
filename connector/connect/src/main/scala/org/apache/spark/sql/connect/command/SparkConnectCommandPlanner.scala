@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.StringType
 
 final case class InvalidCommandInput(
     private val message: String = "",
-    private val cause: Throwable = None.orNull)
+    private val cause: Throwable = null)
     extends Exception(message, cause)
 
 @Unstable
