@@ -308,7 +308,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             with self.assertRaisesRegex(
                 PythonException,
                 "Column names of the returned pandas.DataFrame do not match specified schema. "
-                "Missing: mean Unexpected: median, std",
+                "Missing: mean Unexpected: median, std Schema: id, mean\n",
             ):
                 self._test_apply_in_pandas(
                     lambda key, pdf: pd.DataFrame(
@@ -321,7 +321,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             with self.assertRaisesRegex(
                 PythonException,
                 "Number of columns of the returned pandas.DataFrame doesn't match "
-                "specified schema. Expected: 2 Actual: 3",
+                "specified schema. Expected: 2 Actual: 3 Schema: id, mean\n",
             ):
                 self._test_apply_in_pandas(
                     lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(), pdf.v.std())])
@@ -555,7 +555,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                 with self.assertRaisesRegex(
                     PythonException,
                     "RuntimeError: Column names of the returned pandas.DataFrame do not match "
-                    "specified schema. Missing: id Unexpected: iid",
+                    "specified schema. Missing: id Unexpected: iid Schema: id, v\n",
                 ):
                     grouped_df.apply(column_name_typo).collect()
                 with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
