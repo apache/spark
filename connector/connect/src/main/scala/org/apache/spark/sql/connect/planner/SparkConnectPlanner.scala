@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttrib
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sample, SubqueryAlias}
 import org.apache.spark.sql.types._
 
 final case class InvalidPlanInput(
@@ -62,6 +62,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
       case proto.Relation.RelTypeCase.LOCAL_RELATION =>
         transformLocalRelation(rel.getLocalRelation)
+      case proto.Relation.RelTypeCase.SAMPLE => transformSample(rel.getSample)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -70,6 +71,21 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
     session.sessionState.sqlParser.parsePlan(sql.getQuery)
+  }
+
+  /**
+   * All fields of [[proto.Sample]] are optional. However, given those are proto primitive types,
+   * we cannot differentiate if the fied is not or set when the field's value equals to the type
+   * default value. In the future if this ever become a problem, one solution could be that to wrap
+   * such fields into proto messages.
+   */
+  private def transformSample(rel: proto.Sample): LogicalPlan = {
+    Sample(
+      rel.getLowerBound,
+      rel.getUpperBound,
+      rel.getWithReplacement,
+      rel.getSeed,
+      transformRelation(rel.getInput))
   }
 
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
