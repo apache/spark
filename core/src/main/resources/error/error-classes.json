@@ -3533,7 +3533,7 @@
   },
   "_LEGACY_ERROR_TEMP_2195" : {
     "message" : [
-         "<cnf> when creating Hive client using classpath: <execJars> Please make sure that jars for your version of hive and hadoop are included in the paths passed to <key>."
+      "<cnf> when creating Hive client using classpath: <execJars> Please make sure that jars for your version of hive and hadoop are included in the paths passed to <key>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2196" : {

@@ -1549,7 +1549,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2177",
       messageParameters = Map(
-        "FailFastMode" -> FailFastMode.name),
+        "failFastMode" -> FailFastMode.name),
       cause = e)
   }
 
