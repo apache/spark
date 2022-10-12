@@ -219,6 +219,44 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
         self._test_merge_empty(fn=merge_pandas)
 
+    def test_apply_in_pandas_returning_incompatible_type(self):
+        for safely in [True, False]:
+            with self.subTest(convertToArrowArraySafely=safely), self.sql_conf(
+                {"spark.sql.execution.pandas.convertToArrowArraySafely": safely}
+            ), QuietTest(self.sc):
+                # sometimes we see ValueErrors
+                with self.subTest(convert="string to double"):
+                    expected = (
+                        "ValueError: Exception thrown when converting pandas\\.Series \\(object\\) "
+                        "with name 'k' to Arrow Array \\(double\\)\\."
+                    )
+                    if safely:
+                        expected = expected + (
+                            " It can be caused by overflows or other "
+                            "unsafe conversions warned by Arrow\\. Arrow safe type check "
+                            "can be disabled by using SQL config "
+                            "`spark\\.sql\\.execution\\.pandas\\.convertToArrowArraySafely`\\."
+                        )
+                    self._test_merge_error(
+                        fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": ["2.0"]}),
+                        output_schema="id long, k double",
+                        error_class=PythonException,
+                        error_message_regex=expected,
+                    )
+
+                # sometimes we see TypeErrors
+                with self.subTest(convert="double to string"):
+                    expected = (
+                        "TypeError: Exception thrown when converting pandas\\.Series \\(float64\\) "
+                        "with name 'k' to Arrow Array \\(string\\)\\.\n"
+                    )
+                    self._test_merge_error(
+                        fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": [2.0]}),
+                        output_schema="id long, k string",
+                        error_class=PythonException,
+                        error_message_regex=expected,
+                    )
+
     def test_mixed_scalar_udfs_followed_by_cogrouby_apply(self):
         df = self.spark.range(0, 10).toDF("v1")
         df = df.withColumn("v2", udf(lambda x: x + 1, "int")(df["v1"])).withColumn(

@@ -216,7 +216,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             series = [series]
         series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
-        def create_array(s, t):
+        def create_array(s, t, n):
             if hasattr(s.array, "__arrow_array__"):
                 mask = None
             else:
@@ -231,18 +231,25 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 s = s.astype(s.dtypes.categories.dtype)
             try:
                 array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
+            except TypeError as e:
+                error_msg = (
+                    "Exception thrown when converting pandas.Series (%s) "
+                    "with name '%s' to Arrow Array (%s)."
+                )
+                raise TypeError(error_msg % (s.dtype, n, t)) from e
             except ValueError as e:
+                error_msg = (
+                    "Exception thrown when converting pandas.Series (%s) "
+                    "with name '%s' to Arrow Array (%s)."
+                )
                 if self._safecheck:
-                    error_msg = (
-                        "Exception thrown when converting pandas.Series (%s) to "
-                        + "Arrow Array (%s). It can be caused by overflows or other "
-                        + "unsafe conversions warned by Arrow. Arrow safe type check "
-                        + "can be disabled by using SQL config "
-                        + "`spark.sql.execution.pandas.convertToArrowArraySafely`."
+                    error_msg = error_msg + (
+                        " It can be caused by overflows or other "
+                        "unsafe conversions warned by Arrow. Arrow safe type check "
+                        "can be disabled by using SQL config "
+                        "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                     )
-                    raise ValueError(error_msg % (s.dtype, t)) from e
-                else:
-                    raise e
+                raise ValueError(error_msg % (s.dtype, n, t)) from e
             return array
 
         arrs = []
@@ -260,19 +267,20 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 # Assign result columns by schema name if user labeled with strings
                 elif self._assign_cols_by_name and any(isinstance(name, str) for name in s.columns):
                     arrs_names = [
-                        (create_array(s[field.name], field.type), field.name) for field in t
+                        (create_array(s[field.name], field.type, field.name), field.name)
+                        for field in t
                     ]
                 # Assign result columns by  position
                 else:
                     arrs_names = [
-                        (create_array(s[s.columns[i]], field.type), field.name)
+                        (create_array(s[s.columns[i]], field.type, field.name), field.name)
                         for i, field in enumerate(t)
                     ]
 
                 struct_arrs, struct_names = zip(*arrs_names)
                 arrs.append(pa.StructArray.from_arrays(struct_arrs, struct_names))
             else:
-                arrs.append(create_array(s, t))
+                arrs.append(create_array(s, t, str(t)))
 
         return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 

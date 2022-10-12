@@ -330,6 +330,42 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
     def test_apply_in_pandas_returning_empty_dataframe(self):
         self._test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame())
 
+    def test_apply_in_pandas_returning_incompatible_type(self):
+        for safely in [True, False]:
+            with self.subTest(convertToArrowArraySafely=safely), self.sql_conf(
+                {"spark.sql.execution.pandas.convertToArrowArraySafely": safely}
+            ), QuietTest(self.sc):
+                # sometimes we see ValueErrors
+                with self.subTest(convert="string to double"):
+                    expected = (
+                        "ValueError: Exception thrown when converting pandas\\.Series \\(object\\) "
+                        "with name 'mean' to Arrow Array \\(double\\)\\."
+                    )
+                    if safely:
+                        expected = expected + (
+                            " It can be caused by overflows or other "
+                            "unsafe conversions warned by Arrow\\. Arrow safe type check "
+                            "can be disabled by using SQL config "
+                            "`spark\\.sql\\.execution\\.pandas\\.convertToArrowArraySafely`\\."
+                        )
+                    with self.assertRaisesRegex(PythonException, expected + "\n"):
+                        self._test_apply_in_pandas(
+                            lambda key, pdf: pd.DataFrame([key + (str(pdf.v.mean()),)]),
+                            output_schema="id long, mean double",
+                        )
+
+                # sometimes we see TypeErrors
+                with self.subTest(convert="double to string"):
+                    with self.assertRaisesRegex(
+                        PythonException,
+                        "TypeError: Exception thrown when converting pandas\\.Series \\(float64\\) "
+                        "with name 'mean' to Arrow Array \\(string\\)\\.\n",
+                    ):
+                        self._test_apply_in_pandas(
+                            lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(),)]),
+                            output_schema="id long, mean string",
+                        )
+
     def test_datatype_string(self):
         df = self.data
 
@@ -729,14 +765,11 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         )
         self.assertEqual(row.asDict(), Row(column=1, score=0.5).asDict())
 
-    def _test_apply_in_pandas(self, f):
+    def _test_apply_in_pandas(self, f, output_schema="id long, mean double"):
         df = self.data
 
         result = (
-            df.groupby("id")
-            .applyInPandas(f, schema="id long, mean double")
-            .sort("id", "mean")
-            .toPandas()
+            df.groupby("id").applyInPandas(f, schema=output_schema).sort("id", "mean").toPandas()
         )
         expected = df.select("id").distinct().withColumn("mean", lit(24.5)).toPandas()
 
