@@ -45,7 +45,6 @@ from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
     BooleanType,
     DoubleType,
-    IntegralType,
     LongType,
     NumericType,
 )
@@ -1421,32 +1420,16 @@ class Frame(object, metaclass=ABCMeta):
         def prod(psser: "Series") -> Column:
             spark_type = psser.spark.data_type
             spark_column = psser.spark.column
-
-            if not skipna:
-                spark_column = F.when(spark_column.isNull(), np.nan).otherwise(spark_column)
-
             if isinstance(spark_type, BooleanType):
-                scol = F.min(F.coalesce(spark_column, F.lit(True))).cast(LongType())
-            elif isinstance(spark_type, NumericType):
-                num_zeros = F.sum(F.when(spark_column == 0, 1).otherwise(0))
-                sign = F.when(
-                    F.sum(F.when(spark_column < 0, 1).otherwise(0)) % 2 == 0, 1
-                ).otherwise(-1)
-
-                scol = F.when(num_zeros > 0, 0).otherwise(
-                    sign * F.exp(F.sum(F.log(F.abs(spark_column))))
-                )
-
-                if isinstance(spark_type, IntegralType):
-                    scol = F.round(scol).cast(LongType())
-            else:
+                spark_column = spark_column.cast(LongType())
+            elif not isinstance(spark_type, NumericType):
                 raise TypeError(
                     "Could not convert {} ({}) to numeric".format(
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
 
-            return F.coalesce(scol, F.lit(1))
+            return SF.product(spark_column, skipna)
 
         return self._reduce_for_stat_function(
             prod,

@@ -913,8 +913,17 @@ class DataFrameAggregateSuite extends QueryTest
       val error = intercept[AnalysisException] {
         sql("SELECT max_by(x, y) FROM tempView").show
       }
-      assert(
-        error.message.contains("function max_by does not support ordering on type map<int,string>"))
+      checkError(
+        exception = error,
+        errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+        sqlState = None,
+        parameters = Map(
+          "functionName" -> "function max_by",
+          "dataType" -> "\"MAP<INT, STRING>\"",
+          "sqlExpr" -> "\"max_by(x, y)\""
+        ),
+        context = ExpectedContext(fragment = "max_by(x, y)", start = 7, stop = 18)
+      )
     }
   }
 
@@ -974,8 +983,17 @@ class DataFrameAggregateSuite extends QueryTest
       val error = intercept[AnalysisException] {
         sql("SELECT min_by(x, y) FROM tempView").show
       }
-      assert(
-        error.message.contains("function min_by does not support ordering on type map<int,string>"))
+      checkError(
+        exception = error,
+        errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+        sqlState = None,
+        parameters = Map(
+          "functionName" -> "function min_by",
+          "dataType" -> "\"MAP<INT, STRING>\"",
+          "sqlExpr" -> "\"min_by(x, y)\""
+        ),
+        context = ExpectedContext(fragment = "min_by(x, y)", start = 7, stop = 18)
+      )
     }
   }
 
