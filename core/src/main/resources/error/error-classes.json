@@ -3678,5 +3678,35 @@
     "message" : [
       "Failed to merge incompatible data types ${leftCatalogString} and ${rightCatalogString}"
     ]
+  },
+  "_LEGACY_ERROR_TEMP_2126" : {
+    "message" : [
+      "The accuracy or percentage provided must be a constant literal"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2127" : {
+    "message" : [
+      "The accuracy provided must be a literal between (0, <maxValue>] (current value = <accuracy>)"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2128" : {
+    "message" : [
+      "Percentage value must not be null"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2129" : {
+    "message" : [
+      "All percentage values must be between 0.0 and 1.0 (current = <percentages>)"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2130" : {
+    "message" : [
+      "The percentage(s) must be a constant literal, but got <expression>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2131" : {
+    "message" : [
+      "Percentage(s) must be between 0.0 and 1.0, but got <expression>"
+    ]
   }
 }
