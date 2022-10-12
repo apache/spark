@@ -155,6 +155,7 @@ private[sql] object ProtobufUtils extends Logging {
       fileDescriptorSet = DescriptorProtos.FileDescriptorSet.parseFrom(dscFile)
     } catch {
       case ex: InvalidProtocolBufferException =>
+        // TODO move all the exceptions to core/src/main/resources/error/error-classes.json
         throw new RuntimeException("Error parsing descriptor byte[] into Descriptor object", ex)
       case ex: IOException =>
         throw new RuntimeException(

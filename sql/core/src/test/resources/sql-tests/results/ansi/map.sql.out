@@ -69,7 +69,23 @@ select map_contains_key(map('1', 'a', '2', 'b'), 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'map_contains_key(map('1', 'a', '2', 'b'), 1)' due to data type mismatch: Input to function map_contains_key should have been map followed by a value with same key type, but it's [map<string,string>, int].; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_CONTAINS_KEY_DIFF_TYPES",
+  "messageParameters" : {
+    "dataType" : "\"MAP\"",
+    "functionName" : "map_contains_key",
+    "leftType" : "\"MAP<STRING, STRING>\"",
+    "rightType" : "\"INT\"",
+    "sqlExpr" : "\"map_contains_key(map(1, a, 2, b), 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 51,
+    "fragment" : "map_contains_key(map('1', 'a', '2', 'b'), 1)"
+  } ]
+}
 
 
 -- !query
@@ -78,4 +94,20 @@ select map_contains_key(map(1, 'a', 2, 'b'), '1')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'map_contains_key(map(1, 'a', 2, 'b'), '1')' due to data type mismatch: Input to function map_contains_key should have been map followed by a value with same key type, but it's [map<int,string>, string].; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_CONTAINS_KEY_DIFF_TYPES",
+  "messageParameters" : {
+    "dataType" : "\"MAP\"",
+    "functionName" : "map_contains_key",
+    "leftType" : "\"MAP<INT, STRING>\"",
+    "rightType" : "\"STRING\"",
+    "sqlExpr" : "\"map_contains_key(map(1, a, 2, b), 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 49,
+    "fragment" : "map_contains_key(map(1, 'a', 2, 'b'), '1')"
+  } ]
+}

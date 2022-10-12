@@ -428,12 +428,28 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             metrics.foreach(m => checkMetric(m, m))
 
           // see Analyzer.ResolveUnpivot
-          case up: Unpivot
-            if up.childrenResolved && up.ids.forall(_.resolved) && up.values.isEmpty =>
+          // given ids must be AttributeReference when no values given
+          case up @Unpivot(Some(ids), None, _, _, _, _)
+            if up.childrenResolved && ids.forall(_.resolved) &&
+              ids.exists(! _.isInstanceOf[AttributeReference]) =>
+            throw QueryCompilationErrors.unpivotRequiresAttributes("id", "value", up.ids.get)
+          // given values must be AttributeReference when no ids given
+          case up @Unpivot(None, Some(values), _, _, _, _)
+            if up.childrenResolved && values.forall(_.forall(_.resolved)) &&
+              values.exists(_.exists(! _.isInstanceOf[AttributeReference])) =>
+            throw QueryCompilationErrors.unpivotRequiresAttributes("value", "id", values.flatten)
+          // given values must not be empty seq
+          case up @Unpivot(Some(ids), Some(Seq()), _, _, _, _)
+            if up.childrenResolved && ids.forall(_.resolved) =>
             throw QueryCompilationErrors.unpivotRequiresValueColumns()
+          // all values must have same length as there are value column names
+          case up @Unpivot(Some(ids), Some(values), _, _, _, _)
+            if up.childrenResolved && ids.forall(_.resolved) &&
+              values.exists(_.length != up.valueColumnNames.length) =>
+            throw QueryCompilationErrors.unpivotValueSizeMismatchError(up.valueColumnNames.length)
           // see TypeCoercionBase.UnpivotCoercion
-          case up: Unpivot if !up.valuesTypeCoercioned =>
-            throw QueryCompilationErrors.unpivotValDataTypeMismatchError(up.values)
+          case up: Unpivot if up.canBeCoercioned && !up.valuesTypeCoercioned =>
+            throw QueryCompilationErrors.unpivotValueDataTypeMismatchError(up.values.get)
 
           case Sort(orders, _, _) =>
             orders.foreach { order =>
@@ -493,10 +509,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 if (!dataTypesAreCompatibleFn(dt1, dt2)) {
                   val errorMessage =
                     s"""
-                       |${operator.nodeName} can only be performed on tables with the compatible
+                       |${operator.nodeName} can only be performed on tables with compatible
                        |column types. The ${ordinalNumber(ci)} column of the
                        |${ordinalNumber(ti + 1)} table is ${dt1.catalogString} type which is not
-                       |compatible with ${dt2.catalogString} at same column of first table
+                       |compatible with ${dt2.catalogString} at the same column of the first table
                     """.stripMargin.replace("\n", " ").trim()
                   failAnalysis(errorMessage + extraHintForAnsiTypeCoercionPlan(operator))
                 }

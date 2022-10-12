@@ -62,6 +62,10 @@ object SchemaConverters {
       case STRING => Some(StringType)
       case BYTE_STRING => Some(BinaryType)
       case ENUM => Some(StringType)
+      case MESSAGE if fd.getMessageType.getName == "Duration" =>
+        Some(DayTimeIntervalType.defaultConcreteType)
+      case MESSAGE if fd.getMessageType.getName == "Timestamp" =>
+        Some(TimestampType)
       case MESSAGE if fd.isRepeated && fd.getMessageType.getOptions.hasMapEntry =>
         var keyType: DataType = NullType
         var valueType: DataType = NullType
@@ -106,6 +110,4 @@ object SchemaConverters {
 
   private[protobuf] class IncompatibleSchemaException(msg: String, ex: Throwable = null)
       extends Exception(msg, ex)
-
-  private[protobuf] class UnsupportedProtoValueException(msg: String) extends Exception(msg)
 }

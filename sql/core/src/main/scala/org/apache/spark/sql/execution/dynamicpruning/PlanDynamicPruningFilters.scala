@@ -45,7 +45,7 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.dynamicPartitionPruningEnabled) {
+    if (!conf.dynamicPartitionPruningEnabled && !conf.runtimeRowLevelOperationGroupFilterEnabled) {
       return plan
     }
 

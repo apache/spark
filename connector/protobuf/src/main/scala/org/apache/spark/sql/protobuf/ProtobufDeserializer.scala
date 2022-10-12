@@ -16,13 +16,16 @@
  */
 package org.apache.spark.sql.protobuf
 
+import java.util.concurrent.TimeUnit
+
 import com.google.protobuf.{ByteString, DynamicMessage, Message}
 import com.google.protobuf.Descriptors._
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
 
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils.ProtoMatchedField
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils.toFieldStr
@@ -88,8 +91,7 @@ private[sql] class ProtobufDeserializer(
         val element = iterator.next()
         if (element == null) {
           if (!containsNull) {
-            throw new RuntimeException(
-              s"Array value at path ${toFieldStr(protoElementPath)} is not allowed to be null")
+            throw QueryCompilationErrors.nullableArrayOrMapElementError(protoElementPath)
           } else {
             elementUpdater.setNullAt(i)
           }
@@ -127,9 +129,7 @@ private[sql] class ProtobufDeserializer(
             keyWriter(keyUpdater, i, field.getField(keyField))
             if (field.getField(valueField) == null) {
               if (!valueContainsNull) {
-                throw new RuntimeException(
-                  s"Map value at path ${toFieldStr(protoPath :+ "value")}" +
-                    s" is not allowed to be null")
+                throw QueryCompilationErrors.nullableArrayOrMapElementError(protoPath)
               } else {
                 valueUpdater.setNullAt(i)
               }
@@ -166,9 +166,6 @@ private[sql] class ProtobufDeserializer(
       case (BOOLEAN, BooleanType) =>
         (updater, ordinal, value) => updater.setBoolean(ordinal, value.asInstanceOf[Boolean])
 
-      case (BOOLEAN, ArrayType(BooleanType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, BooleanType, containsNull)
-
       case (INT, IntegerType) =>
         (updater, ordinal, value) => updater.setInt(ordinal, value.asInstanceOf[Int])
 
@@ -178,26 +175,18 @@ private[sql] class ProtobufDeserializer(
       case (INT, ShortType) =>
         (updater, ordinal, value) => updater.setShort(ordinal, value.asInstanceOf[Short])
 
-      case (INT, ArrayType(IntegerType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, IntegerType, containsNull)
+      case  (BOOLEAN | INT | FLOAT | DOUBLE | LONG | STRING | ENUM | BYTE_STRING,
+      ArrayType(dataType: DataType, containsNull)) if protoType.isRepeated =>
+        newArrayWriter(protoType, protoPath, catalystPath, dataType, containsNull)
 
       case (LONG, LongType) =>
         (updater, ordinal, value) => updater.setLong(ordinal, value.asInstanceOf[Long])
 
-      case (LONG, ArrayType(LongType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, LongType, containsNull)
-
       case (FLOAT, FloatType) =>
         (updater, ordinal, value) => updater.setFloat(ordinal, value.asInstanceOf[Float])
 
-      case (FLOAT, ArrayType(FloatType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, FloatType, containsNull)
-
       case (DOUBLE, DoubleType) =>
         (updater, ordinal, value) => updater.setDouble(ordinal, value.asInstanceOf[Double])
-
-      case (DOUBLE, ArrayType(DoubleType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, DoubleType, containsNull)
 
       case (STRING, StringType) =>
         (updater, ordinal, value) =>
@@ -205,9 +194,6 @@ private[sql] class ProtobufDeserializer(
             case s: String => UTF8String.fromString(s)
           }
           updater.set(ordinal, str)
-
-      case (STRING, ArrayType(StringType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, StringType, containsNull)
 
       case (BYTE_STRING, BinaryType) =>
         (updater, ordinal, value) =>
@@ -217,11 +203,28 @@ private[sql] class ProtobufDeserializer(
           }
           updater.set(ordinal, byte_array)
 
-      case (BYTE_STRING, ArrayType(BinaryType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, BinaryType, containsNull)
-
       case (MESSAGE, MapType(keyType, valueType, valueContainsNull)) =>
         newMapWriter(protoType, protoPath, catalystPath, keyType, valueType, valueContainsNull)
+
+      case (MESSAGE, TimestampType) =>
+        (updater, ordinal, value) =>
+          val secondsField = protoType.getMessageType.getFields.get(0)
+          val nanoSecondsField = protoType.getMessageType.getFields.get(1)
+          val message = value.asInstanceOf[DynamicMessage]
+          val seconds = message.getField(secondsField).asInstanceOf[Long]
+          val nanoSeconds = message.getField(nanoSecondsField).asInstanceOf[Int]
+          val micros = DateTimeUtils.millisToMicros(seconds * 1000)
+          updater.setLong(ordinal, micros + TimeUnit.NANOSECONDS.toMicros(nanoSeconds))
+
+      case (MESSAGE, DayTimeIntervalType(startField, endField)) =>
+        (updater, ordinal, value) =>
+          val secondsField = protoType.getMessageType.getFields.get(0)
+          val nanoSecondsField = protoType.getMessageType.getFields.get(1)
+          val message = value.asInstanceOf[DynamicMessage]
+          val seconds = message.getField(secondsField).asInstanceOf[Long]
+          val nanoSeconds = message.getField(nanoSecondsField).asInstanceOf[Int]
+          val micros = DateTimeUtils.millisToMicros(seconds * 1000)
+          updater.setLong(ordinal, micros + TimeUnit.NANOSECONDS.toMicros(nanoSeconds))
 
       case (MESSAGE, st: StructType) =>
         val writeRecord = getRecordWriter(
@@ -240,9 +243,6 @@ private[sql] class ProtobufDeserializer(
 
       case (ENUM, StringType) =>
         (updater, ordinal, value) => updater.set(ordinal, UTF8String.fromString(value.toString))
-
-      case (ENUM, ArrayType(StringType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, StringType, containsNull)
 
       case _ => throw new IncompatibleSchemaException(incompatibleMsg)
     }

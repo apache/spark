@@ -22,9 +22,9 @@ package spark.connect;
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
 
-// This message describes the logical [[Type]] of something. It does not carry the value
+// This message describes the logical [[DataType]] of something. It does not carry the value
 // itself but only describes it.
-message Type {
+message DataType {
   oneof kind {
     Boolean bool = 1;
     I8 i8 = 2;
@@ -168,20 +168,20 @@ message Type {
   }
 
   message Struct {
-    repeated Type types = 1;
+    repeated DataType types = 1;
     uint32 type_variation_reference = 2;
     Nullability nullability = 3;
   }
 
   message List {
-    Type type = 1;
+    DataType DataType = 1;
     uint32 type_variation_reference = 2;
     Nullability nullability = 3;
   }
 
   message Map {
-    Type key = 1;
-    Type value = 2;
+    DataType key = 1;
+    DataType value = 2;
     uint32 type_variation_reference = 3;
     Nullability nullability = 4;
   }

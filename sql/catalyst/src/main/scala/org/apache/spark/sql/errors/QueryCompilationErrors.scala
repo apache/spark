@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, Ta
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
@@ -101,16 +101,39 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "pivotType" -> pivotCol.dataType.catalogString))
   }
 
+  def unpivotRequiresAttributes(
+      given: String,
+      empty: String,
+      expressions: Seq[NamedExpression]): Throwable = {
+    val nonAttributes = expressions.filterNot(_.isInstanceOf[Attribute]).map(toSQLExpr)
+    new AnalysisException(
+      errorClass = "UNPIVOT_REQUIRES_ATTRIBUTES",
+      messageParameters = Map(
+        "given" -> given,
+        "empty" -> empty,
+        "expressions" -> nonAttributes.mkString(", ")))
+  }
+
   def unpivotRequiresValueColumns(): Throwable = {
     new AnalysisException(
       errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
       messageParameters = Map.empty)
   }
 
-  def unpivotValDataTypeMismatchError(values: Seq[NamedExpression]): Throwable = {
-    val dataTypes = values
+  def unpivotValueSizeMismatchError(names: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "UNPIVOT_VALUE_SIZE_MISMATCH",
+      messageParameters = Map("names" -> names.toString))
+  }
+
+  def unpivotValueDataTypeMismatchError(values: Seq[Seq[NamedExpression]]): Throwable = {
+    val dataTypes = values.map {
+      case Seq(value) => value
+      // wrap multiple values into a struct to get a nice name for them
+      case seq => Some(CreateStruct(seq)).map(e => Alias(e, e.sql)()).get
+    }
       .groupBy(_.dataType)
-      .mapValues(values => values.map(value => toSQLId(value.toString)).sorted)
+      .mapValues(values => values.map(value => toSQLId(value.name)).sorted)
       .mapValues(values => if (values.length > 3) values.take(3) :+ "..." else values)
       .toList.sortBy(_._1.sql)
       .map { case (dataType, values) => s"${toSQLType(dataType)} (${values.mkString(", ")})" }

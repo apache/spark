@@ -22,7 +22,6 @@ import java.util.Map;
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException;
-import org.apache.spark.sql.catalyst.analysis.PartitionAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
 
 /**
@@ -46,15 +45,16 @@ import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
 @Experimental
 public interface SupportsAtomicPartitionManagement extends SupportsPartitionManagement {
 
+  @SuppressWarnings("unchecked")
   @Override
   default void createPartition(
       InternalRow ident,
       Map<String, String> properties)
-      throws PartitionAlreadyExistsException, UnsupportedOperationException {
+      throws PartitionsAlreadyExistException, UnsupportedOperationException {
     try {
       createPartitions(new InternalRow[]{ident}, new Map[]{properties});
     } catch (PartitionsAlreadyExistException e) {
-      throw new PartitionAlreadyExistsException(e.getMessage());
+      throw new PartitionsAlreadyExistException(e.getMessage());
     }
   }
 

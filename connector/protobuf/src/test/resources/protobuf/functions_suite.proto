@@ -21,6 +21,7 @@
 syntax = "proto3";
 
 package org.apache.spark.sql.protobuf;
+
 option java_outer_classname = "SimpleMessageProtos";
 
 message SimpleMessageJavaTypes {
@@ -161,8 +162,29 @@ message recursiveD {
 }
 
 message requiredMsg {
-  optional string key = 1;
+  string key = 1;
   int32 col_1 = 2;
-  optional string col_2 = 3;
-  optional int32 col_3 = 4;
+  string col_2 = 3;
+  int32 col_3 = 4;
+}
+
+// https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/timestamp.proto
+message Timestamp {
+  int64 seconds = 1;
+  int32 nanos = 2;
+}
+
+message timeStampMsg {
+  string key = 1;
+  Timestamp stmp = 2;
+}
+// https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/duration.proto
+message Duration {
+  int64 seconds = 1;
+  int32 nanos = 2;
+}
+
+message durationMsg {
+  string key = 1;
+  Duration duration = 2;
 }

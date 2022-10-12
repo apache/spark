@@ -846,14 +846,6 @@
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
-            <artifactId>netty-codec-http</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-codec-http2</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
             <artifactId>netty-codec-memcache</artifactId>
           </exclusion>
           <exclusion>
@@ -870,19 +862,11 @@
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
-            <artifactId>netty-codec-socks</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
             <artifactId>netty-codec-stomp</artifactId>
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
             <artifactId>netty-codec-xml</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-handler-proxy</artifactId>
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
