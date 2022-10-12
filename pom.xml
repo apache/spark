@@ -3085,6 +3085,9 @@
               <fileset>
                 <directory>spark-warehouse</directory>
               </fileset>
+              <fileset>
+                <directory>dist</directory>
+              </fileset>
             </filesets>
           </configuration>
         </plugin>
