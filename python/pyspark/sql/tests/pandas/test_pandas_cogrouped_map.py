@@ -189,7 +189,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             fn=merge_pandas,
             error_class=PythonException,
             error_message_regex="Column names of the returned pandas.DataFrame "
-            "do not match specified schema. Unexpected: add, more Schema: id, k, v, v2\n",
+            "do not match specified schema.  Unexpected: add, more  Schema: id, k, v, v2\n",
         )
 
     def test_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
@@ -206,7 +206,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             fn=merge_pandas,
             error_class=PythonException,
             error_message_regex="Number of columns of the returned pandas.DataFrame "
-            "doesn't match specified schema. Expected: 4 Actual: 6 Schema: id, k, v, v2\n",
+            "doesn't match specified schema.  Expected: 4  Actual: 6  Schema: id, k, v, v2\n",
         )
 
     def test_apply_in_pandas_returning_empty_dataframe(self):

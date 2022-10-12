@@ -171,9 +171,9 @@ def verify_pandas_result(result, return_type, assign_cols_by_name):
             extra = sorted(list(column_names.difference(field_names)))
             raise RuntimeError(
                 "Column names of the returned pandas.DataFrame do not match specified schema."
-                "{}{} Schema: {}".format(
-                    (" Missing: " + (", ".join(missing))) if missing else "",
-                    (" Unexpected: " + (", ".join(extra))) if extra else "",
+                "{}{}  Schema: {}".format(
+                    ("  Missing: " + (", ".join(missing))) if missing else "",
+                    ("  Unexpected: " + (", ".join(extra))) if extra else "",
                     ", ".join(field.name for field in return_type.fields),
                 )
             )
@@ -181,8 +181,8 @@ def verify_pandas_result(result, return_type, assign_cols_by_name):
         elif len(result.columns) != len(return_type):
             raise RuntimeError(
                 "Number of columns of the returned pandas.DataFrame "
-                "doesn't match specified schema. "
-                "Expected: {} Actual: {} Schema: {}".format(
+                "doesn't match specified schema.  "
+                "Expected: {}  Actual: {}  Schema: {}".format(
                     len(return_type),
                     len(result.columns),
                     ", ".join(field.name for field in return_type.fields),
