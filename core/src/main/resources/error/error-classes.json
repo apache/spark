@@ -2833,11 +2833,6 @@
       "Table or view '<ident>' not found."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1304" : {
-    "message" : [
-      "Unexpected type <className> of the relation <tableName>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1305" : {
     "message" : [
       "Unsupported TableChange <change> in JDBC catalog."
