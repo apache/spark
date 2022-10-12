@@ -45,25 +45,21 @@ package object dsl {
               .build())
           .build()
 
-      def protoQualifiedAttr: proto.Expression.QualifiedAttribute =
-        proto.Expression.QualifiedAttribute.newBuilder()
-          .setName(identifier.mkString("."))
-          .build()
-
-      def protoQualifiedAttrInt: proto.Expression.QualifiedAttribute = protoQualifiedAttrWithType(
-        proto.DataType.newBuilder().setI32(proto.DataType.I32.getDefaultInstance).build())
-
-      private def protoQualifiedAttrWithType(
-          dataType: proto.DataType): proto.Expression.QualifiedAttribute =
-        proto.Expression.QualifiedAttribute.newBuilder()
-          .setName(identifier.mkString("."))
-          .setType(dataType)
+      def protoUnresolvedAttr: proto.Expression.UnresolvedAttribute =
+        proto.Expression.UnresolvedAttribute.newBuilder()
+          .addAllParts(identifier.asJava)
           .build()
     }
 
-    implicit class DslQualifiedAttr(val attr: proto.Expression.QualifiedAttribute) {
+    implicit class DslAttr(attr: proto.Expression.UnresolvedAttribute) {
+      def s: String = attr.getPartsList.asScala.toList.mkString(".")
+
+      /** Creates a new AttributeReference of type int */
+      def int: proto.Expression.QualifiedAttribute = protoQualifiedAttrWithType(
+        proto.DataType.newBuilder().setI32(proto.DataType.I32.getDefaultInstance).build())
+
       def struct(
-          attrs: proto.Expression.QualifiedAttribute*): proto.Expression.QualifiedAttribute = {
+        attrs: proto.Expression.QualifiedAttribute*): proto.Expression.QualifiedAttribute = {
         val structExpr = proto.DataType.Struct.newBuilder()
         for (attr <- attrs) {
           val structField = proto.DataType.StructField.newBuilder()
@@ -72,10 +68,17 @@ package object dsl {
           structExpr.addFields(structField)
         }
         proto.Expression.QualifiedAttribute.newBuilder()
-          .setName(attr.getName)
+          .setName(s)
           .setType(proto.DataType.newBuilder().setStruct(structExpr))
           .build()
       }
+
+      private def protoQualifiedAttrWithType(
+        dataType: proto.DataType): proto.Expression.QualifiedAttribute =
+        proto.Expression.QualifiedAttribute.newBuilder()
+          .setName(s)
+          .setType(dataType)
+          .build()
     }
 
     implicit class DslExpression(val expr: proto.Expression) {

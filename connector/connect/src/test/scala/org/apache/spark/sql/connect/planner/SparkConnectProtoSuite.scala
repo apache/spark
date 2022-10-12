@@ -120,7 +120,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val connectPlan = {
       import org.apache.spark.sql.connect.dsl.expressions._
       transform(createLocalRelationProtoByQualifiedAttributes(
-        Seq("a".protoQualifiedAttr.struct("id".protoQualifiedAttrInt))))
+        Seq("a".protoUnresolvedAttr.struct("id".protoUnresolvedAttr.int))))
     }
     val sparkPlan = LocalRelation($"a".struct($"id".int))
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
