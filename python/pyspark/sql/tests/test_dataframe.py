@@ -571,106 +571,170 @@ class DataFrameTests(ReusedSQLTestCase):
             ["id", "int", "double", "str"],
         )
 
-        with self.subTest(desc="with no identifier and no value columns"):
+        with self.subTest(desc="with none identifier"):
+            with self.assertRaisesRegex(AssertionError, "ids must not be None"):
+                df.unpivot(None, ["int", "double"], "var", "val")
+
+        with self.subTest(desc="with no identifier"):
+            for id in [[], ()]:
+                with self.subTest(ids=id):
+                    actual = df.unpivot(id, ["int", "double"], "var", "val")
+                    self.assertEqual(actual.schema.simpleString(), "struct<var:string,val:double>")
+                    self.assertEqual(
+                        actual.collect(),
+                        [
+                            Row(var="int", value=10.0),
+                            Row(var="double", value=1.0),
+                            Row(var="int", value=20.0),
+                            Row(var="double", value=2.0),
+                            Row(var="int", value=30.0),
+                            Row(var="double", value=3.0),
+                        ],
+                    )
+
+        with self.subTest(desc="with single identifier column"):
+            for id in ["id", ["id"], ("id",)]:
+                with self.subTest(ids=id):
+                    actual = df.unpivot(id, ["int", "double"], "var", "val")
+                    self.assertEqual(
+                        actual.schema.simpleString(),
+                        "struct<id:bigint,var:string,val:double>",
+                    )
+                    self.assertEqual(
+                        actual.collect(),
+                        [
+                            Row(id=1, var="int", value=10.0),
+                            Row(id=1, var="double", value=1.0),
+                            Row(id=2, var="int", value=20.0),
+                            Row(id=2, var="double", value=2.0),
+                            Row(id=3, var="int", value=30.0),
+                            Row(id=3, var="double", value=3.0),
+                        ],
+                    )
+
+        with self.subTest(desc="with multiple identifier columns"):
+            for ids in [["id", "double"], ("id", "double")]:
+                with self.subTest(ids=ids):
+                    actual = df.unpivot(ids, ["int", "double"], "var", "val")
+                    self.assertEqual(
+                        actual.schema.simpleString(),
+                        "struct<id:bigint,double:double,var:string,val:double>",
+                    )
+                    self.assertEqual(
+                        actual.collect(),
+                        [
+                            Row(id=1, double=1.0, var="int", value=10.0),
+                            Row(id=1, double=1.0, var="double", value=1.0),
+                            Row(id=2, double=2.0, var="int", value=20.0),
+                            Row(id=2, double=2.0, var="double", value=2.0),
+                            Row(id=3, double=3.0, var="int", value=30.0),
+                            Row(id=3, double=3.0, var="double", value=3.0),
+                        ],
+                    )
+
+        with self.subTest(desc="with no identifier columns but none value columns"):
             # select only columns that have common data type (double)
-            actual = df.select("id", "int", "double").unpivot(
-                ids=None, values=None, variableColumnName="var", valueColumnName="val"
-            )
+            actual = df.select("id", "int", "double").unpivot([], None, "var", "val")
             self.assertEqual(actual.schema.simpleString(), "struct<var:string,val:double>")
             self.assertEqual(
                 actual.collect(),
                 [
-                    Row(variable="id", value=1.0),
-                    Row(variable="int", value=10.0),
-                    Row(variable="double", value=1.0),
-                    Row(variable="id", value=2.0),
-                    Row(variable="int", value=20.0),
-                    Row(variable="double", value=2.0),
-                    Row(variable="id", value=3.0),
-                    Row(variable="int", value=30.0),
-                    Row(variable="double", value=3.0),
+                    Row(var="id", value=1.0),
+                    Row(var="int", value=10.0),
+                    Row(var="double", value=1.0),
+                    Row(var="id", value=2.0),
+                    Row(var="int", value=20.0),
+                    Row(var="double", value=2.0),
+                    Row(var="id", value=3.0),
+                    Row(var="int", value=30.0),
+                    Row(var="double", value=3.0),
                 ],
             )
 
-        with self.subTest(desc="with no identifier column and multiple value columns"):
-            for id in [None, [], ()]:
-                for values in [["int", "double"], ("int", "double")]:
-                    with self.subTest(ids=id, values=values):
-                        actual = df.unpivot(id, values, "var", "val")
-                        self.assertEqual(
-                            actual.schema.simpleString(), "struct<var:string,val:double>"
-                        )
-                        self.assertEqual(
-                            actual.collect(),
-                            [
-                                Row(variable="int", value=10.0),
-                                Row(variable="double", value=1.0),
-                                Row(variable="int", value=20.0),
-                                Row(variable="double", value=2.0),
-                                Row(variable="int", value=30.0),
-                                Row(variable="double", value=3.0),
-                            ],
-                        )
+        with self.subTest(desc="with single identifier columns but none value columns"):
+            for ids in ["id", ["id"], ("id",)]:
+                with self.subTest(ids=ids):
+                    # select only columns that have common data type (double)
+                    actual = df.select("id", "int", "double").unpivot(ids, None, "var", "val")
+                    self.assertEqual(
+                        actual.schema.simpleString(), "struct<id:bigint,var:string,val:double>"
+                    )
+                    self.assertEqual(
+                        actual.collect(),
+                        [
+                            Row(id=1, var="int", value=10.0),
+                            Row(id=1, var="double", value=1.0),
+                            Row(id=2, var="int", value=20.0),
+                            Row(id=2, var="double", value=2.0),
+                            Row(id=3, var="int", value=30.0),
+                            Row(id=3, var="double", value=3.0),
+                        ],
+                    )
 
-        with self.subTest(desc="with single identifier column and multiple value columns"):
-            for id in ["id", ["id"], ("id",)]:
-                for values in [["int", "double"], ("int", "double")]:
-                    with self.subTest(ids=id, values=values):
-                        actual = df.unpivot(id, values, "var", "val")
-                        self.assertEqual(
-                            actual.schema.simpleString(),
-                            "struct<id:bigint,var:string,val:double>",
-                        )
-                        self.assertEqual(
-                            actual.collect(),
-                            [
-                                Row(id=1, variable="int", value=10.0),
-                                Row(id=1, variable="double", value=1.0),
-                                Row(id=2, variable="int", value=20.0),
-                                Row(id=2, variable="double", value=2.0),
-                                Row(id=3, variable="int", value=30.0),
-                                Row(id=3, variable="double", value=3.0),
-                            ],
-                        )
-
-        with self.subTest(desc="with multiple identifier columns and single given value columns"):
-            for ids in [["id", "double"], ("id", "double")]:
-                for values in ["str", ["str"], ("str",)]:
-                    with self.subTest(ids=ids, values=values):
-                        actual = df.unpivot(ids, values, "var", "val")
-                        self.assertEqual(
-                            actual.schema.simpleString(),
-                            "struct<id:bigint,double:double,var:string,val:string>",
-                        )
-                        self.assertEqual(
-                            actual.collect(),
-                            [
-                                Row(id=1, double=1.0, variable="str", value="one"),
-                                Row(id=2, double=2.0, variable="str", value="two"),
-                                Row(id=3, double=3.0, variable="str", value="three"),
-                            ],
-                        )
-
-        with self.subTest(desc="with multiple identifier columns but no given value columns"):
+        with self.subTest(desc="with multiple identifier columns but none given value columns"):
             for ids in [["id", "str"], ("id", "str")]:
-                for values in [None, [], ()]:
-                    with self.subTest(ids=ids, values=values):
-                        actual = df.unpivot(ids, values, "var", "val")
-                        self.assertEqual(
-                            actual.schema.simpleString(),
-                            "struct<id:bigint,str:string,var:string,val:double>",
-                        )
-                        self.assertEqual(
-                            actual.collect(),
-                            [
-                                Row(id=1, str="one", variable="int", value=10.0),
-                                Row(id=1, str="one", variable="double", value=1.0),
-                                Row(id=2, str="two", variable="int", value=20.0),
-                                Row(id=2, str="two", variable="double", value=2.0),
-                                Row(id=3, str="three", variable="int", value=30.0),
-                                Row(id=3, str="three", variable="double", value=3.0),
-                            ],
-                        )
+                with self.subTest(ids=ids):
+                    actual = df.unpivot(ids, None, "var", "val")
+                    self.assertEqual(
+                        actual.schema.simpleString(),
+                        "struct<id:bigint,str:string,var:string,val:double>",
+                    )
+                    self.assertEqual(
+                        actual.collect(),
+                        [
+                            Row(id=1, str="one", var="int", val=10.0),
+                            Row(id=1, str="one", var="double", val=1.0),
+                            Row(id=2, str="two", var="int", val=20.0),
+                            Row(id=2, str="two", var="double", val=2.0),
+                            Row(id=3, str="three", var="int", val=30.0),
+                            Row(id=3, str="three", var="double", val=3.0),
+                        ],
+                    )
+
+        with self.subTest(desc="with no value columns"):
+            for values in [[], ()]:
+                with self.subTest(values=values):
+                    with self.assertRaisesRegex(
+                        AnalysisException,
+                        r"\[UNPIVOT_REQUIRES_VALUE_COLUMNS] At least one value column "
+                        r"needs to be specified for UNPIVOT, all columns specified as ids.*",
+                    ):
+                        df.unpivot("id", values, "var", "val")
+
+        with self.subTest(desc="with single value column"):
+            for values in ["int", ["int"], ("int",)]:
+                with self.subTest(values=values):
+                    actual = df.unpivot("id", values, "var", "val")
+                    self.assertEqual(
+                        actual.schema.simpleString(), "struct<id:bigint,var:string,val:bigint>"
+                    )
+                    self.assertEqual(
+                        actual.collect(),
+                        [
+                            Row(id=1, var="int", val=10),
+                            Row(id=2, var="int", val=20),
+                            Row(id=3, var="int", val=30),
+                        ],
+                    )
+
+        with self.subTest(desc="with multiple value columns"):
+            for values in [["int", "double"], ("int", "double")]:
+                with self.subTest(values=values):
+                    actual = df.unpivot("id", values, "var", "val")
+                    self.assertEqual(
+                        actual.schema.simpleString(), "struct<id:bigint,var:string,val:double>"
+                    )
+                    self.assertEqual(
+                        actual.collect(),
+                        [
+                            Row(id=1, var="int", val=10.0),
+                            Row(id=1, var="double", val=1.0),
+                            Row(id=2, var="int", val=20.0),
+                            Row(id=2, var="double", val=2.0),
+                            Row(id=3, var="int", val=30.0),
+                            Row(id=3, var="double", val=3.0),
+                        ],
+                    )
 
         with self.subTest(desc="with value columns without common data type"):
             with self.assertRaisesRegex(

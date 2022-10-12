@@ -45,11 +45,6 @@ trait SparkConnectPlanTest {
       .build()
 }
 
-trait SparkConnectSessionTest {
-  protected var spark: SparkSession
-
-}
-
 /**
  * This is a rudimentary test class for SparkConnect. The main goal of these basic tests is to
  * ensure that the transformation from Proto to LogicalPlan works and that the right nodes are
@@ -161,7 +156,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proto.Relation.newBuilder.setJoin(proto.Join.newBuilder.setLeft(readRel)).build()
     intercept[AssertionError](transform(incompleteJoin))
 
-    // Cartesian Product not supported.
+    // Join type JOIN_TYPE_UNSPECIFIED is not supported.
     intercept[InvalidPlanInput] {
       val simpleJoin = proto.Relation.newBuilder
         .setJoin(proto.Join.newBuilder.setLeft(readRel).setRight(readRel))
@@ -185,7 +180,12 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val simpleJoin = proto.Relation.newBuilder
       .setJoin(
-        proto.Join.newBuilder.setLeft(readRel).setRight(readRel).setOn(joinCondition).build())
+        proto.Join.newBuilder
+          .setLeft(readRel)
+          .setRight(readRel)
+          .setJoinType(proto.Join.JoinType.JOIN_TYPE_INNER)
+          .setJoinCondition(joinCondition)
+          .build())
       .build()
 
     val res = transform(simpleJoin)
@@ -217,16 +217,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val agg = proto.Aggregate.newBuilder
       .setInput(readRel)
-      .addAllMeasures(
-        Seq(
-          proto.Aggregate.Measure.newBuilder
-            .setFunction(proto.Aggregate.AggregateFunction.newBuilder
-              .setName("sum")
-              .addArguments(unresolvedAttribute))
-            .build()).asJava)
-      .addGroupingSets(proto.Aggregate.GroupingSet.newBuilder
-        .addAggregateExpressions(unresolvedAttribute)
-        .build())
+      .addResultExpressions(
+        proto.Aggregate.AggregateFunction.newBuilder
+          .setName("sum")
+          .addArguments(unresolvedAttribute))
+      .addGroupingExpressions(unresolvedAttribute)
       .build()
 
     val res = transform(proto.Relation.newBuilder.setAggregate(agg).build())

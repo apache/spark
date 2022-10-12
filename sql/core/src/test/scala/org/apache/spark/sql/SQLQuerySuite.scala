@@ -2674,7 +2674,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val m2 = intercept[AnalysisException] {
         sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
       }.message
-      assert(m2.contains("Except can only be performed on tables with the compatible column types"))
+      assert(m2.contains("Except can only be performed on tables with compatible column types"))
 
       withTable("t", "S") {
         sql("CREATE TABLE t(c struct<f:int>) USING parquet")
