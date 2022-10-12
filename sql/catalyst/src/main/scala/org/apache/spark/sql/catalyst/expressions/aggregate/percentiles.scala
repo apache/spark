@@ -83,7 +83,6 @@ abstract class PercentileBase
     if (defaultCheck.isFailure) {
       defaultCheck
     } else if (!percentageExpression.foldable) {
-      import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
       // percentageExpression must be foldable
       DataTypeMismatch(
         errorSubClass = "_LEGACY_ERROR_TEMP_2130",
