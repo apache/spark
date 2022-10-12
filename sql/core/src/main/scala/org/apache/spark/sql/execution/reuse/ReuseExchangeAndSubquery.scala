@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.reuse
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution.{BaseSubqueryExec, ExecSubqueryExpression, ReusedSubqueryExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
@@ -35,6 +36,8 @@ import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
  */
 case object ReuseExchangeAndSubquery extends Rule[SparkPlan] {
 
+  private[sql] val ORIGIN_EXCHANGE = new TreeNodeTag[SparkPlan]("origin_exchange")
+
   def apply(plan: SparkPlan): SparkPlan = {
     if (conf.exchangeReuseEnabled || conf.subqueryReuseEnabled) {
       val exchanges = mutable.Map.empty[SparkPlan, Exchange]
@@ -45,7 +48,9 @@ case object ReuseExchangeAndSubquery extends Rule[SparkPlan] {
           case exchange: Exchange if conf.exchangeReuseEnabled =>
             val cachedExchange = exchanges.getOrElseUpdate(exchange.canonicalized, exchange)
             if (cachedExchange.ne(exchange)) {
-              ReusedExchangeExec(exchange.output, cachedExchange)
+              val reusedExchange = ReusedExchangeExec(exchange.output, cachedExchange)
+              reusedExchange.setTagValue(ORIGIN_EXCHANGE, exchange)
+              reusedExchange
             } else {
               cachedExchange
             }
