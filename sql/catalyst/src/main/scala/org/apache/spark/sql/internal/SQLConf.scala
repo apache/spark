@@ -426,6 +426,14 @@ object SQLConf {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
+  
+  val RUNTIME_FILTER__ENABLED_WHEN_NO_STATS =
+    buildConf("spark.sql.optimizer.runtimeFilter.enabled.whenNoStats")
+      .doc("When true and there is no statistical data, maxScanSize is not " +
+        "used as a judgment condition for using the runtime filter.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val PLANNED_WRITE_ENABLED = buildConf("spark.sql.optimizer.plannedWrite.enabled")
     .internal()
@@ -4108,6 +4116,9 @@ class SQLConf extends Serializable with Logging {
 
   def runtimeRowLevelOperationGroupFilterEnabled: Boolean =
     getConf(RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED)
+  
+  def runtimeFilterEnabledWhenOnStats: Boolean =
+    getConf(RUNTIME_FILTER__ENABLED_WHEN_NO_STATS)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
