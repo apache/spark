@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.FileSourceOptions
+import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -36,6 +36,8 @@ private[sql] class AvroOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     @transient val conf: Configuration)
   extends FileSourceOptions(parameters) with Logging {
+
+  import AvroOptions._
 
   def this(parameters: Map[String, String], conf: Configuration) = {
     this(CaseInsensitiveMap(parameters), conf)
@@ -54,8 +56,8 @@ private[sql] class AvroOptions(
    * instead of "string" type in the default converted schema.
    */
   val schema: Option[Schema] = {
-    parameters.get("avroSchema").map(new Schema.Parser().setValidateDefaults(false).parse).orElse({
-      val avroUrlSchema = parameters.get("avroSchemaUrl").map(url => {
+    parameters.get(AVRO_SCHEMA).map(new Schema.Parser().setValidateDefaults(false).parse).orElse({
+      val avroUrlSchema = parameters.get(AVRO_SCHEMA_URL).map(url => {
         log.debug("loading avro schema from url: " + url)
         val fs = FileSystem.get(new URI(url), conf)
         val in = fs.open(new Path(url))
@@ -75,20 +77,20 @@ private[sql] class AvroOptions(
    * whose field names do not match. Defaults to false.
    */
   val positionalFieldMatching: Boolean =
-    parameters.get("positionalFieldMatching").exists(_.toBoolean)
+    parameters.get(POSITIONAL_FIELD_MATCHING).exists(_.toBoolean)
 
   /**
    * Top level record name in write result, which is required in Avro spec.
    * See https://avro.apache.org/docs/1.11.1/specification/#schema-record .
    * Default value is "topLevelRecord"
    */
-  val recordName: String = parameters.getOrElse("recordName", "topLevelRecord")
+  val recordName: String = parameters.getOrElse(RECORD_NAME, "topLevelRecord")
 
   /**
    * Record namespace in write result. Default value is "".
    * See Avro spec for details: https://avro.apache.org/docs/1.11.1/specification/#schema-record .
    */
-  val recordNamespace: String = parameters.getOrElse("recordNamespace", "")
+  val recordNamespace: String = parameters.getOrElse(RECORD_NAMESPACE, "")
 
   /**
    * The `ignoreExtension` option controls ignoring of files without `.avro` extensions in read.
@@ -104,7 +106,7 @@ private[sql] class AvroOptions(
       ignoreFilesWithoutExtensionByDefault)
 
     parameters
-      .get(AvroOptions.ignoreExtensionKey)
+      .get(IGNORE_EXTENSION)
       .map(_.toBoolean)
       .getOrElse(!ignoreFilesWithoutExtension)
   }
@@ -116,21 +118,21 @@ private[sql] class AvroOptions(
    * taken into account. If the former one is not set too, the `snappy` codec is used by default.
    */
   val compression: String = {
-    parameters.get("compression").getOrElse(SQLConf.get.avroCompressionCodec)
+    parameters.get(COMPRESSION).getOrElse(SQLConf.get.avroCompressionCodec)
   }
 
   val parseMode: ParseMode =
-    parameters.get("mode").map(ParseMode.fromString).getOrElse(FailFastMode)
+    parameters.get(MODE).map(ParseMode.fromString).getOrElse(FailFastMode)
 
   /**
    * The rebasing mode for the DATE and TIMESTAMP_MICROS, TIMESTAMP_MILLIS values in reads.
    */
   val datetimeRebaseModeInRead: String = parameters
-    .get(AvroOptions.DATETIME_REBASE_MODE)
+    .get(DATETIME_REBASE_MODE)
     .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ))
 }
 
-private[sql] object AvroOptions {
+private[sql] object AvroOptions extends DataSourceOptions {
   def apply(parameters: Map[String, String]): AvroOptions = {
     val hadoopConf = SparkSession
       .getActiveSession
@@ -139,11 +141,17 @@ private[sql] object AvroOptions {
     new AvroOptions(CaseInsensitiveMap(parameters), hadoopConf)
   }
 
-  val ignoreExtensionKey = "ignoreExtension"
-
+  val IGNORE_EXTENSION = newOption("ignoreExtension")
+  val MODE = newOption("mode")
+  val RECORD_NAME = newOption("recordName")
+  val COMPRESSION = newOption("compression")
+  val AVRO_SCHEMA = newOption("avroSchema")
+  val AVRO_SCHEMA_URL = newOption("avroSchemaUrl")
+  val RECORD_NAMESPACE = newOption("recordNamespace")
+  val POSITIONAL_FIELD_MATCHING = newOption("positionalFieldMatching")
   // The option controls rebasing of the DATE and TIMESTAMP values between
   // Julian and Proleptic Gregorian calendars. It impacts on the behaviour of the Avro
   // datasource similarly to the SQL config `spark.sql.avro.datetimeRebaseModeInRead`,
   // and can be set to the same values: `EXCEPTION`, `LEGACY` or `CORRECTED`.
-  val DATETIME_REBASE_MODE = "datetimeRebaseMode"
+  val DATETIME_REBASE_MODE = newOption("datetimeRebaseMode")
 }

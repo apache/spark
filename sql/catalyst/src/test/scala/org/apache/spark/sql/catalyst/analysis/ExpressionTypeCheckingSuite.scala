@@ -25,10 +25,11 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
+class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with QueryErrorsBase {
 
   val testRelation = LocalRelation(
     $"intField".int,
@@ -52,13 +53,33 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
     SimpleAnalyzer.checkAnalysis(analyzed)
   }
 
-  def assertErrorForDifferingTypes(
+  def assertErrorForBinaryDifferingTypes(
       expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
       exception = intercept[AnalysisException] {
         assertSuccess(expr)
       },
       errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+      parameters = messageParameters)
+  }
+
+  def assertErrorForOrderingTypes(
+      expr: Expression, messageParameters: Map[String, String]): Unit = {
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(expr)
+      },
+      errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      parameters = messageParameters)
+  }
+
+  def assertErrorForDataDifferingTypes(
+      expr: Expression, messageParameters: Map[String, String]): Unit = {
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(expr)
+      },
+      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
       parameters = messageParameters)
   }
 
@@ -94,49 +115,49 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
     assertSuccess(Remainder($"intField", $"stringField"))
     // checkAnalysis(BitwiseAnd($"intField", $"stringField"))
 
-    assertErrorForDifferingTypes(
+    assertErrorForBinaryDifferingTypes(
       expr = Add($"intField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(intField + booleanField)\"",
         "left" -> "\"INT\"",
         "right" -> "\"BOOLEAN\""))
-    assertErrorForDifferingTypes(
+    assertErrorForBinaryDifferingTypes(
       expr = Subtract($"intField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(intField - booleanField)\"",
         "left" -> "\"INT\"",
         "right" -> "\"BOOLEAN\""))
-    assertErrorForDifferingTypes(
+    assertErrorForBinaryDifferingTypes(
       expr = Multiply($"intField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(intField * booleanField)\"",
         "left" -> "\"INT\"",
         "right" -> "\"BOOLEAN\""))
-    assertErrorForDifferingTypes(
+    assertErrorForBinaryDifferingTypes(
       expr = Divide($"intField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(intField / booleanField)\"",
         "left" -> "\"INT\"",
         "right" -> "\"BOOLEAN\""))
-    assertErrorForDifferingTypes(
+    assertErrorForBinaryDifferingTypes(
       expr = Remainder($"intField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(intField % booleanField)\"",
         "left" -> "\"INT\"",
         "right" -> "\"BOOLEAN\""))
-    assertErrorForDifferingTypes(
+    assertErrorForBinaryDifferingTypes(
       expr = BitwiseAnd($"intField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(intField & booleanField)\"",
         "left" -> "\"INT\"",
         "right" -> "\"BOOLEAN\""))
-    assertErrorForDifferingTypes(
+    assertErrorForBinaryDifferingTypes(
       expr = BitwiseOr($"intField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(intField | booleanField)\"",
         "left" -> "\"INT\"",
         "right" -> "\"BOOLEAN\""))
-    assertErrorForDifferingTypes(
+    assertErrorForBinaryDifferingTypes(
       expr = BitwiseXor($"intField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(intField ^ booleanField)\"",
@@ -211,13 +232,13 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
       assertSuccess(EqualNullSafe($"intField", $"booleanField"))
     }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      assertErrorForDifferingTypes(
+      assertErrorForBinaryDifferingTypes(
         expr = EqualTo($"intField", $"booleanField"),
         messageParameters = Map(
           "sqlExpr" -> "\"(intField = booleanField)\"",
           "left" -> "\"INT\"",
           "right" -> "\"BOOLEAN\""))
-      assertErrorForDifferingTypes(
+      assertErrorForBinaryDifferingTypes(
         expr = EqualNullSafe($"intField", $"booleanField"),
         messageParameters = Map(
           "sqlExpr" -> "\"(intField <=> booleanField)\"",
@@ -225,55 +246,99 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
           "right" -> "\"BOOLEAN\""))
     }
 
-    assertErrorForDifferingTypes(
+    assertErrorForBinaryDifferingTypes(
       expr = EqualTo($"intField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(intField = mapField)\"",
         "left" -> "\"INT\"",
         "right" -> "\"MAP<STRING, BIGINT>\""))
-    assertErrorForDifferingTypes(
+    assertErrorForBinaryDifferingTypes(
       expr = EqualNullSafe($"intField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(intField <=> mapField)\"",
         "left" -> "\"INT\"",
         "right" -> "\"MAP<STRING, BIGINT>\""))
-    assertErrorForDifferingTypes(
+    assertErrorForBinaryDifferingTypes(
       expr = LessThan($"intField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(intField < booleanField)\"",
         "left" -> "\"INT\"",
         "right" -> "\"BOOLEAN\""))
-    assertErrorForDifferingTypes(
+    assertErrorForBinaryDifferingTypes(
       expr = LessThanOrEqual($"intField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(intField <= booleanField)\"",
         "left" -> "\"INT\"",
         "right" -> "\"BOOLEAN\""))
-    assertErrorForDifferingTypes(
+    assertErrorForBinaryDifferingTypes(
       expr = GreaterThan($"intField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(intField > booleanField)\"",
         "left" -> "\"INT\"",
         "right" -> "\"BOOLEAN\""))
-    assertErrorForDifferingTypes(
+    assertErrorForBinaryDifferingTypes(
       expr = GreaterThanOrEqual($"intField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(intField >= booleanField)\"",
         "left" -> "\"INT\"",
         "right" -> "\"BOOLEAN\""))
 
-    assertError(EqualTo($"mapField", $"mapField"),
-      "EqualTo does not support ordering on type map")
-    assertError(EqualNullSafe($"mapField", $"mapField"),
-      "EqualNullSafe does not support ordering on type map")
-    assertError(LessThan($"mapField", $"mapField"),
-      "LessThan does not support ordering on type map")
-    assertError(LessThanOrEqual($"mapField", $"mapField"),
-      "LessThanOrEqual does not support ordering on type map")
-    assertError(GreaterThan($"mapField", $"mapField"),
-      "GreaterThan does not support ordering on type map")
-    assertError(GreaterThanOrEqual($"mapField", $"mapField"),
-      "GreaterThanOrEqual does not support ordering on type map")
+    assertErrorForOrderingTypes(
+      expr = EqualTo($"mapField", $"mapField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(mapField = mapField)\"",
+        "functionName" -> "EqualTo",
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
+    assertErrorForOrderingTypes(
+      expr = EqualTo($"mapField", $"mapField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(mapField = mapField)\"",
+        "functionName" -> "EqualTo",
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
+    assertErrorForOrderingTypes(
+      expr = EqualNullSafe($"mapField", $"mapField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(mapField <=> mapField)\"",
+        "functionName" -> "EqualNullSafe",
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
+    assertErrorForOrderingTypes(
+      expr = LessThan($"mapField", $"mapField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(mapField < mapField)\"",
+        "functionName" -> "LessThan",
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
+    assertErrorForOrderingTypes(
+      expr = LessThanOrEqual($"mapField", $"mapField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(mapField <= mapField)\"",
+        "functionName" -> "LessThanOrEqual",
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
+    assertErrorForOrderingTypes(
+      expr = GreaterThan($"mapField", $"mapField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(mapField > mapField)\"",
+        "functionName" -> "GreaterThan",
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
+    assertErrorForOrderingTypes(
+      expr = GreaterThanOrEqual($"mapField", $"mapField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(mapField >= mapField)\"",
+        "functionName" -> "GreaterThanOrEqual",
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
 
     assertError(If($"intField", $"stringField", $"stringField"),
       "type of predicate expression in If should be boolean")
@@ -305,18 +370,45 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
     assertSuccess(new BoolAnd($"booleanField"))
     assertSuccess(new BoolOr($"booleanField"))
 
-    assertError(Min($"mapField"), "min does not support ordering on type")
-    assertError(Max($"mapField"), "max does not support ordering on type")
+    assertErrorForOrderingTypes(
+      expr = Min($"mapField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"min(mapField)\"",
+        "functionName" -> "function min",
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
+    assertErrorForOrderingTypes(
+      expr = Max($"mapField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"max(mapField)\"",
+        "functionName" -> "function max",
+        "dataType" -> "\"MAP<STRING, BIGINT>\""
+      )
+    )
     assertError(Sum($"booleanField"), "function sum requires numeric or interval types")
     assertError(Average($"booleanField"),
       "function average requires numeric or interval types")
   }
 
   test("check types for others") {
-    assertError(CreateArray(Seq($"intField", $"booleanField")),
-      "input to function array should all be the same type")
-    assertError(Coalesce(Seq($"intField", $"booleanField")),
-      "input to function coalesce should all be the same type")
+    assertErrorForDataDifferingTypes(
+      expr = CreateArray(Seq($"intField", $"booleanField")),
+      messageParameters = Map(
+        "sqlExpr" -> "\"array(intField, booleanField)\"",
+        "functionName" -> "function array",
+        "dataType" -> "(\"INT\" or \"BOOLEAN\")"
+      )
+    )
+    assertErrorForDataDifferingTypes(
+      expr = Coalesce(Seq($"intField", $"booleanField")),
+      messageParameters = Map(
+        "sqlExpr" -> "\"coalesce(intField, booleanField)\"",
+        "functionName" -> "function coalesce",
+        "dataType" -> "(\"INT\" or \"BOOLEAN\")"
+      )
+    )
+
     assertError(Coalesce(Nil), "function coalesce requires at least one argument")
     assertError(new Murmur3Hash(Nil), "function hash requires at least one argument")
     assertError(new XxHash64(Nil), "function xxhash64 requires at least one argument")
@@ -437,8 +529,15 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
       assertError(operator(Seq($"booleanField")), "requires at least two arguments")
       assertError(operator(Seq($"intField", $"stringField")),
         "should all have the same type")
-      assertError(operator(Seq($"mapField", $"mapField")),
-        "does not support ordering")
+      val expr3 = operator(Seq($"mapField", $"mapField"))
+      assertErrorForOrderingTypes(
+        expr = expr3,
+        messageParameters = Map(
+          "sqlExpr" -> toSQLExpr(expr3),
+          "functionName" -> s"function ${expr3.prettyName}",
+          "dataType" -> "\"MAP<STRING, BIGINT>\""
+        )
+      )
     }
   }
 
