@@ -524,8 +524,9 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val map = transformKeys(ai0, makeMap)
     map.checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess => fail("should not allow map as map key")
-      case TypeCheckResult.TypeCheckFailure(msg) =>
-        assert(msg.contains("The key of map cannot be/contain map"))
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass == "INVALID_MAP_KEY_TYPE")
+        assert(messageParameters === Map("keyType" -> "\"MAP<INT, INT>\""))
     }
   }
 

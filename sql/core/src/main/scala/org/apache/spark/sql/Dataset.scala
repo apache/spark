@@ -2060,7 +2060,7 @@ class Dataset[T] private[sql](
    * All "value" columns must share a least common data type. Unless they are the same data type,
    * all "value" columns are cast to the nearest common data type. For instance,
    * types `IntegerType` and `LongType` are cast to `LongType`, while `IntegerType` and `StringType`
-   * do not have a common data type and `unpivot` fails.
+   * do not have a common data type and `unpivot` fails with an `AnalysisException`.
    *
    * @param ids Id columns
    * @param values Value columns to unpivot
@@ -2076,10 +2076,11 @@ class Dataset[T] private[sql](
       variableColumnName: String,
       valueColumnName: String): DataFrame = withPlan {
     Unpivot(
-      ids.map(_.named),
-      values.map(_.named),
+      Some(ids.map(_.named)),
+      Some(values.map(v => Seq(v.named))),
+      None,
       variableColumnName,
-      valueColumnName,
+      Seq(valueColumnName),
       logicalPlan
     )
   }
@@ -2104,8 +2105,16 @@ class Dataset[T] private[sql](
   def unpivot(
       ids: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): DataFrame =
-    unpivot(ids, Array.empty, variableColumnName, valueColumnName)
+      valueColumnName: String): DataFrame = withPlan {
+    Unpivot(
+      Some(ids.map(_.named)),
+      None,
+      None,
+      variableColumnName,
+      Seq(valueColumnName),
+      logicalPlan
+    )
+  }
 
   /**
    * Called from Python as Seq[Column] are easier to create via py4j than Array[Column].
@@ -2117,6 +2126,16 @@ class Dataset[T] private[sql](
       variableColumnName: String,
       valueColumnName: String): DataFrame =
     unpivot(ids.toArray, values.toArray, variableColumnName, valueColumnName)
+
+  /**
+   * Called from Python as Seq[Column] are easier to create via py4j than Array[Column].
+   * We use Array[Column] for unpivot rather than Seq[Column] as those are Java-friendly.
+   */
+  private[sql] def unpivotWithSeq(
+      ids: Seq[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame =
+    unpivot(ids.toArray, variableColumnName, valueColumnName)
 
   /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.

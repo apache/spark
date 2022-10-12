@@ -398,32 +398,32 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "union with incompatible column types",
     testRelation.union(nestedRelation),
-    "union" :: "the compatible column types" :: Nil)
+    "union" :: "compatible column types" :: Nil)
 
   errorTest(
     "union with a incompatible column type and compatible column types",
     testRelation3.union(testRelation4),
-    "union"  :: "the compatible column types" :: "map" :: "decimal" :: Nil)
+    "union"  :: "compatible column types" :: "map" :: "decimal" :: Nil)
 
   errorTest(
     "intersect with incompatible column types",
     testRelation.intersect(nestedRelation, isAll = false),
-    "intersect" :: "the compatible column types" :: Nil)
+    "intersect" :: "compatible column types" :: Nil)
 
   errorTest(
     "intersect with a incompatible column type and compatible column types",
     testRelation3.intersect(testRelation4, isAll = false),
-    "intersect" :: "the compatible column types" :: "map" :: "decimal" :: Nil)
+    "intersect" :: "compatible column types" :: "map" :: "decimal" :: Nil)
 
   errorTest(
     "except with incompatible column types",
     testRelation.except(nestedRelation, isAll = false),
-    "except" :: "the compatible column types" :: Nil)
+    "except" :: "compatible column types" :: Nil)
 
   errorTest(
     "except with a incompatible column type and compatible column types",
     testRelation3.except(testRelation4, isAll = false),
-    "except" :: "the compatible column types" :: "map" :: "decimal" :: Nil)
+    "except" :: "compatible column types" :: "map" :: "decimal" :: Nil)
 
   errorClassTest(
     "SPARK-9955: correct error message for aggregate",
@@ -719,7 +719,17 @@ class AnalysisErrorSuite extends AnalysisTest {
       right,
       joinType = Cross,
       condition = Some($"b" === $"d"))
-    assertAnalysisError(plan2, "EqualTo does not support ordering on type map" :: Nil)
+
+    assertAnalysisErrorClass(
+      inputPlan = plan2,
+      expectedErrorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      expectedMessageParameters = Map(
+        "functionName" -> "EqualTo",
+        "dataType" -> "\"MAP<STRING, STRING>\"",
+        "sqlExpr" -> "\"(b = d)\""
+      ),
+      caseSensitive = true
+    )
   }
 
   test("PredicateSubQuery is used outside of a allowed nodes") {

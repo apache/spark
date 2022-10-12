@@ -38,6 +38,7 @@ import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
+import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
@@ -3078,6 +3079,57 @@ abstract class CSVSuite
         }
       }
     }
+  }
+
+  test("SPARK-40667: validate CSV Options") {
+    assert(CSVOptions.getAllOptions.size == 38)
+    // Please add validation on any new CSV options here
+    assert(CSVOptions.isValidOption("header"))
+    assert(CSVOptions.isValidOption("inferSchema"))
+    assert(CSVOptions.isValidOption("ignoreLeadingWhiteSpace"))
+    assert(CSVOptions.isValidOption("ignoreTrailingWhiteSpace"))
+    assert(CSVOptions.isValidOption("prefersDate"))
+    assert(CSVOptions.isValidOption("escapeQuotes"))
+    assert(CSVOptions.isValidOption("quoteAll"))
+    assert(CSVOptions.isValidOption("enforceSchema"))
+    assert(CSVOptions.isValidOption("quote"))
+    assert(CSVOptions.isValidOption("escape"))
+    assert(CSVOptions.isValidOption("comment"))
+    assert(CSVOptions.isValidOption("maxColumns"))
+    assert(CSVOptions.isValidOption("maxCharsPerColumn"))
+    assert(CSVOptions.isValidOption("mode"))
+    assert(CSVOptions.isValidOption("charToEscapeQuoteEscaping"))
+    assert(CSVOptions.isValidOption("locale"))
+    assert(CSVOptions.isValidOption("dateFormat"))
+    assert(CSVOptions.isValidOption("timestampFormat"))
+    assert(CSVOptions.isValidOption("timestampNTZFormat"))
+    assert(CSVOptions.isValidOption("enableDateTimeParsingFallback"))
+    assert(CSVOptions.isValidOption("multiLine"))
+    assert(CSVOptions.isValidOption("samplingRatio"))
+    assert(CSVOptions.isValidOption("emptyValue"))
+    assert(CSVOptions.isValidOption("lineSep"))
+    assert(CSVOptions.isValidOption("inputBufferSize"))
+    assert(CSVOptions.isValidOption("columnNameOfCorruptRecord"))
+    assert(CSVOptions.isValidOption("nullValue"))
+    assert(CSVOptions.isValidOption("nanValue"))
+    assert(CSVOptions.isValidOption("positiveInf"))
+    assert(CSVOptions.isValidOption("negativeInf"))
+    assert(CSVOptions.isValidOption("timeZone"))
+    assert(CSVOptions.isValidOption("unescapedQuoteHandling"))
+    assert(CSVOptions.isValidOption("encoding"))
+    assert(CSVOptions.isValidOption("charset"))
+    assert(CSVOptions.isValidOption("compression"))
+    assert(CSVOptions.isValidOption("codec"))
+    assert(CSVOptions.isValidOption("sep"))
+    assert(CSVOptions.isValidOption("delimiter"))
+    // Please add validation on any new parquet options with alternative here
+    assert(CSVOptions.getAlternativeOption("sep").contains("delimiter"))
+    assert(CSVOptions.getAlternativeOption("delimiter").contains("sep"))
+    assert(CSVOptions.getAlternativeOption("encoding").contains("charset"))
+    assert(CSVOptions.getAlternativeOption("charset").contains("encoding"))
+    assert(CSVOptions.getAlternativeOption("compression").contains("codec"))
+    assert(CSVOptions.getAlternativeOption("codec").contains("compression"))
+    assert(CSVOptions.getAlternativeOption("prefersDate").isEmpty)
   }
 }
 

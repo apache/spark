@@ -22,7 +22,7 @@ import java.util.Collections
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Encoders, QueryTest, Row}
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryRowLevelOperationTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions._
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -46,13 +46,17 @@ abstract class DeleteFromTableSuiteBase
     spark.sessionState.conf.unsetConf("spark.sql.catalog.cat")
   }
 
-  private val namespace = Array("ns1")
-  private val ident = Identifier.of(namespace, "test_table")
-  private val tableNameAsString = "cat." + ident.toString
+  protected val namespace: Array[String] = Array("ns1")
+  protected val ident: Identifier = Identifier.of(namespace, "test_table")
+  protected val tableNameAsString: String = "cat." + ident.toString
 
-  private def catalog: InMemoryRowLevelOperationTableCatalog = {
+  protected def catalog: InMemoryRowLevelOperationTableCatalog = {
     val catalog = spark.sessionState.catalogManager.catalog("cat")
     catalog.asTableCatalog.asInstanceOf[InMemoryRowLevelOperationTableCatalog]
+  }
+
+  protected def table: InMemoryRowLevelOperationTable = {
+    catalog.loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
   }
 
   test("EXPLAIN only delete") {
@@ -553,13 +557,13 @@ abstract class DeleteFromTableSuiteBase
     }
   }
 
-  private def createTable(schemaString: String): Unit = {
+  protected def createTable(schemaString: String): Unit = {
     val schema = StructType.fromDDL(schemaString)
     val tableProps = Collections.emptyMap[String, String]
     catalog.createTable(ident, schema, Array(identity(reference(Seq("dep")))), tableProps)
   }
 
-  private def createAndInitTable(schemaString: String, jsonData: String): Unit = {
+  protected def createAndInitTable(schemaString: String, jsonData: String): Unit = {
     createTable(schemaString)
     append(schemaString, jsonData)
   }
@@ -606,7 +610,7 @@ abstract class DeleteFromTableSuiteBase
   }
 
   // executes an operation and keeps the executed plan
-  private def executeAndKeepPlan(func: => Unit): SparkPlan = {
+  protected def executeAndKeepPlan(func: => Unit): SparkPlan = {
     var executedPlan: SparkPlan = null
 
     val listener = new QueryExecutionListener {
@@ -625,5 +629,3 @@ abstract class DeleteFromTableSuiteBase
     stripAQEPlan(executedPlan)
   }
 }
-
-class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase
