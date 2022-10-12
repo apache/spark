@@ -278,7 +278,8 @@ class ApproximatePercentileSuite extends SparkFunSuite {
 
       assert(
         wrongPercentage.checkInputDataTypes() match {
-          case DataTypeMismatch(msg, _) if msg.equals("_LEGACY_ERROR_TEMP_2129") => true
+          case DataTypeMismatch(errorSubClass, _) =>
+            errorSubClass.equals("_LEGACY_ERROR_TEMP_2129")
           case _ => false
       })
     }
