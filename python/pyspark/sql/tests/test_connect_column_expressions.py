@@ -27,19 +27,20 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         df = c.DataFrame.withPlan(p.Read("table"))
 
         c1 = df.col_name
-        assert isinstance(c1, col.ColumnRef)
+        self.assertIsInstance(c1, col.ColumnRef)
         c2 = df["col_name"]
-        assert isinstance(c2, col.ColumnRef)
+        self.assertIsInstance(c2, col.ColumnRef)
         c3 = fun.col("col_name")
-        assert isinstance(c3, col.ColumnRef)
+        self.assertIsInstance(c3, col.ColumnRef)
 
         # All Protos should be identical
         cp1 = c1.to_plan(None)
         cp2 = c2.to_plan(None)
         cp3 = c3.to_plan(None)
 
-        assert cp1 is not None
-        assert cp1 == cp2 == cp3
+        self.assertIsNotNone(cp1)
+        self.assertEqual(cp1, cp2)
+        self.assertEqual(cp2, cp3)
 
     def test_column_literals(self):
         df = c.DataFrame.withPlan(p.Read("table"))

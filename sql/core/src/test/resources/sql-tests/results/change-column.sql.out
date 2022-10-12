@@ -55,8 +55,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE",
-  "errorSubClass" : "TABLE_OPERATION",
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "RENAME COLUMN",
@@ -109,8 +108,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE",
-  "errorSubClass" : "TABLE_OPERATION",
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "ALTER COLUMN ... FIRST | ALTER",
@@ -126,8 +124,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE",
-  "errorSubClass" : "TABLE_OPERATION",
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "ALTER COLUMN ... FIRST | ALTER",

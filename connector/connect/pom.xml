@@ -34,6 +34,7 @@
     <sbt.project.name>connect</sbt.project.name>
     <protobuf.version>3.21.1</protobuf.version>
     <guava.version>31.0.1-jre</guava.version>
+    <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
     <io.grpc.version>1.47.0</io.grpc.version>
     <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
   </properties>
@@ -123,7 +124,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>failureaccess</artifactId>
-      <version>1.0.1</version>
+      <version>${guava.failureaccess.version}</version>
     </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>
@@ -133,7 +134,7 @@
     </dependency>
     <dependency>
       <groupId>io.grpc</groupId>
-      <artifactId>grpc-netty-shaded</artifactId>
+      <artifactId>grpc-netty</artifactId>
       <version>${io.grpc.version}</version>
     </dependency>
     <dependency>
@@ -150,6 +151,24 @@
       <groupId>io.grpc</groupId>
       <artifactId>grpc-stub</artifactId>
       <version>${io.grpc.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-codec-http2</artifactId>
+      <version>${netty.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-handler-proxy</artifactId>
+      <version>${netty.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-transport-native-unix-common</artifactId>
+      <version>${netty.version}</version>
+      <scope>provided</scope>
     </dependency>
     <dependency> <!-- necessary for Java 9+ -->
       <groupId>org.apache.tomcat</groupId>
@@ -243,6 +262,19 @@
               <include>com.google.guava:*</include>
               <include>io.grpc:*:</include>
               <include>com.google.protobuf:*</include>
+
+              <!--
+                The dependencies below are not added in SBT because SBT add them all
+                as assembly build.
+              -->
+              <include>com.google.android:annotations</include>
+              <include>com.google.api.grpc:proto-google-common-protos</include>
+              <include>io.perfmark:perfmark-api</include>
+              <include>org.codehaus.mojo:animal-sniffer-annotations</include>
+              <include>com.google.errorprone:error_prone_annotations</include>
+              <include>com.google.j2objc:j2objc-annotations</include>
+              <include>org.checkerframework:checker-qual</include>
+              <include>com.google.code.gson:gson</include>
             </includes>
           </artifactSet>
           <relocations>
@@ -270,6 +302,69 @@
             <relocation>
               <pattern>io.grpc</pattern>
               <shadedPattern>${spark.shade.packageName}.connect.grpc</shadedPattern>
+            </relocation>
+
+            <relocation>
+              <pattern>android.annotation</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.android_annotation</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>io.perfmark</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.io_perfmark</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>org.codehaus.mojo.animal_sniffer</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.animal_sniffer</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.j2objc.annotations</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.j2objc_annotations</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.errorprone.annotations</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.errorprone_annotations</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>org.checkerframework</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.checkerframework</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.gson</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.gson</shadedPattern>
+            </relocation>
+
+            <!--
+              For `com.google.api.grpc:proto-google-common-protos`, do not directly define pattern
+              as `common.google`, otherwise, otherwise, the relocation result may be uncertain due
+              to the change of rule order.
+            -->
+            <relocation>
+              <pattern>com.google.api</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.google_protos.api</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.cloud</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.google_protos.cloud</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.geo</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.google_protos.geo</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.logging</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.google_protos.logging</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.longrunning</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.google_protos.longrunning</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.rpc</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.google_protos.rpc</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.type</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.google_protos.type</shadedPattern>
             </relocation>
           </relocations>
         </configuration>

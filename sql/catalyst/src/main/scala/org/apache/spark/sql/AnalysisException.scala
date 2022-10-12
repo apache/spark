@@ -38,38 +38,17 @@ class AnalysisException protected[sql] (
     @transient val plan: Option[LogicalPlan] = None,
     val cause: Option[Throwable] = None,
     val errorClass: Option[String] = None,
-    val errorSubClass: Option[String] = None,
     val messageParameters: Map[String, String] = Map.empty,
     val context: Array[QueryContext] = Array.empty)
   extends Exception(message, cause.orNull) with SparkThrowable with Serializable {
-
-    // Needed for binary compatibility
-    protected[sql] def this(
-        message: String,
-        line: Option[Int],
-        startPosition: Option[Int],
-        plan: Option[LogicalPlan],
-        cause: Option[Throwable],
-        errorClass: Option[String],
-        messageParameters: Map[String, String]) =
-    this(
-      message = message,
-      line = line,
-      startPosition = startPosition,
-      plan = plan,
-      cause = cause,
-      errorClass,
-      errorSubClass = None,
-      messageParameters = messageParameters)
 
   def this(
       errorClass: String,
       messageParameters: Map[String, String],
       cause: Option[Throwable]) =
     this(
-      SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
       errorClass = Some(errorClass),
-      errorSubClass = None,
       messageParameters = messageParameters,
       cause = cause)
 
@@ -79,9 +58,8 @@ class AnalysisException protected[sql] (
       context: Array[QueryContext],
       summary: String) =
     this(
-      SparkThrowableHelper.getMessage(errorClass, null, messageParameters, summary),
+      SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
       errorClass = Some(errorClass),
-      errorSubClass = None,
       messageParameters = messageParameters,
       cause = null,
       context = context)
@@ -99,35 +77,10 @@ class AnalysisException protected[sql] (
       messageParameters: Map[String, String],
       origin: Origin) =
     this(
-      SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
       line = origin.line,
       startPosition = origin.startPosition,
       errorClass = Some(errorClass),
-      errorSubClass = None,
-      messageParameters = messageParameters,
-      context = origin.getQueryContext)
-
-  def this(
-      errorClass: String,
-      errorSubClass: String,
-      messageParameters: Map[String, String]) =
-    this(
-      SparkThrowableHelper.getMessage(errorClass, errorSubClass, messageParameters),
-      errorClass = Some(errorClass),
-      errorSubClass = Some(errorSubClass),
-      messageParameters = messageParameters)
-
-  def this(
-      errorClass: String,
-      errorSubClass: String,
-      messageParameters: Map[String, String],
-      origin: Origin) =
-    this(
-      SparkThrowableHelper.getMessage(errorClass, errorSubClass, messageParameters),
-      line = origin.line,
-      startPosition = origin.startPosition,
-      errorClass = Some(errorClass),
-      errorSubClass = Option(errorSubClass),
       messageParameters = messageParameters,
       context = origin.getQueryContext)
 
@@ -140,7 +93,7 @@ class AnalysisException protected[sql] (
       errorClass: Option[String] = this.errorClass,
       messageParameters: Map[String, String] = this.messageParameters,
       context: Array[QueryContext] = this.context): AnalysisException =
-    new AnalysisException(message, line, startPosition, plan, cause, errorClass, errorSubClass,
+    new AnalysisException(message, line, startPosition, plan, cause, errorClass,
       messageParameters, context)
 
   def withPosition(origin: Origin): AnalysisException = {
@@ -170,6 +123,6 @@ class AnalysisException protected[sql] (
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass.orNull
-  override def getErrorSubClass: String = errorSubClass.orNull
+
   override def getQueryContext: Array[QueryContext] = context
 }

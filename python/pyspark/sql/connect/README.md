@@ -34,6 +34,6 @@ of Spark. To enable it, you only need to activate the driver plugin for Spark Co
 ## Run Tests
 
 ```bash
-./run-tests --testnames 'pyspark.sql.tests.connect.test_spark_connect'
+./run-tests --testnames 'pyspark.sql.tests.test_connect_basic'
 ```
 

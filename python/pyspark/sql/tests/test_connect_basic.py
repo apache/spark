@@ -31,11 +31,11 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
     """Parent test fixture class for all Spark Connect related
     test cases."""
 
-    connect = RemoteSparkSession
-    tbl_name = str
+    connect: RemoteSparkSession
+    tbl_name: str
 
     @classmethod
-    def setUpClass(cls: Any) -> None:
+    def setUpClass(cls: Any):
         ReusedPySparkTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         cls.hive_available = True
@@ -48,7 +48,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
         cls.spark_connect_test_data()
 
     @classmethod
-    def spark_connect_test_data(cls: Any) -> None:
+    def spark_connect_test_data(cls: Any):
         # Setup Remote Spark Session
         cls.tbl_name = f"tbl{uuid.uuid4()}".replace("-", "")
         cls.connect = RemoteSparkSession(user_id="test_user")
@@ -59,25 +59,25 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
-    def test_simple_read(self) -> None:
+    def test_simple_read(self):
         df = self.connect.read.table(self.tbl_name)
         data = df.limit(10).toPandas()
         # Check that the limit is applied
-        assert len(data.index) == 10
+        self.assertEqual(len(data.index), 10)
 
-    def test_simple_udf(self) -> None:
+    def test_simple_udf(self):
         def conv_udf(x) -> str:
             return "Martin"
 
         u = udf(conv_udf)
         df = self.connect.read.table(self.tbl_name)
         result = df.select(u(df.id)).toPandas()
-        assert result is not None
+        self.assertIsNotNone(result)
 
-    def test_simple_explain_string(self) -> None:
+    def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)
         result = df.explain()
-        assert len(result) > 0
+        self.assertGreater(len(result), 0)
 
 
 if __name__ == "__main__":

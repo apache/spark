@@ -61,25 +61,9 @@ package object analysis {
         origin = t.origin)
     }
 
-    /**
-     * Fails the analysis at the point where a specific tree node was parsed using a provided
-     * error class and subclass and message parameters.
-     */
-    def failAnalysis(
-        errorClass: String,
-        errorSubClass: String,
-        messageParameters: Map[String, String] = Map.empty[String, String]): Nothing = {
-      throw new AnalysisException(
-        errorClass = errorClass,
-        errorSubClass = errorSubClass,
-        messageParameters = messageParameters,
-        origin = t.origin)
-    }
-
     def dataTypeMismatch(expr: Expression, mismatch: DataTypeMismatch): Nothing = {
       throw new AnalysisException(
-        errorClass = "DATATYPE_MISMATCH",
-        errorSubClass = mismatch.errorSubClass,
+        errorClass = s"DATATYPE_MISMATCH.${mismatch.errorSubClass}",
         messageParameters = mismatch.messageParameters + ("sqlExpr" -> toSQLExpr(expr)),
         origin = t.origin)
     }

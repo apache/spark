@@ -45,8 +45,8 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, tokenProviderKafka010, sqlKafka010, avro) = Seq(
-    "catalyst", "sql", "hive", "hive-thriftserver", "token-provider-kafka-0-10", "sql-kafka-0-10", "avro"
+  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, tokenProviderKafka010, sqlKafka010, avro, protobuf) = Seq(
+    "catalyst", "sql", "hive", "hive-thriftserver", "token-provider-kafka-0-10", "sql-kafka-0-10", "avro", "protobuf"
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(streaming, streamingKafka010) =
@@ -59,7 +59,7 @@ object BuildCommons {
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "tags", "sketch", "kvstore"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connect)
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connect) ++ Seq(protobuf)
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
@@ -390,7 +390,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connect
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, connect, protobuf
     ).contains(x)
   }
 
@@ -432,6 +432,9 @@ object SparkBuild extends PomBuild {
   enable(Hive.settings)(hive)
 
   enable(SparkConnect.settings)(connect)
+
+  /* Connector/proto settings */
+  enable(SparkProtobuf.settings)(protobuf)
 
   // SPARK-14738 - Remove docker tests from main Spark build
   // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
@@ -610,10 +613,100 @@ object Core {
 
 
 object SparkConnect {
+  import BuildCommons.protoVersion
+
+  lazy val settings = Seq(
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
+    PB.protocVersion := BuildCommons.protoVersion,
+
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+      val guavaFailureaccessVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "guava.failureaccess.version").asInstanceOf[String]
+      Seq(
+        "io.grpc" % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+
+    dependencyOverrides ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+      val guavaFailureaccessVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "guava.failureaccess.version").asInstanceOf[String]
+      Seq(
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion
+      )
+    },
+
+    (Compile / PB.targets) := Seq(
+      PB.gens.java -> (Compile / sourceManaged).value,
+      PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
+    ),
+
+    (assembly / test) := { },
+
+    (assembly / logLevel) := Level.Info,
+
+    // Exclude `scala-library` from assembly.
+    (assembly / assemblyPackageScala / assembleArtifact) := false,
+
+    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`,`jsr305-*.jar` and
+    // `netty-*.jar` and `unused-1.0.0.jar` from assembly.
+    (assembly / assemblyExcludedJars) := {
+      val cp = (assembly / fullClasspath).value
+      cp filter { v =>
+        val name = v.data.getName
+        name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
+          name.startsWith("jsr305-") || name.startsWith("netty-") || name == "unused-1.0.0.jar"
+      }
+    },
+
+    (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.grpc.@0").inAll,
+      ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.guava.@1").inAll,
+      ShadeRule.rename("com.google.thirdparty.**" -> "org.sparkproject.connect.guava.@1").inAll,
+      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.connect.protobuf.@1").inAll,
+      ShadeRule.rename("android.annotation.**" -> "org.sparkproject.connect.android_annotation.@1").inAll,
+      ShadeRule.rename("io.perfmark.**" -> "org.sparkproject.connect.io_perfmark.@1").inAll,
+      ShadeRule.rename("org.codehaus.mojo.animal_sniffer.**" -> "org.sparkproject.connect.animal_sniffer.@1").inAll,
+      ShadeRule.rename("com.google.j2objc.annotations.**" -> "org.sparkproject.connect.j2objc_annotations.@1").inAll,
+      ShadeRule.rename("com.google.errorprone.annotations.**" -> "org.sparkproject.connect.errorprone_annotations.@1").inAll,
+      ShadeRule.rename("org.checkerframework.**" -> "org.sparkproject.connect.checkerframework.@1").inAll,
+      ShadeRule.rename("com.google.gson.**" -> "org.sparkproject.connect.gson.@1").inAll,
+      ShadeRule.rename("com.google.api.**" -> "org.sparkproject.connect.google_protos.api.@1").inAll,
+      ShadeRule.rename("com.google.cloud.**" -> "org.sparkproject.connect.google_protos.cloud.@1").inAll,
+      ShadeRule.rename("com.google.geo.**" -> "org.sparkproject.connect.google_protos.geo.@1").inAll,
+      ShadeRule.rename("com.google.logging.**" -> "org.sparkproject.connect.google_protos.logging.@1").inAll,
+      ShadeRule.rename("com.google.longrunning.**" -> "org.sparkproject.connect.google_protos.longrunning.@1").inAll,
+      ShadeRule.rename("com.google.rpc.**" -> "org.sparkproject.connect.google_protos.rpc.@1").inAll,
+      ShadeRule.rename("com.google.type.**" -> "org.sparkproject.connect.google_protos.type.@1").inAll
+    ),
+
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      // Drop all proto files that are not needed as artifacts of the build.
+      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    }
+  )
+}
+
+object SparkProtobuf {
 
   import BuildCommons.protoVersion
 
-  private val shadePrefix = "org.sparkproject.connect"
+  private val shadePrefix = "org.sparkproject.spark-protobuf"
   val shadeJar = taskKey[Unit]("Shade the Jars")
 
   lazy val settings = Seq(
@@ -624,22 +717,15 @@ object SparkConnect {
     // For some reason the resolution from the imported Maven build does not work for some
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= Seq(
-      "io.grpc"             % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
-      "org.scala-lang"      % "scala-library"        % "2.12.16" % "provided",
-      "com.google.guava"    % "guava"                % "31.0.1-jre",
-      "com.google.guava"    % "failureaccess"        % "1.0.1",
       "com.google.protobuf" % "protobuf-java"        % protoVersion % "protobuf"
     ),
 
     dependencyOverrides ++= Seq(
-      "com.google.guava"    % "guava"                % "31.0.1-jre",
-      "com.google.guava"    % "failureaccess"        % "1.0.1",
       "com.google.protobuf" % "protobuf-java"        % protoVersion
     ),
 
     (Compile / PB.targets) := Seq(
       PB.gens.java                -> (Compile / sourceManaged).value,
-      PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
     ),
 
     (assembly / test) := false,
@@ -647,10 +733,7 @@ object SparkConnect {
     (assembly / logLevel) := Level.Info,
 
     (assembly / assemblyShadeRules) := Seq(
-      ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.grpc.@0").inAll,
-      ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.guava.@1").inAll,
-      ShadeRule.rename("com.google.thirdparty.**" -> "org.sparkproject.connect.guava.@1").inAll,
-      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.connect.protobuf.@1").inAll,
+      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.spark-protobuf.protobuf.@1").inAll,
     ),
 
     (assembly / assemblyMergeStrategy) := {
@@ -661,7 +744,6 @@ object SparkConnect {
     },
   )
 }
-
 object Unsafe {
   lazy val settings = Seq(
     // This option is needed to suppress warnings from sun.misc.Unsafe usage
@@ -937,7 +1019,6 @@ object YARN {
 }
 
 object Assembly {
-  import sbtassembly.AssemblyUtils._
   import sbtassembly.AssemblyPlugin.autoImport._
 
   val hadoopVersion = taskKey[String]("The version of hadoop that spark is compiled against.")
@@ -1107,10 +1188,10 @@ object Unidoc {
 
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connect),
+        yarn, tags, streamingKafka010, sqlKafka010, connect, protobuf),
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connect),
+        yarn, tags, streamingKafka010, sqlKafka010, connect, protobuf),
 
     (ScalaUnidoc / unidoc / unidocAllClasspaths) := {
       ignoreClasspaths((ScalaUnidoc / unidoc / unidocAllClasspaths).value)
@@ -1195,7 +1276,8 @@ object CopyDependencies {
       // For the SparkConnect build, we manually call the assembly target to
       // produce the shaded Jar which happens automatically in the case of Maven.
       // Later, when the dependencies are copied, we manually copy the shaded Jar only.
-      val fid = (LocalProject("connect")/assembly).value
+      val fid = (LocalProject("connect") / assembly).value
+      val fidProtobuf = (LocalProject("protobuf")/assembly).value
 
       (Compile / dependencyClasspath).value.map(_.data)
         .filter { jar => jar.isFile() }
@@ -1207,6 +1289,9 @@ object CopyDependencies {
           }
           if (jar.getName.contains("spark-connect") &&
             !SbtPomKeys.profiles.value.contains("noshade-connect")) {
+            Files.copy(fid.toPath, destJar.toPath)
+          } else if (jar.getName.contains("spark-protobuf") &&
+            !SbtPomKeys.profiles.value.contains("noshade-protobuf")) {
             Files.copy(fid.toPath, destJar.toPath)
           } else {
             Files.copy(jar.toPath(), destJar.toPath())
@@ -1277,7 +1362,8 @@ object TestSettings {
         "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
-        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED").mkString(" ")
+        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+        "-Djdk.reflect.useDirectMethodHandle=false").mkString(" ")
       s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
         .split(" ").toSeq
     },

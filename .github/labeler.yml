@@ -155,3 +155,6 @@ CONNECT:
   - "connector/connect/**/*"
   - "**/sql/sparkconnect/**/*"
   - "python/pyspark/sql/**/connect/**/*"
+PROTOBUF:
+ - "connector/protobuf/**/*"
+ - "python/pyspark/sql/protobuf/**/*"

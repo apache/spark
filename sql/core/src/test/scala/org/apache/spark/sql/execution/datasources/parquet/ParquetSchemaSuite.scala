@@ -28,7 +28,6 @@ import org.apache.parquet.schema.Type._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType._
@@ -982,7 +981,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     withTempPath { dir =>
       val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = false)
       val expectedMessage = "Encountered error while reading file"
-      assert(e.getCause.isInstanceOf[QueryExecutionException])
+      assert(e.getCause.isInstanceOf[SparkException])
       assert(e.getCause.getCause.isInstanceOf[ParquetDecodingException])
       assert(e.getCause.getMessage.contains(expectedMessage))
     }
@@ -991,7 +990,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
   test("schema mismatch failure error message for parquet vectorized reader") {
     withTempPath { dir =>
       val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = true)
-      assert(e.getCause.isInstanceOf[QueryExecutionException])
+      assert(e.getCause.isInstanceOf[SparkException])
       assert(e.getCause.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
 
       // Check if the physical type is reporting correctly

@@ -200,6 +200,22 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(pdf.b.kurtosis(), psdf.b.kurtosis())
         self.assert_eq(pdf.c.kurtosis(), psdf.c.kurtosis())
 
+    def test_prod_precision(self):
+        pdf = pd.DataFrame(
+            {
+                "a": [np.nan, np.nan, np.nan, np.nan],
+                "b": [1, np.nan, np.nan, -4],
+                "c": [1, -2, 3, -4],
+                "d": [55108, 55108, 55108, 55108],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(pdf.prod(), psdf.prod())
+        self.assert_eq(pdf.prod(skipna=False), psdf.prod(skipna=False))
+        self.assert_eq(pdf.prod(min_count=3), psdf.prod(min_count=3))
+        self.assert_eq(pdf.prod(skipna=False, min_count=3), psdf.prod(skipna=False, min_count=3))
+
 
 if __name__ == "__main__":
     import unittest

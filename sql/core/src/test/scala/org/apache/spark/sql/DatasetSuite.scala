@@ -327,8 +327,7 @@ class DatasetSuite extends QueryTest
         exception = intercept[AnalysisException] {
           ds.select(expr("`(_1)?+.+`").as[Int])
         },
-        errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = "WITH_SUGGESTION",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = None,
         parameters = Map(
           "objectName" -> "`(_1)?+.+`",
@@ -342,8 +341,7 @@ class DatasetSuite extends QueryTest
         exception = intercept[AnalysisException] {
           ds.select(expr("`(_1|_2)`").as[Int])
         },
-        errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = "WITH_SUGGESTION",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = None,
         parameters = Map(
           "objectName" -> "`(_1|_2)`",
@@ -907,8 +905,7 @@ class DatasetSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df.as[KryoData]
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("CAST_WITHOUT_SUGGESTION"),
+      errorClass = "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
       parameters = Map(
         "sqlExpr" -> "\"a\"",
         "srcType" -> "\"DOUBLE\"",
@@ -960,8 +957,7 @@ class DatasetSuite extends QueryTest
     val ds = Seq(ClassData("a", 1)).toDS()
     checkError(
       exception = intercept[AnalysisException] (ds.as[ClassData2]),
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`c`",
         "proposal" -> "`a`, `b`"))

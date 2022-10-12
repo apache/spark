@@ -33,8 +33,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
   test("UNSUPPORTED_FEATURE: LATERAL join with NATURAL join not supported") {
     checkError(
       exception = parseException("SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)"),
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "LATERAL_NATURAL_JOIN",
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_NATURAL_JOIN",
       sqlState = "0A000",
       context = ExpectedContext(
         fragment = "NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)",
@@ -45,8 +44,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
   test("UNSUPPORTED_FEATURE: LATERAL join with USING join not supported") {
     checkError(
       exception = parseException("SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)"),
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "LATERAL_JOIN_USING",
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_JOIN_USING",
       sqlState = "0A000",
       context = ExpectedContext(
         fragment = "JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)",
@@ -62,8 +60,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       "LEFT ANTI" -> (17, 72)).foreach { case (joinType, (start, stop)) =>
       checkError(
         exception = parseException(s"SELECT * FROM t1 $joinType JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3"),
-        errorClass = "UNSUPPORTED_FEATURE",
-        errorSubClass = "LATERAL_JOIN_OF_TYPE",
+        errorClass = "UNSUPPORTED_FEATURE.LATERAL_JOIN_OF_TYPE",
         sqlState = "0A000",
         parameters = Map("joinType" -> joinType),
         context = ExpectedContext(
@@ -94,8 +91,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
   test("UNSUPPORTED_FEATURE: NATURAL CROSS JOIN is not supported") {
     checkError(
       exception = parseException("SELECT * FROM a NATURAL CROSS JOIN b"),
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "NATURAL_CROSS_JOIN",
+      errorClass = "UNSUPPORTED_FEATURE.NATURAL_CROSS_JOIN",
       sqlState = "0A000",
       context = ExpectedContext(
         fragment = "NATURAL CROSS JOIN b",
@@ -143,8 +139,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     val sqlText = "SELECT TRANSFORM(DISTINCT a) USING 'a' FROM t"
     checkError(
       exception = parseException(sqlText),
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "TRANSFORM_DISTINCT_ALL",
+      errorClass = "UNSUPPORTED_FEATURE.TRANSFORM_DISTINCT_ALL",
       sqlState = "0A000",
       context = ExpectedContext(
         fragment = sqlText,
@@ -157,8 +152,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       "'org.apache.hadoop.hive.serde2.OpenCSVSerde' USING 'a' FROM t"
     checkError(
       exception = parseException(sqlText),
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "TRANSFORM_NON_HIVE",
+      errorClass = "UNSUPPORTED_FEATURE.TRANSFORM_NON_HIVE",
       sqlState = "0A000",
       context = ExpectedContext(
         fragment = sqlText,
@@ -466,8 +460,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     val sqlText = "DESCRIBE TABLE EXTENDED customer PARTITION (grade = 'A') customer.age"
     checkError(
       exception = parseException(sqlText),
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "DESC_TABLE_COLUMN_PARTITION",
+      errorClass = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_PARTITION",
       sqlState = "0A000",
       context = ExpectedContext(
         fragment = sqlText,
@@ -492,8 +485,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     val sqlText = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('location'='/home/user/db')"
     checkError(
       exception = parseException(sqlText),
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "SET_NAMESPACE_PROPERTY",
+      errorClass = "UNSUPPORTED_FEATURE.SET_NAMESPACE_PROPERTY",
       sqlState = "0A000",
       parameters = Map(
         "property" -> "location",
@@ -509,8 +501,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       "USING PARQUET TBLPROPERTIES ('provider'='parquet')"
     checkError(
       exception = parseException(sqlText),
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "SET_TABLE_PROPERTY",
+      errorClass = "UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY",
       sqlState = "0A000",
       parameters = Map(
         "property" -> "provider",
@@ -526,7 +517,6 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException(sqlText),
       errorClass = "INVALID_PROPERTY_KEY",
-      sqlState = null,
       parameters = Map("key" -> "\"\"", "value" -> "\"value\""),
       context = ExpectedContext(
         fragment = sqlText,
@@ -538,7 +528,6 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("set `key`=1;2;;"),
       errorClass = "INVALID_PROPERTY_VALUE",
-      sqlState = null,
       parameters = Map("value" -> "\"1;2;;\"", "key" -> "\"key\""),
       context = ExpectedContext(
         fragment = "set `key`=1;2",
@@ -551,8 +540,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       "WITH DBPROPERTIES('a'='a', 'b'='b', 'c'='c')"
     checkError(
       exception = parseException(sqlText),
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "SET_PROPERTIES_AND_DBPROPERTIES",
+      errorClass = "UNSUPPORTED_FEATURE.SET_PROPERTIES_AND_DBPROPERTIES",
       sqlState = "0A000",
       context = ExpectedContext(
         fragment = sqlText,

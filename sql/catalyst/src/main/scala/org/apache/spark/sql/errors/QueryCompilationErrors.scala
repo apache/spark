@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, Ta
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
@@ -101,16 +101,39 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "pivotType" -> pivotCol.dataType.catalogString))
   }
 
+  def unpivotRequiresAttributes(
+      given: String,
+      empty: String,
+      expressions: Seq[NamedExpression]): Throwable = {
+    val nonAttributes = expressions.filterNot(_.isInstanceOf[Attribute]).map(toSQLExpr)
+    new AnalysisException(
+      errorClass = "UNPIVOT_REQUIRES_ATTRIBUTES",
+      messageParameters = Map(
+        "given" -> given,
+        "empty" -> empty,
+        "expressions" -> nonAttributes.mkString(", ")))
+  }
+
   def unpivotRequiresValueColumns(): Throwable = {
     new AnalysisException(
       errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
       messageParameters = Map.empty)
   }
 
-  def unpivotValDataTypeMismatchError(values: Seq[NamedExpression]): Throwable = {
-    val dataTypes = values
+  def unpivotValueSizeMismatchError(names: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "UNPIVOT_VALUE_SIZE_MISMATCH",
+      messageParameters = Map("names" -> names.toString))
+  }
+
+  def unpivotValueDataTypeMismatchError(values: Seq[Seq[NamedExpression]]): Throwable = {
+    val dataTypes = values.map {
+      case Seq(value) => value
+      // wrap multiple values into a struct to get a nice name for them
+      case seq => Some(CreateStruct(seq)).map(e => Alias(e, e.sql)()).get
+    }
       .groupBy(_.dataType)
-      .mapValues(values => values.map(value => toSQLId(value.toString)).sorted)
+      .mapValues(values => values.map(value => toSQLId(value.name)).sorted)
       .mapValues(values => if (values.length > 3) values.take(3) :+ "..." else values)
       .toList.sortBy(_._1.sql)
       .map { case (dataType, values) => s"${toSQLType(dataType)} (${values.mkString(", ")})" }
@@ -122,8 +145,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "INSERT_PARTITION_SPEC_IF_NOT_EXISTS",
+      errorClass = "UNSUPPORTED_FEATURE.INSERT_PARTITION_SPEC_IF_NOT_EXISTS",
       messageParameters = Map("tableName" -> toSQLId(tableName)))
   }
 
@@ -140,15 +162,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def nestedGeneratorError(trimmedNestedGenerator: Expression): Throwable = {
-    new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
-      errorSubClass = "NESTED_IN_EXPRESSIONS",
+    new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
       messageParameters = Map("expression" -> toSQLExpr(trimmedNestedGenerator)))
   }
 
   def moreThanOneGeneratorError(generators: Seq[Expression], clause: String): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_GENERATOR",
-      errorSubClass = "MULTI_GENERATOR",
+      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
       messageParameters = Map(
         "clause" -> clause,
         "num" -> generators.size.toString,
@@ -157,8 +177,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def generatorOutsideSelectError(plan: LogicalPlan): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_GENERATOR",
-      errorSubClass = "OUTSIDE_SELECT",
+      errorClass = "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
       messageParameters = Map("plan" -> plan.simpleString(SQLConf.get.maxToStringFields)))
   }
 
@@ -190,9 +209,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       } else {
         Map("proposal" -> candidates.take(5).map(toSQLId).mkString(", "))
       }
+    val errorSubClass = if (candidates.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION"
     new AnalysisException(
-      errorClass = errorClass,
-      errorSubClass = if (candidates.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION",
+      errorClass = s"$errorClass.$errorSubClass",
       messageParameters = commonParam ++ proposalParam,
       origin = origin
     )
@@ -205,9 +224,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     } else {
       Map("proposal" -> proposal.take(5).map(toSQLId).mkString(", "))
     }
+    val errorSubClass = if (proposal.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION"
     new AnalysisException(
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = if (proposal.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION",
+      errorClass = s"UNRESOLVED_COLUMN.$errorSubClass",
       messageParameters = commonParam ++ proposalParam)
   }
 
@@ -223,17 +242,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       } else {
         Map("proposal" -> proposal.map(toSQLId).mkString(", "))
       }
+    val errorSubClass = if (proposal.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION"
     new AnalysisException(
-      errorClass = "UNRESOLVED_FIELD",
-      errorSubClass = if (proposal.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION",
+      errorClass = s"UNRESOLVED_FIELD.$errorSubClass",
       messageParameters = commonParams ++ proposalParam)
   }
 
   def dataTypeMismatchForDeserializerError(
       dataType: DataType, desiredType: String): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_DESERIALIZER",
-      errorSubClass = "DATA_TYPE_MISMATCH",
+      errorClass = "UNSUPPORTED_DESERIALIZER.DATA_TYPE_MISMATCH",
       messageParameters = Map(
         "desiredType" -> toSQLType(desiredType),
         "dataType" -> toSQLType(dataType)))
@@ -242,8 +260,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def fieldNumberMismatchForDeserializerError(
       schema: StructType, maxOrdinal: Int): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_DESERIALIZER",
-      errorSubClass = "FIELD_NUMBER_MISMATCH",
+      errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
       messageParameters = Map(
         "schema" -> toSQLType(schema),
         "ordinal" -> (maxOrdinal + 1).toString))
@@ -299,8 +316,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def pandasUDFAggregateNotSupportedInPivotError(): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "PANDAS_UDAF_IN_PIVOT",
+      errorClass = "UNSUPPORTED_FEATURE.PANDAS_UDAF_IN_PIVOT",
       messageParameters = Map.empty)
   }
 
@@ -481,8 +497,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def generatorNotExpectedError(name: FunctionIdentifier, classCanonicalName: String): Throwable = {
-    new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR",
-      errorSubClass = "NOT_GENERATOR",
+    new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR.NOT_GENERATOR",
       messageParameters = Map(
         "functionName" -> toSQLId(name.toString),
         "classCanonicalName" -> classCanonicalName))
@@ -713,8 +728,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       nameParts: Seq[String],
       operation: String): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "TABLE_OPERATION",
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       messageParameters = Map(
         "tableName" -> toSQLId(nameParts),
         "operation" -> operation))
@@ -722,8 +736,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def catalogOperationNotSupported(catalog: CatalogPlugin, operation: String): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "CATALOG_OPERATION",
+      errorClass = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
       messageParameters = Map(
         "catalogName" -> toSQLId(Seq(catalog.name())),
         "operation" -> operation))
@@ -1799,7 +1812,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
     val errorClass = "_LEGACY_ERROR_TEMP_1181"
     new AnalysisException(
-      SparkThrowableHelper.getMessage(errorClass, null, Map.empty[String, String]),
+      SparkThrowableHelper.getMessage(errorClass, Map.empty[String, String]),
       errorClass = Some(errorClass),
       messageParameters = Map.empty,
       plan = Some(plan))
@@ -1948,8 +1961,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def mixedRefsInAggFunc(funcStr: String, origin: Origin): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
-      errorSubClass = "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
+      errorClass =
+        "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
       origin = origin,
       messageParameters = Map("function" -> funcStr))
   }
@@ -2096,8 +2109,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def usePythonUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "PYTHON_UDF_IN_ON_CLAUSE",
+      errorClass = "UNSUPPORTED_FEATURE.PYTHON_UDF_IN_ON_CLAUSE",
       messageParameters = Map("joinType" -> toSQLStmt(joinType.sql)))
   }
 
@@ -2838,14 +2850,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("ident" -> ident.quoted))
   }
 
-  def unexpectedTypeOfRelationError(relation: LogicalPlan, tableName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1304",
-      messageParameters = Map(
-        "className" -> relation.getClass.getCanonicalName,
-        "tableName" -> tableName))
-  }
-
   def unsupportedTableChangeInJDBCCatalogError(change: TableChange): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1305",
@@ -3019,8 +3023,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def udfClassWithTooManyTypeArgumentsError(n: Int): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS",
+      errorClass = "UNSUPPORTED_FEATURE.TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS",
       messageParameters = Map("num" -> s"$n"))
   }
 
