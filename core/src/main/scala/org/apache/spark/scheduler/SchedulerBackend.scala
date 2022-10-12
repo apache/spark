@@ -88,7 +88,12 @@ private[spark] trait SchedulerBackend {
    * custom log url pattern is specified.
    * @return Map containing attributes on driver.
    */
-  def getDriverAttributes: Option[Map[String, String]] = None
+  def getDriverAttributes: Option[Map[String, String]] = {
+    val prefix = "SPARK_DRIVER_ATTRIBUTE_"
+    val driverAttributes = sys.env.filterKeys(_.startsWith(prefix))
+      .map(e => (e._1.substring(prefix.length).toUpperCase(Locale.ROOT), e._2)).toMap
+    if (driverAttributes.nonEmpty) Some(driverAttributes) else None
+  }
 
   /**
    * Get the max number of tasks that can be concurrent launched based on the ResourceProfile
