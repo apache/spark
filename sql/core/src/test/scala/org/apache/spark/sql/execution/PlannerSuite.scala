@@ -1370,7 +1370,9 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         """.stripMargin)
       spark.sql("CREATE TABLE date_dim(d_date_sk INT, d_date DATE) using parquet")
 
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         val df = sql(
           """
             |WITH web_tv
