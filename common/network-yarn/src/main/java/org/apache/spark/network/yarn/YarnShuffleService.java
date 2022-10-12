@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -241,6 +242,8 @@ public class YarnShuffleService extends AuxiliaryService {
     super.serviceInit(_conf);
 
     boolean stopOnFailure = _conf.getBoolean(STOP_ON_FAILURE_KEY, DEFAULT_STOP_ON_FAILURE);
+
+    migrateRecoveryDb();
 
     if (_recoveryPath == null && _conf.getBoolean(INTEGRATION_TESTING, false)) {
       _recoveryPath = new Path(JavaUtils.createTempDir().toURI());
@@ -491,6 +494,49 @@ public class YarnShuffleService extends AuxiliaryService {
    */
   protected Path getRecoveryPath(String fileName) {
     return _recoveryPath;
+  }
+
+  private void migrateRecoveryDb() throws IOException {
+    Preconditions.checkNotNull(_recoveryPath,
+            "recovery path should not be null if NM recovery is enabled");
+
+    DBBackend registeredExecutorsDbBackend = findExistedDbBackend(RECOVERY_FILE_NAME);
+    if (registeredExecutorsDbBackend != null) {
+      File oldFile = new File(_recoveryPath.toUri().getPath(),
+        registeredExecutorsDbBackend.fileName(RECOVERY_FILE_NAME));
+      File newFile = new File(_recoveryPath.toUri().getPath(),
+        dbBackend.fileName(RECOVERY_FILE_NAME));
+      DBProvider.migrate(registeredExecutorsDbBackend, oldFile,
+        dbBackend, newFile, CURRENT_VERSION, mapper);
+    }
+
+    DBBackend shuffleMergeDBBackend = findExistedDbBackend(SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME);
+    if (shuffleMergeDBBackend != null) {
+      File oldFile = new File(_recoveryPath.toUri().getPath(),
+        shuffleMergeDBBackend.fileName(SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME));
+      File newFile = new File(_recoveryPath.toUri().getPath(),
+        dbBackend.fileName(SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME));
+      DBProvider.migrate(shuffleMergeDBBackend, oldFile,
+        dbBackend, newFile, CURRENT_VERSION, mapper);
+    }
+
+    DBBackend secretsDBBackend = findExistedDbBackend(SECRETS_RECOVERY_FILE_NAME);
+    if (secretsDBBackend != null) {
+      File oldFile = new File(_recoveryPath.toUri().getPath(),
+        secretsDBBackend.fileName(SECRETS_RECOVERY_FILE_NAME));
+      File newFile = new File(_recoveryPath.toUri().getPath(),
+        dbBackend.fileName(SECRETS_RECOVERY_FILE_NAME));
+      DBProvider.migrate(secretsDBBackend, oldFile,
+        dbBackend, newFile, CURRENT_VERSION, mapper);
+    }
+  }
+
+  private DBBackend findExistedDbBackend(String prefix) {
+    return Arrays.stream(DBBackend.values())
+      .filter(value -> {
+        File recoveryFile = new File(_recoveryPath.toUri().getPath(), value.fileName(prefix));
+        return recoveryFile.exists();
+      }).findFirst().orElse(null);
   }
 
   /**

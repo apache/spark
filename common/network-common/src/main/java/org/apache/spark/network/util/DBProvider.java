@@ -18,17 +18,24 @@ package org.apache.spark.network.util;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.network.shuffledb.DB;
 import org.apache.spark.network.shuffledb.DBBackend;
+import org.apache.spark.network.shuffledb.DBIterator;
 import org.apache.spark.network.shuffledb.LevelDB;
 import org.apache.spark.network.shuffledb.RocksDB;
 import org.apache.spark.network.shuffledb.StoreVersion;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class DBProvider {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(DBProvider.class);
+
     public static DB initDB(
         DBBackend dbBackend,
         File dbFile,
@@ -57,8 +64,29 @@ public class DBProvider {
           case ROCKSDB: return new RocksDB(RocksDBProvider.initRocksDB(file));
           default:
             throw new IllegalArgumentException("Unsupported DBBackend: " + dbBackend);
+          }
+        }
+        return null;
+    }
+
+    public static void migrate(
+        DBBackend fromDbBackend,
+        File fromFile,
+        DBBackend toDbBackend,
+        File toFile,
+        StoreVersion version,
+        ObjectMapper mapper) throws IOException {
+      LOGGER.warn("Migrate DBBackend from {}({}) to {}({})",
+        fromDbBackend.name(), fromFile.getCanonicalPath(),
+        toDbBackend.name(), toFile.getCanonicalPath());
+      DB fromDb = initDB(fromDbBackend, fromFile, version, mapper);
+      DB toDb = initDB(toDbBackend, toFile, version, mapper);
+
+      try (DBIterator fromItr = fromDb.iterator()) {
+        while (fromItr.hasNext()) {
+          Map.Entry<byte[], byte[]> entry = fromItr.next();
+          toDb.put(entry.getKey(), entry.getValue());
         }
       }
-      return null;
     }
 }
