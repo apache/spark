@@ -3346,7 +3346,7 @@
   },
   "_LEGACY_ERROR_TEMP_2264" : {
     "message" : [
-      "Subprocess exited with status $exitCode. Error: <stderrBuffer>"
+      "Subprocess exited with status <exitCode>. Error: <stderrBuffer>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2265" : {

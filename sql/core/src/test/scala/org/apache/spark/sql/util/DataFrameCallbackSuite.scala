@@ -359,7 +359,7 @@ class DataFrameCallbackSuite extends QueryTest
       Dataset.ofRows(spark, ErrorTestCommand("foo")).collect()
     }
     sparkContext.listenerBus.waitUntilEmpty()
-    assert(e != null && e.isInstanceOf[QueryExecutionException]
+    assert(e != null && e.isInstanceOf[SparkException]
       && e.getCause.isInstanceOf[Error] && e.getCause.getMessage == "foo")
     spark.listenerManager.unregister(listener)
   }

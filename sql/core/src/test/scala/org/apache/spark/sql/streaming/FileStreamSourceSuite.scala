@@ -22,16 +22,14 @@ import java.net.URI
 import java.time.{LocalDateTime, ZoneOffset}
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicLong
-
 import scala.collection.mutable
 import scala.util.Random
-
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.util.Progressable
+import org.apache.spark.SparkUnsupportedOperationException
 import org.scalatest.PrivateMethodTester
 import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
@@ -2055,7 +2053,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
             AddFilesToFileStreamSinkLog(fileSystem, srcPath, sinkLog, 0) { path =>
               path.getName.startsWith("keep1")
             },
-            ExpectFailure[UnsupportedOperationException](
+            ExpectFailure[SparkUnsupportedOperationException](
               t => assert(t.getMessage.startsWith("Clean up source files is not supported")),
               isFatalError = false)
           )
