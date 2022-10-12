@@ -3380,6 +3380,43 @@ abstract class JsonSuite
       }
     }
   }
+
+  test("SPARK-40667: validate JSON Options") {
+    assert(JSONOptions.getAllOptions.size == 28)
+    // Please add validation on any new Json options here
+    assert(JSONOptions.isValidOption("samplingRatio"))
+    assert(JSONOptions.isValidOption("primitivesAsString"))
+    assert(JSONOptions.isValidOption("prefersDecimal"))
+    assert(JSONOptions.isValidOption("allowComments"))
+    assert(JSONOptions.isValidOption("allowUnquotedFieldNames"))
+    assert(JSONOptions.isValidOption("allowSingleQuotes"))
+    assert(JSONOptions.isValidOption("allowNumericLeadingZeros"))
+    assert(JSONOptions.isValidOption("allowNonNumericNumbers"))
+    assert(JSONOptions.isValidOption("allowBackslashEscapingAnyCharacter"))
+    assert(JSONOptions.isValidOption("allowUnquotedControlChars"))
+    assert(JSONOptions.isValidOption("compression"))
+    assert(JSONOptions.isValidOption("mode"))
+    assert(JSONOptions.isValidOption("dropFieldIfAllNull"))
+    assert(JSONOptions.isValidOption("ignoreNullFields"))
+    assert(JSONOptions.isValidOption("locale"))
+    assert(JSONOptions.isValidOption("dateFormat"))
+    assert(JSONOptions.isValidOption("timestampFormat"))
+    assert(JSONOptions.isValidOption("timestampNTZFormat"))
+    assert(JSONOptions.isValidOption("enableDateTimeParsingFallback"))
+    assert(JSONOptions.isValidOption("multiLine"))
+    assert(JSONOptions.isValidOption("lineSep"))
+    assert(JSONOptions.isValidOption("pretty"))
+    assert(JSONOptions.isValidOption("inferTimestamp"))
+    assert(JSONOptions.isValidOption("columnNameOfCorruptRecord"))
+    assert(JSONOptions.isValidOption("timeZone"))
+    assert(JSONOptions.isValidOption("writeNonAsciiCharacterAsCodePoint"))
+    assert(JSONOptions.isValidOption("encoding"))
+    assert(JSONOptions.isValidOption("charset"))
+    // Please add validation on any new Json options with alternative here
+    assert(JSONOptions.getAlternativeOption("encoding").contains("charset"))
+    assert(JSONOptions.getAlternativeOption("charset").contains("encoding"))
+    assert(JSONOptions.getAlternativeOption("dateFormat").isEmpty)
+  }
 }
 
 class JsonV1Suite extends JsonSuite {

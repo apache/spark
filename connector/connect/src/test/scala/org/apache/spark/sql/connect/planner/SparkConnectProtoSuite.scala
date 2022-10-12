@@ -17,10 +17,11 @@
 package org.apache.spark.sql.connect.planner
 
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 
 /**
@@ -30,9 +31,13 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
  */
 class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
-  lazy val connectTestRelation = createLocalRelationProto(Seq($"id".int))
+  lazy val connectTestRelation = createLocalRelationProto(Seq($"id".int, $"name".string))
 
-  lazy val sparkTestRelation: LocalRelation = LocalRelation($"id".int)
+  lazy val connectTestRelation2 = createLocalRelationProto(Seq($"key".int, $"value".int))
+
+  lazy val sparkTestRelation: LocalRelation = LocalRelation($"id".int, $"name".string)
+
+  lazy val sparkTestRelation2: LocalRelation = LocalRelation($"key".int, $"value".int)
 
   test("Basic select") {
     val connectPlan = {
@@ -46,12 +51,62 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
+  test("Basic joins with different join types") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.join(connectTestRelation2))
+    }
+    val sparkPlan = sparkTestRelation.join(sparkTestRelation2)
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+
+    val connectPlan2 = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.join(connectTestRelation2, condition = None))
+    }
+    val sparkPlan2 = sparkTestRelation.join(sparkTestRelation2, condition = None)
+    comparePlans(connectPlan2.analyze, sparkPlan2.analyze, false)
+    for ((t, y) <- Seq(
+      (JoinType.JOIN_TYPE_LEFT_OUTER, LeftOuter),
+      (JoinType.JOIN_TYPE_RIGHT_OUTER, RightOuter),
+      (JoinType.JOIN_TYPE_FULL_OUTER, FullOuter),
+      (JoinType.JOIN_TYPE_LEFT_ANTI, LeftAnti),
+      (JoinType.JOIN_TYPE_LEFT_SEMI, LeftSemi),
+      (JoinType.JOIN_TYPE_INNER, Inner))) {
+      val connectPlan3 = {
+        import org.apache.spark.sql.connect.dsl.plans._
+        transform(connectTestRelation.join(connectTestRelation2, t))
+      }
+      val sparkPlan3 = sparkTestRelation.join(sparkTestRelation2, y)
+      comparePlans(connectPlan3.analyze, sparkPlan3.analyze, false)
+    }
+  }
+
+  test("column alias") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.select("id".protoAttr.as("id2")))
+    }
+    val sparkPlan = sparkTestRelation.select($"id".as("id2"))
+  }
+
+  test("Aggregate with more than 1 grouping expressions") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.groupBy("id".protoAttr, "name".protoAttr)())
+    }
+    val sparkPlan = sparkTestRelation.groupBy($"id", $"name")()
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
   private def createLocalRelationProto(attrs: Seq[AttributeReference]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
-    // TODO: set data types for each local relation attribute one proto supports data type.
     for (attr <- attrs) {
       localRelationBuilder.addAttributes(
-        proto.Expression.QualifiedAttribute.newBuilder().setName(attr.name).build()
+        proto.Expression.QualifiedAttribute.newBuilder()
+          .setName(attr.name)
+          .setType(DataTypeProtoConverter.toConnectProtoType(attr.dataType))
       )
     }
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()

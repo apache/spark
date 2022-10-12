@@ -35,6 +35,7 @@ message Expression {
     UnresolvedFunction unresolved_function = 3;
     ExpressionString expression_string = 4;
     UnresolvedStar unresolved_star = 5;
+    Alias alias = 6;
   }
 
   message Literal {
@@ -65,10 +66,10 @@ message Expression {
       // Timestamp in units of microseconds since the UNIX epoch.
       int64 timestamp_tz = 27;
       bytes uuid = 28;
-      Type null = 29; // a typed null literal
+      DataType null = 29; // a typed null literal
       List list = 30;
-      Type.List empty_list = 31;
-      Type.Map empty_map = 32;
+      DataType.List empty_list = 31;
+      DataType.Map empty_map = 32;
       UserDefined user_defined = 33;
     }
 
@@ -164,5 +165,11 @@ message Expression {
   // by the analyzer.
   message QualifiedAttribute {
     string name = 1;
+    DataType type = 2;
+  }
+
+  message Alias {
+    Expression expr = 1;
+    string name = 2;
   }
 }

@@ -528,7 +528,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
       val errMsg = intercept[PartitionsAlreadyExistException] {
         client.createPartitions("default", "src_part", partitions, ignoreIfExists = false)
       }.getMessage
-      assert(errMsg.contains("partitions already exists"))
+      assert(errMsg.contains("partitions already exist"))
     } finally {
       client.dropPartitions(
         "default",

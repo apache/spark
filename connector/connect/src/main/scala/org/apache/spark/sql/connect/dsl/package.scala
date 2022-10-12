@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect
 import scala.collection.JavaConverters._
 
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 
 /**
@@ -39,6 +40,11 @@ package object dsl {
               .build())
           .build()
     }
+
+    implicit class DslExpression(val expr: proto.Expression) {
+      def as(alias: String): proto.Expression = proto.Expression.newBuilder().setAlias(
+        proto.Expression.Alias.newBuilder().setName(alias).setExpr(expr)).build()
+    }
   }
 
   object plans { // scalastyle:ignore
@@ -50,6 +56,34 @@ package object dsl {
             .addAllExpressions(exprs.toIterable.asJava)
             .build()
         ).build()
+      }
+
+      def join(
+          otherPlan: proto.Relation,
+          joinType: JoinType = JoinType.JOIN_TYPE_INNER,
+          condition: Option[proto.Expression] = None): proto.Relation = {
+        val relation = proto.Relation.newBuilder()
+        val join = proto.Join.newBuilder()
+        join.setLeft(logicalPlan)
+          .setRight(otherPlan)
+          .setJoinType(joinType)
+        if (condition.isDefined) {
+          join.setJoinCondition(condition.get)
+        }
+        relation.setJoin(join).build()
+      }
+
+      def groupBy(
+          groupingExprs: proto.Expression*)(aggregateExprs: proto.Expression*): proto.Relation = {
+        val agg = proto.Aggregate.newBuilder()
+        agg.setInput(logicalPlan)
+
+        for (groupingExpr <- groupingExprs) {
+          agg.addGroupingExpressions(groupingExpr)
+        }
+        // TODO: support aggregateExprs, which is blocked by supporting any builtin function
+        // resolution only by name in the analyzer.
+        proto.Relation.newBuilder().setAggregate(agg.build()).build()
       }
     }
   }
