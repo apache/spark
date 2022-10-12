@@ -2042,21 +2042,19 @@ class AdaptiveQueryExecSuite
         (1 to 30).map(i => TestData(i, i.toString)), 5)
         .toDF("c1", "c2").createOrReplaceTempView("t2")
 
-      // left size: 1600B, MapOutputStatistics in ShuffleQueryStageExec [926, 729, 731]
-      // right size: 480B, MapOutputStatistics in ShuffleQueryStageExec [416, 258, 252]
+      // left partition size: [926, 729, 731] after coalesce : [926, 1460]
+      // right partition size: [416, 258, 252] after coalesce : [416, 510]
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "450",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2000",
         SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
         // check default value ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD = 0
           checkJoinStrategy(false)
-          withSQLConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "420") {
-            checkJoinStrategy(true)
-          }
-          withSQLConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "400") {
-            checkJoinStrategy(false)
-          }
           withSQLConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "500") {
             checkJoinStrategy(false)
+          }
+          withSQLConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "800") {
+            checkJoinStrategy(true)
           }
       }
     }
