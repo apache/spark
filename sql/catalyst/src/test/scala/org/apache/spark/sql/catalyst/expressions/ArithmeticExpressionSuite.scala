@@ -507,7 +507,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
         assert(errorSubClass == "DATA_DIFF_TYPES")
         assert(messageParameters === Map(
-          "functionName" -> "function least",
+          "functionName" -> "`least`",
           "dataType" -> "[\"INT\", \"STRING\"]"))
     }
 
@@ -568,7 +568,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
         assert(errorSubClass == "DATA_DIFF_TYPES")
         assert(messageParameters === Map(
-          "functionName" -> "function greatest",
+          "functionName" -> "`greatest`",
           "dataType" -> "[\"INT\", \"STRING\"]"))
     }
 

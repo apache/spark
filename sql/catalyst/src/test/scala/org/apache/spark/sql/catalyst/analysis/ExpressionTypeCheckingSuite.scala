@@ -549,7 +549,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         expr = expr2,
         messageParameters = Map(
           "sqlExpr" -> toSQLExpr(expr2),
-          "functionName" -> s"function ${expr2.prettyName}",
+          "functionName" -> toSQLId(expr2.prettyName),
           "dataType" -> "[\"INT\", \"STRING\"]"
         )
       )

@@ -22,7 +22,7 @@ import scala.math.{max, min}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
@@ -1207,7 +1207,7 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
       DataTypeMismatch(
         errorSubClass = "DATA_DIFF_TYPES",
         messageParameters = Map(
-          "functionName" -> s"function $prettyName",
+          "functionName" -> toSQLId(prettyName),
           "dataType" -> children.map(_.dataType).map(toSQLType).mkString("[", ", ", "]")
         )
       )
@@ -1295,7 +1295,7 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
       DataTypeMismatch(
         errorSubClass = "DATA_DIFF_TYPES",
         messageParameters = Map(
-          "functionName" -> s"function $prettyName",
+          "functionName" -> toSQLId(prettyName),
           "dataType" -> children.map(_.dataType).map(toSQLType).mkString("[", ", ", "]")
         )
       )
