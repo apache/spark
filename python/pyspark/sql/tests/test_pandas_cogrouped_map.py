@@ -80,6 +80,29 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         right = self.data2.withColumn("v3", lit("a"))
         self._test_merge(self.data1, right, "id long, k int, v int, v2 int, v3 string")
 
+    def test_different_keys(self):
+        left = self.data1
+        right = self.data2
+
+        def merge_pandas(lft, rgt):
+            return pd.merge(lft.rename(columns={"id2": "id"}), rgt, on=["id", "k"])
+
+        result = (
+            left.withColumnRenamed("id", "id2")
+            .groupby("id2")
+            .cogroup(right.groupby("id"))
+            .applyInPandas(merge_pandas, "id long, k int, v int, v2 int")
+            .sort(["id", "k"])
+            .toPandas()
+        )
+
+        left = left.toPandas()
+        right = right.toPandas()
+
+        expected = pd.merge(left, right, on=["id", "k"]).sort_values(by=["id", "k"])
+
+        assert_frame_equal(expected, result)
+
     def test_complex_group_by(self):
         left = pd.DataFrame.from_dict({"id": [1, 2, 3], "k": [5, 6, 7], "v": [9, 10, 11]})
 
