@@ -509,10 +509,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 if (!dataTypesAreCompatibleFn(dt1, dt2)) {
                   val errorMessage =
                     s"""
-                       |${operator.nodeName} can only be performed on tables with the compatible
+                       |${operator.nodeName} can only be performed on tables with compatible
                        |column types. The ${ordinalNumber(ci)} column of the
                        |${ordinalNumber(ti + 1)} table is ${dt1.catalogString} type which is not
-                       |compatible with ${dt2.catalogString} at same column of first table
+                       |compatible with ${dt2.catalogString} at the same column of the first table
                     """.stripMargin.replace("\n", " ").trim()
                   failAnalysis(errorMessage + extraHintForAnsiTypeCoercionPlan(operator))
                 }
