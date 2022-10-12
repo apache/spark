@@ -271,6 +271,17 @@ sql_kafka = Module(
     ],
 )
 
+connect = Module(
+    name="connect",
+    dependencies=[sql],
+    source_file_regexes=[
+        "connector/connect",
+    ],
+    sbt_test_goals=[
+        "connect/test",
+    ],
+)
+
 sketch = Module(
     name="sketch",
     dependencies=[tags],
@@ -473,18 +484,18 @@ pyspark_sql = Module(
     ],
 )
 
-pyspark_sql = Module(
-    name="pyspark-sql-connect",
-    dependencies=[pyspark_core, hive, avro],
+pyspark_connect = Module(
+    name="pyspark-connect",
+    dependencies=[pyspark_sql, connect],
     source_file_regexes=["python/pyspark/sql/connect"],
     python_test_goals=[
         # doctests
         # No doctests yet.
         # unittests
-        "pyspark.sql.tests.connect.test_column_expressions",
-        "pyspark.sql.tests.connect.test_plan_only",
-        "pyspark.sql.tests.connect.test_select_ops",
-        "pyspark.sql.tests.connect.test_spark_connect",
+        "pyspark.sql.tests.test_connect_column_expressions",
+        "pyspark.sql.tests.test_connect_plan_only",
+        "pyspark.sql.tests.test_connect_select_ops",
+        "pyspark.sql.tests.test_connect_basic",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and

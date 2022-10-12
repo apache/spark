@@ -152,6 +152,9 @@ WEB UI:
 DEPLOY:
   - "sbin/**/*"
 CONNECT:
-  - "connect/**/*"
+  - "connector/connect/**/*"
   - "**/sql/sparkconnect/**/*"
   - "python/pyspark/sql/**/connect/**/*"
+PROTOBUF:
+ - "connector/protobuf/**/*"
+ - "python/pyspark/sql/protobuf/**/*"

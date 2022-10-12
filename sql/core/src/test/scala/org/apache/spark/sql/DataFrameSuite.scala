@@ -895,6 +895,57 @@ class DataFrameSuite extends QueryTest
     assert(df.schema.map(_.name) === Seq("key", "valueRenamed", "newCol"))
   }
 
+  test("SPARK-40311: withColumnsRenamed") {
+      val df = testData.toDF().withColumns(Seq("newCol1", "newCOL2"),
+        Seq(col("key") + 1, col("key") + 2))
+        .withColumnsRenamed(Map("newCol1" -> "renamed1", "newCol2" -> "renamed2"))
+      checkAnswer(
+        df,
+        testData.collect().map { case Row(key: Int, value: String) =>
+          Row(key, value, key + 1, key + 2)
+        }.toSeq)
+      assert(df.columns === Array("key", "value", "renamed1", "renamed2"))
+  }
+
+  test("SPARK-40311: withColumnsRenamed case sensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val df = testData.toDF().withColumns(Seq("newCol1", "newCOL2"),
+        Seq(col("key") + 1, col("key") + 2))
+        .withColumnsRenamed(Map("newCol1" -> "renamed1", "newCol2" -> "renamed2"))
+      checkAnswer(
+        df,
+        testData.collect().map { case Row(key: Int, value: String) =>
+          Row(key, value, key + 1, key + 2)
+        }.toSeq)
+      assert(df.columns === Array("key", "value", "renamed1", "newCOL2"))
+    }
+  }
+
+  test("SPARK-40311: withColumnsRenamed duplicate column names simple") {
+    val e = intercept[AnalysisException] {
+      person.withColumnsRenamed(Map("id" -> "renamed", "name" -> "renamed"))
+    }
+    assert(e.getMessage.contains("Found duplicate column(s)"))
+    assert(e.getMessage.contains("in given column names for withColumnsRenamed:"))
+    assert(e.getMessage.contains("`renamed`"))
+  }
+
+  test("SPARK-40311: withColumnsRenamed duplicate column names simple case sensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val df = person.withColumnsRenamed(Map("id" -> "renamed", "name" -> "Renamed"))
+      assert(df.columns === Array("renamed", "Renamed", "age"))
+    }
+  }
+
+  test("SPARK-40311: withColumnsRenamed duplicate column names indirect") {
+    val e = intercept[AnalysisException] {
+      person.withColumnsRenamed(Map("id" -> "renamed1", "renamed1" -> "age"))
+    }
+    assert(e.getMessage.contains("Found duplicate column(s)"))
+    assert(e.getMessage.contains("in given column names for withColumnsRenamed:"))
+    assert(e.getMessage.contains("`age`"))
+  }
+
   test("SPARK-20384: Value class filter") {
     val df = spark.sparkContext
       .parallelize(Seq(StringWrapper("a"), StringWrapper("b"), StringWrapper("c")))
@@ -2790,8 +2841,7 @@ class DataFrameSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df.groupBy($"d", $"b").as[GroupByKey, Row]
       },
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`d`", "proposal" -> "`a`, `b`, `c`"))
   }
 

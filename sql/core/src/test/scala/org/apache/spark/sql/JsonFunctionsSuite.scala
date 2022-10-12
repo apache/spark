@@ -492,8 +492,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema))
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("INVALID_JSON_MAP_KEY_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.INVALID_JSON_MAP_KEY_TYPE",
       parameters = Map(
         "schema" -> "\"MAP<STRUCT<f: INT>, STRING>\"",
         "sqlExpr" -> "\"entries\""))

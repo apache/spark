@@ -118,6 +118,7 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     parser.legacy_setops_precedence_enabled = conf.setOpsPrecedenceEnforced
     parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
     parser.SQL_standard_keyword_behavior = conf.enforceReservedKeywords
+    parser.double_quoted_identifiers = conf.doubleQuotedIdentifiers
 
     try {
       try {
@@ -144,7 +145,7 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
       case e: AnalysisException =>
         val position = Origin(e.line, e.startPosition)
         throw new ParseException(Option(command), e.message, position, position,
-          e.errorClass, None, e.messageParameters)
+          e.errorClass, e.messageParameters)
     }
   }
 }
@@ -237,7 +238,6 @@ class ParseException(
     val start: Origin,
     val stop: Origin,
     errorClass: Option[String] = None,
-    errorSubClass: Option[String] = None,
     messageParameters: Map[String, String] = Map.empty,
     queryContext: Array[QueryContext] = ParseException.getQueryContext())
   extends AnalysisException(
@@ -247,33 +247,17 @@ class ParseException(
     None,
     None,
     errorClass,
-    errorSubClass,
     messageParameters) {
 
   def this(errorClass: String, messageParameters: Map[String, String], ctx: ParserRuleContext) =
     this(Option(ParserUtils.command(ctx)),
-      SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
       ParserUtils.position(ctx.getStart),
       ParserUtils.position(ctx.getStop),
       Some(errorClass),
-      None,
       messageParameters)
 
   def this(errorClass: String, ctx: ParserRuleContext) = this(errorClass, Map.empty, ctx)
-
-  def this(
-      errorClass: String,
-      errorSubClass: String,
-      messageParameters: Map[String, String],
-      ctx: ParserRuleContext) =
-    this(
-      Option(ParserUtils.command(ctx)),
-      SparkThrowableHelper.getMessage(errorClass, errorSubClass, messageParameters),
-      ParserUtils.position(ctx.getStart),
-      ParserUtils.position(ctx.getStop),
-      Some(errorClass),
-      Some(errorSubClass),
-      messageParameters)
 
   /** Compose the message through SparkThrowableHelper given errorClass and messageParameters. */
   def this(
@@ -284,11 +268,10 @@ class ParseException(
       messageParameters: Map[String, String]) =
     this(
       command,
-      SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
       start,
       stop,
       Some(errorClass),
-      None,
       messageParameters)
 
   override def getMessage: String = {
@@ -313,14 +296,14 @@ class ParseException(
   }
 
   def withCommand(cmd: String): ParseException = {
-    val (cls, subCls, params) =
+    val (cls, params) =
       if (errorClass == Some("PARSE_SYNTAX_ERROR") && cmd.trim().isEmpty) {
         // PARSE_EMPTY_STATEMENT error class overrides the PARSE_SYNTAX_ERROR when cmd is empty
-        (Some("PARSE_EMPTY_STATEMENT"), None, Map.empty[String, String])
+        (Some("PARSE_EMPTY_STATEMENT"), Map.empty[String, String])
       } else {
-        (errorClass, errorSubClass, messageParameters)
+        (errorClass, messageParameters)
       }
-    new ParseException(Option(cmd), message, start, stop, cls, subCls, params, queryContext)
+    new ParseException(Option(cmd), message, start, stop, cls, params, queryContext)
   }
 
   override def getQueryContext: Array[QueryContext] = queryContext
@@ -347,6 +330,23 @@ case object PostProcessor extends SqlBaseParserBaseListener {
 
   /** Remove the back ticks from an Identifier. */
   override def exitQuotedIdentifier(ctx: SqlBaseParser.QuotedIdentifierContext): Unit = {
+    if (ctx.BACKQUOTED_IDENTIFIER() != null) {
+      replaceTokenByIdentifier(ctx, 1) { token =>
+        // Remove the double back ticks in the string.
+        token.setText(token.getText.replace("``", "`"))
+        token
+      }
+    } else if (ctx.DOUBLEQUOTED_STRING() != null) {
+      replaceTokenByIdentifier(ctx, 1) { token =>
+        // Remove the double quotes in the string.
+        token.setText(token.getText.replace("\"\"", "\""))
+        token
+      }
+    }
+  }
+
+  /** Remove the back ticks from an Identifier. */
+  override def exitBackQuotedIdentifier(ctx: SqlBaseParser.BackQuotedIdentifierContext): Unit = {
     replaceTokenByIdentifier(ctx, 1) { token =>
       // Remove the double back ticks in the string.
       token.setText(token.getText.replace("``", "`"))

@@ -1,0 +1,48 @@
+
+‰
+Cconnector/protobuf/src/test/resources/protobuf/catalyst_types.protoorg.apache.spark.sql.protobuf")
+
+BooleanMsg
+	bool_type (RboolType"+
+
+IntegerMsg
+
+int32_type (R	int32Type",
+	DoubleMsg
+double_type (R
+doubleType")
+FloatMsg
+
+float_type (R	floatType")
+BytesMsg
+
+bytes_type (R	bytesType",
+	StringMsg
+string_type (	R
+stringType".
+Person
+name (	Rname
+age (Rage"n
+Bad
+col_0 (Rcol0
+col_1 (Rcol1
+col_2 (	Rcol2
+col_3 (Rcol3
+col_4 (Rcol4"q
+Actual
+col_0 (	Rcol0
+col_1 (Rcol1
+col_2 (Rcol2
+col_3 (Rcol3
+col_4 (Rcol4"
+oldConsumer
+key (	Rkey"5
+newProducer
+key (	Rkey
+value (Rvalue"t
+newConsumer
+key (	Rkey
+value (Rvalue=
+actual (2%.org.apache.spark.sql.protobuf.ActualRactual"
+oldProducer
+key (	RkeyBBCatalystTypesbproto3

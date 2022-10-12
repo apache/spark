@@ -129,7 +129,7 @@ abstract class HashMapGenerator(
   protected def generateRowIterator(): String
 
   protected final def generateClose(): String = {
-    s"""
+    """
        |public void close() {
        |  batch.close();
        |}

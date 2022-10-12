@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -218,10 +218,10 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
   test("renamePartition") {
     val partTable = createMultiPartTable()
 
-    val errMsg1 = intercept[PartitionAlreadyExistsException] {
+    val errMsg1 = intercept[PartitionsAlreadyExistException] {
       partTable.renamePartition(InternalRow(0, "abc"), InternalRow(1, "abc"))
     }.getMessage
-    assert(errMsg1.contains("Partition already exists"))
+    assert(errMsg1.contains("partitions already exist"))
 
     val newPart = InternalRow(2, "xyz")
     val errMsg2 = intercept[NoSuchPartitionException] {
