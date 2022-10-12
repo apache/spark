@@ -18,17 +18,14 @@
 package org.apache.spark
 
 import java.io.File
-import java.net.Socket
+import java.net.{InetAddress, Socket}
 import java.util.Locale
-
 import scala.collection.JavaConverters._
 import scala.collection.concurrent
 import scala.collection.mutable
 import scala.util.Properties
-
 import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.conf.Configuration
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
@@ -209,11 +206,15 @@ object SparkEnv extends Logging {
       numCores: Int,
       ioEncryptionKey: Option[Array[Byte]],
       isLocal: Boolean): SparkEnv = {
+    var hostnameFinal = hostname
+    if (conf.getBoolean("spark.lyft.resolve", false)) {
+      hostnameFinal = InetAddress.getByName(hostname).getHostAddress
+    }
     val env = create(
       conf,
       executorId,
       bindAddress,
-      hostname,
+      hostnameFinal,
       None,
       isLocal,
       numCores,
