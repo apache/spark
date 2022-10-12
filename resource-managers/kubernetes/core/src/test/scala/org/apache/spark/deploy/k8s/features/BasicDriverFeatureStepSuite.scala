@@ -108,6 +108,11 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
         envVar.getValueFrom.getFieldRef.getApiVersion.equals("v1") &&
         envVar.getValueFrom.getFieldRef.getFieldPath.equals("status.podIP")))
 
+    assert(configuredPod.container.getEnv.asScala.exists(envVar =>
+      envVar.getName.equals(ENV_DRIVER_POD_NAME) &&
+        envVar.getValueFrom.getFieldRef.getApiVersion.equals("v1") &&
+        envVar.getValueFrom.getFieldRef.getFieldPath.equals("metadata.name")))
+
     val resourceRequirements = configuredPod.container.getResources
     val requests = resourceRequirements.getRequests.asScala
     assert(amountAndFormat(requests("cpu")) === "2")
