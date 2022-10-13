@@ -352,6 +352,8 @@ case class Invoke(
 
   lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(INVOKE)
+
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
   override def inputTypes: Seq[AbstractDataType] =

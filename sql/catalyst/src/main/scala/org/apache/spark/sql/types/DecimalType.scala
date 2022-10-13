@@ -93,6 +93,8 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
       (precision - scale) <= (dt.precision - dt.scale) && scale <= dt.scale
     case dt: IntegralType =>
       isTighterThan(DecimalType.forType(dt))
+    case dt: DoubleType =>
+      isTighterThan(DecimalType(precision, scale))
     case _ => false
   }
 

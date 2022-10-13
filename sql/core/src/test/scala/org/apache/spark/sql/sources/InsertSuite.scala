@@ -626,11 +626,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         assert(msg.contains("Cannot safely cast 'i': bigint to int"))
 
         msg = intercept[AnalysisException] {
-          sql("insert into t select 1, 2.0")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'd': decimal(2,1) to double"))
-
-        msg = intercept[AnalysisException] {
           sql("insert into t select 1, 2.0D, 3")
         }.getMessage
         assert(msg.contains("`t` requires that the data to be inserted have the same number of " +
