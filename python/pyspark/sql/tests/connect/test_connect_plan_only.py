@@ -64,7 +64,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_connect_plan_only import *  # noqa: F401
+    from pyspark.sql.tests.connect.test_connect_plan_only import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore
