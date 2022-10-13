@@ -3805,5 +3805,136 @@
     "message" : [
       "Due to Scala's limited support of tuple, tuple with more than 22 elements are not supported."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_2151" : {
+    "message" : [
+      "Error while decoding: <e>",
+      "<expressions>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2152" : {
+    "message" : [
+      "Error while encoding: <e>",
+      "<expressions>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2153" : {
+    "message" : [
+      "class <clsName> has unexpected serializer: <objSerializer>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2154" : {
+    "message" : [
+      "Failed to get outer pointer for <innerCls>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2155" : {
+    "message" : [
+      "<userClass> is not annotated with SQLUserDefinedType nor registered with UDTRegistration.}"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2156" : {
+    "message" : [
+      "The size function doesn't support the operand type <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2157" : {
+    "message" : [
+      "Unexpected value for start in function <prettyName>: SQL array indices start at 1."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2158" : {
+    "message" : [
+      "Unexpected value for length in function <prettyName>: length must be greater than or equal to 0."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2159" : {
+    "message" : [
+      "Unsuccessful try to concat arrays with <numberOfElements> elements due to exceeding the array size limit <maxRoundedArrayLength>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2160" : {
+    "message" : [
+      "Unsuccessful try to flatten an array of arrays with <numberOfElements> elements due to exceeding the array size limit <maxRoundedArrayLength>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2161" : {
+    "message" : [
+      "Unsuccessful try to create array with <count> elements due to exceeding the array size limit <maxRoundedArrayLength>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2162" : {
+    "message" : [
+      "Unsuccessful try to union arrays with <length> elements due to exceeding the array size limit <maxRoundedArrayLength>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2163" : {
+    "message" : [
+      "Initial type <dataType> must be a <target>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2164" : {
+    "message" : [
+      "Initial type <dataType> must be an <arrayType>, a <structType> or a <mapType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2165" : {
+    "message" : [
+      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2166" : {
+    "message" : [
+      "Malformed JSON"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2167" : {
+    "message" : [
+      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>. Reasons: Failed to infer a common schema. Struct types are expected, but `<dataType>` was found."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2168" : {
+    "message" : [
+      "Decorrelate inner query through <plan> is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2169" : {
+    "message" : [
+      "This method should not be called in the analyzer"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2170" : {
+    "message" : [
+      "Cannot safely merge SERDEPROPERTIES:",
+      "<props1>",
+      "<props2>",
+      "The conflict keys: <conflictKeys>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2171" : {
+    "message" : [
+      "Not supported pair: <r1>, <r2> at <function>()"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2172" : {
+    "message" : [
+      "Once strategy's idempotence is broken for batch <batchName>",
+      "<plan>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2173" : {
+    "message" : [
+      "The structural integrity of the input plan is broken in <className>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2174" : {
+    "message" : [
+      "After applying rule <ruleName> in batch <batchName>, the structural integrity of the plan is broken."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2175" : {
+    "message" : [
+      "Rule id not found for <ruleName>"
+    ]
   }
 }
