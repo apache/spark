@@ -15,17 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.write
+package org.apache.spark.sql.connector.write;
 
-import java.util.Optional
+import org.apache.spark.annotation.Experimental;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+/**
+ * A mix-in interface for {@link RowLevelOperation}. Data sources can implement this interface
+ * to indicate they support handling deltas of rows.
+ *
+ * @since 3.4.0
+ */
+@Experimental
+public interface SupportsDelta extends RowLevelOperation {
+  @Override
+  DeltaWriteBuilder newWriteBuilder(LogicalWriteInfo info);
 
-private[sql] case class LogicalWriteInfoImpl(
-    queryId: String,
-    schema: StructType,
-    options: CaseInsensitiveStringMap,
-    override val rowIdSchema: Optional[StructType] = Optional.empty[StructType],
-    override val metadataSchema: Optional[StructType] = Optional.empty[StructType])
-  extends LogicalWriteInfo
+  /**
+   * Returns the row ID column references that should be used for row equality.
+   */
+  NamedReference[] rowId();
+}
