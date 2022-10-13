@@ -1747,7 +1747,6 @@ class DataFrame(Frame, Generic[T]):
 
         sdf = combined._internal.spark_frame
         index_col_name = verify_temp_column_name(sdf, "__corrwith_index_temp_column__")
-        tuple_col_name = verify_temp_column_name(sdf, "__corrwith_tuple_temp_column__")
 
         this_numeric_column_labels: List[Label] = []
         for column_label in this._internal.column_labels:
@@ -1797,15 +1796,7 @@ class DataFrame(Frame, Generic[T]):
                 )
 
         if len(pair_scols) > 0:
-            sdf = sdf.select(F.explode(F.array(*pair_scols)).alias(tuple_col_name)).select(
-                F.col(f"{tuple_col_name}.{index_col_name}").alias(index_col_name),
-                F.col(f"{tuple_col_name}.{CORRELATION_VALUE_1_COLUMN}").alias(
-                    CORRELATION_VALUE_1_COLUMN
-                ),
-                F.col(f"{tuple_col_name}.{CORRELATION_VALUE_2_COLUMN}").alias(
-                    CORRELATION_VALUE_2_COLUMN
-                ),
-            )
+            sdf = sdf.select(F.inline(F.array(*pair_scols)))
 
             sdf = compute(sdf=sdf, groupKeys=[index_col_name], method=method).select(
                 index_col_name, CORRELATION_CORR_OUTPUT_COLUMN

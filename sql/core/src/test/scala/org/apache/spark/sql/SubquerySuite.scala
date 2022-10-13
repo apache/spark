@@ -758,7 +758,7 @@ class SubquerySuite extends QueryTest
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t4")
 
       // Simplest case
-      intercept[AnalysisException] {
+      val exception1 = intercept[AnalysisException] {
         sql(
           """
             | select t1.c1
@@ -767,9 +767,22 @@ class SubquerySuite extends QueryTest
             |                  from   t2
             |                  where  t1.c2 >= t2.c2)""".stripMargin).collect()
       }
+      checkErrorMatchPVals(
+        exception1,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
+        parameters = Map("treeNode" -> "(?s).*"),
+        sqlState = None,
+        context = ExpectedContext(
+          fragment =
+            """select max(t2.c1)
+              |                  from   t2
+              |                  where  t1.c2 >= t2.c2""".stripMargin,
+          start = 44,
+          stop = 128))
 
       // Add a HAVING on top and augmented within an OR predicate
-      intercept[AnalysisException] {
+      val exception2 = intercept[AnalysisException] {
         sql(
           """
             | select t1.c1
@@ -780,9 +793,23 @@ class SubquerySuite extends QueryTest
             |                  having count(*) > 0 )
             |         or t1.c2 >= 0""".stripMargin).collect()
       }
+      checkErrorMatchPVals(
+        exception2,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
+        parameters = Map("treeNode" -> "(?s).*"),
+        sqlState = None,
+        context = ExpectedContext(
+          fragment =
+            """select max(t2.c1)
+              |                  from   t2
+              |                  where  t1.c2 >= t2.c2
+              |                  having count(*) > 0""".stripMargin,
+          start = 44,
+          stop = 166))
 
       // Add a HAVING on top and augmented within an OR predicate
-      intercept[AnalysisException] {
+      val exception3 = intercept[AnalysisException] {
         sql(
           """
             | select t1.c1
@@ -794,10 +821,24 @@ class SubquerySuite extends QueryTest
             |                          or t3.c2 = t2.c2)
             |        )""".stripMargin).collect()
       }
+      checkErrorMatchPVals(
+        exception3,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
+        parameters = Map("treeNode" -> "(?s).*"),
+        sqlState = None,
+        context = ExpectedContext(
+          fragment =
+            """select max(t2.c1)
+              |                   from   t2
+              |                   where  t1.c2 = t2.c2
+              |                          or t3.c2 = t2.c2""".stripMargin,
+          start = 77,
+          stop = 205))
 
       // In Window expression: changing the data set to
       // demonstrate if this query ran, it would return incorrect result.
-      intercept[AnalysisException] {
+      val exception4 = intercept[AnalysisException] {
         sql(
           """
           | select c1
@@ -806,6 +847,19 @@ class SubquerySuite extends QueryTest
           |               from   t4
           |               where t3.c2 >= t4.c2)""".stripMargin).collect()
       }
+      checkErrorMatchPVals(
+        exception4,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+        parameters = Map("treeNode" -> "(?s).*"),
+        sqlState = None,
+        context = ExpectedContext(
+          fragment =
+            """select max(t4.c1) over ()
+              |               from   t4
+              |               where t3.c2 >= t4.c2""".stripMargin,
+          start = 38,
+          stop = 123))
     }
   }
   // This restriction applies to
@@ -820,7 +874,7 @@ class SubquerySuite extends QueryTest
       Seq(1).toDF("c1").createOrReplaceTempView("t3")
 
       // Left outer join (LOJ) in IN subquery context
-      intercept[AnalysisException] {
+      val exception1 = intercept[AnalysisException] {
         sql(
           """
             | select t1.c1
@@ -830,8 +884,19 @@ class SubquerySuite extends QueryTest
             |                     (select c1 from t2 where t1.c1 = 2) t2
             |                     on t2.c1 = t3.c1)""".stripMargin).collect()
       }
+      checkErrorMatchPVals(
+        exception1,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+        parameters = Map("treeNode" -> "(?s).*"),
+        sqlState = None,
+        context = ExpectedContext(
+          fragment = "(select c1 from t2 where t1.c1 = 2) t2",
+          start = 110,
+          stop = 147))
+
       // Right outer join (ROJ) in EXISTS subquery context
-      intercept[AnalysisException] {
+      val exception2 = intercept[AnalysisException] {
         sql(
           """
             | select t1.c1
@@ -841,8 +906,19 @@ class SubquerySuite extends QueryTest
             |                       right outer join t3
             |                       on t2.c1 = t3.c1)""".stripMargin).collect()
       }
+      checkErrorMatchPVals(
+        exception2,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+        parameters = Map("treeNode" -> "(?s).*"),
+        sqlState = None,
+        context = ExpectedContext(
+          fragment = "(select c1 from t2 where t1.c1 = 2) t2",
+          start = 74,
+          stop = 111))
+
       // SPARK-18578: Full outer join (FOJ) in scalar subquery context
-      intercept[AnalysisException] {
+      val exception3 = intercept[AnalysisException] {
         sql(
           """
             | select (select max(1)
@@ -851,6 +927,18 @@ class SubquerySuite extends QueryTest
             |                on t2.c1=t3.c1)
             | from   t1""".stripMargin).collect()
       }
+      checkErrorMatchPVals(
+        exception3,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+        parameters = Map("treeNode" -> "(?s).*"),
+        sqlState = None,
+        context = ExpectedContext(
+          fragment =
+            """full join t3
+              |                on t2.c1=t3.c1""".stripMargin,
+          start = 112,
+          stop = 154))
     }
   }
 
@@ -880,6 +968,15 @@ class SubquerySuite extends QueryTest
             |               WHERE t1.c1 = t2.c1)
           """.stripMargin)
       }
+      checkErrorMatchPVals(
+        exception1,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_REFERENCE",
+        parameters = Map("treeNode" -> "(?s).*"),
+        sqlState = None,
+        context = ExpectedContext(
+          fragment = "LATERAL VIEW explode(t2.arr_c2) q AS c2",
+          start = 68,
+          stop = 106))
       assert(exception1.getMessage.contains(
         "Expressions referencing the outer query are not supported outside of WHERE/HAVING"))
     }
