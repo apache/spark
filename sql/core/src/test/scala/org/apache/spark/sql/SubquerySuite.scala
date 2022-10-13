@@ -2251,7 +2251,7 @@ class SubquerySuite extends QueryTest
     }
   }
 
-  test("SPARK-40618: Do not merge scalar subqueries with nested subqueries inside") {
+  test("Merge non-correlated scalar subqueries from different parent plans") {
     Seq(false, true).foreach { enableAQE =>
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
@@ -2283,12 +2283,12 @@ class SubquerySuite extends QueryTest
         }
 
         if (enableAQE) {
-          assert(subqueryIds.size == 4, "Missing or unexpected SubqueryExec in the plan")
-          assert(reusedSubqueryIds.size == 2,
-            "Missing or unexpected reused ReusedSubqueryExec in the plan")
-        } else {
           assert(subqueryIds.size == 3, "Missing or unexpected SubqueryExec in the plan")
           assert(reusedSubqueryIds.size == 3,
+            "Missing or unexpected reused ReusedSubqueryExec in the plan")
+        } else {
+          assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+          assert(reusedSubqueryIds.size == 4,
             "Missing or unexpected reused ReusedSubqueryExec in the plan")
         }
       }
@@ -2426,9 +2426,32 @@ class SubquerySuite extends QueryTest
     // This test contains a subquery expression with another subquery expression nested inside.
     // It acts as a regression test to ensure that the MergeScalarSubqueries rule does not attempt
     // to merge them together.
-    withTable("t") {
+    withTable("t", "t2") {
       sql("create table t(col int) using csv")
       checkAnswer(sql("select(select sum((select sum(col) from t)) from t)"), Row(null))
+
+      checkAnswer(sql(
+        """
+          |select
+          |  (select sum(
+          |    (select sum(
+          |        (select sum(col) from t))
+          |     from t))
+          |  from t)
+          |""".stripMargin),
+        Row(null))
+
+      sql("create table t2(col int) using csv")
+      checkAnswer(sql(
+        """
+          |select
+          |  (select sum(
+          |    (select sum(
+          |        (select sum(col) from t))
+          |     from t2))
+          |  from t)
+          |""".stripMargin),
+        Row(null))
     }
   }
 }
