@@ -4229,15 +4229,57 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(errMsg.contains(s"input to function $name requires at least one argument"))
     }
 
-    val funcsMustHaveAtLeastTwoArgs =
-      ("greatest", (df: DataFrame) => df.select(greatest())) ::
-      ("greatest", (df: DataFrame) => df.selectExpr("greatest()")) ::
-      ("least", (df: DataFrame) => df.select(least())) ::
-      ("least", (df: DataFrame) => df.selectExpr("least()")) :: Nil
-    funcsMustHaveAtLeastTwoArgs.foreach { case (name, func) =>
-      val errMsg = intercept[AnalysisException] { func(df) }.getMessage
-      assert(errMsg.contains(s"input to function $name requires at least two arguments"))
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(greatest())
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"greatest()\"",
+        "actualNum" -> "0")
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("greatest()")
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"greatest()\"",
+        "actualNum" -> "0"),
+      context = ExpectedContext(
+        fragment = "greatest()",
+        start = 0,
+        stop = 9)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(least())
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"least()\"",
+        "actualNum" -> "0")
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("least()")
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"least()\"",
+        "actualNum" -> "0"),
+      context = ExpectedContext(
+        fragment = "least()",
+        start = 0,
+        stop = 6)
+    )
   }
 
   test("SPARK-24734: Fix containsNull of Concat for array type") {

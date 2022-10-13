@@ -64,7 +64,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
    */
   def getSkewThreshold(medianSize: Long): Long = {
     conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD).max(
-      medianSize * conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR))
+      (medianSize * conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR)).toLong)
   }
 
   /**
