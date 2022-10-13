@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, ResolveDefaultColumns, V2ExpressionBuilder}
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDelete, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
@@ -39,7 +39,7 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBat
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumnAndNestedColumn}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
@@ -141,7 +141,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case _ => false
       }
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
-        relation.keyGroupedPartitioning, relation.ordering)
+        relation.keyGroupedPartitioning, relation.ordering, relation.relation.table)
       withProjectAndFilter(project, postScanFilters, batchExec, !batchExec.supportsColumnar) :: Nil
 
     case PhysicalOperation(p, f, r: StreamingDataSourceV2Relation)
@@ -277,23 +277,28 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           // correctness depends on removing all matching data.
           val filters = DataSourceStrategy.normalizeExprs(Seq(condition), output)
               .flatMap(splitConjunctivePredicates(_).map {
-                f => DataSourceStrategy.translateFilter(f, true).getOrElse(
+                f => DataSourceV2Strategy.translateFilterV2(f).getOrElse(
                   throw QueryCompilationErrors.cannotTranslateExpressionToSourceFilterError(f))
               }).toArray
 
           table match {
-            case t: SupportsDelete if t.canDeleteWhere(filters) =>
+            case t: SupportsDeleteV2 if t.canDeleteWhere(filters) =>
               DeleteFromTableExec(t, filters, refreshCache(r)) :: Nil
-            case t: SupportsDelete =>
+            case t: SupportsDeleteV2 =>
               throw QueryCompilationErrors.cannotDeleteTableWhereFiltersError(t, filters)
             case t: TruncatableTable if condition == TrueLiteral =>
               TruncateTableExec(t, refreshCache(r)) :: Nil
             case _ =>
               throw QueryCompilationErrors.tableDoesNotSupportDeletesError(table)
           }
-
+        case LogicalRelation(_, _, catalogTable, _) =>
+          val tableIdentifier = catalogTable.get.identifier
+          throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
+            Seq(tableIdentifier.catalog.get, tableIdentifier.database.get, tableIdentifier.table),
+            "DELETE")
         case _ =>
-          throw QueryCompilationErrors.deleteOnlySupportedWithV2TablesError()
+          throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
+            Seq(), "DELETE")
       }
 
     case ReplaceData(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, Some(write)) =>
@@ -321,8 +326,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             "DESC TABLE COLUMN", toPrettySQL(nested))
       }
 
-    case DropTable(r: ResolvedTable, ifExists, purge) =>
-      DropTableExec(r.catalog, r.identifier, ifExists, purge, invalidateTableCache(r)) :: Nil
+    case DropTable(r: ResolvedIdentifier, ifExists, purge) =>
+      val invalidateFunc = () => session.sharedState.cacheManager.uncacheTableOrView(
+        session, r.catalog.name() +: r.identifier.namespace() :+ r.identifier.name(),
+        cascade = true)
+      DropTableExec(r.catalog.asTableCatalog, r.identifier, ifExists, purge, invalidateFunc) :: Nil
 
     case _: NoopCommand =>
       LocalTableScanExec(Nil, Nil) :: Nil

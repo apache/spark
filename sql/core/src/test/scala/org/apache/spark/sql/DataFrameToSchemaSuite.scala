@@ -58,10 +58,10 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkThrowable](Seq("a" -> "b").toDF("i", "j").to(schema))
     checkError(
       exception = e,
-      errorClass = "UNRESOLVED_COLUMN",
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`non_exist`",
-        "objectList" -> "`i`, `j`"))
+        "proposal" -> "`i`, `j`"))
   }
 
   test("negative: ambiguous column") {
@@ -160,7 +160,7 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = e,
-      errorClass = "UNRESOLVED_FIELD",
+      errorClass = "UNRESOLVED_FIELD.WITH_SUGGESTION",
       parameters = Map(
         "fieldName" -> "`non_exist`",
         "columnPath" -> "`struct`",

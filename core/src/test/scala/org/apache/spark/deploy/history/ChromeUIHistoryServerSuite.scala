@@ -20,13 +20,14 @@ package org.apache.spark.deploy.history
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.chrome.{ChromeDriver, ChromeOptions}
 
-import org.apache.spark.tags.ChromeUITest
+import org.apache.spark.internal.config.History.HybridStoreDiskBackend
+import org.apache.spark.tags.{ChromeUITest, ExtendedLevelDBTest}
+
 
 /**
  * Tests for HistoryServer with Chrome.
  */
-@ChromeUITest
-class ChromeUIHistoryServerSuite
+abstract class ChromeUIHistoryServerSuite
   extends RealBrowserUIHistoryServerSuite("webdriver.chrome.driver") {
 
   override var webDriver: WebDriver = _
@@ -47,4 +48,15 @@ class ChromeUIHistoryServerSuite
       super.afterAll()
     }
   }
+}
+
+@ChromeUITest
+@ExtendedLevelDBTest
+class LevelDBBackendChromeUIHistoryServerSuite extends ChromeUIHistoryServerSuite {
+  override protected def diskBackend: HybridStoreDiskBackend.Value = HybridStoreDiskBackend.LEVELDB
+}
+
+@ChromeUITest
+class RocksDBBackendChromeUIHistoryServerSuite extends ChromeUIHistoryServerSuite {
+  override protected def diskBackend: HybridStoreDiskBackend.Value = HybridStoreDiskBackend.ROCKSDB
 }

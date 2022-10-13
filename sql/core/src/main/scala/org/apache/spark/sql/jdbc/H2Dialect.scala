@@ -50,7 +50,8 @@ private[sql] object H2Dialect extends JdbcDialect {
     Set("ABS", "COALESCE", "GREATEST", "LEAST", "RAND", "LOG", "LOG10", "LN", "EXP",
       "POWER", "SQRT", "FLOOR", "CEIL", "ROUND", "SIN", "SINH", "COS", "COSH", "TAN",
       "TANH", "COT", "ASIN", "ACOS", "ATAN", "ATAN2", "DEGREES", "RADIANS", "SIGN",
-      "PI", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM")
+      "PI", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM", "MD5", "SHA1", "SHA2",
+      "BIT_LENGTH", "CHAR_LENGTH", "CONCAT")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -106,7 +107,7 @@ private[sql] object H2Dialect extends JdbcDialect {
       indexName: String,
       tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
-    val sql = s"SELECT * FROM INFORMATION_SCHEMA.INDEXES WHERE " +
+    val sql = "SELECT * FROM INFORMATION_SCHEMA.INDEXES WHERE " +
       s"TABLE_SCHEMA = '${tableIdent.namespace().last}' AND " +
       s"TABLE_NAME = '${tableIdent.name()}' AND INDEX_NAME = '$indexName'"
     JdbcUtils.checkIfIndexExists(conn, sql, options)
@@ -234,6 +235,23 @@ private[sql] object H2Dialect extends JdbcDialect {
         case _ => field
       }
       s"EXTRACT($newField FROM $source)"
+    }
+
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
+      if (isSupportedFunction(funcName)) {
+        funcName match {
+          case "MD5" =>
+            "RAWTOHEX(HASH('MD5', " + inputs.mkString(",") + "))"
+          case "SHA1" =>
+            "RAWTOHEX(HASH('SHA-1', " + inputs.mkString(",") + "))"
+          case "SHA2" =>
+            "RAWTOHEX(HASH('SHA-" + inputs(1) + "'," + inputs(0) + "))"
+          case _ => super.visitSQLFunction(funcName, inputs)
+        }
+      } else {
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support function: $funcName");
+      }
     }
   }
 }

@@ -1807,12 +1807,11 @@ class DynamicPartitionPruningV2SuiteAEOn extends DynamicPartitionPruningV2Suite
   with EnableAdaptiveExecutionSuite
 
 abstract class DynamicPartitionPruningV2FilterSuite
-    extends DynamicPartitionPruningDataSourceSuiteBase {
-  override protected def runAnalyzeColumnCommands: Boolean = false
+    extends DynamicPartitionPruningV2Suite {
 
   override protected def initState(): Unit = {
+    super.initState()
     spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableWithV2FilterCatalog].getName)
-    spark.conf.set("spark.sql.defaultCatalog", "testcat")
   }
 }
 

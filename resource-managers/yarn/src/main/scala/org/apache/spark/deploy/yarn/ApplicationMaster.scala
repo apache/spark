@@ -260,7 +260,13 @@ private[spark] class ApplicationMaster(
 
           if (!unregistered) {
             // we only want to unregister if we don't want the RM to retry
-            if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
+            if (isLastAttempt) {
+              cleanupStagingDir(new Path(System.getenv("SPARK_YARN_STAGING_DIR")))
+              unregister(finalStatus, finalMsg)
+            } else if (finalStatus == FinalApplicationStatus.SUCCEEDED) {
+              // When it's not the last attempt, if unregister failed caused by timeout exception,
+              // YARN will rerun the application, AM should not clean staging dir before unregister
+              // success.
               unregister(finalStatus, finalMsg)
               cleanupStagingDir(new Path(System.getenv("SPARK_YARN_STAGING_DIR")))
             }
@@ -327,8 +333,9 @@ private[spark] class ApplicationMaster(
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
           "Uncaught exception: " + StringUtils.stringifyException(e))
         if (!unregistered) {
-          unregister(finalStatus, finalMsg)
+          // It's ok to clean staging dir first because unmanaged AM can't be retried.
           cleanupStagingDir(stagingDir)
+          unregister(finalStatus, finalMsg)
         }
     } finally {
       try {
@@ -348,8 +355,9 @@ private[spark] class ApplicationMaster(
       finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
     }
     if (!unregistered) {
-      unregister(finalStatus, finalMsg)
+      // It's ok to clean staging dir first because unmanaged AM can't be retried.
       cleanupStagingDir(stagingDir)
+      unregister(finalStatus, finalMsg)
     }
   }
 

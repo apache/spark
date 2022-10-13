@@ -367,6 +367,9 @@ object functions {
    */
   def collect_set(columnName: String): Column = collect_set(Column(columnName))
 
+  private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
+    withAggregateFunction { CollectTopK(e.expr, num, reverse) }
+
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
    *
@@ -671,6 +674,14 @@ object functions {
   def last(columnName: String): Column = last(Column(columnName), ignoreNulls = false)
 
   /**
+   * Aggregate function: returns the most frequent value in a group.
+   *
+   * @group agg_funcs
+   * @since 3.4.0
+   */
+  def mode(e: Column): Column = withAggregateFunction { Mode(e.expr) }
+
+  /**
    * Aggregate function: returns the maximum value of the expression in a group.
    *
    * @group agg_funcs
@@ -711,6 +722,14 @@ object functions {
    * @since 1.4.0
    */
   def mean(columnName: String): Column = avg(columnName)
+
+  /**
+   * Aggregate function: returns the median of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 3.4.0
+   */
+  def median(e: Column): Column = withAggregateFunction { Median(e.expr) }
 
   /**
    * Aggregate function: returns the minimum value of the expression in a group.
@@ -2550,7 +2569,7 @@ object functions {
   /**
    * Calculates the hash code of given columns using the 64-bit
    * variant of the xxHash algorithm, and returns the result as a long
-   * column.
+   * column. The hash computation uses an initial seed of 42.
    *
    * @group misc_funcs
    * @since 3.0.0
@@ -3943,6 +3962,17 @@ object functions {
   }
 
   /**
+   * Returns element of array at given (0-based) index. If the index points
+   * outside of the array boundaries, then this function returns NULL.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def get(column: Column, index: Column): Column = withExpr {
+    new Get(column.expr, index.expr)
+  }
+
+  /**
    * Sorts the input array in ascending order. The elements of the input array must be orderable.
    * NaN is greater than any non-NaN elements for double/float type.
    * Null elements will be placed at the end of the returned array.
@@ -3951,6 +3981,19 @@ object functions {
    * @since 2.4.0
    */
   def array_sort(e: Column): Column = withExpr { new ArraySort(e.expr) }
+
+  /**
+   * Sorts the input array based on the given comparator function. The comparator will take two
+   * arguments representing two elements of the array. It returns a negative integer, 0, or a
+   * positive integer as the first element is less than, equal to, or greater than the second
+   * element. If the comparator function returns null, the function will fail and raise an error.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_sort(e: Column, comparator: (Column, Column) => Column): Column = withExpr {
+    new ArraySort(e.expr, createLambda(comparator))
+  }
 
   /**
    * Remove all elements that equal to element from the given array.
@@ -4301,6 +4344,23 @@ object functions {
    * @since 2.2.0
    */
   def posexplode_outer(e: Column): Column = withExpr { GeneratorOuter(PosExplode(e.expr)) }
+
+   /**
+   * Creates a new row for each element in the given array of structs.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def inline(e: Column): Column = withExpr { Inline(e.expr) }
+
+  /**
+   * Creates a new row for each element in the given array of structs.
+   * Unlike inline, if the array is null or empty then null is produced for each nested column.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def inline_outer(e: Column): Column = withExpr { GeneratorOuter(Inline(e.expr)) }
 
   /**
    * Extracts json object from a json string based on json path specified, and returns json string

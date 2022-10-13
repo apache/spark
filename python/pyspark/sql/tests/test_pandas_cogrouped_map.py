@@ -20,7 +20,7 @@ from typing import cast
 
 from pyspark.sql.functions import array, explode, col, lit, udf, pandas_udf
 from pyspark.sql.types import DoubleType, StructType, StructField, Row
-from pyspark.sql.utils import PythonException
+from pyspark.sql.utils import IllegalArgumentException, PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -80,6 +80,29 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         right = self.data2.withColumn("v3", lit("a"))
         self._test_merge(self.data1, right, "id long, k int, v int, v2 int, v3 string")
 
+    def test_different_keys(self):
+        left = self.data1
+        right = self.data2
+
+        def merge_pandas(lft, rgt):
+            return pd.merge(lft.rename(columns={"id2": "id"}), rgt, on=["id", "k"])
+
+        result = (
+            left.withColumnRenamed("id", "id2")
+            .groupby("id2")
+            .cogroup(right.groupby("id"))
+            .applyInPandas(merge_pandas, "id long, k int, v int, v2 int")
+            .sort(["id", "k"])
+            .toPandas()
+        )
+
+        left = left.toPandas()
+        right = right.toPandas()
+
+        expected = pd.merge(left, right, on=["id", "k"]).sort_values(by=["id", "k"])
+
+        assert_frame_equal(expected, result)
+
     def test_complex_group_by(self):
         left = pd.DataFrame.from_dict({"id": [1, 2, 3], "k": [5, 6, 7], "v": [9, 10, 11]})
 
@@ -124,6 +147,22 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         expected = pd.merge(left, right, on=["id", "k"]).sort_values(by=["id", "k"])
 
         assert_frame_equal(expected, result)
+
+    def test_different_group_key_cardinality(self):
+        left = self.data1
+        right = self.data2
+
+        def merge_pandas(lft, _):
+            return lft
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                IllegalArgumentException,
+                "requirement failed: Cogroup keys must have same size: 2 != 1",
+            ):
+                (left.groupby("id", "k").cogroup(right.groupby("id"))).applyInPandas(
+                    merge_pandas, "id long, k int, v int"
+                )
 
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
         left = self.data1

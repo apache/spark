@@ -780,10 +780,14 @@ object LikeSimplification extends Rule[LogicalPlan] {
       } else {
         simplifyLike(input, pattern.toString, escapeChar).getOrElse(l)
       }
-    case l @ LikeAll(child, patterns) => simplifyMultiLike(child, patterns, l)
-    case l @ NotLikeAll(child, patterns) => simplifyMultiLike(child, patterns, l)
-    case l @ LikeAny(child, patterns) => simplifyMultiLike(child, patterns, l)
-    case l @ NotLikeAny(child, patterns) => simplifyMultiLike(child, patterns, l)
+    case l @ LikeAll(child, patterns) if CollapseProject.isCheap(child) =>
+      simplifyMultiLike(child, patterns, l)
+    case l @ NotLikeAll(child, patterns) if CollapseProject.isCheap(child) =>
+      simplifyMultiLike(child, patterns, l)
+    case l @ LikeAny(child, patterns) if CollapseProject.isCheap(child) =>
+      simplifyMultiLike(child, patterns, l)
+    case l @ NotLikeAny(child, patterns) if CollapseProject.isCheap(child) =>
+      simplifyMultiLike(child, patterns, l)
   }
 }
 
@@ -1036,12 +1040,8 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 
   // Returns whether the from DataType can be safely casted to the to DataType without losing
   // any precision or range.
-  private def isWiderCast(from: DataType, to: NumericType): Boolean = (from, to) match {
-    case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
-    case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
-    case (from: IntegralType, to: IntegralType) => Cast.canUpCast(from, to)
-    case _ => from == to
-  }
+  private def isWiderCast(from: DataType, to: NumericType): Boolean =
+    from.isInstanceOf[NumericType] && Cast.canUpCast(from, to)
 }
 
 

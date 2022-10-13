@@ -95,6 +95,10 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       // 2 distinct columns with different order
       val query3 = sql("SELECT corr(DISTINCT j, k), count(DISTINCT k, j) FROM v GROUP BY i")
       assertNoExpand(query3.queryExecution.executedPlan)
+
+      // SPARK-40382: 1 distinct expression with cosmetic differences
+      val query4 = sql("SELECT sum(DISTINCT j), max(DISTINCT J) FROM v GROUP BY i")
+      assertNoExpand(query4.queryExecution.executedPlan)
     }
   }
 

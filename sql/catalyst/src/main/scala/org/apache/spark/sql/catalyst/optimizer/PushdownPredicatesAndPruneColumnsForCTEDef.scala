@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Expression, Literal, Or, SubqueryExpression}
-import org.apache.spark.sql.catalyst.planning.ScanOperation
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.CTE
+import org.apache.spark.util.collection.Utils
 
 /**
  * Infer predicates and column pruning for [[CTERelationDef]] from its reference points, and push
@@ -69,9 +70,9 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] {
         }
         gatherPredicatesAndAttributes(child, cteMap)
 
-      case ScanOperation(projects, predicates, ref: CTERelationRef) =>
+      case PhysicalOperation(projects, predicates, ref: CTERelationRef) =>
         val (cteDef, precedence, preds, attrs) = cteMap(ref.cteId)
-        val attrMapping = ref.output.zip(cteDef.output).map{ case (r, d) => r -> d }.toMap
+        val attrMapping = Utils.toMap(ref.output, cteDef.output)
         val newPredicates = if (isTruePredicate(preds)) {
           preds
         } else {

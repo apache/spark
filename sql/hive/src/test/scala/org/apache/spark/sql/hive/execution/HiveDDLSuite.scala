@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.{CatalystIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -93,7 +93,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       .add("col1", "int", nullable = true, metadata = metadata)
       .add("col2", "string")
     CatalogTable(
-      identifier = CatalystIdentifier.attachSessionCatalog(name),
+      identifier = name,
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
       schema = schema.copy(
@@ -133,10 +133,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       // View texts are checked separately
       viewText = None
     )
-  }
-
-  test("alter table: set location") {
-    testSetLocation(isDatasourceTable = false)
   }
 
   test("alter table: set properties") {
@@ -1051,7 +1047,7 @@ class HiveDDLSuite
       sql("CREATE TABLE tab1(c1 int)")
       assertAnalysisError(
         "DROP VIEW tab1",
-        "tab1 is a table. 'DROP VIEW' expects a view. Please use DROP TABLE instead.")
+        "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
     }
   }
 
@@ -2383,7 +2379,7 @@ class HiveDDLSuite
     withTable("t1", "t2", "t3") {
       assertAnalysisError(
         "CREATE TABLE t1 USING PARQUET AS SELECT NULL AS null_col",
-        "Parquet data source does not support void data type")
+        "Column `null_col` has a data type of void, which is not supported by Parquet.")
 
       assertAnalysisError(
         "CREATE TABLE t2 STORED AS PARQUET AS SELECT null as null_col",
@@ -2397,7 +2393,7 @@ class HiveDDLSuite
     withTable("t1", "t2", "t3", "t4") {
       assertAnalysisError(
         "CREATE TABLE t1 (v VOID) USING PARQUET",
-        "Parquet data source does not support void data type")
+        "Column `v` has a data type of void, which is not supported by Parquet.")
 
       assertAnalysisError(
         "CREATE TABLE t2 (v VOID) STORED AS PARQUET",

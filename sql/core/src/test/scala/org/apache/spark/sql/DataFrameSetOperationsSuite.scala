@@ -1001,10 +1001,10 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       df1.unionByName(df2)
     }.getMessage
     assert(errMsg.contains("Union can only be performed on tables with" +
-      " the compatible column types." +
+      " compatible column types." +
       " The third column of the second table is struct<c1:int,c2:int,c3:struct<c3:int,c5:int>>" +
-      " type which is not compatible with struct<c1:int,c2:int,c3:struct<c3:int>> at same" +
-      " column of first table"))
+      " type which is not compatible with struct<c1:int,c2:int,c3:struct<c3:int>> at the same" +
+      " column of the first table"))
 
     // diff Case sensitive attributes names and diff sequence scenario for unionByName
     df1 = Seq((1, 2, UnionClass1d(1, 2, Struct3(1)))).toDF("a", "b", "c")
@@ -1084,7 +1084,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
     val err = intercept[AnalysisException](df7.union(df8).collect())
     assert(err.message
-      .contains("Union can only be performed on tables with the compatible column types"))
+      .contains("Union can only be performed on tables with compatible column types"))
   }
 
   test("SPARK-36546: Add unionByName support to arrays of structs") {

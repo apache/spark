@@ -31,7 +31,7 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkContext, TaskContext}
+import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
@@ -412,6 +412,21 @@ object SQLConf {
       .longConf
       .createWithDefault(67108864L)
 
+  val RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED =
+    buildConf("spark.sql.optimizer.runtime.rowLevelOperationGroupFilter.enabled")
+      .doc("Enables runtime group filtering for group-based row-level operations. " +
+        "Data sources that replace groups of data (e.g. files, partitions) may prune entire " +
+        "groups using provided data source filters when planning a row-level operation scan. " +
+        "However, such filtering is limited as not all expressions can be converted into data " +
+        "source filters and some expressions can only be evaluated by Spark (e.g. subqueries). " +
+        "Since rewriting groups is expensive, Spark can execute a query at runtime to find what " +
+        "records match the condition of the row-level operation. The information about matching " +
+        "records will be passed back to the row-level operation scan, allowing data sources to " +
+        "discard groups that don't have to be rewritten.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val PLANNED_WRITE_ENABLED = buildConf("spark.sql.optimizer.plannedWrite.enabled")
     .internal()
     .doc("When set to true, Spark optimizer will add logical sort operators to V1 write commands " +
@@ -525,6 +540,16 @@ object SQLConf {
     .intConf
     .checkValue(_ >= 1, "The shuffle hash join factor cannot be negative.")
     .createWithDefault(3)
+
+  val LIMIT_INITIAL_NUM_PARTITIONS = buildConf("spark.sql.limit.initialNumPartitions")
+    .internal()
+    .doc("Initial number of partitions to try when executing a take on a query. Higher values " +
+      "lead to more partitions read. Lower values might lead to longer execution times as more" +
+      "jobs will be run")
+    .version("3.4.0")
+    .intConf
+    .checkValue(_ > 0, "value should be positive")
+    .createWithDefault(1)
 
   val LIMIT_SCALE_UP_FACTOR = buildConf("spark.sql.limit.scaleUpFactor")
     .internal()
@@ -698,9 +723,9 @@ object SQLConf {
         "multiplying the median partition size and also larger than " +
         "'spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes'")
       .version("3.0.0")
-      .intConf
+      .doubleConf
       .checkValue(_ >= 0, "The skew factor cannot be negative.")
-      .createWithDefault(5)
+      .createWithDefault(5.0)
 
   val SKEW_JOIN_SKEWED_PARTITION_THRESHOLD =
     buildConf("spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes")
@@ -2592,8 +2617,8 @@ object SQLConf {
         "1. pyspark.sql.DataFrame.toPandas. " +
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
         "or a NumPy ndarray. " +
-        "The following data types are unsupported: " +
-        "ArrayType of TimestampType, and nested StructType.")
+        "The following data type is unsupported: " +
+        "ArrayType of TimestampType.")
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 
@@ -2915,6 +2940,21 @@ object SQLConf {
     .booleanConf
     .createWithDefault(sys.env.get("SPARK_ANSI_SQL_MODE").contains("true"))
 
+  val ENFORCE_RESERVED_KEYWORDS = buildConf("spark.sql.ansi.enforceReservedKeywords")
+    .doc(s"When true and '${ANSI_ENABLED.key}' is true, the Spark SQL parser enforces the ANSI " +
+      "reserved keywords and forbids SQL queries that use reserved keywords as alias names " +
+      "and/or identifiers for table, view, function, etc.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val DOUBLE_QUOTED_IDENTIFIERS = buildConf("spark.sql.ansi.doubleQuotedIdentifiers")
+    .doc("When true, Spark SQL reads literals enclosed in double quoted (\") as identifiers. " +
+      "When false they are read as string literals.")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val ENABLE_DEFAULT_COLUMNS =
     buildConf("spark.sql.defaultColumn.enabled")
       .internal()
@@ -2940,6 +2980,18 @@ object SQLConf {
       .stringConf
       .createWithDefault("csv,json,orc,parquet")
 
+  val JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE =
+    buildConf("spark.sql.jsonGenerator.writeNullIfWithDefaultValue")
+      .internal()
+      .doc("When true, when writing NULL values to columns of JSON tables with explicit DEFAULT " +
+        "values using INSERT, UPDATE, or MERGE commands, never skip writing the NULL values to " +
+        "storage, overriding spark.sql.jsonGenerator.ignoreNullFields or the ignoreNullFields " +
+        "option. This can be useful to enforce that inserted NULL values are present in " +
+        "storage to differentiate from missing data.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
     buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
       .internal()
@@ -2950,23 +3002,6 @@ object SQLConf {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
-
-  val ENFORCE_RESERVED_KEYWORDS = buildConf("spark.sql.ansi.enforceReservedKeywords")
-    .doc(s"When true and '${ANSI_ENABLED.key}' is true, the Spark SQL parser enforces the ANSI " +
-      "reserved keywords and forbids SQL queries that use reserved keywords as alias names " +
-      "and/or identifiers for table, view, function, etc.")
-    .version("3.3.0")
-    .booleanConf
-    .createWithDefault(false)
-
-  val ANSI_STRICT_INDEX_OPERATOR = buildConf("spark.sql.ansi.strictIndexOperator")
-    .internal()
-    .doc(s"When true and '${ANSI_ENABLED.key}' is true, accessing complex SQL types via [] " +
-      "operator will throw an exception if array index is out of bound, or map key does not " +
-      "exist. Otherwise, Spark will return a null result when accessing an invalid index.")
-    .version("3.3.0")
-    .booleanConf
-    .createWithDefault(true)
 
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
@@ -3533,6 +3568,22 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
+    buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
+      .internal()
+      .doc("When true, enable legacy date/time parsing fallback in CSV")
+      .version("3.4.0")
+      .booleanConf
+      .createOptional
+
+  val LEGACY_JSON_ENABLE_DATE_TIME_PARSING_FALLBACK =
+    buildConf("spark.sql.legacy.json.enableDateTimeParsingFallback")
+      .internal()
+      .doc("When true, enable legacy date/time parsing fallback in JSON")
+      .version("3.4.0")
+      .booleanConf
+      .createOptional
+
   val ADD_PARTITION_BATCH_SIZE =
     buildConf("spark.sql.addPartitionInBatch.size")
       .internal()
@@ -3558,6 +3609,15 @@ object SQLConf {
       .internal()
       .doc("When true, grouping_id() returns int values instead of long values.")
       .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+   val LEGACY_GROUPING_ID_WITH_APPENDED_USER_GROUPBY =
+    buildConf("spark.sql.legacy.groupingIdWithAppendedUserGroupBy")
+      .internal()
+      .doc("When true, grouping_id() returns values based on grouping set columns plus " +
+        "user-given group-by expressions order like Spark 3.2.0, 3.2.1, 3.2.2, and 3.3.0.")
+      .version("3.2.3")
       .booleanConf
       .createWithDefault(false)
 
@@ -3776,6 +3836,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val READ_SIDE_CHAR_PADDING = buildConf("spark.sql.readSideCharPadding")
+    .doc("When true, Spark applies string padding when reading CHAR type columns/fields, " +
+      "in addition to the write-side padding. This config is true by default to better enforce " +
+      "CHAR type semantic in cases such as external tables.")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val CLI_PRINT_HEADER =
     buildConf("spark.sql.cli.print.header")
      .doc("When set to true, spark-sql CLI prints the names of the columns in query output.")
@@ -3888,6 +3956,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ERROR_MESSAGE_FORMAT = buildConf("spark.sql.error.messageFormat")
+    .doc("When PRETTY, the error message consists of textual representation of error class, " +
+      "message and query context. The MINIMAL and STANDARD formats are pretty JSON formats where " +
+      "STANDARD includes an additional JSON field `message`. This configuration property " +
+      "influences on error messages of Thrift Server and SQL CLI while running queries.")
+    .version("3.4.0")
+    .stringConf.transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(ErrorMessageFormat.values.map(_.toString))
+    .createWithDefault(ErrorMessageFormat.PRETTY.toString)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3986,7 +4064,11 @@ object SQLConf {
       RemovedConfig("spark.sql.optimizer.planChangeLog.rules", "3.1.0", "",
         s"Please use `${PLAN_CHANGE_LOG_RULES.key}` instead."),
       RemovedConfig("spark.sql.optimizer.planChangeLog.batches", "3.1.0", "",
-        s"Please use `${PLAN_CHANGE_LOG_BATCHES.key}` instead.")
+        s"Please use `${PLAN_CHANGE_LOG_BATCHES.key}` instead."),
+      RemovedConfig("spark.sql.ansi.strictIndexOperator", "3.4.0", "true",
+        "This was an internal configuration. It is not needed anymore since Spark SQL always " +
+          "returns null when getting a map value with a non-existing key. See SPARK-40066 " +
+          "for more details.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -4047,6 +4129,9 @@ class SQLConf extends Serializable with Logging {
 
   def runtimeFilterCreationSideThreshold: Long =
     getConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD)
+
+  def runtimeRowLevelOperationGroupFilterEnabled: Boolean =
+    getConf(RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
@@ -4299,6 +4384,8 @@ class SQLConf extends Serializable with Logging {
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
+  def limitInitialNumPartitions: Int = getConf(LIMIT_INITIAL_NUM_PARTITIONS)
+
   def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
 
   def advancedPartitionPredicatePushdownEnabled: Boolean =
@@ -4539,12 +4626,15 @@ class SQLConf extends Serializable with Logging {
 
   def defaultColumnAllowedProviders: String = getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
 
+  def jsonWriteNullIfWithDefaultValue: Boolean =
+    getConf(JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE)
+
   def useNullsForMissingDefaultColumnValues: Boolean =
     getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
 
-  def strictIndexOperator: Boolean = ansiEnabled && getConf(ANSI_STRICT_INDEX_OPERATOR)
+  def doubleQuotedIdentifiers: Boolean = ansiEnabled && getConf(DOUBLE_QUOTED_IDENTIFIERS)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>
@@ -4619,7 +4709,16 @@ class SQLConf extends Serializable with Logging {
 
   def avroFilterPushDown: Boolean = getConf(AVRO_FILTER_PUSHDOWN_ENABLED)
 
+  def jsonEnableDateTimeParsingFallback: Option[Boolean] =
+    getConf(LEGACY_JSON_ENABLE_DATE_TIME_PARSING_FALLBACK)
+
+  def csvEnableDateTimeParsingFallback: Option[Boolean] =
+    getConf(LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK)
+
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
+
+  def groupingIdWithAppendedUserGroupByEnabled: Boolean =
+    getConf(SQLConf.LEGACY_GROUPING_ID_WITH_APPENDED_USER_GROUPBY)
 
   def metadataCacheTTL: Long = getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
 
@@ -4637,6 +4736,8 @@ class SQLConf extends Serializable with Logging {
     StaticSQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 
   def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
+
+  def readSideCharPadding: Boolean = getConf(SQLConf.READ_SIDE_CHAR_PADDING)
 
   def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
 
@@ -4665,6 +4766,11 @@ class SQLConf extends Serializable with Logging {
 
   def histogramNumericPropagateInputType: Boolean =
     getConf(SQLConf.HISTOGRAM_NUMERIC_PROPAGATE_INPUT_TYPE)
+
+  def errorMessageFormat: ErrorMessageFormat.Value =
+    ErrorMessageFormat.withName(getConf(SQLConf.ERROR_MESSAGE_FORMAT))
+
+  def defaultDatabase: String = getConf(StaticSQLConf.CATALOG_DEFAULT_DATABASE)
 
   /** ********************** SQLConf functionality methods ************ */
 

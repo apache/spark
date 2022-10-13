@@ -90,7 +90,7 @@ class InMemoryCatalog(
       specs: Seq[TablePartitionSpec]): Unit = {
     specs.foreach { s =>
       if (partitionExists(db, table, s)) {
-        throw new PartitionAlreadyExistsException(db = db, table = table, spec = s)
+        throw new PartitionsAlreadyExistException(db = db, table = table, spec = s)
       }
     }
   }

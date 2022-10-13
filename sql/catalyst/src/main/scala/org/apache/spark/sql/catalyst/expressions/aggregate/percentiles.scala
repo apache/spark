@@ -59,7 +59,8 @@ abstract class PercentileBase
 
   override lazy val dataType: DataType = {
     val resultType = child.dataType match {
-      case it: AnsiIntervalType => it
+      case _: YearMonthIntervalType => YearMonthIntervalType()
+      case _: DayTimeIntervalType => DayTimeIntervalType()
       case _ => DoubleType
     }
     if (returnPercentileArray) ArrayType(resultType, false) else resultType

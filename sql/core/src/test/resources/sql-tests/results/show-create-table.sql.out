@@ -294,7 +294,7 @@ SHOW CREATE TABLE view_SPARK_30302 AS SERDE
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW default.view_SPARK_30302 (
+CREATE VIEW default.view_spark_30302 (
   aaa,
   bbb)
 AS SELECT a, b FROM tbl
@@ -305,7 +305,7 @@ SHOW CREATE TABLE view_SPARK_30302
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW default.view_SPARK_30302 (
+CREATE VIEW default.view_spark_30302 (
   aaa,
   bbb)
 AS SELECT a, b FROM tbl
@@ -334,7 +334,7 @@ SHOW CREATE TABLE view_SPARK_30302 AS SERDE
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW default.view_SPARK_30302 (
+CREATE VIEW default.view_spark_30302 (
   aaa COMMENT 'comment with \'quoted text\' for aaa',
   bbb)
 COMMENT 'This is a comment with \'quoted text\' for view'
@@ -346,7 +346,7 @@ SHOW CREATE TABLE view_SPARK_30302
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW default.view_SPARK_30302 (
+CREATE VIEW default.view_spark_30302 (
   aaa COMMENT 'comment with \'quoted text\' for aaa',
   bbb)
 COMMENT 'This is a comment with \'quoted text\' for view'
@@ -376,7 +376,7 @@ SHOW CREATE TABLE view_SPARK_30302 AS SERDE
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW default.view_SPARK_30302 (
+CREATE VIEW default.view_spark_30302 (
   aaa,
   bbb)
 TBLPROPERTIES (
@@ -390,7 +390,7 @@ SHOW CREATE TABLE view_SPARK_30302
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW default.view_SPARK_30302 (
+CREATE VIEW default.view_spark_30302 (
   aaa,
   bbb)
 TBLPROPERTIES (

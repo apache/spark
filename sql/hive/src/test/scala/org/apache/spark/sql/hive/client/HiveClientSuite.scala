@@ -413,7 +413,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
 
   test("getPartitionsByFilter") {
     // Only one partition [1, 1] for key2 == 1
-    val result = client.getPartitionsByFilter(client.getTable("default", "src_part"),
+    val result = client.getPartitionsByFilter(client.getRawHiveTable("default", "src_part"),
       Seq(EqualTo(AttributeReference("key2", IntegerType)(), Literal(1))))
 
     // Hive 0.12 doesn't support getPartitionsByFilter, it ignores the filter condition.
@@ -437,7 +437,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
 
   test("getPartitionOption(table: CatalogTable, spec: TablePartitionSpec)") {
     val partition = client.getPartitionOption(
-      client.getTable("default", "src_part"), Map("key1" -> "1", "key2" -> "2"))
+      client.getRawHiveTable("default", "src_part"), Map("key1" -> "1", "key2" -> "2"))
     assert(partition.isDefined)
   }
 
@@ -528,7 +528,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
       val errMsg = intercept[PartitionsAlreadyExistException] {
         client.createPartitions("default", "src_part", partitions, ignoreIfExists = false)
       }.getMessage
-      assert(errMsg.contains("partitions already exists"))
+      assert(errMsg.contains("partitions already exist"))
     } finally {
       client.dropPartitions(
         "default",
@@ -895,7 +895,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
   test("Decimal support of Avro Hive serde") {
     val tableName = "tab1"
     // TODO: add the other logical types. For details, see the link:
-    // https://avro.apache.org/docs/1.11.0/spec.html#Logical+Types
+    // https://avro.apache.org/docs/1.11.1/specification/#logical-types
     val avroSchema =
     """{
       |  "name": "test_record",

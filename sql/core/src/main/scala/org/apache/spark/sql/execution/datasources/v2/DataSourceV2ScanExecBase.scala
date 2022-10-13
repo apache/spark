@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan}
-import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode}
+import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SQLExecution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsMetadata
@@ -91,11 +91,18 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   }
 
   override def outputPartitioning: physical.Partitioning = {
-    if (partitions.length == 1) SinglePartition
-    else groupedPartitions.map { partitionValues =>
-      KeyGroupedPartitioning(keyGroupedPartitioning.get,
-        partitionValues.size, Some(partitionValues.map(_._1)))
-    }.getOrElse(super.outputPartitioning)
+    if (partitions.length == 1) {
+      SinglePartition
+    } else {
+      keyGroupedPartitioning match {
+        case Some(exprs) if KeyGroupedPartitioning.supportsExpressions(exprs) =>
+          groupedPartitions.map { partitionValues =>
+            KeyGroupedPartitioning(exprs, partitionValues.size, Some(partitionValues.map(_._1)))
+          }.getOrElse(super.outputPartitioning)
+        case _ =>
+          super.outputPartitioning
+      }
+    }
   }
 
   @transient lazy val groupedPartitions: Option[Seq[(InternalRow, Seq[InputPartition])]] =
@@ -166,6 +173,18 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
       numOutputRows += 1
       r
     }
+  }
+
+  protected def postDriverMetrics(): Unit = {
+    val driveSQLMetrics = scan.reportDriverMetrics().map(customTaskMetric => {
+      val metric = metrics(customTaskMetric.name())
+      metric.set(customTaskMetric.value())
+      metric
+    })
+
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
+      driveSQLMetrics)
   }
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {

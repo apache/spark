@@ -21,6 +21,8 @@ import scala.math.{max, min}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
@@ -214,7 +216,14 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
 abstract class BinaryArithmetic extends BinaryOperator
   with NullIntolerant with SupportQueryContext {
 
-  protected val failOnError: Boolean
+  protected val evalMode: EvalMode.Value
+
+  protected def failOnError: Boolean = evalMode match {
+    // The TRY mode executes as if it would fail on errors, except that it would capture the errors
+    // and return null results.
+    case EvalMode.ANSI | EvalMode.TRY => true
+    case _ => false
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = (left.dataType, right.dataType) match {
     case (l: DecimalType, r: DecimalType) if inputType.acceptsType(l) && inputType.acceptsType(r) =>
@@ -240,11 +249,11 @@ abstract class BinaryArithmetic extends BinaryOperator
       s"${getClass.getSimpleName} must override `resultDecimalType`.")
   }
 
-  override def nullable: Boolean = super.nullable || {
+  override def nullable: Boolean = super.nullable || evalMode == EvalMode.TRY || {
     if (left.dataType.isInstanceOf[DecimalType]) {
       // For decimal arithmetic, we may return null even if both inputs are not null, if overflow
       // happens and this `failOnError` flag is false.
-      !failOnError
+      evalMode != EvalMode.ANSI
     } else {
       // For non-decimal arithmetic, the calculation always return non-null result when inputs are
       // not null. If overflow happens, we return either the overflowed value or fail.
@@ -349,6 +358,49 @@ abstract class BinaryArithmetic extends BinaryOperator
          """.stripMargin
       })
   }
+
+  override def nullSafeCodeGen(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      f: (String, String) => String): ExprCode = {
+    if (evalMode == EvalMode.TRY) {
+      val tryBlock: (String, String) => String = (eval1, eval2) => {
+        s"""
+           |try {
+           | ${f(eval1, eval2)}
+           |} catch (Exception e) {
+           | ${ev.isNull} = true;
+           |}
+           |""".stripMargin
+      }
+      super.nullSafeCodeGen(ctx, ev, tryBlock)
+    } else {
+      super.nullSafeCodeGen(ctx, ev, f)
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val value1 = left.eval(input)
+    if (value1 == null) {
+      null
+    } else {
+      val value2 = right.eval(input)
+      if (value2 == null) {
+        null
+      } else {
+        if (evalMode == EvalMode.TRY) {
+          try {
+            nullSafeEval(value1, value2)
+          } catch {
+            case _: Exception =>
+              null
+          }
+        } else {
+          nullSafeEval(value1, value2)
+        }
+      }
+    }
+  }
 }
 
 object BinaryArithmetic {
@@ -367,9 +419,11 @@ object BinaryArithmetic {
 case class Add(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic
+  with CommutativeExpression {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) =
+    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -422,6 +476,11 @@ case class Add(
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Add =
     copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    // TODO: do not reorder consecutive `Add`s with different `evalMode`
+    orderCommutative({ case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, evalMode))
+  }
 }
 
 @ExpressionDescription(
@@ -436,9 +495,10 @@ case class Add(
 case class Subtract(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) =
+    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -511,9 +571,11 @@ case class Subtract(
 case class Multiply(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic
+  with CommutativeExpression {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) =
+    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
 
   override def inputType: AbstractDataType = NumericType
 
@@ -559,6 +621,11 @@ case class Multiply(
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Multiply = copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    // TODO: do not reorder consecutive `Multiply`s with different `evalMode`
+    orderCommutative({ case Multiply(l, r, _) => Seq(l, r) }).reduce(Multiply(_, _, evalMode))
+  }
 }
 
 // Common base trait for Divide and Remainder, since these two classes are almost identical
@@ -698,9 +765,14 @@ trait DivModLike extends BinaryArithmetic {
 case class Divide(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends DivModLike {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) =
+    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
+
+  // `try_divide` has exactly the same behavior as the legacy divide, so here it only executes
+  // the error code path when `evalMode` is `ANSI`.
+  protected override def failOnError: Boolean = evalMode == EvalMode.ANSI
 
   override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
@@ -762,9 +834,10 @@ case class Divide(
 case class IntegralDivide(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends DivModLike {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) = this(left, right,
+    EvalMode.fromSQLConf(SQLConf.get))
 
   override def checkDivideOverflow: Boolean = left.dataType match {
     case LongType if failOnError => true
@@ -835,9 +908,10 @@ case class IntegralDivide(
 case class Remainder(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends DivModLike {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) =
+    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
 
   override def inputType: AbstractDataType = NumericType
 
@@ -912,16 +986,14 @@ case class Remainder(
 case class Pmod(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) =
+    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
 
   override def toString: String = s"pmod($left, $right)"
 
   override def symbol: String = "pmod"
-
-  protected def checkTypesInternal(t: DataType): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(t, "pmod")
 
   override def inputType: AbstractDataType = NumericType
 
@@ -1118,7 +1190,8 @@ case class Pmod(
   """,
   since = "1.5.0",
   group = "math_funcs")
-case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression {
+case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
+  with CommutativeExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -1127,12 +1200,17 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName requires at least two arguments")
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_PARAMS",
+        messageParameters = Map("actualNum" -> children.length.toString))
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
-      TypeCheckResult.TypeCheckFailure(
-        s"The expressions should all have the same type," +
-          s" got LEAST(${children.map(_.dataType.catalogString).mkString(", ")}).")
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> children.map(_.dataType).map(toSQLType).mkString("[", ", ", "]")
+        )
+      )
     } else {
       TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
     }
@@ -1181,6 +1259,10 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Least =
     copy(children = newChildren)
+
+  override lazy val canonicalized: Expression = {
+    Least(orderCommutative({ case Least(children) => children }))
+  }
 }
 
 /**
@@ -1196,7 +1278,8 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
   """,
   since = "1.5.0",
   group = "math_funcs")
-case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpression {
+case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpression
+  with CommutativeExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -1205,12 +1288,17 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName requires at least two arguments")
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_PARAMS",
+        messageParameters = Map("actualNum" -> children.length.toString))
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
-      TypeCheckResult.TypeCheckFailure(
-        s"The expressions should all have the same type," +
-          s" got GREATEST(${children.map(_.dataType.catalogString).mkString(", ")}).")
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> children.map(_.dataType).map(toSQLType).mkString("[", ", ", "]")
+        )
+      )
     } else {
       TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
     }
@@ -1259,4 +1347,8 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Greatest =
     copy(children = newChildren)
+
+  override lazy val canonicalized: Expression = {
+    Greatest(orderCommutative({ case Greatest(children) => children }))
+  }
 }

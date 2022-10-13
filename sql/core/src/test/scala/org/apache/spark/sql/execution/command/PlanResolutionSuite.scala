@@ -28,7 +28,7 @@ import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedFieldName, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, EvalMode, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
@@ -126,30 +126,20 @@ class PlanResolutionSuite extends AnalysisTest {
     t
   }
 
-  private val v1Table: V1Table = {
+  private def createV1TableMock(
+      ident: Identifier,
+      provider: String = v1Format,
+      tableType: CatalogTableType = CatalogTableType.MANAGED): V1Table = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val t = mock(classOf[CatalogTable])
     when(t.schema).thenReturn(new StructType()
       .add("i", "int")
       .add("s", "string")
       .add("point", new StructType().add("x", "int").add("y", "int")))
-    when(t.tableType).thenReturn(CatalogTableType.MANAGED)
-    when(t.provider).thenReturn(Some(v1Format))
-    V1Table(t)
-  }
-
-  private val v1HiveTable: V1Table = {
-    val t = mock(classOf[CatalogTable])
-    when(t.schema).thenReturn(new StructType().add("i", "int").add("s", "string"))
-    when(t.tableType).thenReturn(CatalogTableType.MANAGED)
-    when(t.provider).thenReturn(Some("hive"))
-    V1Table(t)
-  }
-
-  private val view: V1Table = {
-    val t = mock(classOf[CatalogTable])
-    when(t.schema).thenReturn(new StructType().add("i", "int").add("s", "string"))
-    when(t.tableType).thenReturn(CatalogTableType.VIEW)
-    when(t.provider).thenReturn(Some(v1Format))
+    when(t.tableType).thenReturn(tableType)
+    when(t.provider).thenReturn(Some(provider))
+    when(t.identifier).thenReturn(
+      ident.asTableIdentifier.copy(catalog = Some(SESSION_CATALOG_NAME)))
     V1Table(t)
   }
 
@@ -174,14 +164,14 @@ class PlanResolutionSuite extends AnalysisTest {
   private val v2SessionCatalog: TableCatalog = {
     val newCatalog = mock(classOf[TableCatalog])
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
-      invocation.getArgument[Identifier](0).name match {
-        case "v1Table" => v1Table
-        case "v1Table1" => v1Table
-        case "v1HiveTable" => v1HiveTable
+      val ident = invocation.getArgument[Identifier](0)
+      ident.name match {
+        case "v1Table" | "v1Table1" => createV1TableMock(ident)
+        case "v1HiveTable" => createV1TableMock(ident, provider = "hive")
         case "v2Table" => table
         case "v2Table1" => table1
         case "v2TableWithAcceptAnySchemaCapability" => tableWithAcceptAnySchemaCapability
-        case "view" => view
+        case "view" => createV1TableMock(ident, tableType = CatalogTableType.VIEW)
         case name => throw new NoSuchTableException(name)
       }
     })
@@ -723,13 +713,13 @@ class PlanResolutionSuite extends AnalysisTest {
     val tableIdent2 = Identifier.of(Array.empty, "tab")
 
     parseResolveCompare(s"DROP TABLE $tableName1",
-      DropTable(ResolvedTable.create(testCat, tableIdent1, table), ifExists = false, purge = false))
+      DropTable(ResolvedIdentifier(testCat, tableIdent1), ifExists = false, purge = false))
     parseResolveCompare(s"DROP TABLE IF EXISTS $tableName1",
-      DropTable(ResolvedTable.create(testCat, tableIdent1, table), ifExists = true, purge = false))
+      DropTable(ResolvedIdentifier(testCat, tableIdent1), ifExists = true, purge = false))
     parseResolveCompare(s"DROP TABLE $tableName2",
-      DropTable(ResolvedTable.create(testCat, tableIdent2, table), ifExists = false, purge = false))
+      DropTable(ResolvedIdentifier(testCat, tableIdent2), ifExists = false, purge = false))
     parseResolveCompare(s"DROP TABLE IF EXISTS $tableName2",
-      DropTable(ResolvedTable.create(testCat, tableIdent2, table), ifExists = true, purge = false))
+      DropTable(ResolvedIdentifier(testCat, tableIdent2), ifExists = true, purge = false))
   }
 
   test("drop view") {
@@ -738,7 +728,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val viewName2 = "view"
     val viewIdent2 = TableIdentifier("view", Option("default"), Some(SESSION_CATALOG_NAME))
     val tempViewName = "v"
-    val tempViewIdent = TableIdentifier("v")
+    val tempViewIdent = Identifier.of(Array.empty, "v")
 
     parseResolveCompare(s"DROP VIEW $viewName1",
       DropTableCommand(viewIdent1, ifExists = false, isView = true, purge = false))
@@ -749,16 +739,19 @@ class PlanResolutionSuite extends AnalysisTest {
     parseResolveCompare(s"DROP VIEW IF EXISTS $viewName2",
       DropTableCommand(viewIdent2, ifExists = true, isView = true, purge = false))
     parseResolveCompare(s"DROP VIEW $tempViewName",
-      DropTableCommand(tempViewIdent, ifExists = false, isView = true, purge = false))
+      DropTempViewCommand(tempViewIdent))
     parseResolveCompare(s"DROP VIEW IF EXISTS $tempViewName",
-      DropTableCommand(tempViewIdent, ifExists = true, isView = true, purge = false))
+      DropTempViewCommand(tempViewIdent))
   }
 
   test("drop view in v2 catalog") {
-    intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       parseAndResolve("DROP VIEW testcat.db.view", checkAnalysis = true)
-    }.getMessage.toLowerCase(Locale.ROOT).contains(
-      "view support in catalog has not been implemented")
+    }
+    checkError(
+      e,
+      errorClass = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
+      parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
   }
 
   // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
@@ -1120,8 +1113,10 @@ class PlanResolutionSuite extends AnalysisTest {
             // Note that when resolving DEFAULT column references, the analyzer will insert literal
             // NULL values if the corresponding table does not define an explicit default value for
             // that column. This is intended.
-            Assignment(i: AttributeReference, cast1 @ Cast(Literal(null, _), IntegerType, _, true)),
-            Assignment(s: AttributeReference, cast2 @ Cast(Literal(null, _), StringType, _, true))),
+            Assignment(i: AttributeReference,
+              cast1 @ Cast(Literal(null, _), IntegerType, _, EvalMode.ANSI)),
+            Assignment(s: AttributeReference,
+              cast2 @ Cast(Literal(null, _), StringType, _, EvalMode.ANSI))),
           None) if cast1.getTagValue(Cast.BY_TABLE_INSERTION).isDefined &&
           cast2.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
           assert(i.name == "i")
@@ -1151,7 +1146,8 @@ class PlanResolutionSuite extends AnalysisTest {
       parsed9 match {
         case UpdateTable(
         _,
-        Seq(Assignment(i: AttributeReference, cast @ Cast(Literal(null, _), StringType, _, true))),
+        Seq(Assignment(i: AttributeReference,
+          cast @ Cast(Literal(null, _), StringType, _, EvalMode.ANSI))),
         None) if cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
           assert(i.name == "i")
 
@@ -1264,8 +1260,12 @@ class PlanResolutionSuite extends AnalysisTest {
           val e2 = intercept[AnalysisException] {
             parseAndResolve(sql4)
           }
-          assert(e2.getMessage.contains(
-            "ALTER COLUMN with qualified column is only supported with v2 tables"))
+          checkError(
+            exception = e2,
+            errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+            sqlState = "0A000",
+            parameters = Map("tableName" -> "`spark_catalog`.`default`.`v1Table`",
+              "operation" -> "ALTER COLUMN with qualified column"))
         } else {
           parsed1 match {
             case AlterColumn(
@@ -1642,7 +1642,7 @@ class PlanResolutionSuite extends AnalysisTest {
               case UpdateAction(Some(EqualTo(_: AttributeReference, StringLiteral("update"))),
                 Seq(
                   Assignment(_: AttributeReference,
-                    cast @ Cast(Literal(null, _), StringType, _, true)),
+                    cast @ Cast(Literal(null, _), StringType, _, EvalMode.ANSI)),
                   Assignment(_: AttributeReference, _: AttributeReference)))
                 if cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
               case other => fail("unexpected second matched action " + other)
@@ -1652,9 +1652,9 @@ class PlanResolutionSuite extends AnalysisTest {
             negative match {
               case InsertAction(Some(EqualTo(_: AttributeReference, StringLiteral("insert"))),
               Seq(Assignment(i: AttributeReference,
-                cast1 @ Cast(Literal(null, _), IntegerType, _, true)),
+                cast1 @ Cast(Literal(null, _), IntegerType, _, EvalMode.ANSI)),
               Assignment(s: AttributeReference,
-                cast2 @ Cast(Literal(null, _), StringType, _, true))))
+                cast2 @ Cast(Literal(null, _), StringType, _, EvalMode.ANSI))))
                 if cast1.getTagValue(Cast.BY_TABLE_INSERTION).isDefined &&
                   cast2.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
                 assert(i.name == "i")

@@ -4,8 +4,14 @@ SELECT regexp_extract('1a 2b 14m', '\\d+')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Regex group count is 0, but the specified group index is 1
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "messageParameters" : {
+    "groupCount" : "0",
+    "groupIndex" : "1"
+  }
+}
 
 
 -- !query
@@ -21,8 +27,14 @@ SELECT regexp_extract('1a 2b 14m', '\\d+', 1)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Regex group count is 0, but the specified group index is 1
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "messageParameters" : {
+    "groupCount" : "0",
+    "groupIndex" : "1"
+  }
+}
 
 
 -- !query
@@ -30,8 +42,14 @@ SELECT regexp_extract('1a 2b 14m', '\\d+', 2)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Regex group count is 0, but the specified group index is 2
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "messageParameters" : {
+    "groupCount" : "0",
+    "groupIndex" : "2"
+  }
+}
 
 
 -- !query
@@ -39,8 +57,10 @@ SELECT regexp_extract('1a 2b 14m', '\\d+', -1)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-The specified group index cannot be less than zero
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2006"
+}
 
 
 -- !query
@@ -96,8 +116,14 @@ SELECT regexp_extract('1a 2b 14m', '(\\d+)([a-z]+)', 3)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Regex group count is 2, but the specified group index is 3
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "messageParameters" : {
+    "groupCount" : "2",
+    "groupIndex" : "3"
+  }
+}
 
 
 -- !query
@@ -105,8 +131,10 @@ SELECT regexp_extract('1a 2b 14m', '(\\d+)([a-z]+)', -1)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-The specified group index cannot be less than zero
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2006"
+}
 
 
 -- !query
@@ -131,7 +159,15 @@ SELECT regexp_extract('1a 2b 14m', '(?l)')
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-[INVALID_PARAMETER_VALUE] The value of parameter(s) 'regexp' in `regexp_extract` is invalid: (?l)
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "expected" : "(?l)",
+    "functionName" : "`regexp_extract`",
+    "parameter" : "regexp"
+  }
+}
 
 
 -- !query
@@ -139,8 +175,14 @@ SELECT regexp_extract_all('1a 2b 14m', '\\d+')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Regex group count is 0, but the specified group index is 1
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "messageParameters" : {
+    "groupCount" : "0",
+    "groupIndex" : "1"
+  }
+}
 
 
 -- !query
@@ -156,8 +198,14 @@ SELECT regexp_extract_all('1a 2b 14m', '\\d+', 1)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Regex group count is 0, but the specified group index is 1
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "messageParameters" : {
+    "groupCount" : "0",
+    "groupIndex" : "1"
+  }
+}
 
 
 -- !query
@@ -165,8 +213,14 @@ SELECT regexp_extract_all('1a 2b 14m', '\\d+', 2)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Regex group count is 0, but the specified group index is 2
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "messageParameters" : {
+    "groupCount" : "0",
+    "groupIndex" : "2"
+  }
+}
 
 
 -- !query
@@ -174,8 +228,10 @@ SELECT regexp_extract_all('1a 2b 14m', '\\d+', -1)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-The specified group index cannot be less than zero
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2006"
+}
 
 
 -- !query
@@ -231,8 +287,14 @@ SELECT regexp_extract_all('1a 2b 14m', '(\\d+)([a-z]+)', 3)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Regex group count is 2, but the specified group index is 3
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "messageParameters" : {
+    "groupCount" : "2",
+    "groupIndex" : "3"
+  }
+}
 
 
 -- !query
@@ -240,8 +302,10 @@ SELECT regexp_extract_all('1a 2b 14m', '(\\d+)([a-z]+)', -1)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-The specified group index cannot be less than zero
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2006"
+}
 
 
 -- !query
@@ -266,7 +330,15 @@ SELECT regexp_extract_all('abc', col0, 1) FROM VALUES('], [') AS t(col0)
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-[INVALID_PARAMETER_VALUE] The value of parameter(s) 'regexp' in `regexp_extract_all` is invalid: ], [
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "expected" : "], [",
+    "functionName" : "`regexp_extract_all`",
+    "parameter" : "regexp"
+  }
+}
 
 
 -- !query
@@ -565,4 +637,12 @@ SELECT regexp_instr('abc', col0, 1) FROM VALUES(') ?') AS t(col0)
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-[INVALID_PARAMETER_VALUE] The value of parameter(s) 'regexp' in `regexp_instr` is invalid: ) ?
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "expected" : ") ?",
+    "functionName" : "`regexp_instr`",
+    "parameter" : "regexp"
+  }
+}

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -75,15 +75,15 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
     }
   }
 
-  test("target partition exists") {
+  test("target partitions exist") {
     withNamespaceAndTable("ns", "tbl") { t =>
       createSinglePartTable(t)
       sql(s"INSERT INTO $t PARTITION (id = 2) SELECT 'def'")
       checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
-      val errMsg = intercept[PartitionAlreadyExistsException] {
+      val errMsg = intercept[PartitionsAlreadyExistException] {
         sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
       }.getMessage
-      assert(errMsg.contains("Partition already exists"))
+      assert(errMsg.contains("partitions already exist"))
     }
   }
 

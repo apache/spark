@@ -2060,7 +2060,7 @@ class Dataset[T] private[sql](
    * All "value" columns must share a least common data type. Unless they are the same data type,
    * all "value" columns are cast to the nearest common data type. For instance,
    * types `IntegerType` and `LongType` are cast to `LongType`, while `IntegerType` and `StringType`
-   * do not have a common data type and `unpivot` fails.
+   * do not have a common data type and `unpivot` fails with an `AnalysisException`.
    *
    * @param ids Id columns
    * @param values Value columns to unpivot
@@ -2076,10 +2076,11 @@ class Dataset[T] private[sql](
       variableColumnName: String,
       valueColumnName: String): DataFrame = withPlan {
     Unpivot(
-      ids.map(_.named),
-      values.map(_.named),
+      Some(ids.map(_.named)),
+      Some(values.map(v => Seq(v.named))),
+      None,
       variableColumnName,
-      valueColumnName,
+      Seq(valueColumnName),
       logicalPlan
     )
   }
@@ -2104,8 +2105,16 @@ class Dataset[T] private[sql](
   def unpivot(
       ids: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): DataFrame =
-    unpivot(ids, Array.empty, variableColumnName, valueColumnName)
+      valueColumnName: String): DataFrame = withPlan {
+    Unpivot(
+      Some(ids.map(_.named)),
+      None,
+      None,
+      variableColumnName,
+      Seq(valueColumnName),
+      logicalPlan
+    )
+  }
 
   /**
    * Called from Python as Seq[Column] are easier to create via py4j than Array[Column].
@@ -2117,6 +2126,16 @@ class Dataset[T] private[sql](
       variableColumnName: String,
       valueColumnName: String): DataFrame =
     unpivot(ids.toArray, values.toArray, variableColumnName, valueColumnName)
+
+  /**
+   * Called from Python as Seq[Column] are easier to create via py4j than Array[Column].
+   * We use Array[Column] for unpivot rather than Seq[Column] as those are Java-friendly.
+   */
+  private[sql] def unpivotWithSeq(
+      ids: Seq[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame =
+    unpivot(ids.toArray, variableColumnName, valueColumnName)
 
   /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
@@ -2809,6 +2828,53 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * (Scala-specific)
+   * Returns a new Dataset with a columns renamed.
+   * This is a no-op if schema doesn't contain existingName.
+   *
+   * `colsMap` is a map of existing column name and new column name.
+   *
+   * @throws AnalysisException if there are duplicate names in resulting projection
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  @throws[AnalysisException]
+  def withColumnsRenamed(colsMap: Map[String, String]): DataFrame = {
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    val output: Seq[NamedExpression] = queryExecution.analyzed.output
+
+    val projectList = colsMap.foldLeft(output) {
+      case (attrs, (existingName, newName)) =>
+      attrs.map(attr =>
+        if (resolver(attr.name, existingName)) {
+          Alias(attr, newName)()
+        } else {
+          attr
+        }
+      )
+    }
+    SchemaUtils.checkColumnNameDuplication(
+      projectList.map(_.name),
+      "in given column names for withColumnsRenamed",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    withPlan(Project(projectList, logicalPlan))
+  }
+
+  /**
+   * (Java-specific)
+   * Returns a new Dataset with a columns renamed.
+   * This is a no-op if schema doesn't contain existingName.
+   *
+   * `colsMap` is a map of existing column name and new column name.
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def withColumnsRenamed(colsMap: java.util.Map[String, String]): DataFrame =
+    withColumnsRenamed(colsMap.asScala.toMap)
+
+  /**
    * Returns a new Dataset by updating an existing column with metadata.
    *
    * @group untypedrel
@@ -2857,7 +2923,9 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset with a column dropped.
+   * Returns a new Dataset with column dropped.
+   *
+   * This method can only be used to drop top level column.
    * This version of drop accepts a [[Column]] rather than a name.
    * This is a no-op if the Dataset doesn't have a column
    * with an equivalent expression.
@@ -2866,15 +2934,31 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def drop(col: Column): DataFrame = {
-    val expression = col match {
+    drop(col, Seq.empty : _*)
+  }
+
+  /**
+   * Returns a new Dataset with columns dropped.
+   *
+   * This method can only be used to drop top level columns.
+   * This is a no-op if the Dataset doesn't have a columns
+   * with an equivalent expression.
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def drop(col: Column, cols: Column*): DataFrame = {
+    val allColumns = col +: cols
+    val expressions = (for (col <- allColumns) yield col match {
       case Column(u: UnresolvedAttribute) =>
         queryExecution.analyzed.resolveQuoted(
           u.name, sparkSession.sessionState.analyzer.resolver).getOrElse(u)
       case Column(expr: Expression) => expr
-    }
+    })
     val attrs = this.logicalPlan.output
     val colsAfterDrop = attrs.filter { attr =>
-      !attr.semanticEquals(expression)
+      expressions.forall(expression => !attr.semanticEquals(expression))
     }.map(attr => Column(attr))
     select(colsAfterDrop : _*)
   }

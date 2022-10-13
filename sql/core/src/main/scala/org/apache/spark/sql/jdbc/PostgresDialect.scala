@@ -176,7 +176,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
   override def getTableSample(sample: TableSampleInfo): String = {
     // hard-coded to BERNOULLI for now because Spark doesn't have a way to specify sample
     // method name
-    s"TABLESAMPLE BERNOULLI" +
+    "TABLESAMPLE BERNOULLI" +
       s" (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})"
   }
 

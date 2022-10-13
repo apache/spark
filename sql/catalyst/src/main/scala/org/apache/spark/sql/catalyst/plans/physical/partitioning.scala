@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -360,6 +361,25 @@ object KeyGroupedPartitioning {
       expressions: Seq[Expression],
       partitionValues: Seq[InternalRow]): KeyGroupedPartitioning = {
     KeyGroupedPartitioning(expressions, partitionValues.size, Some(partitionValues))
+  }
+
+  def supportsExpressions(expressions: Seq[Expression]): Boolean = {
+    def isSupportedTransform(transform: TransformExpression): Boolean = {
+      transform.children.size == 1 && isReference(transform.children.head)
+    }
+
+    @tailrec
+    def isReference(e: Expression): Boolean = e match {
+      case _: Attribute => true
+      case g: GetStructField => isReference(g.child)
+      case _ => false
+    }
+
+    expressions.forall {
+      case t: TransformExpression if isSupportedTransform(t) => true
+      case e: Expression if isReference(e) => true
+      case _ => false
+    }
   }
 }
 
