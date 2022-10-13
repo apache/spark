@@ -891,9 +891,9 @@ class SubquerySuite extends QueryTest
         parameters = Map("treeNode" -> "(?s).*"),
         sqlState = None,
         context = ExpectedContext(
-          fragment = "(select c1 from t2 where t1.c1 = 2) t2",
-          start = 110,
-          stop = 147))
+          fragment = "select c1 from t2 where t1.c1 = 2",
+          start = 111,
+          stop = 143))
 
       // Right outer join (ROJ) in EXISTS subquery context
       val exception2 = intercept[AnalysisException] {
@@ -913,9 +913,9 @@ class SubquerySuite extends QueryTest
         parameters = Map("treeNode" -> "(?s).*"),
         sqlState = None,
         context = ExpectedContext(
-          fragment = "(select c1 from t2 where t1.c1 = 2) t2",
-          start = 74,
-          stop = 111))
+          fragment = "select c1 from t2 where t1.c1 = 2",
+          start = 75,
+          stop = 107))
 
       // SPARK-18578: Full outer join (FOJ) in scalar subquery context
       val exception3 = intercept[AnalysisException] {
@@ -934,11 +934,9 @@ class SubquerySuite extends QueryTest
         parameters = Map("treeNode" -> "(?s).*"),
         sqlState = None,
         context = ExpectedContext(
-          fragment =
-            """full join t3
-              |                on t2.c1=t3.c1""".stripMargin,
-          start = 112,
-          stop = 154))
+          fragment = "select c1 from  t2 where t1.c1 = 2 and t1.c1=t2.c1",
+          start = 41,
+          stop = 90))
     }
   }
 
