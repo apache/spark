@@ -79,6 +79,14 @@ package object dsl {
           .setName(s)
           .setType(dataType)
           .build()
+
+      def protoAttr: proto.Expression =
+        proto.Expression.newBuilder()
+          .setUnresolvedAttribute(
+            proto.Expression.UnresolvedAttribute.newBuilder()
+              .addAllParts(identifier.asJava)
+              .build())
+          .build()
     }
 
     implicit class DslExpression(val expr: proto.Expression) {
