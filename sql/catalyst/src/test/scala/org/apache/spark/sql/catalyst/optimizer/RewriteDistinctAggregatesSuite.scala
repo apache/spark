@@ -75,4 +75,37 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
       .analyze
     checkRewrite(RewriteDistinctAggregates(input))
   }
+
+  test("SPARK-40382: eliminate multiple distinct groups due to superficial differences") {
+    val input = testRelation
+      .groupBy($"a")(
+        countDistinct($"b" + $"c").as("agg1"),
+        countDistinct($"c" + $"b").as("agg2"),
+        max($"c").as("agg3"))
+      .analyze
+
+    val rewrite = RewriteDistinctAggregates(input)
+    rewrite match {
+      case Aggregate(_, _, LocalRelation(_, _, _)) =>
+      case _ => fail(s"Plan is not as expected:\n$rewrite")
+    }
+  }
+
+  test("SPARK-40382: reduce multiple distinct groups due to superficial differences") {
+    val input = testRelation
+      .groupBy($"a")(
+        countDistinct($"b" + $"c" + $"d").as("agg1"),
+        countDistinct($"d" + $"c" + $"b").as("agg2"),
+        countDistinct($"b" + $"c").as("agg3"),
+        countDistinct($"c" + $"b").as("agg4"),
+        max($"c").as("agg5"))
+      .analyze
+
+    val rewrite = RewriteDistinctAggregates(input)
+    rewrite match {
+      case Aggregate(_, _, Aggregate(_, _, e: Expand)) =>
+        assert(e.projections.size == 3)
+      case _ => fail(s"Plan is not rewritten:\n$rewrite")
+    }
+  }
 }
