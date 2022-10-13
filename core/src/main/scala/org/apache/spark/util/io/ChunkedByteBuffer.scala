@@ -99,7 +99,6 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
     out.writeInt(chunks.length)
     val chunksCopy = getChunks()
     chunksCopy.foreach(buffer => out.writeInt(buffer.limit()))
-    chunksCopy.foreach(buffer => out.writeBoolean(buffer.isDirect))
     var buffer: Array[Byte] = null
     val bufferLen = ChunkedByteBuffer.COPY_BUFFER_LEN
 
@@ -126,31 +125,14 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
     val chunksNum = in.readInt()
     val indices = 0 until chunksNum
     val chunksSize = indices.map(_ => in.readInt())
-    val chunksDirect = indices.map(_ => in.readBoolean())
     val chunks = new Array[ByteBuffer](chunksNum)
 
-    val copyBufferLen = ChunkedByteBuffer.COPY_BUFFER_LEN
-    val copyBuffer: Array[Byte] = if (chunksDirect.exists(identity)) {
-      new Array[Byte](copyBufferLen)
-    } else {
-      null
-    }
-
+    // We deserialize all chunks into on-heap buffer by default. If we have use case in the future
+    // where we want to preserve the on-heap/off-heap nature of chunks, then we need to record the
+    // `isDirect` property of each chunk during serialization
     indices.foreach { i => {
       val chunkSize = chunksSize(i)
-      chunks(i) = if (chunksDirect(i)) {
-        val buffer = ByteBuffer.allocateDirect(chunkSize)
-        var bytesRemaining = chunkSize
-        var bytesToRead = Math.min(copyBufferLen, bytesRemaining)
-        while (bytesRemaining > 0) {
-          bytesToRead = Math.min(copyBufferLen, bytesRemaining)
-          in.readFully(copyBuffer, 0, bytesToRead)
-          buffer.put(copyBuffer, 0, bytesToRead)
-          bytesRemaining -= bytesToRead
-        }
-        buffer.rewind()
-        buffer
-      } else {
+      chunks(i) = {
         val arr = new Array[Byte](chunkSize)
         in.readFully(arr, 0, chunkSize)
         ByteBuffer.wrap(arr)
