@@ -863,11 +863,24 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       .add("c1", StringType)
       .add("c2", ArrayType(new StructType().add("a", LongType)))
 
-    // Value of "c2.a" is a string instead of a long.
+    // "c2" is expected to be an array of structs but it is a struct in the data.
     val df = Seq("""[{"c2": {"a": 1}, "c1": "abc"}]""").toDF("c0")
     checkAnswer(
       df.select(from_json($"c0", ArrayType(st))),
       Row(Array(Row("abc", null)))
+    )
+  }
+
+  test("SPARK-40646: return partial results for JSON maps") {
+    val st = new StructType()
+      .add("c1", MapType(StringType, IntegerType))
+      .add("c2", StringType)
+
+    // Map "c2" has "k2" key that is a string, not an integer.
+    val df = Seq("""{"c1": {"k1": 1, "k2": "A", "k3": 3}, "c2": "abc"}""").toDF("c0")
+    checkAnswer(
+      df.select(from_json($"c0", st)),
+      Row(Row(null, "abc"))
     )
   }
 
