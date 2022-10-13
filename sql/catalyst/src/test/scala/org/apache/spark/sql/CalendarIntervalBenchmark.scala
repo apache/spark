@@ -45,21 +45,19 @@ object CalendarIntervalBenchmark extends BenchmarkBase {
     runBenchmark(name) {
       val generator = RandomDataGenerator.forType(schema, nullable = false).get
       val toRow = RowEncoder(schema).createSerializer()
-      val rows = (1 to numRows).map(_ => toRow(generator().asInstanceOf[Row]).copy()).toArray
+      val intervals =
+        (1 to numRows).map(_ => toRow(generator().asInstanceOf[Row]).copy().getInterval(0))
 
       val row = InternalRow.apply(new CalendarInterval(0, 0, 0))
       val unsafeRow = UnsafeProjection.create(Array[DataType](CalendarIntervalType)).apply(row)
 
-      val benchmark =
-        new Benchmark("CalendarInterval For " + name, iters * numRows.toLong, output = output)
+      val benchmark = new Benchmark(name, iters * numRows.toLong, output = output)
       benchmark.addCase("Call setInterval & getInterval") { _: Int =>
         for (_ <- 0L until iters) {
           var i = 0
           while (i < numRows) {
-            val interval = rows(i).getInterval(0)
-            unsafeRow.setInterval(0, interval)
-            val newInterval = unsafeRow.getInterval(0)
-            assert(interval == newInterval)
+            unsafeRow.setInterval(0, intervals(i))
+            unsafeRow.getInterval(0)
             i += 1
           }
         }
@@ -71,7 +69,7 @@ object CalendarIntervalBenchmark extends BenchmarkBase {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val schema = new StructType().add("interval", CalendarIntervalType)
-    test("interval", schema, 1 << 14, 1 << 13)
+    test("CalendarInterval", schema, 1 << 14, 1 << 13)
   }
 
 }

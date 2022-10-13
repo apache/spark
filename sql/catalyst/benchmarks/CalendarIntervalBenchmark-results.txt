@@ -1,11 +1,11 @@
 ================================================================================================
-interval
+CalendarInterval
 ================================================================================================
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_311-b11 on Mac OS X 10.16
 Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
-CalendarInterval For interval:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+CalendarInterval:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Call setInterval & getInterval                     1963           1970           9         68.4          14.6       1.0X
+Call setInterval & getInterval                     1200           1201           2        111.9           8.9       1.0X
 
 
