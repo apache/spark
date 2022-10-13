@@ -248,7 +248,12 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       def patchAggregateFunctionChildren(
           af: AggregateFunction)(
           attrs: Expression => Option[Expression]): AggregateFunction = {
-        val newChildren = af.children.map(c => attrs(c).getOrElse(c))
+        val newChildren = af.children.zipWithIndex.map { case (x, i) =>
+            x match {
+              case l: Literal if i > 0 => l // some literal function arguments must stay literal
+              case c@_ => attrs (c).getOrElse (c)
+          }
+        }
         af.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
       }
 
