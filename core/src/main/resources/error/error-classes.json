@@ -168,6 +168,11 @@
           "The <functionName> accepts only arrays of pair structs, but <childExpr> is of <childType>."
         ]
       },
+      "NON_FOLDABLE_ENDPOINT" : {
+        "message" : [
+          "The endpoints provided must be constant literals."
+        ]
+      },
       "NON_FOLDABLE_INPUT" : {
         "message" : [
           "the input should be a foldable string expression and not null; however, got <inputExpr>."
@@ -223,6 +228,11 @@
           "The lower bound of a window frame must be <comparison> to the upper bound."
         ]
       },
+      "UNEXPECTED_ENDPOINT_TYPE" : {
+        "message" : [
+          "Endpoints require (numeric or \"TIMESTAMP\" or \"DATE\" or \"TIMESTAMP_NTZ\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\") type."
+        ]
+      },
       "UNEXPECTED_INPUT_TYPE" : {
         "message" : [
           "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
@@ -231,6 +241,11 @@
       "UNSPECIFIED_FRAME" : {
         "message" : [
           "Cannot use an UnspecifiedFrame. This should have been converted during analysis."
+        ]
+      },
+      "WRONG_NUM_ENDPOINTS" : {
+        "message" : [
+          "The number of endpoints must be >= 2 to construct intervals."
         ]
       },
       "WRONG_NUM_PARAMS" : {

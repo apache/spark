@@ -21,7 +21,7 @@ import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, GenericInternalRow}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, HyperLogLogPlusPlusHelper}
@@ -77,19 +77,17 @@ case class ApproxCountDistinctForIntervals(
     if (defaultCheck.isFailure) {
       defaultCheck
     } else if (!endpointsExpression.foldable) {
-      TypeCheckFailure("The endpoints provided must be constant literals")
+      DataTypeMismatch("NON_FOLDABLE_ENDPOINT")
     } else {
       endpointsExpression.dataType match {
         case ArrayType(_: NumericType | DateType | TimestampType | TimestampNTZType |
            _: AnsiIntervalType, _) =>
           if (endpoints.length < 2) {
-            TypeCheckFailure("The number of endpoints must be >= 2 to construct intervals")
+            DataTypeMismatch("WRONG_NUM_ENDPOINTS")
           } else {
             TypeCheckSuccess
           }
-        case _ =>
-          TypeCheckFailure("Endpoints require (numeric or timestamp or date or timestamp_ntz or " +
-            "interval year to month or interval day to second) type")
+        case _ => DataTypeMismatch("UNEXPECTED_ENDPOINT_TYPE")
       }
     }
   }
