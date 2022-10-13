@@ -676,7 +676,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val execPlan = FlatMapGroupsWithStateExec(
           func, keyDeser, valueDeser, sDeser, groupAttr, stateGroupAttr, dataAttr, sda, outputAttr,
           None, stateEnc, stateVersion, outputMode, timeout, batchTimestampMs = None,
-          eventTimeWatermark = None, planLater(initialState), hasInitialState, planLater(child)
+          eventTimeWatermarkForLateEvents = None, eventTimeWatermarkForEviction = None,
+          planLater(initialState), hasInitialState, planLater(child)
         )
         execPlan :: Nil
       case _ =>
