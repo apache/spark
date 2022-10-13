@@ -202,7 +202,7 @@ try:
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
         install_requires=['py4j==0.10.7'],
-        setup_requires=['pypandoc'],
+        setup_requires=['pypandoc < 1.8.0'],
         extras_require={
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy>=1.7'],
