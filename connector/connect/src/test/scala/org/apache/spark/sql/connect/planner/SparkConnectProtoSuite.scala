@@ -119,8 +119,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   test("Test StructType in LocalRelation") {
     val connectPlan = {
       import org.apache.spark.sql.connect.dsl.expressions._
-      transform(createLocalRelationProtoByQualifiedAttributes(
-        Seq("a".struct("id".int))))
+      transform(createLocalRelationProtoByQualifiedAttributes(Seq("a".struct("id".int))))
     }
     val sparkPlan = LocalRelation($"a".struct($"id".int))
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)

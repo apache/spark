@@ -56,10 +56,10 @@ package object dsl {
 
       /** Creates a new AttributeReference of type int */
       def int: proto.Expression.QualifiedAttribute = protoQualifiedAttrWithType(
-        proto.DataType.newBuilder().setI32(proto.DataType.I32.getDefaultInstance).build())
+        proto.DataType.newBuilder().setI32(proto.DataType.I32.newBuilder()).build())
 
       def struct(
-        attrs: proto.Expression.QualifiedAttribute*): proto.Expression.QualifiedAttribute = {
+          attrs: proto.Expression.QualifiedAttribute*): proto.Expression.QualifiedAttribute = {
         val structExpr = proto.DataType.Struct.newBuilder()
         for (attr <- attrs) {
           val structField = proto.DataType.StructField.newBuilder()
@@ -74,7 +74,7 @@ package object dsl {
       }
 
       private def protoQualifiedAttrWithType(
-        dataType: proto.DataType): proto.Expression.QualifiedAttribute =
+          dataType: proto.DataType): proto.Expression.QualifiedAttribute =
         proto.Expression.QualifiedAttribute.newBuilder()
           .setName(s)
           .setType(dataType)
