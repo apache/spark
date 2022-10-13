@@ -25,7 +25,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 private[spark] object SerializerHelper extends Logging {
-  val CHUNK_BUFFER_SIZE: Int = 1024 * 1024
+  // This value should be synced with ChunkedByteBuffer.COPY_BUFFER_LEN
+  private val CHUNK_BUFFER_SIZE: Int = 1024 * 1024
 
   def serializeToChunkedBuffer[T: ClassTag](
       serializerInstance: SerializerInstance,

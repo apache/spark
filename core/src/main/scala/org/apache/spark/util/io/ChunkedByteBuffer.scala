@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.io
 
-import java.io.{Externalizable, File, FileInputStream, InputStream, ObjectInput, ObjectOutput, OutputStream}
+import java.io.{Externalizable, File, FileInputStream, InputStream, ObjectInput, ObjectOutput}
 import java.nio.ByteBuffer
 import java.nio.channels.WritableByteChannel
 
@@ -57,7 +57,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
   /**
    * This size of this buffer, in bytes.
    */
-  var _size: Long = chunks.map(_.limit().asInstanceOf[Long]).sum
+  private var _size: Long = chunks.map(_.limit().asInstanceOf[Long]).sum
 
   def size: Long = _size
 
@@ -97,12 +97,13 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
   override def writeExternal(out: ObjectOutput): Unit = {
     // we want to keep the chunks layout
     out.writeInt(chunks.length)
-    chunks.foreach(buffer => out.writeInt(buffer.limit()))
-    chunks.foreach(buffer => out.writeBoolean(buffer.isDirect))
+    val chunksCopy = getChunks()
+    chunksCopy.foreach(buffer => out.writeInt(buffer.limit()))
+    chunksCopy.foreach(buffer => out.writeBoolean(buffer.isDirect))
     var buffer: Array[Byte] = null
     val bufferLen = ChunkedByteBuffer.COPY_BUFFER_LEN
 
-    getChunks().foreach { chunk => {
+    chunksCopy.foreach { chunk => {
       if (chunk.hasArray) {
         // zero copy if the bytebuffer is backed by bytes array
         out.write(chunk.array(), chunk.arrayOffset(), chunk.limit())
@@ -246,8 +247,8 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
 }
 
 private[spark] object ChunkedByteBuffer {
-
-  val COPY_BUFFER_LEN: Int = 1024 * 1024
+  // This value should be synced with SerializerHelper.CHUNK_BUFFER_SIZE
+  private val COPY_BUFFER_LEN: Int = 1024 * 1024
 
   def fromManagedBuffer(data: ManagedBuffer): ChunkedByteBuffer = {
     data match {
