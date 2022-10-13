@@ -47,22 +47,29 @@ package object dsl {
     }
 
     implicit class DslExpression(val expr: proto.Expression) {
-      def as(alias: String): proto.Expression = proto.Expression.newBuilder().setAlias(
-        proto.Expression.Alias.newBuilder().setName(alias).setExpr(expr)).build()
+      def as(alias: String): proto.Expression = proto.Expression
+        .newBuilder()
+        .setAlias(proto.Expression.Alias.newBuilder().setName(alias).setExpr(expr))
+        .build()
 
-      def < (other: proto.Expression): proto.Expression =
-        proto.Expression.newBuilder().setUnresolvedFunction(
-          proto.Expression.UnresolvedFunction.newBuilder()
-            .addParts("<")
-            .addArguments(expr)
-            .addArguments(other)
-        ).build()
-
-      implicit def intToLiteral(i: Int): proto.Expression =
-        proto.Expression.newBuilder().setLiteral(
-          proto.Expression.Literal.newBuilder().setI32(i)
-        ).build()
+      def <(other: proto.Expression): proto.Expression =
+        proto.Expression
+          .newBuilder()
+          .setUnresolvedFunction(
+            proto.Expression.UnresolvedFunction
+              .newBuilder()
+              .addParts("<")
+              .addArguments(expr)
+              .addArguments(other))
+          .build()
     }
+
+    implicit def intToLiteral(i: Int): proto.Expression =
+      proto.Expression
+        .newBuilder()
+        .setLiteral(proto.Expression.Literal.newBuilder().setI32(i))
+        .build()
+  }
 
   object commands { // scalastyle:ignore
     implicit class DslCommands(val logicalPlan: proto.Relation) {
@@ -118,12 +125,11 @@ package object dsl {
       }
 
       def where(condition: proto.Expression): proto.Relation = {
-        proto.Relation.newBuilder()
-          .setFilter(
-            proto.Filter.newBuilder().setInput(logicalPlan).setCondition(condition)
-        ).build()
+        proto.Relation
+          .newBuilder()
+          .setFilter(proto.Filter.newBuilder().setInput(logicalPlan).setCondition(condition))
+          .build()
       }
-
 
       def join(
           otherPlan: proto.Relation,
