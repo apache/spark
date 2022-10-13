@@ -123,7 +123,17 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
-   * Not used for streaming.
+   * Returns a new [[KeyValueGroupedDataset]] with each group sorted by the given expressions.
+   * Operations that provide an iterator that contains all of the elements in a group will
+   * then provide a sorted iterator (flatMapGroups, mapGroups, cogroup).
+   *
+   * This is not supported for streaming Datasets (mapGroupsWithState, flatMapGroupsWithState).
+   *
+   * @tparam S The type of the sort value. Must be encodable to Spark SQL types.
+   * @param sortBy A function that provides a sort value for each row.
+   * @param direction The sort direction.
+   *
+   * @since 3.4.0
    */
   def sortWithinGroups[S: Encoder](
       sortBy: V => S, direction: SortDirection = Ascending): KeyValueGroupedDataset[K, V] = {
@@ -138,8 +148,17 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
-   * Not used for streaming.
+   * Returns a new [[KeyValueGroupedDataset]] with each group sorted by the given expressions.
+   * Operations that provide an iterator that contains all of the elements in a group will
+   * then provide a sorted iterator (flatMapGroups, mapGroups).
+   *
+   * This is not supported for streaming Datasets (mapGroupsWithState, flatMapGroupsWithState).
+   *
+   * @param sortExprs The columns to sort.
+   *
+   * @since 3.4.0
    */
+  @scala.annotation.varargs
   def sortWithinGroups(sortExprs: Column*): KeyValueGroupedDataset[K, V] = {
     assert(!logicalPlan.isStreaming, "sorted groups not supported for streaming")
 
@@ -160,6 +179,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an iterator containing elements of an arbitrary type which will be returned
    * as a new [[Dataset]].
+   *
+   * If `sortWithinGroups` has been called before, the iterator will be sorted accordingly.
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
@@ -191,6 +212,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * function can return an iterator containing elements of an arbitrary type which will be returned
    * as a new [[Dataset]].
    *
+   * If `sortWithinGroups` has been called before, the iterator will be sorted accordingly.
+   *
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
    * key, it is best to use the reduce function or an
@@ -212,6 +235,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an element of arbitrary type which will be returned as a new [[Dataset]].
+   *
+   * If `sortWithinGroups` has been called before, the iterator will be sorted accordingly.
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
@@ -235,6 +260,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an element of arbitrary type which will be returned as a new [[Dataset]].
+   *
+   * If `sortWithinGroups` has been called before, the iterator will be sorted accordingly.
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
@@ -774,6 +801,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * be passed the grouping key and 2 iterators containing all elements in the group from
    * [[Dataset]] `this` and `other`.  The function can return an iterator containing elements of an
    * arbitrary type which will be returned as a new [[Dataset]].
+   *
+   * If `sortWithinGroups` has been called on any of the groups, the respective iterator will be
+   * sorted accordingly.
    *
    * @since 1.6.0
    */
