@@ -3676,7 +3676,7 @@
   },
   "_LEGACY_ERROR_TEMP_2125" : {
     "message" : [
-      "Failed to merge incompatible data types ${leftCatalogString} and ${rightCatalogString}"
+      "Failed to merge incompatible data types <leftCatalogString> and <rightCatalogString>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2126" : {
