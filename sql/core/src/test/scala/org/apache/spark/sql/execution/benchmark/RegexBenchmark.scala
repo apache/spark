@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import scala.io.Source
 import scala.util.Random
 
 import org.apache.spark.benchmark.Benchmark
@@ -44,10 +43,6 @@ import org.apache.spark.sql.types.{LongType, StringType, StructField, StructType
 
 object RegexBenchmark extends SqlBasedBenchmark {
 
-  val input = Source
-    .fromFile("sql/core/src/main/resources/regex-benchmark-input-text.txt")
-    .mkString
-    .split('\t')
 
   private def makeRandomStr(cardinality: Int): DataFrame = {
     var rdd1 = spark.sparkContext.range(0, cardinality).map(num => {
@@ -58,7 +53,6 @@ object RegexBenchmark extends SqlBasedBenchmark {
       }
       Row(num, str.toString)
     })
-
     val schema = StructType(
       Seq(
         StructField("id", LongType, true)
@@ -71,42 +65,16 @@ object RegexBenchmark extends SqlBasedBenchmark {
   private def doRunBenchmarkRLike(cardinality: Int): Unit = {
     val df1 = makeRandomStr(cardinality)
     df1.filter(s"t1 rlike '.*a.cd.*e.*'").count()
-
   }
 
-  private def doRunBenchmarkRlike(): Unit = {
-    val rdd1 = spark.sparkContext.parallelize(input, 20).map(Row(_))
-    val schema = StructType(
-      Seq(
-        StructField("t", StringType, true)
-      )
-    )
-    val df1 = spark.createDataFrame(rdd1, schema)
-    df1.filter("t rlike '[\\\\w.+-]+@[\\\\w.-]+\\\\.[\\\\w.-]+'").count()
-    df1.filter("t rlike '[\\\\w]+://[^/\\\\s?#]+" +
-      "[^\\\\s?#]+(?:\\\\?[^\\\\s#]*)?(?:#[^\\\\s]*)?'").count()
-    df1.filter(s"t rlike '(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])\\\\.)" +
-      s"{3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])'").count()
-
-  }
 
   private def doRunBenchmarkLike(cardinality: Int): Unit = {
     val df1 = makeRandomStr(cardinality)
     df1.filter(s"t1 like '%a_cd%e%'").count()
-
-
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val cardinality = 1000000
-
-
-    runBenchmark("Regex rlike by input-text.txt ") {
-      codegenBenchmarkRegex("Regex rlike by input-text.txt", cardinality) {
-        doRunBenchmarkRlike()
-      }
-    }
-
 
 
     runBenchmark("Regex rlike** ") {
