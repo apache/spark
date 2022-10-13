@@ -951,6 +951,45 @@
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution"
     ]
   },
+  "INVALID_PERCENTAGES" : {
+    "message" : [
+      "The percentage(s) "
+    ],
+    "subClass" : {
+      "MUST_NOT_NULL" : {
+        "message" : [
+          "must not be null"
+        ]
+      },
+      "MUST_CONSTANT" : {
+        "message" : [
+          "must be a constant literal (current value = <currentValue>)"
+        ]
+      },
+      "VALUE_OUT_OF_RANGE" : {
+        "message" : [
+          "must be between 0.0 and 1.0 (current value = <currentValue>)"
+        ]
+      }
+    }
+  },
+  "INVALID_ACCURACY" : {
+    "message" : [
+      "The accuracy "
+    ],
+    "subClass" : {
+      "MUST_CONSTANT" : {
+        "message" : [
+          "must be a constant literal (current value = <currentValue>)"
+        ]
+      },
+      "VALUE_OUT_OF_RANGE" : {
+        "message" : [
+          "must be a literal between (0, <maxValue>] (current value = <currentValue>)"
+        ]
+      }
+    }
+  },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
       "Invalid InsertIntoContext"

@@ -21,7 +21,7 @@ import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.util._
@@ -84,14 +84,18 @@ abstract class PercentileBase
       defaultCheck
     } else if (!percentageExpression.foldable) {
       // percentageExpression must be foldable
-      TypeCheckFailure("The percentage(s) must be a constant literal, " +
-        s"but got $percentageExpression")
+      DataTypeMismatch(
+        errorSubClass = "INVALID_PERCENTAGES.MUST_CONSTANT",
+        messageParameters = Map("currentValue" -> percentageExpression.toString)
+      )
     } else if (percentages == null) {
-      TypeCheckFailure("Percentage value must not be null")
+      DataTypeMismatch(errorSubClass = "INVALID_PERCENTAGES.MUST_NOT_NULL")
     } else if (percentages.exists(percentage => percentage < 0.0 || percentage > 1.0)) {
       // percentages(s) must be in the range [0.0, 1.0]
-      TypeCheckFailure("Percentage(s) must be between 0.0 and 1.0, " +
-        s"but got $percentageExpression")
+      DataTypeMismatch(
+        errorSubClass = "INVALID_PERCENTAGES.VALUE_OUT_OF_RANGE",
+        messageParameters = Map("currentValue" -> percentageExpression.toString)
+      )
     } else {
       TypeCheckSuccess
     }

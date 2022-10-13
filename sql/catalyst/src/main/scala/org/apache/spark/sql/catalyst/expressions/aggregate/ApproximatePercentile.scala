@@ -23,7 +23,7 @@ import com.google.common.primitives.{Doubles, Ints, Longs}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
 import org.apache.spark.sql.catalyst.trees.TernaryLike
@@ -118,17 +118,32 @@ case class ApproximatePercentile(
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
       defaultCheck
-    } else if (!percentageExpression.foldable || !accuracyExpression.foldable) {
-      TypeCheckFailure(s"The accuracy or percentage provided must be a constant literal")
+    } else if (!percentageExpression.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "INVALID_PERCENTAGES.MUST_CONSTANT",
+        messageParameters = Map("currentValue" -> percentageExpression.toString
+        )
+      )
+    } else if (!accuracyExpression.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "INVALID_ACCURACY.MUST_CONSTANT",
+        messageParameters = Map("currentValue" -> accuracyExpression.toString)
+      )
     } else if (accuracy <= 0 || accuracy > Int.MaxValue) {
-      TypeCheckFailure(s"The accuracy provided must be a literal between (0, ${Int.MaxValue}]" +
-        s" (current value = $accuracy)")
+      DataTypeMismatch(
+        errorSubClass = "INVALID_ACCURACY.VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "maxValue" -> Int.MaxValue.toString,
+          "currentValue" -> accuracy.toString
+        )
+      )
     } else if (percentages == null) {
-      TypeCheckFailure("Percentage value must not be null")
+      DataTypeMismatch(errorSubClass = "INVALID_PERCENTAGES.MUST_NOT_NULL")
     } else if (percentages.exists(percentage => percentage < 0.0D || percentage > 1.0D)) {
-      TypeCheckFailure(
-        s"All percentage values must be between 0.0 and 1.0 " +
-          s"(current = ${percentages.mkString(", ")})")
+      DataTypeMismatch(
+        errorSubClass = "INVALID_PERCENTAGES.VALUE_OUT_OF_RANGE",
+        messageParameters = Map("currentValue" -> percentages.mkString(", "))
+      )
     } else {
       TypeCheckSuccess
     }
