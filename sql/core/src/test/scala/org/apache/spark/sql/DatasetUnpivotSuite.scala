@@ -539,6 +539,130 @@ class DatasetUnpivotSuite extends QueryTest
         "val"),
       longStructDataRows)
   }
+
+  test("unpivot sql with struct fields") {
+    // accessing struct fields in FROM clause works
+    checkAnswer(
+      spark.sql("""SELECT * FROM (
+                  |  SELECT course, `the.earnings`.* FROM (
+                  |    SELECT col1 AS course,
+                  |           struct(col2 AS `2012`, col3 AS `2013`, col4 AS `2014`) `the.earnings`
+                  |    FROM VALUES ("dotNET", 15000, 48000.0, 22500L)
+                  |  )
+                  |)
+                  |UNPIVOT (
+                  |  earningsYear FOR year IN (`2012`, `2013`, `2014`)
+                  |);
+                  |""".stripMargin),
+      Seq(
+        ("dotNET", "2012", 15000),
+        ("dotNET", "2013", 48000),
+        ("dotNET", "2014", 22500)
+      ).toDF("course", "year", "earningsYear")
+    )
+
+    checkAnswer(
+      spark.sql("""SELECT * FROM (
+                  |  SELECT course, `the.earnings`.* FROM (
+                  |    SELECT col1 AS course,
+                  |           named_struct(
+                  |             'earnings2012', col2, 'earnings2013', col4, 'earnings2014', col6,
+                  |             'sales2012', col3, 'sales2013', col5, 'sales2014', col7
+                  |           ) AS `the.earnings`
+                  |    FROM VALUES ("dotNET", 15000, NULL, 48000.0, 1, 22500L, 1)
+                  |  )
+                  |)
+                  |UNPIVOT (
+                  |  (earnings, sales) FOR year IN (
+                  |    (`earnings2012`, `sales2012`) `2012`,
+                  |    (`earnings2013`, `sales2013`) `2013`,
+                  |    (`earnings2014`, `sales2014`) `2014`
+                  |  )
+                  |);
+                  |""".stripMargin),
+      Seq(
+        ("dotNET", "2012", 15000, null),
+        ("dotNET", "2013", 48000, Some(1)),
+        ("dotNET", "2014", 22500, Some(1))
+      ).toDF("course", "year", "earnings", "sales")
+    )
+
+    // accessing struct fields as unpivot columns does not work
+    val e = intercept[AnalysisException] {
+      spark.sql("""SELECT * FROM (
+                  |  SELECT col1 AS course,
+                  |         struct(col2 AS `2012`, col3 AS `2013`, col4 AS `2014`) AS `the.earnings`
+                  |  FROM VALUES ("dotNET", 15000, 48000, 22500)
+                  |)
+                  |UNPIVOT (
+                  |  earningsYear FOR year IN (`the.earnings`.`2012`,
+                  |                            `the.earnings`.`2013`,
+                  |                            `the.earnings`.`2014`)
+                  |);
+                  |""".stripMargin)
+    }
+    checkError(
+      exception = e,
+      errorClass = "UNPIVOT_REQUIRES_ATTRIBUTES",
+      parameters = Map(
+        "given" -> "value",
+        "empty" -> "id",
+        "expressions" -> (
+          "\"the.earnings.2012 AS `2012`\", " +
+            "\"the.earnings.2013 AS `2013`\", " +
+            "\"the.earnings.2014 AS `2014`\"")
+      ))
+
+    val e2 = intercept[AnalysisException] {
+      spark.sql("""SELECT * FROM (
+                  |  SELECT col1 AS course,
+                  |         named_struct('2012', col2, '2013', col4, '2014', col6) `the.earnings`,
+                  |         named_struct('2012', col3, '2013', col5, '2014', col7) `the.sales`
+                  |  FROM VALUES ("dotNET", 15000, NULL, 48000, 1, 22500, 1)
+                  |)
+                  |UNPIVOT (
+                  |  (earnings, sales) FOR year IN (
+                  |    (`the.earnings`.`2012`, `the.sales`.`2012`) `2012`,
+                  |    (`the.earnings`.`2013`, `the.sales`.`2013`) `2013`,
+                  |    (`the.earnings`.`2014`, `the.sales`.`2014`) `2014`
+                  |  )
+                  |);
+                  |""".stripMargin)
+    }
+    checkError(
+      exception = e2,
+      errorClass = "UNPIVOT_REQUIRES_ATTRIBUTES",
+      parameters = Map(
+        "given" -> "value",
+        "empty" -> "id",
+        "expressions" -> (
+          "\"the.earnings.2012 AS `2012`\", " +
+            "\"the.sales.2012 AS `2012`\", " +
+            "\"the.earnings.2013 AS `2013`\", " +
+            "\"the.sales.2013 AS `2013`\", " +
+            "\"the.earnings.2014 AS `2014`\", " +
+            "\"the.sales.2014 AS `2014`\"")
+      ))
+  }
+
+  test("unpivot sql with unpivot value number mismatch") {
+    Seq("col1", "col1, col2, col3").foreach { columns =>
+      withClue(columns) {
+        val e = intercept[AnalysisException] {
+          spark.sql(s"""SELECT * FROM VALUES (1, 2, 3)
+                       |UNPIVOT (
+                       |  (val1, val2) FOR col IN (($columns))
+                       |);
+                       |""".stripMargin)
+        }
+        checkError(
+          exception = e,
+          errorClass = "UNPIVOT_VALUE_SIZE_MISMATCH",
+          parameters = Map("names" -> "2"))
+      }
+    }
+  }
+
 }
 
 case class WideData(id: Int, str1: String, str2: String, int1: Option[Int], long1: Option[Long])

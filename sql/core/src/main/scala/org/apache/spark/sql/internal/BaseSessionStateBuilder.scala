@@ -196,6 +196,7 @@ abstract class BaseSessionStateBuilder(
         PreprocessTableCreation(session) +:
         PreprocessTableInsertion +:
         DataSourceAnalysis(this) +:
+        ApplyCharTypePadding +:
         ReplaceCharWithVarchar +:
         customPostHocResolutionRules
 
