@@ -396,9 +396,29 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
-    assertError(Sum($"booleanField"), "function sum requires numeric or interval types")
-    assertError(Average($"booleanField"),
-      "function average requires numeric or interval types")
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(Sum($"booleanField"))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"sum(booleanField)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"booleanField\"",
+        "inputType" -> "\"BOOLEAN\"",
+        "requiredType" -> "a numeric or interval"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(Average($"booleanField"))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"avg(booleanField)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"booleanField\"",
+        "inputType" -> "\"BOOLEAN\"",
+        "requiredType" -> "a numeric or interval"))
   }
 
   test("check types for others") {

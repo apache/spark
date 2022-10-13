@@ -40,6 +40,7 @@ struct<>
 -- !query output
 
 
+
 -- !query
 SELECT
     map_concat(boolean_map1, boolean_map2) boolean_map,
