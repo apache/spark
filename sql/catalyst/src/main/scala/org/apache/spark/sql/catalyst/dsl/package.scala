@@ -425,7 +425,9 @@ package object dsl {
           leftGroup: Seq[Attribute],
           rightGroup: Seq[Attribute],
           leftAttr: Seq[Attribute],
-          rightAttr: Seq[Attribute]
+          rightAttr: Seq[Attribute],
+          leftOrder: Seq[SortOrder],
+          rightOrder: Seq[SortOrder]
         ): LogicalPlan = {
         CoGroup.apply[Key, Left, Right, Result](
           func,
@@ -433,6 +435,8 @@ package object dsl {
           rightGroup,
           leftAttr,
           rightAttr,
+          leftOrder,
+          rightOrder,
           logicalPlan,
           otherPlan)
       }

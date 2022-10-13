@@ -700,7 +700,9 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       AppendColumns[Int, Int]((x: Int) => x, left).newColumns,
       AppendColumns[Int, Int]((x: Int) => x, right).newColumns,
       left.output,
-      right.output)
+      right.output,
+      Seq.empty,
+      Seq.empty)
   }
 
   // Union: Mixing between stream and batch not supported
