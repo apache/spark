@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkException
-
 import scala.collection.mutable.ArraySeq
+
 import org.json4s.JsonAST.{JArray, JObject, JString}
 import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
+
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
