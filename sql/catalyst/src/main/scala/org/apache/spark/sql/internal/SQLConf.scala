@@ -723,9 +723,9 @@ object SQLConf {
         "multiplying the median partition size and also larger than " +
         "'spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes'")
       .version("3.0.0")
-      .intConf
+      .doubleConf
       .checkValue(_ >= 0, "The skew factor cannot be negative.")
-      .createWithDefault(5)
+      .createWithDefault(5.0)
 
   val SKEW_JOIN_SKEWED_PARTITION_THRESHOLD =
     buildConf("spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes")
@@ -3820,6 +3820,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val READ_SIDE_CHAR_PADDING = buildConf("spark.sql.readSideCharPadding")
+    .doc("When true, Spark applies string padding when reading CHAR type columns/fields, " +
+      "in addition to the write-side padding. This config is true by default to better enforce " +
+      "CHAR type semantic in cases such as external tables.")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val CLI_PRINT_HEADER =
     buildConf("spark.sql.cli.print.header")
      .doc("When set to true, spark-sql CLI prints the names of the columns in query output.")
@@ -4712,6 +4720,8 @@ class SQLConf extends Serializable with Logging {
     StaticSQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 
   def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
+
+  def readSideCharPadding: Boolean = getConf(SQLConf.READ_SIDE_CHAR_PADDING)
 
   def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
 
