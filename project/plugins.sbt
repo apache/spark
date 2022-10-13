@@ -22,8 +22,8 @@ addSbtPlugin("com.etsy" % "sbt-checkstyle-plugin" % "3.1.1")
 // please check pom.xml in the root of the source tree too.
 libraryDependencies += "com.puppycrawl.tools" % "checkstyle" % "9.3"
 
-// checkstyle uses guava 23.0.
-libraryDependencies += "com.google.guava" % "guava" % "23.0"
+// checkstyle uses guava 31.0.1-jre.
+libraryDependencies += "com.google.guava" % "guava" % "31.0.1-jre"
 
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "1.2.0")
 
