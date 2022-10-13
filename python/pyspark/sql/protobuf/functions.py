@@ -41,6 +41,7 @@ def from_protobuf(
     it may fail or return arbitrary result.
     To deserialize the data with a compatible and evolved schema, the expected
     Protobuf schema can be set via the option protobuf descriptor.
+
     .. versionadded:: 3.4.0
 
     Parameters
@@ -56,31 +57,36 @@ def from_protobuf(
 
     Notes
     -----
-    Protobuf is built-in but external data source module since Spark 2.4. Please deploy the
-    application as per the deployment section of "Protobuf Data Source Guide".
+    Protobuf functionality is provided as an pluggable external module since Spark 3.4.0.
 
     Examples
     --------
     >>> from pyspark.sql import Row
-    >>> from pyspark.sql.types import *
+    >>> import pyspark.sql.types as T
     >>> from pyspark.sql.protobuf.functions import from_protobuf, to_protobuf
     >>> data = ([Row(key="1", value=Row(age=2, name="Alice", score=109200))])
-    >>> schema = StructType([StructField("key", StringType(), False), \
-    StructField( "value", StructType([ StructField("age", IntegerType(), False), \
-    StructField("name", StringType(), False), StructField("score", LongType(), False), ]), False)])
-    >>> df = spark.createDataFrame(data, schema)
+    >>> ddl_schema = "key string, value struct<age: integer, name: string, score: long>"
+    >>> df = spark.createDataFrame(data, T._parse_datatype_string(ddl_schema))
     >>> descFilePath = 'connector/protobuf/src/test/resources/protobuf/pyspark_test.desc'
     >>> messageName = 'SimpleMessage'
     >>> protobufDf = df.select(to_protobuf(df.value, descFilePath, messageName).alias("protobuf"))
-    >>> protobufDf.collect()
-    [Row(protobuf=bytearray(b'\\x08\\x02\\x12\\x05Alice\\x18\\x90\\xd5\\x06'))]
+    >>> protobufDf.show(truncate=False)
+    +----------------------------------------+
+    |protobuf                                |
+    +----------------------------------------+
+    |[08 02 12 05 41 6C 69 63 65 18 90 D5 06]|
+    +----------------------------------------+
 
     >>> descFilePath = 'connector/protobuf/src/test/resources/protobuf/pyspark_test.desc'
     >>> messageName = 'SimpleMessage'
     >>> df = protobufDf.select(from_protobuf(protobufDf.protobuf, \
     descFilePath, messageName).alias("value"))
-    >>> df.collect()
-    [Row(value=Row(age=2, name='Alice', score=109200))]
+    >>> df.show(truncate=False)
+    +------------------+
+    |value             |
+    +------------------+
+    |{2, Alice, 109200}|
+    +------------------+
     """
 
     sc = SparkContext._active_spark_context
@@ -113,24 +119,25 @@ def to_protobuf(data: "ColumnOrName", descFilePath: str, messageName: str) -> Co
 
     Notes
     -----
-    Protobuf is built-in but external data source module since Spark 2.4. Please deploy the
-    application as per the deployment section of "Protobuf Data Source Guide".
+    Protobuf functionality is provided as an pluggable external module since Spark 3.4.0.
 
     Examples
     --------
     >>> from pyspark.sql import Row
     >>> from pyspark.sql.protobuf.functions import to_protobuf
-    >>> from pyspark.sql.types import *
+    >>> import pyspark.sql.types as T
     >>> descFilePath = 'connector/protobuf/src/test/resources/protobuf/pyspark_test.desc'
     >>> messageName = 'SimpleMessage'
     >>> data = ([Row(value=Row(age=2, name="Alice", score=13093020))])
-    >>> schema = StructType([StructField( "value", \
-    StructType([ StructField("age", IntegerType(), False), \
-    StructField("name", StringType(), False), \
-    StructField("score", LongType(), False), ]), False)])
-    >>> df = spark.createDataFrame(data, schema)
-    >>> df.select(to_protobuf(df.value, descFilePath, messageName).alias("suite")).collect()
-    [Row(suite=bytearray(b'\\x08\\x02\\x12\\x05Alice\\x18\\x9c\\x91\\x9f\\x06'))]
+    >>> ddl_schema = "value struct<age: integer, name: string, score: long>"
+    >>> df = spark.createDataFrame(data, T._parse_datatype_string(ddl_schema))
+    >>> protobuf_df = df.select(to_protobuf(df.value, descFilePath, messageName).alias("suite"))
+    >>> protobuf_df.show(truncate=False)
+    +-------------------------------------------+
+    |suite                                      |
+    +-------------------------------------------+
+    |[08 02 12 05 41 6C 69 63 65 18 9C 91 9F 06]|
+    +-------------------------------------------+
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
@@ -170,7 +177,7 @@ def _test() -> None:
 
     globs = pyspark.sql.protobuf.functions.__dict__.copy()
     spark = (
-        SparkSession.builder.master("local[*]")
+        SparkSession.builder.master("local[2]")
         .appName("sql.protobuf.functions tests")
         .getOrCreate()
     )

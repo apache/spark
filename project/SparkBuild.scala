@@ -59,7 +59,7 @@ object BuildCommons {
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "tags", "sketch", "kvstore"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connect)
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connect) ++ Seq(protobuf)
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
@@ -433,7 +433,7 @@ object SparkBuild extends PomBuild {
 
   enable(SparkConnect.settings)(connect)
 
-  /* connector/protobuf settings */
+  /* Connector/proto settings */
   enable(SparkProtobuf.settings)(protobuf)
 
   // SPARK-14738 - Remove docker tests from main Spark build
@@ -1292,7 +1292,7 @@ object CopyDependencies {
             Files.copy(fid.toPath, destJar.toPath)
           } else if (jar.getName.contains("spark-protobuf") &&
             !SbtPomKeys.profiles.value.contains("noshade-protobuf")) {
-            Files.copy(fidProtobuf.toPath, destJar.toPath)
+            Files.copy(fid.toPath, destJar.toPath)
           } else {
             Files.copy(jar.toPath(), destJar.toPath())
           }
