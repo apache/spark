@@ -574,10 +574,11 @@ class DatasetSuite extends QueryTest
       "a", "30", "b", "3", "c", "1")
   }
 
-  test("groupBy function, flatMapSorted by func") {
+  test("SPARK-38591: groupBy function, sortWithinGroups by func, flatMapGroups") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1)).toDS()
     val grouped = ds.groupByKey(v => (v._1, "word"))
-    val aggregated = grouped.flatMapSortedGroups(v => v._2) { (g, iter) =>
+    val sortedGroups = grouped.sortWithinGroups(v => v._2)
+    val aggregated = sortedGroups.flatMapGroups { (g, iter) =>
       Iterator(g._1, iter.mkString(", "))
     }
 
@@ -589,10 +590,11 @@ class DatasetSuite extends QueryTest
     )
   }
 
-  test("groupBy function, flatMapSorted by func desc") {
+  test("SPARK-38591: groupBy function, sortWithinGroups by func desc, flatMapGroups") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1)).toDS()
     val grouped = ds.groupByKey(v => (v._1, "word"))
-    val aggregated = grouped.flatMapSortedGroups(v => v._2, Descending) { (g, iter) =>
+    val sortedGroups = grouped.sortWithinGroups(v => v._2, Descending)
+    val aggregated = sortedGroups.flatMapGroups { (g, iter) =>
       Iterator(g._1, iter.mkString(", "))
     }
 
@@ -604,11 +606,12 @@ class DatasetSuite extends QueryTest
     )
   }
 
-  test("groupBy function, flatMapSorted by expr") {
+  test("SPARK-38591: groupBy function, sortWithinGroups by expr, flatMapGroups") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupByKey(v => (v.getString(0), "word"))
-    val aggregated = grouped.flatMapSortedGroups($"seq", expr("length(key)")) { (g, iter) =>
+    val sortedGroups = grouped.sortWithinGroups($"seq", expr("length(key)"))
+    val aggregated = sortedGroups.flatMapGroups { (g, iter) =>
       Iterator(g._1, iter.mkString(", "))
     }
 
@@ -620,11 +623,12 @@ class DatasetSuite extends QueryTest
     )
   }
 
-  test("groupBy function, flatMapSorted by expr desc") {
+  test("SPARK-38591: groupBy function, sortWithinGroups by expr desc, flatMapGroups") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupByKey(v => (v.getString(0), "word"))
-    val aggregated = grouped.flatMapSortedGroups($"seq".desc, expr("length(key)")) { (g, iter) =>
+    val sortedGroups = grouped.sortWithinGroups($"seq".desc, expr("length(key)"))
+    val aggregated = sortedGroups.flatMapGroups { (g, iter) =>
       Iterator(g._1, iter.mkString(", "))
     }
 
@@ -634,6 +638,20 @@ class DatasetSuite extends QueryTest
       "b", "[b,2,1], [b,1,2]",
       "c", "[c,1,1]"
     )
+  }
+
+  test("SPARK-38591: groupBy function, sortWithinGroups with streaming") {
+    val grouped = MemoryStream[Int].toDS().groupByKey(i => i)
+
+    Map(
+      "func" -> ((kv: KeyValueGroupedDataset[Int, Int]) => kv.sortWithinGroups(i => i)),
+      "expr" -> ((kv: KeyValueGroupedDataset[Int, Int]) => kv.sortWithinGroups($"_1"))
+    ).foreach { case (label, sortFn) =>
+      withClue(label) {
+        val exception = intercept[AssertionError] { sortFn(grouped) }
+        assert(exception.getMessage.contains("sorted groups not supported for streaming"))
+      }
+    }
   }
 
   test("groupBy function, mapValues, flatMap") {
@@ -790,11 +808,11 @@ class DatasetSuite extends QueryTest
       1 -> "a", 2 -> "bc", 3 -> "d")
   }
 
-  test("cogroup sorted") {
+  test("SPARK-38591: cogroup sorted") {
     val left = Seq(1 -> "a", 3 -> "xyz", 5 -> "hello", 3 -> "abc", 3 -> "ijk").toDS()
     val right = Seq(2 -> "q", 3 -> "w", 5 -> "x", 5 -> "z", 3 -> "a", 5 -> "y").toDS()
-    val groupedLeft = left.groupByKey(_._1)
-    val groupedRight = right.groupByKey(_._1)
+    val leftGrouped = left.groupByKey(_._1)
+    val rightGrouped = right.groupByKey(_._1)
 
     val neitherSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "xyzabcijk#wa", 5 -> "hello#xzy")
     val leftSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "abcijkxyz#wa", 5 -> "hello#xzy")
@@ -816,11 +834,19 @@ class DatasetSuite extends QueryTest
       ("both desc", leftDescOrder, rightDescOrder, bothDescSortedExpected)
     ).foreach { case (label, leftOrder, rightOrder, expected) =>
       withClue(s"$label sorted") {
-        val cogrouped = groupedLeft
-          .cogroupSorted(groupedRight)(leftOrder: _*)(rightOrder: _*) {
-            case (key, left, right) =>
-              Iterator(key -> (left.map(_._2).mkString + "#" + right.map(_._2).mkString))
+        val Seq(leftSorted, rightSorted) =
+          Seq((leftGrouped, leftOrder), (rightGrouped, rightOrder)).map {
+            case (grouped, order) => if (order.isEmpty) {
+              grouped
+            } else {
+              grouped.sortWithinGroups(order.head, order.tail: _*)
+            }
           }
+
+        val cogrouped = leftSorted.cogroup(rightSorted) {
+          case (key, left, right) =>
+            Iterator(key -> (left.map(_._2).mkString + "#" + right.map(_._2).mkString))
+        }
 
         checkDatasetUnorderly(cogrouped, expected.toList: _*)
       }

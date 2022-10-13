@@ -160,7 +160,8 @@ class RelationalGroupedDataset protected[sql](
       valueEncoder,
       qe,
       df.logicalPlan.output,
-      aliasedGroupings.map(_.toAttribute))
+      aliasedGroupings.map(_.toAttribute),
+      Seq.empty)
   }
 
   /**

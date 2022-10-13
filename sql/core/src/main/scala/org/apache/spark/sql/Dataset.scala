@@ -1890,7 +1890,8 @@ class Dataset[T] private[sql](
       encoderFor[T],
       executed,
       logicalPlan.output,
-      withGroupingKey.newColumns)
+      withGroupingKey.newColumns,
+      Seq.empty)
   }
 
   /**
