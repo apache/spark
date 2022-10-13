@@ -128,6 +128,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   def sortWithinGroups[S: Encoder](
       sortBy: V => S, direction: SortDirection = Ascending): KeyValueGroupedDataset[K, V] = {
     assert(!logicalPlan.isStreaming, "sorted groups not supported for streaming")
+
     val withSortKey = AppendColumns(sortBy, dataAttributes, logicalPlan)
     val sortOrder = withSortKey.newColumns.map(SortOrder(_, direction))
     val executed = sparkSession.sessionState.executePlan(withSortKey)
@@ -139,10 +140,10 @@ class KeyValueGroupedDataset[K, V] private[sql](
   /**
    * Not used for streaming.
    */
-  def sortWithinGroups(sortExpr: Column, sortExprs: Column*): KeyValueGroupedDataset[K, V] = {
+  def sortWithinGroups(sortExprs: Column*): KeyValueGroupedDataset[K, V] = {
     assert(!logicalPlan.isStreaming, "sorted groups not supported for streaming")
 
-    val sortOrder: Seq[SortOrder] = (Seq(sortExpr) ++ sortExprs).map { col =>
+    val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
       col.expr match {
         case expr: SortOrder => expr
         case expr: Expression => SortOrder(expr, Ascending)

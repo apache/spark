@@ -834,16 +834,8 @@ class DatasetSuite extends QueryTest
       ("both desc", leftDescOrder, rightDescOrder, bothDescSortedExpected)
     ).foreach { case (label, leftOrder, rightOrder, expected) =>
       withClue(s"$label sorted") {
-        val Seq(leftSorted, rightSorted) =
-          Seq((leftGrouped, leftOrder), (rightGrouped, rightOrder)).map {
-            case (grouped, order) => if (order.isEmpty) {
-              grouped
-            } else {
-              grouped.sortWithinGroups(order.head, order.tail: _*)
-            }
-          }
-
-        val cogrouped = leftSorted.cogroup(rightSorted) {
+        val cogrouped = leftGrouped.sortWithinGroups(leftOrder: _*)
+          .cogroup(rightGrouped.sortWithinGroups(rightOrder: _*)) {
           case (key, left, right) =>
             Iterator(key -> (left.map(_._2).mkString + "#" + right.map(_._2).mkString))
         }
