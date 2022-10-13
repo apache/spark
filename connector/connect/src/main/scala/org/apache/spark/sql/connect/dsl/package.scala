@@ -53,13 +53,12 @@ package object dsl {
             .addArguments(expr)
             .addArguments(other)
         ).build()
-
-      implicit def intToLiteral(i: Int): proto.Expression =
-        proto.Expression.newBuilder().setLiteral(
-          proto.Expression.Literal.newBuilder().setI32(i)
-        ).build()
-
     }
+
+    implicit def intToLiteral(i: Int): proto.Expression =
+      proto.Expression.newBuilder().setLiteral(
+        proto.Expression.Literal.newBuilder().setI32(i)
+      ).build()
   }
 
   object plans { // scalastyle:ignore

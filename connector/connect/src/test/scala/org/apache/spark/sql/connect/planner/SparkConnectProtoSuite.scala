@@ -59,7 +59,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
 
     val sparkPlan = sparkTestRelation.where($"id" < 0).analyze
-    val analyzedPlan = sparkPlan
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
   test("Basic joins with different join types") {
