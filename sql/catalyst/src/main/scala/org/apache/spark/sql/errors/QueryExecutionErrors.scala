@@ -53,6 +53,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SqlConfigKeyUtils
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.CircularBuffer
@@ -83,7 +84,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "value" -> toSQLValue(t, from),
         "sourceType" -> toSQLType(from),
         "targetType" -> toSQLType(to),
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "ansiConfig" -> toSQLConf(SqlConfigKeyUtils.ansiModeConfigKey)),
       context = Array.empty,
       summary = "")
   }
@@ -114,7 +115,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "value" -> value.toPlainString,
         "precision" -> decimalPrecision.toString,
         "scale" -> decimalScale.toString,
-        "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "config" -> toSQLConf(SqlConfigKeyUtils.ansiModeConfigKey)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -130,7 +131,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "expression" -> toSQLValue(value, from),
         "sourceType" -> toSQLType(from),
         "targetType" -> toSQLType(to),
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "ansiConfig" -> toSQLConf(SqlConfigKeyUtils.ansiModeConfigKey)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -144,7 +145,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "expression" -> toSQLValue(s, StringType),
         "sourceType" -> toSQLType(StringType),
         "targetType" -> toSQLType(BooleanType),
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "ansiConfig" -> toSQLConf(SqlConfigKeyUtils.ansiModeConfigKey)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -159,7 +160,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "expression" -> toSQLValue(s, StringType),
         "sourceType" -> toSQLType(StringType),
         "targetType" -> toSQLType(to),
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "ansiConfig" -> toSQLConf(SqlConfigKeyUtils.ansiModeConfigKey)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -222,7 +223,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def divideByZeroError(context: SQLQueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
-      messageParameters = Map("config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      messageParameters = Map("config" -> toSQLConf(SqlConfigKeyUtils.ansiModeConfigKey)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -244,7 +245,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "indexValue" -> toSQLValue(index, IntegerType),
         "arraySize" -> toSQLValue(numElements, IntegerType),
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "ansiConfig" -> toSQLConf(SqlConfigKeyUtils.ansiModeConfigKey)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -258,7 +259,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "indexValue" -> toSQLValue(index, IntegerType),
         "arraySize" -> toSQLValue(numElements, IntegerType),
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "ansiConfig" -> toSQLConf(SqlConfigKeyUtils.ansiModeConfigKey)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -267,7 +268,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkDateTimeException(
       errorClass = "INVALID_FRACTION_OF_SECOND",
       messageParameters = Map(
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)
+        "ansiConfig" -> toSQLConf(SqlConfigKeyUtils.ansiModeConfigKey)
       ),
       context = Array.empty,
       summary = "")
@@ -278,7 +279,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "CANNOT_PARSE_TIMESTAMP",
       messageParameters = Map(
         "message" -> e.getMessage,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "ansiConfig" -> toSQLConf(SqlConfigKeyUtils.ansiModeConfigKey)),
       context = Array.empty,
       summary = "")
   }
@@ -288,7 +289,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "_LEGACY_ERROR_TEMP_2000",
       messageParameters = Map(
         "message" -> e.getMessage,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "ansiConfig" -> toSQLConf(SqlConfigKeyUtils.ansiModeConfigKey)),
       context = Array.empty,
       summary = "")
   }
@@ -298,7 +299,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "_LEGACY_ERROR_TEMP_2000",
       messageParameters = Map(
         "message" -> message,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
+        "ansiConfig" -> toSQLConf(SqlConfigKeyUtils.ansiModeConfigKey)))
   }
 
   def ansiIllegalArgumentError(e: Exception): SparkIllegalArgumentException = {
@@ -372,7 +373,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "_LEGACY_ERROR_TEMP_2008",
       messageParameters = Map(
         "url" -> url.toString,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
+        "ansiConfig" -> toSQLConf(SqlConfigKeyUtils.ansiModeConfigKey)))
   }
 
   def illegalUrlError(url: UTF8String): Throwable = {
@@ -626,7 +627,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "_LEGACY_ERROR_TEMP_2042",
       messageParameters = Map(
         "message" -> e.getMessage,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "ansiConfig" -> toSQLConf(SqlConfigKeyUtils.ansiModeConfigKey)),
       context = Array.empty,
       summary = "")
   }
@@ -643,7 +644,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "message" -> message,
         "alternative" -> alternative,
-        "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+        "config" -> toSQLConf(SqlConfigKeyUtils.ansiModeConfigKey)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -1261,7 +1262,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def unscaledValueTooLargeForPrecisionError(): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "_LEGACY_ERROR_TEMP_2117",
-      messageParameters = Map("ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      messageParameters = Map("ansiConfig" -> toSQLConf(SqlConfigKeyUtils.ansiModeConfigKey)),
       context = Array.empty,
       summary = "")
   }
@@ -1376,7 +1377,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
       messageParameters = Map(
         "datetime" -> toSQLValue(s, StringType),
-        "config" -> toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key)),
+        "config" -> toSQLConf(SqlConfigKeyUtils.legacyTimeParserPolicyConfigName)),
       e)
   }
 
@@ -1385,7 +1386,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
       messageParameters = Map(
         "pattern" -> toSQLValue(pattern, StringType),
-        "config" -> toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key)),
+        "config" -> toSQLConf(SqlConfigKeyUtils.legacyTimeParserPolicyConfigName)),
       e)
   }
 
