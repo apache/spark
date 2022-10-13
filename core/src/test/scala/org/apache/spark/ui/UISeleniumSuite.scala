@@ -852,7 +852,6 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
         val columns = rows.head.findElements(By.tagName("td"))
         columns.size should be(4)
         columns.get(0).getText() should be("FetchFailed")
-        columns.get(1).getText() should be("Simulated fetch failure")
         columns.get(2).getText() should be("1")
       }
     }
