@@ -2850,14 +2850,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("ident" -> ident.quoted))
   }
 
-  def unexpectedTypeOfRelationError(relation: LogicalPlan, tableName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1304",
-      messageParameters = Map(
-        "className" -> relation.getClass.getCanonicalName,
-        "tableName" -> tableName))
-  }
-
   def unsupportedTableChangeInJDBCCatalogError(change: TableChange): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1305",
