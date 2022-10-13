@@ -2833,11 +2833,6 @@
       "Table or view '<ident>' not found."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1304" : {
-    "message" : [
-      "Unexpected type <className> of the relation <tableName>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1305" : {
     "message" : [
       "Unsupported TableChange <change> in JDBC catalog."
@@ -3557,6 +3552,258 @@
   "_LEGACY_ERROR_TEMP_2100" : {
     "message" : [
       "not support type: <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2101" : {
+    "message" : [
+      "Not support non-primitive type now"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2102" : {
+    "message" : [
+      "Unsupported type: <catalogString>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2103" : {
+    "message" : [
+      "Dictionary encoding should not be used because of dictionary overflow."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2104" : {
+    "message" : [
+      "End of the iterator"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2105" : {
+    "message" : [
+      "Could not allocate memory to grow BytesToBytesMap"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2106" : {
+    "message" : [
+      "Can't acquire <size> bytes memory to build hash relation, got <got> bytes"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2107" : {
+    "message" : [
+      "There is not enough memory to build hash map"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2108" : {
+    "message" : [
+      "Does not support row that is larger than 256M"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2109" : {
+    "message" : [
+      "Cannot build HashedRelation with more than 1/3 billions unique keys"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2110" : {
+    "message" : [
+      "Can not build a HashedRelation that is larger than 8G"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2111" : {
+    "message" : [
+      "failed to push a row into <rowQueue>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2112" : {
+    "message" : [
+      "Unexpected window function frame <frame>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2113" : {
+    "message" : [
+      "Unable to parse <stats> as a percentile"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2114" : {
+    "message" : [
+      "<stats> is not a recognised statistic"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2115" : {
+    "message" : [
+      "Unknown column: <unknownColumn>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2116" : {
+    "message" : [
+      "Unexpected: <o>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2117" : {
+    "message" : [
+      "Unscaled value too large for precision. If necessary set <ansiConfig> to false to bypass this error."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2118" : {
+    "message" : [
+      "Decimal precision <precision> exceeds max precision <maxPrecision>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2119" : {
+    "message" : [
+      "out of decimal type range: <str>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2120" : {
+    "message" : [
+      "Do not support array of type <clazz>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2121" : {
+    "message" : [
+      "Do not support type <clazz>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2122" : {
+    "message" : [
+      "Failed parsing <simpleString>: <raw>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2123" : {
+    "message" : [
+      "Failed to merge fields '<leftName>' and '<rightName>'. <message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2124" : {
+    "message" : [
+      "Failed to merge decimal types with incompatible scale <leftScale> and <rightScale>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2125" : {
+    "message" : [
+      "Failed to merge incompatible data types ${leftCatalogString} and ${rightCatalogString}"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2126" : {
+    "message" : [
+      "Unsuccessful attempt to build maps with <size> elements due to exceeding the map size limit <maxRoundedArrayLength>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2127" : {
+    "message" : [
+      "Duplicate map key <key> was found, please check the input data. If you want to remove the duplicated keys, you can set <mapKeyDedupPolicy> to <lastWin> so that the key inserted at last takes precedence."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2128" : {
+    "message" : [
+      "The key array and value array of MapData must have the same length."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2129" : {
+    "message" : [
+      "Conflict found: Field <field> <actual> differs from <field> <expected> derived from <candidate>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2130" : {
+    "message" : [
+      "Fail to recognize '<pattern>' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2131" : {
+    "message" : [
+      "Exception when registering StreamingQueryListener"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2132" : {
+    "message" : [
+      "Parsing JSON arrays as structs is forbidden."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2133" : {
+    "message" : [
+      "Cannot parse field name <fieldName>, field value <fieldValue>, [<token>] as target spark data type [<dataType>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2134" : {
+    "message" : [
+      "Cannot parse field value <value> for pattern <pattern> as target spark data type [<dataType>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2135" : {
+    "message" : [
+      "Failed to parse an empty string for data type <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2136" : {
+    "message" : [
+      "Failed to parse field name <fieldName>, field value <fieldValue>, [<token>] to target spark data type [<dataType>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2137" : {
+    "message" : [
+      "Root converter returned null"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2138" : {
+    "message" : [
+      "Cannot have circular references in bean class, but got the circular reference of class <clazz>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2139" : {
+    "message" : [
+      "cannot have circular references in class, but got the circular reference of class <t>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2140" : {
+    "message" : [
+      "`<fieldName>` is not a valid identifier of Java and cannot be used as field name",
+      "<walkedTypePath>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2141" : {
+    "message" : [
+      "No Encoder found for <tpe>",
+      "<walkedTypePath>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2142" : {
+    "message" : [
+      "Attributes for type <schema> is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2143" : {
+    "message" : [
+      "Schema for type <tpe> is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2144" : {
+    "message" : [
+      "Unable to find constructor for <tpe>. This could happen if <tpe> is an interface, or a trait without companion object constructor."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2145" : {
+    "message" : [
+      "<paramName> cannot be more than one character"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2146" : {
+    "message" : [
+      "<paramName> should be an integer. Found <value>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2147" : {
+    "message" : [
+      "<paramName> flag can be true or false"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2148" : {
+    "message" : [
+      "null value found but field <name> is not nullable."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2149" : {
+    "message" : [
+      "Malformed CSV record"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2150" : {
+    "message" : [
+      "Due to Scala's limited support of tuple, tuple with more than 22 elements are not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_2251" : {
