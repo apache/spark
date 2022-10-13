@@ -210,8 +210,12 @@ class PercentileSuite extends SparkFunSuite {
       val percentile2 = new Percentile(child, percentage)
       assertEqual(percentile2.checkInputDataTypes(),
         DataTypeMismatch(
-          errorSubClass = "INVALID_PERCENTAGES.VALUE_OUT_OF_RANGE",
-          messageParameters = Map("currentValue" -> percentage.simpleString(100))
+          errorSubClass = "VALUE_OUT_OF_RANGE",
+          messageParameters = Map(
+            "exprName" -> "percentage(s)",
+            "valueRange" -> "[0.0, 1.0]",
+            "currentValue" -> percentage.simpleString(100)
+          )
         )
       )
     }
@@ -223,9 +227,12 @@ class PercentileSuite extends SparkFunSuite {
       val percentile3 = new Percentile(child, percentage)
       assertEqual(percentile3.checkInputDataTypes(),
         DataTypeMismatch(
-          errorSubClass = "INVALID_PERCENTAGES.MUST_CONSTANT",
-          messageParameters = Map("currentValue" -> percentage.toString))
+          errorSubClass = "MUST_BE_CONSTANT",
+          messageParameters = Map(
+            "exprName" -> "percentage(s)",
+            "currentValue" -> percentage.toString)
         )
+      )
     }
 
     val invalidDataTypes = Seq(ByteType, ShortType, IntegerType, LongType, FloatType,
@@ -266,7 +273,7 @@ class PercentileSuite extends SparkFunSuite {
     assert(new Percentile(
       AttributeReference("a", DoubleType)(),
       percentageExpression = Literal(null, DoubleType)).checkInputDataTypes() ===
-      DataTypeMismatch(errorSubClass = "INVALID_PERCENTAGES.MUST_NOT_NULL"))
+      DataTypeMismatch(errorSubClass = "MUST_NOT_NULL", Map("exprName" -> "percentage(s)")))
 
     val nullPercentageExprs =
       Seq(CreateArray(Seq(null).map(Literal(_))), CreateArray(Seq(0.1D, null).map(Literal(_))))

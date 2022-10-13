@@ -120,29 +120,41 @@ case class ApproximatePercentile(
       defaultCheck
     } else if (!percentageExpression.foldable) {
       DataTypeMismatch(
-        errorSubClass = "INVALID_PERCENTAGES.MUST_CONSTANT",
-        messageParameters = Map("currentValue" -> percentageExpression.toString
+        errorSubClass = "MUST_BE_CONSTANT",
+        messageParameters = Map(
+          "exprName" -> "percentage(s)",
+          "currentValue" -> percentageExpression.toString
         )
       )
     } else if (!accuracyExpression.foldable) {
       DataTypeMismatch(
-        errorSubClass = "INVALID_ACCURACY.MUST_CONSTANT",
-        messageParameters = Map("currentValue" -> accuracyExpression.toString)
+        errorSubClass = "MUST_BE_CONSTANT",
+        messageParameters = Map(
+          "exprName" -> "accuracy",
+          "currentValue" -> accuracyExpression.toString
+        )
       )
     } else if (accuracy <= 0 || accuracy > Int.MaxValue) {
       DataTypeMismatch(
-        errorSubClass = "INVALID_ACCURACY.VALUE_OUT_OF_RANGE",
+        errorSubClass = "VALUE_OUT_OF_RANGE",
         messageParameters = Map(
-          "maxValue" -> Int.MaxValue.toString,
+          "exprName" -> "accuracy",
+          "valueRange" -> s"(0, ${Int.MaxValue}]",
           "currentValue" -> accuracy.toString
         )
       )
     } else if (percentages == null) {
-      DataTypeMismatch(errorSubClass = "INVALID_PERCENTAGES.MUST_NOT_NULL")
+      DataTypeMismatch(
+        errorSubClass = "MUST_NOT_NULL",
+        messageParameters = Map("exprName" -> "percentage(s)"))
     } else if (percentages.exists(percentage => percentage < 0.0D || percentage > 1.0D)) {
       DataTypeMismatch(
-        errorSubClass = "INVALID_PERCENTAGES.VALUE_OUT_OF_RANGE",
-        messageParameters = Map("currentValue" -> percentages.mkString(", "))
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "percentage(s)",
+          "valueRange" -> "[0.0, 1.0]",
+          "currentValue" -> percentages.mkString(", ")
+        )
       )
     } else {
       TypeCheckSuccess

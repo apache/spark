@@ -221,8 +221,11 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     assertEqual(
       wrongAccuracy.checkInputDataTypes(),
       DataTypeMismatch(
-        errorSubClass = "INVALID_ACCURACY.MUST_CONSTANT",
-        messageParameters = Map("currentValue" -> accuracyExpression.toString)
+        errorSubClass = "MUST_BE_CONSTANT",
+        messageParameters = Map(
+          "exprName" -> "accuracy",
+          "currentValue" -> accuracyExpression.toString
+        )
       )
     )
 
@@ -234,8 +237,11 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     assertEqual(
       wrongPercentage.checkInputDataTypes(),
       DataTypeMismatch(
-        errorSubClass = "INVALID_PERCENTAGES.MUST_CONSTANT",
-        messageParameters = Map("currentValue" -> attribute.toString)
+        errorSubClass = "MUST_BE_CONSTANT",
+        messageParameters = Map(
+          "exprName" -> "percentage(s)",
+          "currentValue" -> attribute.toString
+        )
       )
     )
   }
@@ -248,8 +254,11 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     assertEqual(
       wrongAccuracy.checkInputDataTypes(),
       DataTypeMismatch(
-        errorSubClass = "INVALID_ACCURACY.VALUE_OUT_OF_RANGE",
-        messageParameters = Map("maxValue" -> Int.MaxValue.toString, "currentValue" -> "-1")
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "accuracy",
+          "valueRange" -> s"(0, ${Int.MaxValue}]",
+          "currentValue" -> "-1")
       )
     )
 
@@ -286,7 +295,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       assert(
         wrongPercentage.checkInputDataTypes() match {
           case DataTypeMismatch(errorSubClass, _) =>
-            errorSubClass.equals("INVALID_PERCENTAGES.VALUE_OUT_OF_RANGE")
+            errorSubClass.equals("VALUE_OUT_OF_RANGE")
           case _ => false
       })
     }
@@ -331,7 +340,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     assert(new ApproximatePercentile(
       AttributeReference("a", DoubleType)(),
       percentageExpression = Literal(null, DoubleType)).checkInputDataTypes() ===
-      DataTypeMismatch(errorSubClass = "INVALID_PERCENTAGES.MUST_NOT_NULL"))
+      DataTypeMismatch(errorSubClass = "MUST_NOT_NULL", Map("exprName" -> "percentage(s)")))
 
     val nullPercentageExprs =
       Seq(CreateArray(Seq(null).map(Literal(_))), CreateArray(Seq(0.1D, null).map(Literal(_))))

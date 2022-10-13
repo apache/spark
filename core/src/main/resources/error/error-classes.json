@@ -168,6 +168,16 @@
           "The <functionName> accepts only arrays of pair structs, but <childExpr> is of <childType>."
         ]
       },
+      "MUST_BE_CONSTANT" : {
+        "message" : [
+          "The <exprName> must be a constant literal (current value = <currentValue>)"
+        ]
+      },
+      "MUST_NOT_NULL" : {
+        "message" : [
+          "The <exprName> must not be null"
+        ]
+      },
       "NON_FOLDABLE_INPUT" : {
         "message" : [
           "the input should be a foldable string expression and not null; however, got <inputExpr>."
@@ -231,6 +241,11 @@
       "UNSPECIFIED_FRAME" : {
         "message" : [
           "Cannot use an UnspecifiedFrame. This should have been converted during analysis."
+        ]
+      },
+      "VALUE_OUT_OF_RANGE" : {
+        "message" : [
+          "The <exprName> must be between <valueRange> (current value = <currentValue>)"
         ]
       },
       "WRONG_NUM_PARAMS" : {
@@ -950,45 +965,6 @@
       "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive",
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution"
     ]
-  },
-  "INVALID_PERCENTAGES" : {
-    "message" : [
-      "The percentage(s) "
-    ],
-    "subClass" : {
-      "MUST_NOT_NULL" : {
-        "message" : [
-          "must not be null"
-        ]
-      },
-      "MUST_CONSTANT" : {
-        "message" : [
-          "must be a constant literal (current value = <currentValue>)"
-        ]
-      },
-      "VALUE_OUT_OF_RANGE" : {
-        "message" : [
-          "must be between 0.0 and 1.0 (current value = <currentValue>)"
-        ]
-      }
-    }
-  },
-  "INVALID_ACCURACY" : {
-    "message" : [
-      "The accuracy "
-    ],
-    "subClass" : {
-      "MUST_CONSTANT" : {
-        "message" : [
-          "must be a constant literal (current value = <currentValue>)"
-        ]
-      },
-      "VALUE_OUT_OF_RANGE" : {
-        "message" : [
-          "must be a literal between (0, <maxValue>] (current value = <currentValue>)"
-        ]
-      }
-    }
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [

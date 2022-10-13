@@ -85,16 +85,25 @@ abstract class PercentileBase
     } else if (!percentageExpression.foldable) {
       // percentageExpression must be foldable
       DataTypeMismatch(
-        errorSubClass = "INVALID_PERCENTAGES.MUST_CONSTANT",
-        messageParameters = Map("currentValue" -> percentageExpression.toString)
+        errorSubClass = "MUST_BE_CONSTANT",
+        messageParameters = Map(
+          "exprName" -> "percentage(s)",
+          "currentValue" -> percentageExpression.toString)
       )
     } else if (percentages == null) {
-      DataTypeMismatch(errorSubClass = "INVALID_PERCENTAGES.MUST_NOT_NULL")
+      DataTypeMismatch(
+        errorSubClass = "MUST_NOT_NULL",
+        messageParameters = Map("exprName" -> "percentage(s)")
+      )
     } else if (percentages.exists(percentage => percentage < 0.0 || percentage > 1.0)) {
       // percentages(s) must be in the range [0.0, 1.0]
       DataTypeMismatch(
-        errorSubClass = "INVALID_PERCENTAGES.VALUE_OUT_OF_RANGE",
-        messageParameters = Map("currentValue" -> percentageExpression.toString)
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "percentage(s)",
+          "valueRange" -> "[0.0, 1.0]",
+          "currentValue" -> percentageExpression.toString
+        )
       )
     } else {
       TypeCheckSuccess
