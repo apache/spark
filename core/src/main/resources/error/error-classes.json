@@ -3936,5 +3936,145 @@
     "message" : [
       "Rule id not found for <ruleName>"
     ]
+  },
+  "_LEGACY_ERROR_TEMP_2176" : {
+    "message" : [
+      "Cannot create array with <numElements> elements of data due to exceeding the limit <maxRoundedArrayLength> elements for ArrayData. <additionalErrorMessage>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2177" : {
+    "message" : [
+      "Malformed records are detected in record parsing. Parse Mode: <failFastMode>. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2178" : {
+    "message" : [
+      "Remote operations not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2179" : {
+    "message" : [
+      "HiveServer2 Kerberos principal or keytab is not correctly configured"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2180" : {
+    "message" : [
+      "Parent SparkUI to attach this tab to not found!"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2181" : {
+    "message" : [
+      "inferSchema is not supported for hive data source."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2182" : {
+    "message" : [
+      "Requested partitioning does not match the <tableIdentifier> table:",
+      "Requested partitions: <partitionKeys>",
+      "Table partitions: <partitionColumnNames>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2183" : {
+    "message" : [
+      "Dynamic partition key <key> is not among written partition paths."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2184" : {
+    "message" : [
+      "Cannot remove partition directory '<partitionPath>'"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2185" : {
+    "message" : [
+      "Cannot create staging directory: <message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2186" : {
+    "message" : [
+      "The SerDe interface removed since Hive 2.3(HIVE-15167). Please migrate your custom SerDes to Hive 2.3. See HIVE-15167 for more details."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2187" : {
+    "message" : [
+      "<message>, db: <dbName>, table: <tableName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2188" : {
+    "message" : [
+      "Cannot recognize hive type string: <fieldType>, column: <fieldName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2189" : {
+    "message" : [
+      "Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2190" : {
+    "message" : [
+      "DROP TABLE ... PURGE"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2191" : {
+    "message" : [
+      "ALTER TABLE ... DROP PARTITION ... PURGE"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2192" : {
+    "message" : [
+      "Partition filter cannot have both `\"` and `'` characters"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2193" : {
+    "message" : [
+      "Caught Hive MetaException attempting to get partition metadata by filter from Hive. You can set the Spark configuration setting <hiveMetastorePartitionPruningFallbackOnException> to true to work around this problem, however this will result in degraded performance. Please report a bug: https://issues.apache.org/jira/browse/SPARK"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2194" : {
+    "message" : [
+      "Unsupported Hive Metastore version <version>. Please set <key> with a valid version."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2195" : {
+    "message" : [
+      "<cnf> when creating Hive client using classpath: <execJars> Please make sure that jars for your version of hive and hadoop are included in the paths passed to <key>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2196" : {
+    "message" : [
+      "Unable to fetch tables of db <dbName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2197" : {
+    "message" : [
+      "LOCATION clause illegal for view partition"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2198" : {
+    "message" : [
+      "Failed to rename as <dstPath> already exists"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2199" : {
+    "message" : [
+      "Failed to rename temp file <srcPath> to <dstPath> as rename returned false"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2200" : {
+    "message" : [
+      "Error: we detected a possible problem with the location of your \"_spark_metadata\"",
+      "directory and you likely need to move it before restarting this query.",
+      "",
+      "Earlier version of Spark incorrectly escaped paths when writing out the",
+      "\"_spark_metadata\" directory for structured streaming. While this was corrected in",
+      "Spark 3.0, it appears that your query was started using an earlier version that",
+      "",
+      "Correct \"_spark_metadata\" Directory: <metadataPath>",
+      "Incorrect \"_spark_metadata\" Directory: <legacyMetadataPath>",
+      "",
+      "Please move the data from the incorrect directory to the correct one, delete the",
+      "incorrect directory, and then restart this query. If you believe you are receiving",
+      "this message in error, you can disable it with the SQL conf",
+      "<StreamingCheckpointEscaptedPathCheckEnabled>."
+    ]
   }
 }
