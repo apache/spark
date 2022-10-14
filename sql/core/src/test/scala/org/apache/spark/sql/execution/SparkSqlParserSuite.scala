@@ -401,7 +401,8 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     assertEqual("REFRESH \'path with space\'", RefreshResource("path with space"))
     assertEqual("REFRESH \"path with space 2\"", RefreshResource("path with space 2"))
 
-    val errMsg1 = "REFRESH statements cannot contain ' ', '\\n', '\\r', '\\t' inside unquoted resource paths"
+    val errMsg1 =
+      "REFRESH statements cannot contain ' ', '\\n', '\\r', '\\t' inside unquoted resource paths"
     val sql1 = "REFRESH a b"
     checkError(
       exception = parseException(sql1),
