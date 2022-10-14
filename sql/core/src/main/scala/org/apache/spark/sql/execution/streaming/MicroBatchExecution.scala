@@ -677,6 +677,7 @@ class MicroBatchExecution(
         id,
         runId,
         currentBatchId,
+        offsetLog.offsetSeqMetadataForBatchId(currentBatchId - 1),
         offsetSeqMetadata)
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }

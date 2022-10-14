@@ -102,6 +102,11 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
       }
     }
   }
+
+  def offsetSeqMetadataForBatchId(batchId: Long): Option[OffsetSeqMetadata] = {
+    // FIXME: HDFSMetadataLog does not have batchCache and this call will be expensive.
+    if (batchId < 0) None else get(batchId).flatMap(_.metadata).headOption
+  }
 }
 
 object OffsetSeqLog {

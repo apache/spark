@@ -211,34 +211,71 @@ trait WatermarkSupport extends SparkPlan {
   /** The keys that may have a watermark attribute. */
   def keyExpressions: Seq[Attribute]
 
-  /** The watermark value. */
-  def eventTimeWatermark: Option[Long]
+  /** The watermark value for filtering late events/records. This should be the previous
+   * batch state eviction watermark.
+   * */
+  def eventTimeWatermarkForLateEvents: Option[Long]
+  /** The watermark value for closing aggregates and evicting state.
+   * It is different from the late events filtering watermark (consider chained aggregators
+   * agg1 -> agg2: agg1 evicts state which will be effectively late against the eviction watermark
+   * but should not be late for agg2 input late record filtering watermark. Thus agg1 and agg2 use
+   * the current batch watermark for state eviction but the previous batch watermark for late
+   * record filtering.
+   * */
+  def eventTimeWatermarkForEviction: Option[Long]
+
+  /** Generate an expression that matches data older than late event filtering watermark */
+  lazy val watermarkExpressionForLateEvents: Option[Expression] =
+    watermarkExpression(eventTimeWatermarkForLateEvents)
+  /** Generate an expression that matches data older than the state eviction watermark */
+  lazy val watermarkExpressionForEviction: Option[Expression] =
+    watermarkExpression(eventTimeWatermarkForEviction)
 
   /** Generate an expression that matches data older than the watermark */
-  lazy val watermarkExpression: Option[Expression] = {
+  private def watermarkExpression(watermark: Option[Long]): Option[Expression] = {
     WatermarkSupport.watermarkExpression(
-      child.output.find(_.metadata.contains(EventTimeWatermark.delayKey)),
-      eventTimeWatermark)
+      child.output.find(_.metadata.contains(EventTimeWatermark.delayKey)), watermark)
   }
 
-  /** Predicate based on keys that matches data older than the watermark */
-  lazy val watermarkPredicateForKeys: Option[BasePredicate] = watermarkExpression.flatMap { e =>
-    if (keyExpressions.exists(_.metadata.contains(EventTimeWatermark.delayKey))) {
-      Some(Predicate.create(e, keyExpressions))
-    } else {
-      None
+  /** Predicate based on keys that matches data older than the late event filtering watermark */
+  lazy val watermarkPredicateForKeysForLateEvents: Option[BasePredicate] =
+    watermarkPredicateForKeys(watermarkExpressionForLateEvents)
+
+  /** Generate an expression that matches data older than the state eviction watermark */
+  lazy val watermarkPredicateForKeysForEviction: Option[BasePredicate] =
+    watermarkPredicateForKeys(watermarkExpressionForEviction)
+
+  private def watermarkPredicateForKeys(
+    watermarkExpression: Option[Expression]): Option[BasePredicate] = {
+    watermarkExpression.flatMap { e =>
+      if (keyExpressions.exists(_.metadata.contains(EventTimeWatermark.delayKey))) {
+        Some(Predicate.create(e, keyExpressions))
+      } else {
+        None
+      }
     }
   }
 
-  /** Predicate based on the child output that matches data older than the watermark. */
-  lazy val watermarkPredicateForData: Option[BasePredicate] =
+  /**
+   * Predicate based on the child output that matches data older than the watermark for late events
+   * filtering.
+   */
+  lazy val watermarkPredicateForDataForLateEvents: Option[BasePredicate] =
+    watermarkPredicateForData(watermarkExpressionForLateEvents)
+
+  lazy val watermarkPredicateForDataForEviction: Option[BasePredicate] =
+    watermarkPredicateForData(watermarkExpressionForEviction)
+
+  private def watermarkPredicateForData(
+    watermarkExpression: Option[Expression]): Option[BasePredicate] = {
     watermarkExpression.map(Predicate.create(_, child.output))
+  }
 
   protected def removeKeysOlderThanWatermark(store: StateStore): Unit = {
-    if (watermarkPredicateForKeys.nonEmpty) {
+    if (watermarkPredicateForKeysForEviction.nonEmpty) {
       val numRemovedStateRows = longMetric("numRemovedStateRows")
       store.iterator().foreach { rowPair =>
-        if (watermarkPredicateForKeys.get.eval(rowPair.key)) {
+        if (watermarkPredicateForKeysForEviction.get.eval(rowPair.key)) {
           store.remove(rowPair.key)
           numRemovedStateRows += 1
         }
@@ -249,10 +286,10 @@ trait WatermarkSupport extends SparkPlan {
   protected def removeKeysOlderThanWatermark(
       storeManager: StreamingAggregationStateManager,
       store: StateStore): Unit = {
-    if (watermarkPredicateForKeys.nonEmpty) {
+    if (watermarkPredicateForKeysForEviction.nonEmpty) {
       val numRemovedStateRows = longMetric("numRemovedStateRows")
       storeManager.keys(store).foreach { keyRow =>
-        if (watermarkPredicateForKeys.get.eval(keyRow)) {
+        if (watermarkPredicateForKeysForEviction.get.eval(keyRow)) {
           storeManager.remove(store, keyRow)
           numRemovedStateRows += 1
         }
@@ -353,7 +390,8 @@ case class StateStoreSaveExec(
     keyExpressions: Seq[Attribute],
     stateInfo: Option[StatefulOperatorStateInfo] = None,
     outputMode: Option[OutputMode] = None,
-    eventTimeWatermark: Option[Long] = None,
+    eventTimeWatermarkForLateEvents: Option[Long] = None,
+    eventTimeWatermarkForEviction: Option[Long] = None,
     stateFormatVersion: Int,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
@@ -406,7 +444,7 @@ case class StateStoreSaveExec(
           case Some(Append) =>
             allUpdatesTimeMs += timeTakenMs {
               val filteredIter = applyRemovingRowsOlderThanWatermark(iter,
-                watermarkPredicateForData.get)
+                watermarkPredicateForDataForLateEvents.get)
               while (filteredIter.hasNext) {
                 val row = filteredIter.next().asInstanceOf[UnsafeRow]
                 stateManager.put(store, row)
@@ -422,7 +460,7 @@ case class StateStoreSaveExec(
                 var removedValueRow: InternalRow = null
                 while(rangeIter.hasNext && removedValueRow == null) {
                   val rowPair = rangeIter.next()
-                  if (watermarkPredicateForKeys.get.eval(rowPair.key)) {
+                  if (watermarkPredicateForKeysForEviction.get.eval(rowPair.key)) {
                     stateManager.remove(store, rowPair.key)
                     numRemovedStateRows += 1
                     removedValueRow = rowPair.value
@@ -452,7 +490,7 @@ case class StateStoreSaveExec(
 
             new NextIterator[InternalRow] {
               // Filter late date using watermark if specified
-              private[this] val baseIterator = watermarkPredicateForData match {
+              private[this] val baseIterator = watermarkPredicateForDataForLateEvents match {
                 case Some(predicate) => applyRemovingRowsOlderThanWatermark(iter, predicate)
                 case None => iter
               }
@@ -506,8 +544,8 @@ case class StateStoreSaveExec(
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     (outputMode.contains(Append) || outputMode.contains(Update)) &&
-      eventTimeWatermark.isDefined &&
-      newMetadata.batchWatermarkMs > eventTimeWatermark.get
+      eventTimeWatermarkForEviction.isDefined &&
+      newMetadata.batchWatermarkMs > eventTimeWatermarkForEviction.get
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): StateStoreSaveExec =
@@ -524,7 +562,8 @@ case class SessionWindowStateStoreRestoreExec(
     keyWithoutSessionExpressions: Seq[Attribute],
     sessionExpression: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
-    eventTimeWatermark: Option[Long],
+    eventTimeWatermarkForLateEvents: Option[Long],
+    eventTimeWatermarkForEviction: Option[Long],
     stateFormatVersion: Int,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreReader with WatermarkSupport {
@@ -554,7 +593,7 @@ case class SessionWindowStateStoreRestoreExec(
       Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
 
       // We need to filter out outdated inputs
-      val filteredIterator = watermarkPredicateForData match {
+      val filteredIterator = watermarkPredicateForDataForLateEvents match {
         case Some(predicate) => iter.filter((row: InternalRow) => {
           val shouldKeep = !predicate.eval(row)
           if (!shouldKeep) longMetric("numRowsDroppedByWatermark") += 1
@@ -610,7 +649,8 @@ case class SessionWindowStateStoreSaveExec(
     sessionExpression: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo] = None,
     outputMode: Option[OutputMode] = None,
-    eventTimeWatermark: Option[Long] = None,
+    eventTimeWatermarkForLateEvents: Option[Long] = None,
+    eventTimeWatermarkForEviction: Option[Long] = None,
     stateFormatVersion: Int,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
@@ -666,7 +706,7 @@ case class SessionWindowStateStoreSaveExec(
           val removalStartTimeNs = System.nanoTime
           new NextIterator[InternalRow] {
             private val removedIter = stateManager.removeByValueCondition(
-              store, watermarkPredicateForData.get.eval)
+              store, watermarkPredicateForDataForEviction.get.eval)
 
             override protected def getNext(): InternalRow = {
               if (!removedIter.hasNext) {
@@ -703,8 +743,8 @@ case class SessionWindowStateStoreSaveExec(
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     (outputMode.contains(Append) || outputMode.contains(Update)) &&
-      eventTimeWatermark.isDefined &&
-      newMetadata.batchWatermarkMs > eventTimeWatermark.get
+      eventTimeWatermarkForEviction.isDefined &&
+      newMetadata.batchWatermarkMs > eventTimeWatermarkForEviction.get
   }
 
   private def putToStore(iter: Iterator[InternalRow], store: StateStore): Unit = {
@@ -774,7 +814,8 @@ case class StreamingDeduplicateExec(
     keyExpressions: Seq[Attribute],
     child: SparkPlan,
     stateInfo: Option[StatefulOperatorStateInfo] = None,
-    eventTimeWatermark: Option[Long] = None)
+    eventTimeWatermarkForLateEvents: Option[Long] = None,
+    eventTimeWatermarkForEviction: Option[Long] = None)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
 
   /** Distribute by grouping attributes */
@@ -806,7 +847,7 @@ case class StreamingDeduplicateExec(
       val commitTimeMs = longMetric("commitTimeMs")
       val numDroppedDuplicateRows = longMetric("numDroppedDuplicateRows")
 
-      val baseIterator = watermarkPredicateForData match {
+      val baseIterator = watermarkPredicateForDataForLateEvents match {
         case Some(predicate) => applyRemovingRowsOlderThanWatermark(iter, predicate)
         case None => iter
       }
@@ -850,7 +891,8 @@ case class StreamingDeduplicateExec(
   override def shortName: String = "dedupe"
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
-    eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
+    eventTimeWatermarkForEviction.isDefined &&
+      newMetadata.batchWatermarkMs > eventTimeWatermarkForEviction.get
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): StreamingDeduplicateExec =
