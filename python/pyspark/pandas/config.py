@@ -184,13 +184,14 @@ _options: List[Option] = [
         ),
     ),
     Option(
-        key="compute.distributed_sequence_index_storage_level",
+        key="compute.distributed_sequence_index_cache",
         doc=(
-            "This sets the default storage level for temporary rdds cached in "
+            "This sets the default storage level for temporary RDDs cached in "
             "distributed-sequence indexing: 'NONE', 'DISK_ONLY', 'DISK_ONLY_2', "
             "'DISK_ONLY_3', 'MEMORY_ONLY', 'MEMORY_ONLY_2', 'MEMORY_ONLY_SER', "
             "'MEMORY_ONLY_SER_2', 'MEMORY_AND_DISK', 'MEMORY_AND_DISK_2', "
-            "'MEMORY_AND_DISK_SER', 'MEMORY_AND_DISK_SER_2', 'OFF_HEAP'."
+            "'MEMORY_AND_DISK_SER', 'MEMORY_AND_DISK_SER_2', 'OFF_HEAP', "
+            "'LOCAL_CHECKPOINT'."
         ),
         default="MEMORY_AND_DISK_SER",
         types=str,
@@ -210,11 +211,13 @@ _options: List[Option] = [
                 "MEMORY_AND_DISK_SER",
                 "MEMORY_AND_DISK_SER_2",
                 "OFF_HEAP",
+                "LOCAL_CHECKPOINT",
             ),
             "Index type should be one of 'NONE', 'DISK_ONLY', 'DISK_ONLY_2', "
             "'DISK_ONLY_3', 'MEMORY_ONLY', 'MEMORY_ONLY_2', 'MEMORY_ONLY_SER', "
             "'MEMORY_ONLY_SER_2', 'MEMORY_AND_DISK', 'MEMORY_AND_DISK_2', "
-            "'MEMORY_AND_DISK_SER', 'MEMORY_AND_DISK_SER_2', 'OFF_HEAP'.",
+            "'MEMORY_AND_DISK_SER', 'MEMORY_AND_DISK_SER_2', 'OFF_HEAP', "
+            "'LOCAL_CHECKPOINT'.",
         ),
     ),
     Option(
