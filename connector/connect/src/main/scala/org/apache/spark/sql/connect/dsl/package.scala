@@ -113,11 +113,8 @@ package object dsl {
   object plans { // scalastyle:ignore
     implicit class DslLogicalPlan(val logicalPlan: proto.Relation) {
       def select(exprs: proto.Expression*): proto.Relation = {
-        proto.Relation
-          .newBuilder()
-          .setProject(
-            proto.Project
-              .newBuilder()
+        proto.Relation.newBuilder().setProject(
+            proto.Project.newBuilder()
               .setInput(logicalPlan)
               .addAllExpressions(exprs.toIterable.asJava)
               .build())
@@ -125,10 +122,10 @@ package object dsl {
       }
 
       def where(condition: proto.Expression): proto.Relation = {
-        proto.Relation
-          .newBuilder()
-          .setFilter(proto.Filter.newBuilder().setInput(logicalPlan).setCondition(condition))
-          .build()
+        proto.Relation.newBuilder()
+          .setFilter(
+            proto.Filter.newBuilder().setInput(logicalPlan).setCondition(condition)
+          ).build()
       }
 
       def join(
@@ -147,8 +144,8 @@ package object dsl {
         relation.setJoin(join).build()
       }
 
-      def groupBy(groupingExprs: proto.Expression*)(
-          aggregateExprs: proto.Expression*): proto.Relation = {
+      def groupBy(
+          groupingExprs: proto.Expression*)(aggregateExprs: proto.Expression*): proto.Relation = {
         val agg = proto.Aggregate.newBuilder()
         agg.setInput(logicalPlan)
 

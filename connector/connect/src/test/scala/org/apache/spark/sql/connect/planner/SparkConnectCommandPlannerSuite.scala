@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connect.planner
 
 import java.nio.file.{Files, Paths}
-import java.util.UUID
 
 import org.apache.spark.SparkClassNotFoundException
 import org.apache.spark.connect.proto
@@ -34,18 +33,6 @@ class SparkConnectCommandPlannerSuite
     with SharedSparkSession {
 
   lazy val localRelation = createLocalRelationProto(Seq($"id".int))
-
-  /**
-   * Returns a unique path name on every invocation.
-   * @return
-   */
-  private def path(): String = s"/tmp/${UUID.randomUUID()}"
-
-  /**
-   * Returns a unique valid table name indentifier on each invocation.
-   * @return
-   */
-  private def table(): String = s"table${UUID.randomUUID().toString.replace("-", "")}"
 
   def transform(cmd: proto.Command): Unit = {
     new SparkConnectCommandPlanner(spark, cmd).process()
@@ -65,9 +52,8 @@ class SparkConnectCommandPlannerSuite
   }
 
   test("Write with partitions") {
-    val name = table()
     val cmd = localRelation.write(
-      tableName = Some(name),
+      tableName = Some("testtable"),
       format = Some("parquet"),
       partitionByCols = Seq("noid"))
     assertThrows[AnalysisException] {
@@ -96,28 +82,32 @@ class SparkConnectCommandPlannerSuite
   test("Write to Path with invalid input") {
     // Wrong data source.
     assertThrows[SparkClassNotFoundException](
-      transform(localRelation.write(path = Some(path), format = Some("ThisAintNoFormat"))))
+      transform(
+        localRelation.write(path = Some("/tmp/tmppath"), format = Some("ThisAintNoFormat"))))
 
     // Default data source not found.
-    assertThrows[SparkClassNotFoundException](transform(localRelation.write(path = Some(path))))
+    assertThrows[SparkClassNotFoundException](
+      transform(localRelation.write(path = Some("/tmp/tmppath"))))
   }
 
   test("Write with sortBy") {
     // Sort by existing column.
-    transform(
-      localRelation.write(
-        tableName = Some(table),
-        format = Some("parquet"),
-        sortByColumns = Seq("id"),
-        bucketByCols = Seq("id"),
-        numBuckets = Some(10)))
+    withTable("testtable") { table: String =>
+      transform(
+        localRelation.write(
+          tableName = Some(table),
+          format = Some("parquet"),
+          sortByColumns = Seq("id"),
+          bucketByCols = Seq("id"),
+          numBuckets = Some(10)))
+    }
 
     // Sort by non-existing column
     assertThrows[AnalysisException](
       transform(
         localRelation
           .write(
-            tableName = Some(table),
+            tableName = Some("testtable"),
             format = Some("parquet"),
             sortByColumns = Seq("noid"),
             bucketByCols = Seq("id"),
@@ -125,7 +115,7 @@ class SparkConnectCommandPlannerSuite
   }
 
   test("Write to Table") {
-    withTable(table()) { name: String =>
+    withTable("testtable") { name: String =>
       val cmd = localRelation.write(format = Some("parquet"), tableName = Some(name))
       transform(cmd)
       // Check that we can find and drop the table.
