@@ -100,7 +100,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
     val chunksCopy = getChunks()
     chunksCopy.foreach(buffer => out.writeInt(buffer.limit()))
     var buffer: Array[Byte] = null
-    val bufferLen = ChunkedByteBuffer.COPY_BUFFER_LEN
+    val bufferLen = ChunkedByteBuffer.estimateBufferChunkSize(size)
 
     chunksCopy.foreach { chunk => {
       if (chunk.hasArray) {
@@ -229,8 +229,8 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
 }
 
 private[spark] object ChunkedByteBuffer {
-  // This value should be synced with SerializerHelper.CHUNK_BUFFER_SIZE
-  private val COPY_BUFFER_LEN: Int = 1024 * 1024
+  private val CHUNK_BUFFER_SIZE: Int = 1024 * 1024
+  private val MINIMUM_CHUNK_BUFFER_SIZE: Int = 1024
 
   def fromManagedBuffer(data: ManagedBuffer): ChunkedByteBuffer = {
     data match {
@@ -266,6 +266,18 @@ private[spark] object ChunkedByteBuffer {
       out.close()
     }
     out.toChunkedByteBuffer
+  }
+
+  /**
+   * Try to estimate appropriate chunk size so that it's not too large(waste memory) or too
+   * small(too many segments)
+   */
+  def estimateBufferChunkSize(estimatedSize: Long = -1): Int = {
+    if (estimatedSize < 0) {
+      CHUNK_BUFFER_SIZE
+    } else {
+      Math.max(Math.min(estimatedSize >> 3, CHUNK_BUFFER_SIZE).toInt, MINIMUM_CHUNK_BUFFER_SIZE)
+    }
   }
 }
 

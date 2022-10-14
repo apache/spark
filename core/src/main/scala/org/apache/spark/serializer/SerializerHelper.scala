@@ -25,13 +25,16 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 private[spark] object SerializerHelper extends Logging {
-  // This value should be synced with ChunkedByteBuffer.COPY_BUFFER_LEN
-  private val CHUNK_BUFFER_SIZE: Int = 1024 * 1024
 
+  /**
+   * @param estimatedSize estimated size of `t`, used as a hint to choose proper chunk size
+   */
   def serializeToChunkedBuffer[T: ClassTag](
       serializerInstance: SerializerInstance,
-      t: T): ChunkedByteBuffer = {
-    val cbbos = new ChunkedByteBufferOutputStream(CHUNK_BUFFER_SIZE, ByteBuffer.allocate)
+      t: T,
+      estimatedSize: Long = -1): ChunkedByteBuffer = {
+    val chunkSize = ChunkedByteBuffer.estimateBufferChunkSize(estimatedSize)
+    val cbbos = new ChunkedByteBufferOutputStream(chunkSize, ByteBuffer.allocate)
     val out = serializerInstance.serializeStream(cbbos)
     out.writeObject(t)
     out.close()

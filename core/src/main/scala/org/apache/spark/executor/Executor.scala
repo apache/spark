@@ -660,7 +660,8 @@ private[spark] class Executor(
         val metricPeaks = metricsPoller.getTaskMetricPeaks(taskId)
         // TODO: do not serialize value twice
         val directResult = new DirectTaskResult(valueByteBuffer, accumUpdates, metricPeaks)
-        val serializedDirectResult = SerializerHelper.serializeToChunkedBuffer(ser, directResult)
+        val serializedDirectResult = SerializerHelper.serializeToChunkedBuffer(ser, directResult,
+          valueByteBuffer.size)
         val resultSize = serializedDirectResult.size
 
         // directSend = sending directly back to the driver
