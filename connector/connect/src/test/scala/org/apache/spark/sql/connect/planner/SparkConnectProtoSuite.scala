@@ -99,6 +99,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       transform(connectTestRelation.select("id".protoAttr.as("id2")))
     }
     val sparkPlan = sparkTestRelation.select($"id".as("id2"))
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
   test("Aggregate with more than 1 grouping expressions") {
