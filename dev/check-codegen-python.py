@@ -44,7 +44,7 @@ def run_cmd(cmd):
 
 
 def check_connect_protos():
-    print("start checking the generated codes in pyspark-connect")
+    print("Start checking the generated codes in pyspark-connect")
     with tempfile.TemporaryDirectory() as tmp:
         run_cmd(f"{SPARK_HOME}/connector/connect/dev/generate_protos.sh {tmp}")
         result = filecmp.dircmp(f"{SPARK_HOME}/python/pyspark/sql/connect/proto/", tmp)
@@ -54,7 +54,7 @@ def check_connect_protos():
             and result.diff_files == []
             and result.funny_files == []
         ):
-            print("finish checking the generated codes in pyspark-connect: SUCCESS")
+            print("Finish checking the generated codes in pyspark-connect: SUCCESS")
         else:
             fail(
                 "Generated codes for pyspark-connect are out of sync! "

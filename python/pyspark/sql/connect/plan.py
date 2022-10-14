@@ -322,11 +322,15 @@ class Aggregate(LogicalPlan):
     ) -> proto.Aggregate.AggregateFunction:
         exp, fun = m
         measure = proto.Aggregate.AggregateFunction()
-        measure.function.name = fun
+        measure.function.name = fun  # type: ignore[attr-defined]
         if type(exp) is str:
-            measure.function.arguments.append(self.unresolved_attr(exp))
+            measure.function.arguments.append(  # type: ignore[attr-defined]
+                self.unresolved_attr(exp)
+            )
         else:
-            measure.function.arguments.append(cast(Expression, exp).to_plan(session))
+            measure.function.arguments.append(  # type: ignore[attr-defined]
+                cast(Expression, exp).to_plan(session)
+            )
         return measure
 
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
@@ -335,13 +339,13 @@ class Aggregate(LogicalPlan):
 
         agg = proto.Relation()
         agg.aggregate.input.CopyFrom(self._child.plan(session))
-        agg.aggregate.measures.extend(
+        agg.aggregate.measures.extend(  # type: ignore[attr-defined]
             list(map(lambda x: self._convert_measure(x, session), self.measures))
         )
 
-        gs = proto.Aggregate.GroupingSet()
+        gs = proto.Aggregate.GroupingSet()  # type: ignore[attr-defined]
         gs.aggregate_expressions.extend(groupings)
-        agg.aggregate.grouping_sets.append(gs)
+        agg.aggregate.grouping_sets.append(gs)  # type: ignore[attr-defined]
         return agg
 
     def print(self, indent: int = 0) -> str:
@@ -405,7 +409,9 @@ class Join(LogicalPlan):
         rel = proto.Relation()
         rel.join.left.CopyFrom(self.left.plan(session))
         rel.join.right.CopyFrom(self.right.plan(session))
-        rel.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
+        rel.join.join_condition.CopyFrom(  # type: ignore[attr-defined]
+            self.to_attr_or_expression(self.on, session)
+        )
         rel.join.join_type = self.how
         return rel
 
