@@ -2475,4 +2475,29 @@ class SubquerySuite extends QueryTest
       assert(error.getMessage.contains("Correlated column reference 'v1.x' cannot be map type"))
     }
   }
+
+  test("SPARK-40800: always inline expressions in OptimizeOneRowRelationSubquery") {
+    withTempView("t1") {
+      sql("CREATE TEMP VIEW t1 AS SELECT ARRAY('a', 'b') a")
+      // Scalar subquery.
+      checkAnswer(sql(
+        """
+          |SELECT (
+          |  SELECT array_sort(a, (i, j) -> rank[i] - rank[j])[0] AS sorted
+          |  FROM (SELECT MAP('a', 1, 'b', 2) rank)
+          |) FROM t1
+          |""".stripMargin),
+        Row("a"))
+      // Lateral subquery.
+      checkAnswer(
+        sql("""
+          |SELECT sorted[0] FROM t1
+          |JOIN LATERAL (
+          |  SELECT array_sort(a, (i, j) -> rank[i] - rank[j]) AS sorted
+          |  FROM (SELECT MAP('a', 1, 'b', 2) rank)
+          |)
+          |""".stripMargin),
+        Row("a"))
+    }
+  }
 }
