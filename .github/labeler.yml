@@ -84,12 +84,12 @@ SPARK SHELL:
   - "repl/**/*"
   - "bin/spark-shell*"
 SQL:
-#- any: ["**/sql/**/*", "!python/pyspark/sql/avro/**/*", "!python/pyspark/sql/streaming/**/*", "!python/pyspark/sql/tests/test_streaming.py"]
+#- any: ["**/sql/**/*", "!python/pyspark/sql/avro/**/*", "!python/pyspark/sql/streaming/**/*", "!python/pyspark/sql/tests/streaming/test_streaming.py"]
   - "**/sql/**/*"
   - "common/unsafe/**/*"
   #- "!python/pyspark/sql/avro/**/*"
   #- "!python/pyspark/sql/streaming/**/*"
-  #- "!python/pyspark/sql/tests/test_streaming.py"
+  #- "!python/pyspark/sql/tests/streaming/test_streaming.py"
   - "bin/spark-sql*"
   - "bin/beeline*"
   - "sbin/*thriftserver*.sh"
@@ -125,7 +125,7 @@ STRUCTURED STREAMING:
   - "**/sql/**/streaming/**/*"
   - "connector/kafka-0-10-sql/**/*"
   - "python/pyspark/sql/streaming/**/*"
-  - "python/pyspark/sql/tests/test_streaming.py"
+  - "python/pyspark/sql/tests/streaming/test_streaming.py"
   - "**/*streaming.R"
 PYTHON:
   - "bin/pyspark*"
@@ -156,5 +156,5 @@ CONNECT:
   - "**/sql/sparkconnect/**/*"
   - "python/pyspark/sql/**/connect/**/*"
 PROTOBUF:
- - "connector/protobuf/**/*"
- - "python/pyspark/sql/protobuf/**/*"
+  - "connector/protobuf/**/*"
+  - "python/pyspark/sql/protobuf/**/*"
