@@ -1992,6 +1992,33 @@ class DatasetSuite extends QueryTest
     }
   }
 
+  test("SPARK-39783: Fix error messages for columns with dots/periods") {
+    forAll(dotColumnTestModes) { (caseSensitive, colName) =>
+      val ds = Seq(SpecialCharClass("1", "2")).toDS
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        val errorMsg = intercept[AnalysisException] {
+          // Note: ds(colName) has different semantics than ds.select(colName)
+          ds.select(colName)
+        }
+        assert(errorMsg.getMessage.contains(
+          s"A column or function parameter with name `${colName.replace(".", "`.`")}` " +
+            s"cannot be resolved. Did you mean one of the following? [`field.1`, `field 2`]"))
+      }
+    }
+  }
+
+  test("SPARK-39783: backticks in error message for candidate column with dots") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(0).toDF("the.id").select("the.id")
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map(
+        "objectName" -> "`the`.`id`",
+        "proposal" -> "`the.id`"))
+  }
+
   test("groupBy.as") {
     val df1 = Seq(DoubleData(1, "one"), DoubleData(2, "two"), DoubleData(3, "three")).toDS()
       .repartition($"id").sortWithinPartitions("id")

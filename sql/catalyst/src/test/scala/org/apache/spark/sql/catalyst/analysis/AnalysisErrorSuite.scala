@@ -876,6 +876,24 @@ class AnalysisErrorSuite extends AnalysisTest {
       "[`a`, `b`, `c`, `d`, `e`]"
       :: Nil)
 
+  errorTest(
+    "SPARK-39783: backticks in error message for candidate column with dots",
+    // This selects a column that does not exist,
+    // the error message suggest the existing column with correct backticks
+    testRelation6.select($"`the`.`id`"),
+    "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with name `the`.`id` " +
+      "cannot be resolved. Did you mean one of the following? [`the.id`]"
+      :: Nil)
+
+  errorTest(
+    "SPARK-39783: backticks in error message for candidate struct column",
+    // This selects a column that does not exist,
+    // the error message suggest the existing column with correct backticks
+    nestedRelation2.select($"`top.aField`"),
+    "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with name `top.aField` " +
+      "cannot be resolved. Did you mean one of the following? [`top`]"
+      :: Nil)
+
   test("SPARK-35080: Unsupported correlated equality predicates in subquery") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()

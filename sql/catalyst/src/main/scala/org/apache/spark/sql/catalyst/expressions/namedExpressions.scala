@@ -75,7 +75,7 @@ trait NamedExpression extends Expression {
    * multiple qualifiers, it is possible that there are other possible way to refer to this
    * attribute.
    */
-  def qualifiedName: String = (qualifier :+ name).mkString(".")
+  def qualifiedName: String = (qualifier :+ name).map(quoteIfNeeded).mkString(".")
 
   /**
    * Optional qualifier for the expression.
