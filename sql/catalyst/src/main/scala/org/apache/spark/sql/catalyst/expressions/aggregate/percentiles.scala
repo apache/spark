@@ -104,7 +104,7 @@ abstract class PercentileBase
         messageParameters = Map(
           "exprName" -> "percentage",
           "valueRange" -> "[0.0, 1.0]",
-          "currentValue" -> toSQLValue(percentageExpression, DoubleType)
+          "currentValue" -> percentages.map(toSQLValue(_, DoubleType)).mkString(",")
         )
       )
     } else {

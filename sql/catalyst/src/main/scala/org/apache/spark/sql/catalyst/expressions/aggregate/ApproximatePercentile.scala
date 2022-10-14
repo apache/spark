@@ -156,7 +156,7 @@ case class ApproximatePercentile(
         messageParameters = Map(
           "exprName" -> "percentage",
           "valueRange" -> "[0.0, 1.0]",
-          "currentValue" -> toSQLValue(percentages, DoubleType)
+          "currentValue" -> percentages.map(toSQLValue(_, DoubleType)).mkString(",")
         )
       )
     } else {

@@ -261,7 +261,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         messageParameters = Map(
           "exprName" -> "accuracy",
           "valueRange" -> s"(0, ${Int.MaxValue}]",
-          "currentValue" -> "-1")
+          "currentValue" -> "-1L")
       )
     )
 

@@ -209,16 +209,32 @@ class PercentileSuite extends SparkFunSuite {
 
     invalidPercentages.foreach { percentage =>
       val percentile2 = new Percentile(child, percentage)
-      assertEqual(percentile2.checkInputDataTypes(),
-        DataTypeMismatch(
-          errorSubClass = "VALUE_OUT_OF_RANGE",
-          messageParameters = Map(
-            "exprName" -> "percentage",
-            "valueRange" -> "[0.0, 1.0]",
-            "currentValue" -> toSQLValue(percentage)
+      percentage.eval() match {
+        case array: ArrayData =>
+          assertEqual(percentile2.checkInputDataTypes(),
+            DataTypeMismatch(
+              errorSubClass = "VALUE_OUT_OF_RANGE",
+              messageParameters = Map(
+                "exprName" -> "percentage",
+                "valueRange" -> "[0.0, 1.0]",
+                "currentValue" ->
+                  array.toDoubleArray().map(toSQLValue(_, DoubleType)).mkString(",")
+              )
+            )
           )
-        )
-      )
+        case other =>
+          assertEqual(percentile2.checkInputDataTypes(),
+            DataTypeMismatch(
+              errorSubClass = "VALUE_OUT_OF_RANGE",
+              messageParameters = Map(
+                "exprName" -> "percentage",
+                "valueRange" -> "[0.0, 1.0]",
+                "currentValue" ->
+                  Array(other).map(toSQLValue(_, DoubleType)).mkString(",")
+              )
+            )
+          )
+      }
     }
 
     val nonFoldablePercentage = Seq(NonFoldableLiteral(0.5),
