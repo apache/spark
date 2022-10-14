@@ -116,9 +116,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .setInput(proto.Relation.newBuilder().setRead(readWithTable).build())
         .addExpressions(
           proto.Expression.newBuilder()
-            .setUnresolvedStar(UnresolvedStar.newBuilder().build()
-            ).build())
-        .build()
+            .setUnresolvedStar(UnresolvedStar.newBuilder().build()).build()
+        ).build()
     val res = transform(proto.Relation.newBuilder.setProject(project).build())
     assert(res !== null)
     assert(res.nodeName == "Project")
