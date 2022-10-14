@@ -22,7 +22,7 @@ import pyspark.sql.connect.proto as proto
 
 
 class SparkConnectToProtoSuite(PlanOnlyTestFixture):
-    def test_select_with_literal(self):
+    def test_select_with_columns_and_strings(self):
         df = DataFrame.withPlan(Read("table"))
         self.assertIsNotNone(df.select(col("name"))._plan.collect())
         self.assertIsNotNone(df.select("name"))
