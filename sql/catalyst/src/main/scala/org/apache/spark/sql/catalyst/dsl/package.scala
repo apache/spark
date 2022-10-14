@@ -528,6 +528,8 @@ package object dsl {
       }
 
       def deduplicate(colNames: Attribute*): LogicalPlan = Deduplicate(colNames, logicalPlan)
+
+      def distinct(): LogicalPlan = Deduplicate(logicalPlan.output, logicalPlan)
     }
   }
 }

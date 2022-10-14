@@ -43,6 +43,7 @@ message Relation {
     LocalRelation local_relation = 11;
     Sample sample = 12;
     Offset offset = 13;
+    Deduplicate deduplicate = 14;
 
     Unknown unknown = 999;
   }
@@ -179,6 +180,14 @@ message Sort {
     SORT_NULLS_FIRST = 1;
     SORT_NULLS_LAST = 2;
   }
+}
+
+// Relation of type [[Deduplicate]] which have duplicate rows removed, could consider either only
+// the subset of columns or all the columns.
+message Deduplicate {
+  Relation input = 1;
+  repeated string column_names = 2;
+  bool all_columns_as_keys = 3;
 }
 
 message LocalRelation {

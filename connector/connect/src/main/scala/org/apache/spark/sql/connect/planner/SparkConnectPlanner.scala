@@ -27,8 +27,9 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sample, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, LogicalPlan, Sample, SubqueryAlias}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types._
 
 final case class InvalidPlanInput(
@@ -60,6 +61,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.OFFSET => transformOffset(rel.getOffset)
       case proto.Relation.RelTypeCase.JOIN => transformJoin(rel.getJoin)
       case proto.Relation.RelTypeCase.UNION => transformUnion(rel.getUnion)
+      case proto.Relation.RelTypeCase.DEDUPLICATE => transformDeduplicate(rel.getDeduplicate)
       case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
       case proto.Relation.RelTypeCase.AGGREGATE => transformAggregate(rel.getAggregate)
       case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
@@ -89,6 +91,37 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       rel.getWithReplacement,
       rel.getSeed,
       transformRelation(rel.getInput))
+  }
+
+  private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
+    if (!rel.hasInput) {
+      throw InvalidPlanInput("Deduplicate needs a plan input")
+    }
+    if (rel.getAllColumnsAsKeys && rel.getColumnNamesCount > 0) {
+      throw InvalidPlanInput("Cannot deduplicate on both all columns and a subset of columns")
+    }
+    if (!rel.getAllColumnsAsKeys && rel.getColumnNamesCount == 0) {
+      throw InvalidPlanInput(
+        "Deduplicate requires to either deduplicate on all columns or a subset of columns")
+    }
+    val queryExecution = new QueryExecution(session, transformRelation(rel.getInput))
+    val resolver = session.sessionState.analyzer.resolver
+    val allColumns = queryExecution.analyzed.output
+    if (rel.getAllColumnsAsKeys) {
+      Deduplicate(allColumns, queryExecution.analyzed)
+    } else {
+      val toGroupColumnNames = rel.getColumnNamesList.asScala.toSeq
+      val groupCols = toGroupColumnNames.flatMap { (colName: String) =>
+        // It is possibly there are more than one columns with the same name,
+        // so we call filter instead of find.
+        val cols = allColumns.filter(col => resolver(col.name, colName))
+        if (cols.isEmpty) {
+          throw InvalidPlanInput(s"Invalid deduplicate column ${colName}")
+        }
+        cols
+      }
+      Deduplicate(groupCols, queryExecution.analyzed)
+    }
   }
 
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {

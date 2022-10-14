@@ -215,6 +215,26 @@ package object dsl {
           .build()
       }
 
+      def deduplicate(colNames: Seq[String]): proto.Relation =
+        proto.Relation
+          .newBuilder()
+          .setDeduplicate(
+            proto.Deduplicate
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllColumnNames(colNames.asJava))
+          .build()
+
+      def distinct(): proto.Relation =
+        proto.Relation
+          .newBuilder()
+          .setDeduplicate(
+            proto.Deduplicate
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setAllColumnsAsKeys(true))
+          .build()
+
       def join(
           otherPlan: proto.Relation,
           joinType: JoinType = JoinType.JOIN_TYPE_INNER,

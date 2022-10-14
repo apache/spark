@@ -72,6 +72,7 @@ class Relation(google.protobuf.message.Message):
     LOCAL_RELATION_FIELD_NUMBER: builtins.int
     SAMPLE_FIELD_NUMBER: builtins.int
     OFFSET_FIELD_NUMBER: builtins.int
+    DEDUPLICATE_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -100,6 +101,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def offset(self) -> global___Offset: ...
     @property
+    def deduplicate(self) -> global___Deduplicate: ...
+    @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
         self,
@@ -117,6 +120,7 @@ class Relation(google.protobuf.message.Message):
         local_relation: global___LocalRelation | None = ...,
         sample: global___Sample | None = ...,
         offset: global___Offset | None = ...,
+        deduplicate: global___Deduplicate | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -126,6 +130,8 @@ class Relation(google.protobuf.message.Message):
             b"aggregate",
             "common",
             b"common",
+            "deduplicate",
+            b"deduplicate",
             "filter",
             b"filter",
             "join",
@@ -161,6 +167,8 @@ class Relation(google.protobuf.message.Message):
             b"aggregate",
             "common",
             b"common",
+            "deduplicate",
+            b"deduplicate",
             "filter",
             b"filter",
             "join",
@@ -204,6 +212,7 @@ class Relation(google.protobuf.message.Message):
         "local_relation",
         "sample",
         "offset",
+        "deduplicate",
         "unknown",
     ] | None: ...
 
@@ -758,6 +767,47 @@ class Sort(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Sort = Sort
+
+class Deduplicate(google.protobuf.message.Message):
+    """Relation of type [[Deduplicate]] which have duplicate rows removed, could consider either only
+    the subset of columns or all the columns.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLUMN_NAMES_FIELD_NUMBER: builtins.int
+    ALL_COLUMNS_AS_KEYS_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation: ...
+    @property
+    def column_names(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    all_columns_as_keys: builtins.bool
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        column_names: collections.abc.Iterable[builtins.str] | None = ...,
+        all_columns_as_keys: builtins.bool = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "all_columns_as_keys",
+            b"all_columns_as_keys",
+            "column_names",
+            b"column_names",
+            "input",
+            b"input",
+        ],
+    ) -> None: ...
+
+global___Deduplicate = Deduplicate
 
 class LocalRelation(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
