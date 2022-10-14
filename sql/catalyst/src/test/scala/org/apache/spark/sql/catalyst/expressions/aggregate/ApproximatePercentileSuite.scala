@@ -295,12 +295,32 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         percentageExpression = percentageExpression,
         accuracyExpression = Literal(100))
 
-      assert(
-        wrongPercentage.checkInputDataTypes() match {
-          case DataTypeMismatch(errorSubClass, _) =>
-            errorSubClass.equals("VALUE_OUT_OF_RANGE")
-          case _ => false
-      })
+      percentageExpression.eval() match {
+        case array: ArrayData =>
+          assertEqual(wrongPercentage.checkInputDataTypes(),
+            DataTypeMismatch(
+              errorSubClass = "VALUE_OUT_OF_RANGE",
+              messageParameters = Map(
+                "exprName" -> "percentage",
+                "valueRange" -> "[0.0, 1.0]",
+                "currentValue" ->
+                  array.toDoubleArray().map(toSQLValue(_, DoubleType)).mkString(",")
+              )
+            )
+          )
+        case other =>
+          assertEqual(wrongPercentage.checkInputDataTypes(),
+            DataTypeMismatch(
+              errorSubClass = "VALUE_OUT_OF_RANGE",
+              messageParameters = Map(
+                "exprName" -> "percentage",
+                "valueRange" -> "[0.0, 1.0]",
+                "currentValue" ->
+                  Array(other).map(toSQLValue(_, DoubleType)).mkString(",")
+              )
+            )
+          )
+      }
     }
   }
 
