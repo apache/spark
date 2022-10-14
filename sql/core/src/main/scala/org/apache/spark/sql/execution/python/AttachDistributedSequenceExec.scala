@@ -67,16 +67,23 @@ case class AttachDistributedSequenceExec(
     //    In [7]: spark.conf.get("pandas_on_Spark.compute.distributed_sequence_index_storage_level")
     //    Out[7]: '"DISK_ONLY"'
     val storageLevel = StorageLevel.fromString(
+      // The string is double quoted because of JSON ser/deser for pandas API on Spark
       SQLConf.get.getConfString(
         "pandas_on_Spark.compute.distributed_sequence_index_storage_level",
         "MEMORY_AND_DISK_SER"
-      ).replaceAll("\"", "")
+      ).stripPrefix("\"").stripSuffix("\"")
     )
+
     val cachedRDD = if (childRDD.getNumPartitions > 1 && storageLevel != StorageLevel.NONE) {
       // zipWithIndex launches a Spark job when #partition > 1
-      cached = childRDD.map(_.copy()).persist(storageLevel)
-        .setName(s"Temporary RDD cached in AttachDistributedSequenceExec($id)")
-      cached
+      if (conf.getConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)) {
+        cached = childRDD.map(_.copy()).persist(storageLevel)
+          .setName(s"Temporary RDD cached in AttachDistributedSequenceExec($id)")
+        cached
+      } else {
+        childRDD.map(_.copy()).localCheckpoint()
+          .setName(s"Temporary RDD locally checkpointed in AttachDistributedSequenceExec($id)")
+      }
     } else {
       childRDD
     }
@@ -96,11 +103,14 @@ case class AttachDistributedSequenceExec(
   }
 
   override protected[sql] def cleanupResources(): Unit = {
-    if (cached != null && cached.getStorageLevel != StorageLevel.NONE) {
-      logWarning(s"clean up cached RDD(${cached.id}) in AttachDistributedSequenceExec($id)")
-      cached.unpersist(blocking = false)
+    try {
+      if (cached != null && cached.getStorageLevel != StorageLevel.NONE) {
+        logWarning(s"clean up cached RDD(${cached.id}) in AttachDistributedSequenceExec($id)")
+        cached.unpersist(blocking = false)
+      }
+    } finally {
+      super.cleanupResources()
     }
-    super.cleanupResources()
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): AttachDistributedSequenceExec =
