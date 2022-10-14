@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
+import java.nio.charset.StandardCharsets
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -327,6 +328,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Ascii(a), 0, create_row(""))
     checkEvaluation(Ascii(a), null, create_row(null))
     checkEvaluation(Ascii(Literal.create(null, StringType)), null, create_row("abdef"))
+  }
+
+  test("mask_hash") {
+    Seq(
+      (512, "44844a586c54c9a212da1dbfe05c5f1705de1af5fda1f0d36297623249b279" +
+        "fd8f0ccec03f888f4fb13bf7cd83fdad58591c797f81121a23cfdd5e0897795238"),
+      (256, "529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b")
+    )
+      .foreach { case (alg, expected ) =>
+          checkEvaluation(
+          Sha2(Literal("Spark".getBytes(StandardCharsets.UTF_8)), Literal(alg)),
+          expected)
+      }
   }
 
   test("string for ascii") {

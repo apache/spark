@@ -341,6 +341,34 @@ k
 
 
 -- !query
+select mask_hash('TestString-123'),
+       mask_hash('TestString-123', TRUE),
+       mask_hash('TestString-123', FALSE),
+       mask_hash(123),
+       mask_hash(123, TRUE),
+       mask_hash(123, FALSE),
+       mask_hash(12345),
+       mask_hash(12345, TRUE),
+       mask_hash(12345, FALSE),
+       mask_hash(12345L),
+       mask_hash(12345L, TRUE),
+       mask_hash(12345L, FALSE),
+       mask_hash(cast('2022-10-14' as date)),
+       mask_hash(cast('2022-10-14' as date), TRUE),
+       mask_hash(cast('2022-10-14' as date), FALSE),
+       mask_hash(cast(12345 as bigint)),
+       mask_hash(cast(12345 as bigint), TRUE),
+       mask_hash(cast(12345 as bigint), FALSE),
+       mask_hash(NULL),
+       mask_hash(NULL, TRUE),
+       mask_hash(NULL, FALSE)
+-- !query schema
+struct<mask_hash(TestString-123, false):string,mask_hash(TestString-123, true):string,mask_hash(TestString-123, false):string,mask_hash(123, false):string,mask_hash(123, true):string,mask_hash(123, false):string,mask_hash(12345, false):string,mask_hash(12345, true):string,mask_hash(12345, false):string,mask_hash(12345, false):string,mask_hash(12345, true):string,mask_hash(12345, false):string,mask_hash(CAST(2022-10-14 AS DATE), false):string,mask_hash(CAST(2022-10-14 AS DATE), true):string,mask_hash(CAST(2022-10-14 AS DATE), false):string,mask_hash(CAST(12345 AS BIGINT), false):string,mask_hash(CAST(12345 AS BIGINT), true):string,mask_hash(CAST(12345 AS BIGINT), false):string,mask_hash(NULL, false):string,mask_hash(NULL, true):string,mask_hash(NULL, false):string>
+-- !query output
+8b44d559dc5d60e4453c9b4edf2a455fbce054bb8504cd3eb9b5f391bd239c90	f3a58111be6ecec11449ac44654e72376b7759883ea11723b6e51354d50436de645bd061cb5c2b07b68e15b7a7c342cac41f69b9c4efe19e810bbd7abf639a1c	8b44d559dc5d60e4453c9b4edf2a455fbce054bb8504cd3eb9b5f391bd239c90	a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3	3c9909afec25354d551dae21590bb26e38d53f2173b8d3dc3eee4c047e7ab1c1eb8b85103e3be7ba613b31bb5c9c36214dc9f14a42fd7a2fdb84856bca5c44c2	a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3	5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5	3627909a29c31381a071ec27f7c9ca97726182aed29a7ddd2e54353322cfb30abb9e3a6df2ac2c20fe23436311d678564d0c8d305930575f60e2d3d048184d79	5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5	5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5	3627909a29c31381a071ec27f7c9ca97726182aed29a7ddd2e54353322cfb30abb9e3a6df2ac2c20fe23436311d678564d0c8d305930575f60e2d3d048184d79	5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5	a18ea86a7b2d8ec2fa56abd88ac829d38e85026dade229f33657db4fec59a514	ba6654775480876a066564107653d9b44d90f45bfd885f62b1cc4f37dccc6edaa9b27e0b0834dbebf52bc32fcde5cf6452c2822c34be908e011ac74555195c79	a18ea86a7b2d8ec2fa56abd88ac829d38e85026dade229f33657db4fec59a514	5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5	3627909a29c31381a071ec27f7c9ca97726182aed29a7ddd2e54353322cfb30abb9e3a6df2ac2c20fe23436311d678564d0c8d305930575f60e2d3d048184d79	5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5	NULL	NULL	NULL
+
+
+-- !query
 SELECT trim(" xyz "), ltrim(" xyz "), rtrim(" xyz ")
 -- !query schema
 struct<trim( xyz ):string,ltrim( xyz ):string,rtrim( xyz ):string>

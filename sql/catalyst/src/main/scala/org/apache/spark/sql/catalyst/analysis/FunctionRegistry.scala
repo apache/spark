@@ -806,6 +806,8 @@ object FunctionRegistry {
     castAlias("binary", BinaryType),
     castAlias("string", StringType),
 
+    // mask
+    expression[MaskHash]("mask_hash"),
     // csv
     expression[CsvToStructs]("from_csv"),
     expression[SchemaOfCsv]("schema_of_csv"),

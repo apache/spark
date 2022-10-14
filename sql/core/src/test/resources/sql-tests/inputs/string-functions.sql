@@ -58,6 +58,29 @@ SELECT substring('Spark SQL' from 5);
 SELECT substring('Spark SQL' from -3);
 SELECT substring('Spark SQL' from 5 for 1);
 
+-- mask function
+select mask_hash('TestString-123'),
+       mask_hash('TestString-123', TRUE),
+       mask_hash('TestString-123', FALSE),
+       mask_hash(123),
+       mask_hash(123, TRUE),
+       mask_hash(123, FALSE),
+       mask_hash(12345),
+       mask_hash(12345, TRUE),
+       mask_hash(12345, FALSE),
+       mask_hash(12345L),
+       mask_hash(12345L, TRUE),
+       mask_hash(12345L, FALSE),
+       mask_hash(cast('2022-10-14' as date)),
+       mask_hash(cast('2022-10-14' as date), TRUE),
+       mask_hash(cast('2022-10-14' as date), FALSE),
+       mask_hash(cast(12345 as bigint)),
+       mask_hash(cast(12345 as bigint), TRUE),
+       mask_hash(cast(12345 as bigint), FALSE),
+       mask_hash(NULL),
+       mask_hash(NULL, TRUE),
+       mask_hash(NULL, FALSE);
+
 -- trim
 SELECT trim(" xyz "), ltrim(" xyz "), rtrim(" xyz ");
 SELECT trim(BOTH 'xyz' FROM 'yxTomxx'), trim('xyz' FROM 'yxTomxx');
