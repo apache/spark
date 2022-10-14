@@ -14,22 +14,3 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-align = none
-align.openParenDefnSite = false
-align.openParenCallSite = false
-align.tokens = []
-importSelectors = "singleLine"
-optIn = {
-  configStyleArguments = false
-}
-danglingParentheses.preset = false
-docstrings.style = Asterisk
-maxColumn = 98
-runner.dialect = scala212
-fileOverride {
-  "glob:**/src/**/scala-2.13/**.scala" {
-    runner.dialect = scala213
-  }
-}
-version = 3.5.9

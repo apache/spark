@@ -9,21 +9,33 @@ of Spark. To enable it, you only need to activate the driver plugin for Spark Co
 
 ## Build
 
-1. Build Spark as usual per the documentation.
+```bash
+./build/mvn -Phive clean package
+```
 
-2. Build and package the Spark Connect package
+or
 
-   ```bash
-   ./build/mvn -Phive package
-   ```
-
-   or
-
-   ```bash
-   ./build/sbt -Phive package
-   ```
+```bash
+./build/sbt -Phive clean package
+```
    
 ## Run Spark Shell
+
+To run Spark Connect you locally built:
+
+```bash
+# Scala shell
+./bin/spark-shell \
+  --jars `ls connector/connect/target/**/spark-connect*SNAPSHOT.jar | paste -sd ',' -` \
+  --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
+
+# PySpark shell
+./bin/pyspark \
+  --jars `ls connector/connect/target/**/spark-connect*SNAPSHOT.jar | paste -sd ',' -` \
+  --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
+```
+
+To use the release version of Spark Connect:
 
 ```bash
 ./bin/spark-shell \
@@ -34,6 +46,6 @@ of Spark. To enable it, you only need to activate the driver plugin for Spark Co
 ## Run Tests
 
 ```bash
-./run-tests --testnames 'pyspark.sql.tests.test_connect_basic'
+./python/run-tests --testnames 'pyspark.sql.tests.connect.test_connect_basic'
 ```
 
