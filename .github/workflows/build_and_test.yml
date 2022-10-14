@@ -605,12 +605,10 @@ jobs:
       run: ./dev/lint-scala
     - name: Java linter
       run: ./dev/lint-java
+    - name: Python code generation check
+      run: PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/check-codegen-python.py
     - name: Python linter
       run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
-    - name: Python code generation check
-      run: |
-        export PATH=$PATH:$HOME/buf/bin
-        ./dev/check-codegen-python.py
     - name: R linter
       run: ./dev/lint-r
     - name: JS linter
