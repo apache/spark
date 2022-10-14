@@ -20,7 +20,6 @@
 # Utility for checking whether generated codes in PySpark are out of sync.
 #   usage: ./dev/check-codegen-python.py
 
-# todo: also check generated codes in pyspark-ml and pyspark-mllib
 import os
 import sys
 import filecmp
@@ -59,8 +58,10 @@ def check_connect_protos():
         else:
             fail(
                 "Generated codes for pyspark-connect are out of sync! "
-                "Please run `./connector/connect/dev/generate_protos.sh`"
+                "Please run ./connector/connect/dev/generate_protos.sh"
             )
 
 
 check_connect_protos()
+
+# TODO: also check generated codes in pyspark-ml and pyspark-mllib
