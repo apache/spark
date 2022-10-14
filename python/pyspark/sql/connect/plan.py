@@ -153,10 +153,12 @@ class Project(LogicalPlan):
         self._verify_expressions()
 
     def _verify_expressions(self) -> None:
-        """Ensures that all input arguments are instances of Expression."""
+        """Ensures that all input arguments are instances of Expression or String."""
         for c in self._raw_columns:
-            if not isinstance(c, Expression):
-                raise InputValidationError(f"Only Expressions can be used for projections: '{c}'.")
+            if not isinstance(c, (Expression, str)):
+                raise InputValidationError(
+                    f"Only Expressions or String can be used for projections: '{c}'."
+                )
 
     def withAlias(self, alias: str) -> LogicalPlan:
         self.alias = alias
@@ -164,10 +166,16 @@ class Project(LogicalPlan):
 
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
-        proj_exprs = [
-            c.to_plan(session) if isinstance(c, Expression) else self.unresolved_attr(c)
-            for c in self._raw_columns
-        ]
+        proj_exprs = []
+        for c in self._raw_columns:
+            if isinstance(c, Expression):
+                proj_exprs.append(c.to_plan(session))
+            elif c == "*":
+                exp = proto.Expression()
+                exp.unresolved_star.SetInParent()
+                proj_exprs.append(exp)
+            else:
+                proj_exprs.append(self.unresolved_attr(c))
         common = proto.RelationCommon()
         if self.alias is not None:
             common.alias = self.alias
