@@ -44,9 +44,7 @@ class DefaultIndexTest(PandasOnSparkTestCase):
             "compute.default_index_type", "distributed-sequence"
         ), ps.option_context("compute.ops_on_diff_frames", True):
             for storage_level in ["NONE", "DISK_ONLY_2", "MEMORY_AND_DISK_SER"]:
-                with ps.option_context(
-                    "compute.distributed_sequence_index_storage_level", storage_level
-                ):
+                with ps.option_context("compute.distributed_sequence_index_cache", storage_level):
                     cached_rdd_ids = [rdd_id for rdd_id in self.spark._jsc.getPersistentRDDs()]
 
                     psdf1 = (
