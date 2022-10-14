@@ -319,9 +319,9 @@ class Aggregate(LogicalPlan):
 
     def _convert_measure(
         self, m: MeasureType, session: Optional["RemoteSparkSession"]
-    ) -> proto.Aggregate.Measure:
+    ) -> proto.Aggregate.AggregateFunction:
         exp, fun = m
-        measure = proto.Aggregate.Measure()
+        measure = proto.Aggregate.AggregateFunction()
         measure.function.name = fun
         if type(exp) is str:
             measure.function.arguments.append(self.unresolved_attr(exp))
