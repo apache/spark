@@ -797,7 +797,10 @@ case class SchemaOfJson(
     } else {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map("inputExpr" -> toSQLExpr(child)))
+        messageParameters = Map(
+          "inputName" -> "input",
+          "inputType" -> "string",
+          "inputExpr" -> toSQLExpr(child)))
     }
   }
 

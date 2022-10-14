@@ -227,10 +227,11 @@ class PercentileSuite extends SparkFunSuite {
       val percentile3 = new Percentile(child, percentage)
       assertEqual(percentile3.checkInputDataTypes(),
         DataTypeMismatch(
-          errorSubClass = "MUST_BE_CONSTANT",
+          errorSubClass = "NON_FOLDABLE_INPUT",
           messageParameters = Map(
-            "exprName" -> "percentage(s)",
-            "currentValue" -> percentage.toString)
+            "inputName" -> "percentage(s)",
+            "inputType" -> "double",
+            "inputExpr" -> percentage.toString)
         )
       )
     }

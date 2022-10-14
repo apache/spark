@@ -85,10 +85,11 @@ abstract class PercentileBase
     } else if (!percentageExpression.foldable) {
       // percentageExpression must be foldable
       DataTypeMismatch(
-        errorSubClass = "MUST_BE_CONSTANT",
+        errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "exprName" -> "percentage(s)",
-          "currentValue" -> percentageExpression.toString)
+          "inputName" -> "percentage(s)",
+          "inputType" -> "double",
+          "inputExpr" -> percentageExpression.toString)
       )
     } else if (percentages == null) {
       DataTypeMismatch(

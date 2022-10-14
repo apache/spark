@@ -120,18 +120,20 @@ case class ApproximatePercentile(
       defaultCheck
     } else if (!percentageExpression.foldable) {
       DataTypeMismatch(
-        errorSubClass = "MUST_BE_CONSTANT",
+        errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "exprName" -> "percentage(s)",
-          "currentValue" -> percentageExpression.toString
+          "inputName" -> "percentage(s)",
+          "inputType" -> "double",
+          "inputExpr" -> percentageExpression.toString
         )
       )
     } else if (!accuracyExpression.foldable) {
       DataTypeMismatch(
-        errorSubClass = "MUST_BE_CONSTANT",
+        errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "exprName" -> "accuracy",
-          "currentValue" -> accuracyExpression.toString
+          "inputName" -> "accuracy",
+          "inputType" -> "int",
+          "inputExpr" -> accuracyExpression.toString
         )
       )
     } else if (accuracy <= 0 || accuracy > Int.MaxValue) {

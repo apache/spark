@@ -168,14 +168,9 @@
           "The <functionName> accepts only arrays of pair structs, but <childExpr> is of <childType>."
         ]
       },
-      "MUST_BE_CONSTANT" : {
-        "message" : [
-          "The <exprName> must be a constant literal (current value = <currentValue>)"
-        ]
-      },
       "NON_FOLDABLE_INPUT" : {
         "message" : [
-          "the input should be a foldable string expression and not null; however, got <inputExpr>."
+          "the <inputName> should be a foldable <inputType> expression and not null; however, got <inputExpr>."
         ]
       },
       "NON_STRING_TYPE" : {

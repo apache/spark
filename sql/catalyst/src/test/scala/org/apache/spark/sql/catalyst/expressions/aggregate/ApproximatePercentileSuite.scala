@@ -221,10 +221,11 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     assertEqual(
       wrongAccuracy.checkInputDataTypes(),
       DataTypeMismatch(
-        errorSubClass = "MUST_BE_CONSTANT",
+        errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "exprName" -> "accuracy",
-          "currentValue" -> accuracyExpression.toString
+          "inputName" -> "accuracy",
+          "inputType" -> "int",
+          "inputExpr" -> accuracyExpression.toString
         )
       )
     )
@@ -237,10 +238,11 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     assertEqual(
       wrongPercentage.checkInputDataTypes(),
       DataTypeMismatch(
-        errorSubClass = "MUST_BE_CONSTANT",
+        errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "exprName" -> "percentage(s)",
-          "currentValue" -> attribute.toString
+          "inputName" -> "percentage(s)",
+          "inputType" -> "double",
+          "inputExpr" -> attribute.toString
         )
       )
     )
