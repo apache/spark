@@ -70,10 +70,13 @@ buf generate --debug -vvv
 for f in `find gen/proto/python -name "*.py*"`; do
   # First fix the imports.
   if [[ $f == *_pb2.py || $f == *_pb2_grpc.py ]]; then
-    sed -i'' -e 's/from spark.connect import/from pyspark.sql.connect.proto import/g' $f
+    mv $f $f.tmp
+    sed -e 's/from spark.connect import/from pyspark.sql.connect.proto import/g' $f.tmp > $f
+    rm $f.tmp
   elif [[ $f == *.pyi ]]; then
-    sed -i'' -e 's/import spark.connect./import pyspark.sql.connect.proto./g' $f
-    sed -i'' -e 's/spark.connect./pyspark.sql.connect.proto./g' $f
+    mv $f $f.tmp
+    sed -e 's/import spark.connect./import pyspark.sql.connect.proto./g' -e 's/spark.connect./pyspark.sql.connect.proto./g' $f.tmp > $f
+    rm $f.tmp
   fi
 
   # Prepend the Apache licence header to the files.
