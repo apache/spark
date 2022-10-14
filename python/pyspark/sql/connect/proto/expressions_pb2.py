@@ -40,9 +40,8 @@ _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "spark.connect.expressions_pb2", globals())
 if _descriptor._USE_C_DESCRIPTORS == False:
 
-
     DESCRIPTOR._options = None
-    DESCRIPTOR._serialized_options = b"\n\036org.apache.spark.connect.protoP\001"
+    DESCRIPTOR._serialized_options = b"\n\036org.apache.spark.connect.protoP\001helloworld"
     _EXPRESSION._serialized_start = 123459
     _EXPRESSION._serialized_end = 3088
     _EXPRESSION_LITERAL._serialized_start = 613

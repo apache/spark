@@ -43,7 +43,6 @@ import pyspark.sql.connect.proto.types_pb2
 import sys
 import typing
 
-
 if sys.version_info >= (3, 10):
     import typing as typing_extensions
 else:
