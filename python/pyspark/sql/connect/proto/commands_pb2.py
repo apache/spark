@@ -41,7 +41,7 @@ if _descriptor._USE_C_DESCRIPTORS == False:
 
     DESCRIPTOR._options = None
     DESCRIPTOR._serialized_options = b"\n\036org.apache.spark.connect.protoP\001"
-    _COMMAND._serialized_start = 174
+    _COMMAND._serialized_start = 74
     _COMMAND._serialized_end = 179
     _CREATESCALARFUNCTION._serialized_start = 182
     _CREATESCALARFUNCTION._serialized_end = 717
