@@ -296,7 +296,7 @@ class StreamingListenerTests(ReusedSQLTestCase):
 if __name__ == "__main__":
     import unittest
 
-    from pyspark.sql.tests.test_streaming_listener import *  # noqa: F401
+    from pyspark.sql.tests.streaming.test_streaming_listener import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

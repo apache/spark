@@ -891,9 +891,9 @@ class SubquerySuite extends QueryTest
         parameters = Map("treeNode" -> "(?s).*"),
         sqlState = None,
         context = ExpectedContext(
-          fragment = "(select c1 from t2 where t1.c1 = 2) t2",
-          start = 110,
-          stop = 147))
+          fragment = "select c1 from t2 where t1.c1 = 2",
+          start = 111,
+          stop = 143))
 
       // Right outer join (ROJ) in EXISTS subquery context
       val exception2 = intercept[AnalysisException] {
@@ -913,9 +913,9 @@ class SubquerySuite extends QueryTest
         parameters = Map("treeNode" -> "(?s).*"),
         sqlState = None,
         context = ExpectedContext(
-          fragment = "(select c1 from t2 where t1.c1 = 2) t2",
-          start = 74,
-          stop = 111))
+          fragment = "select c1 from t2 where t1.c1 = 2",
+          start = 75,
+          stop = 107))
 
       // SPARK-18578: Full outer join (FOJ) in scalar subquery context
       val exception3 = intercept[AnalysisException] {
@@ -934,11 +934,9 @@ class SubquerySuite extends QueryTest
         parameters = Map("treeNode" -> "(?s).*"),
         sqlState = None,
         context = ExpectedContext(
-          fragment =
-            """full join t3
-              |                on t2.c1=t3.c1""".stripMargin,
-          start = 112,
-          stop = 154))
+          fragment = "select c1 from  t2 where t1.c1 = 2 and t1.c1=t2.c1",
+          start = 41,
+          stop = 90))
     }
   }
 
@@ -2253,7 +2251,7 @@ class SubquerySuite extends QueryTest
     }
   }
 
-  test("SPARK-40618: Do not merge scalar subqueries with nested subqueries inside") {
+  test("Merge non-correlated scalar subqueries from different parent plans") {
     Seq(false, true).foreach { enableAQE =>
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
@@ -2285,12 +2283,12 @@ class SubquerySuite extends QueryTest
         }
 
         if (enableAQE) {
-          assert(subqueryIds.size == 4, "Missing or unexpected SubqueryExec in the plan")
-          assert(reusedSubqueryIds.size == 2,
-            "Missing or unexpected reused ReusedSubqueryExec in the plan")
-        } else {
           assert(subqueryIds.size == 3, "Missing or unexpected SubqueryExec in the plan")
           assert(reusedSubqueryIds.size == 3,
+            "Missing or unexpected reused ReusedSubqueryExec in the plan")
+        } else {
+          assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+          assert(reusedSubqueryIds.size == 4,
             "Missing or unexpected reused ReusedSubqueryExec in the plan")
         }
       }
@@ -2428,9 +2426,32 @@ class SubquerySuite extends QueryTest
     // This test contains a subquery expression with another subquery expression nested inside.
     // It acts as a regression test to ensure that the MergeScalarSubqueries rule does not attempt
     // to merge them together.
-    withTable("t") {
+    withTable("t", "t2") {
       sql("create table t(col int) using csv")
       checkAnswer(sql("select(select sum((select sum(col) from t)) from t)"), Row(null))
+
+      checkAnswer(sql(
+        """
+          |select
+          |  (select sum(
+          |    (select sum(
+          |        (select sum(col) from t))
+          |     from t))
+          |  from t)
+          |""".stripMargin),
+        Row(null))
+
+      sql("create table t2(col int) using csv")
+      checkAnswer(sql(
+        """
+          |select
+          |  (select sum(
+          |    (select sum(
+          |        (select sum(col) from t))
+          |     from t2))
+          |  from t)
+          |""".stripMargin),
+        Row(null))
     }
   }
 }
