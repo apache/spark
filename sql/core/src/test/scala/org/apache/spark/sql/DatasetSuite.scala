@@ -1996,13 +1996,17 @@ class DatasetSuite extends QueryTest
     forAll(dotColumnTestModes) { (caseSensitive, colName) =>
       val ds = Seq(SpecialCharClass("1", "2")).toDS
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
-        val errorMsg = intercept[AnalysisException] {
-          // Note: ds(colName) has different semantics than ds.select(colName)
-          ds.select(colName)
-        }
-        assert(errorMsg.getMessage.contains(
-          s"A column or function parameter with name `${colName.replace(".", "`.`")}` " +
-            s"cannot be resolved. Did you mean one of the following? [`field.1`, `field 2`]"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            // Note: ds(colName) "SPARK-25153: Improve error messages for columns with dots/periods"
+            // has different semantics than ds.select(colName)
+            ds.select(colName)
+          },
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          sqlState = None,
+          parameters = Map(
+            "objectName" -> s"`${colName.replace(".", "`.`")}`",
+            "proposal" -> "`field.1`, `field 2`"))
       }
     }
   }
