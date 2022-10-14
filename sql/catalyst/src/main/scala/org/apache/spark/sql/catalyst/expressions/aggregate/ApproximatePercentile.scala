@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
 import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
@@ -122,9 +123,9 @@ case class ApproximatePercentile(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "percentage(s)",
-          "inputType" -> "double",
-          "inputExpr" -> percentageExpression.toString
+          "inputName" -> "percentage",
+          "inputType" -> toSQLType(percentageExpression.dataType),
+          "inputExpr" -> toSQLExpr(percentageExpression)
         )
       )
     } else if (!accuracyExpression.foldable) {
@@ -132,8 +133,8 @@ case class ApproximatePercentile(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> "accuracy",
-          "inputType" -> "int",
-          "inputExpr" -> accuracyExpression.toString
+          "inputType" -> toSQLType(accuracyExpression.dataType),
+          "inputExpr" -> toSQLExpr(accuracyExpression)
         )
       )
     } else if (accuracy <= 0 || accuracy > Int.MaxValue) {
@@ -148,12 +149,12 @@ case class ApproximatePercentile(
     } else if (percentages == null) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
-        messageParameters = Map("exprName" -> "percentage(s)"))
+        messageParameters = Map("exprName" -> "percentage"))
     } else if (percentages.exists(percentage => percentage < 0.0D || percentage > 1.0D)) {
       DataTypeMismatch(
         errorSubClass = "VALUE_OUT_OF_RANGE",
         messageParameters = Map(
-          "exprName" -> "percentage(s)",
+          "exprName" -> "percentage",
           "valueRange" -> "[0.0, 1.0]",
           "currentValue" -> percentages.mkString(", ")
         )

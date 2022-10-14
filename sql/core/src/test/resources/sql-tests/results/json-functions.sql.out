@@ -430,11 +430,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
   "messageParameters" : {
-    "inputExpr" : "\"NULL\"",
-    "inputName" : "input",
-    "inputType" : "string",
+    "exprName" : "json",
     "sqlExpr" : "\"schema_of_json(NULL)\""
   },
   "queryContext" : [ {
@@ -465,8 +463,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "messageParameters" : {
     "inputExpr" : "\"jsonField\"",
-    "inputName" : "input",
-    "inputType" : "string",
+    "inputName" : "json",
+    "inputType" : "\"STRING\"",
     "sqlExpr" : "\"schema_of_json(jsonField)\""
   },
   "queryContext" : [ {

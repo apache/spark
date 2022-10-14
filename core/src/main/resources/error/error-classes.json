@@ -170,7 +170,7 @@
       },
       "NON_FOLDABLE_INPUT" : {
         "message" : [
-          "the <inputName> should be a foldable <inputType> expression and not null; however, got <inputExpr>."
+          "the input <inputName> should be a foldable <inputType> expression; however, got <inputExpr>."
         ]
       },
       "NON_STRING_TYPE" : {

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference, Cast, CreateArray, DecimalLiteral, GenericInternalRow, Literal}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.{PercentileDigest, PercentileDigestSerializer}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.{ArrayData, QuantileSummaries}
@@ -224,8 +225,8 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> "accuracy",
-          "inputType" -> "int",
-          "inputExpr" -> accuracyExpression.toString
+          "inputType" -> toSQLType(accuracyExpression.dataType),
+          "inputExpr" -> toSQLExpr(accuracyExpression)
         )
       )
     )
@@ -240,9 +241,9 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "percentage(s)",
-          "inputType" -> "double",
-          "inputExpr" -> attribute.toString
+          "inputName" -> "percentage",
+          "inputType" -> toSQLType(attribute.dataType),
+          "inputExpr" -> toSQLExpr(attribute)
         )
       )
     )
@@ -342,7 +343,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     assert(new ApproximatePercentile(
       AttributeReference("a", DoubleType)(),
       percentageExpression = Literal(null, DoubleType)).checkInputDataTypes() ===
-      DataTypeMismatch(errorSubClass = "UNEXPECTED_NULL", Map("exprName" -> "percentage(s)")))
+      DataTypeMismatch(errorSubClass = "UNEXPECTED_NULL", Map("exprName" -> "percentage")))
 
     val nullPercentageExprs =
       Seq(CreateArray(Seq(null).map(Literal(_))), CreateArray(Seq(0.1D, null).map(Literal(_))))

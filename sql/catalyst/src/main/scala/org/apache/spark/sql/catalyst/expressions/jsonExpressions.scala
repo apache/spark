@@ -794,13 +794,17 @@ case class SchemaOfJson(
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.foldable && json != null) {
       super.checkInputDataTypes()
-    } else {
+    } else if (!child.foldable) {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "input",
-          "inputType" -> "string",
+          "inputName" -> "json",
+          "inputType" -> toSQLType(child.dataType),
           "inputExpr" -> toSQLExpr(child)))
+    } else {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "json"))
     }
   }
 

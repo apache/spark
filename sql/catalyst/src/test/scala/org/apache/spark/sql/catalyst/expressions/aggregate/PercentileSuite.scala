@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
@@ -212,9 +213,9 @@ class PercentileSuite extends SparkFunSuite {
         DataTypeMismatch(
           errorSubClass = "VALUE_OUT_OF_RANGE",
           messageParameters = Map(
-            "exprName" -> "percentage(s)",
+            "exprName" -> "percentage",
             "valueRange" -> "[0.0, 1.0]",
-            "currentValue" -> percentage.simpleString(100)
+            "currentValue" -> toSQLExpr(percentage)
           )
         )
       )
@@ -229,9 +230,9 @@ class PercentileSuite extends SparkFunSuite {
         DataTypeMismatch(
           errorSubClass = "NON_FOLDABLE_INPUT",
           messageParameters = Map(
-            "inputName" -> "percentage(s)",
-            "inputType" -> "double",
-            "inputExpr" -> percentage.toString)
+            "inputName" -> "percentage",
+            "inputType" -> toSQLType(percentage.dataType),
+            "inputExpr" -> toSQLExpr(percentage))
         )
       )
     }
@@ -274,7 +275,7 @@ class PercentileSuite extends SparkFunSuite {
     assert(new Percentile(
       AttributeReference("a", DoubleType)(),
       percentageExpression = Literal(null, DoubleType)).checkInputDataTypes() ===
-      DataTypeMismatch(errorSubClass = "UNEXPECTED_NULL", Map("exprName" -> "percentage(s)")))
+      DataTypeMismatch(errorSubClass = "UNEXPECTED_NULL", Map("exprName" -> "percentage")))
 
     val nullPercentageExprs =
       Seq(CreateArray(Seq(null).map(Literal(_))), CreateArray(Seq(0.1D, null).map(Literal(_))))

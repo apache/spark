@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -87,23 +88,23 @@ abstract class PercentileBase
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "percentage(s)",
-          "inputType" -> "double",
-          "inputExpr" -> percentageExpression.toString)
+          "inputName" -> "percentage",
+          "inputType" -> toSQLType(percentageExpression.dataType),
+          "inputExpr" -> toSQLExpr(percentageExpression))
       )
     } else if (percentages == null) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
-        messageParameters = Map("exprName" -> "percentage(s)")
+        messageParameters = Map("exprName" -> "percentage")
       )
     } else if (percentages.exists(percentage => percentage < 0.0 || percentage > 1.0)) {
       // percentages(s) must be in the range [0.0, 1.0]
       DataTypeMismatch(
         errorSubClass = "VALUE_OUT_OF_RANGE",
         messageParameters = Map(
-          "exprName" -> "percentage(s)",
+          "exprName" -> "percentage",
           "valueRange" -> "[0.0, 1.0]",
-          "currentValue" -> percentageExpression.toString
+          "currentValue" -> toSQLExpr(percentageExpression)
         )
       )
     } else {
