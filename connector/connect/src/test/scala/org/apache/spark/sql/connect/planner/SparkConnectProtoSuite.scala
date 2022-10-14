@@ -77,12 +77,12 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val sparkPlan2 = sparkTestRelation.join(sparkTestRelation2, condition = None)
     comparePlans(connectPlan2.analyze, sparkPlan2.analyze, false)
     for ((t, y) <- Seq(
-      (JoinType.JOIN_TYPE_LEFT_OUTER, LeftOuter),
-      (JoinType.JOIN_TYPE_RIGHT_OUTER, RightOuter),
-      (JoinType.JOIN_TYPE_FULL_OUTER, FullOuter),
-      (JoinType.JOIN_TYPE_LEFT_ANTI, LeftAnti),
-      (JoinType.JOIN_TYPE_LEFT_SEMI, LeftSemi),
-      (JoinType.JOIN_TYPE_INNER, Inner))) {
+        (JoinType.JOIN_TYPE_LEFT_OUTER, LeftOuter),
+        (JoinType.JOIN_TYPE_RIGHT_OUTER, RightOuter),
+        (JoinType.JOIN_TYPE_FULL_OUTER, FullOuter),
+        (JoinType.JOIN_TYPE_LEFT_ANTI, LeftAnti),
+        (JoinType.JOIN_TYPE_LEFT_SEMI, LeftSemi),
+        (JoinType.JOIN_TYPE_INNER, Inner))) {
       val connectPlan3 = {
         import org.apache.spark.sql.connect.dsl.plans._
         transform(connectTestRelation.join(connectTestRelation2, t))
@@ -115,10 +115,10 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
     for (attr <- attrs) {
       localRelationBuilder.addAttributes(
-        proto.Expression.QualifiedAttribute.newBuilder()
+        proto.Expression.QualifiedAttribute
+          .newBuilder()
           .setName(attr.name)
-          .setType(DataTypeProtoConverter.toConnectProtoType(attr.dataType))
-      )
+          .setType(DataTypeProtoConverter.toConnectProtoType(attr.dataType)))
     }
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
   }

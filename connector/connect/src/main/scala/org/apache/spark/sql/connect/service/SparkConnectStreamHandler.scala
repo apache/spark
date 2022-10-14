@@ -34,7 +34,6 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveS
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.ArrowUtils
 
-
 @Unstable
 @Since("3.4.0")
 class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) extends Logging {

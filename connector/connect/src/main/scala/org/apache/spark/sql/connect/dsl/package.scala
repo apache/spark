@@ -34,51 +34,61 @@ package object dsl {
       val identifier = CatalystSqlParser.parseMultipartIdentifier(s)
 
       def protoAttr: proto.Expression =
-        proto.Expression.newBuilder()
+        proto.Expression
+          .newBuilder()
           .setUnresolvedAttribute(
-            proto.Expression.UnresolvedAttribute.newBuilder()
+            proto.Expression.UnresolvedAttribute
+              .newBuilder()
               .addAllParts(identifier.asJava)
               .build())
           .build()
     }
 
     implicit class DslExpression(val expr: proto.Expression) {
-      def as(alias: String): proto.Expression = proto.Expression.newBuilder().setAlias(
-        proto.Expression.Alias.newBuilder().setName(alias).setExpr(expr)).build()
+      def as(alias: String): proto.Expression = proto.Expression
+        .newBuilder()
+        .setAlias(proto.Expression.Alias.newBuilder().setName(alias).setExpr(expr))
+        .build()
 
-      def < (other: proto.Expression): proto.Expression =
-        proto.Expression.newBuilder().setUnresolvedFunction(
-          proto.Expression.UnresolvedFunction.newBuilder()
-            .addParts("<")
-            .addArguments(expr)
-            .addArguments(other)
-        ).build()
+      def <(other: proto.Expression): proto.Expression =
+        proto.Expression
+          .newBuilder()
+          .setUnresolvedFunction(
+            proto.Expression.UnresolvedFunction
+              .newBuilder()
+              .addParts("<")
+              .addArguments(expr)
+              .addArguments(other))
+          .build()
     }
 
     implicit def intToLiteral(i: Int): proto.Expression =
-      proto.Expression.newBuilder().setLiteral(
-        proto.Expression.Literal.newBuilder().setI32(i)
-      ).build()
+      proto.Expression
+        .newBuilder()
+        .setLiteral(proto.Expression.Literal.newBuilder().setI32(i))
+        .build()
   }
 
   object plans { // scalastyle:ignore
     implicit class DslLogicalPlan(val logicalPlan: proto.Relation) {
       def select(exprs: proto.Expression*): proto.Relation = {
-        proto.Relation.newBuilder().setProject(
-          proto.Project.newBuilder()
-            .setInput(logicalPlan)
-            .addAllExpressions(exprs.toIterable.asJava)
-            .build()
-        ).build()
+        proto.Relation
+          .newBuilder()
+          .setProject(
+            proto.Project
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllExpressions(exprs.toIterable.asJava)
+              .build())
+          .build()
       }
 
       def where(condition: proto.Expression): proto.Relation = {
-        proto.Relation.newBuilder()
-          .setFilter(
-            proto.Filter.newBuilder().setInput(logicalPlan).setCondition(condition)
-        ).build()
+        proto.Relation
+          .newBuilder()
+          .setFilter(proto.Filter.newBuilder().setInput(logicalPlan).setCondition(condition))
+          .build()
       }
-
 
       def join(
           otherPlan: proto.Relation,
@@ -86,7 +96,8 @@ package object dsl {
           condition: Option[proto.Expression] = None): proto.Relation = {
         val relation = proto.Relation.newBuilder()
         val join = proto.Join.newBuilder()
-        join.setLeft(logicalPlan)
+        join
+          .setLeft(logicalPlan)
           .setRight(otherPlan)
           .setJoinType(joinType)
         if (condition.isDefined) {
@@ -95,8 +106,8 @@ package object dsl {
         relation.setJoin(join).build()
       }
 
-      def groupBy(
-          groupingExprs: proto.Expression*)(aggregateExprs: proto.Expression*): proto.Relation = {
+      def groupBy(groupingExprs: proto.Expression*)(
+          aggregateExprs: proto.Expression*): proto.Relation = {
         val agg = proto.Aggregate.newBuilder()
         agg.setInput(logicalPlan)
 
