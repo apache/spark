@@ -135,10 +135,10 @@ class CreateScalarFunction(google.protobuf.message.Message):
     def argument_types(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        pyspark.sql.connect.proto.types_pb2.Type
+        pyspark.sql.connect.proto.types_pb2.DataType
     ]: ...
     @property
-    def return_type(self) -> pyspark.sql.connect.proto.types_pb2.Type: ...
+    def return_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
     serialized_function: builtins.bytes
     """As a raw string serialized:"""
     literal_string: builtins.str
@@ -149,9 +149,9 @@ class CreateScalarFunction(google.protobuf.message.Message):
         parts: collections.abc.Iterable[builtins.str] | None = ...,
         language: global___CreateScalarFunction.FunctionLanguage.ValueType = ...,
         temporary: builtins.bool = ...,
-        argument_types: collections.abc.Iterable[pyspark.sql.connect.proto.types_pb2.Type]
+        argument_types: collections.abc.Iterable[pyspark.sql.connect.proto.types_pb2.DataType]
         | None = ...,
-        return_type: pyspark.sql.connect.proto.types_pb2.Type | None = ...,
+        return_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         serialized_function: builtins.bytes = ...,
         literal_string: builtins.str = ...,
     ) -> None: ...
