@@ -215,7 +215,7 @@ class PercentileSuite extends SparkFunSuite {
           messageParameters = Map(
             "exprName" -> "percentage",
             "valueRange" -> "[0.0, 1.0]",
-            "currentValue" -> toSQLExpr(percentage)
+            "currentValue" -> toSQLValue(percentage)
           )
         )
       )

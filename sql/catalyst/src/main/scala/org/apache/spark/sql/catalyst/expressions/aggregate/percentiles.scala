@@ -104,7 +104,7 @@ abstract class PercentileBase
         messageParameters = Map(
           "exprName" -> "percentage",
           "valueRange" -> "[0.0, 1.0]",
-          "currentValue" -> toSQLExpr(percentageExpression)
+          "currentValue" -> toSQLValue(percentageExpression)
         )
       )
     } else {
