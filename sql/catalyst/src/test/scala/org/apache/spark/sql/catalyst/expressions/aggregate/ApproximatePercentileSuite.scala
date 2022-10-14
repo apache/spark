@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.{ArrayData, QuantileSummaries}
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
-import org.apache.spark.sql.types.{ArrayType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType}
+import org.apache.spark.sql.types.{ArrayType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType, LongType}
 import org.apache.spark.util.SizeEstimator
 
 class ApproximatePercentileSuite extends SparkFunSuite {
@@ -250,10 +250,11 @@ class ApproximatePercentileSuite extends SparkFunSuite {
   }
 
   test("class ApproximatePercentile, fails analysis if parameters are invalid") {
+    val wrongAccuracyExpression = Literal(-1)
     val wrongAccuracy = new ApproximatePercentile(
       AttributeReference("a", DoubleType)(),
       percentageExpression = Literal(0.5D),
-      accuracyExpression = Literal(-1))
+      accuracyExpression = wrongAccuracyExpression)
     assertEqual(
       wrongAccuracy.checkInputDataTypes(),
       DataTypeMismatch(
@@ -261,7 +262,8 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         messageParameters = Map(
           "exprName" -> "accuracy",
           "valueRange" -> s"(0, ${Int.MaxValue}]",
-          "currentValue" -> "-1L")
+          "currentValue" ->
+            toSQLValue(wrongAccuracyExpression.eval().asInstanceOf[Number].longValue, LongType))
       )
     )
 
