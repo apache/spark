@@ -1323,7 +1323,7 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql5),
       errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "ALTER TABLE table PARTITION partition_spec REPLACE COLUMNS") ,
+      parameters = Map("message" -> "ALTER TABLE table PARTITION partition_spec REPLACE COLUMNS"),
       context = ExpectedContext(
         fragment = sql5,
         start = 0,
