@@ -103,12 +103,12 @@
       },
       "BLOOM_FILTER_BINARY_OP_WRONG_TYPE" : {
         "message" : [
-          "The Bloom filter binary input to <functionName> should be either a constant value or a scalar subquery expression."
+          "The Bloom filter binary input to <functionName> should be either a constant value or a scalar subquery expression, but it's <actual>."
         ]
       },
-      "BLOOM_FILTER_BINARY_OP_WRONG_TYPE" : {
+      "BLOOM_FILTER_WRONG_TYPE" : {
         "message" : [
-          "The Bloom filter binary input to function <functionName> should be <required>, but it's <actual>."
+          "Input to function <functionName> should have been <required>, but it's <actual>."
         ]
       },
       "CANNOT_CONVERT_TO_JSON" : {

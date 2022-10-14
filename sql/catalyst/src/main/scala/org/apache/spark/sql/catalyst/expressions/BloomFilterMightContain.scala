@@ -62,21 +62,20 @@ case class BloomFilterMightContain(
             TypeCheckResult.TypeCheckSuccess
           case _ =>
             DataTypeMismatch(
-              errorSubClass = "BLOOM_FILTER_BINARY_WRONG_TYPE",
+              errorSubClass = "BLOOM_FILTER_BINARY_OP_WRONG_TYPE",
               messageParameters = Map(
                 "functionName" -> toSQLId(prettyName),
-                "required" -> "either a constant value or a scalar subquery expression",
                 "actual" -> toSQLType(bloomFilterExpression.dataType)
               )
             )
         }
       case _ =>
         DataTypeMismatch(
-          errorSubClass = "BLOOM_FILTER_BINARY_OP_WRONG_TYPE",
+          errorSubClass = "BLOOM_FILTER_WRONG_TYPE",
           messageParameters = Map(
             "functionName" -> toSQLId(prettyName),
-            "required" -> (s"${toSQLType(BinaryType)} followed by a value" +
-              s" with ${toSQLType(LongType)}"),
+            "required" -> (s"${toSQLType(BinaryType)} followed by " +
+              s"a value with ${toSQLType(LongType)}"),
             "actual" -> s"[${toSQLType(left.dataType)}, ${toSQLType(right.dataType)}]"
           )
         )
