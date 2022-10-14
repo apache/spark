@@ -237,7 +237,7 @@ class GroupedMapInPandasWithStateTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_grouped_map_with_state import *  # noqa: F401
+    from pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

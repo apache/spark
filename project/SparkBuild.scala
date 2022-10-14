@@ -59,7 +59,7 @@ object BuildCommons {
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "tags", "sketch", "kvstore"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connect) ++ Seq(protobuf)
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connect)
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
@@ -433,7 +433,7 @@ object SparkBuild extends PomBuild {
 
   enable(SparkConnect.settings)(connect)
 
-  /* Connector/proto settings */
+  /* Protobuf settings */
   enable(SparkProtobuf.settings)(protobuf)
 
   // SPARK-14738 - Remove docker tests from main Spark build
@@ -703,11 +703,7 @@ object SparkConnect {
 }
 
 object SparkProtobuf {
-
   import BuildCommons.protoVersion
-
-  private val shadePrefix = "org.sparkproject.spark-protobuf"
-  val shadeJar = taskKey[Unit]("Shade the Jars")
 
   lazy val settings = Seq(
     // Setting version for the protobuf compiler. This has to be propagated to every sub-project
@@ -716,19 +712,15 @@ object SparkProtobuf {
 
     // For some reason the resolution from the imported Maven build does not work for some
     // of these dependendencies that we need to shade later on.
-    libraryDependencies ++= Seq(
-      "com.google.protobuf" % "protobuf-java"        % protoVersion % "protobuf"
-    ),
+    libraryDependencies += "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf",
 
-    dependencyOverrides ++= Seq(
-      "com.google.protobuf" % "protobuf-java"        % protoVersion
-    ),
+    dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
 
     (Compile / PB.targets) := Seq(
-      PB.gens.java                -> (Compile / sourceManaged).value,
+      PB.gens.java -> (Compile / sourceManaged).value,
     ),
 
-    (assembly / test) := false,
+    (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
 
@@ -744,6 +736,7 @@ object SparkProtobuf {
     },
   )
 }
+
 object Unsafe {
   lazy val settings = Seq(
     // This option is needed to suppress warnings from sun.misc.Unsafe usage
@@ -1277,7 +1270,7 @@ object CopyDependencies {
       // produce the shaded Jar which happens automatically in the case of Maven.
       // Later, when the dependencies are copied, we manually copy the shaded Jar only.
       val fid = (LocalProject("connect") / assembly).value
-      val fidProtobuf = (LocalProject("protobuf")/assembly).value
+      val fidProtobuf = (LocalProject("protobuf") / assembly).value
 
       (Compile / dependencyClasspath).value.map(_.data)
         .filter { jar => jar.isFile() }
@@ -1292,7 +1285,7 @@ object CopyDependencies {
             Files.copy(fid.toPath, destJar.toPath)
           } else if (jar.getName.contains("spark-protobuf") &&
             !SbtPomKeys.profiles.value.contains("noshade-protobuf")) {
-            Files.copy(fid.toPath, destJar.toPath)
+            Files.copy(fidProtobuf.toPath, destJar.toPath)
           } else {
             Files.copy(jar.toPath(), destJar.toPath())
           }
