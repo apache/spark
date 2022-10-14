@@ -30,11 +30,12 @@ import scala.util.Random
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkException
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, EqualTo, ExpressionSet, GreaterThan, Literal, Uuid}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, Uuid}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -2843,6 +2844,35 @@ class DataFrameSuite extends QueryTest
       },
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`d`", "proposal" -> "`a`, `b`, `c`"))
+  }
+
+  test("SPARK-40601: flatMapCoGroupsInPandas should fail with different number of keys") {
+    val df1 = Seq((1, 2, "A1"), (2, 1, "A2")).toDF("key1", "key2", "value")
+    val df2 = df1.filter($"value" === "A2")
+
+    val flatMapCoGroupsInPandasUDF = PythonUDF("flagMapCoGroupsInPandasUDF", null,
+      StructType(Seq(StructField("x", LongType), StructField("y", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+
+    // the number of keys must match
+    val exception1 = intercept[IllegalArgumentException] {
+      df1.groupBy($"key1", $"key2").flatMapCoGroupsInPandas(
+        df2.groupBy($"key2"), flatMapCoGroupsInPandasUDF)
+    }
+    assert(exception1.getMessage.contains("Cogroup keys must have same size: 2 != 1"))
+    val exception2 = intercept[IllegalArgumentException] {
+      df1.groupBy($"key1").flatMapCoGroupsInPandas(
+        df2.groupBy($"key1", $"key2"), flatMapCoGroupsInPandasUDF)
+    }
+    assert(exception2.getMessage.contains("Cogroup keys must have same size: 1 != 2"))
+
+    // but different keys are allowed
+    val actual = df1.groupBy($"key1").flatMapCoGroupsInPandas(
+      df2.groupBy($"key2"), flatMapCoGroupsInPandasUDF)
+    // can't evaluate the DataFrame as there is no PythonFunction given
+    assert(actual != null)
   }
 
   test("emptyDataFrame should be foldable") {
