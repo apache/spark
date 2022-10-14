@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.SQLException
+import java.sql.{Connection, SQLException}
 import java.util.Locale
 
 import scala.util.control.NonFatal
@@ -26,6 +26,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -38,6 +39,12 @@ private object MsSqlServerDialect extends JdbcDialect {
     val GEOMETRY = -157
     val GEOGRAPHY = -158
   }
+
+  override def getQueryOutputSchema(
+      conn: Connection,
+      query: String,
+      options: JDBCOptions): StructType =
+    JdbcUtils.getQueryOutputSchemaWithExecuteQuery(conn, query, options, this)
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")

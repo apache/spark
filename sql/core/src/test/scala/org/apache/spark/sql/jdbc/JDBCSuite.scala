@@ -1899,14 +1899,11 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     when(mockRsmd.isSigned(anyInt())).thenReturn(false)
     when(mockRsmd.isNullable(anyInt())).thenReturn(java.sql.ResultSetMetaData.columnNoNulls)
 
-    val mockRs = mock(classOf[java.sql.ResultSet])
-    when(mockRs.getMetaData).thenReturn(mockRsmd)
-
     val mockDialect = mock(classOf[JdbcDialect])
     when(mockDialect.getCatalystType(anyInt(), anyString(), anyInt(), any[MetadataBuilder]))
       .thenReturn(None)
 
-    val schema = JdbcUtils.getSchema(mockRs, mockDialect)
+    val schema = JdbcUtils.getSchema(mockRsmd, mockDialect)
     val fields = schema.fields
     assert(fields.length === 1)
     assert(fields(0).dataType === StringType)

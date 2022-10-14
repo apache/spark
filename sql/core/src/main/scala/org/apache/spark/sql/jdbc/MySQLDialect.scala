@@ -32,12 +32,18 @@ import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.types.{BooleanType, DataType, FloatType, LongType, MetadataBuilder}
+import org.apache.spark.sql.types.{BooleanType, DataType, FloatType, LongType, MetadataBuilder, StructType}
 
 private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
   override def canHandle(url : String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:mysql")
+
+  override def getQueryOutputSchema(
+      conn: Connection,
+      query: String,
+      options: JDBCOptions): StructType =
+    JdbcUtils.getQueryOutputSchemaWithExecuteQuery(conn, query, options, this)
 
   private val distinctUnsupportedAggregateFunctions =
     Set("VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")

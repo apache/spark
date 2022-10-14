@@ -85,6 +85,9 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   def canHandle(url : String): Boolean
 
+  def getQueryOutputSchema(conn: Connection, query: String, options: JDBCOptions): StructType =
+    JdbcUtils.getQueryOutputSchemaWithGetMetaData(conn, query, options, this)
+
   /**
    * Get the custom datatype mapping for the given jdbc meta information.
    * @param sqlType The sql type (see java.sql.Types)

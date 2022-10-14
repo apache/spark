@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.streaming.state.RenameReturnsFalseFileSyst
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
-import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
+import org.apache.spark.sql.jdbc.{H2Dialect, JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, DecimalType, LongType, MetadataBuilder, StructType}
 import org.apache.spark.util.Utils
@@ -499,6 +499,13 @@ class QueryExecutionErrorsSuite
 
     val testH2DialectUnrecognizedSQLType = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+
+      // The mocked H2Dialect should use the same implementation to H2Dialect
+      override def getQueryOutputSchema(
+          conn: Connection,
+          query: String,
+          options: JDBCOptions): StructType =
+        H2Dialect.getQueryOutputSchema(conn, query, options)
 
       override def getCatalystType(sqlType: Int, typeName: String, size: Int,
         md: MetadataBuilder): Option[DataType] = {

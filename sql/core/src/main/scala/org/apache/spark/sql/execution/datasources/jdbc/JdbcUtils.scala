@@ -250,7 +250,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         conn.prepareStatement(options.prepareQuery + dialect.getSchemaQuery(options.tableOrQuery))
       try {
         statement.setQueryTimeout(options.queryTimeout)
-        Some(getSchema(statement.executeQuery(), dialect,
+        Some(getSchema(statement.executeQuery().getMetaData, dialect,
           isTimestampNTZ = options.inferTimestampNTZType))
       } catch {
         case _: SQLException => None
@@ -271,11 +271,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * @throws SQLException if the schema contains an unsupported type.
    */
   def getSchema(
-      resultSet: ResultSet,
+      rsmd: ResultSetMetaData,
       dialect: JdbcDialect,
       alwaysNullable: Boolean = false,
       isTimestampNTZ: Boolean = false): StructType = {
-    val rsmd = resultSet.getMetaData
     val ncols = rsmd.getColumnCount
     val fields = new Array[StructField](ncols)
     var i = 0
@@ -321,6 +320,35 @@ object JdbcUtils extends Logging with SQLConfHelper {
       i = i + 1
     }
     new StructType(fields)
+  }
+
+  def getQueryOutputSchemaWithGetMetaData(
+      conn: Connection, query: String, options: JDBCOptions, dialect: JdbcDialect): StructType = {
+    val statement = conn.prepareStatement(query)
+    try {
+      statement.setQueryTimeout(options.queryTimeout)
+      JdbcUtils.getSchema(statement.getMetaData, dialect, alwaysNullable = true,
+        isTimestampNTZ = options.inferTimestampNTZType)
+    } finally {
+      statement.close()
+    }
+  }
+
+  def getQueryOutputSchemaWithExecuteQuery(
+        conn: Connection, query: String, options: JDBCOptions, dialect: JdbcDialect): StructType = {
+    val statement = conn.prepareStatement(query)
+    try {
+      statement.setQueryTimeout(options.queryTimeout)
+      val rs = statement.executeQuery()
+      try {
+        JdbcUtils.getSchema(rs.getMetaData, dialect, alwaysNullable = true,
+          isTimestampNTZ = options.inferTimestampNTZType)
+      } finally {
+        rs.close()
+      }
+    } finally {
+      statement.close()
+    }
   }
 
   /**
