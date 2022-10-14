@@ -48,12 +48,26 @@ def check_connect_protos():
     with tempfile.TemporaryDirectory() as tmp:
         run_cmd(f"{SPARK_HOME}/connector/connect/dev/generate_protos.sh {tmp}")
         result = filecmp.dircmp(f"{SPARK_HOME}/python/pyspark/sql/connect/proto/", tmp)
-        if (
-            result.left_only == ["__init__.py"]
-            and result.right_only == []
-            and result.diff_files == []
-            and result.funny_files == []
-        ):
+        failed = False
+
+        if result.left_only != ["__init__.py"]:
+            files = [file for file in result.left_only if file != "__init__.py"]
+            print(f"Unexpected files: {files}")
+            failed = True
+
+        if len(result.right_only) > 0:
+            print(f"Missing files: {result.right_only}")
+            failed = True
+
+        if len(result.funny_files) > 0:
+            print(f"Incomparable files: {result.funny_files}")
+            failed = True
+
+        if len(result.diff_files) > 0:
+            print(f"Different files: {result.diff_files}")
+            failed = True
+
+        if not failed:
             print("Finish checking the generated codes in pyspark-connect: SUCCESS")
         else:
             fail(
