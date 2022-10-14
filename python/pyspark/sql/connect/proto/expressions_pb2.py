@@ -42,7 +42,7 @@ if _descriptor._USE_C_DESCRIPTORS == False:
 
     DESCRIPTOR._options = None
     DESCRIPTOR._serialized_options = b"\n\036org.apache.spark.connect.protoP\001"
-    _EXPRESSION._serialized_start = 105
+    _EXPRESSION._serialized_start = 123459
     _EXPRESSION._serialized_end = 3088
     _EXPRESSION_LITERAL._serialized_start = 613
     _EXPRESSION_LITERAL._serialized_end = 2696
