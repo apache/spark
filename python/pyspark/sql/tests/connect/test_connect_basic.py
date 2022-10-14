@@ -33,6 +33,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
 
     connect: RemoteSparkSession
     tbl_name: str
+    tbl_name2: str
 
     @classmethod
     def setUpClass(cls: Any):
@@ -51,11 +52,15 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
     def spark_connect_test_data(cls: Any):
         # Setup Remote Spark Session
         cls.tbl_name = f"tbl{uuid.uuid4()}".replace("-", "")
+        cls.tbl_name2 = f"tbl{uuid.uuid4()}".replace("-", "")
         cls.connect = RemoteSparkSession(user_id="test_user")
         df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
         # Since we might create multiple Spark sessions, we need to creata global temporary view
         # that is specifically maintained in the "global_temp" schema.
         df.write.saveAsTable(cls.tbl_name)
+
+        df = cls.spark.createDataFrame([(x, f"{x}") for x in range(10)], ["id", "value"])
+        df.write.saveAsTable(cls.tbl_name2)
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
@@ -78,6 +83,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         df = self.connect.read.table(self.tbl_name).limit(10)
         result = df.explain()
         self.assertGreater(len(result), 0)
+
+    def test_simple_join(self):
+        df_left = self.connect.read.table(self.tbl_name)
+        df_right = self.connect.read.table(self.tbl_name)
+        df_joined = df_left.join(other=df_right)
+        result = df_joined.toPandas().values.tolist()
+        self.assertEqual(len(result) == 10)
 
 
 if __name__ == "__main__":
