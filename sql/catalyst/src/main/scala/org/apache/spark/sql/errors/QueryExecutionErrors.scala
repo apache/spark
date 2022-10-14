@@ -1175,17 +1175,33 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def unscaledValueTooLargeForPrecisionError(): Throwable = {
-    new ArithmeticException("Unscaled value too large for precision. " +
-      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
+    new SparkArithmeticException(
+      errorClass = "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION",
+      messageParameters = Map(
+        "ANSIEnabled" -> SQLConf.ANSI_ENABLED.key),
+      context = Array.empty,
+      summary = "")
   }
 
-  def decimalPrecisionExceedsMaxPrecisionError(precision: Int, maxPrecision: Int): Throwable = {
-    new ArithmeticException(
-      s"Decimal precision $precision exceeds max precision $maxPrecision")
+  def decimalPrecisionExceedsMaxPrecisionError(precision: Int,
+                                               maxPrecision: Int): Throwable = {
+    new SparkArithmeticException(
+      errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+      messageParameters = Map(
+        "precision" -> precision.toString,
+        "maxPrecision" -> maxPrecision.toString
+      ),
+      context = Array.empty,
+      summary = "")
   }
 
   def outOfDecimalTypeRangeError(str: UTF8String): Throwable = {
-    new ArithmeticException(s"out of decimal type range: $str")
+    new SparkArithmeticException(
+      errorClass = "OUT_OF_DECIMAL_TYPE_RANGE",
+      messageParameters = Map(
+        "value" -> str.toString),
+      context = Array.empty,
+      summary = "")
   }
 
   def unsupportedArrayTypeError(clazz: Class[_]): Throwable = {
@@ -2020,7 +2036,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def integerOverflowError(message: String): Throwable = {
-    new ArithmeticException(s"Integer overflow. $message")
+    new SparkArithmeticException(
+      errorClass = "INTEGER_OVERFLOW",
+      messageParameters = Map(
+        "message" -> message
+      ),
+      context = Array.empty,
+      summary = "")
   }
 
   def failedToReadDeltaFileError(fileToRead: Path, clazz: String, keySize: Int): Throwable = {

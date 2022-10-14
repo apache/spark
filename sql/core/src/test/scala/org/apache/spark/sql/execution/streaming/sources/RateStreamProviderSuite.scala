@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
@@ -193,6 +194,16 @@ class RateStreamProviderSuite extends StreamTest {
         }
 
       assert(readData.map(_.getLong(1)).sorted === 0.until(33).toArray)
+    }
+  }
+
+  test("SPARK-37945: microbatch - incorrect setup of the stream") {
+    intercept[SparkArithmeticException] {
+      new RateStreamMicroBatchStream(
+        rowsPerSecond = Long.MaxValue,
+        rampUpTimeSeconds = 2,
+        options = CaseInsensitiveStringMap.empty(),
+        checkpointLocation = "")
     }
   }
 

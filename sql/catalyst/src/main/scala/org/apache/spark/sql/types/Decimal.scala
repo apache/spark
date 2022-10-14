@@ -300,7 +300,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   /**
    * @return the Long value that is equal to the rounded decimal.
-   * @throws ArithmeticException if the decimal too big to fit in Long type.
+   * @throws SparkArithmeticException if the decimal too big to fit in Long type.
    */
   private[sql] def roundToLong(): Long = {
     if (decimalVal.eq(null)) {
@@ -332,7 +332,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * Create new `Decimal` with given precision and scale.
    *
    * @return a non-null `Decimal` value if successful. Otherwise, if `nullOnOverflow` is true, null
-   *         is returned; if `nullOnOverflow` is false, an `ArithmeticException` is thrown.
+   *         is returned; if `nullOnOverflow` is false, an `SparkArithmeticException` is thrown.
    */
   private[sql] def toPrecision(
       precision: Int,
