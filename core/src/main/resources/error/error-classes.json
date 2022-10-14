@@ -173,11 +173,6 @@
           "The <exprName> must be a constant literal (current value = <currentValue>)"
         ]
       },
-      "MUST_NOT_NULL" : {
-        "message" : [
-          "The <exprName> must not be null"
-        ]
-      },
       "NON_FOLDABLE_INPUT" : {
         "message" : [
           "the input should be a foldable string expression and not null; however, got <inputExpr>."
@@ -236,6 +231,11 @@
       "UNEXPECTED_INPUT_TYPE" : {
         "message" : [
           "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
+        ]
+      },
+      "UNEXPECTED_NULL" : {
+        "message" : [
+          "The <exprName> must not be null"
         ]
       },
       "UNSPECIFIED_FRAME" : {

@@ -340,7 +340,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     assert(new ApproximatePercentile(
       AttributeReference("a", DoubleType)(),
       percentageExpression = Literal(null, DoubleType)).checkInputDataTypes() ===
-      DataTypeMismatch(errorSubClass = "MUST_NOT_NULL", Map("exprName" -> "percentage(s)")))
+      DataTypeMismatch(errorSubClass = "UNEXPECTED_NULL", Map("exprName" -> "percentage(s)")))
 
     val nullPercentageExprs =
       Seq(CreateArray(Seq(null).map(Literal(_))), CreateArray(Seq(0.1D, null).map(Literal(_))))

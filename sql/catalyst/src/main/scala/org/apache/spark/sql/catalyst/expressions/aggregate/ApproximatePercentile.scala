@@ -145,7 +145,7 @@ case class ApproximatePercentile(
       )
     } else if (percentages == null) {
       DataTypeMismatch(
-        errorSubClass = "MUST_NOT_NULL",
+        errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "percentage(s)"))
     } else if (percentages.exists(percentage => percentage < 0.0D || percentage > 1.0D)) {
       DataTypeMismatch(

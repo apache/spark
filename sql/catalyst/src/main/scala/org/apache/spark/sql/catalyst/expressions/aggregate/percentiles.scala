@@ -92,7 +92,7 @@ abstract class PercentileBase
       )
     } else if (percentages == null) {
       DataTypeMismatch(
-        errorSubClass = "MUST_NOT_NULL",
+        errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "percentage(s)")
       )
     } else if (percentages.exists(percentage => percentage < 0.0 || percentage > 1.0)) {
