@@ -83,7 +83,9 @@ case class ApproxCountDistinctForIntervals(
         case ArrayType(_: NumericType | DateType | TimestampType | TimestampNTZType |
            _: AnsiIntervalType, _) =>
           if (endpoints.length < 2) {
-            DataTypeMismatch("WRONG_NUM_ENDPOINTS")
+            DataTypeMismatch(
+              errorSubClass = "WRONG_NUM_ENDPOINTS",
+              messageParameters = Map("actualNumber" -> endpoints.length.toString))
           } else {
             TypeCheckSuccess
           }

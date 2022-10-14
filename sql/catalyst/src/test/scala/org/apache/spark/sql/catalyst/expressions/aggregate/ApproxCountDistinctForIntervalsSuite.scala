@@ -52,7 +52,8 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
     wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = CreateArray(Array(10L).map(Literal(_))))
-    assert(wrongEndpoints.checkInputDataTypes() == DataTypeMismatch("WRONG_NUM_ENDPOINTS"))
+    assert(wrongEndpoints.checkInputDataTypes() ==
+      DataTypeMismatch("WRONG_NUM_ENDPOINTS", Map("actualNumber" -> "1")))
 
     wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
