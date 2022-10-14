@@ -1777,131 +1777,180 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def cannotCreateArrayWithElementsExceedLimitError(
-      numElements: Long, additionalErrorMessage: String): Throwable = {
-    new RuntimeException(
-      s"""
-         |Cannot create array with $numElements
-         |elements of data due to exceeding the limit
-         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for ArrayData.
-         |$additionalErrorMessage
-       """.stripMargin.replaceAll("\n", " "))
+      numElements: Long, additionalErrorMessage: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2176",
+      messageParameters = Map(
+        "numElements" -> numElements.toString(),
+        "maxRoundedArrayLength"-> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
+        "additionalErrorMessage" -> additionalErrorMessage))
   }
 
   def malformedRecordsDetectedInRecordParsingError(e: BadRecordException): Throwable = {
-    new SparkException("Malformed records are detected in record parsing. " +
-      s"Parse Mode: ${FailFastMode.name}. To process malformed records as null " +
-      "result, try setting the option 'mode' as 'PERMISSIVE'.", e)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2177",
+      messageParameters = Map(
+        "failFastMode" -> FailFastMode.name),
+      cause = e)
   }
 
-  def remoteOperationsUnsupportedError(): Throwable = {
-    new RuntimeException("Remote operations not supported")
+  def remoteOperationsUnsupportedError(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2178",
+      messageParameters = Map.empty)
   }
 
   def invalidKerberosConfigForHiveServer2Error(): Throwable = {
-    new IOException(
-      "HiveServer2 Kerberos principal or keytab is not correctly configured")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2179",
+      messageParameters = Map.empty,
+      cause = null)
   }
 
   def parentSparkUIToAttachTabNotFoundError(): Throwable = {
-    new SparkException("Parent SparkUI to attach this tab to not found!")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2180",
+      messageParameters = Map.empty,
+      cause = null)
   }
 
-  def inferSchemaUnsupportedForHiveError(): Throwable = {
-    new UnsupportedOperationException("inferSchema is not supported for hive data source.")
+  def inferSchemaUnsupportedForHiveError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2181",
+      messageParameters = Map.empty)
   }
 
   def requestedPartitionsMismatchTablePartitionsError(
       table: CatalogTable, partition: Map[String, Option[String]]): Throwable = {
     new SparkException(
-      s"""
-         |Requested partitioning does not match the ${table.identifier.table} table:
-         |Requested partitions: ${partition.keys.mkString(",")}
-         |Table partitions: ${table.partitionColumnNames.mkString(",")}
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_2182",
+      messageParameters = Map(
+        "tableIdentifier" -> table.identifier.table,
+        "partitionKeys" -> partition.keys.mkString(","),
+        "partitionColumnNames" -> table.partitionColumnNames.mkString(",")),
+      cause = null)
   }
 
   def dynamicPartitionKeyNotAmongWrittenPartitionPathsError(key: String): Throwable = {
     new SparkException(
-      s"Dynamic partition key ${toSQLValue(key, StringType)} is not among written partition paths.")
+      errorClass = "_LEGACY_ERROR_TEMP_2183",
+      messageParameters = Map(
+        "key" -> toSQLValue(key, StringType)),
+      cause = null)
   }
 
-  def cannotRemovePartitionDirError(partitionPath: Path): Throwable = {
-    new RuntimeException(s"Cannot remove partition directory '$partitionPath'")
+  def cannotRemovePartitionDirError(partitionPath: Path): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2184",
+      messageParameters = Map(
+        "partitionPath" -> partitionPath.toString()))
   }
 
-  def cannotCreateStagingDirError(message: String, e: IOException): Throwable = {
-    new RuntimeException(s"Cannot create staging directory: $message", e)
+  def cannotCreateStagingDirError(message: String, e: IOException): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2185",
+      messageParameters = Map(
+        "message" -> message),
+      cause = e)
   }
 
-  def serDeInterfaceNotFoundError(e: NoClassDefFoundError): Throwable = {
-    new ClassNotFoundException("The SerDe interface removed since Hive 2.3(HIVE-15167)." +
-      " Please migrate your custom SerDes to Hive 2.3. See HIVE-15167 for more details.", e)
+  def serDeInterfaceNotFoundError(e: NoClassDefFoundError): SparkClassNotFoundException = {
+    new SparkClassNotFoundException(
+      errorClass = "_LEGACY_ERROR_TEMP_2186",
+      messageParameters = Map.empty,
+      cause = e)
   }
 
   def convertHiveTableToCatalogTableError(
       e: SparkException, dbName: String, tableName: String): Throwable = {
-    new SparkException(s"${e.getMessage}, db: $dbName, table: $tableName", e)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2187",
+      messageParameters = Map(
+        "message" -> e.getMessage,
+        "dbName" -> dbName,
+        "tableName" -> tableName.toString()),
+      cause = e)
   }
 
   def cannotRecognizeHiveTypeError(
       e: ParseException, fieldType: String, fieldName: String): Throwable = {
     new SparkException(
-      s"Cannot recognize hive type string: $fieldType, column: $fieldName", e)
+      errorClass = "_LEGACY_ERROR_TEMP_2188",
+      messageParameters = Map(
+        "fieldType" -> fieldType,
+        "fieldName" -> fieldName),
+      cause = e)
   }
 
-  def getTablesByTypeUnsupportedByHiveVersionError(): Throwable = {
-    new UnsupportedOperationException("Hive 2.2 and lower versions don't support " +
-      "getTablesByType. Please use Hive 2.3 or higher version.")
+  def getTablesByTypeUnsupportedByHiveVersionError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2189",
+      messageParameters = Map.empty)
   }
 
-  def dropTableWithPurgeUnsupportedError(): Throwable = {
-    new UnsupportedOperationException("DROP TABLE ... PURGE")
+  def dropTableWithPurgeUnsupportedError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2190",
+      messageParameters = Map.empty)
   }
 
-  def alterTableWithDropPartitionAndPurgeUnsupportedError(): Throwable = {
-    new UnsupportedOperationException("ALTER TABLE ... DROP PARTITION ... PURGE")
+  def alterTableWithDropPartitionAndPurgeUnsupportedError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2191",
+      messageParameters = Map.empty)
   }
 
-  def invalidPartitionFilterError(): Throwable = {
-    new UnsupportedOperationException(
-      """Partition filter cannot have both `"` and `'` characters""")
+  def invalidPartitionFilterError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2192",
+      messageParameters = Map.empty)
   }
 
-  def getPartitionMetadataByFilterError(e: InvocationTargetException): Throwable = {
-    new RuntimeException(
-      s"""
-         |Caught Hive MetaException attempting to get partition metadata by filter
-         |from Hive. You can set the Spark configuration setting
-         |${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key} to true to work
-         |around this problem, however this will result in degraded performance. Please
-         |report a bug: https://issues.apache.org/jira/browse/SPARK
-       """.stripMargin.replaceAll("\n", " "), e)
+  def getPartitionMetadataByFilterError(e: InvocationTargetException): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2193",
+      messageParameters = Map(
+        "hiveMetastorePartitionPruningFallbackOnException" ->
+          SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key),
+      cause = e)
   }
 
-  def unsupportedHiveMetastoreVersionError(version: String, key: String): Throwable = {
-    new UnsupportedOperationException(s"Unsupported Hive Metastore version ($version). " +
-      s"Please set $key with a valid version.")
+  def unsupportedHiveMetastoreVersionError(
+      version: String, key: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2194",
+      messageParameters = Map(
+        "version" -> version,
+        "key" -> key))
   }
 
   def loadHiveClientCausesNoClassDefFoundError(
       cnf: NoClassDefFoundError,
       execJars: Seq[URL],
       key: String,
-      e: InvocationTargetException): Throwable = {
-    new ClassNotFoundException(
-      s"""
-         |$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n
-         |Please make sure that jars for your version of hive and hadoop are included in the
-         |paths passed to $key.
-       """.stripMargin.replaceAll("\n", " "), e)
+      e: InvocationTargetException): SparkClassNotFoundException = {
+    new SparkClassNotFoundException(
+      errorClass = "_LEGACY_ERROR_TEMP_2195",
+      messageParameters = Map(
+        "cnf" -> cnf.toString(),
+        "execJars" -> execJars.mkString(", "),
+        "key" -> key),
+      cause = e)
   }
 
   def cannotFetchTablesOfDatabaseError(dbName: String, e: Exception): Throwable = {
-    new SparkException(s"Unable to fetch tables of db $dbName", e)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2196",
+      messageParameters = Map(
+        "dbName" -> dbName),
+      cause = e)
   }
 
   def illegalLocationClauseForViewPartitionError(): Throwable = {
-    new SparkException("LOCATION clause illegal for view partition")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2197",
+      messageParameters = Map.empty,
+      cause = null)
   }
 
   def renamePathAsExistsPathError(srcPath: Path, dstPath: Path): Throwable = {
@@ -1912,8 +1961,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "targetPath" -> dstPath.toString))
   }
 
-  def renameAsExistsPathError(dstPath: Path): Throwable = {
-    new FileAlreadyExistsException(s"Failed to rename as $dstPath already exists")
+  def renameAsExistsPathError(dstPath: Path): SparkFileAlreadyExistsException = {
+    new SparkFileAlreadyExistsException(
+      errorClass = "_LEGACY_ERROR_TEMP_2198",
+      messageParameters = Map(
+        "dstPath" -> dstPath.toString()))
   }
 
   def renameSrcPathNotFoundError(srcPath: Path): Throwable = {
@@ -1923,28 +1975,23 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def failedRenameTempFileError(srcPath: Path, dstPath: Path): Throwable = {
-    new IOException(s"Failed to rename temp file $srcPath to $dstPath as rename returned false")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2199",
+      messageParameters = Map(
+        "srcPath" -> srcPath.toString(),
+        "dstPath" -> dstPath.toString()),
+      cause = null)
   }
 
   def legacyMetadataPathExistsError(metadataPath: Path, legacyMetadataPath: Path): Throwable = {
     new SparkException(
-      s"""
-         |Error: we detected a possible problem with the location of your "_spark_metadata"
-         |directory and you likely need to move it before restarting this query.
-         |
-         |Earlier version of Spark incorrectly escaped paths when writing out the
-         |"_spark_metadata" directory for structured streaming. While this was corrected in
-         |Spark 3.0, it appears that your query was started using an earlier version that
-         |incorrectly handled the "_spark_metadata" path.
-         |
-         |Correct "_spark_metadata" Directory: $metadataPath
-         |Incorrect "_spark_metadata" Directory: $legacyMetadataPath
-         |
-         |Please move the data from the incorrect directory to the correct one, delete the
-         |incorrect directory, and then restart this query. If you believe you are receiving
-         |this message in error, you can disable it with the SQL conf
-         |${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}.
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_2200",
+      messageParameters = Map(
+        "metadataPath" -> metadataPath.toString(),
+        "legacyMetadataPath" -> legacyMetadataPath.toString(),
+        "StreamingCheckpointEscaptedPathCheckEnabled" ->
+          SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key),
+      cause = null)
   }
 
   def partitionColumnNotFoundInSchemaError(col: String, schema: StructType): Throwable = {
