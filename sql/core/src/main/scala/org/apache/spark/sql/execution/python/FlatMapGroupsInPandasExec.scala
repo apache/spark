@@ -50,7 +50,7 @@ case class FlatMapGroupsInPandasExec(
     func: Expression,
     output: Seq[Attribute],
     child: SparkPlan)
-  extends SparkPlan with UnaryExecNode {
+  extends SparkPlan with UnaryExecNode with PythonSQLMetrics {
 
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
   private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
@@ -73,6 +73,8 @@ case class FlatMapGroupsInPandasExec(
     Seq(groupingAttributes.map(SortOrder(_, Ascending)))
 
   override protected def doExecute(): RDD[InternalRow] = {
+    metrics // force lazy init at driver
+
     val inputRDD = child.execute()
 
     val (dedupAttributes, argOffsets) = resolveArgOffsets(child.output, groupingAttributes)
@@ -89,7 +91,8 @@ case class FlatMapGroupsInPandasExec(
         Array(argOffsets),
         StructType.fromAttributes(dedupAttributes),
         sessionLocalTimeZone,
-        pythonRunnerConf)
+        pythonRunnerConf,
+        pythonMetrics)
 
       executePython(data, output, runner)
     }}

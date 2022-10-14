@@ -37,7 +37,7 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
  * This is somewhat similar with [[FlatMapGroupsInPandasExec]] and
  * `org.apache.spark.sql.catalyst.plans.logical.MapPartitionsInRWithArrow`
  */
-trait MapInBatchExec extends UnaryExecNode {
+trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
   protected val func: Expression
   protected val pythonEvalType: Int
 
@@ -50,6 +50,8 @@ trait MapInBatchExec extends UnaryExecNode {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override protected def doExecute(): RDD[InternalRow] = {
+    metrics // force lazy init at driver
+
     child.execute().mapPartitionsInternal { inputIter =>
       // Single function with one struct.
       val argOffsets = Array(Array(0))
@@ -75,7 +77,8 @@ trait MapInBatchExec extends UnaryExecNode {
         argOffsets,
         StructType(StructField("struct", outputTypes) :: Nil),
         sessionLocalTimeZone,
-        pythonRunnerConf).compute(batchIter, context.partitionId(), context)
+        pythonRunnerConf,
+        pythonMetrics).compute(batchIter, context.partitionId(), context)
 
       val unsafeProj = UnsafeProjection.create(output, output)
 

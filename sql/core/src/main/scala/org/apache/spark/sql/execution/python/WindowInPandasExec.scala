@@ -84,7 +84,7 @@ case class WindowInPandasExec(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: SparkPlan)
-  extends WindowExecBase {
+  extends WindowExecBase with PythonSQLMetrics {
 
   /**
    * Helper functions and data structures for window bounds
@@ -158,6 +158,8 @@ case class WindowInPandasExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
+    metrics // force lazy init at driver
+
     // Unwrap the expressions and factories from the map.
     val expressionsWithFrameIndex =
       windowFrameExpressionFactoryPairs.map(_._1).zipWithIndex.flatMap {
@@ -375,7 +377,8 @@ case class WindowInPandasExec(
         argOffsets,
         pythonInputSchema,
         sessionLocalTimeZone,
-        pythonRunnerConf).compute(pythonInput, context.partitionId(), context)
+        pythonRunnerConf,
+        pythonMetrics).compute(pythonInput, context.partitionId(), context)
 
       val joined = new JoinedRow
 
