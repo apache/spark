@@ -3444,13 +3444,13 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def resolveUserSpecifiedColumns(i: InsertIntoStatement): Seq[NamedExpression] = {
       SchemaUtils.checkColumnNameDuplication(
         i.userSpecifiedCols, "in the column list", resolver)
-
       i.userSpecifiedCols.map { col =>
         i.table.resolve(Seq(col), resolver).getOrElse {
           val candidates = i.table.output.map(_.name)
           val orderedCandidates = StringUtils.orderStringsBySimilarity(col, candidates)
+          val qualifiedCandidates = orderedCandidates.map(Seq(_))
           throw QueryCompilationErrors
-            .unresolvedAttributeError("UNRESOLVED_COLUMN", col, orderedCandidates, i.origin)
+            .unresolvedAttributeError("UNRESOLVED_COLUMN", col, qualifiedCandidates, i.origin)
         }
       }
     }

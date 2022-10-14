@@ -108,9 +108,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       errorClass: String): Nothing = {
     val missingCol = a.sql
     val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
+    // Because the names are already qualified, do not attempt to parse them again.
     val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
+    val qualifiedCandidates = orderedCandidates.map(Seq(_))
     throw QueryCompilationErrors.unresolvedAttributeError(
-      errorClass, missingCol, orderedCandidates, a.origin)
+      errorClass, missingCol, qualifiedCandidates, a.origin)
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {

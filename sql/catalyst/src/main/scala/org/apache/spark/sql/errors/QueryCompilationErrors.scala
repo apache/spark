@@ -182,7 +182,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def unresolvedAttributeError(
       errorClass: String,
       colName: String,
-      candidates: Seq[String],
+      candidates: Seq[Seq[String]],
       origin: Origin): Throwable = {
     val commonParam = Map("objectName" -> toSQLId(colName))
     val proposalParam = if (candidates.isEmpty) {
