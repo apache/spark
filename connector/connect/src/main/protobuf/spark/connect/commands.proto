@@ -71,7 +71,7 @@ message WriteOperation {
   // The output of the `input` relation will be persisted according to the options.
   Relation input = 1;
   // Format value according to the Spark documentation. Examples are: text, parquet, delta.
-  string format = 2;
+  string source = 2;
   // The destination of the write operation must be either a path or a table.
   oneof save_type {
     string path = 3;
@@ -79,18 +79,18 @@ message WriteOperation {
   }
   SaveMode mode = 5;
   // List of columns to sort the output by.
-  repeated string sortColumnNames = 6;
+  repeated string sort_column_names = 6;
   // List of columns for partitioning.
-  repeated string partitionByColumns = 7;
+  repeated string partitioning_columns = 7;
   // Optional bucketing specification. Bucketing must set the number of buckets and the columns
   // to bucket by.
-  BucketBy bucketBy = 8;
+  BucketBy bucket_by = 8;
   // Optional list of configuration options.
   map<string, string> options = 9;
 
   message BucketBy {
-    repeated string columns = 1;
-    int32 bucketCount = 2;
+    repeated string bucket_column_names = 1;
+    int32 num_buckets = 2;
   }
 
   enum SaveMode {

@@ -83,7 +83,7 @@ package object dsl {
           bucketByCols: Seq[String] = Seq.empty,
           numBuckets: Option[Int] = None): proto.Command = {
         val writeOp = proto.WriteOperation.newBuilder()
-        format.foreach(writeOp.setFormat(_))
+        format.foreach(writeOp.setSource(_))
 
         mode
           .map(SaveMode.valueOf(_))
@@ -96,12 +96,12 @@ package object dsl {
           path.foreach(writeOp.setPath(_))
         }
         sortByColumns.foreach(writeOp.addSortColumnNames(_))
-        partitionByCols.foreach(writeOp.addPartitionByColumns(_))
+        partitionByCols.foreach(writeOp.addPartitioningColumns(_))
 
         if (numBuckets.nonEmpty && bucketByCols.nonEmpty) {
           val op = proto.WriteOperation.BucketBy.newBuilder()
-          numBuckets.foreach(op.setBucketCount(_))
-          bucketByCols.foreach(op.addColumns(_))
+          numBuckets.foreach(op.setNumBuckets(_))
+          bucketByCols.foreach(op.addBucketColumnNames(_))
           writeOp.setBucketBy(op.build())
         }
         writeOp.setInput(logicalPlan)

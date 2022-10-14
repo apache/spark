@@ -114,21 +114,21 @@ class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) 
 
     if (writeOperation.hasBucketBy) {
       val op = writeOperation.getBucketBy
-      val cols = op.getColumnsList.asScala
-      if (op.getBucketCount <= 0) {
+      val cols = op.getBucketColumnNamesList.asScala
+      if (op.getNumBuckets <= 0) {
         throw InvalidCommandInput(
-          s"BucketBy must specify a bucket count > 0, received ${op.getBucketCount} instead.")
+          s"BucketBy must specify a bucket count > 0, received ${op.getNumBuckets} instead.")
       }
-      w.bucketBy(op.getBucketCount, cols.head, cols.tail.toSeq: _*)
+      w.bucketBy(op.getNumBuckets, cols.head, cols.tail.toSeq: _*)
     }
 
-    if (writeOperation.getPartitionByColumnsCount > 0) {
-      val names = writeOperation.getPartitionByColumnsList.asScala
+    if (writeOperation.getPartitioningColumnsCount > 0) {
+      val names = writeOperation.getPartitioningColumnsList.asScala
       w.partitionBy(names.toSeq: _*)
     }
 
-    if (writeOperation.getFormat != null) {
-      w.format(writeOperation.getFormat)
+    if (writeOperation.getSource != null) {
+      w.format(writeOperation.getSource)
     }
 
     writeOperation.getSaveTypeCase match {
@@ -137,8 +137,8 @@ class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) 
         w.saveAsTable(writeOperation.getTableName)
       case _ =>
         throw new UnsupportedOperationException(
-          s"WriteOperation:SaveTypeCase not supported "
-            + "${writeOperation.getSaveTypeCase.getNumber}")
+          "WriteOperation:SaveTypeCase not supported "
+            + s"${writeOperation.getSaveTypeCase.getNumber}")
     }
   }
 

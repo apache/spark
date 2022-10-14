@@ -17,22 +17,19 @@
 
 package org.apache.spark.sql.connect.planner
 
-import java.io.File
 import java.nio.file.{Files, Paths}
 import java.util.UUID
 
-import org.apache.commons.io.FileUtils
-
-import org.apache.spark.{SparkClassNotFoundException, SparkFunSuite}
+import org.apache.spark.SparkClassNotFoundException
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.connect.command.{InvalidCommandInput, SparkConnectCommandPlanner}
 import org.apache.spark.sql.connect.dsl.commands._
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
 class SparkConnectCommandPlannerSuite
-    extends SparkFunSuite
+    extends SQLTestUtils
     with SparkConnectPlanTest
     with SharedSparkSession {
 
@@ -49,27 +46,6 @@ class SparkConnectCommandPlannerSuite
    * @return
    */
   private def table(): String = s"table${UUID.randomUUID().toString.replace("-", "")}"
-
-  /**
-   * Helper method that takes a closure as an argument to handle cleanup of the resource created.
-   * @param thunk
-   */
-  def withTable(thunk: String => Any): Unit = {
-    val name = table()
-    thunk(name)
-    spark.sql(s"drop table if exists ${name}")
-  }
-
-  /**
-   * Helper method that takes a closure as an arugment and handles cleanup of the file system
-   * resource created.
-   * @param thunk
-   */
-  def withPath(thunk: String => Any): Unit = {
-    val name = path()
-    thunk(name)
-    FileUtils.deleteDirectory(new File(name))
-  }
 
   def transform(cmd: proto.Command): Unit = {
     new SparkConnectCommandPlanner(spark, cmd).process()
@@ -107,10 +83,13 @@ class SparkConnectCommandPlannerSuite
   }
 
   test("Write to Path") {
-    withPath { name =>
-      val cmd = localRelation.write(format = Some("parquet"), path = Some(name))
+    withTempDir { f =>
+      val cmd = localRelation.write(
+        format = Some("parquet"),
+        path = Some(f.getPath),
+        mode = Some("Overwrite"))
       transform(cmd)
-      assert(Files.exists(Paths.get(name)), s"Output file must exist: ${name}")
+      assert(Files.exists(Paths.get(f.getPath)), s"Output file must exist: ${f.getPath}")
     }
   }
 
@@ -146,7 +125,7 @@ class SparkConnectCommandPlannerSuite
   }
 
   test("Write to Table") {
-    withTable { name =>
+    withTable(table()) { name: String =>
       val cmd = localRelation.write(format = Some("parquet"), tableName = Some(name))
       transform(cmd)
       // Check that we can find and drop the table.
