@@ -74,12 +74,16 @@ case class AttachDistributedSequenceExec(
       ).stripPrefix("\"").stripSuffix("\"")
     )
 
-    val cachedRDD = if (childRDD.getNumPartitions > 1 && storageLevel != StorageLevel.NONE) {
+    val cachedRDD = if (childRDD.getNumPartitions > 1) {
       // zipWithIndex launches a Spark job when #partition > 1
       if (conf.getConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)) {
-        cached = childRDD.map(_.copy()).persist(storageLevel)
-          .setName(s"Temporary RDD cached in AttachDistributedSequenceExec($id)")
-        cached
+        if (storageLevel != StorageLevel.NONE) {
+          cached = childRDD.map(_.copy()).persist(storageLevel)
+            .setName(s"Temporary RDD cached in AttachDistributedSequenceExec($id)")
+          cached
+        } else {
+          childRDD
+        }
       } else {
         childRDD.map(_.copy()).localCheckpoint()
           .setName(s"Temporary RDD locally checkpointed in AttachDistributedSequenceExec($id)")
