@@ -143,7 +143,7 @@ case class ApproximatePercentile(
         messageParameters = Map(
           "exprName" -> "accuracy",
           "valueRange" -> s"(0, ${Int.MaxValue}]",
-          "currentValue" -> toSQLValue(accuracy)
+          "currentValue" -> toSQLValue(accuracy, LongType)
         )
       )
     } else if (percentages == null) {
@@ -156,7 +156,7 @@ case class ApproximatePercentile(
         messageParameters = Map(
           "exprName" -> "percentage",
           "valueRange" -> "[0.0, 1.0]",
-          "currentValue" -> toSQLValue(percentages)
+          "currentValue" -> toSQLValue(percentages, DoubleType)
         )
       )
     } else {
