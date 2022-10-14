@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import java.util.Locale
+import org.apache.spark.SparkThrowable
 
+import java.util.Locale
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
@@ -33,6 +34,10 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DDLParserSuite extends AnalysisTest {
   import CatalystSqlParser._
+
+  private def parseException(sqlText: String): SparkThrowable = {
+    intercept[ParseException](parsePlan(sqlText))
+  }
 
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
     val e = intercept[ParseException] {
@@ -74,8 +79,11 @@ class DDLParserSuite extends AnalysisTest {
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }
 
-    intercept("CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING) USING parquet",
-      "Syntax error at or near ':': extra input ':'")
+    val sql = "CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING) USING parquet"
+    checkError(
+      exception = parseException(sql),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "':'", "hint" -> ": extra input ':'"))
   }
 
   test("create/replace table - with IF NOT EXISTS") {
@@ -543,10 +551,26 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("Unsupported skew clause - create/replace table") {
-    intercept("CREATE TABLE my_tab (id bigint) SKEWED BY (id) ON (1,2,3)",
-      "CREATE TABLE ... SKEWED BY")
-    intercept("REPLACE TABLE my_tab (id bigint) SKEWED BY (id) ON (1,2,3)",
-      "CREATE TABLE ... SKEWED BY")
+    val sql1 = "CREATE TABLE my_tab (id bigint) SKEWED BY (id) ON (1,2,3)"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "CREATE TABLE ... SKEWED BY"),
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 56))
+
+
+    val sql2 = "REPLACE TABLE my_tab (id bigint) SKEWED BY (id) ON (1,2,3)"
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "CREATE TABLE ... SKEWED BY"),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 57))
   }
 
   test("Duplicate clauses - create/replace table") {
@@ -555,46 +579,188 @@ class DDLParserSuite extends AnalysisTest {
     }
 
     def replaceTableHeader(duplicateClause: String): String = {
-      s"CREATE TABLE my_tab(a INT, b STRING) $duplicateClause $duplicateClause"
+      s"REPLACE TABLE my_tab(a INT, b STRING) $duplicateClause $duplicateClause"
     }
 
-    intercept(createTableHeader("TBLPROPERTIES('test' = 'test2')"),
-      "Found duplicate clauses: TBLPROPERTIES")
-    intercept(createTableHeader("LOCATION '/tmp/file'"),
-      "Found duplicate clauses: LOCATION")
-    intercept(createTableHeader("COMMENT 'a table'"),
-      "Found duplicate clauses: COMMENT")
-    intercept(createTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS"),
-      "Found duplicate clauses: CLUSTERED BY")
-    intercept(createTableHeader("PARTITIONED BY (b)"),
-      "Found duplicate clauses: PARTITIONED BY")
-    intercept(createTableHeader("PARTITIONED BY (c int)"),
-      "Found duplicate clauses: PARTITIONED BY")
-    intercept(createTableHeader("STORED AS parquet"),
-      "Found duplicate clauses: STORED AS")
-    intercept(createTableHeader("STORED AS INPUTFORMAT 'in' OUTPUTFORMAT 'out'"),
-      "Found duplicate clauses: STORED AS")
-    intercept(createTableHeader("ROW FORMAT SERDE 'serde'"),
-      "Found duplicate clauses: ROW FORMAT")
+    val sql1 = createTableHeader("TBLPROPERTIES('test' = 'test2')")
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "TBLPROPERTIES"),
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 99))
 
-    intercept(replaceTableHeader("TBLPROPERTIES('test' = 'test2')"),
-      "Found duplicate clauses: TBLPROPERTIES")
-    intercept(replaceTableHeader("LOCATION '/tmp/file'"),
-      "Found duplicate clauses: LOCATION")
-    intercept(replaceTableHeader("COMMENT 'a table'"),
-      "Found duplicate clauses: COMMENT")
-    intercept(replaceTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS"),
-      "Found duplicate clauses: CLUSTERED BY")
-    intercept(replaceTableHeader("PARTITIONED BY (b)"),
-      "Found duplicate clauses: PARTITIONED BY")
-    intercept(replaceTableHeader("PARTITIONED BY (c int)"),
-      "Found duplicate clauses: PARTITIONED BY")
-    intercept(replaceTableHeader("STORED AS parquet"),
-      "Found duplicate clauses: STORED AS")
-    intercept(replaceTableHeader("STORED AS INPUTFORMAT 'in' OUTPUTFORMAT 'out'"),
-      "Found duplicate clauses: STORED AS")
-    intercept(replaceTableHeader("ROW FORMAT SERDE 'serde'"),
-      "Found duplicate clauses: ROW FORMAT")
+    val sql2 = createTableHeader("LOCATION '/tmp/file'")
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "LOCATION"),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 77))
+
+    val sql3 = createTableHeader("COMMENT 'a table'")
+    checkError(
+      exception = parseException(sql3),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "COMMENT"),
+      context = ExpectedContext(
+        fragment = sql3,
+        start = 0,
+        stop = 71))
+
+    val sql4 = createTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS")
+    checkError(
+      exception = parseException(sql4),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "CLUSTERED BY"),
+      context = ExpectedContext(
+        fragment = sql4,
+        start = 0,
+        stop = 101))
+
+    val sql5 = createTableHeader("PARTITIONED BY (b)")
+    checkError(
+      exception = parseException(sql5),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "PARTITIONED BY"),
+      context = ExpectedContext(
+        fragment = sql5,
+        start = 0,
+        stop = 73))
+
+    val sql6 = createTableHeader("PARTITIONED BY (c int)")
+    checkError(
+      exception = parseException(sql6),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "PARTITIONED BY"),
+      context = ExpectedContext(
+        fragment = sql6,
+        start = 0,
+        stop = 81))
+
+    val sql7 = createTableHeader("STORED AS parquet")
+    checkError(
+      exception = parseException(sql7),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "STORED AS/BY"),
+      context = ExpectedContext(
+        fragment = sql7,
+        start = 0,
+        stop = 71))
+
+    val sql8 = createTableHeader("STORED AS INPUTFORMAT 'in' OUTPUTFORMAT 'out'")
+    checkError(
+      exception = parseException(sql8),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "STORED AS/BY"),
+      context = ExpectedContext(
+        fragment = sql8,
+        start = 0,
+        stop = 127))
+
+    val sql9 = createTableHeader("ROW FORMAT SERDE 'serde'")
+    checkError(
+      exception = parseException(sql9),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "ROW FORMAT"),
+      context = ExpectedContext(
+        fragment = sql9,
+        start = 0,
+        stop = 85))
+
+    val sql10 = replaceTableHeader("TBLPROPERTIES('test' = 'test2')")
+    checkError(
+      exception = parseException(sql10),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "TBLPROPERTIES"),
+      context = ExpectedContext(
+        fragment = sql10,
+        start = 0,
+        stop = 100))
+
+    val sql11 = replaceTableHeader("LOCATION '/tmp/file'")
+    checkError(
+      exception = parseException(sql11),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "LOCATION"),
+      context = ExpectedContext(
+        fragment = sql11,
+        start = 0,
+        stop = 78))
+
+    val sql12 = replaceTableHeader("COMMENT 'a table'")
+    checkError(
+      exception = parseException(sql12),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "COMMENT"),
+      context = ExpectedContext(
+        fragment = sql12,
+        start = 0,
+        stop = 72))
+
+    val sql13 = replaceTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS")
+    checkError(
+      exception = parseException(sql13),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "CLUSTERED BY"),
+      context = ExpectedContext(
+        fragment = sql13,
+        start = 0,
+        stop = 102))
+
+    val sql14 = replaceTableHeader("PARTITIONED BY (b)")
+    checkError(
+      exception = parseException(sql14),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "PARTITIONED BY"),
+      context = ExpectedContext(
+        fragment = sql14,
+        start = 0,
+        stop = 74))
+
+    val sql15 = replaceTableHeader("PARTITIONED BY (c int)")
+    checkError(
+      exception = parseException(sql15),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "PARTITIONED BY"),
+      context = ExpectedContext(
+        fragment = sql15,
+        start = 0,
+        stop = 82))
+
+    val sql16 = replaceTableHeader("STORED AS parquet")
+    checkError(
+      exception = parseException(sql16),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "STORED AS/BY"),
+      context = ExpectedContext(
+        fragment = sql16,
+        start = 0,
+        stop = 72))
+
+    val sql17 = replaceTableHeader("STORED AS INPUTFORMAT 'in' OUTPUTFORMAT 'out'")
+    checkError(
+      exception = parseException(sql17),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "STORED AS/BY"),
+      context = ExpectedContext(
+        fragment = sql17,
+        start = 0,
+        stop = 128))
+
+    val sql18 = replaceTableHeader("ROW FORMAT SERDE 'serde'")
+    checkError(
+      exception = parseException(sql18),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "ROW FORMAT"),
+      context = ExpectedContext(
+        fragment = sql18,
+        start = 0,
+        stop = 86))
   }
 
   test("support for other types in OPTIONS") {
