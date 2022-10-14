@@ -92,10 +92,10 @@ class SparkConnectCommandPlannerSuite
 
   test("Write with sortBy") {
     // Sort by existing column.
-    withTable("testtable") { table: String =>
+    withTable("testtable") {
       transform(
         localRelation.write(
-          tableName = Some(table),
+          tableName = Some("testtable"),
           format = Some("parquet"),
           sortByColumns = Seq("id"),
           bucketByCols = Seq("id"),
@@ -115,11 +115,11 @@ class SparkConnectCommandPlannerSuite
   }
 
   test("Write to Table") {
-    withTable("testtable") { name: String =>
-      val cmd = localRelation.write(format = Some("parquet"), tableName = Some(name))
+    withTable("testtable") {
+      val cmd = localRelation.write(format = Some("parquet"), tableName = Some("testtable"))
       transform(cmd)
       // Check that we can find and drop the table.
-      spark.sql(s"select count(*) from ${name}").collect()
+      spark.sql(s"select count(*) from testtable").collect()
     }
   }
 
