@@ -19,15 +19,7 @@ package org.apache.spark.sql.connect.planner
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.{
-  FullOuter,
-  Inner,
-  LeftAnti,
-  LeftOuter,
-  LeftSemi,
-  PlanTest,
-  RightOuter
-}
+import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 
 /**
