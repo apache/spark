@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttrib
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.types._
 
@@ -61,8 +60,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
       case proto.Relation.RelTypeCase.AGGREGATE => transformAggregate(rel.getAggregate)
       case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
-      case proto.Relation.RelTypeCase.LOCAL_RELATION =>
-        transformLocalRelation(rel.getLocalRelation)
+      case proto.Relation.RelTypeCase.LOCAL_RELATION => transformLocalRelation(rel.getLocalRelation)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -111,10 +109,10 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     // TODO: support the target field for *.
     val projection =
       if (rel.getExpressionsCount == 1 && rel.getExpressions(0).hasUnresolvedStar) {
-        Seq(UnresolvedStar(Option.empty))
-      } else {
-        rel.getExpressionsList.asScala.map(transformExpression).map(UnresolvedAlias(_))
-      }
+      Seq(UnresolvedStar(Option.empty))
+    } else {
+      rel.getExpressionsList.asScala.map(transformExpression).map(UnresolvedAlias(_))
+    }
     val project = logical.Project(projectList = projection.toSeq, child = baseRel)
     if (common.nonEmpty && common.get.getAlias.nonEmpty) {
       logical.SubqueryAlias(identifier = common.get.getAlias, child = project)
@@ -143,7 +141,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
    * Transforms the protocol buffers literals into the appropriate Catalyst literal expression.
    *
    * TODO(SPARK-40533): Missing support for Instant, BigDecimal, LocalDate, LocalTimestamp,
-   * Duration, Period.
+   *   Duration, Period.
    * @param lit
    * @return
    *   Expression
@@ -169,10 +167,9 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       // Days since UNIX epoch.
       case proto.Expression.Literal.LiteralTypeCase.DATE =>
         expressions.Literal(lit.getDate, DateType)
-      case _ =>
-        throw InvalidPlanInput(
-          s"Unsupported Literal Type: ${lit.getLiteralTypeCase.getNumber}" +
-            s"(${lit.getLiteralTypeCase.name})")
+      case _ => throw InvalidPlanInput(
+        s"Unsupported Literal Type: ${lit.getLiteralTypeCase.getNumber}" +
+          s"(${lit.getLiteralTypeCase.name})")
     }
   }
 
@@ -191,8 +188,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
    *
    * TODO(SPARK-40546) We need to homogenize the function names for binary operators.
    *
-   * @param fun
-   *   Proto representation of the function call.
+   * @param fun Proto representation of the function call.
    * @return
    */
   private def transformScalarFunction(fun: proto.Expression.UnresolvedFunction): Expression = {
