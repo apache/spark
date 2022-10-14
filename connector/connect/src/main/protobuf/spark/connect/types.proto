@@ -172,20 +172,17 @@ message DataType {
   message Struct {
     repeated StructField fields = 1;
     uint32 type_variation_reference = 2;
-    bool nullability = 3;
     map<string, google.protobuf.Any> metadata = 4;
   }
 
   message List {
     DataType DataType = 1;
     uint32 type_variation_reference = 2;
-    bool nullability = 3;
   }
 
   message Map {
     DataType key = 1;
     DataType value = 2;
     uint32 type_variation_reference = 3;
-    bool nullability = 4;
   }
 }

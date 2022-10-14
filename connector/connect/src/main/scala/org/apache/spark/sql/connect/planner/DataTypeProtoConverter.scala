@@ -36,7 +36,7 @@ object DataTypeProtoConverter {
   }
 
   private def convertProtoDataTypeToCatalyst(t: proto.DataType.Struct): StructType = {
-    // TODO: handle nullbility
+    // TODO: handle nullability
     val structFields =
       t.getFieldsList.map(f => StructField(f.getName, toCatalystType(f.getType))).toList
     StructType.apply(structFields)
