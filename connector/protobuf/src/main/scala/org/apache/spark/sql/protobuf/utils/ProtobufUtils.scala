@@ -22,13 +22,14 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
-import com.google.protobuf.{DescriptorProtos, Descriptors, InvalidProtocolBufferException}
+import com.google.protobuf.{DescriptorProtos, Descriptors, InvalidProtocolBufferException, Message}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 private[sql] object ProtobufUtils extends Logging {
 
@@ -132,6 +133,50 @@ private[sql] object ProtobufUtils extends Logging {
     }
   }
 
+  /**
+   * Builds Protobuf message descriptor either from the Java class or from serialized descriptor
+   * read from the file.
+   * @param messageName
+   *  Protobuf message name or Java class name.
+   * @param descFilePathOpt
+   *  When the file name set, the descriptor and it's dependencies are read from the file. Other
+   *  the `messageName` is treated as Java class name.
+   * @return
+   */
+  def buildDescriptor(messageName: String, descFilePathOpt: Option[String]): Descriptor = {
+    descFilePathOpt match {
+      case Some(filePath) => buildDescriptor(descFilePath = filePath, messageName)
+      case None => buildDescriptorFromJavaClass(messageName)
+    }
+  }
+
+  /**
+   *  Loads the given protobuf class and returns Protobuf descriptor for it.
+   */
+  def buildDescriptorFromJavaClass(protobufClassName: String): Descriptor = {
+    val protobufClass = try {
+      Utils.classForName(protobufClassName)
+    } catch {
+      case _: ClassNotFoundException =>
+        val hasDots = protobufClassName.contains(".")
+        throw new IllegalArgumentException(
+          s"Could not load Protobuf class with name '$protobufClassName''" +
+          (if (hasDots) "" else ". Ensure the class name includes package prefix.")
+        )
+    }
+
+    if (!protobufClass.isAssignableFrom(classOf[Message])) {
+      throw new IllegalArgumentException(s"$protobufClassName is not a Protobuf Message class")
+      // TODO: Need to support V2. This might work with V2 classes too.
+    }
+
+    // Extract the descriptor from Protobuf message.
+    protobufClass
+      .getDeclaredMethod("getDescriptor")
+      .invoke(null)
+      .asInstanceOf[Descriptor]
+  }
+
   def buildDescriptor(descFilePath: String, messageName: String): Descriptor = {
     val fileDescriptor: Descriptors.FileDescriptor = parseFileDescriptor(descFilePath)
     var result: Descriptors.Descriptor = null;
@@ -148,7 +193,7 @@ private[sql] object ProtobufUtils extends Logging {
     result
   }
 
-  def parseFileDescriptor(descFilePath: String): Descriptors.FileDescriptor = {
+  private def parseFileDescriptor(descFilePath: String): Descriptors.FileDescriptor = {
     var fileDescriptorSet: DescriptorProtos.FileDescriptorSet = null
     try {
       val dscFile = new BufferedInputStream(new FileInputStream(descFilePath))

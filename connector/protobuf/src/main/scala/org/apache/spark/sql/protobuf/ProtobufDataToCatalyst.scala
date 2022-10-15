@@ -31,9 +31,9 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, Struc
 
 private[protobuf] case class ProtobufDataToCatalyst(
     child: Expression,
-    descFilePath: String,
     messageName: String,
-    options: Map[String, String])
+    descFilePath: Option[String] = None,
+    options: Map[String, String] = Map.empty)
     extends UnaryExpression
     with ExpectsInputTypes {
 
@@ -55,10 +55,10 @@ private[protobuf] case class ProtobufDataToCatalyst(
   private lazy val protobufOptions = ProtobufOptions(options)
 
   @transient private lazy val messageDescriptor =
-    ProtobufUtils.buildDescriptor(descFilePath, messageName)
+    ProtobufUtils.buildDescriptor(messageName, descFilePath)
 
   @transient private lazy val fieldsNumbers =
-    messageDescriptor.getFields.asScala.map(f => f.getNumber)
+    messageDescriptor.getFields.asScala.map(f => f.getNumber).toSet
 
   @transient private lazy val deserializer = new ProtobufDeserializer(messageDescriptor, dataType)
 
@@ -108,18 +108,16 @@ private[protobuf] case class ProtobufDataToCatalyst(
     val binary = input.asInstanceOf[Array[Byte]]
     try {
       result = DynamicMessage.parseFrom(messageDescriptor, binary)
-      val unknownFields = result.getUnknownFields
-      if (!unknownFields.asMap().isEmpty) {
-        unknownFields.asMap().keySet().asScala.map { number =>
-          {
-            if (fieldsNumbers.contains(number)) {
-              return handleException(
-                new Throwable(s"Type mismatch encountered for field:" +
-                  s" ${messageDescriptor.getFields.get(number)}"))
-            }
-          }
-        }
+
+      result.getUnknownFields.asMap().keySet().asScala.find(fieldsNumbers.contains(_)) match {
+        case Some(number) =>
+          // Unknown fields contain a field with same number asa known field. Must be due to
+          // mismatch of schema between writer and reader here.
+          throw new IllegalArgumentException(s"Type mismatch encountered for field:" +
+              s" ${messageDescriptor.getFields.get(number)}")
+        case None =>
       }
+
       val deserialized = deserializer.deserialize(result)
       assert(
         deserialized.isDefined,

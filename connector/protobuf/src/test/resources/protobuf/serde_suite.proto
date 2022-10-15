@@ -20,7 +20,7 @@
 
 syntax = "proto3";
 
-package org.apache.spark.sql.protobuf;
+package org.apache.spark.sql.protobuf.testing;
 option java_outer_classname = "SimpleMessageProtos";
 
 /* Clean Message*/
