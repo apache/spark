@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
@@ -38,6 +39,10 @@ class PlanParserSuite extends AnalysisTest {
 
   private def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
     comparePlans(parsePlan(sqlCommand), plan, checkAnalysis = false)
+  }
+
+  private def parseException(sqlText: String): SparkThrowable = {
+    intercept[ParseException](parsePlan(sqlText))
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit =
@@ -182,8 +187,7 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("unclosed bracketed comment one") {
-    val query = """
-                  |/*abc*/
+    val query = """/*abc*/
                   |select 1 as a
                   |/*
                   |
@@ -193,8 +197,10 @@ class PlanParserSuite extends AnalysisTest {
                   |
                   |/**/
                   |""".stripMargin
-    val e = intercept[ParseException](parsePlan(query))
-    assert(e.getMessage.contains(s"Unclosed bracketed comment"))
+    checkError(
+      exception = parseException(query),
+      errorClass = "_LEGACY_ERROR_TEMP_0055",
+      parameters = Map.empty)
   }
 
   test("unclosed bracketed comment two") {
