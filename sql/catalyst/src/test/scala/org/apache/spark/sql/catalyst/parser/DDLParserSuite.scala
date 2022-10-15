@@ -35,17 +35,7 @@ class DDLParserSuite extends AnalysisTest {
   import CatalystSqlParser._
 
   private def parseException(sqlText: String): SparkThrowable = {
-    intercept[ParseException](parsePlan(sqlText))
-  }
-
-  private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
-    val e = intercept[ParseException] {
-      parsePlan(sql)
-    }
-    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
-    containsThesePhrases.foreach { p =>
-      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(p.toLowerCase(Locale.ROOT)))
-    }
+    super.parseException(parsePlan)(sqlText)
   }
 
   private def parseCompare(sql: String, expected: LogicalPlan): Unit = {
@@ -325,23 +315,53 @@ class DDLParserSuite extends AnalysisTest {
 
   test("create/replace table - mixed partition references and column definitions") {
     val createSql = "CREATE TABLE my_tab (id bigint, p1 string) PARTITIONED BY (p1, p2 string)"
+    val value1 =
+      """PARTITION BY: Cannot mix partition expressions and partition columns:
+        |Expressions: p1
+        |Columns: p2 string""".stripMargin
+    checkError(
+      exception = parseException(createSql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> value1),
+      context = ExpectedContext(
+        fragment = createSql,
+        start = 0,
+        stop = 72))
+
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
-    Seq(createSql, replaceSql).foreach { sql =>
-      assertUnsupported(sql, Seq(
-        "PARTITION BY: Cannot mix partition expressions and partition columns",
-        "Expressions: p1",
-        "Columns: p2 string"))
-    }
+    checkError(
+      exception = parseException(replaceSql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> value1),
+      context = ExpectedContext(
+        fragment = replaceSql,
+        start = 0,
+        stop = 73))
 
     val createSqlWithExpr =
       "CREATE TABLE my_tab (id bigint, p1 string) PARTITIONED BY (p2 string, truncate(p1, 16))"
+    val value2 =
+      """PARTITION BY: Cannot mix partition expressions and partition columns:
+        |Expressions: truncate(p1, 16)
+        |Columns: p2 string""".stripMargin
+    checkError(
+      exception = parseException(createSqlWithExpr),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> value2),
+      context = ExpectedContext(
+        fragment = createSqlWithExpr,
+        start = 0,
+        stop = 86))
+
     val replaceSqlWithExpr = createSqlWithExpr.replaceFirst("CREATE", "REPLACE")
-    Seq(createSqlWithExpr, replaceSqlWithExpr).foreach { sql =>
-      assertUnsupported(sql, Seq(
-        "PARTITION BY: Cannot mix partition expressions and partition columns",
-        "Expressions: truncate(p1, 16)",
-        "Columns: p2 string"))
-    }
+    checkError(
+      exception = parseException(replaceSqlWithExpr),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> value2),
+      context = ExpectedContext(
+        fragment = replaceSqlWithExpr,
+        start = 0,
+        stop = 87))
   }
 
   test("create/replace table - stored as") {
@@ -398,12 +418,27 @@ class DDLParserSuite extends AnalysisTest {
          |PARTITIONED BY (part string)
          |STORED AS otherFormat
          |ROW FORMAT SERDE 'customSerde'
-         |WITH SERDEPROPERTIES ('prop'='value')
-         """.stripMargin
+         |WITH SERDEPROPERTIES ('prop'='value')""".stripMargin
+    val value = "ROW FORMAT SERDE is incompatible with format 'otherformat', " +
+      "which also specifies a serde"
+    checkError(
+      exception = parseException(createSql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> value),
+      context = ExpectedContext(
+        fragment = createSql,
+        start = 0,
+        stop = 150))
+
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
-    Seq(createSql, replaceSql).foreach { sql =>
-      assertUnsupported(sql, Seq("ROW FORMAT SERDE is incompatible with format 'otherFormat'"))
-    }
+    checkError(
+      exception = parseException(replaceSql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> value),
+      context = ExpectedContext(
+        fragment = replaceSql,
+        start = 0,
+        stop = 151))
   }
 
   test("create/replace table - stored as format with delimited clauses") {
@@ -440,13 +475,26 @@ class DDLParserSuite extends AnalysisTest {
          |PARTITIONED BY (part string)
          |STORED AS otherFormat
          |ROW FORMAT DELIMITED
-         |FIELDS TERMINATED BY ','
-         """.stripMargin
+         |FIELDS TERMINATED BY ','""".stripMargin
+    val value = "ROW FORMAT DELIMITED is only compatible with 'textfile', not 'otherformat'"
+    checkError(
+      exception = parseException(createFailSql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> value),
+      context = ExpectedContext(
+        fragment = createFailSql,
+        start = 0,
+        stop = 127))
+
     val replaceFailSql = createFailSql.replaceFirst("CREATE", "REPLACE")
-    Seq(createFailSql, replaceFailSql).foreach { sql =>
-      assertUnsupported(sql, Seq(
-        "ROW FORMAT DELIMITED is only compatible with 'textfile', not 'otherFormat'"))
-    }
+    checkError(
+      exception = parseException(replaceFailSql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> value),
+      context = ExpectedContext(
+        fragment = replaceFailSql,
+        start = 0,
+        stop = 128))
   }
 
   test("create/replace table - stored as inputformat/outputformat") {
@@ -500,47 +548,100 @@ class DDLParserSuite extends AnalysisTest {
     val createSql =
       """CREATE TABLE my_tab (id bigint, part string)
         |USING parquet
-        |STORED AS parquet
-        """.stripMargin
-    assertUnsupported(createSql, Seq("CREATE TABLE ... USING ... STORED AS"))
+        |STORED AS parquet""".stripMargin
+    checkError(
+      exception = parseException(createSql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "CREATE TABLE ... USING ... STORED AS parquet "),
+      context = ExpectedContext(
+        fragment = createSql,
+        start = 0,
+        stop = 75))
 
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
-    assertUnsupported(replaceSql, Seq("REPLACE TABLE ... USING ... STORED AS"))
+    checkError(
+      exception = parseException(replaceSql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "REPLACE TABLE ... USING ... STORED AS parquet "),
+      context = ExpectedContext(
+        fragment = replaceSql,
+        start = 0,
+        stop = 76))
   }
 
   test("create/replace table - using with row format serde") {
     val createSql =
       """CREATE TABLE my_tab (id bigint, part string)
         |USING parquet
-        |ROW FORMAT SERDE 'customSerde'
-        """.stripMargin
-    assertUnsupported(createSql, Seq("CREATE TABLE ... USING ... ROW FORMAT SERDE"))
+        |ROW FORMAT SERDE 'customSerde'""".stripMargin
+    checkError(
+      exception = parseException(createSql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "CREATE TABLE ... USING ... ROW FORMAT SERDE customSerde"),
+      context = ExpectedContext(
+        fragment = createSql,
+        start = 0,
+        stop = 88))
 
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
-    assertUnsupported(replaceSql, Seq("REPLACE TABLE ... USING ... ROW FORMAT SERDE"))
+    checkError(
+      exception = parseException(replaceSql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "REPLACE TABLE ... USING ... ROW FORMAT SERDE customSerde"),
+      context = ExpectedContext(
+        fragment = replaceSql,
+        start = 0,
+        stop = 89))
   }
 
   test("create/replace table - using with row format delimited") {
     val createSql =
       """CREATE TABLE my_tab (id bigint, part string)
         |USING parquet
-        |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-        """.stripMargin
-    assertUnsupported(createSql, Seq("CREATE TABLE ... USING ... ROW FORMAT DELIMITED"))
+        |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','""".stripMargin
+    checkError(
+      exception = parseException(createSql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "CREATE TABLE ... USING ... ROW FORMAT DELIMITED"),
+      context = ExpectedContext(
+        fragment = createSql,
+        start = 0,
+        stop = 103))
 
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
-    assertUnsupported(replaceSql, Seq("REPLACE TABLE ... USING ... ROW FORMAT DELIMITED"))
+    checkError(
+      exception = parseException(replaceSql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "REPLACE TABLE ... USING ... ROW FORMAT DELIMITED"),
+      context = ExpectedContext(
+        fragment = replaceSql,
+        start = 0,
+        stop = 104))
   }
 
   test("create/replace table - stored by") {
     val createSql =
       """CREATE TABLE my_tab (id bigint, p1 string)
-        |STORED BY 'handler'
-        """.stripMargin
+        |STORED BY 'handler'""".stripMargin
+    val fragment = "STORED BY 'handler'"
+    checkError(
+      exception = parseException(createSql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "STORED BY"),
+      context = ExpectedContext(
+        fragment = fragment,
+        start = 43,
+        stop = 61))
+
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
-    Seq(createSql, replaceSql).foreach { sql =>
-      assertUnsupported(sql, Seq("stored by"))
-    }
+    checkError(
+      exception = parseException(replaceSql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "STORED BY"),
+      context = ExpectedContext(
+        fragment = fragment,
+        start = 44,
+        stop = 62))
   }
 
   test("Unsupported skew clause - create/replace table") {
@@ -553,7 +654,6 @@ class DDLParserSuite extends AnalysisTest {
         fragment = sql1,
         start = 0,
         stop = 56))
-
 
     val sql2 = "REPLACE TABLE my_tab (id bigint) SKEWED BY (id) ON (1,2,3)"
     checkError(
@@ -2142,12 +2242,18 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("alter view: add partition (not supported)") {
-    assertUnsupported(
-      """
-        |ALTER VIEW a.b.c ADD IF NOT EXISTS PARTITION
+    val sql =
+      """ALTER VIEW a.b.c ADD IF NOT EXISTS PARTITION
         |(dt='2008-08-08', country='us') PARTITION
-        |(dt='2009-09-09', country='uk')
-      """.stripMargin)
+        |(dt='2009-09-09', country='uk')""".stripMargin
+    checkError(
+      exception = parseException(sql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER VIEW ... ADD PARTITION"),
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 117))
   }
 
   test("alter view: AS Query") {
