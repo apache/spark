@@ -56,8 +56,8 @@ trait AlterTableTests extends SharedSparkSession {
       }
 
       checkErrorTableNotFound(exc, quoted,
-        ExpectedContext("${catalogAndNamespace}table_name", 12,
-          11 + "${catalogAndNamespace}table_name".length))
+        ExpectedContext(s"${catalogAndNamespace}table_name", 12,
+          11 + s"${catalogAndNamespace}table_name".length))
     }
   }
 

@@ -40,6 +40,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
 
   protected def viewTypeString: String
   protected def formattedViewName(viewName: String): String
+  protected def fullyQualifiedViewName(viewName: String): String
   protected def tableIdentifier(viewName: String): TableIdentifier
 
   def createView(
@@ -278,7 +279,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("SPARK-34490 - query should fail if the view refers a dropped table") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      val viewName = createView("testView", "SELECT * FROM t")
+      val viewName = createView("testview", "SELECT * FROM t")
       withView(viewName) {
         // Always create a temp view in this case, not use `createView` on purpose
         sql("CREATE TEMP VIEW t AS SELECT 1 AS c1")
@@ -290,7 +291,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
             sql(s"SELECT * FROM $viewName").collect()
           }
           checkErrorTableNotFound(e, "`t`",
-            ExpectedContext("VIEW", viewName, 14, 14, "t"))
+            ExpectedContext("VIEW", fullyQualifiedViewName("testview"), 14, 14, "t"))
         }
       }
     }
@@ -469,6 +470,7 @@ abstract class TempViewTestSuite extends SQLViewTestSuite {
 class LocalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession {
   override protected def viewTypeString: String = "TEMPORARY VIEW"
   override protected def formattedViewName(viewName: String): String = viewName
+  override protected def fullyQualifiedViewName(viewName: String): String = viewName
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
     TableIdentifier(viewName)
   }
@@ -481,6 +483,9 @@ class GlobalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession 
   private def db: String = spark.sharedState.globalTempViewManager.database
   override protected def viewTypeString: String = "GLOBAL TEMPORARY VIEW"
   override protected def formattedViewName(viewName: String): String = {
+    s"$db.$viewName"
+  }
+  override protected def fullyQualifiedViewName(viewName: String): String = {
     s"$db.$viewName"
   }
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
@@ -509,6 +514,8 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   private def db: String = "default"
   override protected def viewTypeString: String = "VIEW"
   override protected def formattedViewName(viewName: String): String = s"$db.$viewName"
+  override protected def fullyQualifiedViewName(viewName: String): String =
+    s"spark_catalog.$db.$viewName"
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
     TableIdentifier(viewName, Some(db), Some(SESSION_CATALOG_NAME))
   }

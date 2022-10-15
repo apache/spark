@@ -44,22 +44,19 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
       // try table/view in current database, which is "default" in this case. So we expect
       // NoSuchTableException here.
       var e = intercept[AnalysisException](spark.table("src"))
-      checkErrorTableNotFound(e, "`src`",
-        ExpectedContext("src", 24, 26))
+      checkErrorTableNotFound(e, "`src`")
 
       // Use qualified name to refer to the global temp view explicitly.
       checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a"))
 
       // Table name without database will never refer to a global temp view.
       e = intercept[AnalysisException](sql("DROP VIEW src"))
-      checkErrorTableNotFound(e, "`spark_catalog`.`default`.`src`",
-        ExpectedContext("src", 10, 12))
+      checkErrorTableNotFound(e, "`spark_catalog`.`default`.`src`")
 
       sql(s"DROP VIEW $globalTempDB.src")
       // The global temp view should be dropped successfully.
       e = intercept[AnalysisException](spark.table(s"$globalTempDB.src"))
-      checkErrorTableNotFound(e, "`global_temp`.`src`",
-        ExpectedContext(s"$globalTempDB.src", 10, 9 + s"$globalTempDB.src".length))
+      checkErrorTableNotFound(e, "`global_temp`.`src`")
 
       // We can also use Dataset API to create global temp view
       Seq(1 -> "a").toDF("i", "j").createGlobalTempView("src")
@@ -68,8 +65,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
       // Use qualified name to rename a global temp view.
       sql(s"ALTER VIEW $globalTempDB.src RENAME TO src2")
       e = intercept[AnalysisException](spark.table(s"$globalTempDB.src"))
-      checkErrorTableNotFound(e, "`global_temp`.`src`",
-        ExpectedContext(s"$globalTempDB.src", 11, 10 + s"$globalTempDB.src".length))
+      checkErrorTableNotFound(e, "`global_temp`.`src`")
       checkAnswer(spark.table(s"$globalTempDB.src2"), Row(1, "a"))
 
       // Use qualified name to alter a global temp view.
@@ -79,8 +75,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
       // We can also use Catalog API to drop global temp view
       spark.catalog.dropGlobalTempView("src2")
       e = intercept[AnalysisException](spark.table(s"$globalTempDB.src2"))
-      checkErrorTableNotFound(e, "`global_temp`.`src2`",
-        ExpectedContext(s"$globalTempDB.src2", 10, 9 + s"$globalTempDB.src2".length))
+      checkErrorTableNotFound(e, "`global_temp`.`src2`")
 
       // We can also use Dataset API to replace global temp view
       Seq(2 -> "b").toDF("i", "j").createOrReplaceGlobalTempView("src")

@@ -771,7 +771,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         spark.sql(
           """
             |INSERT INTO TABLE tab2 PARTITION(first)
-            |SELECT word, length, cast(first as string) as first FRy_OM tab1
+            |SELECT word, length, cast(first as string) as first FROM tab1
           """.stripMargin)
 
         checkAnswer(spark.table("tab2"), Row("a", 3, "b"))
