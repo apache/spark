@@ -19,7 +19,7 @@ package org.apache.spark.sql.types
 
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
@@ -60,11 +60,11 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     checkDecimal(Decimal(1000000000000000000L, 20, 2), "10000000000000000.00", 20, 2)
     checkDecimal(Decimal(Long.MaxValue), Long.MaxValue.toString, 20, 0)
     checkDecimal(Decimal(Long.MinValue), Long.MinValue.toString, 20, 0)
-    intercept[ArithmeticException](Decimal(170L, 2, 1))
-    intercept[ArithmeticException](Decimal(170L, 2, 0))
-    intercept[ArithmeticException](Decimal(BigDecimal("10.030"), 2, 1))
-    intercept[ArithmeticException](Decimal(BigDecimal("-9.95"), 2, 1))
-    intercept[ArithmeticException](Decimal(1e17.toLong, 17, 0))
+    intercept[SparkArithmeticException](Decimal(170L, 2, 1))
+    intercept[SparkArithmeticException](Decimal(170L, 2, 0))
+    intercept[SparkArithmeticException](Decimal(BigDecimal("10.030"), 2, 1))
+    intercept[SparkArithmeticException](Decimal(BigDecimal("-9.95"), 2, 1))
+    intercept[SparkArithmeticException](Decimal(1e17.toLong, 17, 0))
   }
 
   test("creating decimals with negative scale under legacy mode") {
@@ -294,7 +294,8 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
     def checkOutOfRangeFromString(string: String): Unit = {
       assert(Decimal.fromString(UTF8String.fromString(string)) === null)
-      val e = intercept[ArithmeticException](Decimal.fromStringANSI(UTF8String.fromString(string)))
+      val e = intercept[SparkArithmeticException](
+        Decimal.fromStringANSI(UTF8String.fromString(string)))
       assert(e.getMessage.contains("out of decimal type range"))
     }
 
@@ -333,7 +334,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     val values = Array("7.836725755512218E38")
     for (string <- values) {
       assert(Decimal.fromString(UTF8String.fromString(string)) === null)
-      intercept[ArithmeticException](Decimal.fromStringANSI(UTF8String.fromString(string)))
+      intercept[SparkArithmeticException](Decimal.fromStringANSI(UTF8String.fromString(string)))
     }
 
     withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {

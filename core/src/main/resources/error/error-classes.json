@@ -293,6 +293,11 @@
     ],
     "sqlState" : "23000"
   },
+  "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION" : {
+    "message" : [
+      "Decimal precision <precision> exceeds max precision <maxPrecision>"
+    ]
+  },
   "ELEMENT_AT_BY_INDEX_ZERO" : {
     "message" : [
       "The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1)."
@@ -444,6 +449,11 @@
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead."
     ],
     "sqlState" : "22012"
+  },
+  "INTEGER_OVERFLOW" : {
+    "message" : [
+      "Integer overflow. <message>"
+    ]
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [
@@ -604,6 +614,11 @@
       "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22005"
+  },
+  "OUT_OF_DECIMAL_TYPE_RANGE" : {
+    "message" : [
+      "out of decimal type range: <value>"
+    ]
   },
   "PARSE_CHAR_MISSING_LENGTH" : {
     "message" : [
@@ -1097,6 +1112,11 @@
       "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`",
       "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive",
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution"
+    ]
+  },
+  "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION" : {
+    "message" : [
+      "Unscaled value too large for precision. If necessary set <ANSIEnabled> to false to bypass this error."
     ]
   },
   "_LEGACY_ERROR_TEMP_0001" : {
@@ -3705,21 +3725,6 @@
   "_LEGACY_ERROR_TEMP_2116" : {
     "message" : [
       "Unexpected: <o>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2117" : {
-    "message" : [
-      "Unscaled value too large for precision. If necessary set <ansiConfig> to false to bypass this error."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2118" : {
-    "message" : [
-      "Decimal precision <precision> exceeds max precision <maxPrecision>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2119" : {
-    "message" : [
-      "out of decimal type range: <str>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2120" : {

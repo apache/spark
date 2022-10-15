@@ -1258,29 +1258,31 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("o" -> o.toString()))
   }
 
-  def unscaledValueTooLargeForPrecisionError(): SparkArithmeticException = {
+  def unscaledValueTooLargeForPrecisionError(): Throwable = {
     new SparkArithmeticException(
-      errorClass = "_LEGACY_ERROR_TEMP_2117",
-      messageParameters = Map("ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = Array.empty,
-      summary = "")
-  }
-
-  def decimalPrecisionExceedsMaxPrecisionError(
-      precision: Int, maxPrecision: Int): SparkArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "_LEGACY_ERROR_TEMP_2118",
+      errorClass = "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION",
       messageParameters = Map(
-        "precision" -> precision.toString(),
-        "maxPrecision" -> maxPrecision.toString()),
+        "ANSIEnabled" -> SQLConf.ANSI_ENABLED.key),
       context = Array.empty,
       summary = "")
   }
 
-  def outOfDecimalTypeRangeError(str: UTF8String): SparkArithmeticException = {
+  def decimalPrecisionExceedsMaxPrecisionError(precision: Int, maxPrecision: Int): Throwable = {
+      new SparkArithmeticException(
+        errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+        messageParameters = Map(
+          "precision" -> precision.toString,
+          "maxPrecision" -> maxPrecision.toString
+        ),
+        context = Array.empty,
+        summary = "")
+  }
+
+  def outOfDecimalTypeRangeError(str: UTF8String): Throwable = {
     new SparkArithmeticException(
-      errorClass = "_LEGACY_ERROR_TEMP_2119",
-      messageParameters = Map("str" -> str.toString()),
+      errorClass = "OUT_OF_DECIMAL_TYPE_RANGE",
+      messageParameters = Map(
+        "value" -> str.toString),
       context = Array.empty,
       summary = "")
   }
@@ -2385,7 +2387,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def integerOverflowError(message: String): Throwable = {
-    new ArithmeticException(s"Integer overflow. $message")
+    new SparkArithmeticException(
+      errorClass = "INTEGER_OVERFLOW",
+      messageParameters = Map(
+        "message" -> message
+      ),
+      context = Array.empty,
+      summary = "")
   }
 
   def failedToReadDeltaFileError(fileToRead: Path, clazz: String, keySize: Int): Throwable = {
