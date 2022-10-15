@@ -105,23 +105,23 @@ class ColumnRef(Expression):
         """Returns the qualified name of the column reference."""
         return ".".join(self._parts)
 
-    __gt__ = _bin_op("gt")
-    __lt__ = _bin_op("lt")
-    __add__ = _bin_op("plus")
-    __sub__ = _bin_op("minus")
-    __mul__ = _bin_op("multiply")
-    __div__ = _bin_op("divide")
-    __truediv__ = _bin_op("divide")
-    __mod__ = _bin_op("modulo")
-    __radd__ = _bin_op("plus", reverse=True)
-    __rsub__ = _bin_op("minus", reverse=True)
-    __rmul__ = _bin_op("multiply", reverse=True)
-    __rdiv__ = _bin_op("divide", reverse=True)
-    __rtruediv__ = _bin_op("divide", reverse=True)
+    __gt__ = _bin_op(">")
+    __lt__ = _bin_op(">")
+    __add__ = _bin_op("+")
+    __sub__ = _bin_op("-")
+    __mul__ = _bin_op("*")
+    __div__ = _bin_op("/")
+    __truediv__ = _bin_op("/")
+    __mod__ = _bin_op("%")
+    __radd__ = _bin_op("+", reverse=True)
+    __rsub__ = _bin_op("-", reverse=True)
+    __rmul__ = _bin_op("*", reverse=True)
+    __rdiv__ = _bin_op("/", reverse=True)
+    __rtruediv__ = _bin_op("/", reverse=True)
     __pow__ = _bin_op("pow")
     __rpow__ = _bin_op("pow", reverse=True)
-    __ge__ = _bin_op("greterEquals")
-    __le__ = _bin_op("lessEquals")
+    __ge__ = _bin_op(">=")
+    __le__ = _bin_op("<=")
 
     def __eq__(self, other: Any) -> Expression:  # type: ignore[override]
         """Returns a binary expression with the current column as the left
@@ -129,7 +129,7 @@ class ColumnRef(Expression):
         """
         if isinstance(other, get_args(PrimitiveType)):
             other = LiteralExpression(other)
-        return ScalarFunctionExpression("eq", self, other)
+        return ScalarFunctionExpression("==", self, other)
 
     def to_plan(self, session: Optional["RemoteSparkSession"]) -> proto.Expression:
         """Returns the Proto representation of the expression."""
@@ -161,7 +161,7 @@ class SortOrder(Expression):
         return self.ref.to_plan(session)
 
 
-class ScalarFunctionExpression(Expression):
+class ScalarFunctionExpression(ColumnRef):
     def __init__(
         self,
         op: str,
