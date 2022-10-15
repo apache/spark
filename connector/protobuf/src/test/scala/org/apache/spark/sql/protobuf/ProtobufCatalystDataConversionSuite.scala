@@ -37,7 +37,7 @@ class ProtobufCatalystDataConversionSuite
     with ExpressionEvalHelper {
 
   private val testFileDesc = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
-  private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.CatalystTypes"
+  private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.CatalystTypes$"
 
   private def checkResultWithEval(
       data: Literal,
@@ -45,15 +45,15 @@ class ProtobufCatalystDataConversionSuite
       messageName: String,
       expected: Any): Unit = {
 
-    withClue("checkResult with Java class name") {
+    withClue("Eval check with Java class name") {
       checkEvaluation(
         ProtobufDataToCatalyst(
-          CatalystDataToProtobuf(data, descFilePath, messageName),
-          s"$javaClassNamePrefix.$messageName",
+          CatalystDataToProtobuf(data, descFilePath, messageName), // XXX Fix this.
+          s"$javaClassNamePrefix$messageName",
           descFilePath = None),
         prepareExpectedResult(expected))
     }
-    withClue("checkResult with descriptor file") {
+    withClue("Eval check with descriptor file") {
       checkEvaluation(
         ProtobufDataToCatalyst(
           CatalystDataToProtobuf(data, descFilePath, messageName),
@@ -114,25 +114,32 @@ class ProtobufCatalystDataConversionSuite
     StructType(StructField("bytes_type", BinaryType, nullable = true) :: Nil),
     StructType(StructField("string_type", StringType, nullable = true) :: Nil))
 
-  private val catalystTypesToProtoMessages: Map[DataType, String] = Map(
-    IntegerType -> "IntegerMsg",
-    DoubleType -> "DoubleMsg",
-    FloatType -> "FloatMsg",
-    BinaryType -> "BytesMsg",
-    StringType -> "StringMsg")
+  private val catalystTypesToProtoMessages: Map[DataType, (String, Any)] = Map(
+    IntegerType -> ("IntegerMsg", 0),
+    DoubleType -> ("DoubleMsg", 0.0),
+    FloatType -> ("FloatMsg", 0.0),
+    BinaryType -> ("BytesMsg", ByteString.empty().toByteArray),
+    StringType -> ("StringMsg", ""))
 
   testingTypes.foreach { dt =>
     val seed = 1 + scala.util.Random.nextInt((1024 - 1) + 1)
     test(s"single $dt with seed $seed") {
+
+      val (messageName, defaultValue) = catalystTypesToProtoMessages(dt.fields(0).dataType)
+
       val rand = new scala.util.Random(seed)
-      val data = RandomDataGenerator.forType(dt, rand = rand).get.apply()
+      val generator = RandomDataGenerator.forType(dt, rand = rand).get
+      var data = generator()
+      while (data == defaultValue)  // Do not use default. from_protobuf() might return null.
+        data = generator.apply()
+
       val converter = CatalystTypeConverters.createToCatalystConverter(dt)
       val input = Literal.create(converter(data), dt)
 
       checkResultWithEval(
         input,
         testFileDesc,
-        catalystTypesToProtoMessages(dt.fields(0).dataType),
+        messageName,
         input.eval())
     }
   }
@@ -154,7 +161,7 @@ class ProtobufCatalystDataConversionSuite
 
     // Verify Java class deserializer matches with descriptor based serializer.
     val javaDescriptor = ProtobufUtils
-      .buildDescriptorFromJavaClass(s"$javaClassNamePrefix$$$messageName")
+      .buildDescriptorFromJavaClass(s"$javaClassNamePrefix$messageName")
     assert(dataType == SchemaConverters.toSqlType(javaDescriptor).dataType)
     val javaDeserialized = new ProtobufDeserializer(javaDescriptor, dataType, filters)
       .deserialize(DynamicMessage.parseFrom(javaDescriptor, data.toByteArray))
