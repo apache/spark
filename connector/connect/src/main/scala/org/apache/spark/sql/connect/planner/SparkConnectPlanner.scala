@@ -179,10 +179,6 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       limitExpr = expressions.Literal(limit.getLimit, IntegerType))
   }
 
-  private def lookupFunction(name: String, args: Seq[Expression]): Expression = {
-    UnresolvedFunction(Seq(name), args, isDistinct = false)
-  }
-
   /**
    * Translates a scalar function from proto to the Catalyst expression.
    *
@@ -193,20 +189,10 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
    */
   private def transformScalarFunction(fun: proto.Expression.UnresolvedFunction): Expression = {
     val funName = fun.getPartsList.asScala.mkString(".")
-    funName match {
-      case "gt" =>
-        assert(fun.getArgumentsCount == 2, "`gt` function must have two arguments.")
-        expressions.GreaterThan(
-          transformExpression(fun.getArguments(0)),
-          transformExpression(fun.getArguments(1)))
-      case "eq" =>
-        assert(fun.getArgumentsCount == 2, "`eq` function must have two arguments.")
-        expressions.EqualTo(
-          transformExpression(fun.getArguments(0)),
-          transformExpression(fun.getArguments(1)))
-      case _ =>
-        lookupFunction(funName, fun.getArgumentsList.asScala.map(transformExpression).toSeq)
-    }
+    UnresolvedFunction(
+      Seq(funName),
+      fun.getArgumentsList.asScala.map(transformExpression).toSeq,
+      isDistinct = false)
   }
 
   private def transformAlias(alias: proto.Expression.Alias): Expression = {
