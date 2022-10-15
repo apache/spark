@@ -185,10 +185,17 @@ case class SchemaOfCsv(
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.foldable && csv != null) {
       super.checkInputDataTypes()
-    } else {
+    } else if (!child.foldable) {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map("inputExpr" -> toSQLExpr(child)))
+        messageParameters = Map(
+          "inputName" -> "csv",
+          "inputType" -> toSQLType(child.dataType),
+          "inputExpr" -> toSQLExpr(child)))
+    } else {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "csv"))
     }
   }
 
