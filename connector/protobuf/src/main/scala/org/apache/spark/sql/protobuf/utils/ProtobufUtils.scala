@@ -160,13 +160,13 @@ private[sql] object ProtobufUtils extends Logging {
       case _: ClassNotFoundException =>
         val hasDots = protobufClassName.contains(".")
         throw new IllegalArgumentException(
-          s"Could not load Protobuf class with name '$protobufClassName''" +
+          s"Could not load Protobuf class with name '$protobufClassName'" +
           (if (hasDots) "" else ". Ensure the class name includes package prefix.")
         )
     }
 
-    if (!protobufClass.isAssignableFrom(classOf[Message])) {
-      throw new IllegalArgumentException(s"$protobufClassName is not a Protobuf Message class")
+    if (!classOf[Message].isAssignableFrom(protobufClass)) {
+      throw new IllegalArgumentException(s"$protobufClassName is not a Protobuf message type")
       // TODO: Need to support V2. This might work with V2 classes too.
     }
 

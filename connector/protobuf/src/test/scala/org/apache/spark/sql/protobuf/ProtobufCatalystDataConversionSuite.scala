@@ -18,12 +18,13 @@
 package org.apache.spark.sql.protobuf
 
 import com.google.protobuf.{ByteString, DynamicMessage, Message}
-
 import org.apache.spark.SparkFunSuite
+
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters, OrderedFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+import org.apache.spark.sql.protobuf.protos.CatalystTypes.BytesMsg
 import org.apache.spark.sql.protobuf.utils.{ProtobufUtils, SchemaConverters}
 import org.apache.spark.sql.sources.{EqualTo, Not}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -36,19 +37,30 @@ class ProtobufCatalystDataConversionSuite
     with ExpressionEvalHelper {
 
   private val testFileDesc = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
+  private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.CatalystTypes"
 
-  private def checkResult(
+  private def checkResultWithEval(
       data: Literal,
       descFilePath: String,
       messageName: String,
       expected: Any): Unit = {
-    checkEvaluation(
-      ProtobufDataToCatalyst(
-        CatalystDataToProtobuf(data, descFilePath, messageName),
-        messageName,
-        Some(descFilePath),
-        Map.empty),
-      prepareExpectedResult(expected))
+
+    withClue("checkResult with Java class name") {
+      checkEvaluation(
+        ProtobufDataToCatalyst(
+          CatalystDataToProtobuf(data, descFilePath, messageName),
+          s"$javaClassNamePrefix.$messageName",
+          descFilePath = None),
+        prepareExpectedResult(expected))
+    }
+    withClue("checkResult with descriptor file") {
+      checkEvaluation(
+        ProtobufDataToCatalyst(
+          CatalystDataToProtobuf(data, descFilePath, messageName),
+          messageName,
+          descFilePath = Some(descFilePath)),
+        prepareExpectedResult(expected))
+    }
   }
 
   protected def checkUnsupportedRead(
@@ -117,7 +129,7 @@ class ProtobufCatalystDataConversionSuite
       val converter = CatalystTypeConverters.createToCatalystConverter(dt)
       val input = Literal.create(converter(data), dt)
 
-      checkResult(
+      checkResultWithEval(
         input,
         testFileDesc,
         catalystTypesToProtoMessages(dt.fields(0).dataType),
@@ -139,6 +151,15 @@ class ProtobufCatalystDataConversionSuite
 
     val dynMsg = DynamicMessage.parseFrom(descriptor, data.toByteArray)
     val deserialized = deserializer.deserialize(dynMsg)
+
+    // Verify Java class deserializer matches with descriptor based serializer.
+    val javaDescriptor = ProtobufUtils
+      .buildDescriptorFromJavaClass(s"$javaClassNamePrefix$$$messageName")
+    assert(dataType == SchemaConverters.toSqlType(javaDescriptor).dataType)
+    val javaDeserialized = new ProtobufDeserializer(javaDescriptor, dataType, filters)
+      .deserialize(DynamicMessage.parseFrom(javaDescriptor, data.toByteArray))
+    assert(deserialized == javaDeserialized)
+
     expected match {
       case None => assert(deserialized.isEmpty)
       case Some(d) =>
@@ -198,14 +219,12 @@ class ProtobufCatalystDataConversionSuite
 
     val bb = java.nio.ByteBuffer.wrap(Array[Byte](97, 48, 53))
 
-    val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "BytesMsg")
-
-    val dynamicMessage = DynamicMessage
-      .newBuilder(descriptor)
-      .setField(descriptor.findFieldByName("bytes_type"), ByteString.copyFrom(bb))
+    val bytesProto = BytesMsg
+      .newBuilder()
+      .setBytesType(ByteString.copyFrom(bb))
       .build()
 
     val expected = InternalRow(Array[Byte](97, 48, 53))
-    checkDeserialization(testFileDesc, "BytesMsg", dynamicMessage, Some(expected))
+    checkDeserialization(testFileDesc, "BytesMsg", bytesProto, Some(expected))
   }
 }

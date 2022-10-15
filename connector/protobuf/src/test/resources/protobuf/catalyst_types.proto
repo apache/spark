@@ -19,7 +19,7 @@
 
 syntax = "proto3";
 
-package org.apache.spark.sql.protobuf.testing;
+package org.apache.spark.sql.protobuf.protos;
 option java_outer_classname = "CatalystTypes";
 
 // TODO: import one or more protobuf files.
