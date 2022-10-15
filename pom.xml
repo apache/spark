@@ -101,6 +101,7 @@
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
     <module>connector/connect</module>
+    <module>connector/protobuf</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -173,7 +174,7 @@
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.13.4</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.13.4</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.databind.version>2.13.4.1</fasterxml.jackson.databind.version>
     <snappy.version>1.1.8.4</snappy.version>
     <netlib.ludovic.dev.version>3.0.2</netlib.ludovic.dev.version>
     <it.unimi.dsi.fastutil.version>8.5.8</it.unimi.dsi.fastutil.version>
@@ -208,7 +209,7 @@
     <!-- When upgrading `netty.version`, need to check whether
          the version of `netty-tcnative-classes.version` also needs to be upgraded
     -->
-    <netty.version>4.1.80.Final</netty.version>
+    <netty.version>4.1.84.Final</netty.version>
     <netty-tcnative-classes.version>2.0.54.Final</netty-tcnative-classes.version>
     <!--
     If you are changing Arrow version specification, please check
@@ -313,6 +314,7 @@
       --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
       --add-opens=java.base/sun.security.action=ALL-UNNAMED
       --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
+      -Djdk.reflect.useDirectMethodHandle=false
     </extraJavaTestArgs>
   </properties>
   <repositories>
@@ -846,14 +848,6 @@
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
-            <artifactId>netty-codec-http</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-codec-http2</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
             <artifactId>netty-codec-memcache</artifactId>
           </exclusion>
           <exclusion>
@@ -870,19 +864,11 @@
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
-            <artifactId>netty-codec-socks</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
             <artifactId>netty-codec-stomp</artifactId>
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
             <artifactId>netty-codec-xml</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-handler-proxy</artifactId>
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -3105,6 +3091,9 @@
               </fileset>
               <fileset>
                 <directory>spark-warehouse</directory>
+              </fileset>
+              <fileset>
+                <directory>dist</directory>
               </fileset>
             </filesets>
           </configuration>

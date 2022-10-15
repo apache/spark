@@ -1003,25 +1003,61 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df3.selectExpr("map_concat(map1, map2)"), expected3)
     checkAnswer(df3.select(map_concat($"map1", $"map2")), expected3)
 
-    val expectedMessage1 = "input to function map_concat should all be the same type"
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.selectExpr("map_concat(map1, map2)").collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"map_concat(map1, map2)\"",
+        "dataType" -> "(\"MAP<ARRAY<INT>, INT>\" or \"MAP<STRING, INT>\")",
+        "functionName" -> "function map_concat"),
+      context = ExpectedContext(
+        fragment = "map_concat(map1, map2)",
+        start = 0,
+        stop = 21)
+    )
 
-    assert(intercept[AnalysisException] {
-      df2.selectExpr("map_concat(map1, map2)").collect()
-    }.getMessage().contains(expectedMessage1))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.select(map_concat($"map1", $"map2")).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"map_concat(map1, map2)\"",
+        "dataType" -> "(\"MAP<ARRAY<INT>, INT>\" or \"MAP<STRING, INT>\")",
+        "functionName" -> "function map_concat")
+    )
 
-    assert(intercept[AnalysisException] {
-      df2.select(map_concat($"map1", $"map2")).collect()
-    }.getMessage().contains(expectedMessage1))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.selectExpr("map_concat(map1, 12)").collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.MAP_CONCAT_DIFF_TYPES",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"map_concat(map1, 12)\"",
+        "dataType" -> "[\"MAP<ARRAY<INT>, INT>\", \"INT\"]",
+        "functionName" -> "function map_concat"),
+      context = ExpectedContext(
+        fragment = "map_concat(map1, 12)",
+        start = 0,
+        stop = 19)
+    )
 
-    val expectedMessage2 = "input to function map_concat should all be of type map"
-
-    assert(intercept[AnalysisException] {
-      df2.selectExpr("map_concat(map1, 12)").collect()
-    }.getMessage().contains(expectedMessage2))
-
-    assert(intercept[AnalysisException] {
-      df2.select(map_concat($"map1", lit(12))).collect()
-    }.getMessage().contains(expectedMessage2))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.select(map_concat($"map1", lit(12))).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.MAP_CONCAT_DIFF_TYPES",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"map_concat(map1, 12)\"",
+        "dataType" -> "[\"MAP<ARRAY<INT>, INT>\", \"INT\"]",
+        "functionName" -> "function map_concat")
+    )
   }
 
   test("map_from_entries function") {
@@ -3606,10 +3642,20 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "inputType" -> "\"INT\"", "requiredType" -> "\"MAP\""))
     // scalastyle:on line.size.limit
 
-    val ex5 = intercept[AnalysisException] {
-      df.selectExpr("map_zip_with(mmi, mmi, (x, y, z) -> x)")
-    }
-    assert(ex5.getMessage.contains("function map_zip_with does not support ordering on type map"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("map_zip_with(mmi, mmi, (x, y, z) -> x)")
+      },
+      errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"map_zip_with(mmi, mmi, lambdafunction(x, x, y, z))\"",
+        "dataType" -> "\"MAP<INT, INT>\"",
+        "functionName" -> "function map_zip_with"),
+      context = ExpectedContext(
+        fragment = "map_zip_with(mmi, mmi, (x, y, z) -> x)",
+        start = 0,
+        stop = 37))
   }
 
   test("transform keys function - primitive data types") {
@@ -4183,15 +4229,57 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(errMsg.contains(s"input to function $name requires at least one argument"))
     }
 
-    val funcsMustHaveAtLeastTwoArgs =
-      ("greatest", (df: DataFrame) => df.select(greatest())) ::
-      ("greatest", (df: DataFrame) => df.selectExpr("greatest()")) ::
-      ("least", (df: DataFrame) => df.select(least())) ::
-      ("least", (df: DataFrame) => df.selectExpr("least()")) :: Nil
-    funcsMustHaveAtLeastTwoArgs.foreach { case (name, func) =>
-      val errMsg = intercept[AnalysisException] { func(df) }.getMessage
-      assert(errMsg.contains(s"input to function $name requires at least two arguments"))
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(greatest())
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"greatest()\"",
+        "actualNum" -> "0")
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("greatest()")
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"greatest()\"",
+        "actualNum" -> "0"),
+      context = ExpectedContext(
+        fragment = "greatest()",
+        start = 0,
+        stop = 9)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(least())
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"least()\"",
+        "actualNum" -> "0")
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("least()")
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"least()\"",
+        "actualNum" -> "0"),
+      context = ExpectedContext(
+        fragment = "least()",
+        start = 0,
+        stop = 6)
+    )
   }
 
   test("SPARK-24734: Fix containsNull of Concat for array type") {

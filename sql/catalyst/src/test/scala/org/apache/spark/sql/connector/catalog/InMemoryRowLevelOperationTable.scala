@@ -34,6 +34,9 @@ class InMemoryRowLevelOperationTable(
     properties: util.Map[String, String])
   extends InMemoryTable(name, schema, partitioning, properties) with SupportsRowLevelOperations {
 
+  // used in row-level operation tests to verify replaced partitions
+  var replacedPartitions: Seq[Seq[Any]] = Seq.empty
+
   override def newRowLevelOperationBuilder(
       info: RowLevelOperationInfo): RowLevelOperationBuilder = {
     () => PartitionBasedOperation(info.command)
@@ -88,8 +91,9 @@ class InMemoryRowLevelOperationTable(
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       val readRows = scan.data.flatMap(_.asInstanceOf[BufferedRows].rows)
-      val readPartitions = readRows.map(r => getKey(r, schema))
+      val readPartitions = readRows.map(r => getKey(r, schema)).distinct
       dataMap --= readPartitions
+      replacedPartitions = readPartitions
       withData(newData, schema)
     }
   }

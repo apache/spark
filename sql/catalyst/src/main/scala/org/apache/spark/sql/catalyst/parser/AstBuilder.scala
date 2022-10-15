@@ -1137,7 +1137,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       Unpivot(
         None,
         Some(unpivotColumns.map(Seq(_))),
-        Some(unpivotAliases),
+        // None when all elements are None
+        Some(unpivotAliases).filter(_.exists(_.isDefined)),
         variableColumnName,
         valueColumnNames,
         query
@@ -1151,7 +1152,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       Unpivot(
         None,
         Some(unpivotColumns),
-        Some(unpivotAliases),
+        // None when all elements are None
+        Some(unpivotAliases).filter(_.exists(_.isDefined)),
         variableColumnName,
         valueColumnNames,
         query

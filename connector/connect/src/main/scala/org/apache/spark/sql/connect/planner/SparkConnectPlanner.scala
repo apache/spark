@@ -22,10 +22,10 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.{expressions, plans}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
-import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.types._
 
@@ -77,8 +77,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   }
 
   private def transformAttribute(exp: proto.Expression.QualifiedAttribute): Attribute = {
-    // TODO: use data type from the proto.
-    AttributeReference(exp.getName, IntegerType)()
+    AttributeReference(exp.getName, DataTypeProtoConverter.toCatalystType(exp.getType))()
   }
 
   private def transformReadRel(
@@ -133,6 +132,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
         transformUnresolvedExpression(exp)
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION =>
         transformScalarFunction(exp.getUnresolvedFunction)
+      case proto.Expression.ExprTypeCase.ALIAS => transformAlias(exp.getAlias)
       case _ => throw InvalidPlanInput()
     }
   }
@@ -209,6 +209,10 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     }
   }
 
+  private def transformAlias(alias: proto.Expression.Alias): Expression = {
+    Alias(transformExpression(alias.getExpr), alias.getName)()
+  }
+
   private def transformUnion(u: proto.Union): LogicalPlan = {
     assert(u.getInputsCount == 2, "Union must have 2 inputs")
     val plan = logical.Union(transformRelation(u.getInputs(0)), transformRelation(u.getInputs(1)))
@@ -223,13 +227,28 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   private def transformJoin(rel: proto.Join): LogicalPlan = {
     assert(rel.hasLeft && rel.hasRight, "Both join sides must be present")
+    val joinCondition =
+      if (rel.hasJoinCondition) Some(transformExpression(rel.getJoinCondition)) else None
+
     logical.Join(
       left = transformRelation(rel.getLeft),
       right = transformRelation(rel.getRight),
-      // TODO(SPARK-40534) Support additional join types and configuration.
-      joinType = plans.Inner,
-      condition = Some(transformExpression(rel.getOn)),
+      joinType = transformJoinType(
+        if (rel.getJoinType != null) rel.getJoinType else proto.Join.JoinType.JOIN_TYPE_INNER),
+      condition = joinCondition,
       hint = logical.JoinHint.NONE)
+  }
+
+  private def transformJoinType(t: proto.Join.JoinType): JoinType = {
+    t match {
+      case proto.Join.JoinType.JOIN_TYPE_INNER => Inner
+      case proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI => LeftAnti
+      case proto.Join.JoinType.JOIN_TYPE_FULL_OUTER => FullOuter
+      case proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER => LeftOuter
+      case proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER => RightOuter
+      case proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI => LeftSemi
+      case _ => throw InvalidPlanInput(s"Join type ${t} is not supported")
+    }
   }
 
   private def transformSort(rel: proto.Sort): LogicalPlan = {
@@ -256,11 +275,9 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   private def transformAggregate(rel: proto.Aggregate): LogicalPlan = {
     assert(rel.hasInput)
-    assert(rel.getGroupingSetsCount == 1, "Only one grouping set is supported")
 
-    val groupingSet = rel.getGroupingSetsList.asScala.take(1)
-    val ge = groupingSet
-      .flatMap(f => f.getAggregateExpressionsList.asScala)
+    val groupingExprs =
+      rel.getGroupingExpressionsList.asScala
       .map(transformExpression)
       .map {
         case x @ UnresolvedAttribute(_) => x
@@ -269,18 +286,18 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
     logical.Aggregate(
       child = transformRelation(rel.getInput),
-      groupingExpressions = ge.toSeq,
+      groupingExpressions = groupingExprs.toSeq,
       aggregateExpressions =
-        (rel.getMeasuresList.asScala.map(transformAggregateExpression) ++ ge).toSeq)
+        rel.getResultExpressionsList.asScala.map(transformAggregateExpression).toSeq)
   }
 
   private def transformAggregateExpression(
-      exp: proto.Aggregate.Measure): expressions.NamedExpression = {
-    val fun = exp.getFunction.getName
+      exp: proto.Aggregate.AggregateFunction): expressions.NamedExpression = {
+    val fun = exp.getName
     UnresolvedAlias(
       UnresolvedFunction(
         name = fun,
-        arguments = exp.getFunction.getArgumentsList.asScala.map(transformExpression).toSeq,
+        arguments = exp.getArgumentsList.asScala.map(transformExpression).toSeq,
         isDistinct = false))
   }
 
