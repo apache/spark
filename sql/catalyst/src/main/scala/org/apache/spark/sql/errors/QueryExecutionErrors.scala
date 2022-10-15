@@ -1258,7 +1258,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("o" -> o.toString()))
   }
 
-  def unscaledValueTooLargeForPrecisionError(): Throwable = {
+  def unscaledValueTooLargeForPrecisionError(): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION",
       messageParameters = Map(
@@ -1267,7 +1267,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = "")
   }
 
-  def decimalPrecisionExceedsMaxPrecisionError(precision: Int, maxPrecision: Int): Throwable = {
+  def decimalPrecisionExceedsMaxPrecisionError(
+      precision: Int, maxPrecision: Int): SparkArithmeticException = {
       new SparkArithmeticException(
         errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
         messageParameters = Map(
@@ -1278,7 +1279,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         summary = "")
   }
 
-  def outOfDecimalTypeRangeError(str: UTF8String): Throwable = {
+  def outOfDecimalTypeRangeError(str: UTF8String): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "OUT_OF_DECIMAL_TYPE_RANGE",
       messageParameters = Map(
@@ -2386,7 +2387,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkException("Foreach writer has been aborted due to a task failure")
   }
 
-  def integerOverflowError(message: String): Throwable = {
+  def integerOverflowError(message: String): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "INTEGER_OVERFLOW",
       messageParameters = Map(
