@@ -170,7 +170,7 @@
       },
       "NON_FOLDABLE_INPUT" : {
         "message" : [
-          "the input should be a foldable string expression and not null; however, got <inputExpr>."
+          "the input <inputName> should be a foldable <inputType> expression; however, got <inputExpr>."
         ]
       },
       "NON_STRING_TYPE" : {
@@ -228,9 +228,19 @@
           "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
         ]
       },
+      "UNEXPECTED_NULL" : {
+        "message" : [
+          "The <exprName> must not be null"
+        ]
+      },
       "UNSPECIFIED_FRAME" : {
         "message" : [
           "Cannot use an UnspecifiedFrame. This should have been converted during analysis."
+        ]
+      },
+      "VALUE_OUT_OF_RANGE" : {
+        "message" : [
+          "The <exprName> must be between <valueRange> (current value = <currentValue>)"
         ]
       },
       "WRONG_NUM_PARAMS" : {
@@ -3103,11 +3113,6 @@
   "_LEGACY_ERROR_TEMP_2011" : {
     "message" : [
       "Unexpected data type <dataType>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2012" : {
-    "message" : [
-      "Unexpected type <dataType>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2013" : {
