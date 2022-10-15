@@ -1269,14 +1269,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def decimalPrecisionExceedsMaxPrecisionError(
       precision: Int, maxPrecision: Int): SparkArithmeticException = {
-      new SparkArithmeticException(
-        errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
-        messageParameters = Map(
-          "precision" -> precision.toString,
-          "maxPrecision" -> maxPrecision.toString
-        ),
-        context = Array.empty,
-        summary = "")
+    new SparkArithmeticException(
+      errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+      messageParameters = Map(
+        "precision" -> precision.toString,
+        "maxPrecision" -> maxPrecision.toString
+      ),
+      context = Array.empty,
+      summary = "")
   }
 
   def outOfDecimalTypeRangeError(str: UTF8String): SparkArithmeticException = {
