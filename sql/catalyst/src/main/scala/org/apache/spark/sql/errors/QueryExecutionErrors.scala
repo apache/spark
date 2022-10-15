@@ -402,7 +402,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def typeUnsupportedError(dataType: DataType): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2012",
+      errorClass = "_LEGACY_ERROR_TEMP_2011",
       messageParameters = Map("dataType" -> dataType.toString()))
   }
 
