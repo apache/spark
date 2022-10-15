@@ -262,7 +262,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
           val numExchanges = collect(plan) {
             case exchange: ShuffleExchangeExec => exchange
           }.length
-          assert(numExchanges === 3)
+          assert(numExchanges === 5)
         }
 
         {
@@ -278,7 +278,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
           val numExchanges = collect(plan) {
             case exchange: ShuffleExchangeExec => exchange
           }.length
-          assert(numExchanges === 3)
+          assert(numExchanges === 5)
         }
 
       }
