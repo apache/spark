@@ -69,7 +69,7 @@ message Read {
   }
 
   message NamedTable {
-    repeated string parts = 1;
+    string unparsed_identifier = 1;
   }
 }
 

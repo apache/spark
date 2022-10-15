@@ -41,7 +41,7 @@ trait SparkConnectPlanTest {
       .setRead(
         proto.Read
           .newBuilder()
-          .setNamedTable(proto.Read.NamedTable.newBuilder().addParts("table"))
+          .setNamedTable(proto.Read.NamedTable.newBuilder().setUnparsedIdentifier("table"))
           .build())
       .build()
 
@@ -100,7 +100,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     // Invalid read without Table name.
     intercept[InvalidPlanInput](transform(proto.Relation.newBuilder.setRead(read).build()))
     val readWithTable = read.toBuilder
-      .setNamedTable(proto.Read.NamedTable.newBuilder.addParts("name").build())
+      .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name").build())
       .build()
     val res = transform(proto.Relation.newBuilder.setRead(readWithTable).build())
     assert(res !== null)
@@ -108,9 +108,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Simple Project") {
-    val readWithTable = proto.Read
-      .newBuilder()
-      .setNamedTable(proto.Read.NamedTable.newBuilder.addParts("name").build())
+    val readWithTable = proto.Read.newBuilder()
+      .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name").build())
       .build()
     val project =
       proto.Project
