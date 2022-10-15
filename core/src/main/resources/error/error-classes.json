@@ -3120,11 +3120,6 @@
       "Unexpected data type <dataType>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2012" : {
-    "message" : [
-      "Unexpected type <dataType>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2013" : {
     "message" : [
       "Negative values found in <frequencyExpression>"
