@@ -65,6 +65,18 @@ trait AlterTableRenameSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
+  test("include catalog in the destination table") {
+    withNamespaceAndTable("ns", "dst_tbl", catalog) { dst =>
+      val src = dst.replace("dst", "src")
+      sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
+      sql(s"INSERT INTO $src SELECT 0")
+
+      sql(s"ALTER TABLE $src RENAME TO $catalog.ns.dst_tbl")
+      checkTables("ns", "dst_tbl")
+      QueryTest.checkAnswer(sql(s"SELECT c0 FROM $dst"), Seq(Row(0)))
+    }
+  }
+
   test("SPARK-33786: Cache's storage level should be respected when a table name is altered") {
     withNamespaceAndTable("ns", "dst_tbl") { dst =>
       val src = dst.replace("dst", "src")

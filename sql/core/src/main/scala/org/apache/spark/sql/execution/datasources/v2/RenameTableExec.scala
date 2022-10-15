@@ -45,7 +45,8 @@ case class RenameTableExec(
 
     // If new identifier consists of a table name only, the table should be renamed in place.
     // Such behavior matches to the v1 implementation of table renaming in Spark and other DBMSs.
-    val qualifiedNewIdent = if (newIdent.namespace.isEmpty) {
+    // Handling length=2 case is for where newIdent is specified as catalog.db.table.
+    val qualifiedNewIdent = if (newIdent.namespace.isEmpty || newIdent.namespace.length == 2) {
       Identifier.of(oldIdent.namespace, newIdent.name)
     } else newIdent
     catalog.renameTable(oldIdent, qualifiedNewIdent)
