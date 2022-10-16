@@ -19,7 +19,6 @@ from typing import List, cast, get_args, TYPE_CHECKING, Optional, Callable, Any
 
 
 import pyspark.sql.connect.proto as proto
-
 from pyspark.sql.connect._typing import PrimitiveType
 
 if TYPE_CHECKING:
