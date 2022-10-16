@@ -59,7 +59,7 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   private def parseException(sqlText: String): SparkThrowable = {
-    intercept[ParseException](defaultParser.parseExpression(sqlText))
+    super.parseException(defaultParser.parseExpression)(sqlText)
   }
 
   def assertEval(
