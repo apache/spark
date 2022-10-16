@@ -74,9 +74,10 @@ case class BloomFilterMightContain(
           errorSubClass = "BLOOM_FILTER_WRONG_TYPE",
           messageParameters = Map(
             "functionName" -> toSQLId(prettyName),
-            "required" -> (s"${toSQLType(BinaryType)} followed by " +
-              s"a value with ${toSQLType(LongType)}"),
-            "actual" -> s"[${toSQLType(left.dataType)}, ${toSQLType(right.dataType)}]"
+            "expectedLeft" -> toSQLType(BinaryType),
+            "expectedRight" -> toSQLType(LongType),
+            "actualLeft" -> toSQLType(left.dataType),
+            "actualRight" -> toSQLType(right.dataType)
           )
         )
     }

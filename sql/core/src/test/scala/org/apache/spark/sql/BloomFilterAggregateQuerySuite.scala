@@ -158,8 +158,10 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"might_contain(1.0, 1)\"",
         "functionName" -> "`might_contain`",
-        "required" -> "\"BINARY\" followed by a value with \"BIGINT\"",
-        "actual" -> "[\"DECIMAL(2,1)\", \"BIGINT\"]"
+        "expectedLeft" -> "\"BINARY\"",
+        "expectedRight" -> "\"BIGINT\"",
+        "actualLeft" -> "\"DECIMAL(2,1)\"",
+        "actualRight" -> "\"BIGINT\""
       ),
       context = ExpectedContext(
         fragment = "might_contain(1.0, 1L)",
@@ -178,8 +180,10 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"might_contain(NULL, 0.1)\"",
         "functionName" -> "`might_contain`",
-        "required" -> "\"BINARY\" followed by a value with \"BIGINT\"",
-        "actual" -> "[\"VOID\", \"DECIMAL(1,1)\"]"
+        "expectedLeft" -> "\"BINARY\"",
+        "expectedRight" -> "\"BIGINT\"",
+        "actualLeft" -> "\"VOID\"",
+        "actualRight" -> "\"DECIMAL(1,1)\""
       ),
       context = ExpectedContext(
         fragment = "might_contain(NULL, 0.1)",
@@ -231,9 +235,6 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
         stop = 65
       )
     )
-//    assert(exception2.getMessage.contains(
-//      "The Bloom filter binary input to might_contain should be either a constant value or " +
-//        "a scalar subquery expression"))
   }
 
   test("Test that might_contain can take a constant value input") {

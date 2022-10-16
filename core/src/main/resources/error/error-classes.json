@@ -108,7 +108,7 @@
       },
       "BLOOM_FILTER_WRONG_TYPE" : {
         "message" : [
-          "Input to function <functionName> should have been <required>, but it's <actual>."
+          "Input to function <functionName> should have been <expectedLeft> followed by a value with <expectedRight>, but it's [<actualLeft>, <actualRight>]."
         ]
       },
       "CANNOT_CONVERT_TO_JSON" : {
