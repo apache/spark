@@ -23,6 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.UnresolvedStar
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
@@ -43,11 +44,25 @@ trait SparkConnectPlanTest {
           .setNamedTable(proto.Read.NamedTable.newBuilder().addParts("table"))
           .build())
       .build()
-}
 
-trait SparkConnectSessionTest {
-  protected var spark: SparkSession
-
+  /**
+   * Creates a local relation for testing purposes. The local relation is mapped to it's
+   * equivalent in Catalyst and can be easily used for planner testing.
+   *
+   * @param attrs
+   * @return
+   */
+  def createLocalRelationProto(attrs: Seq[AttributeReference]): proto.Relation = {
+    val localRelationBuilder = proto.LocalRelation.newBuilder()
+    for (attr <- attrs) {
+      localRelationBuilder.addAttributes(
+        proto.Expression.QualifiedAttribute
+          .newBuilder()
+          .setName(attr.name)
+          .setType(DataTypeProtoConverter.toConnectProtoType(attr.dataType)))
+    }
+    proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
+  }
 }
 
 /**
@@ -161,7 +176,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proto.Relation.newBuilder.setJoin(proto.Join.newBuilder.setLeft(readRel)).build()
     intercept[AssertionError](transform(incompleteJoin))
 
-    // Cartesian Product not supported.
+    // Join type JOIN_TYPE_UNSPECIFIED is not supported.
     intercept[InvalidPlanInput] {
       val simpleJoin = proto.Relation.newBuilder
         .setJoin(proto.Join.newBuilder.setLeft(readRel).setRight(readRel))
@@ -185,7 +200,12 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val simpleJoin = proto.Relation.newBuilder
       .setJoin(
-        proto.Join.newBuilder.setLeft(readRel).setRight(readRel).setOn(joinCondition).build())
+        proto.Join.newBuilder
+          .setLeft(readRel)
+          .setRight(readRel)
+          .setJoinType(proto.Join.JoinType.JOIN_TYPE_INNER)
+          .setJoinCondition(joinCondition)
+          .build())
       .build()
 
     val res = transform(simpleJoin)
@@ -217,16 +237,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val agg = proto.Aggregate.newBuilder
       .setInput(readRel)
-      .addAllMeasures(
-        Seq(
-          proto.Aggregate.Measure.newBuilder
-            .setFunction(proto.Aggregate.AggregateFunction.newBuilder
-              .setName("sum")
-              .addArguments(unresolvedAttribute))
-            .build()).asJava)
-      .addGroupingSets(proto.Aggregate.GroupingSet.newBuilder
-        .addAggregateExpressions(unresolvedAttribute)
-        .build())
+      .addResultExpressions(
+        proto.Aggregate.AggregateFunction.newBuilder
+          .setName("sum")
+          .addArguments(unresolvedAttribute))
+      .addGroupingExpressions(unresolvedAttribute)
       .build()
 
     val res = transform(proto.Relation.newBuilder.setAggregate(agg).build())

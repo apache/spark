@@ -239,7 +239,10 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     In(map, Seq(map)).checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckFailure(msg) =>
         assert(msg.contains("function in does not support ordering on type map"))
-      case _ => fail("In should not work on map type")
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass == "INVALID_ORDERING_TYPE")
+        assert(messageParameters === Map(
+          "functionName" -> "function in", "dataType" -> "\"MAP<INT, INT>\""))
     }
   }
 

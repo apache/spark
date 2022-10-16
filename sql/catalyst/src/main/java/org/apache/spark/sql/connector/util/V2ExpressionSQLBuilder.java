@@ -47,7 +47,7 @@ public class V2ExpressionSQLBuilder {
 
   public String build(Expression expr) {
     if (expr instanceof Literal) {
-      return visitLiteral((Literal) expr);
+      return visitLiteral((Literal<?>) expr);
     } else if (expr instanceof NamedReference) {
       return visitNamedReference((NamedReference) expr);
     } else if (expr instanceof Cast) {
@@ -213,7 +213,7 @@ public class V2ExpressionSQLBuilder {
     }
   }
 
-  protected String visitLiteral(Literal literal) {
+  protected String visitLiteral(Literal<?> literal) {
     return literal.toString();
   }
 

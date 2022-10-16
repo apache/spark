@@ -94,16 +94,17 @@ message Filter {
 message Join {
   Relation left = 1;
   Relation right = 2;
-  Expression on = 3;
-  JoinType how = 4;
+  Expression join_condition = 3;
+  JoinType join_type = 4;
 
   enum JoinType {
     JOIN_TYPE_UNSPECIFIED = 0;
     JOIN_TYPE_INNER = 1;
-    JOIN_TYPE_OUTER = 2;
+    JOIN_TYPE_FULL_OUTER = 2;
     JOIN_TYPE_LEFT_OUTER = 3;
     JOIN_TYPE_RIGHT_OUTER = 4;
-    JOIN_TYPE_ANTI = 5;
+    JOIN_TYPE_LEFT_ANTI = 5;
+    JOIN_TYPE_LEFT_SEMI = 6;
   }
 }
 
@@ -129,22 +130,8 @@ message Fetch {
 // Relation of type [[Aggregate]].
 message Aggregate {
   Relation input = 1;
-
-  // Grouping sets are used in rollups
-  repeated GroupingSet grouping_sets = 2;
-
-  // Measures
-  repeated Measure measures = 3;
-
-  message GroupingSet {
-    repeated Expression aggregate_expressions = 1;
-  }
-
-  message Measure {
-    AggregateFunction function = 1;
-    // Conditional filter for SUM(x FILTER WHERE x < 10)
-    Expression filter = 2;
-  }
+  repeated Expression grouping_expressions = 2;
+  repeated AggregateFunction result_expressions = 3;
 
   message AggregateFunction {
     string name = 1;

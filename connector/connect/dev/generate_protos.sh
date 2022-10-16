@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -16,7 +18,7 @@
 #
 set -ex
 
-SPARK_HOME="$(cd "`dirname $0`"/../..; pwd)"
+SPARK_HOME="$(cd "`dirname $0`"/../../..; pwd)"
 cd "$SPARK_HOME"
 
 pushd connector/connect/src/main
