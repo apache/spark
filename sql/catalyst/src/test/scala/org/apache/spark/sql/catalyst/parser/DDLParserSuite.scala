@@ -501,10 +501,10 @@ class DDLParserSuite extends AnalysisTest {
         |USING parquet
         |STORED AS parquet
         """.stripMargin
+    assertUnsupported(createSql, Seq("CREATE TABLE ... USING ... STORED AS"))
+
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
-    Seq(createSql, replaceSql).foreach { sql =>
-      assertUnsupported(sql, Seq("CREATE TABLE ... USING ... STORED AS"))
-    }
+    assertUnsupported(replaceSql, Seq("REPLACE TABLE ... USING ... STORED AS"))
   }
 
   test("create/replace table - using with row format serde") {
@@ -513,10 +513,10 @@ class DDLParserSuite extends AnalysisTest {
         |USING parquet
         |ROW FORMAT SERDE 'customSerde'
         """.stripMargin
+    assertUnsupported(createSql, Seq("CREATE TABLE ... USING ... ROW FORMAT SERDE"))
+
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
-    Seq(createSql, replaceSql).foreach { sql =>
-      assertUnsupported(sql, Seq("CREATE TABLE ... USING ... ROW FORMAT SERDE"))
-    }
+    assertUnsupported(replaceSql, Seq("REPLACE TABLE ... USING ... ROW FORMAT SERDE"))
   }
 
   test("create/replace table - using with row format delimited") {
@@ -525,10 +525,10 @@ class DDLParserSuite extends AnalysisTest {
         |USING parquet
         |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
         """.stripMargin
+    assertUnsupported(createSql, Seq("CREATE TABLE ... USING ... ROW FORMAT DELIMITED"))
+
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
-    Seq(createSql, replaceSql).foreach { sql =>
-      assertUnsupported(sql, Seq("CREATE TABLE ... USING ... ROW FORMAT DELIMITED"))
-    }
+    assertUnsupported(replaceSql, Seq("REPLACE TABLE ... USING ... ROW FORMAT DELIMITED"))
   }
 
   test("create/replace table - stored by") {
