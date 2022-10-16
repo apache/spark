@@ -2580,4 +2580,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "numElements" -> numElements.toString,
         "size" -> elementSize.toString))
   }
+
+  def unsupportedEmptyLocationError(): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2201",
+      messageParameters = Map.empty)
+  }
 }

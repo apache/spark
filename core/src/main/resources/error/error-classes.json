@@ -4081,5 +4081,10 @@
       "this message in error, you can disable it with the SQL conf",
       "<StreamingCheckpointEscaptedPathCheckEnabled>."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_2201" : {
+    "message" : [
+      "Unsupported empty location."
+    ]
   }
 }

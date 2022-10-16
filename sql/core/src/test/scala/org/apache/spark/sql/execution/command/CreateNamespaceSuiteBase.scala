@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
-
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -68,10 +68,10 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
         val path = tmpDir.getCanonicalPath
         assert(!path.startsWith("file:/"))
 
-        val e = intercept[IllegalArgumentException] {
+        val e = intercept[SparkIllegalArgumentException] {
           sql(s"CREATE NAMESPACE $ns LOCATION ''")
         }
-        assert(e.getMessage.contains("Can not create a Path from an empty string"))
+        assert(e.getMessage.contains("Unsupported empty location"))
 
         val uri = new Path(path).toUri
         sql(s"CREATE NAMESPACE $ns LOCATION '$uri'")
