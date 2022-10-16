@@ -50,7 +50,7 @@ object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
 
   private def preferShuffledHashJoin(
       mapStats: MapOutputStatistics,
-      streamedStats: MapOutputStatistics): Boolean = {
+      streamedStats: Seq[MapOutputStatistics]): Boolean = {
     val maxShuffledHashJoinLocalMapThreshold =
       conf.getConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD)
     if (maxShuffledHashJoinLocalMapThreshold <= 0) {
@@ -58,7 +58,7 @@ object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
     }
 
     val newPartitionSpecs = ShufflePartitionsUtil.coalescePartitions(
-      Seq(Some(mapStats), Some(streamedStats)),
+      Seq(Some(mapStats)) ++ streamedStats.map(Some(_)),
       Seq(None, None),
       advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),
       minNumPartitions = 0,
@@ -111,13 +111,13 @@ object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
           false
         }
 
-        val preferShuffleHash = streamedPlan match {
-          case LogicalQueryStage(_, streamedStage: ShuffleQueryStageExec)
-            if streamedStage.isMaterialized && streamedStage.mapStats.isDefined =>
-            preferShuffledHashJoin(stage.mapStats.get, streamedStage.mapStats.get)
-
-          case _ => false
+        def collectShuffleStats(plan: LogicalPlan): Seq[MapOutputStatistics] = plan match {
+          case stage: ShuffleQueryStageExec
+            if stage.isMaterialized && stage.mapStats.isDefined => Seq(stage.mapStats.get)
+          case _ => plan.children.flatMap(collectShuffleStats)
         }
+        val preferShuffleHash =
+          preferShuffledHashJoin(stage.mapStats.get, collectShuffleStats(streamedPlan))
         if (demoteBroadcastHash && preferShuffleHash) {
           Some(SHUFFLE_HASH)
         } else if (preferShuffleHash) {
