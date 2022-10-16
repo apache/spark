@@ -17,6 +17,8 @@
 
 syntax = 'proto3';
 
+import "spark/connect/expressions.proto";
+import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 
 package spark.connect;
@@ -29,6 +31,7 @@ option java_package = "org.apache.spark.connect.proto";
 message Command {
   oneof command_type {
     CreateScalarFunction create_function = 1;
+    WriteOperation write_operation = 2;
   }
 }
 
@@ -60,5 +63,41 @@ message CreateScalarFunction {
     FUNCTION_LANGUAGE_SQL = 1;
     FUNCTION_LANGUAGE_PYTHON = 2;
     FUNCTION_LANGUAGE_SCALA = 3;
+  }
+}
+
+// As writes are not directly handled during analysis and planning, they are modeled as commands.
+message WriteOperation {
+  // The output of the `input` relation will be persisted according to the options.
+  Relation input = 1;
+  // Format value according to the Spark documentation. Examples are: text, parquet, delta.
+  string source = 2;
+  // The destination of the write operation must be either a path or a table.
+  oneof save_type {
+    string path = 3;
+    string table_name = 4;
+  }
+  SaveMode mode = 5;
+  // List of columns to sort the output by.
+  repeated string sort_column_names = 6;
+  // List of columns for partitioning.
+  repeated string partitioning_columns = 7;
+  // Optional bucketing specification. Bucketing must set the number of buckets and the columns
+  // to bucket by.
+  BucketBy bucket_by = 8;
+  // Optional list of configuration options.
+  map<string, string> options = 9;
+
+  message BucketBy {
+    repeated string bucket_column_names = 1;
+    int32 num_buckets = 2;
+  }
+
+  enum SaveMode {
+    SAVE_MODE_UNSPECIFIED = 0;
+    SAVE_MODE_APPEND = 1;
+    SAVE_MODE_OVERWRITE = 2;
+    SAVE_MODE_ERROR_IF_EXISTS = 3;
+    SAVE_MODE_IGNORE = 4;
   }
 }
