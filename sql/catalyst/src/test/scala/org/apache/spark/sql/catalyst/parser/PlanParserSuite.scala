@@ -42,7 +42,7 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   private def parseException(sqlText: String): SparkThrowable = {
-    intercept[ParseException](parsePlan(sqlText))
+    super.parseException(parsePlan)(sqlText)
   }
 
   private def cte(
