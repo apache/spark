@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException
