@@ -197,6 +197,21 @@ class RateStreamProviderSuite extends StreamTest {
     }
   }
 
+  testQuietly("microbatch - error class") {
+    val e = intercept[SparkArithmeticException](
+      new RateStreamMicroBatchStream(
+        rowsPerSecond = Long.MaxValue,
+        rampUpTimeSeconds = 2,
+        options = CaseInsensitiveStringMap.empty(),
+        checkpointLocation = ""))
+
+    checkError(
+      exception = e,
+      errorClass = "INTEGER_OVERFLOW",
+      parameters = Map("message" -> (s"Max offset with ${Long.MaxValue.toString} " +
+        "rowsPerSecond is 1, but 'rampUpTimeSeconds' is 2.")))
+  }
+
   test("valueAtSecond") {
     import RateStreamProvider._
 
