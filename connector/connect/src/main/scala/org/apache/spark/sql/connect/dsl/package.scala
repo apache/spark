@@ -144,6 +144,12 @@ package object dsl {
         relation.setJoin(join).build()
       }
 
+      def as(alias: String): proto.Relation = {
+        proto.Relation.newBuilder(logicalPlan)
+          .setCommon(proto.RelationCommon.newBuilder().setAlias(alias))
+          .build()
+      }
+
       def groupBy(
           groupingExprs: proto.Expression*)(aggregateExprs: proto.Expression*): proto.Relation = {
         val agg = proto.Aggregate.newBuilder()
