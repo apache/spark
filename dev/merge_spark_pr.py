@@ -508,8 +508,11 @@ def main():
     else:
         title = pr["title"]
 
-    modified_body = re.sub(re.compile(r"<!--[^>]*-->\n?", re.DOTALL), "", pr["body"]).lstrip()
-    if modified_body != pr["body"]:
+    body = pr["body"]
+    if body is None:
+        body = ""
+    modified_body = re.sub(re.compile(r"<!--[^>]*-->\n?", re.DOTALL), "", body).lstrip()
+    if modified_body != body:
         print("=" * 80)
         print(modified_body)
         print("=" * 80)
@@ -519,13 +522,10 @@ def main():
             body = modified_body
             print("Using modified body:")
         else:
-            body = pr["body"]
             print("Using original body:")
         print("=" * 80)
         print(body)
         print("=" * 80)
-    else:
-        body = pr["body"]
     target_ref = pr["base"]["ref"]
     user_login = pr["user"]["login"]
     base_ref = pr["head"]["ref"]

@@ -231,9 +231,10 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(spark.conf.get(SQLConf.PLAN_CHANGE_LOG_RULES).isEmpty)
 
     // static sql configs
-    val e2 = intercept[AnalysisException](sql(s"RESET ${StaticSQLConf.WAREHOUSE_PATH.key}"))
-    assert(e2.getMessage ===
-      s"Cannot modify the value of a static config: ${StaticSQLConf.WAREHOUSE_PATH.key}")
+    checkError(
+      exception = intercept[AnalysisException](sql(s"RESET ${StaticSQLConf.WAREHOUSE_PATH.key}")),
+      errorClass = "_LEGACY_ERROR_TEMP_1325",
+      parameters = Map("key" -> "spark.sql.warehouse.dir"))
 
   }
 

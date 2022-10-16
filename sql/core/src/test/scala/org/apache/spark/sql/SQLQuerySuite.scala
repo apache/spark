@@ -1829,7 +1829,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           sql("select a.* from testData2")
         },
         errorClass = "_LEGACY_ERROR_TEMP_1050",
-        errorSubClass = None,
         sqlState = None,
         parameters = Map("attributes" -> "(ArrayBuffer|List)\\(a\\)"),
         matchPVals = true,
@@ -2675,7 +2674,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val m2 = intercept[AnalysisException] {
         sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
       }.message
-      assert(m2.contains("Except can only be performed on tables with the compatible column types"))
+      assert(m2.contains("Except can only be performed on tables with compatible column types"))
 
       withTable("t", "S") {
         sql("CREATE TABLE t(c struct<f:int>) USING parquet")
@@ -2686,8 +2685,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           exception = intercept[AnalysisException] {
             sql(query)
           },
-          errorClass = "DATATYPE_MISMATCH",
-          errorSubClass = "BINARY_OP_DIFF_TYPES",
+          errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
           sqlState = None,
           parameters = Map(
             "sqlExpr" -> "\"(c = C)\"",

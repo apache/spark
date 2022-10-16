@@ -174,20 +174,6 @@ trait AnalysisTest extends PlanTest {
       inputPlan: LogicalPlan,
       expectedErrorClass: String,
       expectedMessageParameters: Map[String, String],
-      caseSensitive: Boolean = true): Unit = {
-    assertAnalysisErrorClass(
-      inputPlan,
-      expectedErrorClass,
-      null,
-      expectedMessageParameters,
-      caseSensitive)
-  }
-
-  protected def assertAnalysisErrorClass(
-      inputPlan: LogicalPlan,
-      expectedErrorClass: String,
-      expectedErrorSubClass: String,
-      expectedMessageParameters: Map[String, String],
       caseSensitive: Boolean): Unit = {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer
@@ -196,19 +182,12 @@ trait AnalysisTest extends PlanTest {
       }
 
       if (e.getErrorClass != expectedErrorClass ||
-        !e.messageParameters.sameElements(expectedMessageParameters) ||
-        e.getErrorSubClass != expectedErrorSubClass) {
+        !e.messageParameters.sameElements(expectedMessageParameters)) {
         var failMsg = ""
         if (e.getErrorClass != expectedErrorClass) {
           failMsg +=
             s"""Error class should be: ${expectedErrorClass}
                |Actual error class: ${e.getErrorClass}
-             """.stripMargin
-        }
-        if (e.getErrorSubClass != expectedErrorSubClass) {
-          failMsg +=
-            s"""Error sub class should be: $expectedErrorSubClass
-               |Actual error sub class: ${e.getErrorSubClass}
              """.stripMargin
         }
         if (!e.messageParameters.sameElements(expectedMessageParameters)) {
@@ -225,12 +204,17 @@ trait AnalysisTest extends PlanTest {
   protected def interceptParseException(parser: String => Any)(
     sqlCommand: String, messages: String*)(
     errorClass: Option[String] = None): Unit = {
-    val e = intercept[ParseException](parser(sqlCommand))
+    val e = parseException(parser)(sqlCommand)
     messages.foreach { message =>
       assert(e.message.contains(message))
     }
     if (errorClass.isDefined) {
       assert(e.getErrorClass == errorClass.get)
     }
+  }
+
+  protected def parseException(parser: String => Any)(
+    sqlText: String): ParseException = {
+    intercept[ParseException](parser(sqlText))
   }
 }
