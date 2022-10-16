@@ -54,14 +54,14 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       import org.apache.spark.sql.connect.dsl.expressions._
       import org.apache.spark.sql.connect.dsl.plans._
       assertThrows[IllegalArgumentException] {
-        transform(connectTestRelation.where(fun("default.hex", Seq("id".protoAttr)) < 10))
+        transform(connectTestRelation.select(callFunction("default.hex", Seq("id".protoAttr))))
       }
     }
 
     val connectPlan = {
       import org.apache.spark.sql.connect.dsl.expressions._
       import org.apache.spark.sql.connect.dsl.plans._
-      transform(connectTestRelation.where(fun(Seq("default", "hex"), Seq("id".protoAttr)) < 10))
+      transform(connectTestRelation.select(fun(Seq("default", "hex"), Seq("id".protoAttr))))
     }
 
     assertThrows[UnsupportedOperationException] {
@@ -71,11 +71,10 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val validPlan = {
       import org.apache.spark.sql.connect.dsl.expressions._
       import org.apache.spark.sql.connect.dsl.plans._
-      transform(connectTestRelation.where(fun(Seq("hex"), Seq("id".protoAttr)) < 10))
+      transform(connectTestRelation.select(fun(Seq("hex"), Seq("id".protoAttr))))
     }
     assert(validPlan.analyze != null)
   }
-
 
   test("Basic filter") {
     val connectPlan = {
