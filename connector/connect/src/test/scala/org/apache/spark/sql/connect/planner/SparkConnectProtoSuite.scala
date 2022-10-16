@@ -108,4 +108,13 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val sparkPlan = sparkTestRelation.groupBy($"id", $"name")()
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
+
+  test("Test as(alias: string)") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.as("target_table"))
+    }
+    val sparkPlan = sparkTestRelation.as("target_table")
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
 }
