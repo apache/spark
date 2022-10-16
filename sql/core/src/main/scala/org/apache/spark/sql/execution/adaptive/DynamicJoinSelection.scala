@@ -112,8 +112,9 @@ object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
         }
 
         def collectShuffleStats(plan: LogicalPlan): Seq[MapOutputStatistics] = plan match {
-          case stage: ShuffleQueryStageExec
-            if stage.isMaterialized && stage.mapStats.isDefined => Seq(stage.mapStats.get)
+          case LogicalQueryStage(_, streamedStage: ShuffleQueryStageExec)
+            if streamedStage.isMaterialized && streamedStage.mapStats.isDefined =>
+            Seq(streamedStage.mapStats.get)
           case _ => plan.children.flatMap(collectShuffleStats)
         }
         val preferShuffleHash =
