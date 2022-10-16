@@ -188,9 +188,12 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
    * @return
    */
   private def transformScalarFunction(fun: proto.Expression.UnresolvedFunction): Expression = {
-    val funName = fun.getPartsList.asScala.mkString(".")
+    if (fun.getPartsCount == 1 && fun.getParts(0).contains(".")) {
+      throw new IllegalArgumentException(
+        "Function identifier must be passed as sequence of name parts.")
+    }
     UnresolvedFunction(
-      Seq(funName),
+      fun.getPartsList.asScala.toSeq,
       fun.getArgumentsList.asScala.map(transformExpression).toSeq,
       isDistinct = false)
   }
