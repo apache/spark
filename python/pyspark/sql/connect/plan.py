@@ -83,6 +83,16 @@ class LogicalPlan(object):
     def to_proto(
         self, session: Optional["RemoteSparkSession"] = None, debug: bool = False
     ) -> proto.Plan:
+        """
+        Generates connect proto plan based on this LogicalPlan.
+
+        Parameters
+        ----------
+        session : :class:`RemoteSparkSession`, optional.
+            a session that connects remote spark cluster.
+        debug: bool
+            if enabled, the proto plan will be printed.
+        """
         plan = proto.Plan()
         plan.root.CopyFrom(self.plan(session))
 
