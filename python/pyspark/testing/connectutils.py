@@ -49,6 +49,9 @@ class MockRemoteSession:
     def set_hook(self, name: str, hook: Any) -> None:
         self.hooks[name] = hook
 
+    def drop_hook(self, name: str) -> None:
+        self.hooks.pop(name)
+
     def __getattr__(self, item: str) -> Any:
         if item not in self.hooks:
             raise LookupError(f"{item} is not defined as a method hook in MockRemoteSession")
@@ -62,7 +65,7 @@ class PlanOnlyTestFixture(unittest.TestCase):
 
     @classmethod
     def _read_table(cls, table_name: str) -> "DataFrame":
-        return DataFrame.withPlan(Read(table_name), cls.connect)
+        return DataFrame.withPlan(Read(table_name), cls.connect)  # type: ignore
 
     @classmethod
     def _udf_mock(cls, *args, **kwargs):
@@ -75,3 +78,8 @@ class PlanOnlyTestFixture(unittest.TestCase):
 
         cls.connect.set_hook("register_udf", cls._udf_mock)
         cls.connect.set_hook("readTable", cls._read_table)
+
+    @classmethod
+    def tearDownClass(cls: Any) -> None:
+        cls.connect.drop_hook("register_udf")
+        cls.connect.drop_hook("readTable")
