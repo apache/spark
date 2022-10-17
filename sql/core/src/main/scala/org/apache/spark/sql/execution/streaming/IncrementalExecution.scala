@@ -211,7 +211,7 @@ class IncrementalExecution(
                 stateFormatVersion,
                 child) :: Nil))
 
-      case StreamingDeduplicateExec(keys, child, None, None) =>
+      case StreamingDeduplicateExec(keys, child, None, None, None) =>
         StreamingDeduplicateExec(
           keys,
           child,

@@ -474,7 +474,7 @@ object AggUtils {
     // shuffle & sort happens here: most of details are also handled in this physical plan
     val restored = SessionWindowStateStoreRestoreExec(groupingWithoutSessionAttributes,
       sessionExpression.toAttribute, stateInfo = None,
-      eventTimeWatermarkForLateEvents = None, eventTimeWatermarkForLateEviction = None,
+      eventTimeWatermarkForLateEvents = None, eventTimeWatermarkForEviction = None,
       stateFormatVersion, partialMerged1)
 
     val mergedSessions = {
@@ -504,7 +504,7 @@ object AggUtils {
       stateInfo = None,
       outputMode = None,
       eventTimeWatermarkForLateEvents = None,
-      eventTimeWatermarkForLateEviction = None,
+      eventTimeWatermarkForEviction = None,
       stateFormatVersion, mergedSessions)
 
     val finalAndCompleteAggregate: SparkPlan = {
