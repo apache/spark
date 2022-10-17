@@ -56,6 +56,10 @@ private[protobuf] case class ProtobufDataToCatalyst(
 
   @transient private lazy val messageDescriptor =
     ProtobufUtils.buildDescriptor(messageName, descFilePath)
+    // TODO: Avoid carrying the file name. Read the contents of descriptor file only once
+    //       at the start. Rest of the runs should reuse the buffer. Otherwise, it could
+    //       cause inconsistencies if the file contents are changed the user after a few days.
+    //       Same for the write side in [[CatalystDataToProtobuf]].
 
   @transient private lazy val fieldsNumbers =
     messageDescriptor.getFields.asScala.map(f => f.getNumber).toSet
