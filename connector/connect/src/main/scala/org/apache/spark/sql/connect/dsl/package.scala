@@ -22,8 +22,8 @@ import scala.language.implicitConversions
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
+
 
 /**
  * A collection of implicit conversions that create a DSL for constructing connect protos.
@@ -33,16 +33,13 @@ package object dsl {
 
   object expressions { // scalastyle:ignore
     implicit class DslString(val s: String) {
-      val identifier = CatalystSqlParser.parseMultipartIdentifier(s)
-
       def protoAttr: proto.Expression =
         proto.Expression
           .newBuilder()
           .setUnresolvedAttribute(
             proto.Expression.UnresolvedAttribute
               .newBuilder()
-              .addAllParts(identifier.asJava)
-              .build())
+              .setUnparsedIdentifier(s))
           .build()
 
       def struct(

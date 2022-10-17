@@ -49,10 +49,10 @@ class LogicalPlan(object):
     def __init__(self, child: Optional["LogicalPlan"]) -> None:
         self._child = child
 
-    def unresolved_attr(self, *colNames: str) -> proto.Expression:
+    def unresolved_attr(self, colName: str) -> proto.Expression:
         """Creates an unresolved attribute from a column name."""
         exp = proto.Expression()
-        exp.unresolved_attribute.parts.extend(list(colNames))
+        exp.unresolved_attribute.unparsed_identifier = colName
         return exp
 
     def to_attr_or_expression(
@@ -155,9 +155,7 @@ class Project(LogicalPlan):
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
         proj_exprs = [
-            c.to_plan(session)
-            if isinstance(c, Expression)
-            else self.unresolved_attr(*(c.split(".")))
+            c.to_plan(session) if isinstance(c, Expression) else self.unresolved_attr(c)
             for c in self._raw_columns
         ]
         common = proto.RelationCommon()

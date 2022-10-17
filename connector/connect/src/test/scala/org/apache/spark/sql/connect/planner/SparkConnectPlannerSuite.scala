@@ -140,7 +140,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .setDirection(proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING)
       .setExpression(proto.Expression.newBuilder
         .setUnresolvedAttribute(
-          proto.Expression.UnresolvedAttribute.newBuilder.addAllParts(Seq("col").asJava).build())
+          proto.Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier("col").build())
         .build())
       .build()
 
@@ -191,7 +191,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val unresolvedAttribute = proto.Expression
       .newBuilder()
       .setUnresolvedAttribute(
-        proto.Expression.UnresolvedAttribute.newBuilder().addAllParts(Seq("left").asJava).build())
+        proto.Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier("left").build())
       .build()
 
     val joinCondition = proto.Expression.newBuilder.setUnresolvedFunction(
@@ -235,7 +235,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val unresolvedAttribute = proto.Expression
       .newBuilder()
       .setUnresolvedAttribute(
-        proto.Expression.UnresolvedAttribute.newBuilder().addAllParts(Seq("left").asJava).build())
+        proto.Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier("left").build())
       .build()
 
     val agg = proto.Aggregate.newBuilder
