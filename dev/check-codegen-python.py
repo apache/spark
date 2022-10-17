@@ -47,31 +47,34 @@ def check_connect_protos():
     print("Start checking the generated codes in pyspark-connect.")
     with tempfile.TemporaryDirectory() as tmp:
         run_cmd(f"{SPARK_HOME}/connector/connect/dev/generate_protos.sh {tmp}")
-        result = filecmp.dircmp(f"{SPARK_HOME}/python/pyspark/sql/connect/proto/", tmp)
-        failed = False
+        result = filecmp.dircmp(
+            f"{SPARK_HOME}/python/pyspark/sql/connect/proto/",
+            tmp,
+            ignore=["__init__.py", "__pycache__"],
+        )
+        success = True
 
-        if result.left_only != ["__init__.py"]:
-            files = [file for file in result.left_only if file != "__init__.py"]
-            print(f"Unexpected files: {files}")
-            failed = True
+        if len(result.left_only) > 0:
+            print(f"Unexpected files: {result.left_only}")
+            success = False
 
         if len(result.right_only) > 0:
             print(f"Missing files: {result.right_only}")
-            failed = True
+            success = False
 
         if len(result.funny_files) > 0:
             print(f"Incomparable files: {result.funny_files}")
-            failed = True
+            success = False
 
         if len(result.diff_files) > 0:
             print(f"Different files: {result.diff_files}")
-            failed = True
+            success = False
 
-        if not failed:
+        if success:
             print("Finish checking the generated codes in pyspark-connect: SUCCESS")
         else:
             fail(
-                "Generated codes for pyspark-connect are out of sync! "
+                "Generated files for pyspark-connect are out of sync! "
                 "Please run ./connector/connect/dev/generate_protos.sh"
             )
 
