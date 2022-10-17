@@ -71,7 +71,7 @@ package object dsl {
      * @param args
      * @return Expression wrapping the unresolved function.
      */
-    def fun(nameParts: Seq[String], args: Seq[proto.Expression]): proto.Expression = {
+    def callFunction(nameParts: Seq[String], args: Seq[proto.Expression]): proto.Expression = {
       proto.Expression.newBuilder().setUnresolvedFunction(
         proto.Expression.UnresolvedFunction.newBuilder()
           .addAllParts(nameParts.asJava)

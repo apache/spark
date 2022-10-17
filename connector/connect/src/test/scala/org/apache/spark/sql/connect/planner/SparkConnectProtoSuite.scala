@@ -61,7 +61,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val connectPlan = {
       import org.apache.spark.sql.connect.dsl.expressions._
       import org.apache.spark.sql.connect.dsl.plans._
-      transform(connectTestRelation.select(fun(Seq("default", "hex"), Seq("id".protoAttr))))
+      transform(connectTestRelation.select(callFunction(Seq("default", "hex"), Seq("id".protoAttr))))
     }
 
     assertThrows[UnsupportedOperationException] {
@@ -71,7 +71,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val validPlan = {
       import org.apache.spark.sql.connect.dsl.expressions._
       import org.apache.spark.sql.connect.dsl.plans._
-      transform(connectTestRelation.select(fun(Seq("hex"), Seq("id".protoAttr))))
+      transform(connectTestRelation.select(callFunction(Seq("hex"), Seq("id".protoAttr))))
     }
     assert(validPlan.analyze != null)
   }
