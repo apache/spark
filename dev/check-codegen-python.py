@@ -44,7 +44,7 @@ def run_cmd(cmd):
 
 
 def check_connect_protos():
-    print("Start checking the generated codes in pyspark-connect")
+    print("Start checking the generated codes in pyspark-connect.")
     with tempfile.TemporaryDirectory() as tmp:
         run_cmd(f"{SPARK_HOME}/connector/connect/dev/generate_protos.sh {tmp}")
         result = filecmp.dircmp(f"{SPARK_HOME}/python/pyspark/sql/connect/proto/", tmp)
@@ -78,4 +78,4 @@ def check_connect_protos():
 
 check_connect_protos()
 
-# TODO: also check generated codes in pyspark-ml and pyspark-mllib
+# TODO: also check generated code in pyspark-ml and pyspark-mllib.
