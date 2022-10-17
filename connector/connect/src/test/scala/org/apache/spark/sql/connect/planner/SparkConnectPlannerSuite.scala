@@ -248,4 +248,24 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(res.nodeName == "Aggregate")
   }
 
+  test("Test Intersect") {
+    val nodeName = transform(proto.Relation.newBuilder.setIntersect(
+      proto.Intersect.newBuilder
+        .setInput(readRel)
+        .setOther(readRel)
+        .setIsAll(false)
+        .build()
+    ).build()).nodeName
+    assert(nodeName == "Intersect")
+
+    val nodeName2 = transform(proto.Relation.newBuilder.setIntersect(
+      proto.Intersect.newBuilder
+        .setInput(readRel)
+        .setOther(readRel)
+        .setIsAll(true)
+        .build()
+    ).build()).nodeName
+    assert(nodeName2 == "IntersectAll")
+  }
+
 }

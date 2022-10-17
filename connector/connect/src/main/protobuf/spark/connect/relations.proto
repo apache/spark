@@ -41,6 +41,7 @@ message Relation {
     Aggregate aggregate = 9;
     SQL sql = 10;
     LocalRelation local_relation = 11;
+    Intersect intersect = 12;
 
     Unknown unknown = 999;
   }
@@ -161,6 +162,13 @@ message Sort {
     SORT_NULLS_FIRST = 1;
     SORT_NULLS_LAST = 2;
   }
+}
+
+// Relation of type [[Intersect]]
+message Intersect {
+  Relation input = 1;
+  Relation other = 2;
+  bool is_all = 3;
 }
 
 message LocalRelation {

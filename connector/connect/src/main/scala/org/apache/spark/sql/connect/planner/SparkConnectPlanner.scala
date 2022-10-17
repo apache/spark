@@ -57,6 +57,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.FETCH => transformFetch(rel.getFetch)
       case proto.Relation.RelTypeCase.JOIN => transformJoin(rel.getJoin)
       case proto.Relation.RelTypeCase.UNION => transformUnion(rel.getUnion)
+      case proto.Relation.RelTypeCase.INTERSECT => transformIntersect(rel.getIntersect)
       case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
       case proto.Relation.RelTypeCase.AGGREGATE => transformAggregate(rel.getAggregate)
       case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
@@ -271,6 +272,14 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
         case _ => expressions.NullsFirst
       },
       sameOrderExpressions = Seq.empty)
+  }
+
+  private def transformIntersect(rel: proto.Intersect): LogicalPlan = {
+    assert(rel.hasInput)
+    logical.Intersect(
+      transformRelation(rel.getInput),
+      transformRelation(rel.getOther),
+      rel.getIsAll)
   }
 
   private def transformAggregate(rel: proto.Aggregate): LogicalPlan = {

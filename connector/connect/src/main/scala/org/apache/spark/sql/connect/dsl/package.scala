@@ -162,6 +162,14 @@ package object dsl {
         // resolution only by name in the analyzer.
         proto.Relation.newBuilder().setAggregate(agg.build()).build()
       }
+
+      def intersect(otherPlan: proto.Relation, isAll: Boolean): proto.Relation =
+        proto.Relation.newBuilder().setIntersect(
+          proto.Intersect.newBuilder()
+            .setInput(logicalPlan)
+            .setOther(otherPlan)
+            .setIsAll(isAll)
+        ).build()
     }
   }
 }
