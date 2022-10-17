@@ -113,6 +113,7 @@
         <groupId>com.github.os72</groupId>
         <artifactId>protoc-jar-maven-plugin</artifactId>
         <version>3.11.4</version>
+        <!-- Generates Java classes for tests. TODO(Raghu): Generate descriptor files too. -->
         <executions>
           <execution>
             <phase>generate-test-sources</phase>
@@ -133,6 +134,7 @@
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>build-helper-maven-plugin</artifactId>
+        <!-- Adds generated Java files to test sources. -->
         <executions>
           <execution>
             <id>add-test-source</id>
