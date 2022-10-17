@@ -208,7 +208,7 @@
     <!-- When upgrading `netty.version`, need to check whether
          the version of `netty-tcnative-classes.version` also needs to be upgraded
     -->
-    <netty.version>4.1.80.Final</netty.version>
+    <netty.version>4.1.84.Final</netty.version>
     <netty-tcnative-classes.version>2.0.54.Final</netty-tcnative-classes.version>
     <!--
     If you are changing Arrow version specification, please check
@@ -474,7 +474,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm9-shaded</artifactId>
-        <version>4.21</version>
+        <version>4.22</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -604,7 +604,7 @@
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-text</artifactId>
-        <version>1.9</version>
+        <version>1.10.0</version>
       </dependency>
       <dependency>
         <groupId>commons-lang</groupId>
@@ -3156,12 +3156,12 @@
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm</artifactId>
-              <version>9.3</version>
+              <version>9.4</version>
             </dependency>
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm-commons</artifactId>
-              <version>9.3</version>
+              <version>9.4</version>
             </dependency>
           </dependencies>
         </plugin>

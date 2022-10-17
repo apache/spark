@@ -21,7 +21,9 @@ import scala.language.implicitConversions
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 
 /**
  * A collection of implicit conversions that create a DSL for constructing connect protos.
@@ -34,51 +36,97 @@ package object dsl {
       val identifier = CatalystSqlParser.parseMultipartIdentifier(s)
 
       def protoAttr: proto.Expression =
-        proto.Expression.newBuilder()
+        proto.Expression
+          .newBuilder()
           .setUnresolvedAttribute(
-            proto.Expression.UnresolvedAttribute.newBuilder()
+            proto.Expression.UnresolvedAttribute
+              .newBuilder()
               .addAllParts(identifier.asJava)
               .build())
           .build()
     }
 
     implicit class DslExpression(val expr: proto.Expression) {
-      def as(alias: String): proto.Expression = proto.Expression.newBuilder().setAlias(
-        proto.Expression.Alias.newBuilder().setName(alias).setExpr(expr)).build()
+      def as(alias: String): proto.Expression = proto.Expression
+        .newBuilder()
+        .setAlias(proto.Expression.Alias.newBuilder().setName(alias).setExpr(expr))
+        .build()
 
-      def < (other: proto.Expression): proto.Expression =
-        proto.Expression.newBuilder().setUnresolvedFunction(
-          proto.Expression.UnresolvedFunction.newBuilder()
-            .addParts("<")
-            .addArguments(expr)
-            .addArguments(other)
-        ).build()
+      def <(other: proto.Expression): proto.Expression =
+        proto.Expression
+          .newBuilder()
+          .setUnresolvedFunction(
+            proto.Expression.UnresolvedFunction
+              .newBuilder()
+              .addParts("<")
+              .addArguments(expr)
+              .addArguments(other))
+          .build()
     }
 
     implicit def intToLiteral(i: Int): proto.Expression =
-      proto.Expression.newBuilder().setLiteral(
-        proto.Expression.Literal.newBuilder().setI32(i)
-      ).build()
+      proto.Expression
+        .newBuilder()
+        .setLiteral(proto.Expression.Literal.newBuilder().setI32(i))
+        .build()
+  }
+
+  object commands { // scalastyle:ignore
+    implicit class DslCommands(val logicalPlan: proto.Relation) {
+      def write(
+          format: Option[String] = None,
+          path: Option[String] = None,
+          tableName: Option[String] = None,
+          mode: Option[String] = None,
+          sortByColumns: Seq[String] = Seq.empty,
+          partitionByCols: Seq[String] = Seq.empty,
+          bucketByCols: Seq[String] = Seq.empty,
+          numBuckets: Option[Int] = None): proto.Command = {
+        val writeOp = proto.WriteOperation.newBuilder()
+        format.foreach(writeOp.setSource(_))
+
+        mode
+          .map(SaveMode.valueOf(_))
+          .map(DataTypeProtoConverter.toSaveModeProto(_))
+          .foreach(writeOp.setMode(_))
+
+        if (tableName.nonEmpty) {
+          tableName.foreach(writeOp.setTableName(_))
+        } else {
+          path.foreach(writeOp.setPath(_))
+        }
+        sortByColumns.foreach(writeOp.addSortColumnNames(_))
+        partitionByCols.foreach(writeOp.addPartitioningColumns(_))
+
+        if (numBuckets.nonEmpty && bucketByCols.nonEmpty) {
+          val op = proto.WriteOperation.BucketBy.newBuilder()
+          numBuckets.foreach(op.setNumBuckets(_))
+          bucketByCols.foreach(op.addBucketColumnNames(_))
+          writeOp.setBucketBy(op.build())
+        }
+        writeOp.setInput(logicalPlan)
+        proto.Command.newBuilder().setWriteOperation(writeOp.build()).build()
+      }
+    }
   }
 
   object plans { // scalastyle:ignore
     implicit class DslLogicalPlan(val logicalPlan: proto.Relation) {
       def select(exprs: proto.Expression*): proto.Relation = {
         proto.Relation.newBuilder().setProject(
-          proto.Project.newBuilder()
-            .setInput(logicalPlan)
-            .addAllExpressions(exprs.toIterable.asJava)
-            .build()
-        ).build()
+            proto.Project.newBuilder()
+              .setInput(logicalPlan)
+              .addAllExpressions(exprs.toIterable.asJava)
+              .build())
+          .build()
       }
 
       def where(condition: proto.Expression): proto.Relation = {
         proto.Relation.newBuilder()
           .setFilter(
             proto.Filter.newBuilder().setInput(logicalPlan).setCondition(condition)
-        ).build()
+          ).build()
       }
-
 
       def join(
           otherPlan: proto.Relation,
@@ -86,13 +134,20 @@ package object dsl {
           condition: Option[proto.Expression] = None): proto.Relation = {
         val relation = proto.Relation.newBuilder()
         val join = proto.Join.newBuilder()
-        join.setLeft(logicalPlan)
+        join
+          .setLeft(logicalPlan)
           .setRight(otherPlan)
           .setJoinType(joinType)
         if (condition.isDefined) {
           join.setJoinCondition(condition.get)
         }
         relation.setJoin(join).build()
+      }
+
+      def as(alias: String): proto.Relation = {
+        proto.Relation.newBuilder(logicalPlan)
+          .setCommon(proto.RelationCommon.newBuilder().setAlias(alias))
+          .build()
       }
 
       def groupBy(

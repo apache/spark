@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.RenameTable
 
 class AlterTableRenameParserSuite extends AnalysisTest {
@@ -42,10 +41,16 @@ class AlterTableRenameParserSuite extends AnalysisTest {
   }
 
   test("invalid table identifiers") {
-    Seq(
-      "ALTER TABLE RENAME TO x.y.z",
-      "ALTER TABLE _ RENAME TO .z").foreach { renameCmd =>
-      intercept[ParseException] { parsePlan(renameCmd) }
-    }
+    val sql1 = "ALTER TABLE RENAME TO x.y.z"
+    checkError(
+      exception = parseException(parsePlan)(sql1),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'TO'", "hint" -> ""))
+
+    val sql2 = "ALTER TABLE _ RENAME TO .z"
+    checkError(
+      exception = parseException(parsePlan)(sql2),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'.'", "hint" -> ": extra input '.'"))
   }
 }

@@ -318,14 +318,14 @@ class Expression(google.protobuf.message.Message):
         """Timestamp in units of microseconds since the UNIX epoch."""
         uuid: builtins.bytes
         @property
-        def null(self) -> pyspark.sql.connect.proto.types_pb2.Type:
+        def null(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
             """a typed null literal"""
         @property
         def list(self) -> global___Expression.Literal.List: ...
         @property
-        def empty_list(self) -> pyspark.sql.connect.proto.types_pb2.Type.List: ...
+        def empty_list(self) -> pyspark.sql.connect.proto.types_pb2.DataType.List: ...
         @property
-        def empty_map(self) -> pyspark.sql.connect.proto.types_pb2.Type.Map: ...
+        def empty_map(self) -> pyspark.sql.connect.proto.types_pb2.DataType.Map: ...
         @property
         def user_defined(self) -> global___Expression.Literal.UserDefined: ...
         nullable: builtins.bool
@@ -363,10 +363,10 @@ class Expression(google.protobuf.message.Message):
             map: global___Expression.Literal.Map | None = ...,
             timestamp_tz: builtins.int = ...,
             uuid: builtins.bytes = ...,
-            null: pyspark.sql.connect.proto.types_pb2.Type | None = ...,
+            null: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
             list: global___Expression.Literal.List | None = ...,
-            empty_list: pyspark.sql.connect.proto.types_pb2.Type.List | None = ...,
-            empty_map: pyspark.sql.connect.proto.types_pb2.Type.Map | None = ...,
+            empty_list: pyspark.sql.connect.proto.types_pb2.DataType.List | None = ...,
+            empty_map: pyspark.sql.connect.proto.types_pb2.DataType.Map | None = ...,
             user_defined: global___Expression.Literal.UserDefined | None = ...,
             nullable: builtins.bool = ...,
             type_variation_reference: builtins.int = ...,
@@ -594,10 +594,67 @@ class Expression(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["expression", b"expression"]
         ) -> None: ...
 
+    class UnresolvedStar(google.protobuf.message.Message):
+        """UnresolvedStar is used to expand all the fields of a relation or struct."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
+    class QualifiedAttribute(google.protobuf.message.Message):
+        """An qualified attribute that can specify a reference (e.g. column) without needing a resolution
+        by the analyzer.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        NAME_FIELD_NUMBER: builtins.int
+        TYPE_FIELD_NUMBER: builtins.int
+        name: builtins.str
+        @property
+        def type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+        def __init__(
+            self,
+            *,
+            name: builtins.str = ...,
+            type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["type", b"type"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["name", b"name", "type", b"type"]
+        ) -> None: ...
+
+    class Alias(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        EXPR_FIELD_NUMBER: builtins.int
+        NAME_FIELD_NUMBER: builtins.int
+        @property
+        def expr(self) -> global___Expression: ...
+        name: builtins.str
+        def __init__(
+            self,
+            *,
+            expr: global___Expression | None = ...,
+            name: builtins.str = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["expr", b"expr"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["expr", b"expr", "name", b"name"]
+        ) -> None: ...
+
     LITERAL_FIELD_NUMBER: builtins.int
     UNRESOLVED_ATTRIBUTE_FIELD_NUMBER: builtins.int
     UNRESOLVED_FUNCTION_FIELD_NUMBER: builtins.int
     EXPRESSION_STRING_FIELD_NUMBER: builtins.int
+    UNRESOLVED_STAR_FIELD_NUMBER: builtins.int
+    ALIAS_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
     @property
@@ -606,6 +663,10 @@ class Expression(google.protobuf.message.Message):
     def unresolved_function(self) -> global___Expression.UnresolvedFunction: ...
     @property
     def expression_string(self) -> global___Expression.ExpressionString: ...
+    @property
+    def unresolved_star(self) -> global___Expression.UnresolvedStar: ...
+    @property
+    def alias(self) -> global___Expression.Alias: ...
     def __init__(
         self,
         *,
@@ -613,10 +674,14 @@ class Expression(google.protobuf.message.Message):
         unresolved_attribute: global___Expression.UnresolvedAttribute | None = ...,
         unresolved_function: global___Expression.UnresolvedFunction | None = ...,
         expression_string: global___Expression.ExpressionString | None = ...,
+        unresolved_star: global___Expression.UnresolvedStar | None = ...,
+        alias: global___Expression.Alias | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "alias",
+            b"alias",
             "expr_type",
             b"expr_type",
             "expression_string",
@@ -627,11 +692,15 @@ class Expression(google.protobuf.message.Message):
             b"unresolved_attribute",
             "unresolved_function",
             b"unresolved_function",
+            "unresolved_star",
+            b"unresolved_star",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "alias",
+            b"alias",
             "expr_type",
             b"expr_type",
             "expression_string",
@@ -642,12 +711,19 @@ class Expression(google.protobuf.message.Message):
             b"unresolved_attribute",
             "unresolved_function",
             b"unresolved_function",
+            "unresolved_star",
+            b"unresolved_star",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["expr_type", b"expr_type"]
     ) -> typing_extensions.Literal[
-        "literal", "unresolved_attribute", "unresolved_function", "expression_string"
+        "literal",
+        "unresolved_attribute",
+        "unresolved_function",
+        "expression_string",
+        "unresolved_star",
+        "alias",
     ] | None: ...
 
 global___Expression = Expression
