@@ -45,7 +45,7 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
     def test_column_literals(self):
         df = c.DataFrame.withPlan(p.Read("table"))
         lit_df = df.select(fun.lit(10))
-        self.assertIsNotNone(lit_df._plan.collect(None))
+        self.assertIsNotNone(lit_df._plan.to_proto(None))
 
         self.assertIsNotNone(fun.lit(10).to_plan(None))
         plan = fun.lit(10).to_plan(None)

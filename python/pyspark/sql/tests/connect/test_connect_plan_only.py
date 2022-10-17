@@ -59,7 +59,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
     def test_all_the_plans(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         df = df.select(df.col1).filter(df.col2 == 2).sort(df.col3.asc())
-        plan = df._plan.collect(self.connect)
+        plan = df._plan.to_proto(self.connect)
         self.assertIsNotNone(plan.root, "Root relation must be set")
         self.assertIsNotNone(plan.root.read)
 

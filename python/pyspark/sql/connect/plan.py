@@ -80,7 +80,7 @@ class LogicalPlan(object):
 
         return test_plan == plan
 
-    def collect(
+    def to_proto(
         self, session: Optional["RemoteSparkSession"] = None, debug: bool = False
     ) -> proto.Plan:
         plan = proto.Plan()
