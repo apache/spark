@@ -183,7 +183,7 @@ class DataFrame(object):
         return self.toPandas()
 
     # TODO(martin.grund) fix mypu
-    def join(self, other: "DataFrame", on: Any, how: Any = None) -> "DataFrame":
+    def join(self, other: "DataFrame", on: Any, how: Optional[str] = None) -> "DataFrame":
         if self._plan is None:
             raise Exception("Cannot join when self._plan is empty.")
         if other._plan is None:
