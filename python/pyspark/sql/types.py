@@ -653,8 +653,8 @@ class StructField(DataType):
         return StructField(
             json["name"],
             _parse_datatype_json_value(json["type"]),
-            json["nullable"],
-            json["metadata"],
+            json.get("nullable", True),
+            json.get("metadata"),
         )
 
     def needConversion(self) -> bool:

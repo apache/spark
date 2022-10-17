@@ -1382,7 +1382,16 @@ class DataTypeVerificationTests(unittest.TestCase):
         self.assertEqual(r, expected)
         self.assertEqual(repr(r), "Row(b=1, a=2)")
 
+    def test_struct_field_from_json(self):
+        json = {
+            "name": "name",
+            "type": "string"
+        }
+        struct_field = StructField.fromJson(json)
 
+        self.assertEqual(repr(struct_field), "StructField('name', StringType(), True)")
+        
+        
 if __name__ == "__main__":
     from pyspark.sql.tests.test_types import *  # noqa: F401
 
