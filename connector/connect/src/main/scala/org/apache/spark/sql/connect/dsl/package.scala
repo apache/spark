@@ -69,8 +69,6 @@ package object dsl {
         .newBuilder()
         .setLiteral(proto.Expression.Literal.newBuilder().setI32(i))
         .build()
-<<<<<<< HEAD
-=======
   }
 
   object commands { // scalastyle:ignore
@@ -110,22 +108,13 @@ package object dsl {
         proto.Command.newBuilder().setWriteOperation(writeOp.build()).build()
       }
     }
->>>>>>> origin/master
   }
 
   object plans { // scalastyle:ignore
     implicit class DslLogicalPlan(val logicalPlan: proto.Relation) {
       def select(exprs: proto.Expression*): proto.Relation = {
-<<<<<<< HEAD
-        proto.Relation
-          .newBuilder()
-          .setProject(
-            proto.Project
-              .newBuilder()
-=======
         proto.Relation.newBuilder().setProject(
             proto.Project.newBuilder()
->>>>>>> origin/master
               .setInput(logicalPlan)
               .addAllExpressions(exprs.toIterable.asJava)
               .build())
@@ -133,17 +122,10 @@ package object dsl {
       }
 
       def where(condition: proto.Expression): proto.Relation = {
-<<<<<<< HEAD
-        proto.Relation
-          .newBuilder()
-          .setFilter(proto.Filter.newBuilder().setInput(logicalPlan).setCondition(condition))
-          .build()
-=======
         proto.Relation.newBuilder()
           .setFilter(
             proto.Filter.newBuilder().setInput(logicalPlan).setCondition(condition)
           ).build()
->>>>>>> origin/master
       }
 
       def join(
@@ -162,10 +144,6 @@ package object dsl {
         relation.setJoin(join).build()
       }
 
-<<<<<<< HEAD
-      def groupBy(groupingExprs: proto.Expression*)(
-          aggregateExprs: proto.Expression*): proto.Relation = {
-=======
       def as(alias: String): proto.Relation = {
         proto.Relation.newBuilder(logicalPlan)
           .setCommon(proto.RelationCommon.newBuilder().setAlias(alias))
@@ -174,7 +152,6 @@ package object dsl {
 
       def groupBy(
           groupingExprs: proto.Expression*)(aggregateExprs: proto.Expression*): proto.Relation = {
->>>>>>> origin/master
         val agg = proto.Aggregate.newBuilder()
         agg.setInput(logicalPlan)
 
