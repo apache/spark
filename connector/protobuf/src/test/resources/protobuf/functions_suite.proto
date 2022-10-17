@@ -119,7 +119,7 @@ message SimpleMessageEnum {
   string key = 1;
   string value = 2;
   enum NestedEnum {
-    ESTED_NOTHING = 0;
+    ESTED_NOTHING = 0; // TODO: Fix the name.
     NESTED_FIRST = 1;
     NESTED_SECOND = 2;
   }

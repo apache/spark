@@ -45,18 +45,19 @@ class ProtobufCatalystDataConversionSuite
       messageName: String,
       expected: Any): Unit = {
 
-    withClue("Eval check with Java class name") {
+    withClue("(Eval check with Java class name)") {
+      val className = s"$javaClassNamePrefix$messageName"
       checkEvaluation(
         ProtobufDataToCatalyst(
-          CatalystDataToProtobuf(data, descFilePath, messageName), // XXX Fix this.
-          s"$javaClassNamePrefix$messageName",
+          CatalystDataToProtobuf(data, className),
+          className,
           descFilePath = None),
         prepareExpectedResult(expected))
     }
-    withClue("Eval check with descriptor file") {
+    withClue("(Eval check with descriptor file)") {
       checkEvaluation(
         ProtobufDataToCatalyst(
-          CatalystDataToProtobuf(data, descFilePath, messageName),
+          CatalystDataToProtobuf(data, messageName, Some(descFilePath)),
           messageName,
           descFilePath = Some(descFilePath)),
         prepareExpectedResult(expected))
@@ -69,7 +70,7 @@ class ProtobufCatalystDataConversionSuite
       actualSchema: String,
       badSchema: String): Unit = {
 
-    val binary = CatalystDataToProtobuf(data, descFilePath, actualSchema)
+    val binary = CatalystDataToProtobuf(data, actualSchema, Some(descFilePath))
 
     intercept[Exception] {
       ProtobufDataToCatalyst(binary, badSchema, Some(descFilePath), Map("mode" -> "FAILFAST"))
@@ -116,8 +117,8 @@ class ProtobufCatalystDataConversionSuite
 
   private val catalystTypesToProtoMessages: Map[DataType, (String, Any)] = Map(
     IntegerType -> ("IntegerMsg", 0),
-    DoubleType -> ("DoubleMsg", 0.0),
-    FloatType -> ("FloatMsg", 0.0),
+    DoubleType -> ("DoubleMsg", 0.0d),
+    FloatType -> ("FloatMsg", 0.0f),
     BinaryType -> ("BytesMsg", ByteString.empty().toByteArray),
     StringType -> ("StringMsg", ""))
 
@@ -130,8 +131,8 @@ class ProtobufCatalystDataConversionSuite
       val rand = new scala.util.Random(seed)
       val generator = RandomDataGenerator.forType(dt, rand = rand).get
       var data = generator()
-      while (data == defaultValue)  // Do not use default. from_protobuf() might return null.
-        data = generator.apply()
+      while (data.asInstanceOf[Row].get(0) == defaultValue) // Do not use default values, since
+        data = generator()                                  // from_protobuf() returns null in v3.
 
       val converter = CatalystTypeConverters.createToCatalystConverter(dt)
       val input = Literal.create(converter(data), dt)
@@ -233,5 +234,14 @@ class ProtobufCatalystDataConversionSuite
 
     val expected = InternalRow(Array[Byte](97, 48, 53))
     checkDeserialization(testFileDesc, "BytesMsg", bytesProto, Some(expected))
+  }
+
+  test("Full names for message using descriptor file") {
+    val withShortName = ProtobufUtils.buildDescriptor(testFileDesc, "BytesMsg")
+    assert(withShortName.findFieldByName("bytes_type") != null)
+
+    val withFullName = ProtobufUtils.buildDescriptor(
+      testFileDesc, "org.apache.spark.sql.protobuf.BytesMsg") // XXX
+    assert(withShortName.findFieldByName("bytes_type") != null)
   }
 }

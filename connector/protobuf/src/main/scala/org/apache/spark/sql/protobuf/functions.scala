@@ -46,7 +46,7 @@ object functions {
       descFilePath: String,
       options: java.util.Map[String, String]): Column = {
     new Column(
-      ProtobufDataToCatalyst(data.expr, messageName, descFilePath = Some(descFilePath), options.asScala.toMap)
+      ProtobufDataToCatalyst(data.expr, messageName, Some(descFilePath), options.asScala.toMap)
     )
   }
 
@@ -79,13 +79,13 @@ object functions {
    *
    * @param data
    *   the binary column.
-   * @param messageName
-   *   The Protobuf class name.
+   * @param messageClassName
+   *   The Protobuf class name. E.g. <code>org.spark.examples.protobuf.ExampleEvent</code>.
    * @since 3.4.0
    */
   @Experimental
-  def from_protobuf(data: Column, messageName: String): Column = {
-    new Column(ProtobufDataToCatalyst(data.expr, messageName))
+  def from_protobuf(data: Column, messageClassName: String): Column = {
+    new Column(ProtobufDataToCatalyst(data.expr, messageClassName))
   }
 
   /**
@@ -101,6 +101,20 @@ object functions {
    */
   @Experimental
   def to_protobuf(data: Column, messageName: String, descFilePath: String): Column = {
-    new Column(CatalystDataToProtobuf(data.expr, descFilePath, messageName))
+    new Column(CatalystDataToProtobuf(data.expr, messageName, Some(descFilePath)))
+  }
+
+  /**
+   * Converts a column into binary of protobuf format.
+   *
+   * @param data
+   *   the data column.
+   * @param messageClassName
+   *   The Protobuf class name. E.g. <code>org.spark.examples.protobuf.ExampleEvent</code>.
+   * @since 3.4.0
+   */
+  @Experimental
+  def to_protobuf(data: Column, messageClassName: String): Column = {
+    new Column(CatalystDataToProtobuf(data.expr, messageClassName))
   }
 }

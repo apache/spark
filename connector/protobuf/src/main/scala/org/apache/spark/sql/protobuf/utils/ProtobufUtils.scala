@@ -178,19 +178,15 @@ private[sql] object ProtobufUtils extends Logging {
   }
 
   def buildDescriptor(descFilePath: String, messageName: String): Descriptor = {
-    val fileDescriptor: Descriptors.FileDescriptor = parseFileDescriptor(descFilePath)
-    var result: Descriptors.Descriptor = null;
-
-    for (descriptor <- fileDescriptor.getMessageTypes.asScala) {
-      if (descriptor.getName().equals(messageName)) {
-        result = descriptor
-      }
+    val descriptor = parseFileDescriptor(descFilePath).getMessageTypes.asScala.find { desc =>
+      desc.getName == messageName || desc.getFullName == messageName
     }
 
-    if (null == result) {
-      throw new RuntimeException("Unable to locate Message '" + messageName + "' in Descriptor");
+    descriptor match {
+      case Some(d) => d
+      case None =>
+        throw new RuntimeException(s"Unable to locate Message '$messageName' in Descriptor")
     }
-    result
   }
 
   private def parseFileDescriptor(descFilePath: String): Descriptors.FileDescriptor = {
