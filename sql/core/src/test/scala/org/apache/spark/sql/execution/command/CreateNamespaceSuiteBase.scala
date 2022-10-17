@@ -68,7 +68,6 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
         // The generated temp path is not qualified.
         val path = tmpDir.getCanonicalPath
         assert(!path.startsWith("file:/"))
-
         val sqlText = s"CREATE NAMESPACE $ns LOCATION ''"
         checkError(
           exception = intercept[SparkIllegalArgumentException] {
@@ -76,10 +75,8 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
           },
           errorClass = "_LEGACY_ERROR_TEMP_2251",
           parameters = Map.empty)
-        
         val uri = new Path(path).toUri
         sql(s"CREATE NAMESPACE $ns LOCATION '$uri'")
-
         // Make sure the location is qualified.
         val expected = makeQualifiedPath(tmpDir.toString)
         assert("file" === expected.getScheme)
