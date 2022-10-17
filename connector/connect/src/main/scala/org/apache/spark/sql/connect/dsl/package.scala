@@ -21,7 +21,9 @@ import scala.language.implicitConversions
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 
 /**
  * A collection of implicit conversions that create a DSL for constructing connect protos.
@@ -67,16 +69,63 @@ package object dsl {
         .newBuilder()
         .setLiteral(proto.Expression.Literal.newBuilder().setI32(i))
         .build()
+<<<<<<< HEAD
+=======
+  }
+
+  object commands { // scalastyle:ignore
+    implicit class DslCommands(val logicalPlan: proto.Relation) {
+      def write(
+          format: Option[String] = None,
+          path: Option[String] = None,
+          tableName: Option[String] = None,
+          mode: Option[String] = None,
+          sortByColumns: Seq[String] = Seq.empty,
+          partitionByCols: Seq[String] = Seq.empty,
+          bucketByCols: Seq[String] = Seq.empty,
+          numBuckets: Option[Int] = None): proto.Command = {
+        val writeOp = proto.WriteOperation.newBuilder()
+        format.foreach(writeOp.setSource(_))
+
+        mode
+          .map(SaveMode.valueOf(_))
+          .map(DataTypeProtoConverter.toSaveModeProto(_))
+          .foreach(writeOp.setMode(_))
+
+        if (tableName.nonEmpty) {
+          tableName.foreach(writeOp.setTableName(_))
+        } else {
+          path.foreach(writeOp.setPath(_))
+        }
+        sortByColumns.foreach(writeOp.addSortColumnNames(_))
+        partitionByCols.foreach(writeOp.addPartitioningColumns(_))
+
+        if (numBuckets.nonEmpty && bucketByCols.nonEmpty) {
+          val op = proto.WriteOperation.BucketBy.newBuilder()
+          numBuckets.foreach(op.setNumBuckets(_))
+          bucketByCols.foreach(op.addBucketColumnNames(_))
+          writeOp.setBucketBy(op.build())
+        }
+        writeOp.setInput(logicalPlan)
+        proto.Command.newBuilder().setWriteOperation(writeOp.build()).build()
+      }
+    }
+>>>>>>> origin/master
   }
 
   object plans { // scalastyle:ignore
     implicit class DslLogicalPlan(val logicalPlan: proto.Relation) {
       def select(exprs: proto.Expression*): proto.Relation = {
+<<<<<<< HEAD
         proto.Relation
           .newBuilder()
           .setProject(
             proto.Project
               .newBuilder()
+=======
+        proto.Relation.newBuilder().setProject(
+            proto.Project.newBuilder()
+>>>>>>> origin/master
               .setInput(logicalPlan)
               .addAllExpressions(exprs.toIterable.asJava)
               .build())
@@ -84,10 +133,17 @@ package object dsl {
       }
 
       def where(condition: proto.Expression): proto.Relation = {
+<<<<<<< HEAD
         proto.Relation
           .newBuilder()
           .setFilter(proto.Filter.newBuilder().setInput(logicalPlan).setCondition(condition))
           .build()
+=======
+        proto.Relation.newBuilder()
+          .setFilter(
+            proto.Filter.newBuilder().setInput(logicalPlan).setCondition(condition)
+          ).build()
+>>>>>>> origin/master
       }
 
       def join(
@@ -106,8 +162,19 @@ package object dsl {
         relation.setJoin(join).build()
       }
 
+<<<<<<< HEAD
       def groupBy(groupingExprs: proto.Expression*)(
           aggregateExprs: proto.Expression*): proto.Relation = {
+=======
+      def as(alias: String): proto.Relation = {
+        proto.Relation.newBuilder(logicalPlan)
+          .setCommon(proto.RelationCommon.newBuilder().setAlias(alias))
+          .build()
+      }
+
+      def groupBy(
+          groupingExprs: proto.Expression*)(aggregateExprs: proto.Expression*): proto.Relation = {
+>>>>>>> origin/master
         val agg = proto.Aggregate.newBuilder()
         agg.setInput(logicalPlan)
 
