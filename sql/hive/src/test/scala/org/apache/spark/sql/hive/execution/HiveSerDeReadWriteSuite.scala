@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.{QueryTest, Row}
@@ -216,6 +219,41 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
 
       hiveClient.runSqlHive("INSERT INTO t1 SELECT array('SPARK-34512', 'HIVE-24797')")
       checkAnswer(spark.table("t1"), Seq(Row(Array("SPARK-34512", "HIVE-24797"))))
+    }
+  }
+
+  test("SPARK-40815: Read SymlinkTextInputFormat") {
+    withTable("t") {
+      withTempDir { root =>
+        val dataPath = new File(root, "data")
+        val symlinkPath = new File(root, "symlink")
+
+        spark.range(10).selectExpr("cast(id as string) as value")
+          .repartition(4).write.text(dataPath.getAbsolutePath)
+
+        // Generate symlink manifest file.
+        val files = dataPath.listFiles().filter(_.getName.endsWith(".txt"))
+        assert(files.length > 0)
+
+        symlinkPath.mkdir()
+        Files.write(
+          new File(symlinkPath, "symlink.txt").toPath,
+          files.mkString("\n").getBytes(StandardCharsets.UTF_8)
+        )
+
+        sql(s"""
+          CREATE TABLE t (id bigint)
+          STORED AS
+            INPUTFORMAT 'org.apache.hadoop.hive.ql.io.SymlinkTextInputFormat'
+            OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+          LOCATION '${symlinkPath.getAbsolutePath}';
+        """)
+
+        checkAnswer(
+          sql("SELECT id FROM t ORDER BY id ASC"),
+          (0 until 10).map(Row(_))
+        )
+      }
     }
   }
 }
