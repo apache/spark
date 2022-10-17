@@ -46,10 +46,13 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
     val ns = s"$catalog.$namespace"
     withNamespace(ns) {
       sql(s"CREATE NAMESPACE $ns")
-      val message = intercept[SparkIllegalArgumentException] {
-        sql(s"ALTER NAMESPACE $ns SET LOCATION ''")
-      }.getMessage
-      assert(message.contains("Unsupported empty location"))
+      val sqlText = s"ALTER NAMESPACE $ns SET LOCATION ''"
+      super.checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          sql(sqlText)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_2201",
+        parameters = Map.empty)
     }
   }
 

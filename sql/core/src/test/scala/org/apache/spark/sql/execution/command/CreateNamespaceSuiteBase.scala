@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.{QueryContext, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -53,6 +53,15 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
   protected def notFoundMsgPrefix: String =
     if (commandVersion == V1_COMMAND_VERSION) "Database" else "Namespace"
 
+  override def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      sqlState: Option[String],
+      parameters: Map[String, String],
+      matchPVals: Boolean,
+      queryContext: Array[QueryContext]): Unit =
+    super.checkError(exception, errorClass, sqlState, parameters, matchPVals, queryContext)
+
   test("basic") {
     val ns = s"$catalog.$namespace"
     withNamespace(ns) {
@@ -69,11 +78,14 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
         val path = tmpDir.getCanonicalPath
         assert(!path.startsWith("file:/"))
 
-        val e = intercept[SparkIllegalArgumentException] {
-          sql(s"CREATE NAMESPACE $ns LOCATION ''")
-        }
-        assert(e.getMessage.contains("Unsupported empty location"))
-
+        val sqlText = s"CREATE NAMESPACE $ns LOCATION ''"
+        checkError(
+          exception = intercept[SparkIllegalArgumentException] {
+            sql(sqlText)
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_2201",
+          parameters = Map.empty)
+        
         val uri = new Path(path).toUri
         sql(s"CREATE NAMESPACE $ns LOCATION '$uri'")
 
