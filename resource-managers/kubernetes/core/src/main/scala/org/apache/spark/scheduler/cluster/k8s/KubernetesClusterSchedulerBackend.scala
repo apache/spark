@@ -101,6 +101,12 @@ private[spark] class KubernetesClusterSchedulerBackend(
     conf.getOption("spark.app.id").getOrElse(appId)
   }
 
+  override def getDriverAttributes: Option[Map[String, String]] = Some(
+    super.getDriverAttributes.getOrElse(Map.empty) ++ Map(
+      "APP_ID" -> System.getenv(ENV_APPLICATION_ID),
+      "KUBERNETES_NAMESPACE" -> conf.get(KUBERNETES_NAMESPACE),
+      "KUBERNETES_POD_NAME" -> System.getenv(ENV_DRIVER_POD_NAME)))
+
   override def start(): Unit = {
     super.start()
     // Must be called before setting the executors
