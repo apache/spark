@@ -575,4 +575,27 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       validateWindowColumnInSchema(schema2, "window")
     }
   }
+
+  test("window_time function") {
+    val df1 = Seq(
+      ("2016-03-27 19:38:20", 1), ("2016-03-27 19:39:30", 2)
+    ).toDF("time", "value")
+    Seq(df1).foreach { df =>
+      checkAnswer(
+        df.groupBy(window($"time", "10 seconds"))
+          .agg(count("*").as("counts"))
+          .orderBy($"window.start".asc)
+          .select(
+            $"window.start".cast("string"),
+            $"window.end".cast("string"),
+            window_time($"window").cast("string"),
+            $"counts"),
+        Seq(
+          Row("2016-03-27 19:38:20", "2016-03-27 19:38:30", "2016-03-27 19:38:29.999999", 1),
+          Row("2016-03-27 19:39:30", "2016-03-27 19:39:40", "2016-03-27 19:39:39.999999", 1)
+        )
+      )
+    }
+  }
+
 }
