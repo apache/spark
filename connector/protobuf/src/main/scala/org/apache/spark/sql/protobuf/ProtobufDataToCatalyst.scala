@@ -112,6 +112,8 @@ private[protobuf] case class ProtobufDataToCatalyst(
     val binary = input.asInstanceOf[Array[Byte]]
     try {
       result = DynamicMessage.parseFrom(messageDescriptor, binary)
+      // If the Java class is available, it is likely more efficient to parse with it than using
+      // DynamicMessage. Can consider it in the future if parsing overhead is noticeable.
 
       result.getUnknownFields.asMap().keySet().asScala.find(fieldsNumbers.contains(_)) match {
         case Some(number) =>

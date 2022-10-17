@@ -18,8 +18,8 @@
 package org.apache.spark.sql.protobuf
 
 import com.google.protobuf.{ByteString, DynamicMessage, Message}
-import org.apache.spark.SparkFunSuite
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters, OrderedFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
