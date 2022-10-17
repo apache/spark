@@ -17,8 +17,7 @@
 import unittest
 
 from pyspark.testing.connectutils import PlanOnlyTestFixture
-from pyspark.sql.connect import DataFrame
-from pyspark.sql.connect.plan import Read
+import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
 from pyspark.sql.types import StringType
 
@@ -31,6 +30,23 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         plan = self.connect.readTable(table_name=self.tbl_name)._plan.collect(self.connect)
         self.assertIsNotNone(plan.root, "Root relation must be set")
         self.assertIsNotNone(plan.root.read)
+
+    def test_filter(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.filter(df.col_name > 3)._plan.collect(self.connect)
+        self.assertIsNotNone(plan.root.filter)
+        self.assertTrue(
+            isinstance(
+                plan.root.filter.condition.unresolved_function, proto.Expression.UnresolvedFunction
+            )
+        )
+        self.assertEqual(plan.root.filter.condition.unresolved_function.parts, ["gt"])
+        self.assertEqual(len(plan.root.filter.condition.unresolved_function.arguments), 2)
+
+    def test_relation_alias(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.alias("table_alias")._plan.collect(self.connect)
+        self.assertEqual(plan.root.common.alias, "table_alias")
 
     def test_simple_udf(self):
         u = udf(lambda x: "Martin", StringType())

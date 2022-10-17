@@ -61,7 +61,7 @@ class PlanOnlyTestFixture(unittest.TestCase):
     connect: "MockRemoteSession"
 
     @classmethod
-    def _read_table(cls, table_name: str):
+    def _read_table(cls, table_name: str) -> "DataFrame":
         return DataFrame.withPlan(Read(table_name), cls.connect)
 
     @classmethod
