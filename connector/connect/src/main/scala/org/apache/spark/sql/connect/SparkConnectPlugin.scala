@@ -39,8 +39,7 @@ class SparkConnectPlugin extends SparkPlugin {
   /**
    * Return the plugin's driver-side component.
    *
-   * @return
-   *   The driver-side component.
+   * @return The driver-side component.
    */
   override def driverPlugin(): DriverPlugin = new DriverPlugin {
 
