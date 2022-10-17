@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.commons.lang3.StringUtils
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+
+import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, Strategy}
