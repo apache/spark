@@ -324,13 +324,9 @@ class Aggregate(LogicalPlan):
         measure = proto.Aggregate.AggregateFunction()
         measure.function.name = fun
         if type(exp) is str:
-            measure.function.arguments.append(
-                self.unresolved_attr(exp)
-            )
+            measure.function.arguments.append(self.unresolved_attr(exp))
         else:
-            measure.function.arguments.append(
-                cast(Expression, exp).to_plan(session)
-            )
+            measure.function.arguments.append(cast(Expression, exp).to_plan(session))
         return measure
 
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
