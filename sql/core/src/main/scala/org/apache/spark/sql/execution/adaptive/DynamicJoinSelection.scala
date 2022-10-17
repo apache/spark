@@ -59,7 +59,7 @@ object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
 
     val newPartitionSpecs = ShufflePartitionsUtil.coalescePartitions(
       Seq(Some(mapStats)) ++ streamedStats.map(Some(_)),
-      Seq(None, None),
+      Seq.fill(streamedStats.length + 1)(None),
       advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),
       minNumPartitions = 0,
       minPartitionSize = 0)
