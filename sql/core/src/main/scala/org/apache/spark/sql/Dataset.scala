@@ -1922,6 +1922,14 @@ class Dataset[T] private[sql](
    * (Scala-specific)
    * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
    *
+   * @see `org.apache.spark.sql.Dataset.groupBy(*Column)`
+   * @see `org.apache.spark.sql.Dataset.groupBy(String, *String)`
+   * @see `org.apache.spark.sql.RelationalGroupedDataset.as()`
+   *
+   * @note Calling `groupBy(Column*).as[K, T]` or `groupByKey(String, String*).as[K, T]` should be
+   *       preferred to this method because the Catalyst query planner cannot exploit
+   *       existing partitioning and ordering of this Dataset with this function.
+   *
    * @group typedrel
    * @since 2.0.0
    */
@@ -1940,6 +1948,14 @@ class Dataset[T] private[sql](
   /**
    * (Java-specific)
    * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
+   *
+   * @see `org.apache.spark.sql.Dataset.groupBy(*Column)`
+   * @see `org.apache.spark.sql.Dataset.groupBy(String, *String)`
+   * @see `org.apache.spark.sql.RelationalGroupedDataset.as()`
+   *
+   * @note Calling `groupBy(Column*).as[K, T]` or `groupByKey(String, String*).as[K, T]` should be
+   *       preferred to this method because the Catalyst query planner cannot exploit
+   *       existing partitioning and ordering of this Dataset with this function.
    *
    * @group typedrel
    * @since 2.0.0
