@@ -35,7 +35,6 @@ limitations under the License.
 """
 import builtins
 import collections.abc
-import google.protobuf.any_pb2
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
@@ -59,22 +58,16 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -82,22 +75,16 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -105,22 +92,16 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -128,22 +109,16 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -151,22 +126,16 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -174,22 +143,16 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -197,22 +160,16 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -220,22 +177,16 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -243,22 +194,16 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -266,22 +211,16 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -289,22 +228,16 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -312,22 +245,16 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -335,22 +262,16 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -358,22 +279,16 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -381,22 +296,16 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -404,22 +313,16 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -430,26 +333,18 @@ class DataType(google.protobuf.message.Message):
 
         LENGTH_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         length: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             length: builtins.int = ...,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "length",
-                b"length",
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "length", b"length", "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -458,26 +353,18 @@ class DataType(google.protobuf.message.Message):
 
         LENGTH_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         length: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             length: builtins.int = ...,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "length",
-                b"length",
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "length", b"length", "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -486,26 +373,18 @@ class DataType(google.protobuf.message.Message):
 
         LENGTH_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         length: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             length: builtins.int = ...,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "length",
-                b"length",
-                "nullability",
-                b"nullability",
-                "type_variation_reference",
-                b"type_variation_reference",
+                "length", b"length", "type_variation_reference", b"type_variation_reference"
             ],
         ) -> None: ...
 
@@ -515,24 +394,19 @@ class DataType(google.protobuf.message.Message):
         SCALE_FIELD_NUMBER: builtins.int
         PRECISION_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
         scale: builtins.int
         precision: builtins.int
         type_variation_reference: builtins.int
-        nullability: builtins.bool
         def __init__(
             self,
             *,
             scale: builtins.int = ...,
             precision: builtins.int = ...,
             type_variation_reference: builtins.int = ...,
-            nullability: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "nullability",
-                b"nullability",
                 "precision",
                 b"precision",
                 "scale",
@@ -551,43 +425,36 @@ class DataType(google.protobuf.message.Message):
             KEY_FIELD_NUMBER: builtins.int
             VALUE_FIELD_NUMBER: builtins.int
             key: builtins.str
-            @property
-            def value(self) -> google.protobuf.any_pb2.Any: ...
+            value: builtins.str
             def __init__(
                 self,
                 *,
                 key: builtins.str = ...,
-                value: google.protobuf.any_pb2.Any | None = ...,
+                value: builtins.str = ...,
             ) -> None: ...
-            def HasField(
-                self, field_name: typing_extensions.Literal["value", b"value"]
-            ) -> builtins.bool: ...
             def ClearField(
                 self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
             ) -> None: ...
 
         TYPE_FIELD_NUMBER: builtins.int
         NAME_FIELD_NUMBER: builtins.int
-        NULLABILITY_FIELD_NUMBER: builtins.int
+        NULLABLE_FIELD_NUMBER: builtins.int
         METADATA_FIELD_NUMBER: builtins.int
         @property
         def type(self) -> global___DataType: ...
         name: builtins.str
-        nullability: builtins.bool
+        nullable: builtins.bool
         @property
         def metadata(
             self,
-        ) -> google.protobuf.internal.containers.MessageMap[
-            builtins.str, google.protobuf.any_pb2.Any
-        ]: ...
+        ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]: ...
         def __init__(
             self,
             *,
             type: global___DataType | None = ...,
             name: builtins.str = ...,
-            nullability: builtins.bool = ...,
-            metadata: collections.abc.Mapping[builtins.str, google.protobuf.any_pb2.Any]
-            | None = ...,
+            nullable: builtins.bool = ...,
+            metadata: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
         ) -> None: ...
         def HasField(
             self, field_name: typing_extensions.Literal["type", b"type"]
@@ -595,14 +462,7 @@ class DataType(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "metadata",
-                b"metadata",
-                "name",
-                b"name",
-                "nullability",
-                b"nullability",
-                "type",
-                b"type",
+                "metadata", b"metadata", "name", b"name", "nullable", b"nullable", "type", b"type"
             ],
         ) -> None: ...
 
@@ -636,14 +496,17 @@ class DataType(google.protobuf.message.Message):
 
         DATATYPE_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
+        ELEMENT_NULLABLE_FIELD_NUMBER: builtins.int
         @property
         def DataType(self) -> global___DataType: ...
         type_variation_reference: builtins.int
+        element_nullable: builtins.bool
         def __init__(
             self,
             *,
             DataType: global___DataType | None = ...,
             type_variation_reference: builtins.int = ...,
+            element_nullable: builtins.bool = ...,
         ) -> None: ...
         def HasField(
             self, field_name: typing_extensions.Literal["DataType", b"DataType"]
@@ -651,7 +514,12 @@ class DataType(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "DataType", b"DataType", "type_variation_reference", b"type_variation_reference"
+                "DataType",
+                b"DataType",
+                "element_nullable",
+                b"element_nullable",
+                "type_variation_reference",
+                b"type_variation_reference",
             ],
         ) -> None: ...
 
@@ -661,17 +529,20 @@ class DataType(google.protobuf.message.Message):
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
+        VALUE_NULLABLE_FIELD_NUMBER: builtins.int
         @property
         def key(self) -> global___DataType: ...
         @property
         def value(self) -> global___DataType: ...
         type_variation_reference: builtins.int
+        value_nullable: builtins.bool
         def __init__(
             self,
             *,
             key: global___DataType | None = ...,
             value: global___DataType | None = ...,
             type_variation_reference: builtins.int = ...,
+            value_nullable: builtins.bool = ...,
         ) -> None: ...
         def HasField(
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
@@ -685,6 +556,8 @@ class DataType(google.protobuf.message.Message):
                 b"type_variation_reference",
                 "value",
                 b"value",
+                "value_nullable",
+                b"value_nullable",
             ],
         ) -> None: ...
 

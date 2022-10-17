@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.planner
 
+import scala.collection.convert.ImplicitConversions._
+
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructField, StructType}

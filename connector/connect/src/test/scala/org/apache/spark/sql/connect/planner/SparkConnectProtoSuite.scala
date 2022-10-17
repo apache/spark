@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.planner
 
+import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -114,6 +115,9 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       import org.apache.spark.sql.connect.dsl.plans._
       transform(connectTestRelation.as("target_table"))
     }
+
+    val sparkPlan = sparkTestRelation.as("target_table")
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
   test("Test StructType in LocalRelation") {
@@ -132,18 +136,5 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       localRelationBuilder.addAttributes(attr)
     }
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
-  }
-
-  private def createLocalRelationProto(attrs: Seq[AttributeReference]): proto.Relation = {
-    val localRelationBuilder = proto.LocalRelation.newBuilder()
-    for (attr <- attrs) {
-      localRelationBuilder.addAttributes(
-        proto.Expression.QualifiedAttribute.newBuilder()
-          .setName(attr.name)
-          .setType(DataTypeProtoConverter.toConnectProtoType(attr.dataType))
-      )
-    }
-    val sparkPlan = sparkTestRelation.as("target_table")
-    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 }

@@ -45,21 +45,8 @@ package object dsl {
               .build())
           .build()
 
-      def protoUnresolvedAttr: proto.Expression.UnresolvedAttribute =
-        proto.Expression.UnresolvedAttribute.newBuilder()
-          .addAllParts(identifier.asJava)
-          .build()
-    }
-
-    implicit class DslAttr(attr: proto.Expression.UnresolvedAttribute) {
-      def s: String = attr.getPartsList.asScala.toList.mkString(".")
-
-      /** Creates a new AttributeReference of type int */
-      def int: proto.Expression.QualifiedAttribute = protoQualifiedAttrWithType(
-        proto.DataType.newBuilder().setI32(proto.DataType.I32.newBuilder()).build())
-
       def struct(
-          attrs: proto.Expression.QualifiedAttribute*): proto.Expression.QualifiedAttribute = {
+        attrs: proto.Expression.QualifiedAttribute*): proto.Expression.QualifiedAttribute = {
         val structExpr = proto.DataType.Struct.newBuilder()
         for (attr <- attrs) {
           val structField = proto.DataType.StructField.newBuilder()
@@ -73,19 +60,20 @@ package object dsl {
           .build()
       }
 
+      /** Creates a new AttributeReference of type int */
+      def int: proto.Expression.QualifiedAttribute = protoQualifiedAttrWithType(
+        proto.DataType.newBuilder().setI32(proto.DataType.I32.newBuilder()).build())
+
       private def protoQualifiedAttrWithType(
-          dataType: proto.DataType): proto.Expression.QualifiedAttribute =
+        dataType: proto.DataType): proto.Expression.QualifiedAttribute =
         proto.Expression.QualifiedAttribute.newBuilder()
           .setName(s)
           .setType(dataType)
           .build()
 
-      def protoAttr: proto.Expression =
-        proto.Expression.newBuilder()
-          .setUnresolvedAttribute(
-            proto.Expression.UnresolvedAttribute.newBuilder()
-              .addAllParts(identifier.asJava)
-              .build())
+      def protoUnresolvedAttr: proto.Expression.UnresolvedAttribute =
+        proto.Expression.UnresolvedAttribute.newBuilder()
+          .addAllParts(identifier.asJava)
           .build()
     }
 
