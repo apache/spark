@@ -4081,5 +4081,131 @@
       "this message in error, you can disable it with the SQL conf",
       "<StreamingCheckpointEscaptedPathCheckEnabled>."
     ]
+  },
+  "_LEGACY_ERROR_TEMP_2226" : {
+    "message" : [
+      "null literals can't be casted to <name>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2227" : {
+    "message" : [
+      "<name> is not an UserDefinedType. Please make sure registering an UserDefinedType for <userClass>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2228" : {
+    "message" : [
+      "Can not load in UserDefinedType <name> for user class <userClass>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2229" : {
+    "message" : [
+      "<name> is not a public class. Only public classes are supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2230" : {
+    "message" : [
+      "Primitive types are not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2231" : {
+    "message" : [
+      "fieldIndex on a Row without schema is undefined."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2232" : {
+    "message" : [
+      "Value at index <index> is null"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2233" : {
+    "message" : [
+      "Only Data Sources providing FileFormat are supported: <providingClass>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2234" : {
+    "message" : [
+      "Failed to set original ACL <aclEntries> back to the created path: <path>. Exception: <message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2235" : {
+    "message" : [
+      "Multiple failures in stage materialization."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2236" : {
+    "message" : [
+      "Unrecognized compression scheme type ID: <typeId>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2237" : {
+    "message" : [
+      "<className>.getParentLogger is not yet implemented."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2238" : {
+    "message" : [
+      "Unable to create Parquet converter for <typeName> whose Parquet type is <parquetType> without decimal metadata. Please read this column/field as Spark BINARY type."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2239" : {
+    "message" : [
+      "Unable to create Parquet converter for decimal type <t> whose Parquet type is <parquetType>.  Parquet DECIMAL type can only be backed by INT32, INT64, FIXED_LEN_BYTE_ARRAY, or BINARY."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2240" : {
+    "message" : [
+      "Unable to create Parquet converter for data type <t> whose Parquet type is <parquetType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2241" : {
+    "message" : [
+      "Nonatomic partition table <tableName> can not add multiple partitions."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2242" : {
+    "message" : [
+      "<provider> source does not support user-specified schema."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2243" : {
+    "message" : [
+      "Nonatomic partition table <tableName> can not drop multiple partitions."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2244" : {
+    "message" : [
+      "The table <tableName> does not support truncation of multiple partition."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2245" : {
+    "message" : [
+      "Table does not support overwrite by expression: <table>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2246" : {
+    "message" : [
+      "Table does not support dynamic partition overwrite: <table>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2247" : {
+    "message" : [
+      "Failed merging schema:",
+      "<schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2248" : {
+    "message" : [
+      "Cannot broadcast the table over <maxBroadcastTableRows> rows: <numRows> rows"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2249" : {
+    "message" : [
+      "Cannot broadcast the table that is larger than <maxBroadcastTableBytes>GB: <dataSize> GB"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2250" : {
+    "message" : [
+      "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastjoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
+    ]
   }
 }
