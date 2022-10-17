@@ -28,6 +28,8 @@ import org.apache.spark.sql.execution.command
 class AlterTableAddPartitionSuite
   extends command.AlterTableAddPartitionSuiteBase
   with CommandSuiteBase {
+  override def defaultPartitionName: String = "null"
+
   test("SPARK-33650: add partition into a table which doesn't support partition management") {
     withNamespaceAndTable("ns", "tbl", s"non_part_$catalog") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")

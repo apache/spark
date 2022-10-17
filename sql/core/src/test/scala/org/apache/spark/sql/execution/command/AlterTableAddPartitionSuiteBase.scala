@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.time.{Duration, Period}
 
+import org.apache.spark.SparkNumberFormatException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
@@ -40,6 +41,39 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. ADD PARTITION"
+  def defaultPartitionName: String
+
+  test("SPARK-40798: Alter partition should verify partition value") {
+    def shouldThrowException(policy: SQLConf.StoreAssignmentPolicy.Value): Boolean = policy match {
+      case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
+        true
+      case SQLConf.StoreAssignmentPolicy.LEGACY =>
+        false
+    }
+
+    SQLConf.StoreAssignmentPolicy.values.foreach { policy =>
+      withNamespaceAndTable("ns", "tbl") { t =>
+        sql(s"CREATE TABLE $t (c int) $defaultUsing PARTITIONED BY (p int)")
+
+        withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString) {
+          if (shouldThrowException(policy)) {
+            val errMsg = intercept[SparkNumberFormatException] {
+              sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
+            }.getMessage
+            assert(errMsg.contains(
+              "The value 'aaa' of the type \"STRING\" cannot be cast to \"INT\""))
+          } else {
+            sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
+            checkPartitions(t, Map("p" -> defaultPartitionName))
+            sql(s"ALTER TABLE $t DROP PARTITION (p=null)")
+          }
+        }
+
+        sql(s"ALTER TABLE $t ADD PARTITION (p=null)")
+        checkPartitions(t, Map("p" -> defaultPartitionName))
+      }
+    }
+  }
 
   test("one partition") {
     withNamespaceAndTable("ns", "tbl") { t =>

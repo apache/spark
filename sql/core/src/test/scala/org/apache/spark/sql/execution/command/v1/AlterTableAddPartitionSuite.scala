@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
@@ -33,6 +34,8 @@ import org.apache.spark.sql.internal.SQLConf
  *     `org.apache.spark.sql.hive.execution.command.AlterTableAddPartitionSuite`
  */
 trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuiteBase {
+  override def defaultPartitionName: String = DEFAULT_PARTITION_NAME
+
   test("empty string as partition value") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
