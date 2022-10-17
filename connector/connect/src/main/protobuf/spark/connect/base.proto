@@ -79,7 +79,7 @@ message Response {
   }
 
   message CSVBatch {
-    int64 row_count = 3;
+    int64 row_count = 1;
     string data = 2;
   }
 
