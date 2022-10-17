@@ -320,6 +320,20 @@ public class JavaDatasetSuite implements Serializable {
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(mapped.collectAsList()));
 
+    KeyValueGroupedDataset<Integer, String> colGrouped =
+      ds.groupByKey(Encoders.INT(), length(col("value")));
+
+    Dataset<String> colMapped = colGrouped.mapGroups(
+      (MapGroupsFunction<Integer, String, String>) (key, values) -> {
+        StringBuilder sb = new StringBuilder(key.toString());
+        while (values.hasNext()) {
+          sb.append(values.next());
+        }
+        return sb.toString();
+      }, Encoders.STRING());
+
+    Assert.assertEquals(toSet(mapped.collectAsList()), toSet(colMapped.collectAsList()));
+
     Dataset<String> flatMapped = grouped.flatMapGroups(
         (FlatMapGroupsFunction<Integer, String, String>) (key, values) -> {
           StringBuilder sb = new StringBuilder(key.toString());

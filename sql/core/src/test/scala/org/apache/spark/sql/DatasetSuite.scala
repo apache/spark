@@ -1906,7 +1906,7 @@ class DatasetSuite extends QueryTest
 
 
   test("Check KeyValueGroupedDataset toString: Single data") {
-    val kvDataset = (1 to 3).toDF("id").as[SingleData].groupByKey(identity)
+    val kvDataset = (1 to 3).toDF("id").as[SingleData].groupByKey(identity(_))
     val expected = "KeyValueGroupedDataset: [key: [id: int], value: [id: int]]"
     val actual = kvDataset.toString
     assert(expected === actual)
@@ -1934,7 +1934,7 @@ class DatasetSuite extends QueryTest
 
   test("Check KeyValueGroupedDataset toString: over length schema ") {
     val kvDataset = (1 to 3).map( x => (x, x.toString, x.toLong))
-      .toDF("id", "val1", "val2").as[TripleData].groupByKey(identity)
+      .toDF("id", "val1", "val2").as[TripleData].groupByKey(identity(_))
     val expected = "KeyValueGroupedDataset:" +
       " [key: [id: int, val1: string ... 1 more field(s)]," +
       " value: [id: int, val1: string ... 1 more field(s)]]"
@@ -2272,6 +2272,27 @@ class DatasetSuite extends QueryTest
 
     val df3 = df1.groupBy("id").as[Int, DoubleData]
       .cogroup(df2.groupBy("id").as[Int, DoubleData]) { case (key, data1, data2) =>
+        if (key == 1) {
+          Iterator(DoubleData(key, (data1 ++ data2).foldLeft("")((cur, next) => cur + next.val1)))
+        } else Iterator.empty
+      }
+    checkDataset(df3, DoubleData(1, "onetwo"))
+
+    // Assert that no extra shuffle introduced by cogroup.
+    val exchanges = collect(df3.queryExecution.executedPlan) {
+      case h: ShuffleExchangeExec => h
+    }
+    assert(exchanges.size == 2)
+  }
+
+  test("groupByKey - column and column name") {
+    val df1 = Seq(DoubleData(1, "one"), DoubleData(2, "two"), DoubleData(3, "three")).toDS()
+      .repartition($"id").sortWithinPartitions("id")
+    val df2 = Seq(DoubleData(5, "one"), DoubleData(1, "two"), DoubleData(3, "three")).toDS()
+      .repartition($"id").sortWithinPartitions("id")
+
+    val df3 = df1.groupByKey[Int]("id")
+      .cogroup(df2.groupByKey[Int]($"id")) { case (key, data1, data2) =>
         if (key == 1) {
           Iterator(DoubleData(key, (data1 ++ data2).foldLeft("")((cur, next) => cur + next.val1)))
         } else Iterator.empty

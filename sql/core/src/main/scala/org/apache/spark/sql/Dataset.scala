@@ -1920,13 +1920,44 @@ class Dataset[T] private[sql](
 
   /**
    * (Scala-specific)
+   * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key columns.
+   *
+   * @see `org.apache.spark.sql.Dataset.groupByKey(T => K)`
+   *
+   * @note Calling this method should be preferred to `groupByKey(T => K)` because the
+   *       Catalyst query planner cannot exploit existing partitioning and ordering of
+   *       this Dataset with that function.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def groupByKey[K: Encoder](columns: Column*): KeyValueGroupedDataset[K, T] =
+    groupBy(columns: _*).as[K, T]
+
+  /**
+   * (Scala-specific)
+   * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key columns.
+   *
+   * @see `org.apache.spark.sql.Dataset.groupByKey(T => K)`
+   *
+   * @note Calling this method should be preferred to `groupByKey(T => K)` because the
+   *       Catalyst query planner cannot exploit existing partitioning and ordering of
+   *       this Dataset with that function.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def groupByKey[K: Encoder](col1: String, columns: String*): KeyValueGroupedDataset[K, T] =
+    groupBy(col1, columns: _*).as[K, T]
+
+  /**
+   * (Scala-specific)
    * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
    *
-   * @see `org.apache.spark.sql.Dataset.groupBy(*Column)`
-   * @see `org.apache.spark.sql.Dataset.groupBy(String, *String)`
-   * @see `org.apache.spark.sql.RelationalGroupedDataset.as()`
+   * @see `org.apache.spark.sql.Dataset.groupByKey(Column*)`
+   * @see `org.apache.spark.sql.Dataset.groupByKey(String, String*)`
    *
-   * @note Calling `groupBy(Column*).as[K, T]` or `groupByKey(String, String*).as[K, T]` should be
+   * @note Calling `groupByKey(Column*)` or `groupByKey(String, String*)` should be
    *       preferred to this method because the Catalyst query planner cannot exploit
    *       existing partitioning and ordering of this Dataset with this function.
    *
@@ -1947,14 +1978,49 @@ class Dataset[T] private[sql](
 
   /**
    * (Java-specific)
+   * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key columns.
+   *
+   * @see `org.apache.spark.sql.Dataset.groupByKey(MapFunction[T, K])`
+   *
+   * @note Calling this method should be preferred to `groupByKey(MapFunction[T, K])` because the
+   *       Catalyst query planner cannot exploit existing partitioning and ordering of
+   *       this Dataset with that function.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def groupByKey[K](encoder: Encoder[K], columns: Column*) : KeyValueGroupedDataset[K, T] =
+    groupBy(columns: _*).as(encoderFor(encoder), exprEnc)
+
+  /**
+   * (Java-specific)
+   * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key columns.
+   *
+   * @see `org.apache.spark.sql.Dataset.groupByKey(MapFunction[T, K])`
+   *
+   * @note Calling this method should be preferred to `groupByKey(MapFunction[T, K])` because the
+   *       Catalyst query planner cannot exploit existing partitioning and ordering of
+   *       this Dataset with that function.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def groupByKey[K](encoder: Encoder[K],
+                    col1: String,
+                    columns: String*): KeyValueGroupedDataset[K, T] =
+    groupBy(col1, columns: _*).as(encoderFor(encoder), exprEnc)
+
+  /**
+   * (Java-specific)
    * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
    *
-   * @see `org.apache.spark.sql.Dataset.groupBy(*Column)`
-   * @see `org.apache.spark.sql.Dataset.groupBy(String, *String)`
-   * @see `org.apache.spark.sql.RelationalGroupedDataset.as()`
+   * @see `org.apache.spark.sql.Dataset.groupByKey(Encoder, Column*)`
+   * @see `org.apache.spark.sql.Dataset.groupByKey(Encoder, String, String*)`
    *
-   * @note Calling `groupBy(Column*).as[K, T]` or `groupByKey(String, String*).as[K, T]` should be
-   *       preferred to this method because the Catalyst query planner cannot exploit
+   * @note Calling `groupByKey(Encoder, Column*)` or `groupByKey(Encoder, String, String*)` should
+   *       be preferred to this method because the Catalyst query planner cannot exploit
    *       existing partitioning and ordering of this Dataset with this function.
    *
    * @group typedrel
