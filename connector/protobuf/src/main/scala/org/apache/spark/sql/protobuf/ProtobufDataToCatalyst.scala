@@ -117,7 +117,7 @@ private[protobuf] case class ProtobufDataToCatalyst(
 
       result.getUnknownFields.asMap().keySet().asScala.find(fieldsNumbers.contains(_)) match {
         case Some(number) =>
-          // Unknown fields contain a field with same number asa known field. Must be due to
+          // Unknown fields contain a field with same number as a known field. Must be due to
           // mismatch of schema between writer and reader here.
           throw new IllegalArgumentException(s"Type mismatch encountered for field:" +
               s" ${messageDescriptor.getFields.get(number)}")
