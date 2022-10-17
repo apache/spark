@@ -409,9 +409,7 @@ class Join(LogicalPlan):
         rel = proto.Relation()
         rel.join.left.CopyFrom(self.left.plan(session))
         rel.join.right.CopyFrom(self.right.plan(session))
-        rel.join.join_condition.CopyFrom(  # type: ignore[attr-defined]
-            self.to_attr_or_expression(self.on, session)
-        )
+        rel.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
         rel.join.join_type = self.how
         return rel
 
