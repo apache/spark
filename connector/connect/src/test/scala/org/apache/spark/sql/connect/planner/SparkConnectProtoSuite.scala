@@ -60,6 +60,16 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
+  test("Basic intersect") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.intersect(connectTestRelation, true))
+    }
+
+    val sparkPlan = sparkTestRelation.intersect(sparkTestRelation, true).analyze
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
   test("Basic joins with different join types") {
     val connectPlan = {
       import org.apache.spark.sql.connect.dsl.plans._

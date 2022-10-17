@@ -70,6 +70,7 @@ class Relation(google.protobuf.message.Message):
     AGGREGATE_FIELD_NUMBER: builtins.int
     SQL_FIELD_NUMBER: builtins.int
     LOCAL_RELATION_FIELD_NUMBER: builtins.int
+    INTERSECT_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -94,6 +95,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def local_relation(self) -> global___LocalRelation: ...
     @property
+    def intersect(self) -> global___Intersect: ...
+    @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
         self,
@@ -109,6 +112,7 @@ class Relation(google.protobuf.message.Message):
         aggregate: global___Aggregate | None = ...,
         sql: global___SQL | None = ...,
         local_relation: global___LocalRelation | None = ...,
+        intersect: global___Intersect | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -122,6 +126,8 @@ class Relation(google.protobuf.message.Message):
             b"fetch",
             "filter",
             b"filter",
+            "intersect",
+            b"intersect",
             "join",
             b"join",
             "local_relation",
@@ -153,6 +159,8 @@ class Relation(google.protobuf.message.Message):
             b"fetch",
             "filter",
             b"filter",
+            "intersect",
+            b"intersect",
             "join",
             b"join",
             "local_relation",
@@ -186,6 +194,7 @@ class Relation(google.protobuf.message.Message):
         "aggregate",
         "sql",
         "local_relation",
+        "intersect",
         "unknown",
     ] | None: ...
 
@@ -669,6 +678,38 @@ class Sort(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Sort = Sort
+
+class Intersect(google.protobuf.message.Message):
+    """Relation of type [[Intersect]]"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    OTHER_FIELD_NUMBER: builtins.int
+    IS_ALL_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation: ...
+    @property
+    def other(self) -> global___Relation: ...
+    is_all: builtins.bool
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        other: global___Relation | None = ...,
+        is_all: builtins.bool = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input", "other", b"other"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "input", b"input", "is_all", b"is_all", "other", b"other"
+        ],
+    ) -> None: ...
+
+global___Intersect = Intersect
 
 class LocalRelation(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
