@@ -313,6 +313,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveAggregateFunctions ::
       TimeWindowing ::
       SessionWindowing ::
+      ResolveWindowTime ::
       ResolveDefaultColumns(v1SessionCatalog) ::
       ResolveInlineTables ::
       ResolveLambdaVariables ::
@@ -4024,10 +4025,21 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
         val window = windowExpressions.head
 
+        if (StructType.acceptsType(window.timeColumn.dataType)) {
+          return p.transformExpressions {
+            case t: TimeWindow => t.copy(timeColumn = WindowTime(window.timeColumn))
+          }
+        }
+
         val metadata = window.timeColumn match {
           case a: Attribute => a.metadata
           case _ => Metadata.empty
         }
+
+        val newMetadata = new MetadataBuilder()
+          .withMetadata(metadata)
+          .putBoolean(TimeWindow.marker, true)
+          .build()
 
         def getWindow(i: Int, dataType: DataType): Expression = {
           val timestamp = PreciseTimestampConversion(window.timeColumn, dataType, LongType)
@@ -4047,11 +4059,11 @@ object TimeWindowing extends Rule[LogicalPlan] {
         }
 
         val windowAttr = AttributeReference(
-          WINDOW_COL_NAME, window.dataType, metadata = metadata)()
+          WINDOW_COL_NAME, window.dataType, metadata = newMetadata)()
 
         if (window.windowDuration == window.slideDuration) {
           val windowStruct = Alias(getWindow(0, window.timeColumn.dataType), WINDOW_COL_NAME)(
-            exprId = windowAttr.exprId, explicitMetadata = Some(metadata))
+            exprId = windowAttr.exprId, explicitMetadata = Some(newMetadata))
 
           val replacedPlan = p transformExpressions {
             case t: TimeWindow => windowAttr
@@ -4133,6 +4145,12 @@ object SessionWindowing extends Rule[LogicalPlan] {
 
         val session = sessionExpressions.head
 
+        if (StructType.acceptsType(session.timeColumn.dataType)) {
+          return p transformExpressions {
+            case t: SessionWindow => t.copy(timeColumn = WindowTime(session.timeColumn))
+          }
+        }
+
         val metadata = session.timeColumn match {
           case a: Attribute => a.metadata
           case _ => Metadata.empty
@@ -4195,6 +4213,140 @@ object SessionWindowing extends Rule[LogicalPlan] {
             Project(sessionStruct +: child.output, child)) :: Nil)
       } else if (numWindowExpr > 1) {
         throw QueryCompilationErrors.multiTimeWindowExpressionsNotSupportedError(p)
+      } else {
+        p // Return unchanged. Analyzer will throw exception later
+      }
+  }
+}
+
+/**
+ * Resolves the window_time expression which extracts the correct window time from the
+ * window column generated as the output of the window aggregating operators. The
+ * window column is of type struct { start: TimestampType, end: TimestampType }.
+ * The correct window time for further aggregations is window.end - 1.
+ * */
+object ResolveWindowTime extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    case p: LogicalPlan if p.children.size == 1 =>
+      val child = p.children.head
+      val windowTimeExpressions =
+        p.expressions.flatMap(_.collect { case w: WindowTime => w }).toSet
+
+      if (windowTimeExpressions.size == 1 &&
+        windowTimeExpressions.head.windowColumn.resolved &&
+        windowTimeExpressions.head.checkInputDataTypes().isSuccess) {
+
+        val windowTime = windowTimeExpressions.head
+
+        val metadata = windowTime.windowColumn match {
+          case a: Attribute => a.metadata
+          case _ => Metadata.empty
+        }
+
+        if (!metadata.contains(TimeWindow.marker) &&
+          !metadata.contains(SessionWindow.marker)) {
+          // FIXME: error framework?
+          throw new AnalysisException("The input is not a correct window column!")
+        }
+
+        val newMetadata = new MetadataBuilder()
+          .withMetadata(metadata)
+          .remove(TimeWindow.marker)
+          .remove(SessionWindow.marker)
+          .build()
+
+        val attr = AttributeReference(
+          "window_time", windowTime.dataType, metadata = newMetadata)()
+
+        // NOTE: "window.end" is "exclusive" upper bound of window, so if we use this value as
+        // it is, it is going to be bound to the different window even if we apply the same window
+        // spec. Decrease 1 microsecond from window.end to let the window_time be bound to the
+        // correct window range.
+        val subtractExpr =
+        PreciseTimestampConversion(
+          Subtract(PreciseTimestampConversion(
+            // FIXME: better handling of window.end
+            GetStructField(windowTime.windowColumn, 1),
+            windowTime.dataType, LongType), Literal(1L)),
+          LongType,
+          windowTime.dataType)
+
+        // FIXME: Can there already be a window_time column? Will this lead to conflict?
+        val newColumn = Alias(subtractExpr, "window_time")(
+          exprId = attr.exprId, explicitMetadata = Some(newMetadata))
+
+        val replacedPlan = p transformExpressions {
+          case w: WindowTime => attr
+        }
+
+        replacedPlan.withNewChildren(Project(newColumn +: child.output, child) :: Nil)
+      } else {
+        p // Return unchanged. Analyzer will throw exception later
+      }
+  }
+}
+
+/**
+ * Resolves the window_time expression which extracts the correct window time from the
+ * window column generated as the output of the window aggregating operators. The
+ * window column is of type struct { start: TimestampType, end: TimestampType }.
+ * The correct window time for further aggregations is window.end - 1.
+ * */
+object ResolveWindowTime extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    case p: LogicalPlan if p.children.size == 1 =>
+      val child = p.children.head
+      val windowTimeExpressions =
+        p.expressions.flatMap(_.collect { case w: WindowTime => w }).toSet
+
+      if (windowTimeExpressions.size == 1 &&
+        windowTimeExpressions.head.windowColumn.resolved &&
+        windowTimeExpressions.head.checkInputDataTypes().isSuccess) {
+
+        val windowTime = windowTimeExpressions.head
+
+        val metadata = windowTime.windowColumn match {
+          case a: Attribute => a.metadata
+          case _ => Metadata.empty
+        }
+
+        if (!metadata.contains(TimeWindow.marker) &&
+          !metadata.contains(SessionWindow.marker)) {
+          // FIXME: error framework?
+          throw new AnalysisException("The input is not a correct window column!")
+        }
+
+        val newMetadata = new MetadataBuilder()
+          .withMetadata(metadata)
+          .remove(TimeWindow.marker)
+          .remove(SessionWindow.marker)
+          .build()
+
+        val attr = AttributeReference(
+          "window_time", windowTime.dataType, metadata = newMetadata)()
+
+        // NOTE: "window.end" is "exclusive" upper bound of window, so if we use this value as
+        // it is, it is going to be bound to the different window even if we apply the same window
+        // spec. Decrease 1 microsecond from window.end to let the window_time be bound to the
+        // correct window range.
+        val subtractExpr =
+        PreciseTimestampConversion(
+          Subtract(PreciseTimestampConversion(
+            // FIXME: better handling of window.end
+            GetStructField(windowTime.windowColumn, 1),
+            windowTime.dataType, LongType), Literal(1L)),
+          LongType,
+          windowTime.dataType)
+
+        // FIXME: Can there already be a window_time column? Will this lead to conflict?
+        val newColumn = Alias(subtractExpr, "window_time")(
+          exprId = attr.exprId, explicitMetadata = Some(newMetadata))
+
+        val replacedPlan = p transformExpressions {
+          case w: WindowTime => attr
+        }
+
+        replacedPlan.withNewChildren(Project(newColumn +: child.output, child) :: Nil)
       } else {
         p // Return unchanged. Analyzer will throw exception later
       }

@@ -4884,6 +4884,42 @@ def window(
         return _invoke_function("window", time_col, windowDuration)
 
 
+def window_time(
+    windowColumn: "ColumnOrName",
+) -> Column:
+    """Computes the event time from a window column. The column window values are produced
+    by window aggregating operators and are of type
+    StructType { start: TimestampType, end: TimestampType } where start is inclusive and
+    end is exclusive. The event time of records produced by window aggregating operators can be
+    computed as window_time(window) and are window.end - 1 microsecond (as microsecond is the
+    minimal supported event time precision).
+    The window column must be one produced by a window aggregating operator - of type
+    :class:`pyspark.sql.types.StructType`.
+    .. versionadded:: 3.4.0
+    Parameters
+    ----------
+    windowColumn : :class:`~pyspark.sql.Column`
+        The window column of a window aggregate records.
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+    Examples
+    --------
+    >>> import datetime
+    >>> df = spark.createDataFrame(
+    ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)],
+    ... ).toDF("date", "val")
+    >>> w = df.groupBy(window("date", "5 seconds")).agg(sum("val").alias("sum"))
+    >>> w.select(w.window.end.cast("string").alias("end"),
+    ...          window_time(w.window).cast("string").alias("window_time"),
+    ...          "sum").collect()
+    [Row(end='2016-03-11 09:00:10', window_time='2016-03-11 09:00:09.999999', sum=1)]
+    """
+    window_col = _to_java_column(windowColumn)
+    return _invoke_function("window_time", window_col)
+
+
 def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) -> Column:
     """
     Generates session window given a timestamp specifying column.
