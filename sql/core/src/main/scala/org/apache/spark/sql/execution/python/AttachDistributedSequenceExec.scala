@@ -46,30 +46,30 @@ case class AttachDistributedSequenceExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     val childRDD = child.execute()
-    // before `compute.distributed_sequence_index_cache` is explicitly set via
+    // before `compute.default_index_cache` is explicitly set via
     // `ps.set_option`, `SQLConf.get` can not get its value (as well as its default value);
     // after `ps.set_option`, `SQLConf.get` can get its value:
     //
     //    In [1]: import pyspark.pandas as ps
-    //    In [2]: ps.get_option("compute.distributed_sequence_index_cache")
+    //    In [2]: ps.get_option("compute.default_index_cache")
     //    Out[2]: 'MEMORY_AND_DISK_SER'
-    //    In [3]: spark.conf.get("pandas_on_Spark.compute.distributed_sequence_index_cache")
+    //    In [3]: spark.conf.get("pandas_on_Spark.compute.default_index_cache")
     //    ...
     //    Py4JJavaError: An error occurred while calling o40.get.
     //      : java.util.NoSuchElementException: pandas_on_Spark.compute.distributed_sequence_...
     //    at org.apache.spark.sql.errors.QueryExecutionErrors$.noSuchElementExceptionError...
     //    at org.apache.spark.sql.internal.SQLConf.$anonfun$getConfString$3(SQLConf.scala:4766)
     //    ...
-    //    In [4]: ps.set_option("compute.distributed_sequence_index_cache", "NONE")
-    //    In [5]: spark.conf.get("pandas_on_Spark.compute.distributed_sequence_index_cache")
+    //    In [4]: ps.set_option("compute.default_index_cache", "NONE")
+    //    In [5]: spark.conf.get("pandas_on_Spark.compute.default_index_cache")
     //    Out[5]: '"NONE"'
-    //    In [6]: ps.set_option("compute.distributed_sequence_index_cache", "DISK_ONLY")
-    //    In [7]: spark.conf.get("pandas_on_Spark.compute.distributed_sequence_index_cache")
+    //    In [6]: ps.set_option("compute.default_index_cache", "DISK_ONLY")
+    //    In [7]: spark.conf.get("pandas_on_Spark.compute.default_index_cache")
     //    Out[7]: '"DISK_ONLY"'
 
     // The string is double quoted because of JSON ser/deser for pandas API on Spark
     val storageLevel = SQLConf.get.getConfString(
-      "pandas_on_Spark.compute.distributed_sequence_index_cache",
+      "pandas_on_Spark.compute.default_index_cache",
       "MEMORY_AND_DISK_SER"
     ).stripPrefix("\"").stripSuffix("\"")
 

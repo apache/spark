@@ -271,7 +271,7 @@ compute.ops_on_diff_frames      False                   This determines whether 
                                                         that method throws an exception.
 compute.default_index_type      'distributed-sequence'  This sets the default index type: sequence,
                                                         distributed and distributed-sequence.
-compute.distributed_sequence_index_cache 'MEMORY_AND_DISK_SER'   This sets the default storage level for temporary
+compute.default_index_cache     'MEMORY_AND_DISK_SER'   This sets the default storage level for temporary
                                                         RDDs cached in distributed-sequence indexing: 'NONE',
                                                         'DISK_ONLY', 'DISK_ONLY_2', 'DISK_ONLY_3',
                                                         'MEMORY_ONLY', 'MEMORY_ONLY_2', 'MEMORY_ONLY_SER',

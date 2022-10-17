@@ -184,7 +184,7 @@ _options: List[Option] = [
         ),
     ),
     Option(
-        key="compute.distributed_sequence_index_cache",
+        key="compute.default_index_cache",
         doc=(
             "This sets the default storage level for temporary RDDs cached in "
             "distributed-sequence indexing: 'NONE', 'DISK_ONLY', 'DISK_ONLY_2', "
