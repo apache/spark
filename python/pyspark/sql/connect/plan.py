@@ -49,7 +49,6 @@ class LogicalPlan(object):
     def __init__(self, child: Optional["LogicalPlan"]) -> None:
         self._child = child
 
-
     def unresolved_attr(self, *colNames: str) -> proto.Expression:
         """Creates an unresolved attribute from a column name."""
         exp = proto.Expression()
@@ -323,13 +322,13 @@ class Aggregate(LogicalPlan):
     ) -> proto.Aggregate.AggregateFunction:
         exp, fun = m
         measure = proto.Aggregate.AggregateFunction()
-        measure.function.name = fun  # type: ignore[attr-defined]
+        measure.function.name = fun
         if type(exp) is str:
-            measure.function.arguments.append(  # type: ignore[attr-defined]
+            measure.function.arguments.append(
                 self.unresolved_attr(exp)
             )
         else:
-            measure.function.arguments.append(  # type: ignore[attr-defined]
+            measure.function.arguments.append(
                 cast(Expression, exp).to_plan(session)
             )
         return measure
@@ -340,13 +339,13 @@ class Aggregate(LogicalPlan):
 
         agg = proto.Relation()
         agg.aggregate.input.CopyFrom(self._child.plan(session))
-        agg.aggregate.measures.extend(  # type: ignore[attr-defined]
+        agg.aggregate.measures.extend(
             list(map(lambda x: self._convert_measure(x, session), self.measures))
         )
 
-        gs = proto.Aggregate.GroupingSet()  # type: ignore[attr-defined]
+        gs = proto.Aggregate.GroupingSet()
         gs.aggregate_expressions.extend(groupings)
-        agg.aggregate.grouping_sets.append(gs)  # type: ignore[attr-defined]
+        agg.aggregate.grouping_sets.append(gs)
         return agg
 
     def print(self, indent: int = 0) -> str:
