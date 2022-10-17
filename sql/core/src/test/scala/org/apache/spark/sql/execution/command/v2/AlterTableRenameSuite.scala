@@ -35,13 +35,25 @@ class AlterTableRenameSuite extends command.AlterTableRenameSuiteBase with Comma
     }
   }
 
-  test("include catalog in the destination table") {
+  test("include the same catalog name in the destination table") {
     withNamespaceAndTable("ns", "dst_tbl", catalog) { dst =>
       val src = dst.replace("dst", "src")
       sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
       sql(s"INSERT INTO $src SELECT 0")
 
       sql(s"ALTER TABLE $src RENAME TO $catalog.ns.dst_tbl")
+      checkTables("ns", "dst_tbl")
+    }
+  }
+
+  test("include the different catalog name in the destination table") {
+    withNamespaceAndTable("ns", "dst_tbl") { dst =>
+      val src = dst.replace("dst", "src")
+      val newDst = dst.replace("test_catalog", "another_test_catalog")
+      sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
+      sql(s"INSERT INTO $src SELECT 0")
+
+      sql(s"ALTER TABLE $src RENAME TO $newDst")
       checkTables("ns", "dst_tbl")
     }
   }
