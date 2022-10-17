@@ -24,7 +24,6 @@ import scala.collection.parallel.ForkJoinTaskSupport
 import scala.collection.parallel.immutable.ParVector
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
@@ -42,7 +41,7 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.hiveTableWithAnsiIntervalsError
 import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
@@ -77,9 +76,6 @@ case class CreateDatabaseCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (path.isDefined && StringUtils.isEmpty(path.get)) {
-      throw QueryExecutionErrors.unsupportedEmptyLocationError()
-    }
     catalog.createDatabase(
       CatalogDatabase(
         databaseName,
@@ -158,9 +154,6 @@ case class AlterDatabaseSetLocationCommand(databaseName: String, location: Strin
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val oldDb = catalog.getDatabaseMetadata(databaseName)
-    if (StringUtils.isEmpty(location)) {
-      throw QueryExecutionErrors.unsupportedEmptyLocationError()
-    }
     catalog.alterDatabase(oldDb.copy(locationUri = CatalogUtils.stringToURI(location)))
 
     Seq.empty[Row]
