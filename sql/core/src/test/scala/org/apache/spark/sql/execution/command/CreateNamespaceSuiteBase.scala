@@ -83,7 +83,7 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
           exception = intercept[SparkIllegalArgumentException] {
             sql(sqlText)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_2201",
+          errorClass = "_LEGACY_ERROR_TEMP_2251",
           parameters = Map.empty)
         
         val uri = new Path(path).toUri
