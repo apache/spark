@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{QueryContext, SparkIllegalArgumentException, SparkThrowable}
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -52,15 +52,6 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   protected def notFoundMsgPrefix: String =
     if (commandVersion == V1_COMMAND_VERSION) "Database" else "Namespace"
-
-  override def checkError(
-      exception: SparkThrowable,
-      errorClass: String,
-      sqlState: Option[String],
-      parameters: Map[String, String],
-      matchPVals: Boolean,
-      queryContext: Array[QueryContext]): Unit =
-    super.checkError(exception, errorClass, sqlState, parameters, matchPVals, queryContext)
 
   test("basic") {
     val ns = s"$catalog.$namespace"

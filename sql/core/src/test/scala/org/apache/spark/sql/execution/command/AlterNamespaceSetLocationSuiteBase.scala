@@ -47,7 +47,7 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
     withNamespace(ns) {
       sql(s"CREATE NAMESPACE $ns")
       val sqlText = s"ALTER NAMESPACE $ns SET LOCATION ''"
-      super.checkError(
+      checkError(
         exception = intercept[SparkIllegalArgumentException] {
           sql(sqlText)
         },
