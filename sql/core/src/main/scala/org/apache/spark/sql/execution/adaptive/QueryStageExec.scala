@@ -151,6 +151,11 @@ abstract class QueryStageExec extends LeafExecNode {
     plan.generateTreeString(
       depth + 1, lastChildren :+ true, append, verbose, "", false, maxFields, printNodeId, indent)
   }
+
+  override protected[sql] def cleanupResources(): Unit = {
+    plan.cleanupResources()
+    super.cleanupResources()
+  }
 }
 
 /**
