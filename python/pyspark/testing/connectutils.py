@@ -68,7 +68,7 @@ class PlanOnlyTestFixture(unittest.TestCase):
         return DataFrame.withPlan(Read(table_name), cls.connect)  # type: ignore
 
     @classmethod
-    def _udf_mock(cls, *args, **kwargs):
+    def _udf_mock(cls, *args, **kwargs) -> str:
         return "internal_name"
 
     @classmethod
