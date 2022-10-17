@@ -75,6 +75,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertIsNotNone(result)
 
     def test_simple_explain_string(self):
+        read_rel = Read("test_table")
         df = self.connect.read.table(self.tbl_name).limit(10)
         result = df.explain()
         self.assertGreater(len(result), 0)

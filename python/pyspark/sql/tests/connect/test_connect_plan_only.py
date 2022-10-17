@@ -28,21 +28,11 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
     generation but do not call Spark."""
 
     def test_simple_project(self):
-        def read_table(x):
-            return DataFrame.withPlan(Read(x), self.connect)
-
-        self.connect.set_hook("readTable", read_table)
-
-        plan = self.connect.readTable(self.tbl_name)._plan.collect(self.connect)
+        plan = self.connect.readTable(table_name=self.tbl_name)._plan.collect(self.connect)
         self.assertIsNotNone(plan.root, "Root relation must be set")
         self.assertIsNotNone(plan.root.read)
 
     def test_simple_udf(self):
-        def udf_mock(*args, **kwargs):
-            return "internal_name"
-
-        self.connect.set_hook("register_udf", udf_mock)
-
         u = udf(lambda x: "Martin", StringType())
         self.assertIsNotNone(u)
         expr = u("ThisCol", "ThatCol", "OtherCol")
@@ -51,12 +41,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertIsNotNone(u_plan)
 
     def test_all_the_plans(self):
-        def read_table(x):
-            return DataFrame.withPlan(Read(x), self.connect)
-
-        self.connect.set_hook("readTable", read_table)
-
-        df = self.connect.readTable(self.tbl_name)
+        df = self.connect.readTable(table_name=self.tbl_name)
         df = df.select(df.col1).filter(df.col2 == 2).sort(df.col3.asc())
         plan = df._plan.collect(self.connect)
         self.assertIsNotNone(plan.root, "Root relation must be set")
