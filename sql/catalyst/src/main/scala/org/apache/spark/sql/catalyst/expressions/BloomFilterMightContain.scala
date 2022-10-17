@@ -22,7 +22,7 @@ import java.io.ByteArrayInputStream
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLType}
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, JavaCode, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
@@ -65,7 +65,7 @@ case class BloomFilterMightContain(
               errorSubClass = "BLOOM_FILTER_BINARY_OP_WRONG_TYPE",
               messageParameters = Map(
                 "functionName" -> toSQLId(prettyName),
-                "actual" -> toSQLType(bloomFilterExpression.dataType)
+                "actual" -> toSQLExpr(bloomFilterExpression)
               )
             )
         }

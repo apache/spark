@@ -206,7 +206,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"might_contain(CAST(a AS BINARY), CAST(5 AS BIGINT))\"",
         "functionName" -> "`might_contain`",
-        "actual" -> "\"BINARY\""
+        "actual" -> "\"CAST(a AS BINARY)\""
       ),
       context = ExpectedContext(
         fragment = "might_contain(cast(a as binary), cast(5 as long))",
@@ -227,7 +227,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"might_contain(scalarsubquery(a), CAST(5 AS BIGINT))\"",
         "functionName" -> "`might_contain`",
-        "actual" -> "\"BINARY\""
+        "actual" -> "\"scalarsubquery(a)\""
       ),
       context = ExpectedContext(
         fragment = "might_contain((select cast(a as binary)), cast(5 as long))",
