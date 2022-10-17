@@ -173,6 +173,7 @@
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
+    <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.13.4</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.13.4.1</fasterxml.jackson.databind.version>
@@ -3417,7 +3418,7 @@
           <skipSources>${scalafmt.skip}</skipSources>
           <skipTestSources>${scalafmt.skip}</skipTestSources>
           <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config location -->
-          <onlyChangedFiles>true</onlyChangedFiles>
+          <onlyChangedFiles>${scalafmt.changedOnly}</onlyChangedFiles>
         </configuration>
         <executions>
           <execution>
