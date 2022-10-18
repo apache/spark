@@ -716,11 +716,11 @@ object SparkProtobuf {
 
     dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
 
-  (Test / PB.protoSources) := Seq((Test / sourceDirectory).value / "resources/protobuf"),
+    (Test / PB.protoSources) := Seq((Test / sourceDirectory).value / "resources/protobuf"),
 
-  (Test / PB.targets) := Seq(
-    PB.gens.java -> target.value / "generated-test-sources"
-  ),
+    (Test / PB.targets) := Seq(
+      PB.gens.java -> target.value / "generated-test-sources"
+    ),
 
     (assembly / test) := { },
 
