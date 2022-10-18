@@ -94,7 +94,8 @@ private[sql] object PartitioningUtils {
               case other => other
             }
             v.asInstanceOf[T]
-          case _ if value != null && value != DEFAULT_PARTITION_NAME =>
+          case _ if !SQLConf.get.getConf(SQLConf.SKIP_PARTITION_SPEC_TYPE_VALIDATION) &&
+              value != null && value != DEFAULT_PARTITION_NAME =>
             val v = value match {
               case Some(str: String) => Some(castPartitionSpecToString(str, normalizedFiled))
               case str: String => castPartitionSpecToString(str, normalizedFiled)

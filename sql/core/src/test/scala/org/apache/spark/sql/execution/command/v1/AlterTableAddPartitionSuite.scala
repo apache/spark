@@ -160,6 +160,18 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
       checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
     }
   }
+
+  test("SPARK-40798: Alter partition should verify partition value - legacy") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (c int) $defaultUsing PARTITIONED BY (p int)")
+
+      withSQLConf(SQLConf.SKIP_PARTITION_SPEC_TYPE_VALIDATION.key -> "true") {
+        sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
+        checkPartitions(t, Map("p" -> "aaa"))
+        sql(s"ALTER TABLE $t DROP PARTITION (p='aaa')")
+      }
+    }
+  }
 }
 
 /**

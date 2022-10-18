@@ -2995,6 +2995,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SKIP_PARTITION_SPEC_TYPE_VALIDATION =
+    buildConf("spark.sql.legacy.skipPartitionSpecTypeValidation")
+      .internal()
+      .doc("When true, skip do validation for partition spec. E.g., " +
+        "`ALTER TABLE .. ADD PARTITION(p='a')` would work even the partition type is int. " +
+        s"When false, the behavior follows ${STORE_ASSIGNMENT_POLICY.key}")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
