@@ -74,7 +74,7 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
   test("SparkListenerSQLExecutionEnd backward compatibility") {
     spark = new TestSparkSession()
     val qe = spark.sql("select 1").queryExecution
-    val event = SparkListenerSQLExecutionEnd(1, 10)
+    val event = SparkListenerSQLExecutionEnd(1, 10, Some("test"))
     event.duration = 1000
     event.executionName = Some("test")
     event.qe = qe
@@ -85,7 +85,8 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
         |{
         |  "Event" : "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",
         |  "executionId" : 1,
-        |  "time" : 10
+        |  "time" : 10,
+        |  "errorMessage": "test"
         |}
       """.stripMargin))
     val readBack = JsonProtocol.sparkEventFromJson(json)
@@ -94,6 +95,33 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
     event.qe = null
     event.executionFailure = None
     assert(readBack == event)
+  }
+
+  test("SPARK-40834: Use SparkListenerSQLExecutionEnd to track final SQL status in UI") {
+    // parse old event log using new SparkListenerSQLExecutionEnd
+    val executionEnd =
+      """
+        |{
+        |  "Event" : "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",
+        |  "executionId" : 1,
+        |  "time" : 10
+        |}
+      """.stripMargin
+    val readBack = JsonProtocol.sparkEventFromJson(executionEnd)
+    assert(readBack == SparkListenerSQLExecutionEnd(1, 10))
+
+    // parse new event using old SparkListenerSQLExecutionEnd
+    val newExecutionEnd =
+      """
+        |{
+        |  "Event" : "org.apache.spark.sql.execution.OldVersionSQLExecutionEnd",
+        |  "executionId" : 1,
+        |  "time" : 10,
+        |  "errorMessage": "test"
+        |}
+      """.stripMargin
+    val readBack2 = JsonProtocol.sparkEventFromJson(newExecutionEnd)
+    assert(readBack2 == OldVersionSQLExecutionEnd(1, 10))
   }
 }
 
@@ -104,4 +132,7 @@ private case class OldVersionSQLExecutionStart(
     physicalPlanDescription: String,
     sparkPlanInfo: SparkPlanInfo,
     time: Long)
+  extends SparkListenerEvent
+
+private case class OldVersionSQLExecutionEnd(executionId: Long, time: Long)
   extends SparkListenerEvent
