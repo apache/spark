@@ -17,8 +17,7 @@
 import unittest
 
 from pyspark.testing.connectutils import PlanOnlyTestFixture
-from pyspark.sql.connect import DataFrame
-from pyspark.sql.connect.plan import Read
+import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
 from pyspark.sql.types import StringType
 
@@ -28,21 +27,28 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
     generation but do not call Spark."""
 
     def test_simple_project(self):
-        def read_table(x):
-            return DataFrame.withPlan(Read(x), self.connect)
-
-        self.connect.set_hook("readTable", read_table)
-
-        plan = self.connect.readTable(self.tbl_name)._plan.collect(self.connect)
+        plan = self.connect.readTable(table_name=self.tbl_name)._plan.collect(self.connect)
         self.assertIsNotNone(plan.root, "Root relation must be set")
         self.assertIsNotNone(plan.root.read)
 
+    def test_filter(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.filter(df.col_name > 3)._plan.collect(self.connect)
+        self.assertIsNotNone(plan.root.filter)
+        self.assertTrue(
+            isinstance(
+                plan.root.filter.condition.unresolved_function, proto.Expression.UnresolvedFunction
+            )
+        )
+        self.assertEqual(plan.root.filter.condition.unresolved_function.parts, ["gt"])
+        self.assertEqual(len(plan.root.filter.condition.unresolved_function.arguments), 2)
+
+    def test_relation_alias(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.alias("table_alias")._plan.collect(self.connect)
+        self.assertEqual(plan.root.common.alias, "table_alias")
+
     def test_simple_udf(self):
-        def udf_mock(*args, **kwargs):
-            return "internal_name"
-
-        self.connect.set_hook("register_udf", udf_mock)
-
         u = udf(lambda x: "Martin", StringType())
         self.assertIsNotNone(u)
         expr = u("ThisCol", "ThatCol", "OtherCol")
@@ -51,12 +57,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertIsNotNone(u_plan)
 
     def test_all_the_plans(self):
-        def read_table(x):
-            return DataFrame.withPlan(Read(x), self.connect)
-
-        self.connect.set_hook("readTable", read_table)
-
-        df = self.connect.readTable(self.tbl_name)
+        df = self.connect.readTable(table_name=self.tbl_name)
         df = df.select(df.col1).filter(df.col2 == 2).sort(df.col3.asc())
         plan = df._plan.collect(self.connect)
         self.assertIsNotNone(plan.root, "Root relation must be set")

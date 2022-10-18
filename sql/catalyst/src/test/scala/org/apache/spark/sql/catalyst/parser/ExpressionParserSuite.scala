@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.language.implicitConversions
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
@@ -57,11 +58,9 @@ class ExpressionParserSuite extends AnalysisTest {
     compareExpressions(parser.parseExpression(sqlCommand), e)
   }
 
-  private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(defaultParser.parseExpression)(sqlCommand, messages: _*)()
-
-  private def intercept(sqlCommand: String, errorClass: Option[String], messages: String*): Unit =
-    interceptParseException(defaultParser.parseExpression)(sqlCommand, messages: _*)(errorClass)
+  private def parseException(sqlText: String): SparkThrowable = {
+    super.parseException(defaultParser.parseExpression)(sqlText)
+  }
 
   def assertEval(
       sqlCommand: String,
@@ -197,12 +196,45 @@ class ExpressionParserSuite extends AnalysisTest {
     val message = "Escape string must contain only one character."
     assertEqual("a like 'pattern%' escape '#'", $"a".like("pattern%", '#'))
     assertEqual("a like 'pattern%' escape '\"'", $"a".like("pattern%", '\"'))
-    intercept("a like 'pattern%' escape '##'", message)
-    intercept("a like 'pattern%' escape ''", message)
+
+    checkError(
+      exception = parseException("a like 'pattern%' escape '##'"),
+      errorClass = "_LEGACY_ERROR_TEMP_0017",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "like 'pattern%' escape '##'",
+        start = 2,
+        stop = 28))
+
+    checkError(
+      exception = parseException("a like 'pattern%' escape ''"),
+      errorClass = "_LEGACY_ERROR_TEMP_0017",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "like 'pattern%' escape ''",
+        start = 2,
+        stop = 26))
+
     assertEqual("a not like 'pattern%' escape '#'", !($"a".like("pattern%", '#')))
     assertEqual("a not like 'pattern%' escape '\"'", !($"a".like("pattern%", '\"')))
-    intercept("a not like 'pattern%' escape '\"/'", message)
-    intercept("a not like 'pattern%' escape ''", message)
+
+    checkError(
+      exception = parseException("a not like 'pattern%' escape '\"/'"),
+      errorClass = "_LEGACY_ERROR_TEMP_0017",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "not like 'pattern%' escape '\"/'",
+        start = 2,
+        stop = 32))
+
+    checkError(
+      exception = parseException("a not like 'pattern%' escape ''"),
+      errorClass = "_LEGACY_ERROR_TEMP_0017",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "not like 'pattern%' escape ''",
+        start = 2,
+        stop = 30))
   }
 
   test("like expressions with ESCAPED_STRING_LITERALS = true") {
@@ -225,7 +257,14 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("not (a like all ('foo%', 'b%'))", !($"a" likeAll("foo%", "b%")))
 
     Seq("any", "some", "all").foreach { quantifier =>
-      intercept(s"a like $quantifier()", "Expected something between '(' and ')'")
+      checkError(
+        exception = parseException(s"a like $quantifier()"),
+        errorClass = "_LEGACY_ERROR_TEMP_0064",
+        parameters = Map("msg" -> "Expected something between '(' and ')'."),
+        context = ExpectedContext(
+          fragment = s"like $quantifier()",
+          start = 2,
+          stop = 8 + quantifier.length))
     }
   }
 
@@ -285,7 +324,10 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("foo(distinct a, b)", $"foo".distinctFunction($"a", $"b"))
     assertEqual("grouping(distinct a, b)", $"grouping".distinctFunction($"a", $"b"))
     assertEqual("`select`(all a, b)", $"select".function($"a", $"b"))
-    intercept("foo(a x)", "Syntax error at or near 'x': extra input 'x'")
+    checkError(
+      exception = parseException("foo(a x)"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'x'", "hint" -> ": extra input 'x'"))
   }
 
   private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
@@ -398,8 +440,14 @@ class ExpressionParserSuite extends AnalysisTest {
     }
 
     // We cannot use an arbitrary expression.
-    intercept("foo(*) over (partition by a order by b rows exp(b) preceding)",
-      "Frame bound value must be a literal.")
+    checkError(
+      exception = parseException("foo(*) over (partition by a order by b rows exp(b) preceding)"),
+      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> "Frame bound value must be a literal."),
+      context = ExpectedContext(
+        fragment = "exp(b) preceding",
+        start = 44,
+        stop = 59))
   }
 
   test("row constructor") {
@@ -471,28 +519,64 @@ class ExpressionParserSuite extends AnalysisTest {
       // Timestamp with local time zone
       assertEqual("tImEstAmp_LTZ '2016-03-11 20:54:00.000'",
         Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
-      intercept("timestamP_LTZ '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP_LTZ value")
+      checkError(
+        exception = parseException("timestamP_LTZ '2016-33-11 20:54:00.000'"),
+        errorClass = "_LEGACY_ERROR_TEMP_0019",
+        parameters = Map("valueType" -> "TIMESTAMP_LTZ", "value" -> "2016-33-11 20:54:00.000"),
+        context = ExpectedContext(
+          fragment = "timestamP_LTZ '2016-33-11 20:54:00.000'",
+          start = 0,
+          stop = 38))
+
       // Timestamp without time zone
       assertEqual("tImEstAmp_Ntz '2016-03-11 20:54:00.000'",
         Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
-      intercept("tImEstAmp_Ntz '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP_NTZ value")
+      checkError(
+        exception = parseException("tImEstAmp_Ntz '2016-33-11 20:54:00.000'"),
+        errorClass = "_LEGACY_ERROR_TEMP_0019",
+        parameters = Map("valueType" -> "TIMESTAMP_NTZ", "value" -> "2016-33-11 20:54:00.000"),
+        context = ExpectedContext(
+          fragment = "tImEstAmp_Ntz '2016-33-11 20:54:00.000'",
+          start = 0,
+          stop = 38))
     }
 
     // Dates.
     assertEqual("dAte '2016-03-11'", Literal(Date.valueOf("2016-03-11")))
-    intercept("DAtE 'mar 11 2016'", "Cannot parse the DATE value")
+    checkError(
+      exception = parseException("DAtE 'mar 11 2016'"),
+      errorClass = "_LEGACY_ERROR_TEMP_0019",
+      parameters = Map("valueType" -> "DATE", "value" -> "mar 11 2016"),
+      context = ExpectedContext(
+        fragment = "DAtE 'mar 11 2016'",
+        start = 0,
+        stop = 17))
 
     // Timestamps.
     assertEqual("tImEstAmp '2016-03-11 20:54:00.000'",
       Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
-    intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
+    checkError(
+      exception = parseException("timestamP '2016-33-11 20:54:00.000'"),
+      errorClass = "_LEGACY_ERROR_TEMP_0019",
+      parameters = Map("valueType" -> "TIMESTAMP", "value" -> "2016-33-11 20:54:00.000"),
+      context = ExpectedContext(
+        fragment = "timestamP '2016-33-11 20:54:00.000'",
+        start = 0,
+        stop = 34))
 
     checkTimestampNTZAndLTZ()
     withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_NTZ.toString) {
       assertEqual("tImEstAmp '2016-03-11 20:54:00.000'",
         Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
 
-      intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
+      checkError(
+        exception = parseException("timestamP '2016-33-11 20:54:00.000'"),
+        errorClass = "_LEGACY_ERROR_TEMP_0019",
+        parameters = Map("valueType" -> "TIMESTAMP", "value" -> "2016-33-11 20:54:00.000"),
+        context = ExpectedContext(
+          fragment = "timestamP '2016-33-11 20:54:00.000'",
+          start = 0,
+          stop = 34))
 
       // If the timestamp string contains time zone, return a timestamp with local time zone literal
       assertEqual("tImEstAmp '1970-01-01 00:00:00.000 +01:00'",
@@ -505,24 +589,51 @@ class ExpressionParserSuite extends AnalysisTest {
     val ymIntervalLiteral = Literal.create(Period.of(1, 2, 0), YearMonthIntervalType())
     assertEqual("InterVal 'interval 1 year 2 month'", ymIntervalLiteral)
     assertEqual("INTERVAL '1 year 2 month'", ymIntervalLiteral)
-    intercept("Interval 'interval 1 yearsss 2 monthsss'",
-      "Cannot parse the INTERVAL value: interval 1 yearsss 2 monthsss")
+    checkError(
+      exception = parseException("Interval 'interval 1 yearsss 2 monthsss'"),
+      errorClass = "_LEGACY_ERROR_TEMP_0020",
+      parameters = Map("value" -> "interval 1 yearsss 2 monthsss"),
+      context = ExpectedContext(
+        fragment = "Interval 'interval 1 yearsss 2 monthsss'",
+        start = 0,
+        stop = 39))
+
     assertEqual("-interval '1 year 2 month'", UnaryMinus(ymIntervalLiteral))
     val dtIntervalLiteral = Literal.create(
       Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4).plusMillis(5).plusNanos(6000))
     assertEqual("InterVal 'interval 1 day 2 hour 3 minute 4.005006 second'", dtIntervalLiteral)
     assertEqual("INTERVAL '1 day 2 hour 3 minute 4.005006 second'", dtIntervalLiteral)
-    intercept("Interval 'interval 1 daysss 2 hoursss'",
-      "Cannot parse the INTERVAL value: interval 1 daysss 2 hoursss")
+    checkError(
+      exception = parseException("Interval 'interval 1 daysss 2 hoursss'"),
+      errorClass = "_LEGACY_ERROR_TEMP_0020",
+      parameters = Map("value" -> "interval 1 daysss 2 hoursss"),
+      context = ExpectedContext(
+        fragment = "Interval 'interval 1 daysss 2 hoursss'",
+        start = 0,
+        stop = 37))
+
     assertEqual("-interval '1 day 2 hour 3 minute 4.005006 second'", UnaryMinus(dtIntervalLiteral))
-    intercept("INTERVAL '1 year 2 second'",
-      "Cannot mix year-month and day-time fields: INTERVAL '1 year 2 second'")
+    checkError(
+      exception = parseException("INTERVAL '1 year 2 second'"),
+      errorClass = "_LEGACY_ERROR_TEMP_0029",
+      parameters = Map("literal" -> "INTERVAL '1 year 2 second'"),
+      context = ExpectedContext(
+        fragment = "INTERVAL '1 year 2 second'",
+        start = 0,
+        stop = 25))
 
     withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
       val intervalLiteral = Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))
       assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
       assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
-      intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
+      checkError(
+        exception = parseException("Interval 'interval 3 monthsss 1 hoursss'"),
+        errorClass = "_LEGACY_ERROR_TEMP_0020",
+        parameters = Map("value" -> "interval 3 monthsss 1 hoursss"),
+        context = ExpectedContext(
+          fragment = "Interval 'interval 3 monthsss 1 hoursss'",
+          start = 0,
+          stop = 39))
       assertEqual(
         "-interval '3 month 1 hour'",
         UnaryMinus(Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))))
@@ -536,10 +647,23 @@ class ExpressionParserSuite extends AnalysisTest {
     // Binary.
     assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
     assertEqual("x'A10C'", Literal(Array(0xa1, 0x0c).map(_.toByte)))
-    intercept("x'A1OC'")
+    checkError(
+      exception = parseException("x'A1OC'"),
+      errorClass = "_LEGACY_ERROR_TEMP_0022",
+      parameters = Map("msg" -> "contains illegal character for hexBinary: A1OC"),
+      context = ExpectedContext(
+        fragment = "x'A1OC'",
+        start = 0,
+        stop = 6))
 
-    // Unsupported datatype.
-    intercept("GEO '(10,-6)'", "Literals of type 'GEO' are currently not supported.")
+    checkError(
+      exception = parseException("GEO '(10,-6)'"),
+      errorClass = "_LEGACY_ERROR_TEMP_0021",
+      parameters = Map("valueType" -> "GEO"),
+      context = ExpectedContext(
+        fragment = "GEO '(10,-6)'",
+        start = 0,
+        stop = 12))
   }
 
   test("literals") {
@@ -571,32 +695,96 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("900e-1BD", Literal(BigDecimal("900e-1").underlying()))
     assertEqual("900.0E-1BD", Literal(BigDecimal("900.0E-1").underlying()))
     assertEqual("9.e+1BD", Literal(BigDecimal("9.e+1").underlying()))
-    intercept(".e3")
+    checkError(
+      exception = parseException(".e3"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'.'", "hint" -> ": extra input '.'"))
 
     // Tiny Int Literal
     assertEqual("10Y", Literal(10.toByte))
-    intercept("-1000Y", s"does not fit in range [${Byte.MinValue}, ${Byte.MaxValue}]")
+    checkError(
+      exception = parseException("1000Y"),
+      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      parameters = Map(
+        "rawStrippedQualifier" -> "1000",
+        "minValue" -> Byte.MinValue.toString,
+        "maxValue" -> Byte.MaxValue.toString,
+        "typeName" -> "tinyint"),
+      context = ExpectedContext(
+        fragment = "1000Y",
+        start = 0,
+        stop = 4))
 
     // Small Int Literal
     assertEqual("10S", Literal(10.toShort))
-    intercept("40000S", s"does not fit in range [${Short.MinValue}, ${Short.MaxValue}]")
+    checkError(
+      exception = parseException("40000S"),
+      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      parameters = Map(
+        "rawStrippedQualifier" -> "40000",
+        "minValue" -> Short.MinValue.toString,
+        "maxValue" -> Short.MaxValue.toString,
+        "typeName" -> "smallint"),
+      context = ExpectedContext(
+        fragment = "40000S",
+        start = 0,
+        stop = 5))
 
     // Long Int Literal
     assertEqual("10L", Literal(10L))
-    intercept("78732472347982492793712334L",
-        s"does not fit in range [${Long.MinValue}, ${Long.MaxValue}]")
+    checkError(
+      exception = parseException("78732472347982492793712334L"),
+      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      parameters = Map(
+        "rawStrippedQualifier" -> "78732472347982492793712334",
+        "minValue" -> Long.MinValue.toString,
+        "maxValue" -> Long.MaxValue.toString,
+        "typeName" -> "bigint"),
+      context = ExpectedContext(
+        fragment = "78732472347982492793712334L",
+        start = 0,
+        stop = 26))
 
     // Double Literal
     assertEqual("10.0D", Literal(10.0D))
-    intercept("-1.8E308D", s"does not fit in range")
-    intercept("1.8E308D", s"does not fit in range")
+    checkError(
+      exception = parseException("-1.8E308D"),
+      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      parameters = Map(
+        "rawStrippedQualifier" -> "-1.8E308",
+        "minValue" -> BigDecimal(Double.MinValue).toString,
+        "maxValue" -> BigDecimal(Double.MaxValue).toString,
+        "typeName" -> "double"),
+      context = ExpectedContext(
+        fragment = "-1.8E308D",
+        start = 0,
+        stop = 8))
+    checkError(
+      exception = parseException("1.8E308D"),
+      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      parameters = Map(
+        "rawStrippedQualifier" -> "1.8E308",
+        "minValue" -> BigDecimal(Double.MinValue).toString,
+        "maxValue" -> BigDecimal(Double.MaxValue).toString,
+        "typeName" -> "double"),
+      context = ExpectedContext(
+        fragment = "1.8E308D",
+        start = 0,
+        stop = 7))
 
     // BigDecimal Literal
     assertEqual("90912830918230182310293801923652346786BD",
       Literal(BigDecimal("90912830918230182310293801923652346786").underlying()))
     assertEqual("123.0E-28BD", Literal(BigDecimal("123.0E-28").underlying()))
     assertEqual("123.08BD", Literal(BigDecimal("123.08").underlying()))
-    intercept("1.20E-38BD", "decimal can only support precision up to 38")
+    checkError(
+      exception = parseException("1.20E-38BD"),
+      errorClass = "_LEGACY_ERROR_TEMP_0061",
+      parameters = Map("msg" -> "decimal can only support precision up to 38."),
+      context = ExpectedContext(
+        fragment = "1.20E-38BD",
+        start = 0,
+        stop = 9))
   }
 
   test("SPARK-30252: Decimal should set zero scale rather than negative scale by default") {
@@ -661,8 +849,10 @@ class ExpressionParserSuite extends AnalysisTest {
 
           // Note: Single quote follows 1.6 parsing behavior
           // when ESCAPED_STRING_LITERALS is enabled.
-          val e = intercept[ParseException](parser.parseExpression("'\''"))
-          assert(e.message.contains("Syntax error at or near ''': extra input '''"))
+          checkError(
+            exception = parseException("'\''"),
+            errorClass = "PARSE_SYNTAX_ERROR",
+            parameters = Map("error" -> "'''", "hint" -> ": extra input '''"))
 
           // The unescape special characters (e.g., "\\t") for 2.0+ don't work
           // when ESCAPED_STRING_LITERALS is enabled. They are parsed literally.
@@ -753,7 +943,14 @@ class ExpressionParserSuite extends AnalysisTest {
     }
 
     // Empty interval statement
-    intercept("interval", "At least one time unit should be given for interval literal")
+    checkError(
+      exception = parseException("interval"),
+      errorClass = "_LEGACY_ERROR_TEMP_0025",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "interval",
+        start = 0,
+        stop = 7))
 
     // Single Intervals.
     val forms = Seq("", "s")
@@ -809,7 +1006,15 @@ class ExpressionParserSuite extends AnalysisTest {
     }
 
     // Non Existing unit
-    intercept("interval 10 nanoseconds", "invalid unit 'nanoseconds'")
+    checkError(
+      exception = parseException("interval 10 nanoseconds"),
+      errorClass = "_LEGACY_ERROR_TEMP_0062",
+      parameters = Map(
+        "msg" -> "Error parsing ' 10 nanoseconds' to interval, invalid unit 'nanoseconds'"),
+      context = ExpectedContext(
+        fragment = "10 nanoseconds",
+        start = 9,
+        stop = 22))
 
     withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
       // Year-Month intervals.
@@ -848,8 +1053,14 @@ class ExpressionParserSuite extends AnalysisTest {
     }
 
     // Unknown FROM TO intervals
-    intercept("interval '10' month to second",
-      "Intervals FROM month TO second are not supported.")
+    checkError(
+      exception = parseException("interval '10' month to second"),
+      errorClass = "_LEGACY_ERROR_TEMP_0028",
+      parameters = Map("from" -> "month", "to" -> "second"),
+      context = ExpectedContext(
+        fragment = "'10' month to second",
+        start = 9,
+        stop = 28))
 
     // Composed intervals.
     checkIntervals(
@@ -864,8 +1075,14 @@ class ExpressionParserSuite extends AnalysisTest {
         if (legacyEnabled) {
           checkIntervals(intervalStr, Literal(new CalendarInterval(3, 4, 22001000L)))
         } else {
-          intercept(s"interval $intervalStr",
-            s"Cannot mix year-month and day-time fields: interval $intervalStr")
+          checkError(
+            exception = parseException(s"interval $intervalStr"),
+            errorClass = "_LEGACY_ERROR_TEMP_0029",
+            parameters = Map("literal" -> "interval 3 monThs 4 dayS 22 sEcond 1 millisecond"),
+            context = ExpectedContext(
+              fragment = s"interval $intervalStr",
+              start = 0,
+              stop = 47))
         }
       }
     }
@@ -874,8 +1091,10 @@ class ExpressionParserSuite extends AnalysisTest {
   test("composed expressions") {
     assertEqual("1 + r.r As q", (Literal(1) + UnresolvedAttribute("r.r")).as("q"))
     assertEqual("1 - f('o', o(bar))", Literal(1) - $"f".function("o", $"o".function($"bar")))
-    intercept("1 - f('o', o(bar)) hello * world", Some("PARSE_SYNTAX_ERROR"),
-      "Syntax error at or near '*'")
+    checkError(
+      exception = parseException("1 - f('o', o(bar)) hello * world"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'*'", "hint" -> ""))
   }
 
   test("SPARK-17364, fully qualified column name which starts with number") {
@@ -894,8 +1113,11 @@ class ExpressionParserSuite extends AnalysisTest {
   test("SPARK-17832 function identifier contains backtick") {
     val complexName = FunctionIdentifier("`ba`r", Some("`fo`o"))
     assertEqual(complexName.quotedString, UnresolvedAttribute(Seq("`fo`o", "`ba`r")))
-    intercept(complexName.unquotedString, Some("PARSE_SYNTAX_ERROR"),
-      "Syntax error at or near")
+    checkError(
+      exception = parseException(complexName.unquotedString),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'.'", "hint" -> ""))
+
     // Function identifier contains continuous backticks should be treated correctly.
     val complexName2 = FunctionIdentifier("ba``r", Some("fo``o"))
     assertEqual(complexName2.quotedString, UnresolvedAttribute(Seq("fo``o", "ba``r")))
@@ -974,7 +1196,14 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("not (a ilike all ('foO%', 'b%'))", !(lower($"a") likeAll("foo%", "b%")))
 
     Seq("any", "some", "all").foreach { quantifier =>
-      intercept(s"a ilike $quantifier()", "Expected something between '(' and ')'")
+      checkError(
+        exception = parseException(s"a ilike $quantifier()"),
+        errorClass = "_LEGACY_ERROR_TEMP_0064",
+        parameters = Map("msg" -> "Expected something between '(' and ')'."),
+        context = ExpectedContext(
+          fragment = s"ilike $quantifier()",
+          start = 2,
+          stop = 9 + quantifier.length))
     }
   }
 }

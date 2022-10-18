@@ -18,8 +18,23 @@
 #
 set -ex
 
+if [[ $# -gt 1 ]]; then
+  echo "Illegal number of parameters."
+  echo "Usage: ./connector/connect/dev/generate_protos.sh [path]"
+  exit -1
+fi
+
+
 SPARK_HOME="$(cd "`dirname $0`"/../../..; pwd)"
 cd "$SPARK_HOME"
+
+
+OUTPUT_PATH=${SPARK_HOME}/python/pyspark/sql/connect/proto/
+if [[ $# -eq 1 ]]; then
+  rm -Rf $1
+  mkdir -p $1
+  OUTPUT_PATH=$1
+fi
 
 pushd connector/connect/src/main
 
@@ -55,10 +70,11 @@ buf generate --debug -vvv
 for f in `find gen/proto/python -name "*.py*"`; do
   # First fix the imports.
   if [[ $f == *_pb2.py || $f == *_pb2_grpc.py ]]; then
-    sed -i '' -e 's/from spark.connect import/from pyspark.sql.connect.proto import/g' $f
+    sed -e 's/from spark.connect import/from pyspark.sql.connect.proto import/g' $f > $f.tmp
+    mv $f.tmp $f
   elif [[ $f == *.pyi ]]; then
-    sed -i '' -e 's/import spark.connect./import pyspark.sql.connect.proto./g' $f
-    sed -i '' -e 's/spark.connect./pyspark.sql.connect.proto./g' $f
+    sed -e 's/import spark.connect./import pyspark.sql.connect.proto./g' -e 's/spark.connect./pyspark.sql.connect.proto./g' $f > $f.tmp
+    mv $f.tmp $f
   fi
 
   # Prepend the Apache licence header to the files.
@@ -77,7 +93,7 @@ black --config $SPARK_HOME/dev/pyproject.toml gen/proto/python
 
 # Last step copy the result files to the destination module.
 for f in `find gen/proto/python -name "*.py*"`; do
-  cp $f $SPARK_HOME/python/pyspark/sql/connect/proto
+  cp $f $OUTPUT_PATH
 done
 
 # Clean up everything.
