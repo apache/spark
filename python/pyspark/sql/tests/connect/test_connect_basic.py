@@ -19,9 +19,12 @@ import uuid
 import unittest
 import tempfile
 
+import pandas
+
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.connect.client import RemoteSparkSession
 from pyspark.sql.connect.function_builder import udf
+from pyspark.sql.connect.functions import lit
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import ReusedPySparkTestCase
 
@@ -78,6 +81,15 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         df = self.connect.read.table(self.tbl_name).limit(10)
         result = df.explain()
         self.assertGreater(len(result), 0)
+
+    def test_simple_binary_expressions(self):
+        """Test complex expression"""
+        df = self.connect.read.table(self.tbl_name)
+        pd = df.select(df.id).where(df.id % lit(30) == lit(0)).sort(df.id.asc()).toPandas()
+        self.assertEqual(len(pd.index), 4)
+
+        res = pandas.DataFrame(data={"id": [0, 30, 60, 90]})
+        self.assert_(pd.equals(res), f"{pd.to_string()} != {res.to_string()}")
 
 
 if __name__ == "__main__":

@@ -322,11 +322,11 @@ class Aggregate(LogicalPlan):
     ) -> proto.Aggregate.AggregateFunction:
         exp, fun = m
         measure = proto.Aggregate.AggregateFunction()
-        measure.function.name = fun
+        measure.name = fun
         if type(exp) is str:
-            measure.function.arguments.append(self.unresolved_attr(exp))
+            measure.arguments.append(self.unresolved_attr(exp))
         else:
-            measure.function.arguments.append(cast(Expression, exp).to_plan(session))
+            measure.arguments.append(cast(Expression, exp).to_plan(session))
         return measure
 
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
@@ -335,13 +335,11 @@ class Aggregate(LogicalPlan):
 
         agg = proto.Relation()
         agg.aggregate.input.CopyFrom(self._child.plan(session))
-        agg.aggregate.measures.extend(
+        agg.aggregate.result_expressions.extend(
             list(map(lambda x: self._convert_measure(x, session), self.measures))
         )
 
-        gs = proto.Aggregate.GroupingSet()
-        gs.aggregate_expressions.extend(groupings)
-        agg.aggregate.grouping_sets.append(gs)
+        agg.aggregate.grouping_expressions.extend(groupings)
         return agg
 
     def print(self, indent: int = 0) -> str:
@@ -368,21 +366,45 @@ class Join(LogicalPlan):
         left: Optional["LogicalPlan"],
         right: "LogicalPlan",
         on: "ColumnOrString",
-        how: proto.Join.JoinType.ValueType = proto.Join.JoinType.JOIN_TYPE_INNER,
+        how: Optional[str],
     ) -> None:
         super().__init__(left)
         self.left = cast(LogicalPlan, left)
         self.right = right
         self.on = on
         if how is None:
-            how = proto.Join.JoinType.JOIN_TYPE_INNER
-        self.how = how
+            join_type = proto.Join.JoinType.JOIN_TYPE_INNER
+        elif how == "inner":
+            join_type = proto.Join.JoinType.JOIN_TYPE_INNER
+        elif how in ["outer", "full", "fullouter"]:
+            join_type = proto.Join.JoinType.JOIN_TYPE_FULL_OUTER
+        elif how in ["leftouter", "left"]:
+            join_type = proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER
+        elif how in ["rightouter", "right"]:
+            join_type = proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER
+        elif how in ["leftsemi", "semi"]:
+            join_type = proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI
+        elif how in ["leftanti", "anti"]:
+            join_type = proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI
+        else:
+            raise NotImplementedError(
+                """
+                Unsupported join type: %s. Supported join types include:
+                "inner", "outer", "full", "fullouter", "full_outer",
+                "leftouter", "left", "left_outer", "rightouter",
+                "right", "right_outer", "leftsemi", "left_semi",
+                "semi", "leftanti", "left_anti", "anti",
+                """
+                % how
+            )
+        self.how = join_type
 
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         rel = proto.Relation()
         rel.join.left.CopyFrom(self.left.plan(session))
         rel.join.right.CopyFrom(self.right.plan(session))
-        rel.join.on.CopyFrom(self.to_attr_or_expression(self.on, session))
+        rel.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
+        rel.join.join_type = self.how
         return rel
 
     def print(self, indent: int = 0) -> str:

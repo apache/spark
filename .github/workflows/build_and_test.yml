@@ -556,6 +556,12 @@ jobs:
         #   See also https://issues.apache.org/jira/browse/SPARK-35375.
         python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.920' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==22.6.0'
         python3.9 -m pip install 'pandas-stubs==1.2.0.53'
+    - name: Install dependencies for Python code generation check
+      run: |
+        # See more in "Installation" https://docs.buf.build/installation#tarball
+        curl -LO https://github.com/bufbuild/buf/releases/download/v1.8.0/buf-Linux-x86_64.tar.gz
+        mkdir -p $HOME/buf
+        tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
     - name: Install R linter dependencies and SparkR
       run: |
         apt update
@@ -565,7 +571,7 @@ jobs:
         Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
         Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
         ./R/install-dev.sh
-    - name: Instll JavaScript linter dependencies
+    - name: Install JavaScript linter dependencies
       run: |
         apt update
         apt-get install -y nodejs npm
@@ -581,7 +587,7 @@ jobs:
         #   See also https://issues.apache.org/jira/browse/SPARK-38279.
         python3.9 -m pip install 'sphinx<3.1.0' mkdocs pydata_sphinx_theme ipython nbsphinx numpydoc 'jinja2<3.0.0' 'markupsafe==2.0.1' 'pyzmq<24.0.0'
         python3.9 -m pip install ipython_genutils # See SPARK-38517
-        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8' grpcio protobuf
+        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8' grpcio protobuf mypy-protobuf
         python3.9 -m pip install 'docutils<0.18.0' # See SPARK-39421
         apt-get update -y
         apt-get install -y ruby ruby-dev
@@ -601,6 +607,8 @@ jobs:
       run: ./dev/lint-java
     - name: Python linter
       run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
+    - name: Python code generation check
+      run: if test -f ./dev/check-codegen-python.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/check-codegen-python.py; fi
     - name: R linter
       run: ./dev/lint-r
     - name: JS linter
