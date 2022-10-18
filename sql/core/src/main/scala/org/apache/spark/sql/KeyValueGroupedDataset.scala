@@ -43,6 +43,14 @@ class KeyValueGroupedDataset[K, V] private[sql](
     private val groupingAttributes: Seq[Attribute],
     private val dataOrder: Seq[SortOrder]) extends Serializable {
 
+  // Needed for Spark 3.x binary compatibility
+  def this(kEncoder: Encoder[K],
+           vEncoder: Encoder[V],
+           queryExecution: QueryExecution,
+           dataAttributes: Seq[Attribute],
+           groupingAttributes: Seq[Attribute]) =
+    this(kEncoder, vEncoder, queryExecution, dataAttributes, groupingAttributes, Seq.empty)
+
   // Similar to [[Dataset]], we turn the passed in encoder to `ExpressionEncoder` explicitly.
   private implicit val kExprEnc = encoderFor(kEncoder)
   private implicit val vExprEnc = encoderFor(vEncoder)
