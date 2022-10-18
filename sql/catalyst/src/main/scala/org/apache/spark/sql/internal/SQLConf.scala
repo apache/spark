@@ -1831,7 +1831,7 @@ object SQLConf {
       .createWithDefault("lz4")
 
   val CHECKPOINT_RENAMEDFILE_CHECK_ENABLED =
-    buildConf("spark.sql.streaming.checkpoint.renamedFileCheck")
+    buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
       .doc("When true, Spark will validate if renamed checkpoint file exists.")
       .internal()
       .booleanConf
