@@ -172,6 +172,8 @@
     <scala-maven-plugin.version>4.7.1</scala-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
+    <scalafmt.validateOnly>true</scalafmt.validateOnly>
+    <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.13.4</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.13.4.1</fasterxml.jackson.databind.version>
@@ -3412,11 +3414,11 @@
         <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
         <version>1.1.1640084764.9f463a9</version>
         <configuration>
-          <validateOnly>${scalafmt.skip}</validateOnly> <!-- (Optional) skip formatting -->
+          <validateOnly>${scalafmt.validateOnly}</validateOnly> <!-- (Optional) skip formatting -->
           <skipSources>${scalafmt.skip}</skipSources>
           <skipTestSources>${scalafmt.skip}</skipTestSources>
           <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config location -->
-          <onlyChangedFiles>true</onlyChangedFiles>
+          <onlyChangedFiles>${scalafmt.changedOnly}</onlyChangedFiles>
         </configuration>
         <executions>
           <execution>
