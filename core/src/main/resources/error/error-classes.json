@@ -1059,6 +1059,11 @@
           "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses<treeNode>"
         ]
       },
+      "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE" : {
+        "message" : [
+          "Correlated column reference '<expr>' cannot be <dataType> type"
+        ]
+      },
       "UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY" : {
         "message" : [
           "Correlated scalar subqueries can only be used in filters, aggregations, projections, and UPDATE/MERGE/DELETE commands<treeNode>"
