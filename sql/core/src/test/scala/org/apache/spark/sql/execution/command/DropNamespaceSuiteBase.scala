@@ -60,10 +60,12 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("namespace does not exist") {
     // Namespace $catalog.unknown does not exist.
-    val message = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql(s"DROP NAMESPACE $catalog.unknown")
-    }.getMessage
-    assert(message.contains(s"'unknown' not found"))
+    }
+    checkError(e,
+      errorClass = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> "`unknown`"))
   }
 
   test("drop non-empty namespace with a non-cascading mode") {
@@ -75,7 +77,9 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     val e = intercept[AnalysisException] {
       sql(s"DROP NAMESPACE $catalog.ns")
     }
-    assert(e.getMessage.contains(s"Cannot drop a non-empty $namespaceAlias: ns"))
+    checkError(e,
+      errorClass = "SCHEMA_NOT_EMPTY",
+      parameters = Map("schemaName" -> "`ns`"))
     sql(s"DROP TABLE $catalog.ns.table")
 
     // Now that $catalog.ns is empty, it can be dropped.

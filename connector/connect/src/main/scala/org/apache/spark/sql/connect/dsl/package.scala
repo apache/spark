@@ -182,6 +182,24 @@ package object dsl {
           .build()
       }
 
+      def sample(
+          lowerBound: Double,
+          upperBound: Double,
+          withReplacement: Boolean,
+          seed: Long): proto.Relation = {
+        proto.Relation
+          .newBuilder()
+          .setSample(
+            proto.Sample
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setUpperBound(upperBound)
+              .setLowerBound(lowerBound)
+              .setWithReplacement(withReplacement)
+              .setSeed(seed))
+          .build()
+      }
+
       def groupBy(groupingExprs: proto.Expression*)(
           aggregateExprs: proto.Expression*): proto.Relation = {
         val agg = proto.Aggregate.newBuilder()
