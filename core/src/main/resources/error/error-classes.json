@@ -223,6 +223,11 @@
           "The lower bound of a window frame must be <comparison> to the upper bound."
         ]
       },
+      "UNEXPECTED_CLASS_TYPE" : {
+        "message" : [
+          "class <className> not found"
+        ]
+      },
       "UNEXPECTED_INPUT_TYPE" : {
         "message" : [
           "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
@@ -246,6 +251,11 @@
       "WRONG_NUM_PARAMS" : {
         "message" : [
           "wrong number of parameters: <actualNum>."
+        ]
+      },
+      "UNEXPECTED_STATIC_METHOD" : {
+        "message" : [
+          "cannot find a static method <methodName> that matches the argument types in <className>"
         ]
       }
     }
