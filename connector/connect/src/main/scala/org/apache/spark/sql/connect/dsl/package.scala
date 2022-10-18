@@ -44,6 +44,34 @@ package object dsl {
               .addAllParts(identifier.asJava)
               .build())
           .build()
+
+      def struct(
+          attrs: proto.Expression.QualifiedAttribute*): proto.Expression.QualifiedAttribute = {
+        val structExpr = proto.DataType.Struct.newBuilder()
+        for (attr <- attrs) {
+          val structField = proto.DataType.StructField.newBuilder()
+          structField.setName(attr.getName)
+          structField.setType(attr.getType)
+          structExpr.addFields(structField)
+        }
+        proto.Expression.QualifiedAttribute
+          .newBuilder()
+          .setName(s)
+          .setType(proto.DataType.newBuilder().setStruct(structExpr))
+          .build()
+      }
+
+      /** Creates a new AttributeReference of type int */
+      def int: proto.Expression.QualifiedAttribute = protoQualifiedAttrWithType(
+        proto.DataType.newBuilder().setI32(proto.DataType.I32.newBuilder()).build())
+
+      private def protoQualifiedAttrWithType(
+          dataType: proto.DataType): proto.Expression.QualifiedAttribute =
+        proto.Expression.QualifiedAttribute
+          .newBuilder()
+          .setName(s)
+          .setType(dataType)
+          .build()
     }
 
     implicit class DslExpression(val expr: proto.Expression) {
@@ -143,8 +171,11 @@ package object dsl {
   object plans { // scalastyle:ignore
     implicit class DslLogicalPlan(val logicalPlan: proto.Relation) {
       def select(exprs: proto.Expression*): proto.Relation = {
-        proto.Relation.newBuilder().setProject(
-            proto.Project.newBuilder()
+        proto.Relation
+          .newBuilder()
+          .setProject(
+            proto.Project
+              .newBuilder()
               .setInput(logicalPlan)
               .addAllExpressions(exprs.toIterable.asJava)
               .build())
@@ -152,10 +183,10 @@ package object dsl {
       }
 
       def where(condition: proto.Expression): proto.Relation = {
-        proto.Relation.newBuilder()
-          .setFilter(
-            proto.Filter.newBuilder().setInput(logicalPlan).setCondition(condition)
-          ).build()
+        proto.Relation
+          .newBuilder()
+          .setFilter(proto.Filter.newBuilder().setInput(logicalPlan).setCondition(condition))
+          .build()
       }
 
       def join(
@@ -174,8 +205,33 @@ package object dsl {
         relation.setJoin(join).build()
       }
 
-      def groupBy(
-          groupingExprs: proto.Expression*)(aggregateExprs: proto.Expression*): proto.Relation = {
+      def as(alias: String): proto.Relation = {
+        proto.Relation
+          .newBuilder(logicalPlan)
+          .setCommon(proto.RelationCommon.newBuilder().setAlias(alias))
+          .build()
+      }
+
+      def sample(
+          lowerBound: Double,
+          upperBound: Double,
+          withReplacement: Boolean,
+          seed: Long): proto.Relation = {
+        proto.Relation
+          .newBuilder()
+          .setSample(
+            proto.Sample
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setUpperBound(upperBound)
+              .setLowerBound(lowerBound)
+              .setWithReplacement(withReplacement)
+              .setSeed(seed))
+          .build()
+      }
+
+      def groupBy(groupingExprs: proto.Expression*)(
+          aggregateExprs: proto.Expression*): proto.Relation = {
         val agg = proto.Aggregate.newBuilder()
         agg.setInput(logicalPlan)
 

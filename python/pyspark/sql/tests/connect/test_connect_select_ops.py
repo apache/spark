@@ -18,13 +18,29 @@ from pyspark.testing.connectutils import PlanOnlyTestFixture
 from pyspark.sql.connect import DataFrame
 from pyspark.sql.connect.functions import col
 from pyspark.sql.connect.plan import Read, InputValidationError
+import pyspark.sql.connect.proto as proto
 
 
-class SparkConnectSelectOpsSuite(PlanOnlyTestFixture):
+class SparkConnectToProtoSuite(PlanOnlyTestFixture):
     def test_select_with_literal(self):
         df = DataFrame.withPlan(Read("table"))
         self.assertIsNotNone(df.select(col("name"))._plan.collect())
         self.assertRaises(InputValidationError, df.select, "name")
+
+    def test_join_with_join_type(self):
+        df_left = DataFrame.withPlan(Read("table"))
+        df_right = DataFrame.withPlan(Read("table"))
+        for (join_type_str, join_type) in [
+            (None, proto.Join.JoinType.JOIN_TYPE_INNER),
+            ("inner", proto.Join.JoinType.JOIN_TYPE_INNER),
+            ("outer", proto.Join.JoinType.JOIN_TYPE_FULL_OUTER),
+            ("leftouter", proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER),
+            ("rightouter", proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER),
+            ("leftanti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
+            ("leftsemi", proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI),
+        ]:
+            joined_df = df_left.join(df_right, on=col("name"), how=join_type_str)._plan.collect()
+            self.assertEqual(joined_df.root.join.join_type, join_type)
 
 
 if __name__ == "__main__":

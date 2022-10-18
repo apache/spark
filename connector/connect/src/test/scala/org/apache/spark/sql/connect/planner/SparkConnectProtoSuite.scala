@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.planner
 
+import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -117,6 +118,15 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
   }
 
+  test("Test sample") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.sample(0, 0.2, false, 1))
+    }
+    val sparkPlan = sparkTestRelation.sample(0, 0.2, false, 1)
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
   test("column alias") {
     val connectPlan = {
       import org.apache.spark.sql.connect.dsl.expressions._
@@ -124,6 +134,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       transform(connectTestRelation.select("id".protoAttr.as("id2")))
     }
     val sparkPlan = sparkTestRelation.select($"id".as("id2"))
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
   test("Aggregate with more than 1 grouping expressions") {
@@ -134,5 +145,33 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
     val sparkPlan = sparkTestRelation.groupBy($"id", $"name")()
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
+  test("Test as(alias: String)") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.as("target_table"))
+    }
+
+    val sparkPlan = sparkTestRelation.as("target_table")
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
+  test("Test StructType in LocalRelation") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      transform(createLocalRelationProtoByQualifiedAttributes(Seq("a".struct("id".int))))
+    }
+    val sparkPlan = LocalRelation($"a".struct($"id".int))
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
+  private def createLocalRelationProtoByQualifiedAttributes(
+      attrs: Seq[proto.Expression.QualifiedAttribute]): proto.Relation = {
+    val localRelationBuilder = proto.LocalRelation.newBuilder()
+    for (attr <- attrs) {
+      localRelationBuilder.addAttributes(attr)
+    }
+    proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
   }
 }
