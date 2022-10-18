@@ -61,16 +61,19 @@ import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{Utils => CUtils}
 
 /**
- * A trivial [[Analyzer]] with a dummy [[SessionCatalog]], [[EmptyFunctionRegistry]] and
+ * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and
  * [[EmptyTableFunctionRegistry]]. Used for testing when all relations are already filled
  * in and the analyzer needs only to resolve attribute references.
+ *
+ * Built-in function registry is set for Spark Connect project to test unresolved
+ * functions.
  */
 object SimpleAnalyzer extends Analyzer(
   new CatalogManager(
     FakeV2SessionCatalog,
     new SessionCatalog(
       new InMemoryCatalog,
-      EmptyFunctionRegistry,
+      FunctionRegistry.builtin,
       EmptyTableFunctionRegistry) {
       override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {}
     })) {
@@ -81,7 +84,7 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog {
   private def fail() = throw new UnsupportedOperationException
   override def listTables(namespace: Array[String]): Array[Identifier] = fail()
   override def loadTable(ident: Identifier): Table = {
-    throw new NoSuchTableException(ident.toString)
+    throw new NoSuchTableException(ident.asMultipartIdentifier)
   }
   override def createTable(
       ident: Identifier,

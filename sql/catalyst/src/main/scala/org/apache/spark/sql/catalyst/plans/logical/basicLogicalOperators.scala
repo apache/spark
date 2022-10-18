@@ -1471,7 +1471,10 @@ case class Unpivot(
     copy(child = newChild)
 
   def canBeCoercioned: Boolean = values.exists(_.nonEmpty) &&
-    values.exists(_.forall(_.forall(_.resolved)))
+    values.exists(_.forall(_.forall(_.resolved))) &&
+    // when no ids are given, values must be Attributes (column names) to allow detecting ids
+    // coercion will add aliases, would disallow detecting ids, so defer coercion after id detection
+    ids.exists(_.forall(_.resolved))
 
   def valuesTypeCoercioned: Boolean = canBeCoercioned &&
     // all inner values at position idx must have the same data type

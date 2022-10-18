@@ -49,7 +49,8 @@ import org.apache.spark.sql.execution.ExtendedMode
 @Unstable
 @Since("3.4.0")
 class SparkConnectService(debug: Boolean)
-  extends SparkConnectServiceGrpc.SparkConnectServiceImplBase with Logging {
+    extends SparkConnectServiceGrpc.SparkConnectServiceImplBase
+    with Logging {
 
   /**
    * This is the main entry method for Spark Connect and all calls to execute a plan.
@@ -183,7 +184,6 @@ object SparkConnectService {
 
   /**
    * Starts the GRPC Serivce.
-   *
    */
   def startGRPCService(): Unit = {
     val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", true)
@@ -212,4 +212,3 @@ object SparkConnectService {
     }
   }
 }
-

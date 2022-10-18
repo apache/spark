@@ -723,9 +723,9 @@ object SQLConf {
         "multiplying the median partition size and also larger than " +
         "'spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes'")
       .version("3.0.0")
-      .intConf
+      .doubleConf
       .checkValue(_ >= 0, "The skew factor cannot be negative.")
-      .createWithDefault(5)
+      .createWithDefault(5.0)
 
   val SKEW_JOIN_SKEWED_PARTITION_THRESHOLD =
     buildConf("spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes")

@@ -23,7 +23,8 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util, SupportsNamespaces}
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils.V1_COMMAND_VERSION
 import org.apache.spark.sql.internal.SQLConf
@@ -86,13 +87,19 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("Namespace already exists") {
     val ns = s"$catalog.$namespace"
+
     withNamespace(ns) {
       sql(s"CREATE NAMESPACE $ns")
+
+      val parsed = CatalystSqlParser.parseMultipartIdentifier(namespace)
+        .map(part => quoteIdentifier(part)).mkString(".")
 
       val e = intercept[NamespaceAlreadyExistsException] {
         sql(s"CREATE NAMESPACE $ns")
       }
-      assert(e.getMessage.contains(s"$notFoundMsgPrefix '$namespace' already exists"))
+      checkError(e,
+        errorClass = "SCHEMA_ALREADY_EXISTS",
+        parameters = Map("schemaName" -> parsed))
 
       // The following will be no-op since the namespace already exists.
       sql(s"CREATE NAMESPACE IF NOT EXISTS $ns")

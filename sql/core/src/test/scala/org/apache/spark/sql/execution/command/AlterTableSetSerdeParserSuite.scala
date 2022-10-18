@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.SetTableSerDeProperties
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -30,11 +29,14 @@ class AlterTableSetSerdeParserSuite extends AnalysisTest with SharedSparkSession
   test("SerDe property values must be set") {
     val sql = "ALTER TABLE table_name SET SERDE 'serde' " +
       "WITH SERDEPROPERTIES('key_without_value', 'key_with_value'='x')"
-    val errMsg = intercept[ParseException] {
-      parsePlan(sql)
-    }.getMessage
-    assert(errMsg.contains("Operation not allowed"))
-    assert(errMsg.contains("key_without_value"))
+    checkError(
+      exception = parseException(parsePlan)(sql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "Values must be specified for key(s): [key_without_value]"),
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 103))
   }
 
   test("alter table SerDe properties by 'SET SERDE'") {
