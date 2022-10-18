@@ -1868,7 +1868,10 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
 
         df_bool = ps.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
         ser_bool = ps.Series([True, True, False, True])
-        self._test_corrwith(df_bool, ser_bool)
+        # Regression in pandas 1.5.0
+        # See https://github.com/pandas-dev/pandas/issues/49141 for the reported issue,
+        # and https://github.com/pandas-dev/pandas/pull/46174 for the initial PR that causes.
+        # self._test_corrwith(df_bool, ser_bool)
 
         self._test_corrwith(self.psdf1, self.psdf1)
         self._test_corrwith(self.psdf1, self.psdf2)
@@ -1876,7 +1879,10 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         self._test_corrwith(self.psdf3, self.psdf4)
 
         self._test_corrwith(self.psdf1, self.psdf1.a)
-        self._test_corrwith(self.psdf1, self.psdf2.b)
+        # Regression in pandas 1.5.0
+        # See https://github.com/pandas-dev/pandas/issues/49141 for the reported issue,
+        # and https://github.com/pandas-dev/pandas/pull/46174 for the initial PR that causes.
+        # self._test_corrwith(self.psdf1, self.psdf2.b)
         self._test_corrwith(self.psdf2, self.psdf3.c)
         self._test_corrwith(self.psdf3, self.psdf4.f)
 
