@@ -1881,7 +1881,7 @@ private[spark] class DAGScheduler(
           val ignoreStageFailure = ignoreDecommissionFetchFailure &&
             isExecutorDecommissioningOrDecommissioned(taskScheduler, bmAddress)
           if (ignoreStageFailure) {
-            logInfo("Ignoring fetch failure from $task of $failedStage attempt " +
+            logInfo(s"Ignoring fetch failure from $task of $failedStage attempt " +
               s"${task.stageAttemptId} when count spark.stage.maxConsecutiveAttempts " +
               "as executor ${bmAddress.executorId} is decommissioned and " +
               s" ${config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key}=true")
