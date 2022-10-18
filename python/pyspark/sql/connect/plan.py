@@ -55,6 +55,9 @@ class LogicalPlan(object):
         exp.unresolved_attribute.parts.extend(list(colNames))
         return exp
 
+    def _name(self) -> str:
+        return "LogicalPlan"
+
     def to_attr_or_expression(
         self, col: "ColumnOrString", session: Optional["RemoteSparkSession"]
     ) -> proto.Expression:
