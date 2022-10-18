@@ -97,14 +97,18 @@ package object dsl {
      *
      * @param nameParts
      * @param args
-     * @return Expression wrapping the unresolved function.
+     * @return
+     *   Expression wrapping the unresolved function.
      */
     def callFunction(nameParts: Seq[String], args: Seq[proto.Expression]): proto.Expression = {
-      proto.Expression.newBuilder().setUnresolvedFunction(
-        proto.Expression.UnresolvedFunction.newBuilder()
-          .addAllParts(nameParts.asJava)
-          .addAllArguments(args.asJava)
-      ).build()
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          proto.Expression.UnresolvedFunction
+            .newBuilder()
+            .addAllParts(nameParts.asJava)
+            .addAllArguments(args.asJava))
+        .build()
     }
 
     /**
@@ -112,14 +116,18 @@ package object dsl {
      *
      * @param name
      * @param args
-     * @return Expression wrapping the unresolved function.
+     * @return
+     *   Expression wrapping the unresolved function.
      */
     def callFunction(name: String, args: Seq[proto.Expression]): proto.Expression = {
-      proto.Expression.newBuilder().setUnresolvedFunction(
-        proto.Expression.UnresolvedFunction.newBuilder()
-          .addParts(name)
-          .addAllArguments(args.asJava)
-      ).build()
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          proto.Expression.UnresolvedFunction
+            .newBuilder()
+            .addParts(name)
+            .addAllArguments(args.asJava))
+        .build()
     }
 
     implicit def intToLiteral(i: Int): proto.Expression =
