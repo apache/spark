@@ -238,6 +238,11 @@
           "The <exprName> must not be null"
         ]
       },
+      "UNEXPECTED_STATIC_METHOD" : {
+        "message" : [
+          "cannot find a static method <methodName> that matches the argument types in <className>"
+        ]
+      },
       "UNSPECIFIED_FRAME" : {
         "message" : [
           "Cannot use an UnspecifiedFrame. This should have been converted during analysis."
@@ -251,11 +256,6 @@
       "WRONG_NUM_PARAMS" : {
         "message" : [
           "wrong number of parameters: <actualNum>."
-        ]
-      },
-      "UNEXPECTED_STATIC_METHOD" : {
-        "message" : [
-          "cannot find a static method <methodName> that matches the argument types in <className>"
         ]
       }
     }
