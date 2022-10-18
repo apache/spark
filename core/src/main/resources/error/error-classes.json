@@ -101,6 +101,16 @@
           "the binary operator requires the input type <inputType>, not <actualDataType>."
         ]
       },
+      "BLOOM_FILTER_BINARY_OP_WRONG_TYPE" : {
+        "message" : [
+          "The Bloom filter binary input to <functionName> should be either a constant value or a scalar subquery expression, but it's <actual>."
+        ]
+      },
+      "BLOOM_FILTER_WRONG_TYPE" : {
+        "message" : [
+          "Input to function <functionName> should have been <expectedLeft> followed by a value with <expectedRight>, but it's [<actualLeft>, <actualRight>]."
+        ]
+      },
       "CANNOT_CONVERT_TO_JSON" : {
         "message" : [
           "Unable to convert column <name> of type <type> to JSON."
