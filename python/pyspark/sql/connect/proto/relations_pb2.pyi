@@ -70,11 +70,8 @@ class Relation(google.protobuf.message.Message):
     AGGREGATE_FIELD_NUMBER: builtins.int
     SQL_FIELD_NUMBER: builtins.int
     LOCAL_RELATION_FIELD_NUMBER: builtins.int
-<<<<<<< HEAD
     SAMPLE_FIELD_NUMBER: builtins.int
-=======
     OFFSET_FIELD_NUMBER: builtins.int
->>>>>>> 31ffeba9a0 ([SPARK-40813][CONNECT] Add limit and offset to Connect DSL.)
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -99,11 +96,9 @@ class Relation(google.protobuf.message.Message):
     @property
     def local_relation(self) -> global___LocalRelation: ...
     @property
-<<<<<<< HEAD
     def sample(self) -> global___Sample: ...
-=======
+    @property
     def offset(self) -> global___Offset: ...
->>>>>>> 31ffeba9a0 ([SPARK-40813][CONNECT] Add limit and offset to Connect DSL.)
     @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
@@ -120,11 +115,8 @@ class Relation(google.protobuf.message.Message):
         aggregate: global___Aggregate | None = ...,
         sql: global___SQL | None = ...,
         local_relation: global___LocalRelation | None = ...,
-<<<<<<< HEAD
         sample: global___Sample | None = ...,
-=======
         offset: global___Offset | None = ...,
->>>>>>> 31ffeba9a0 ([SPARK-40813][CONNECT] Add limit and offset to Connect DSL.)
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -210,11 +202,8 @@ class Relation(google.protobuf.message.Message):
         "aggregate",
         "sql",
         "local_relation",
-<<<<<<< HEAD
         "sample",
-=======
         "offset",
->>>>>>> 31ffeba9a0 ([SPARK-40813][CONNECT] Add limit and offset to Connect DSL.)
         "unknown",
     ] | None: ...
 
