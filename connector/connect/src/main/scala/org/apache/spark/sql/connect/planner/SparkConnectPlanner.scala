@@ -76,8 +76,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   /**
    * All fields of [[proto.Sample]] are optional. However, given those are proto primitive types,
    * we cannot differentiate if the fied is not or set when the field's value equals to the type
-   * default value. In the future if this ever become a problem, one solution could be that to wrap
-   * such fields into proto messages.
+   * default value. In the future if this ever become a problem, one solution could be that to
+   * wrap such fields into proto messages.
    */
   private def transformSample(rel: proto.Sample): LogicalPlan = {
     Sample(

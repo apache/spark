@@ -91,7 +91,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
   }
 
-  test ("Test sample") {
+  test("Test sample") {
     val connectPlan = {
       import org.apache.spark.sql.connect.dsl.plans._
       transform(connectTestRelation.sample(0, 0.2, false, 1))
