@@ -48,14 +48,14 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
         # Cleanup test data
         cls.spark_connect_clean_up_test_data()
         # Load test data
-        cls.spark_connect_test_data()
+        cls.spark_connect_load_test_data()
 
     @classmethod
     def tearDownClass(cls: Any) -> None:
         cls.spark_connect_clean_up_test_data()
 
     @classmethod
-    def spark_connect_test_data(cls: Any):
+    def spark_connect_load_test_data(cls: Any):
         # Setup Remote Spark Session
         cls.connect = RemoteSparkSession(user_id="test_user")
         df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
