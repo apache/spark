@@ -166,7 +166,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val sparkPlan = LocalRelation($"a".struct($"id".int))
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
-  
+
   test("Test limit offset") {
     val connectPlan = {
       import org.apache.spark.sql.connect.dsl.plans._
@@ -195,13 +195,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
     val sparkPlan4 = sparkTestRelation.offset(2).limit(10)
     comparePlans(connectPlan4.analyze, sparkPlan4.analyze, false)
-
-    val connectPlan5 = {
-      import org.apache.spark.sql.connect.dsl.plans._
-      transform(connectTestRelation.limit(10).offset(2))
-    }
-    val sparkPlan5 = sparkTestRelation.limit(10).offset(2)
-    comparePlans(connectPlan5.analyze, sparkPlan5.analyze, false)
   }
 
   private def createLocalRelationProtoByQualifiedAttributes(

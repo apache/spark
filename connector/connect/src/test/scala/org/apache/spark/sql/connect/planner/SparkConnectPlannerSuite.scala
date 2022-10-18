@@ -78,8 +78,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assertThrows[IndexOutOfBoundsException] {
       new SparkConnectPlanner(
         proto.Relation.newBuilder
-          .setLimit(
-            proto.Limit.newBuilder.setLimit(10)).build(),
+          .setLimit(proto.Limit.newBuilder.setLimit(10))
+          .build(),
         None.orNull)
         .transform()
     }
