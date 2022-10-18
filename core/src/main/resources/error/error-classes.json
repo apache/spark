@@ -233,6 +233,16 @@
           "The <exprName> must not be null"
         ]
       },
+      "UNEXPECTED_NUM_PARAMS" : {
+        "message" : [
+          "The <functionName> requires at least <num> arguments."
+        ]
+      },
+      "UNEXPECTED_VALUE" : {
+        "message" : [
+          "The <exprName> must be <expectedValue> (current value = <currentValue>)"
+        ]
+      },
       "UNSPECIFIED_FRAME" : {
         "message" : [
           "Cannot use an UnspecifiedFrame. This should have been converted during analysis."
