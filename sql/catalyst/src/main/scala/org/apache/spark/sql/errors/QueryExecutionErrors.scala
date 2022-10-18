@@ -2660,7 +2660,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def unsupportedEmptyLocationError(): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2251",
+      errorClass = "UNSUPPORTED_EMPTY_LOCATION",
       messageParameters = Map.empty)
   }
 }
