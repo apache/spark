@@ -21,3 +21,12 @@ SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 SPARK_ROOT_DIR="$(dirname $SCRIPT_DIR)"
 
 "$SCRIPT_DIR/scalastyle" "$1"
+
+# For Spark Connect, we actively enforce scalafmt and check that the produced diff is empty.
+./build/mvn -Pscala-2.12 scalafmt:format -Dscalafmt.skip=false -Dscalafmt.validateOnly=true -Dscalafmt.changedOnly=false -pl connector/connect
+if [[ $? -ne 0 ]]; then
+  echo "The scalafmt check failed on connector/connect."
+  echo "Before submitting your change, please make sure to format your code using the following command:"
+  echo "./build/mvn -Pscala-2.12 scalafmt:format -Dscalafmt.skip=fase -Dscalafmt.validateOnly=false -Dscalafmt.changedOnly=false -pl connector/connect"
+  exit 1
+fi

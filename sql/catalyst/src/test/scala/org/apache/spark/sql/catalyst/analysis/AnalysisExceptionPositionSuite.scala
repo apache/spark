@@ -48,9 +48,12 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     verifyTableOrViewPosition("REFRESH TABLE unknown", "unknown")
     verifyTableOrViewPosition("SHOW COLUMNS FROM unknown", "unknown")
     // Special case where namespace is prepended to the table name.
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       parsePlan("SHOW COLUMNS FROM unknown IN db"),
-      Seq(s"Table or view not found: db.unknown; line 1 pos 18"))
+      "TABLE_OR_VIEW_NOT_FOUND",
+      Map("relationName" -> "`db`.`unknown`"),
+      line = 1,
+      pos = 18)
     verifyTableOrViewPosition("ALTER TABLE unknown RENAME TO t", "unknown")
     verifyTableOrViewPosition("ALTER VIEW unknown RENAME TO v", "unknown")
   }
@@ -73,26 +76,29 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
   }
 
   private def verifyTablePosition(sql: String, table: String): Unit = {
-    verifyPosition(sql, table, "Table")
+    verifyPosition(sql, table)
   }
 
   private def verifyViewPosition(sql: String, table: String): Unit = {
-    verifyPosition(sql, table, "View")
+    verifyPosition(sql, table)
   }
 
   private def verifyTableOrViewPosition(sql: String, table: String): Unit = {
-    verifyPosition(sql, table, "Table or view")
+    verifyPosition(sql, table)
   }
 
   private def verifyTableOrPermanentViewPosition(sql: String, table: String): Unit = {
-    verifyPosition(sql, table, "Table or permanent view")
+    verifyPosition(sql, table)
   }
 
-  private def verifyPosition(sql: String, table: String, msgPrefix: String): Unit = {
+  private def verifyPosition(sql: String, table: String): Unit = {
     val expectedPos = sql.indexOf(table)
     assert(expectedPos != -1)
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       parsePlan(sql),
-      Seq(s"$msgPrefix not found: $table; line 1 pos $expectedPos"))
+      "TABLE_OR_VIEW_NOT_FOUND",
+      Map("relationName" -> s"`$table`"),
+      line = 1,
+      pos = expectedPos)
   }
 }

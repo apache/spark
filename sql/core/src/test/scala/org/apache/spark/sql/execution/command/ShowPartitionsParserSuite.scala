@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartitionSpec, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ShowPartitions
 
 class ShowPartitionsParserSuite extends AnalysisTest {
@@ -47,9 +46,7 @@ class ShowPartitionsParserSuite extends AnalysisTest {
 
   test("empty values in non-optional partition specs") {
     checkError(
-      exception = intercept[ParseException] {
-        parsePlan("SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
-      },
+      exception = parseException(parsePlan)("SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)"),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" -> "Partition key `b` must set value (can't be empty)."),

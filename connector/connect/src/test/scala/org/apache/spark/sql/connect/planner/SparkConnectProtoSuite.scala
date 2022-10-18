@@ -20,7 +20,6 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 
@@ -77,12 +76,12 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val sparkPlan2 = sparkTestRelation.join(sparkTestRelation2, condition = None)
     comparePlans(connectPlan2.analyze, sparkPlan2.analyze, false)
     for ((t, y) <- Seq(
-      (JoinType.JOIN_TYPE_LEFT_OUTER, LeftOuter),
-      (JoinType.JOIN_TYPE_RIGHT_OUTER, RightOuter),
-      (JoinType.JOIN_TYPE_FULL_OUTER, FullOuter),
-      (JoinType.JOIN_TYPE_LEFT_ANTI, LeftAnti),
-      (JoinType.JOIN_TYPE_LEFT_SEMI, LeftSemi),
-      (JoinType.JOIN_TYPE_INNER, Inner))) {
+        (JoinType.JOIN_TYPE_LEFT_OUTER, LeftOuter),
+        (JoinType.JOIN_TYPE_RIGHT_OUTER, RightOuter),
+        (JoinType.JOIN_TYPE_FULL_OUTER, FullOuter),
+        (JoinType.JOIN_TYPE_LEFT_ANTI, LeftAnti),
+        (JoinType.JOIN_TYPE_LEFT_SEMI, LeftSemi),
+        (JoinType.JOIN_TYPE_INNER, Inner))) {
       val connectPlan3 = {
         import org.apache.spark.sql.connect.dsl.plans._
         transform(connectTestRelation.join(connectTestRelation2, t))
@@ -92,6 +91,15 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
   }
 
+  test("Test sample") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.sample(0, 0.2, false, 1))
+    }
+    val sparkPlan = sparkTestRelation.sample(0, 0.2, false, 1)
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
   test("column alias") {
     val connectPlan = {
       import org.apache.spark.sql.connect.dsl.expressions._
@@ -99,6 +107,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       transform(connectTestRelation.select("id".protoAttr.as("id2")))
     }
     val sparkPlan = sparkTestRelation.select($"id".as("id2"))
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
   test("Aggregate with more than 1 grouping expressions") {
@@ -111,14 +120,30 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
-  private def createLocalRelationProto(attrs: Seq[AttributeReference]): proto.Relation = {
+  test("Test as(alias: String)") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.as("target_table"))
+    }
+
+    val sparkPlan = sparkTestRelation.as("target_table")
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
+  test("Test StructType in LocalRelation") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      transform(createLocalRelationProtoByQualifiedAttributes(Seq("a".struct("id".int))))
+    }
+    val sparkPlan = LocalRelation($"a".struct($"id".int))
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
+  private def createLocalRelationProtoByQualifiedAttributes(
+      attrs: Seq[proto.Expression.QualifiedAttribute]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
     for (attr <- attrs) {
-      localRelationBuilder.addAttributes(
-        proto.Expression.QualifiedAttribute.newBuilder()
-          .setName(attr.name)
-          .setType(DataTypeProtoConverter.toConnectProtoType(attr.dataType))
-      )
+      localRelationBuilder.addAttributes(attr)
     }
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
   }

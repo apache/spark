@@ -319,11 +319,16 @@ abstract class SparkFunSuite
     val actualQueryContext = exception.getQueryContext()
     assert(actualQueryContext.length === queryContext.length, "Invalid length of the query context")
     actualQueryContext.zip(queryContext).foreach { case (actual, expected) =>
-      assert(actual.objectType() === expected.objectType(), "Invalid objectType of a query context")
-      assert(actual.objectName() === expected.objectName(), "Invalid objectName of a query context")
-      assert(actual.startIndex() === expected.startIndex(), "Invalid startIndex of a query context")
-      assert(actual.stopIndex() === expected.stopIndex(), "Invalid stopIndex of a query context")
-      assert(actual.fragment() === expected.fragment(), "Invalid fragment of a query context")
+      assert(actual.objectType() === expected.objectType(),
+        "Invalid objectType of a query context Actual:" + actual.toString)
+      assert(actual.objectName() === expected.objectName(),
+        "Invalid objectName of a query context. Actual:" + actual.toString)
+      assert(actual.startIndex() === expected.startIndex(),
+        "Invalid startIndex of a query context. Actual:" + actual.toString)
+      assert(actual.stopIndex() === expected.stopIndex(),
+        "Invalid stopIndex of a query context. Actual:" + actual.toString)
+      assert(actual.fragment() === expected.fragment(),
+        "Invalid fragment of a query context. Actual:" + actual.toString)
     }
   }
 
@@ -373,6 +378,28 @@ abstract class SparkFunSuite
       context: QueryContext): Unit =
     checkError(exception, errorClass, sqlState, parameters,
       matchPVals = true, Array(context))
+
+  protected def checkErrorTableNotFound(
+      exception: SparkThrowable,
+      tableName: String,
+      queryContext: ExpectedContext): Unit =
+    checkError(exception = exception,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relationName" -> tableName),
+      queryContext = Array(queryContext))
+
+  protected def checkErrorTableNotFound(
+      exception: SparkThrowable,
+      tableName: String): Unit =
+    checkError(exception = exception,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relationName" -> tableName))
+
+  protected def checkErrorTableAlreadyExists(exception: SparkThrowable,
+                                             tableName: String): Unit =
+    checkError(exception = exception,
+      errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+      parameters = Map("relationName" -> tableName))
 
   case class ExpectedContext(
       objectType: String,
