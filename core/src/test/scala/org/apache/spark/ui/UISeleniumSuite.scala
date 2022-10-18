@@ -30,7 +30,6 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods
 import org.openqa.selenium.{By, WebDriver}
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -80,7 +79,7 @@ private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 /**
  * Selenium tests for the Spark Web UI.
  */
-class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll {
+class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
 
   implicit var webDriver: WebDriver = _
   implicit val formats = DefaultFormats

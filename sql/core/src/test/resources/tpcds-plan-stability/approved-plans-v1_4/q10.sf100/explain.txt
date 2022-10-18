@@ -90,6 +90,7 @@ Output [1]: [d_date_sk#11]
 (9) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_sold_date_sk#9]
 Right keys [1]: [d_date_sk#11]
+Join type: Inner
 Join condition: None
 
 (10) Project [codegen id : 4]
@@ -107,6 +108,7 @@ Arguments: [ss_customer_sk#8 ASC NULLS FIRST], false, 0
 (13) SortMergeJoin [codegen id : 6]
 Left keys [1]: [c_customer_sk#3]
 Right keys [1]: [ss_customer_sk#8]
+Join type: LeftSemi
 Join condition: None
 
 (14) Scan parquet spark_catalog.default.web_sales
@@ -125,6 +127,7 @@ Output [1]: [d_date_sk#14]
 (17) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ws_sold_date_sk#13]
 Right keys [1]: [d_date_sk#14]
+Join type: Inner
 Join condition: None
 
 (18) Project [codegen id : 8]
@@ -142,6 +145,7 @@ Arguments: [ws_bill_customer_sk#12 ASC NULLS FIRST], false, 0
 (21) SortMergeJoin [codegen id : 10]
 Left keys [1]: [c_customer_sk#3]
 Right keys [1]: [ws_bill_customer_sk#12]
+Join type: ExistenceJoin(exists#2)
 Join condition: None
 
 (22) Scan parquet spark_catalog.default.catalog_sales
@@ -160,6 +164,7 @@ Output [1]: [d_date_sk#17]
 (25) BroadcastHashJoin [codegen id : 12]
 Left keys [1]: [cs_sold_date_sk#16]
 Right keys [1]: [d_date_sk#17]
+Join type: Inner
 Join condition: None
 
 (26) Project [codegen id : 12]
@@ -177,6 +182,7 @@ Arguments: [cs_ship_customer_sk#15 ASC NULLS FIRST], false, 0
 (29) SortMergeJoin [codegen id : 15]
 Left keys [1]: [c_customer_sk#3]
 Right keys [1]: [cs_ship_customer_sk#15]
+Join type: ExistenceJoin(exists#1)
 Join condition: None
 
 (30) Filter [codegen id : 15]
@@ -212,6 +218,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (37) BroadcastHashJoin [codegen id : 15]
 Left keys [1]: [c_current_addr_sk#5]
 Right keys [1]: [ca_address_sk#18]
+Join type: Inner
 Join condition: None
 
 (38) Project [codegen id : 15]
@@ -251,6 +258,7 @@ Arguments: [cd_demo_sk#20 ASC NULLS FIRST], false, 0
 (46) SortMergeJoin [codegen id : 19]
 Left keys [1]: [c_current_cdemo_sk#4]
 Right keys [1]: [cd_demo_sk#20]
+Join type: Inner
 Join condition: None
 
 (47) Project [codegen id : 19]

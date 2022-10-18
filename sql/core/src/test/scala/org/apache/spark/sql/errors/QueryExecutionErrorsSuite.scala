@@ -22,33 +22,47 @@ import java.net.{URI, URL}
 import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, when}
-import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
+import org.apache.spark._
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
-import org.apache.spark.sql.connector.SimpleWritableDataSource
-import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
+import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.execution.streaming.state.RenameReturnsFalseFileSystem
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
-import org.apache.spark.sql.types.{DataType, DecimalType, MetadataBuilder, StructType}
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{DataType, DecimalType, LongType, MetadataBuilder, StructType}
 import org.apache.spark.util.Utils
 
 class QueryExecutionErrorsSuite
   extends QueryTest
   with ParquetTest
   with OrcTest
-  with QueryErrorsSuiteBase {
+  with SharedSparkSession {
 
   import testImplicits._
+
+  test("CONVERSION_INVALID_INPUT: to_binary conversion function") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        sql("select to_binary('???', 'base64')").collect()
+      },
+      errorClass = "CONVERSION_INVALID_INPUT",
+      parameters = Map(
+        "str" -> "'???'",
+        "fmt" -> "'BASE64'",
+        "targetType" -> "\"BINARY\"",
+        "suggestion" -> "`try_to_binary`"))
+  }
 
   private def getAesInputs(): (DataFrame, DataFrame) = {
     val encryptedText16 = "4Hv0UKCx6nfUeAoPZo1z+w=="
@@ -130,8 +144,7 @@ class QueryExecutionErrorsSuite
         exception = intercept[SparkException] {
           df.collect
         }.getCause.asInstanceOf[SparkRuntimeException],
-        errorClass = "UNSUPPORTED_FEATURE",
-        errorSubClass = "AES_MODE",
+        errorClass = "UNSUPPORTED_FEATURE.AES_MODE",
         parameters = Map("mode" -> mode,
         "padding" -> padding,
         "functionName" -> "`aes_encrypt`/`aes_decrypt`"),
@@ -157,8 +170,7 @@ class QueryExecutionErrorsSuite
     def checkUnsupportedTypeInLiteral(v: Any, literal: String, dataType: String): Unit = {
       checkError(
         exception = intercept[SparkRuntimeException] { lit(v) },
-        errorClass = "UNSUPPORTED_FEATURE",
-        errorSubClass = "LITERAL_TYPE",
+        errorClass = "UNSUPPORTED_FEATURE.LITERAL_TYPE",
         parameters = Map("value" -> literal, "type" -> dataType),
         sqlState = "0A000")
     }
@@ -176,8 +188,7 @@ class QueryExecutionErrorsSuite
     }
     checkError(
       exception = e2,
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "PIVOT_TYPE",
+      errorClass = "UNSUPPORTED_FEATURE.PIVOT_TYPE",
       parameters = Map("value" -> "[dotnet,Dummies]",
       "type" -> "\"STRUCT<col1: STRING, training: STRING>\""),
       sqlState = "0A000")
@@ -194,8 +205,7 @@ class QueryExecutionErrorsSuite
     }
     checkError(
       exception = e1,
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "REPEATED_PIVOT",
+      errorClass = "UNSUPPORTED_FEATURE.REPEATED_PIVOT",
       parameters = Map[String, String](),
       sqlState = "0A000")
 
@@ -208,8 +218,7 @@ class QueryExecutionErrorsSuite
     }
     checkError(
       exception = e2,
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "PIVOT_AFTER_GROUP_BY",
+      errorClass = "UNSUPPORTED_FEATURE.PIVOT_AFTER_GROUP_BY",
       parameters = Map[String, String](),
       sqlState = "0A000")
   }
@@ -230,12 +239,8 @@ class QueryExecutionErrorsSuite
       val option = "\"datetimeRebaseMode\""
       checkError(
         exception = e,
-        errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-        errorSubClass = "READ_ANCIENT_DATETIME",
-        parameters = Map("format" -> format,
-        "config" -> config,
-        "option" -> option),
-        sqlState = null)
+        errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.READ_ANCIENT_DATETIME",
+        parameters = Map("format" -> format, "config" -> config, "option" -> option))
     }
 
     // Fail to write ancient datetime values.
@@ -244,17 +249,14 @@ class QueryExecutionErrorsSuite
         val df = Seq(java.sql.Date.valueOf("1001-01-01")).toDF("dt")
         val e = intercept[SparkException] {
           df.write.parquet(dir.getCanonicalPath)
-        }.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException]
+        }.getCause.getCause.asInstanceOf[SparkUpgradeException]
 
         val format = "Parquet"
         val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key + "\""
         checkError(
           exception = e,
-          errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-          errorSubClass = "WRITE_ANCIENT_DATETIME",
-          parameters = Map("format" -> format,
-            "config" -> config),
-          sqlState = null)
+          errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.WRITE_ANCIENT_DATETIME",
+          parameters = Map("format" -> format, "config" -> config))
       }
     }
   }
@@ -267,8 +269,7 @@ class QueryExecutionErrorsSuite
           exception = intercept[SparkException] {
             spark.read.schema("time timestamp_ntz").orc(file.getCanonicalPath).collect()
           }.getCause.asInstanceOf[SparkUnsupportedOperationException],
-          errorClass = "UNSUPPORTED_FEATURE",
-          errorSubClass = "ORC_TYPE_CAST",
+          errorClass = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
           parameters = Map("orcType" -> "\"TIMESTAMP\"",
             "toType" -> "\"TIMESTAMP_NTZ\""),
           sqlState = "0A000")
@@ -284,8 +285,7 @@ class QueryExecutionErrorsSuite
           exception = intercept[SparkException] {
             spark.read.schema("time timestamp_ltz").orc(file.getCanonicalPath).collect()
           }.getCause.asInstanceOf[SparkUnsupportedOperationException],
-          errorClass = "UNSUPPORTED_FEATURE",
-          errorSubClass = "ORC_TYPE_CAST",
+          errorClass = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
           parameters = Map("orcType" -> "\"TIMESTAMP_NTZ\"",
             "toType" -> "\"TIMESTAMP\""),
           sqlState = "0A000")
@@ -328,9 +328,9 @@ class QueryExecutionErrorsSuite
           .load(path.getAbsolutePath).select($"money").collect()
       }
     }
-    assert(e1.getCause.isInstanceOf[QueryExecutionException])
+    assert(e1.getCause.isInstanceOf[SparkException])
 
-    val e2 = e1.getCause.asInstanceOf[QueryExecutionException]
+    val e2 = e1.getCause.asInstanceOf[SparkException]
     assert(e2.getCause.isInstanceOf[SparkException])
 
     val e3 = e2.getCause.asInstanceOf[SparkException]
@@ -344,37 +344,6 @@ class QueryExecutionErrorsSuite
       errorClass = "CANNOT_PARSE_DECIMAL",
       parameters = Map[String, String](),
       sqlState = "42000")
-  }
-
-  test("WRITING_JOB_ABORTED: read of input data fails in the middle") {
-    Seq(classOf[SimpleWritableDataSource], classOf[JavaSimpleWritableDataSource]).foreach { cls =>
-      withTempPath { file =>
-        val path = file.getCanonicalPath
-        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
-        // test transaction
-        val failingUdf = org.apache.spark.sql.functions.udf {
-          var count = 0
-          (id: Long) => {
-            if (count > 5) {
-              throw new RuntimeException("testing error")
-            }
-            count += 1
-            id
-          }
-        }
-        val input = spark.range(15).select(failingUdf($"id").as(Symbol("i")))
-          .select($"i", -$"i" as Symbol("j"))
-        checkError(
-          exception = intercept[SparkException] {
-            input.write.format(cls.getName).option("path", path).mode("overwrite").save()
-          },
-          errorClass = "WRITING_JOB_ABORTED",
-          parameters = Map[String, String](),
-          sqlState = "40000")
-        // make sure we don't have partial data.
-        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
-      }
-    }
   }
 
   test("FAILED_EXECUTE_UDF: execute user defined function") {
@@ -392,11 +361,9 @@ class QueryExecutionErrorsSuite
     checkError(
       exception = e1.getCause.asInstanceOf[SparkException],
       errorClass = "FAILED_EXECUTE_UDF",
-      errorSubClass = None,
       parameters = Map("functionName" -> "QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+",
         "signature" -> "string, int",
         "result" -> "string"),
-      sqlState = None,
       matchPVals = true)
   }
 
@@ -434,10 +401,8 @@ class QueryExecutionErrorsSuite
       }
       checkError(
         exception = e1,
-        errorClass = "UNSUPPORTED_SAVE_MODE",
-        errorSubClass = "NON_EXISTENT_PATH",
-        parameters = Map("saveMode" -> "NULL"),
-        sqlState = null)
+        errorClass = "UNSUPPORTED_SAVE_MODE.NON_EXISTENT_PATH",
+        parameters = Map("saveMode" -> "NULL"))
 
       Utils.createDirectory(path)
 
@@ -447,10 +412,8 @@ class QueryExecutionErrorsSuite
       }
       checkError(
         exception = e2,
-        errorClass = "UNSUPPORTED_SAVE_MODE",
-        errorSubClass = "EXISTENT_PATH",
-        parameters = Map("saveMode" -> "NULL"),
-        sqlState = null)
+        errorClass = "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
+        parameters = Map("saveMode" -> "NULL"))
     }
   }
 
@@ -469,11 +432,9 @@ class QueryExecutionErrorsSuite
           checkError(
             exception = e.getCause.asInstanceOf[SparkSecurityException],
             errorClass = "RESET_PERMISSION_TO_ORIGINAL",
-            errorSubClass = None,
             parameters = Map("permission" -> ".+",
               "path" -> ".+",
               "message" -> ".+"),
-            sqlState = None,
             matchPVals = true)
       }
     }
@@ -605,49 +566,97 @@ class QueryExecutionErrorsSuite
           aggregated.count()
         },
         errorClass = "INVALID_BUCKET_FILE",
-        errorSubClass = None,
         parameters = Map("path" -> ".+"),
-        sqlState = None,
         matchPVals = true)
     }
   }
 
-  test("MULTI_VALUE_SUBQUERY_ERROR: " +
-    "more than one row returned by a subquery used as an expression") {
+  test(
+    "MULTI_VALUE_SUBQUERY_ERROR: " +
+    "More than one row returned by a subquery used as an expression") {
     checkError(
       exception = intercept[SparkException] {
         sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
       },
       errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
-      errorSubClass = None,
-      parameters = Map("plan" ->
-          """Subquery subquery#\w+, \[id=#\w+\]
-            |\+\- AdaptiveSparkPlan isFinalPlan=true
-            |   \+\- == Final Plan ==
-            |      Union
-            |      :\- \*\(1\) Project \[\w+ AS a#\w+\]
-            |      :  \+\- \*\(1\) Scan OneRowRelation\[\]
-            |      \+\- \*\(2\) Project \[\w+ AS a#\w+\]
-            |         \+\- \*\(2\) Scan OneRowRelation\[\]
-            |   \+\- == Initial Plan ==
-            |      Union
-            |      :\- Project \[\w+ AS a#\w+\]
-            |      :  \+\- Scan OneRowRelation\[\]
-            |      \+\- Project \[\w+ AS a#\w+\]
-            |         \+\- Scan OneRowRelation\[\]
-            |""".stripMargin),
-      sqlState = None,
-      matchPVals = true)
+      queryContext = Array(
+        ExpectedContext(
+          fragment = "(select a from (select 1 as a union all select 2 as a) t)",
+          start = 7,
+          stop = 63
+        )
+      )
+    )
   }
 
-  test("ELEMENT_AT_BY_INDEX_ZERO: element_at from array by index zero") {
+  test("ARITHMETIC_OVERFLOW: overflow on adding months") {
     checkError(
-      exception = intercept[SparkRuntimeException](
-        sql("select element_at(array(1, 2, 3, 4, 5), 0)").collect()
+      exception = intercept[SparkArithmeticException](
+        sql("select add_months('5500000-12-31', 10000000)").collect()
       ),
-      errorClass = "ELEMENT_AT_BY_INDEX_ZERO",
-      Map.empty
+      errorClass = "ARITHMETIC_OVERFLOW",
+      parameters = Map(
+        "message" -> "integer overflow",
+        "alternative" -> "",
+        "config" -> s""""${SQLConf.ANSI_ENABLED.key}""""))
+  }
+
+  test("CAST_OVERFLOW: from long to ANSI intervals") {
+    Seq(
+      LongType -> "9223372036854775807L",
+      DecimalType(19, 0) -> "9223372036854775807BD").foreach { case (sourceType, sourceValue) =>
+      Seq("INTERVAL YEAR TO MONTH", "INTERVAL HOUR TO MINUTE").foreach { it =>
+        checkError(
+          exception = intercept[SparkArithmeticException] {
+            sql(s"select CAST($sourceValue AS $it)").collect()
+          },
+          errorClass = "CAST_OVERFLOW",
+          parameters = Map(
+            "value" -> sourceValue,
+            "sourceType" -> s""""${sourceType.sql}"""",
+            "targetType" -> s""""$it"""",
+            "ansiConfig" -> s""""${SQLConf.ANSI_ENABLED.key}""""),
+          sqlState = "22005")
+      }
+    }
+  }
+
+  test("UNSUPPORTED_DATATYPE: invalid StructType raw format") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        val row = spark.sparkContext.parallelize(Seq(1, 2)).map(Row(_))
+        spark.sqlContext.createDataFrame(row, StructType.fromString("StructType()"))
+      },
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map(
+        "typeName" -> "StructType()[1.1] failure: 'TimestampType' expected but 'S' found\n\nStructType()\n^"
+      ),
+      sqlState = "0A000")
+  }
+
+  test("RENAME_SRC_PATH_NOT_FOUND: rename the file which source path does not exist") {
+    var srcPath: Path = null
+    val e = intercept[SparkFileNotFoundException](
+      withTempPath { p =>
+        val conf = new Configuration()
+        conf.set("fs.test.impl", classOf[RenameReturnsFalseFileSystem].getName)
+        conf.set("fs.defaultFS", "test:///")
+        val basePath = new Path(p.getAbsolutePath)
+        val fm = new FileSystemBasedCheckpointFileManager(basePath, conf)
+        srcPath = new Path(s"$basePath/file")
+        assert(!fm.exists(srcPath))
+        fm.createAtomic(srcPath, overwriteIfPossible = true).cancel()
+        assert(!fm.exists(srcPath))
+        val dstPath = new Path(s"$basePath/new_file")
+        fm.renameTempFile(srcPath, dstPath, true)
+      }
     )
+    checkError(
+      exception = e,
+      errorClass = "RENAME_SRC_PATH_NOT_FOUND",
+      parameters = Map(
+        "sourcePath" -> s"$srcPath"
+      ))
   }
 }
 

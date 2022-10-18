@@ -133,35 +133,46 @@ class ResolveSubquerySuite extends AnalysisTest {
     // TODO: support accessing columns from outer outer query.
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b", $"c"))),
-      "UNRESOLVED_COLUMN",
-      Array("`a`", ""))
+      "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      Map("objectName" -> "`a`"),
+      caseSensitive = true,
+      line = -1,
+      pos = -1)
   }
 
   test("lateral subquery with unresolvable attributes") {
     // SELECT * FROM t1, LATERAL (SELECT a, c)
     assertAnalysisErrorClass(
       lateralJoin(t1, t0.select($"a", $"c")),
-      "UNRESOLVED_COLUMN",
-      Array("`c`", "")
-    )
+      "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      Map("objectName" -> "`c`"),
+      caseSensitive = true,
+      line = -1,
+      pos = -1)
     // SELECT * FROM t1, LATERAL (SELECT a, b, c, d FROM t2)
     assertAnalysisErrorClass(
       lateralJoin(t1, t2.select($"a", $"b", $"c", $"d")),
-      "UNRESOLVED_COLUMN",
-      Array("`d`", "`b`, `c`")
-    )
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      Map("objectName" -> "`d`", "proposal" -> "`b`, `c`"),
+      caseSensitive = true,
+      line = -1,
+      pos = -1)
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.a))
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"t1.a"))),
-      "UNRESOLVED_COLUMN",
-      Array("`t1`.`a`", "")
-    )
+      "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      Map("objectName" -> "`t1`.`a`"),
+      caseSensitive = true,
+      line = -1,
+      pos = -1)
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b))
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b"))),
-      "UNRESOLVED_COLUMN",
-      Array("`a`", "")
-    )
+      "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      Map("objectName" -> "`a`"),
+      caseSensitive = true,
+      line = -1,
+      pos = -1)
   }
 
   test("lateral subquery with struct type") {

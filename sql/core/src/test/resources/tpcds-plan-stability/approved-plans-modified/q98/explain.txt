@@ -59,6 +59,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (8) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_item_sk#1]
 Right keys [1]: [i_item_sk#5]
+Join type: Inner
 Join condition: None
 
 (9) Project [codegen id : 3]
@@ -71,6 +72,7 @@ Output [1]: [d_date_sk#11]
 (11) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_sold_date_sk#3]
 Right keys [1]: [d_date_sk#11]
+Join type: Inner
 Join condition: None
 
 (12) Project [codegen id : 3]

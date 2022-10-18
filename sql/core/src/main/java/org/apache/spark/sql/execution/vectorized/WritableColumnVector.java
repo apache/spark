@@ -23,6 +23,9 @@ import java.util.Optional;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.catalyst.util.ArrayBasedMapData;
+import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
@@ -736,6 +739,54 @@ public abstract class WritableColumnVector extends ColumnVector {
       int result = 0;
       for (int i = 0; i < length; ++i) {
         result += appendByteArray(bytes, 0, bytes.length);
+      }
+      return Optional.of(result);
+    }
+    if (value instanceof GenericArrayData) {
+      GenericArrayData arrayData = (GenericArrayData) value;
+      int result = 0;
+      for (int i = 0; i < length; ++i) {
+        appendArray(arrayData.numElements());
+        for (Object element : arrayData.array()) {
+          if (!arrayData().appendObjects(1, element).isPresent()) {
+            return Optional.empty();
+          }
+        }
+        result += arrayData.numElements();
+      }
+      return Optional.of(result);
+    }
+    if (value instanceof GenericInternalRow) {
+      GenericInternalRow row = (GenericInternalRow) value;
+      int result = 0;
+      for (int i = 0; i < length; ++i) {
+        appendStruct(false);
+        for (int j = 0; j < row.values().length; ++j) {
+          Object element = row.values()[j];
+          if (!childColumns[j].appendObjects(1, element).isPresent()) {
+            return Optional.empty();
+          }
+        }
+        result += row.values().length;
+      }
+      return Optional.of(result);
+    }
+    if (value instanceof ArrayBasedMapData) {
+      ArrayBasedMapData data = (ArrayBasedMapData) value;
+      appendArray(length);
+      int result = 0;
+      for (int i = 0; i < length; ++i) {
+        for (Object key : data.keyArray().array()) {
+          if (!childColumns[0].appendObjects(1, key).isPresent()) {
+            return Optional.empty();
+          }
+        }
+        for (Object val: data.valueArray().array()) {
+          if (!childColumns[1].appendObjects(1, val).isPresent()) {
+            return Optional.empty();
+          }
+        }
+        result += data.keyArray().numElements();
       }
       return Optional.of(result);
     }

@@ -81,6 +81,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       Seq(
         // Operator push down
         PushProjectionThroughUnion,
+        PushProjectionThroughLimit,
         ReorderJoin,
         EliminateOuterJoin,
         PushDownPredicates,
@@ -107,6 +108,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         ConstantPropagation,
         FoldablePropagation,
         OptimizeIn,
+        OptimizeRand,
         ConstantFolding,
         EliminateAggregateFilter,
         ReorderAssociativeOperator,
@@ -117,7 +119,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RemoveDispensableExpressions,
         SimplifyBinaryComparison,
         ReplaceNullWithFalseInPredicate,
-        SimplifyConditionalsInPredicate,
         PruneFilters,
         SimplifyCasts,
         SimplifyCaseConversionExpressions,
@@ -165,8 +166,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveNoopOperators,
       CombineUnions,
       RemoveNoopUnion) ::
-    Batch("OptimizeLimitZero", Once,
-      OptimizeLimitZero) ::
     // Run this once earlier. This might simplify the plan and reduce cost of optimizer.
     // For example, a query such as Filter(LocalRelation) would go through all the heavy
     // optimizer rules that are triggered when there is a filter
@@ -529,9 +528,11 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
   }
 
   /**
-   * Remove redundant alias expression from a LogicalPlan and its subtree. A set of excludes is used
-   * to prevent the removal of seemingly redundant aliases used to deduplicate the input for a
-   * (self) join or to prevent the removal of top-level subquery attributes.
+   * Remove redundant alias expression from a LogicalPlan and its subtree.
+   * A set of excludes is used to prevent the removal of:
+   * - seemingly redundant aliases used to deduplicate the input for a (self) join,
+   * - top-level subquery attributes and
+   * - attributes of a Union's first child
    */
   private def removeRedundantAliases(plan: LogicalPlan, excluded: AttributeSet): LogicalPlan = {
     if (!plan.containsPattern(ALIAS)) {
@@ -558,6 +559,22 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         })
         Join(newLeft, newRight, joinType, newCondition, hint)
 
+      case u: Union =>
+        var first = true
+        plan.mapChildren { child =>
+          if (first) {
+            first = false
+            // `Union` inherits its first child's outputs. We don't remove those aliases from the
+            // first child's tree that prevent aliased attributes to appear multiple times in the
+            // `Union`'s output. A parent projection node on the top of an `Union` with non-unique
+            // output attributes could return incorrect result.
+            removeRedundantAliases(child, excluded ++ child.outputSet)
+          } else {
+            // We don't need to exclude those attributes that `Union` inherits from its first child.
+            removeRedundantAliases(child, excluded -- u.children.head.outputSet)
+          }
+        }
+
       case _ =>
         // Remove redundant aliases in the subtree(s).
         val currentNextAttrPairs = mutable.Buffer.empty[(Attribute, Attribute)]
@@ -567,9 +584,6 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
           newChild
         }
 
-        // Create the attribute mapping. Note that the currentNextAttrPairs can contain duplicate
-        // keys in case of Union (this is caused by the PushProjectionThroughUnion rule); in this
-        // case we use the first mapping (which should be provided by the first child).
         val mapping = AttributeMap(currentNextAttrPairs.toSeq)
 
         // Create a an expression cleaning function for nodes that can actually produce redundant
@@ -705,9 +719,11 @@ object LimitPushDown extends Rule[LogicalPlan] {
 
   private def pushLocalLimitThroughJoin(limitExpr: Expression, join: Join): Join = {
     join.joinType match {
-      case RightOuter => join.copy(right = maybePushLocalLimit(limitExpr, join.right))
-      case LeftOuter => join.copy(left = maybePushLocalLimit(limitExpr, join.left))
-      case _: InnerLike if join.condition.isEmpty =>
+      case RightOuter if join.condition.nonEmpty =>
+        join.copy(right = maybePushLocalLimit(limitExpr, join.right))
+      case LeftOuter if join.condition.nonEmpty =>
+        join.copy(left = maybePushLocalLimit(limitExpr, join.left))
+      case _: InnerLike | RightOuter | LeftOuter | FullOuter if join.condition.isEmpty =>
         join.copy(
           left = maybePushLocalLimit(limitExpr, join.left),
           right = maybePushLocalLimit(limitExpr, join.right))
@@ -729,15 +745,15 @@ object LimitPushDown extends Rule[LogicalPlan] {
       LocalLimit(exp, u.copy(children = u.children.map(maybePushLocalLimit(exp, _))))
 
     // Add extra limits below JOIN:
-    // 1. For LEFT OUTER and RIGHT OUTER JOIN, we push limits to the left and right sides,
-    //    respectively.
-    // 2. For INNER and CROSS JOIN, we push limits to both the left and right sides if join
-    //    condition is empty.
+    // 1. For LEFT OUTER and RIGHT OUTER JOIN, we push limits to the left and right sides
+    //    respectively if join condition is not empty.
+    // 2. For INNER, CROSS JOIN and OUTER JOIN, we push limits to both the left and right sides if
+    //    join condition is empty.
     // 3. For LEFT SEMI and LEFT ANTI JOIN, we push limits to the left side if join condition
     //    is empty.
-    // It's not safe to push limits below FULL OUTER JOIN in the general case without a more
-    // invasive rewrite. We also need to ensure that this limit pushdown rule will not eventually
-    // introduce limits on both sides if it is applied multiple times. Therefore:
+    // It's not safe to push limits below FULL OUTER JOIN with join condition in the general case
+    // without a more invasive rewrite. We also need to ensure that this limit pushdown rule will
+    // not eventually introduce limits on both sides if it is applied multiple times. Therefore:
     //   - If one side is already limited, stack another limit on top if the new limit is smaller.
     //     The redundant limit will be collapsed by the CombineLimits rule.
     case LocalLimit(exp, join: Join) =>
@@ -767,7 +783,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
  * safe to pushdown Filters and Projections through it. Filter pushdown is handled by another
  * rule PushDownPredicates. Once we add UNION DISTINCT, we will not be able to pushdown Projections.
  */
-object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper {
+object PushProjectionThroughUnion extends Rule[LogicalPlan] {
 
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
@@ -942,11 +958,23 @@ object ColumnPruning extends Rule[LogicalPlan] {
    * order, otherwise lower Projects can be missed.
    */
   private def removeProjectBeforeFilter(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case p1 @ Project(_, f @ Filter(_, p2 @ Project(_, child)))
+    case p1 @ Project(_, f @ Filter(e, p2 @ Project(_, child)))
       if p2.outputSet.subsetOf(child.outputSet) &&
         // We only remove attribute-only project.
-        p2.projectList.forall(_.isInstanceOf[AttributeReference]) =>
+        p2.projectList.forall(_.isInstanceOf[AttributeReference]) &&
+        // We can't remove project when the child has conflicting attributes
+        // with the subquery in filter predicate
+        !hasConflictingAttrsWithSubquery(e, child) =>
       p1.copy(child = f.copy(child = child))
+  }
+
+  private def hasConflictingAttrsWithSubquery(
+      predicate: Expression,
+      child: LogicalPlan): Boolean = {
+    predicate.find {
+      case s: SubqueryExpression if s.plan.outputSet.intersect(child.outputSet).nonEmpty => true
+      case _ => false
+    }.isDefined
   }
 }
 
@@ -1011,24 +1039,92 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       .forall {
         case (reference, count) =>
           val producer = producerMap.getOrElse(reference, reference)
-          producer.deterministic && (count == 1 || alwaysInline || {
-            val relatedConsumers = consumers.filter(_.references.contains(reference))
-            // It's still exactly-only if there is only one reference in non-extract expressions,
-            // as we won't duplicate the expensive CreateStruct-like expressions.
-            val extractOnly = relatedConsumers.map(refCountInNonExtract(_, reference)).sum <= 1
-            shouldInline(producer, extractOnly)
-          })
+          val relatedConsumers = consumers.filter(_.references.contains(reference))
+
+          def cheapToInlineProducer: Boolean = trimAliases(producer) match {
+            // These collection creation functions are not cheap as a producer, but we have
+            // optimizer rules that can optimize them out if they are only consumed by
+            // ExtractValue (See SimplifyExtractValueOps), so we need to allow to inline them to
+            // avoid perf regression. As an example:
+            //   Project(s.a, s.b, Project(create_struct(a, b, c) as s, child))
+            // We should collapse these two projects and eventually get Project(a, b, child)
+            case e @ (_: CreateNamedStruct | _: UpdateFields | _: CreateMap | _: CreateArray) =>
+              // We can inline the collection creation producer if at most one of its access
+              // is non-cheap. Cheap access here means the access can be optimized by
+              // `SimplifyExtractValueOps` and become a cheap expression. For example,
+              // `create_struct(a, b, c).a` is a cheap access as it can be optimized to `a`.
+              // For a query:
+              //   Project(s.a, s, Project(create_struct(a, b, c) as s, child))
+              // We should collapse these two projects and eventually get
+              //   Project(a, create_struct(a, b, c) as s, child)
+              var nonCheapAccessSeen = false
+              def nonCheapAccessVisitor(): Boolean = {
+                // Returns true for all calls after the first.
+                try {
+                  nonCheapAccessSeen
+                } finally {
+                  nonCheapAccessSeen = true
+                }
+              }
+
+              !relatedConsumers.exists(findNonCheapAccesses(_, reference, e, nonCheapAccessVisitor))
+
+            case other => isCheap(other)
+          }
+
+          producer.deterministic && (count == 1 || alwaysInline || cheapToInlineProducer)
       }
   }
 
-  private def refCountInNonExtract(expr: Expression, ref: Attribute): Int = {
-    def refCount(e: Expression): Int = e match {
-      case a: Attribute if a.semanticEquals(ref) => 1
-      // The first child of `ExtractValue` is the complex type to be extracted.
-      case e: ExtractValue if e.children.head.semanticEquals(ref) => 0
-      case _ => e.children.map(refCount).sum
+  private object ExtractOnlyRef {
+    def unapply(expr: Expression): Option[Attribute] = expr match {
+      case a: Alias => unapply(a.child)
+      case e: ExtractValue => unapply(e.children.head)
+      case a: Attribute => Some(a)
+      case _ => None
     }
-    refCount(expr)
+  }
+
+  private def inlineReference(expr: Expression, ref: Attribute, refExpr: Expression): Expression = {
+    expr.transformUp {
+      case a: Attribute if a.semanticEquals(ref) => refExpr
+    }
+  }
+
+  private object SimplifyExtractValueExecutor extends RuleExecutor[LogicalPlan] {
+    override val batches = Batch("SimplifyExtractValueOps", FixedPoint(10),
+      SimplifyExtractValueOps,
+      // `SimplifyExtractValueOps` turns map lookup to CaseWhen, and we need the following two rules
+      // to further optimize CaseWhen.
+      ConstantFolding,
+      SimplifyConditionals) :: Nil
+  }
+
+  private def simplifyExtractValues(expr: Expression): Expression = {
+    val fakePlan = Project(Seq(Alias(expr, "fake")()), LocalRelation(Nil))
+    SimplifyExtractValueExecutor.execute(fakePlan)
+      .asInstanceOf[Project].projectList.head.asInstanceOf[Alias].child
+  }
+
+  // This method visits the consumer expression tree and finds non-cheap accesses to the reference.
+  // It returns true as long as the `nonCheapAccessVisitor` returns true.
+  private def findNonCheapAccesses(
+      consumer: Expression,
+      ref: Attribute,
+      refExpr: Expression,
+      nonCheapAccessVisitor: () => Boolean): Boolean = consumer match {
+    // Direct access to the collection creation producer is non-cheap.
+    case attr: Attribute if attr.semanticEquals(ref) =>
+      nonCheapAccessVisitor()
+
+    // If the collection creation producer is accessed by a `ExtractValue` chain, inline it and
+    // apply `SimplifyExtractValueOps` to see if the result expression is cheap.
+    case e @ ExtractOnlyRef(attr) if attr.semanticEquals(ref) =>
+      val finalExpr = simplifyExtractValues(inlineReference(e, ref, refExpr))
+      !isCheap(finalExpr) && nonCheapAccessVisitor()
+
+    case _ =>
+      consumer.children.exists(findNonCheapAccesses(_, ref, refExpr, nonCheapAccessVisitor))
   }
 
   /**
@@ -1053,20 +1149,13 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
   /**
    * Check if the given expression is cheap that we can inline it.
    */
-  private def shouldInline(e: Expression, extractOnlyConsumer: Boolean): Boolean = e match {
+  def isCheap(e: Expression): Boolean = e match {
     case _: Attribute | _: OuterReference => true
     case _ if e.foldable => true
     // PythonUDF is handled by the rule ExtractPythonUDFs
     case _: PythonUDF => true
     // Alias and ExtractValue are very cheap.
-    case _: Alias | _: ExtractValue => e.children.forall(shouldInline(_, extractOnlyConsumer))
-    // These collection create functions are not cheap, but we have optimizer rules that can
-    // optimize them out if they are only consumed by ExtractValue, so we need to allow to inline
-    // them to avoid perf regression. As an example:
-    //   Project(s.a, s.b, Project(create_struct(a, b, c) as s, child))
-    // We should collapse these two projects and eventually get Project(a, b, child)
-    case _: CreateNamedStruct | _: CreateArray | _: CreateMap | _: UpdateFields =>
-      extractOnlyConsumer
+    case _: Alias | _: ExtractValue => e.children.forall(isCheap)
     case _ => false
   }
 
@@ -1185,9 +1274,9 @@ object CollapseWindow extends Rule[LogicalPlan] {
  */
 object TransposeWindow extends Rule[LogicalPlan] {
   private def compatiblePartitions(ps1 : Seq[Expression], ps2: Seq[Expression]): Boolean = {
-    ps1.length < ps2.length && ps2.take(ps1.length).permutations.exists(ps1.zip(_).forall {
-      case (l, r) => l.semanticEquals(r)
-    })
+    ps1.length < ps2.length && ps1.forall { expr1 =>
+      ps2.exists(expr1.semanticEquals)
+    }
   }
 
   private def windowsCompatible(w1: Window, w2: Window): Boolean = {
@@ -1454,21 +1543,37 @@ object EliminateSorts extends Rule[LogicalPlan] {
       }
     case Sort(orders, false, child) if SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
       applyLocally.lift(child).getOrElse(child)
-    case s @ Sort(_, _, child) => s.copy(child = recursiveRemoveSort(child))
+    case s @ Sort(_, global, child) => s.copy(child = recursiveRemoveSort(child, global))
     case j @ Join(originLeft, originRight, _, cond, _) if cond.forall(_.deterministic) =>
-      j.copy(left = recursiveRemoveSort(originLeft), right = recursiveRemoveSort(originRight))
+      j.copy(left = recursiveRemoveSort(originLeft, true),
+        right = recursiveRemoveSort(originRight, true))
     case g @ Aggregate(_, aggs, originChild) if isOrderIrrelevantAggs(aggs) =>
-      g.copy(child = recursiveRemoveSort(originChild))
+      g.copy(child = recursiveRemoveSort(originChild, true))
   }
 
-  private def recursiveRemoveSort(plan: LogicalPlan): LogicalPlan = {
+  /**
+   * If the upper sort is global then we can remove the global or local sort recursively.
+   * If the upper sort is local then we can only remove the local sort recursively.
+   */
+  private def recursiveRemoveSort(
+      plan: LogicalPlan,
+      canRemoveGlobalSort: Boolean): LogicalPlan = {
     if (!plan.containsPattern(SORT)) {
       return plan
     }
     plan match {
-      case Sort(_, _, child) => recursiveRemoveSort(child)
+      case Sort(_, global, child) if canRemoveGlobalSort || !global =>
+        recursiveRemoveSort(child, canRemoveGlobalSort)
+      case Sort(sortOrder, true, child) =>
+        // For this case, the upper sort is local so the ordering of present sort is unnecessary,
+        // so here we only preserve its output partitioning using `RepartitionByExpression`.
+        // We should use `None` as the optNumPartitions so AQE can coalesce shuffle partitions.
+        // This behavior is same with original global sort.
+        RepartitionByExpression(sortOrder, recursiveRemoveSort(child, true), None)
       case other if canEliminateSort(other) =>
-        other.withNewChildren(other.children.map(recursiveRemoveSort))
+        other.withNewChildren(other.children.map(c => recursiveRemoveSort(c, canRemoveGlobalSort)))
+      case other if canEliminateGlobalSort(other) =>
+        other.withNewChildren(other.children.map(c => recursiveRemoveSort(c, true)))
       case _ => plan
     }
   }
@@ -1476,6 +1581,11 @@ object EliminateSorts extends Rule[LogicalPlan] {
   private def canEliminateSort(plan: LogicalPlan): Boolean = plan match {
     case p: Project => p.projectList.forall(_.deterministic)
     case f: Filter => f.condition.deterministic
+    case _: LocalLimit => true
+    case _ => false
+  }
+
+  private def canEliminateGlobalSort(plan: LogicalPlan): Boolean = plan match {
     case r: RepartitionByExpression => r.partitionExpressions.forall(_.deterministic)
     case r: RebalancePartitions => r.partitionExpressions.forall(_.deterministic)
     case _: Repartition => true
@@ -1543,7 +1653,7 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
  * This rule improves performance of predicate pushdown for cascading joins such as:
  *  Filter-Join-Join-Join. Most predicates can be pushed down in a single pass.
  */
-object PushDownPredicates extends Rule[LogicalPlan] with PredicateHelper {
+object PushDownPredicates extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(FILTER, JOIN)) {
     CombineFilters.applyLocally
@@ -1860,7 +1970,9 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 /**
  * This rule is applied by both normal and AQE Optimizer, and optimizes Limit operators by:
  * 1. Eliminate [[Limit]]/[[GlobalLimit]] operators if it's child max row <= limit.
- * 2. Combines two adjacent [[Limit]] operators into one, merging the
+ * 2. Replace [[Limit]]/[[LocalLimit]]/[[GlobalLimit]] operators with empty [[LocalRelation]]
+ *    if the limit value is zero (0).
+ * 3. Combines two adjacent [[Limit]] operators into one, merging the
  *    expressions into one single expression.
  */
 object EliminateLimits extends Rule[LogicalPlan] {
@@ -1874,6 +1986,11 @@ object EliminateLimits extends Rule[LogicalPlan] {
       child
     case GlobalLimit(l, child) if canEliminate(l, child) =>
       child
+
+    case LocalLimit(IntegerLiteral(0), child) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
+    case GlobalLimit(IntegerLiteral(0), child) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
 
     case GlobalLimit(le, GlobalLimit(ne, grandChild)) =>
       GlobalLimit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
@@ -2143,7 +2260,7 @@ object RewriteExceptAll extends Rule[LogicalPlan] {
       val modifiedRightPlan = Project(Seq(newColumnRight) ++ right.output, right)
       val unionPlan = Union(modifiedLeftPlan, modifiedRightPlan)
       val aggSumCol =
-        Alias(AggregateExpression(Sum(unionPlan.output.head.toAttribute), Complete, false), "sum")()
+        Alias(Sum(unionPlan.output.head.toAttribute).toAggregateExpression(), "sum")()
       val aggOutputColumns = left.output ++ Seq(aggSumCol)
       val aggregatePlan = Aggregate(left.output, aggOutputColumns, unionPlan)
       val filteredAggPlan = Filter(GreaterThan(aggSumCol.toAttribute, Literal(0L)), aggregatePlan)
@@ -2210,9 +2327,9 @@ object RewriteIntersectAll extends Rule[LogicalPlan] {
 
       // Expressions to compute count and minimum of both the counts.
       val vCol1AggrExpr =
-        Alias(AggregateExpression(Count(unionPlan.output(0)), Complete, false), "vcol1_count")()
+        Alias(Count(unionPlan.output(0)).toAggregateExpression(), "vcol1_count")()
       val vCol2AggrExpr =
-        Alias(AggregateExpression(Count(unionPlan.output(1)), Complete, false), "vcol2_count")()
+        Alias(Count(unionPlan.output(1)).toAggregateExpression(), "vcol2_count")()
       val ifExpression = Alias(If(
         GreaterThan(vCol1AggrExpr.toAttribute, vCol2AggrExpr.toAttribute),
         vCol2AggrExpr.toAttribute,
@@ -2308,40 +2425,5 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
       } else {
         a.copy(groupingExpressions = newGrouping)
       }
-  }
-}
-
-/**
- * Replaces GlobalLimit 0 and LocalLimit 0 nodes (subtree) with empty Local Relation, as they don't
- * return any rows.
- */
-object OptimizeLimitZero extends Rule[LogicalPlan] {
-  // returns empty Local Relation corresponding to given plan
-  private def empty(plan: LogicalPlan) =
-    LocalRelation(plan.output, data = Seq.empty, isStreaming = plan.isStreaming)
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsAllPatterns(LIMIT, LITERAL)) {
-    // Nodes below GlobalLimit or LocalLimit can be pruned if the limit value is zero (0).
-    // Any subtree in the logical plan that has GlobalLimit 0 or LocalLimit 0 as its root is
-    // semantically equivalent to an empty relation.
-    //
-    // In such cases, the effects of Limit 0 can be propagated through the Logical Plan by replacing
-    // the (Global/Local) Limit subtree with an empty LocalRelation, thereby pruning the subtree
-    // below and triggering other optimization rules of PropagateEmptyRelation to propagate the
-    // changes up the Logical Plan.
-    //
-    // Replace Global Limit 0 nodes with empty Local Relation
-    case gl @ GlobalLimit(IntegerLiteral(0), _) =>
-      empty(gl)
-
-    // Note: For all SQL queries, if a LocalLimit 0 node exists in the Logical Plan, then a
-    // GlobalLimit 0 node would also exist. Thus, the above case would be sufficient to handle
-    // almost all cases. However, if a user explicitly creates a Logical Plan with LocalLimit 0 node
-    // then the following rule will handle that case as well.
-    //
-    // Replace Local Limit 0 nodes with empty Local Relation
-    case ll @ LocalLimit(IntegerLiteral(0), _) =>
-      empty(ll)
   }
 }

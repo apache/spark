@@ -316,6 +316,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (8) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
+Join type: Inner
 Join condition: None
 
 
@@ -368,6 +369,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (7) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
+Join type: LeftOuter
 Join condition: None
 
 
@@ -751,6 +753,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (8) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
+Join type: Inner
 Join condition: None
 
 
@@ -828,6 +831,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (10) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
+Join type: Inner
 Join condition: None
 
 

@@ -43,7 +43,13 @@ SELECT udf(a), udf(COUNT(udf(b))) FROM testData GROUP BY b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-expression 'testdata.a' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "\"a\""
+  }
+}
 
 
 -- !query
@@ -107,7 +113,13 @@ SELECT udf(a + 2), udf(COUNT(b)) FROM testData GROUP BY a + 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-expression 'testdata.a' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "\"a\""
+  }
+}
 
 
 -- !query
@@ -182,7 +194,13 @@ SELECT k AS a, udf(COUNT(udf(v))) FROM testDataHasSameNameWithAlias GROUP BY udf
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-expression 'testdatahassamenamewithalias.k' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "\"k\""
+  }
+}
 
 
 -- !query
@@ -199,7 +217,21 @@ SELECT a AS k, udf(COUNT(udf(b))) FROM testData GROUP BY k
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `k` cannot be resolved. Did you mean one of the following? [`testdata`.`a`, `testdata`.`b`]; line 1 pos 57
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`k`",
+    "proposal" : "`testdata`.`a`, `testdata`.`b`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 58,
+    "stopIndex" : 58,
+    "fragment" : "k"
+  } ]
+}
 
 
 -- !query
@@ -377,7 +409,23 @@ SELECT every(udf(1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'every(CAST(udf(cast(1 as string)) AS INT))' due to data type mismatch: argument 1 requires boolean type, however, 'CAST(udf(cast(1 as string)) AS INT)' is of int type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"udf(1)\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"every(udf(1))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "every(udf(1))"
+  } ]
+}
 
 
 -- !query
@@ -386,7 +434,23 @@ SELECT some(udf(1S))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'some(CAST(udf(cast(1 as string)) AS SMALLINT))' due to data type mismatch: argument 1 requires boolean type, however, 'CAST(udf(cast(1 as string)) AS SMALLINT)' is of smallint type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"udf(1)\"",
+    "inputType" : "\"SMALLINT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"some(udf(1))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "some(udf(1S))"
+  } ]
+}
 
 
 -- !query
@@ -395,7 +459,23 @@ SELECT any(udf(1L))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'any(CAST(udf(cast(1 as string)) AS BIGINT))' due to data type mismatch: argument 1 requires boolean type, however, 'CAST(udf(cast(1 as string)) AS BIGINT)' is of bigint type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"udf(1)\"",
+    "inputType" : "\"BIGINT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"any(udf(1))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "any(udf(1L))"
+  } ]
+}
 
 
 -- !query
@@ -404,7 +484,23 @@ SELECT udf(every("true"))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'every('true')' due to data type mismatch: argument 1 requires boolean type, however, ''true'' is of string type.; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"true\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"every(true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 24,
+    "fragment" : "every(\"true\")"
+  } ]
+}
 
 
 -- !query

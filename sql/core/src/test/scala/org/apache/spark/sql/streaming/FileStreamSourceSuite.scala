@@ -1273,6 +1273,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         .text(src.getCanonicalPath)
 
       def startQuery(): StreamingQuery = {
+        // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
         df.writeStream
           .format("parquet")
           .trigger(Trigger.Once)
@@ -1328,6 +1329,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         .text(src.getCanonicalPath)
 
       def startTriggerOnceQuery(): StreamingQuery = {
+        // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
         df.writeStream
           .foreachBatch((_: Dataset[Row], _: Long) => {})
           .trigger(Trigger.Once)

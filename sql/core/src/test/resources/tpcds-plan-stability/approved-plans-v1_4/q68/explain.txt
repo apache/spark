@@ -61,6 +61,7 @@ Output [1]: [d_date_sk#11]
 (5) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_sold_date_sk#9]
 Right keys [1]: [d_date_sk#11]
+Join type: Inner
 Join condition: None
 
 (6) Project [codegen id : 5]
@@ -92,6 +93,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (12) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_store_sk#4]
 Right keys [1]: [s_store_sk#12]
+Join type: Inner
 Join condition: None
 
 (13) Project [codegen id : 5]
@@ -123,6 +125,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (19) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_hdemo_sk#2]
 Right keys [1]: [hd_demo_sk#14]
+Join type: Inner
 Join condition: None
 
 (20) Project [codegen id : 5]
@@ -150,6 +153,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (25) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_addr_sk#3]
 Right keys [1]: [ca_address_sk#17]
+Join type: Inner
 Join condition: None
 
 (26) Project [codegen id : 5]
@@ -195,6 +199,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (34) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ss_customer_sk#1]
 Right keys [1]: [c_customer_sk#32]
+Join type: Inner
 Join condition: None
 
 (35) Project [codegen id : 8]
@@ -207,6 +212,7 @@ Output [2]: [ca_address_sk#36, ca_city#37]
 (37) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [c_current_addr_sk#33]
 Right keys [1]: [ca_address_sk#36]
+Join type: Inner
 Join condition: NOT (ca_city#37 = bought_city#28)
 
 (38) Project [codegen id : 8]

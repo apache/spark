@@ -80,6 +80,7 @@ Output [1]: [d_date_sk#7]
 (8) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [ws_sold_date_sk#5]
 Right keys [1]: [d_date_sk#7]
+Join type: Inner
 Join condition: None
 
 (9) Project [codegen id : 2]
@@ -107,6 +108,7 @@ Output [1]: [d_date_sk#11]
 (14) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [cs_sold_date_sk#10]
 Right keys [1]: [d_date_sk#11]
+Join type: Inner
 Join condition: None
 
 (15) Project [codegen id : 4]
@@ -122,6 +124,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (18) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [c_customer_sk#1]
 Right keys [1]: [customer_sk#8]
+Join type: LeftSemi
 Join condition: None
 
 (19) Scan parquet spark_catalog.default.store_sales
@@ -145,6 +148,7 @@ Output [1]: [d_date_sk#15]
 (23) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [ss_sold_date_sk#14]
 Right keys [1]: [d_date_sk#15]
+Join type: Inner
 Join condition: None
 
 (24) Project [codegen id : 6]
@@ -158,6 +162,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (26) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [c_customer_sk#1]
 Right keys [1]: [customer_sk#16]
+Join type: LeftSemi
 Join condition: None
 
 (27) Project [codegen id : 9]
@@ -189,6 +194,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (33) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [c_current_addr_sk#3]
 Right keys [1]: [ca_address_sk#17]
+Join type: Inner
 Join condition: None
 
 (34) Project [codegen id : 9]
@@ -216,6 +222,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (39) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [c_current_cdemo_sk#2]
 Right keys [1]: [cd_demo_sk#19]
+Join type: Inner
 Join condition: None
 
 (40) Project [codegen id : 9]

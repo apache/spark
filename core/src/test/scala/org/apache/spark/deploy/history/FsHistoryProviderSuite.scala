@@ -40,7 +40,6 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.{JobExecutionStatus, SecurityManager, SPARK_VERSION, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogTestHelper._
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.DRIVER_LOG_DFS_DIR
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.UI.{ADMIN_ACLS, ADMIN_ACLS_GROUPS, UI_VIEW_ACLS, UI_VIEW_ACLS_GROUPS, USER_GROUPS_MAPPING}
@@ -57,8 +56,7 @@ import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
 import org.apache.spark.util.logging.DriverLogger
 
-abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging
-  with PrivateMethodTester {
+abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with PrivateMethodTester {
 
   private var testDir: File = null
 

@@ -123,6 +123,7 @@ Arguments: [rnk#17 ASC NULLS FIRST], false, 0
 (21) SortMergeJoin [codegen id : 11]
 Left keys [1]: [rnk#14]
 Right keys [1]: [rnk#17]
+Join type: Inner
 Join condition: None
 
 (22) Project [codegen id : 11]
@@ -150,6 +151,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (27) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [item_sk#10]
 Right keys [1]: [i_item_sk#18]
+Join type: Inner
 Join condition: None
 
 (28) Project [codegen id : 11]
@@ -162,6 +164,7 @@ Output [2]: [i_item_sk#20, i_product_name#21]
 (30) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [item_sk#15]
 Right keys [1]: [i_item_sk#20]
+Join type: Inner
 Join condition: None
 
 (31) Project [codegen id : 11]

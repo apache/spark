@@ -44,7 +44,7 @@ Cluster administrators should use [Pod Security Policies](https://kubernetes.io/
 
 # Prerequisites
 
-* A running Kubernetes cluster at version >= 1.20 with access configured to it using
+* A running Kubernetes cluster at version >= 1.22 with access configured to it using
 [kubectl](https://kubernetes.io/docs/user-guide/prereqs/).  If you do not already have a working Kubernetes cluster,
 you may set up a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
@@ -112,6 +112,8 @@ $ ./bin/docker-image-tool.sh -r <repo> -t my-tag -p ./kubernetes/dockerfiles/spa
 # To build additional SparkR docker image
 $ ./bin/docker-image-tool.sh -r <repo> -t my-tag -R ./kubernetes/dockerfiles/spark/bindings/R/Dockerfile build
 ```
+
+You can also use the [Apache Spark Docker images](https://hub.docker.com/r/apache/spark) (such as `apache/spark:<version>`) directly.
 
 ## Cluster Mode
 
@@ -1273,6 +1275,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.trust.certificates</code></td>
+  <td><code>false</code></td>
+  <td>
+    If set to true then client can submit to kubernetes cluster only with token.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driver.connectionTimeout</code></td>
   <td><code>10000</code></td>
   <td>
@@ -1394,6 +1404,22 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.service.ipFamilyPolicy</code></td>
+  <td><code>SingleStack</code></td>
+  <td>
+    K8s IP Family Policy for Driver Service.
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.service.ipFamilies</code></td>
+  <td><code>IPv4</code></td>
+  <td>
+    A list of IP families for K8s Driver Service.
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driver.ownPersistentVolumeClaim</code></td>
   <td><code>true</code></td>
   <td>
@@ -1498,6 +1524,14 @@ See the [configuration page](configuration.html) for information on Spark config
     in order to allow API Server-side caching. This should be used carefully.
   </td>
   <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.eventProcessingInterval</code></td>
+  <td><code>1s</code></td>
+  <td>
+    Interval between successive inspection of executor events sent from the Kubernetes API.
+  </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.rollInterval</code></td>
@@ -1808,6 +1842,43 @@ spec:
   # Specify the queue, indicates the resource queue which the job should be submitted to
   queue: default
 ```
+
+#### Using Apache YuniKorn as Customized Scheduler for Spark on Kubernetes
+
+[Apache YuniKorn](https://yunikorn.apache.org/) is a resource scheduler for Kubernetes that provides advanced batch scheduling
+capabilities, such as job queuing, resource fairness, min/max queue capacity and flexible job ordering policies.
+For available Apache YuniKorn features, please refer to [core features](https://yunikorn.apache.org/docs/get_started/core_features).
+
+##### Prerequisites
+
+Install Apache YuniKorn:
+
+```bash
+helm repo add yunikorn https://apache.github.io/yunikorn-release
+helm repo update
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.1.0 --create-namespace --set embedAdmissionController=false
+```
+
+The above steps will install YuniKorn v1.1.0 on an existing Kubernetes cluster.
+
+##### Get started
+
+Submit Spark jobs with the following extra options:
+
+```bash
+--conf spark.kubernetes.scheduler.name=yunikorn
+--conf spark.kubernetes.driver.label.queue=root.default
+--conf spark.kubernetes.executor.label.queue=root.default
+--conf spark.kubernetes.driver.annotation.yunikorn.apache.org/app-id={{APP_ID}}
+--conf spark.kubernetes.executor.annotation.yunikorn.apache.org/app-id={{APP_ID}}
+```
+
+Note that `{{APP_ID}}` is the built-in variable that will be substituted with Spark job ID automatically.
+With the above configuration, the job will be scheduled by YuniKorn scheduler instead of the default Kubernetes scheduler.
+
+##### Limitations
+
+- Apache YuniKorn currently only supports x86 Linux, running Spark on ARM64 (or other platform) with Apache YuniKorn is not supported at present.
 
 ### Stage Level Scheduling Overview
 

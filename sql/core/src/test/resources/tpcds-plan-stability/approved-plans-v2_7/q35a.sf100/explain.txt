@@ -89,6 +89,7 @@ Output [1]: [d_date_sk#7]
 (9) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_sold_date_sk#5]
 Right keys [1]: [d_date_sk#7]
+Join type: Inner
 Join condition: None
 
 (10) Project [codegen id : 4]
@@ -106,6 +107,7 @@ Arguments: [ss_customer_sk#4 ASC NULLS FIRST], false, 0
 (13) SortMergeJoin [codegen id : 6]
 Left keys [1]: [c_customer_sk#1]
 Right keys [1]: [ss_customer_sk#4]
+Join type: LeftSemi
 Join condition: None
 
 (14) Scan parquet spark_catalog.default.web_sales
@@ -124,6 +126,7 @@ Output [1]: [d_date_sk#10]
 (17) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ws_sold_date_sk#9]
 Right keys [1]: [d_date_sk#10]
+Join type: Inner
 Join condition: None
 
 (18) Project [codegen id : 8]
@@ -146,6 +149,7 @@ Output [1]: [d_date_sk#14]
 (22) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [cs_sold_date_sk#13]
 Right keys [1]: [d_date_sk#14]
+Join type: Inner
 Join condition: None
 
 (23) Project [codegen id : 10]
@@ -165,6 +169,7 @@ Arguments: [customsk#11 ASC NULLS FIRST], false, 0
 (27) SortMergeJoin [codegen id : 12]
 Left keys [1]: [c_customer_sk#1]
 Right keys [1]: [customsk#11]
+Join type: LeftSemi
 Join condition: None
 
 (28) Project [codegen id : 12]
@@ -204,6 +209,7 @@ Arguments: [ca_address_sk#16 ASC NULLS FIRST], false, 0
 (36) SortMergeJoin [codegen id : 16]
 Left keys [1]: [c_current_addr_sk#3]
 Right keys [1]: [ca_address_sk#16]
+Join type: Inner
 Join condition: None
 
 (37) Project [codegen id : 16]
@@ -243,6 +249,7 @@ Arguments: [cd_demo_sk#18 ASC NULLS FIRST], false, 0
 (45) SortMergeJoin [codegen id : 20]
 Left keys [1]: [c_current_cdemo_sk#2]
 Right keys [1]: [cd_demo_sk#18]
+Join type: Inner
 Join condition: None
 
 (46) Project [codegen id : 20]

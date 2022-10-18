@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Rand, UpdateFields}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -31,7 +31,8 @@ class CollapseProjectSuite extends PlanTest {
     val batches =
       Batch("Subqueries", FixedPoint(10), EliminateSubqueryAliases) ::
       Batch("CollapseProject", Once, CollapseProject) ::
-      Batch("SimplifyExtractValueOps", Once, SimplifyExtractValueOps) :: Nil
+      Batch("SimplifyExtractValueOps", Once, SimplifyExtractValueOps) ::
+      Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int)
@@ -132,28 +133,76 @@ class CollapseProjectSuite extends PlanTest {
 
     val optimized = Optimize.execute(query)
     comparePlans(optimized, query)
+  }
 
-    // CreateStruct is an exception if it's only referenced by ExtractValue.
-    val query2 = testRelation
-      .select(namedStruct("a", $"a", "a_plus_1", $"a" + 1).as("struct"))
+  test("SPARK-39699: collapse project with collection creation expressions") {
+    val struct = namedStruct(
+      "a", $"a",
+      "a_plus_1", $"a" + 1,
+      "a_plus_2", $"a" + 2,
+      "nested", namedStruct("inner1", $"a" + 3, "inner2", $"a" + 4)
+    ).as("struct")
+    val baseQuery = testRelation.select(struct)
+
+    // Can collapse as there is only one non-cheap access: `struct.a_plus_1`
+    val query1 = baseQuery
       .select(($"struct".getField("a") + $"struct".getField("a_plus_1")).as("add"))
       .analyze
-    val optimized2 = Optimize.execute(query2)
-    val expected2 = testRelation
+    val optimized1 = Optimize.execute(query1)
+    val expected1 = testRelation
       .select(($"a" + ($"a" + 1)).as("add"))
       .analyze
-    comparePlans(optimized2, expected2)
+    comparePlans(optimized1, expected1)
 
-    // referencing `CreateStruct` only once in non-extract expression is OK.
-    val query3 = testRelation
-      .select(namedStruct("a", $"a", "a_plus_1", $"a" + 1).as("struct"))
-      .select($"struct", $"struct".getField("a"))
+    // Cannot collapse as there are two non-cheap accesses: `struct.a_plus_1` and `struct.a_plus_1`
+    val query2 = baseQuery
+      .select(($"struct".getField("a_plus_1") + $"struct".getField("a_plus_1")).as("add"))
+      .analyze
+    val optimized2 = Optimize.execute(query2)
+    comparePlans(optimized2, query2)
+
+    // Cannot collapse as there are two non-cheap accesses: `struct.a_plus_1` and `struct`
+    val query3 = baseQuery
+      .select($"struct".getField("a_plus_1"), $"struct")
       .analyze
     val optimized3 = Optimize.execute(query3)
-    val expected3 = testRelation
-      .select(namedStruct("a", $"a", "a_plus_1", $"a" + 1).as("struct"), $"a".as("struct.a"))
+    comparePlans(optimized3, query3)
+
+    // Can collapse as there is only one non-cheap access: `struct`
+    val query4 = baseQuery
+      .select($"struct".getField("a"), $"struct")
       .analyze
-    comparePlans(optimized3, expected3)
+    val optimized4 = Optimize.execute(query4)
+    val expected4 = testRelation
+      .select($"a".as("struct.a"), struct)
+      .analyze
+    comparePlans(optimized4, expected4)
+
+    // Referenced by WithFields.
+    val query5 = testRelation.select(namedStruct("a", $"a", "b", $"a" + 1).as("struct"))
+      .select(UpdateFields($"struct", "c", $"struct".getField("a")).as("u"))
+      .analyze
+    val optimized5 = Optimize.execute(query5)
+    val expected5 = testRelation
+      .select(namedStruct("a", $"a", "b", $"a" + 1, "c", $"a").as("struct").as("u"))
+      .analyze
+    comparePlans(optimized5, expected5)
+
+    // TODO: should collapse as the non-cheap accesses are distinct:
+    //  `struct.a_plus_1` and `struct.a_plus_2`
+    val query6 = baseQuery
+      .select(($"struct".getField("a_plus_1") + $"struct".getField("a_plus_2")).as("add"))
+      .analyze
+    val optimized6 = Optimize.execute(query6)
+    comparePlans(optimized6, query6)
+
+    // Cannot collapse as the two non-cheap accesses have a lineage:
+    // `struct.nested` and `struct.nested.inner1`
+    val query7 = baseQuery
+      .select($"struct".getField("nested"), $"struct".getField("nested").getField("inner1"))
+      .analyze
+    val optimized7 = Optimize.execute(query7)
+    comparePlans(optimized7, query7)
   }
 
   test("preserve top-level alias metadata while collapsing projects") {

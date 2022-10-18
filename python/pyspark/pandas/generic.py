@@ -45,7 +45,6 @@ from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
     BooleanType,
     DoubleType,
-    IntegralType,
     LongType,
     NumericType,
 )
@@ -1329,7 +1328,7 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            return F.coalesce(F.sum(spark_column), SF.lit(0))
+            return F.coalesce(F.sum(spark_column), F.lit(0))
 
         return self._reduce_for_stat_function(
             sum,
@@ -1421,32 +1420,16 @@ class Frame(object, metaclass=ABCMeta):
         def prod(psser: "Series") -> Column:
             spark_type = psser.spark.data_type
             spark_column = psser.spark.column
-
-            if not skipna:
-                spark_column = F.when(spark_column.isNull(), np.nan).otherwise(spark_column)
-
             if isinstance(spark_type, BooleanType):
-                scol = F.min(F.coalesce(spark_column, SF.lit(True))).cast(LongType())
-            elif isinstance(spark_type, NumericType):
-                num_zeros = F.sum(F.when(spark_column == 0, 1).otherwise(0))
-                sign = F.when(
-                    F.sum(F.when(spark_column < 0, 1).otherwise(0)) % 2 == 0, 1
-                ).otherwise(-1)
-
-                scol = F.when(num_zeros > 0, 0).otherwise(
-                    sign * F.exp(F.sum(F.log(F.abs(spark_column))))
-                )
-
-                if isinstance(spark_type, IntegralType):
-                    scol = F.round(scol).cast(LongType())
-            else:
+                spark_column = spark_column.cast(LongType())
+            elif not isinstance(spark_type, NumericType):
                 raise TypeError(
                     "Could not convert {} ({}) to numeric".format(
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
 
-            return F.coalesce(scol, SF.lit(1))
+            return SF.product(spark_column, skipna)
 
         return self._reduce_for_stat_function(
             prod,
@@ -1810,6 +1793,8 @@ class Frame(object, metaclass=ABCMeta):
         """
         Return sample standard deviation.
 
+        .. versionadded:: 3.3.0
+
         Parameters
         ----------
         axis : {index (0), columns (1)}
@@ -1822,6 +1807,9 @@ class Frame(object, metaclass=ABCMeta):
         ddof : int, default 1
             Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
             where N represents the number of elements.
+
+            .. versionchanged:: 3.4.0
+               Supported including arbitary integers.
         numeric_only : bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
@@ -1843,6 +1831,11 @@ class Frame(object, metaclass=ABCMeta):
         b    0.1
         dtype: float64
 
+        >>> df.std(ddof=2)
+        a    1.414214
+        b    0.141421
+        dtype: float64
+
         >>> df.std(axis=1)
         0    0.636396
         1    1.272792
@@ -1862,8 +1855,12 @@ class Frame(object, metaclass=ABCMeta):
 
         >>> df['a'].std(ddof=0)
         0.816496580927726
+
+        >>> df['a'].std(ddof=-1)
+        0.707106...
         """
-        assert ddof in (0, 1)
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
 
         axis = validate_axis(axis)
 
@@ -1881,10 +1878,7 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            if ddof == 0:
-                return F.stddev_pop(spark_column)
-            else:
-                return F.stddev_samp(spark_column)
+            return SF.stddev(spark_column, ddof)
 
         return self._reduce_for_stat_function(
             std, name="std", axis=axis, numeric_only=numeric_only, ddof=ddof, skipna=skipna
@@ -1896,6 +1890,8 @@ class Frame(object, metaclass=ABCMeta):
         """
         Return unbiased variance.
 
+        .. versionadded:: 3.3.0
+
         Parameters
         ----------
         axis : {index (0), columns (1)}
@@ -1903,6 +1899,9 @@ class Frame(object, metaclass=ABCMeta):
         ddof : int, default 1
             Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
             where N represents the number of elements.
+
+            .. versionchanged:: 3.4.0
+               Supported including arbitary integers.
         numeric_only : bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
@@ -1924,6 +1923,11 @@ class Frame(object, metaclass=ABCMeta):
         b    0.01
         dtype: float64
 
+        >>> df.var(ddof=2)
+        a    2.00
+        b    0.02
+        dtype: float64
+
         >>> df.var(axis=1)
         0    0.405
         1    1.620
@@ -1943,8 +1947,12 @@ class Frame(object, metaclass=ABCMeta):
 
         >>> df['a'].var(ddof=0)
         0.6666666666666666
+
+        >>> df['a'].var(ddof=-2)
+        0.4
         """
-        assert ddof in (0, 1)
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
 
         axis = validate_axis(axis)
 
@@ -1962,10 +1970,7 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            if ddof == 0:
-                return F.var_pop(spark_column)
-            else:
-                return F.var_samp(spark_column)
+            return SF.var(spark_column, ddof)
 
         return self._reduce_for_stat_function(
             var, name="var", axis=axis, numeric_only=numeric_only, ddof=ddof
@@ -2105,6 +2110,8 @@ class Frame(object, metaclass=ABCMeta):
         """
         Return unbiased standard error of the mean over requested axis.
 
+        .. versionadded:: 3.3.0
+
         Parameters
         ----------
         axis : {index (0), columns (1)}
@@ -2117,6 +2124,9 @@ class Frame(object, metaclass=ABCMeta):
         ddof : int, default 1
             Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
             where N represents the number of elements.
+
+            .. versionchanged:: 3.4.0
+               Supported including arbitary integers.
         numeric_only : bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
@@ -2144,6 +2154,11 @@ class Frame(object, metaclass=ABCMeta):
         b    0.471405
         dtype: float64
 
+        >>> psdf.sem(ddof=2)
+        a    0.816497
+        b    0.816497
+        dtype: float64
+
         >>> psdf.sem(axis=1)
         0    1.5
         1    1.5
@@ -2165,7 +2180,8 @@ class Frame(object, metaclass=ABCMeta):
         >>> psser.sem(ddof=0)
         0.47140452079103173
         """
-        assert ddof in (0, 1)
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
 
         axis = validate_axis(axis)
 
@@ -2183,13 +2199,10 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            if ddof == 0:
-                return F.stddev_pop(spark_column)
-            else:
-                return F.stddev_samp(spark_column)
+            return SF.stddev(spark_column, ddof)
 
         def sem(psser: "Series") -> Column:
-            return std(psser) / pow(Frame._count_expr(psser), 0.5)
+            return std(psser) / F.sqrt(Frame._count_expr(psser))
 
         return self._reduce_for_stat_function(
             sem,
@@ -2462,8 +2475,6 @@ class Frame(object, metaclass=ABCMeta):
             df = self
         elif isinstance(self, ps.Series):
             df = self.to_dataframe()
-        else:
-            raise TypeError("bool() expects DataFrame or Series; however, " "got [%s]" % (self,))
         return df.head(2)._to_internal_pandas().bool()
 
     def first_valid_index(self) -> Optional[Union[Scalar, Tuple[Scalar, ...]]]:
@@ -3117,11 +3128,11 @@ class Frame(object, metaclass=ABCMeta):
         if isinstance(self, ps.Series):
             if indexes_increasing:
                 result = first_series(
-                    self.to_frame().loc[before:after]  # type: ignore[arg-type, assignment]
+                    self.to_frame().loc[before:after]  # type: ignore[arg-type]
                 ).rename(self.name)
             else:
                 result = first_series(
-                    self.to_frame().loc[after:before]  # type: ignore[arg-type,assignment]
+                    self.to_frame().loc[after:before]  # type: ignore[arg-type]
                 ).rename(self.name)
         elif isinstance(self, ps.DataFrame):
             if axis == 0:

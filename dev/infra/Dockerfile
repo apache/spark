@@ -16,7 +16,10 @@
 #
 
 # Image for building and testing Spark branches. Based on Ubuntu 20.04.
-FROM ubuntu:20.04
+# See also in https://hub.docker.com/_/ubuntu
+FROM ubuntu:focal-20220801
+
+ENV FULL_REFRESH_DATE 20220706
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
@@ -29,7 +32,7 @@ RUN $APT_INSTALL software-properties-common git libxml2-dev pkg-config curl wget
 RUN update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
-RUN python3.9 -m pip install 'numpy<1.23.0' pyarrow 'pandas<1.4.0' scipy xmlrunner plotly>=4.8 sklearn 'mlflow>=1.0' coverage matplotlib
+RUN python3.9 -m pip install numpy pyarrow 'pandas<=1.4.4' scipy unittest-xml-reporting plotly>=4.8 sklearn 'mlflow>=1.0' coverage matplotlib openpyxl
 
 RUN add-apt-repository ppa:pypy/ppa
 RUN apt update
@@ -42,13 +45,26 @@ RUN mkdir -p /usr/local/pypy/pypy3.7 && \
     ln -sf /usr/local/pypy/pypy3.7/bin/pypy /usr/local/bin/pypy3
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-RUN pypy3 -m pip install 'numpy<1.23.0' 'pandas<1.4.0' scipy coverage matplotlib
+RUN pypy3 -m pip install numpy 'pandas<=1.4.4' scipy coverage matplotlib
 
 RUN $APT_INSTALL gnupg ca-certificates pandoc
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list
-RUN gpg --keyserver keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
+RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
 RUN gpg -a --export E084DAB9 | apt-key add -
 RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/'
 RUN apt update
 RUN $APT_INSTALL r-base libcurl4-openssl-dev qpdf libssl-dev zlib1g-dev
 RUN Rscript -e "install.packages(c('knitr', 'markdown', 'rmarkdown', 'testthat', 'devtools', 'e1071', 'survival', 'arrow', 'roxygen2', 'xml2'), repos='https://cloud.r-project.org/')"
+
+# See more in SPARK-39959, roxygen2 < 7.2.1
+RUN apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev \
+          libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev \
+          libtiff5-dev libjpeg-dev
+RUN Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
+RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')"
+
+# See more in SPARK-39735
+ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
+
+# Add Python deps for Spark Connect.
+RUN python3.9 -m pip install grpcio protobuf

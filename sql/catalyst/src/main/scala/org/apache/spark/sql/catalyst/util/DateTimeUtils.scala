@@ -27,6 +27,7 @@ import scala.util.control.NonFatal
 
 import sun.util.calendar.ZoneInfo
 
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -464,17 +465,20 @@ object DateTimeUtils {
     }
   }
 
-  def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId, errorContext: String = ""): Long = {
+  def stringToTimestampAnsi(
+      s: UTF8String,
+      timeZoneId: ZoneId,
+      context: SQLQueryContext = null): Long = {
     stringToTimestamp(s, timeZoneId).getOrElse {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
-        s, StringType, TimestampType, errorContext)
+        s, StringType, TimestampType, context)
     }
   }
 
-  def doubleToTimestampAnsi(d: Double, errorContext: String): Long = {
+  def doubleToTimestampAnsi(d: Double, context: SQLQueryContext): Long = {
     if (d.isNaN || d.isInfinite) {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
-        d, DoubleType, TimestampType, errorContext)
+        d, DoubleType, TimestampType, context)
     } else {
       DoubleExactNumeric.toLong(d * MICROS_PER_SECOND)
     }
@@ -521,10 +525,12 @@ object DateTimeUtils {
     stringToTimestampWithoutTimeZone(s, true)
   }
 
-  def stringToTimestampWithoutTimeZoneAnsi(s: UTF8String, errorContext: String): Long = {
+  def stringToTimestampWithoutTimeZoneAnsi(
+      s: UTF8String,
+      context: SQLQueryContext): Long = {
     stringToTimestampWithoutTimeZone(s, true).getOrElse {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
-        s, StringType, TimestampNTZType, errorContext)
+        s, StringType, TimestampNTZType, context)
     }
   }
 
@@ -563,7 +569,7 @@ object DateTimeUtils {
   /**
    * Converts the local date to the number of days since 1970-01-01.
    */
-  def localDateToDays(localDate: LocalDate): Int = Math.toIntExact(localDate.toEpochDay)
+  def localDateToDays(localDate: LocalDate): Int = MathUtils.toIntExact(localDate.toEpochDay)
 
   /**
    * Obtains an instance of `java.time.LocalDate` from the epoch day count.
@@ -640,10 +646,12 @@ object DateTimeUtils {
     }
   }
 
-  def stringToDateAnsi(s: UTF8String, errorContext: String = ""): Int = {
+  def stringToDateAnsi(
+      s: UTF8String,
+      context: SQLQueryContext = null): Int = {
     stringToDate(s).getOrElse {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
-        s, StringType, DateType, errorContext)
+        s, StringType, DateType, context)
     }
   }
 

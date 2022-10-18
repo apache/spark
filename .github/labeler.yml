@@ -84,12 +84,12 @@ SPARK SHELL:
   - "repl/**/*"
   - "bin/spark-shell*"
 SQL:
-#- any: ["**/sql/**/*", "!python/pyspark/sql/avro/**/*", "!python/pyspark/sql/streaming/**/*", "!python/pyspark/sql/tests/test_streaming.py"]
+#- any: ["**/sql/**/*", "!python/pyspark/sql/avro/**/*", "!python/pyspark/sql/streaming/**/*", "!python/pyspark/sql/tests/streaming/test_streaming.py"]
   - "**/sql/**/*"
   - "common/unsafe/**/*"
   #- "!python/pyspark/sql/avro/**/*"
   #- "!python/pyspark/sql/streaming/**/*"
-  #- "!python/pyspark/sql/tests/test_streaming.py"
+  #- "!python/pyspark/sql/tests/streaming/test_streaming.py"
   - "bin/spark-sql*"
   - "bin/beeline*"
   - "sbin/*thriftserver*.sh"
@@ -103,7 +103,7 @@ SQL:
   - "**/*schema.R"
   - "**/*types.R"
 AVRO:
-  - "external/avro/**/*"
+  - "connector/avro/**/*"
   - "python/pyspark/sql/avro/**/*"
 DSTREAM:
   - "streaming/**/*"
@@ -123,9 +123,9 @@ MLLIB:
   - "python/pyspark/mllib/**/*"
 STRUCTURED STREAMING:
   - "**/sql/**/streaming/**/*"
-  - "external/kafka-0-10-sql/**/*"
+  - "connector/kafka-0-10-sql/**/*"
   - "python/pyspark/sql/streaming/**/*"
-  - "python/pyspark/sql/tests/test_streaming.py"
+  - "python/pyspark/sql/tests/streaming/test_streaming.py"
   - "**/*streaming.R"
 PYTHON:
   - "bin/pyspark*"
@@ -151,4 +151,10 @@ WEB UI:
   - "**/*UI.scala"
 DEPLOY:
   - "sbin/**/*"
-
+CONNECT:
+  - "connector/connect/**/*"
+  - "**/sql/sparkconnect/**/*"
+  - "python/pyspark/sql/**/connect/**/*"
+PROTOBUF:
+  - "connector/protobuf/**/*"
+  - "python/pyspark/sql/protobuf/**/*"

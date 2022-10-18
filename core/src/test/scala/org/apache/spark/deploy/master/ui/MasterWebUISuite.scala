@@ -25,7 +25,6 @@ import java.util.Date
 import scala.collection.mutable.HashMap
 
 import org.mockito.Mockito.{mock, times, verify, when}
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, KillDriverResponse, RequestKillDriver}
@@ -34,8 +33,7 @@ import org.apache.spark.deploy.master._
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.Utils
 
-
-class MasterWebUISuite extends SparkFunSuite with BeforeAndAfterAll {
+class MasterWebUISuite extends SparkFunSuite {
 
   val conf = new SparkConf()
   val securityMgr = new SecurityManager(conf)

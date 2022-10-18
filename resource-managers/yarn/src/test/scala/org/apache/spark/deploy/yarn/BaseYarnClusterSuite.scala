@@ -29,19 +29,17 @@ import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
 import org.scalactic.source.Position
-import org.scalatest.{BeforeAndAfterAll, Tag}
+import org.scalatest.Tag
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher._
 import org.apache.spark.util.Utils
 
-abstract class BaseYarnClusterSuite
-  extends SparkFunSuite with BeforeAndAfterAll with Matchers with Logging {
+abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
   private var isBindSuccessful = true
 
   // log4j configuration for the YARN containers, so that their output is collected
@@ -87,7 +85,7 @@ abstract class BaseYarnClusterSuite
     logConfDir = new File(tempDir, "log4j")
     logConfDir.mkdir()
 
-    val logConfFile = new File(logConfDir, "log4j.properties")
+    val logConfFile = new File(logConfDir, "log4j2.properties")
     Files.write(LOG4J_CONF, logConfFile, StandardCharsets.UTF_8)
 
     // Disable the disk utilization check to avoid the test hanging when people's disks are

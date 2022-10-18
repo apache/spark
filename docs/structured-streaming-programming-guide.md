@@ -498,14 +498,14 @@ to track the read position in the stream. The engine uses checkpointing and writ
 
 # API using Datasets and DataFrames
 Since Spark 2.0, DataFrames and Datasets can represent static, bounded data, as well as streaming, unbounded data. Similar to static Datasets/DataFrames, you can use the common entry point `SparkSession`
-([Scala](api/scala/org/apache/spark/sql/SparkSession.html)/[Java](api/java/org/apache/spark/sql/SparkSession.html)/[Python](api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.html#pyspark.sql.SparkSession)/[R](api/R/sparkR.session.html) docs)
+([Scala](api/scala/org/apache/spark/sql/SparkSession.html)/[Java](api/java/org/apache/spark/sql/SparkSession.html)/[Python](api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.html#pyspark.sql.SparkSession)/[R](api/R/reference/sparkR.session.html) docs)
 to create streaming DataFrames/Datasets from streaming sources, and apply the same operations on them as static DataFrames/Datasets. If you are not familiar with Datasets/DataFrames, you are strongly advised to familiarize yourself with them using the
 [DataFrame/Dataset Programming Guide](sql-programming-guide.html).
 
 ## Creating streaming DataFrames and streaming Datasets
 Streaming DataFrames can be created through the `DataStreamReader` interface
 ([Scala](api/scala/org/apache/spark/sql/streaming/DataStreamReader.html)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamReader.html)/[Python](api/python/reference/pyspark.ss/api/pyspark.sql.streaming.DataStreamReader.html#pyspark.sql.streaming.DataStreamReader) docs)
-returned by `SparkSession.readStream()`. In [R](api/R/read.stream.html), with the `read.stream()` method. Similar to the read interface for creating static DataFrame, you can specify the details of the source – data format, schema, options, etc.
+returned by `SparkSession.readStream()`. In [R](api/R/reference/read.stream.html), with the `read.stream()` method. Similar to the read interface for creating static DataFrame, you can specify the details of the source – data format, schema, options, etc.
 
 #### Input Sources
 There are a few built-in sources.
@@ -1959,6 +1959,11 @@ Here are the configs regarding to RocksDB instance of the state store provider:
     <td>60000</td>
   </tr>
   <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.maxOpenFiles</td>
+    <td>The number of open files that can be used by the RocksDB instance. Value of -1 means that files opened are always kept open. If the open file limit is reached, RocksDB will evict entries from the open file cache and close those file descriptors and remove the entries from the cache.</td>
+    <td>-1</td>
+  </tr>
+  <tr>
     <td>spark.sql.streaming.stateStore.rocksdb.resetStatsOnLoad</td>
     <td>Whether we resets all ticker and histogram stats for RocksDB on load.</td>
     <td>True</td>
@@ -2774,12 +2779,15 @@ Here are the different kinds of triggers that are supported.
     </td>
   </tr>
   <tr>
-    <td><b>One-time micro-batch</b></td>
+    <td><b>One-time micro-batch</b><i>(deprecated)</i></td>
     <td>
         The query will execute <strong>only one</strong> micro-batch to process all the available data and then
         stop on its own. This is useful in scenarios you want to periodically spin up a cluster,
         process everything that is available since the last period, and then shutdown the
         cluster. In some case, this may lead to significant cost savings.
+        Note that this trigger is deprecated and users are encouraged to migrate to <b>Available-now micro-batch</b>,
+        as it provides the better guarantee of processing, fine-grained scale of batches, and better gradual processing
+        of watermark advancement including no-data batch.
     </td>
   </tr>
   <tr>
@@ -2789,6 +2797,15 @@ Here are the different kinds of triggers that are supported.
         stop on its own. The difference is that, it will process the data in (possibly) multiple micro-batches
         based on the source options (e.g. <code>maxFilesPerTrigger</code> for file source), which will result
         in better query scalability.
+        <ul>
+            <li>This trigger provides a strong guarantee of processing: regardless of how many batches were
+                left over in previous run, it ensures all available data at the time of execution gets
+                processed before termination. All uncommitted batches will be processed first.</li>
+
+            <li>Watermark gets advanced per each batch, and no-data batch gets executed before termination
+                if the last batch advances the watermark. This helps to maintain smaller and predictable
+                state size and smaller latency on the output of stateful operators.</li>
+        </ul>
     </td>
   </tr>
   <tr>
@@ -2819,7 +2836,7 @@ df.writeStream
   .trigger(Trigger.ProcessingTime("2 seconds"))
   .start()
 
-// One-time trigger
+// One-time trigger (Deprecated, encouraged to use Available-now trigger)
 df.writeStream
   .format("console")
   .trigger(Trigger.Once())
@@ -2857,7 +2874,7 @@ df.writeStream
   .trigger(Trigger.ProcessingTime("2 seconds"))
   .start();
 
-// One-time trigger
+// One-time trigger (Deprecated, encouraged to use Available-now trigger)
 df.writeStream
   .format("console")
   .trigger(Trigger.Once())
@@ -2893,7 +2910,7 @@ df.writeStream \
   .trigger(processingTime='2 seconds') \
   .start()
 
-# One-time trigger
+# One-time trigger (Deprecated, encouraged to use Available-now trigger)
 df.writeStream \
   .format("console") \
   .trigger(once=True) \

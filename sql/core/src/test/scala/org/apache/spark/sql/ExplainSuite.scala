@@ -474,7 +474,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         )
         val expected_plan_fragment1 =
           s"""
-             |\\(1\\) BatchScan
+             |\\(1\\) BatchScan $fmt file:$basePath
              |Output \\[2\\]: \\[value#x, id#x\\]
              |DataFilters: \\[isnotnull\\(value#x\\), \\(value#x > 2\\)\\]
              |Format: $fmt
@@ -599,6 +599,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         |(16) BroadcastHashJoin
         |Left keys [1]: [k#x]
         |Right keys [1]: [k#x]
+        |Join type: Inner
         |Join condition: None
         |""".stripMargin,
       """

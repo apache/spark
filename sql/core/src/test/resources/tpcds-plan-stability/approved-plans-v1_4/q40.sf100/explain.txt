@@ -86,6 +86,7 @@ Arguments: [cr_order_number#10 ASC NULLS FIRST, cr_item_sk#9 ASC NULLS FIRST], f
 (12) SortMergeJoin [codegen id : 8]
 Left keys [2]: [cs_order_number#3, cs_item_sk#2]
 Right keys [2]: [cr_order_number#10, cr_item_sk#9]
+Join type: LeftOuter
 Join condition: None
 
 (13) Project [codegen id : 8]
@@ -117,6 +118,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (19) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [cs_item_sk#2]
 Right keys [1]: [i_item_sk#13]
+Join type: Inner
 Join condition: None
 
 (20) Project [codegen id : 8]
@@ -129,6 +131,7 @@ Output [2]: [d_date_sk#16, d_date#17]
 (22) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [cs_sold_date_sk#5]
 Right keys [1]: [d_date_sk#16]
+Join type: Inner
 Join condition: None
 
 (23) Project [codegen id : 8]
@@ -156,6 +159,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (28) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [cs_warehouse_sk#1]
 Right keys [1]: [w_warehouse_sk#18]
+Join type: Inner
 Join condition: None
 
 (29) Project [codegen id : 8]

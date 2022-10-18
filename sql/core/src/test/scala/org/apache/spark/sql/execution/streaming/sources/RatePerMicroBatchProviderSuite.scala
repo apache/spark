@@ -84,6 +84,7 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
   }
 
   test("Trigger.Once") {
+    // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
     testTrigger(Trigger.Once())
   }
 

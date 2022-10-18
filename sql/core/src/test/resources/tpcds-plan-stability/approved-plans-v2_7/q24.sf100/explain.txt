@@ -88,6 +88,7 @@ Condition : ((isnotnull(ca_address_sk#6) AND isnotnull(ca_country#9)) AND isnotn
 (9) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [s_zip#5]
 Right keys [1]: [ca_zip#8]
+Join type: Inner
 Join condition: None
 
 (10) Project [codegen id : 2]
@@ -115,6 +116,7 @@ Condition : ((isnotnull(c_customer_sk#10) AND isnotnull(c_current_addr_sk#11)) A
 (15) BroadcastHashJoin [codegen id : 3]
 Left keys [2]: [ca_address_sk#6, upper(ca_country#9)]
 Right keys [2]: [c_current_addr_sk#11, c_birth_country#14]
+Join type: Inner
 Join condition: None
 
 (16) Project [codegen id : 3]
@@ -146,6 +148,7 @@ Input [6]: [ss_item_sk#15, ss_customer_sk#16, ss_store_sk#17, ss_ticket_number#1
 (22) BroadcastHashJoin [codegen id : 5]
 Left keys [2]: [s_store_sk#1, c_customer_sk#10]
 Right keys [2]: [ss_store_sk#17, ss_customer_sk#16]
+Join type: Inner
 Join condition: None
 
 (23) Project [codegen id : 5]
@@ -173,6 +176,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (28) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_item_sk#15]
 Right keys [1]: [i_item_sk#21]
+Join type: Inner
 Join condition: None
 
 (29) Project [codegen id : 5]
@@ -216,6 +220,7 @@ Arguments: [sr_ticket_number#28 ASC NULLS FIRST, sr_item_sk#27 ASC NULLS FIRST],
 (38) SortMergeJoin [codegen id : 9]
 Left keys [2]: [ss_ticket_number#18, ss_item_sk#15]
 Right keys [2]: [sr_ticket_number#28, sr_item_sk#27]
+Join type: Inner
 Join condition: None
 
 (39) Project [codegen id : 9]
@@ -327,6 +332,7 @@ Input [6]: [ss_item_sk#15, ss_customer_sk#16, ss_store_sk#17, ss_ticket_number#1
 (54) BroadcastHashJoin [codegen id : 4]
 Left keys [2]: [s_store_sk#1, c_customer_sk#10]
 Right keys [2]: [ss_store_sk#17, ss_customer_sk#16]
+Join type: Inner
 Join condition: None
 
 (55) Project [codegen id : 4]
@@ -366,6 +372,7 @@ Arguments: [i_item_sk#21 ASC NULLS FIRST], false, 0
 (63) SortMergeJoin [codegen id : 8]
 Left keys [1]: [ss_item_sk#15]
 Right keys [1]: [i_item_sk#21]
+Join type: Inner
 Join condition: None
 
 (64) Project [codegen id : 8]
@@ -390,6 +397,7 @@ Arguments: [sr_ticket_number#28 ASC NULLS FIRST, sr_item_sk#27 ASC NULLS FIRST],
 (69) SortMergeJoin [codegen id : 12]
 Left keys [2]: [ss_ticket_number#18, ss_item_sk#15]
 Right keys [2]: [sr_ticket_number#28, sr_item_sk#27]
+Join type: Inner
 Join condition: None
 
 (70) Project [codegen id : 12]

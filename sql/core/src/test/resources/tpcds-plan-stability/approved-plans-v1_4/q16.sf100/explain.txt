@@ -96,6 +96,7 @@ Arguments: [cs_order_number#16 ASC NULLS FIRST], false, 0
 (12) SortMergeJoin [codegen id : 5]
 Left keys [1]: [cs_order_number#5]
 Right keys [1]: [cs_order_number#16]
+Join type: LeftSemi
 Join condition: NOT (cs_warehouse_sk#4 = cs_warehouse_sk#15)
 
 (13) Project [codegen id : 5]
@@ -126,6 +127,7 @@ Arguments: [cr_order_number#18 ASC NULLS FIRST], false, 0
 (19) SortMergeJoin [codegen id : 11]
 Left keys [1]: [cs_order_number#5]
 Right keys [1]: [cr_order_number#18]
+Join type: LeftAnti
 Join condition: None
 
 (20) Scan parquet spark_catalog.default.customer_address
@@ -153,6 +155,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (25) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [cs_ship_addr_sk#2]
 Right keys [1]: [ca_address_sk#20]
+Join type: Inner
 Join condition: None
 
 (26) Project [codegen id : 11]
@@ -184,6 +187,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (32) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [cs_call_center_sk#3]
 Right keys [1]: [cc_call_center_sk#22]
+Join type: Inner
 Join condition: None
 
 (33) Project [codegen id : 11]
@@ -215,6 +219,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (39) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [cs_ship_date_sk#1]
 Right keys [1]: [d_date_sk#24]
+Join type: Inner
 Join condition: None
 
 (40) Project [codegen id : 11]

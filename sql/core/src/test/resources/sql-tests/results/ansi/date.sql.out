@@ -21,12 +21,20 @@ select date '2020-01-01中文'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 2020-01-01中文(line 1, pos 7)
-
-== SQL ==
-select date '2020-01-01中文'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "2020-01-01中文",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "date '2020-01-01中文'"
+  } ]
+}
 
 
 -- !query
@@ -42,8 +50,14 @@ select make_date(2000, 13, 1)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid value for MonthOfYear (valid values 1 - 12): 13. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid value for MonthOfYear (valid values 1 - 12): 13"
+  }
+}
 
 
 -- !query
@@ -51,8 +65,14 @@ select make_date(2000, 1, 33)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid value for DayOfMonth (valid values 1 - 28/31): 33. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid value for DayOfMonth (valid values 1 - 28/31): 33"
+  }
+}
 
 
 -- !query
@@ -61,12 +81,20 @@ select date'015'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 015(line 1, pos 7)
-
-== SQL ==
-select date'015'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "015",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "date'015'"
+  } ]
+}
 
 
 -- !query
@@ -75,12 +103,20 @@ select date'2021-4294967297-11'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 2021-4294967297-11(line 1, pos 7)
-
-== SQL ==
-select date'2021-4294967297-11'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "2021-4294967297-11",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "date'2021-4294967297-11'"
+  } ]
+}
 
 
 -- !query
@@ -136,8 +172,15 @@ select to_date("02-29", "MM-dd")
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid date 'February 29' as '1970' is not a leap year. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid date 'February 29' as '1970' is not a leap year"
+  }
+}
 
 
 -- !query
@@ -195,8 +238,13 @@ select next_day("2015-07-23", "xx")
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal input for day of week: xx. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2002",
+  "messageParameters" : {
+    "message" : "Illegal input for day of week: xx"
+  }
+}
 
 
 -- !query
@@ -229,10 +277,23 @@ select next_day("xx", "Mon")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CAST_INVALID_INPUT] The value 'xx' of the type "STRING" cannot be cast to "DATE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select next_day("xx", "Mon")
-       ^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'xx'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DATE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "next_day(\"xx\", \"Mon\")"
+  } ]
+}
 
 
 -- !query
@@ -289,7 +350,23 @@ select date_add('2011-11-11', 1L)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(CAST('2011-11-11' AS DATE), 1L)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1L' is of bigint type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"BIGINT\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(2011-11-11, 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "date_add('2011-11-11', 1L)"
+  } ]
+}
 
 
 -- !query
@@ -298,7 +375,23 @@ select date_add('2011-11-11', 1.0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(CAST('2011-11-11' AS DATE), 1.0BD)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1.0BD' is of decimal(2,1) type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1.0\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(2011-11-11, 1.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "date_add('2011-11-11', 1.0)"
+  } ]
+}
 
 
 -- !query
@@ -307,7 +400,23 @@ select date_add('2011-11-11', 1E1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(CAST('2011-11-11' AS DATE), 10.0D)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '10.0D' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"10.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(2011-11-11, 10.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "date_add('2011-11-11', 1E1)"
+  } ]
+}
 
 
 -- !query
@@ -324,10 +433,23 @@ select date_add('2011-11-11', '1.2')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value '1.2' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select date_add('2011-11-11', '1.2')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'1.2'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "date_add('2011-11-11', '1.2')"
+  } ]
+}
 
 
 -- !query
@@ -400,7 +522,23 @@ select date_sub('2011-11-11', 1L)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), 1L)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1L' is of bigint type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"BIGINT\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_sub(2011-11-11, 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "date_sub('2011-11-11', 1L)"
+  } ]
+}
 
 
 -- !query
@@ -409,7 +547,23 @@ select date_sub('2011-11-11', 1.0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), 1.0BD)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1.0BD' is of decimal(2,1) type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1.0\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_sub(2011-11-11, 1.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "date_sub('2011-11-11', 1.0)"
+  } ]
+}
 
 
 -- !query
@@ -418,7 +572,23 @@ select date_sub('2011-11-11', 1E1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), 10.0D)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '10.0D' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"10.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_sub(2011-11-11, 10.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "date_sub('2011-11-11', 1E1)"
+  } ]
+}
 
 
 -- !query
@@ -435,10 +605,23 @@ select date_sub(date'2011-11-11', '1.2')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value '1.2' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select date_sub(date'2011-11-11', '1.2')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'1.2'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "date_sub(date'2011-11-11', '1.2')"
+  } ]
+}
 
 
 -- !query
@@ -511,7 +694,23 @@ select date '2011-11-11' + 1E1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(DATE '2011-11-11', 10.0D)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '10.0D' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"10.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(DATE '2011-11-11', 10.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "date '2011-11-11' + 1E1"
+  } ]
+}
 
 
 -- !query
@@ -600,7 +799,23 @@ select date'2011-11-11' + '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(DATE '2011-11-11', CAST('1' AS DATE))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST('1' AS DATE)' is of date type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"DATE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(DATE '2011-11-11', 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 29,
+    "fragment" : "date'2011-11-11' + '1'"
+  } ]
+}
 
 
 -- !query
@@ -609,7 +824,23 @@ select '1' + date'2011-11-11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(CAST('1' AS DATE), DATE '2011-11-11')' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'DATE '2011-11-11'' is of date type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"DATE '2011-11-11'\"",
+    "inputType" : "\"DATE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(1, DATE '2011-11-11')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 29,
+    "fragment" : "'1' + date'2011-11-11'"
+  } ]
+}
 
 
 -- !query
@@ -647,8 +878,13 @@ select to_date('26/October/2015', 'dd/MMMMM/yyyy')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'dd/MMMMM/yyyy' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'dd/MMMMM/yyyy'"
+  }
+}
 
 
 -- !query
@@ -657,8 +893,13 @@ select from_json('{"d":"26/October/2015"}', 'd Date', map('dateFormat', 'dd/MMMM
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'dd/MMMMM/yyyy' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'dd/MMMMM/yyyy'"
+  }
+}
 
 
 -- !query
@@ -667,8 +908,13 @@ select from_csv('26/October/2015', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'))
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'dd/MMMMM/yyyy' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'dd/MMMMM/yyyy'"
+  }
+}
 
 
 -- !query

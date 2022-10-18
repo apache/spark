@@ -22,7 +22,7 @@ import java.util
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
@@ -75,9 +75,10 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   }
 
   test("read: read non-exist table") {
-    intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       spark.readStream.table("non_exist_table")
-    }.message.contains("Table not found")
+    }
+    checkErrorTableNotFound(e, "`non_exist_table`")
   }
 
   test("read: stream table API with temp view") {
@@ -445,6 +446,44 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("SPARK-39940: refresh table when streaming query writes to the catalog table via DSv1") {
+    withTable("tbl1", "tbl2") {
+      withTempDir { dir =>
+        val baseTbls = new File(dir, "tables")
+        val tbl1File = new File(baseTbls, "tbl1")
+        val tbl2File = new File(baseTbls, "tbl2")
+        val checkpointLocation = new File(dir, "checkpoint")
+
+        val format = "parquet"
+        Seq((1, 2)).toDF("i", "d")
+          .write.format(format).option("path", tbl1File.getCanonicalPath).saveAsTable("tbl1")
+
+        val query = spark.readStream.format(format).table("tbl1")
+          .writeStream.format(format)
+          .option("checkpointLocation", checkpointLocation.getCanonicalPath)
+          .option("path", tbl2File.getCanonicalPath)
+          .toTable("tbl2")
+
+        try {
+          query.processAllAvailable()
+          checkAnswer(spark.table("tbl2").sort($"i"), Seq(Row(1, 2)))
+
+          Seq((3, 4)).toDF("i", "d")
+            .write.format(format).option("path", tbl1File.getCanonicalPath)
+            .mode(SaveMode.Append).saveAsTable("tbl1")
+
+          query.processAllAvailable()
+          checkAnswer(spark.table("tbl2").sort($"i"), Seq(Row(1, 2), Row(3, 4)))
+
+          assert(query.exception.isEmpty, "No exception should happen in streaming query: " +
+            s"exception - ${query.exception}")
+        } finally {
+          query.stop()
+        }
+      }
+    }
+  }
+
   private def checkForStreamTable(dir: Option[File], tableName: String): Unit = {
     val memory = MemoryStream[Int]
     val dsw = memory.toDS().writeStream.format("parquet")
@@ -567,7 +606,7 @@ class InMemoryStreamTableCatalog extends InMemoryTableCatalog {
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
     if (tables.containsKey(ident)) {
-      throw new TableAlreadyExistsException(ident)
+      throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
     }
 
     val table = if (ident.name() == DataStreamTableAPISuite.V1FallbackTestTableName) {

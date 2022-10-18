@@ -48,7 +48,7 @@ The entry point into all functionality in Spark is the [`SparkSession`](api/pyth
 
 <div data-lang="r"  markdown="1">
 
-The entry point into all functionality in Spark is the [`SparkSession`](api/R/sparkR.session.html) class. To initialize a basic `SparkSession`, just call `sparkR.session()`:
+The entry point into all functionality in Spark is the [`SparkSession`](api/R/reference/sparkR.session.html) class. To initialize a basic `SparkSession`, just call `sparkR.session()`:
 
 {% include_example init_session r/RSparkSQLExample.R %}
 
@@ -104,7 +104,7 @@ As an example, the following creates a DataFrame based on the content of a JSON 
 
 ## Untyped Dataset Operations (aka DataFrame Operations)
 
-DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/org/apache/spark/sql/Dataset.html), [Java](api/java/index.html?org/apache/spark/sql/Dataset.html), [Python](api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.html) and [R](api/R/SparkDataFrame.html).
+DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/org/apache/spark/sql/Dataset.html), [Java](api/java/index.html?org/apache/spark/sql/Dataset.html), [Python](api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.html) and [R](api/R/reference/SparkDataFrame.html).
 
 As mentioned above, in Spark 2.0, DataFrames are just Dataset of `Row`s in Scala and Java API. These operations are also referred as "untyped transformations" in contrast to "typed transformations" come with strongly typed Scala/Java Datasets.
 
@@ -146,9 +146,9 @@ In addition to simple column references and expressions, DataFrames also have a 
 
 {% include_example untyped_ops r/RSparkSQLExample.R %}
 
-For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/R/index.html).
+For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/R/reference/index.html).
 
-In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/R/SparkDataFrame.html).
+In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/R/reference/SparkDataFrame.html).
 
 </div>
 

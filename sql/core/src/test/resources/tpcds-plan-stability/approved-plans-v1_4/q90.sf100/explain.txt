@@ -95,6 +95,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (10) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_web_page_sk#3]
 Right keys [1]: [wp_web_page_sk#5]
+Join type: Inner
 Join condition: None
 
 (11) Project [codegen id : 4]
@@ -126,6 +127,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (17) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_ship_hdemo_sk#2]
 Right keys [1]: [hd_demo_sk#7]
+Join type: Inner
 Join condition: None
 
 (18) Project [codegen id : 4]
@@ -157,6 +159,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (24) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_sold_time_sk#1]
 Right keys [1]: [t_time_sk#9]
+Join type: Inner
 Join condition: None
 
 (25) Project [codegen id : 4]
@@ -205,6 +208,7 @@ Output [1]: [wp_web_page_sk#19]
 (34) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ws_web_page_sk#17]
 Right keys [1]: [wp_web_page_sk#19]
+Join type: Inner
 Join condition: None
 
 (35) Project [codegen id : 8]
@@ -217,6 +221,7 @@ Output [1]: [hd_demo_sk#20]
 (37) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ws_ship_hdemo_sk#16]
 Right keys [1]: [hd_demo_sk#20]
+Join type: Inner
 Join condition: None
 
 (38) Project [codegen id : 8]
@@ -248,6 +253,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (44) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ws_sold_time_sk#15]
 Right keys [1]: [t_time_sk#21]
+Join type: Inner
 Join condition: None
 
 (45) Project [codegen id : 8]
@@ -277,6 +283,7 @@ Input [1]: [pmc#26]
 Arguments: IdentityBroadcastMode, [plan_id=7]
 
 (50) BroadcastNestedLoopJoin [codegen id : 10]
+Join type: Inner
 Join condition: None
 
 (51) Project [codegen id : 10]

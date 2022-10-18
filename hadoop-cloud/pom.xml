@@ -51,6 +51,13 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
@@ -125,6 +132,18 @@
         <exclusion>
           <groupId>org.mockito</groupId>
           <artifactId>mockito-all</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>com.google.cloud.bigdataoss</groupId>
+      <artifactId>gcs-connector</artifactId>
+      <version>${gcs-connector.version}</version>
+      <classifier>shaded</classifier>
+      <exclusions>
+        <exclusion>
+          <groupId>*</groupId>
+          <artifactId>*</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
@@ -206,37 +225,57 @@
         <activeByDefault>true</activeByDefault>
       </activation>
       <properties>
-        <extra.source.dir>src/hadoop-3/main/scala</extra.source.dir>
-        <extra.testsource.dir>src/hadoop-3/test/scala</extra.testsource.dir>
+        <extra.java.source.dir>src/hadoop-3/main/java</extra.java.source.dir>
+        <extra.java.testsource.dir>src/hadoop-3/test/java</extra.java.testsource.dir>
+        <extra.scala.source.dir>src/hadoop-3/main/scala</extra.scala.source.dir>
+        <extra.scala.testsource.dir>src/hadoop-3/test/scala</extra.scala.testsource.dir>
       </properties>
 
       <build>
         <plugins>
           <plugin>
+            <groupId>org.scalatest</groupId>
+            <artifactId>scalatest-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>test</id>
+                <phase>test</phase>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+                <configuration>
+                  <tagsToExclude>org.apache.spark.internal.io.cloud.IntegrationTestSuite</tagsToExclude>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>build-helper-maven-plugin</artifactId>
             <executions>
               <execution>
-                <id>add-scala-sources</id>
+                <id>add-extra-sources</id>
                 <phase>generate-sources</phase>
                 <goals>
                   <goal>add-source</goal>
                 </goals>
                 <configuration>
                   <sources>
-                    <source>${extra.source.dir}</source>
+                    <source>${extra.java.source.dir}</source>
+                    <source>${extra.scala.source.dir}</source>
                   </sources>
                 </configuration>
               </execution>
               <execution>
-                <id>add-scala-test-sources</id>
+                <id>add-extra-test-sources</id>
                 <phase>generate-test-sources</phase>
                 <goals>
                   <goal>add-test-source</goal>
                 </goals>
                 <configuration>
                   <sources>
-                    <source>${extra.testsource.dir}</source>
+                    <source>${extra.java.testsource.dir}</source>
+                    <source>${extra.scala.testsource.dir}</source>
                   </sources>
                 </configuration>
               </execution>
@@ -297,6 +336,30 @@
       </dependencies>
     </profile>
 
+    <profile>
+      <id>integration-test</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.scalatest</groupId>
+            <artifactId>scalatest-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>test</id>
+                <phase>test</phase>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+                <configuration>
+                  <tagsToExclude>None</tagsToExclude>
+                  <tagsToInclude>org.apache.spark.internal.io.cloud.IntegrationTestSuite</tagsToInclude>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
   </profiles>
 
 </project>

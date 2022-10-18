@@ -226,6 +226,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (10) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_sold_time_sk#1]
 Right keys [1]: [t_time_sk#5]
+Join type: Inner
 Join condition: None
 
 (11) Project [codegen id : 4]
@@ -257,6 +258,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (17) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#3]
 Right keys [1]: [s_store_sk#8]
+Join type: Inner
 Join condition: None
 
 (18) Project [codegen id : 4]
@@ -288,6 +290,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (24) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_hdemo_sk#2]
 Right keys [1]: [hd_demo_sk#10]
+Join type: Inner
 Join condition: None
 
 (25) Project [codegen id : 4]
@@ -355,6 +358,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (38) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ss_sold_time_sk#17]
 Right keys [1]: [t_time_sk#21]
+Join type: Inner
 Join condition: None
 
 (39) Project [codegen id : 8]
@@ -367,6 +371,7 @@ Output [1]: [s_store_sk#24]
 (41) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ss_store_sk#19]
 Right keys [1]: [s_store_sk#24]
+Join type: Inner
 Join condition: None
 
 (42) Project [codegen id : 8]
@@ -379,6 +384,7 @@ Output [1]: [hd_demo_sk#25]
 (44) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ss_hdemo_sk#18]
 Right keys [1]: [hd_demo_sk#25]
+Join type: Inner
 Join condition: None
 
 (45) Project [codegen id : 8]
@@ -408,6 +414,7 @@ Input [1]: [h9_to_9_30#29]
 Arguments: IdentityBroadcastMode, [plan_id=7]
 
 (50) BroadcastNestedLoopJoin [codegen id : 40]
+Join type: Inner
 Join condition: None
 
 (51) Scan parquet spark_catalog.default.store_sales
@@ -453,6 +460,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (60) BroadcastHashJoin [codegen id : 13]
 Left keys [1]: [ss_sold_time_sk#30]
 Right keys [1]: [t_time_sk#34]
+Join type: Inner
 Join condition: None
 
 (61) Project [codegen id : 13]
@@ -465,6 +473,7 @@ Output [1]: [s_store_sk#37]
 (63) BroadcastHashJoin [codegen id : 13]
 Left keys [1]: [ss_store_sk#32]
 Right keys [1]: [s_store_sk#37]
+Join type: Inner
 Join condition: None
 
 (64) Project [codegen id : 13]
@@ -477,6 +486,7 @@ Output [1]: [hd_demo_sk#38]
 (66) BroadcastHashJoin [codegen id : 13]
 Left keys [1]: [ss_hdemo_sk#31]
 Right keys [1]: [hd_demo_sk#38]
+Join type: Inner
 Join condition: None
 
 (67) Project [codegen id : 13]
@@ -506,6 +516,7 @@ Input [1]: [h9_30_to_10#42]
 Arguments: IdentityBroadcastMode, [plan_id=10]
 
 (72) BroadcastNestedLoopJoin [codegen id : 40]
+Join type: Inner
 Join condition: None
 
 (73) Scan parquet spark_catalog.default.store_sales
@@ -551,6 +562,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (82) BroadcastHashJoin [codegen id : 18]
 Left keys [1]: [ss_sold_time_sk#43]
 Right keys [1]: [t_time_sk#47]
+Join type: Inner
 Join condition: None
 
 (83) Project [codegen id : 18]
@@ -563,6 +575,7 @@ Output [1]: [s_store_sk#50]
 (85) BroadcastHashJoin [codegen id : 18]
 Left keys [1]: [ss_store_sk#45]
 Right keys [1]: [s_store_sk#50]
+Join type: Inner
 Join condition: None
 
 (86) Project [codegen id : 18]
@@ -575,6 +588,7 @@ Output [1]: [hd_demo_sk#51]
 (88) BroadcastHashJoin [codegen id : 18]
 Left keys [1]: [ss_hdemo_sk#44]
 Right keys [1]: [hd_demo_sk#51]
+Join type: Inner
 Join condition: None
 
 (89) Project [codegen id : 18]
@@ -604,6 +618,7 @@ Input [1]: [h10_to_10_30#55]
 Arguments: IdentityBroadcastMode, [plan_id=13]
 
 (94) BroadcastNestedLoopJoin [codegen id : 40]
+Join type: Inner
 Join condition: None
 
 (95) Scan parquet spark_catalog.default.store_sales
@@ -649,6 +664,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (104) BroadcastHashJoin [codegen id : 23]
 Left keys [1]: [ss_sold_time_sk#56]
 Right keys [1]: [t_time_sk#60]
+Join type: Inner
 Join condition: None
 
 (105) Project [codegen id : 23]
@@ -661,6 +677,7 @@ Output [1]: [s_store_sk#63]
 (107) BroadcastHashJoin [codegen id : 23]
 Left keys [1]: [ss_store_sk#58]
 Right keys [1]: [s_store_sk#63]
+Join type: Inner
 Join condition: None
 
 (108) Project [codegen id : 23]
@@ -673,6 +690,7 @@ Output [1]: [hd_demo_sk#64]
 (110) BroadcastHashJoin [codegen id : 23]
 Left keys [1]: [ss_hdemo_sk#57]
 Right keys [1]: [hd_demo_sk#64]
+Join type: Inner
 Join condition: None
 
 (111) Project [codegen id : 23]
@@ -702,6 +720,7 @@ Input [1]: [h10_30_to_11#68]
 Arguments: IdentityBroadcastMode, [plan_id=16]
 
 (116) BroadcastNestedLoopJoin [codegen id : 40]
+Join type: Inner
 Join condition: None
 
 (117) Scan parquet spark_catalog.default.store_sales
@@ -747,6 +766,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (126) BroadcastHashJoin [codegen id : 28]
 Left keys [1]: [ss_sold_time_sk#69]
 Right keys [1]: [t_time_sk#73]
+Join type: Inner
 Join condition: None
 
 (127) Project [codegen id : 28]
@@ -759,6 +779,7 @@ Output [1]: [s_store_sk#76]
 (129) BroadcastHashJoin [codegen id : 28]
 Left keys [1]: [ss_store_sk#71]
 Right keys [1]: [s_store_sk#76]
+Join type: Inner
 Join condition: None
 
 (130) Project [codegen id : 28]
@@ -771,6 +792,7 @@ Output [1]: [hd_demo_sk#77]
 (132) BroadcastHashJoin [codegen id : 28]
 Left keys [1]: [ss_hdemo_sk#70]
 Right keys [1]: [hd_demo_sk#77]
+Join type: Inner
 Join condition: None
 
 (133) Project [codegen id : 28]
@@ -800,6 +822,7 @@ Input [1]: [h11_to_11_30#81]
 Arguments: IdentityBroadcastMode, [plan_id=19]
 
 (138) BroadcastNestedLoopJoin [codegen id : 40]
+Join type: Inner
 Join condition: None
 
 (139) Scan parquet spark_catalog.default.store_sales
@@ -845,6 +868,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (148) BroadcastHashJoin [codegen id : 33]
 Left keys [1]: [ss_sold_time_sk#82]
 Right keys [1]: [t_time_sk#86]
+Join type: Inner
 Join condition: None
 
 (149) Project [codegen id : 33]
@@ -857,6 +881,7 @@ Output [1]: [s_store_sk#89]
 (151) BroadcastHashJoin [codegen id : 33]
 Left keys [1]: [ss_store_sk#84]
 Right keys [1]: [s_store_sk#89]
+Join type: Inner
 Join condition: None
 
 (152) Project [codegen id : 33]
@@ -869,6 +894,7 @@ Output [1]: [hd_demo_sk#90]
 (154) BroadcastHashJoin [codegen id : 33]
 Left keys [1]: [ss_hdemo_sk#83]
 Right keys [1]: [hd_demo_sk#90]
+Join type: Inner
 Join condition: None
 
 (155) Project [codegen id : 33]
@@ -898,6 +924,7 @@ Input [1]: [h11_30_to_12#94]
 Arguments: IdentityBroadcastMode, [plan_id=22]
 
 (160) BroadcastNestedLoopJoin [codegen id : 40]
+Join type: Inner
 Join condition: None
 
 (161) Scan parquet spark_catalog.default.store_sales
@@ -943,6 +970,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (170) BroadcastHashJoin [codegen id : 38]
 Left keys [1]: [ss_sold_time_sk#95]
 Right keys [1]: [t_time_sk#99]
+Join type: Inner
 Join condition: None
 
 (171) Project [codegen id : 38]
@@ -955,6 +983,7 @@ Output [1]: [s_store_sk#102]
 (173) BroadcastHashJoin [codegen id : 38]
 Left keys [1]: [ss_store_sk#97]
 Right keys [1]: [s_store_sk#102]
+Join type: Inner
 Join condition: None
 
 (174) Project [codegen id : 38]
@@ -967,6 +996,7 @@ Output [1]: [hd_demo_sk#103]
 (176) BroadcastHashJoin [codegen id : 38]
 Left keys [1]: [ss_hdemo_sk#96]
 Right keys [1]: [hd_demo_sk#103]
+Join type: Inner
 Join condition: None
 
 (177) Project [codegen id : 38]
@@ -996,5 +1026,6 @@ Input [1]: [h12_to_12_30#107]
 Arguments: IdentityBroadcastMode, [plan_id=25]
 
 (182) BroadcastNestedLoopJoin [codegen id : 40]
+Join type: Inner
 Join condition: None
 

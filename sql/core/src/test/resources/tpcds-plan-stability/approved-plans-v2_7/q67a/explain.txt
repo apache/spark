@@ -89,6 +89,7 @@ Output [4]: [d_date_sk#7, d_year#8, d_moy#9, d_qoy#10]
 (5) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_sold_date_sk#5]
 Right keys [1]: [d_date_sk#7]
+Join type: Inner
 Join condition: None
 
 (6) Project [codegen id : 4]
@@ -116,6 +117,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (11) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#2]
 Right keys [1]: [s_store_sk#11]
+Join type: Inner
 Join condition: None
 
 (12) Project [codegen id : 4]
@@ -143,6 +145,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (17) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_item_sk#1]
 Right keys [1]: [i_item_sk#13]
+Join type: Inner
 Join condition: None
 
 (18) Project [codegen id : 4]

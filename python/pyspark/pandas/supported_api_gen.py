@@ -27,6 +27,7 @@ from typing import Any, Callable, Dict, List, NamedTuple, Set, TextIO, Tuple
 import pyspark.pandas as ps
 import pyspark.pandas.groupby as psg
 import pyspark.pandas.window as psw
+from pyspark.pandas.exceptions import PandasNotImplementedError
 
 import pandas as pd
 import pandas.core.groupby as pdg
@@ -97,12 +98,14 @@ def generate_supported_api(output_rst_file_path: str) -> None:
 
     Write supported APIs documentation.
     """
-    if LooseVersion(pd.__version__) < LooseVersion("1.4.0"):
-        warnings.warn(
-            "Warning: Latest version of pandas(>=1.4.0) is required to generate the documentation; "
-            + "however, your version was %s" % pd.__version__,
-            UserWarning,
+    pandas_latest_version = "1.4.4"
+    if LooseVersion(pd.__version__) != LooseVersion(pandas_latest_version):
+        msg = (
+            "Warning: Latest version of pandas (%s) is required to generate the documentation; "
+            "however, your version was %s" % (pandas_latest_version, pd.__version__)
         )
+        warnings.warn(msg, UserWarning)
+        raise ImportError(msg)
 
     all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]] = {}
     for pd_module_group, ps_module_group in MODULE_GROUP_MATCH:
@@ -131,7 +134,7 @@ def _create_supported_by_module(
     pd_module = getattr(pd_module_group, module_name) if module_name else pd_module_group
     try:
         ps_module = getattr(ps_module_group, module_name) if module_name else ps_module_group
-    except AttributeError:
+    except (AttributeError, PandasNotImplementedError):
         # module not implemented
         return {}
 
@@ -262,7 +265,7 @@ def _transform_missing(
 
 def _get_pd_modules(pd_module_group: Any) -> List[str]:
     """
-    Returns sorted pandas memeber list from pandas module path.
+    Returns sorted pandas member list from pandas module path.
 
     Parameters
     ----------

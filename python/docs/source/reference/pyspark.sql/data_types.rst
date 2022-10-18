@@ -40,6 +40,7 @@ Data Types
     NullType
     ShortType
     StringType
+    VarcharType
     StructField
     StructType
     TimestampType

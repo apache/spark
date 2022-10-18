@@ -246,7 +246,19 @@ from t1 where f1 = f2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY spark_catalog.default.t1.f1 RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)' due to data type mismatch: A range window frame cannot be used in an unordered window specification.; line 1 pos 24
+{
+  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
+  "messageParameters" : {
+    "sqlExpr" : "\"(PARTITION BY f1 RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 108,
+    "fragment" : "(partition by f1\n                         range between 1 preceding and 1 following)"
+  } ]
+}
 
 
 -- !query
@@ -296,7 +308,12 @@ SELECT * FROM empsalary WHERE row_number() OVER (ORDER BY salary) < 10
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use window functions inside WHERE clause
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "messageParameters" : {
+    "clauseName" : "WHERE"
+  }
+}
 
 
 -- !query
@@ -329,12 +346,14 @@ SELECT * FROM rank() OVER (ORDER BY random())
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'BY'(line 1, pos 33)
-
-== SQL ==
-SELECT * FROM rank() OVER (ORDER BY random())
----------------------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'BY'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -343,7 +362,12 @@ SELECT * FROM empsalary WHERE (rank() OVER (ORDER BY random())) > 10
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use window functions inside WHERE clause
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "messageParameters" : {
+    "clauseName" : "WHERE"
+  }
+}
 
 
 -- !query
@@ -352,7 +376,12 @@ SELECT * FROM empsalary WHERE rank() OVER (ORDER BY random())
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use window functions inside WHERE clause
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "messageParameters" : {
+    "clauseName" : "WHERE"
+  }
+}
 
 
 -- !query
@@ -361,12 +390,14 @@ select rank() OVER (PARTITION BY four, ORDER BY ten) FROM tenk1
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'BY': extra input 'BY'(line 1, pos 45)
-
-== SQL ==
-select rank() OVER (PARTITION BY four, ORDER BY ten) FROM tenk1
----------------------------------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'BY'",
+    "hint" : ": extra input 'BY'"
+  }
+}
 
 
 -- !query
@@ -375,7 +406,20 @@ SELECT range(1, 100) OVER () FROM empsalary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: range. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.range.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "messageParameters" : {
+    "fullName" : "spark_catalog.default.range",
+    "rawName" : "range"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "range(1, 100) OVER ()"
+  } ]
+}
 
 
 -- !query

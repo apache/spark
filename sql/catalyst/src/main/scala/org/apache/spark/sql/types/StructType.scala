@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.collection.Utils
 
 /**
  * A [[StructType]] object can be constructed by
@@ -117,7 +118,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
-  private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap
+  private lazy val nameToIndex: Map[String, Int] = Utils.toMapWithIndex(fieldNames)
 
   override def equals(that: Any): Boolean = {
     that match {
@@ -335,7 +336,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       val searchName = searchPath.head
       val found = struct.fields.filter(f => resolver(searchName, f.name))
       if (found.length > 1) {
-        throw QueryCompilationErrors.ambiguousFieldNameError(fieldNames, found.length, context)
+        throw QueryCompilationErrors.ambiguousColumnOrFieldError(fieldNames, found.length, context)
       } else if (found.isEmpty) {
         None
       } else {

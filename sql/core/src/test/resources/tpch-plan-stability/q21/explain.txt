@@ -87,6 +87,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [pla
 (11) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [l_orderkey#4]
 Right keys [1]: [l_orderkey#8]
+Join type: LeftSemi
 Join condition: NOT (l_suppkey#9 = l_suppkey#5)
 
 (12) Scan parquet spark_catalog.default.lineitem
@@ -114,6 +115,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [pla
 (17) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [l_orderkey#4]
 Right keys [1]: [l_orderkey#10]
+Join type: LeftAnti
 Join condition: NOT (l_suppkey#11 = l_suppkey#5)
 
 (18) BroadcastExchange
@@ -123,6 +125,7 @@ Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [pla
 (19) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [s_suppkey#1]
 Right keys [1]: [l_suppkey#5]
+Join type: Inner
 Join condition: None
 
 (20) Project [codegen id : 6]
@@ -154,6 +157,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [pla
 (26) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [l_orderkey#4]
 Right keys [1]: [o_orderkey#14]
+Join type: Inner
 Join condition: None
 
 (27) Project [codegen id : 6]
@@ -185,6 +189,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [pla
 (33) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [s_nationkey#3]
 Right keys [1]: [n_nationkey#16]
+Join type: Inner
 Join condition: None
 
 (34) Project [codegen id : 6]

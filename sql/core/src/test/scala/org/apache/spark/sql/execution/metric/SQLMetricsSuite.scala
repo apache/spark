@@ -111,11 +111,11 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val df = testData2.groupBy().count() // 2 partitions
     val expected1 = Seq(
       Map("number of output rows" -> 2L,
-        "avg hash probe bucket list iters" ->
+        "avg hash probes per key" ->
           aggregateMetricsPattern,
         "number of sort fallback tasks" -> 0L),
       Map("number of output rows" -> 1L,
-        "avg hash probe bucket list iters" ->
+        "avg hash probes per key" ->
           aggregateMetricsPattern,
         "number of sort fallback tasks" -> 0L))
     val shuffleExpected1 = Map(
@@ -133,11 +133,11 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val df2 = testData2.groupBy($"a").count()
     val expected2 = Seq(
       Map("number of output rows" -> 4L,
-        "avg hash probe bucket list iters" ->
+        "avg hash probes per key" ->
           aggregateMetricsPattern,
         "number of sort fallback tasks" -> 0L),
       Map("number of output rows" -> 3L,
-        "avg hash probe bucket list iters" ->
+        "avg hash probes per key" ->
           aggregateMetricsPattern,
         "number of sort fallback tasks" -> 0L))
 
@@ -186,7 +186,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       }
       val metrics = getSparkPlanMetrics(df, 1, nodeIds, enableWholeStage).get
       nodeIds.foreach { nodeId =>
-        val probes = metrics(nodeId)._2("avg hash probe bucket list iters").toString
+        val probes = metrics(nodeId)._2("avg hash probes per key").toString
         if (!probes.contains("\n")) {
           // It's a single metrics value
           assert(probes.toDouble > 1.0)
@@ -206,7 +206,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     // Assume the execution plan is
     // ... -> ObjectHashAggregate(nodeId = 2) -> Exchange(nodeId = 1)
     // -> ObjectHashAggregate(nodeId = 0)
-    val df = testData2.groupBy().agg(collect_set($"a")) // 2 partitions
+    val df = testData2.agg(collect_set($"a")) // 2 partitions
     testSparkPlanMetrics(df, 1, Map(
       2L -> (("ObjectHashAggregate", Map("number of output rows" -> 2L))),
       1L -> (("Exchange", Map(
@@ -643,8 +643,9 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       val union = view.union(view)
       testSparkPlanMetrics(union, 1, Map(
         0L -> ("Union" -> Map()),
-        1L -> ("LocalTableScan" -> Map("number of output rows" -> 2L)),
-        2L -> ("LocalTableScan" -> Map("number of output rows" -> 2L))))
+        1L -> ("Project" -> Map()),
+        2L -> ("LocalTableScan" -> Map("number of output rows" -> 2L)),
+        3L -> ("LocalTableScan" -> Map("number of output rows" -> 2L))))
     }
   }
 

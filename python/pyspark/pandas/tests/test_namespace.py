@@ -26,7 +26,7 @@ from pyspark import pandas as ps
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.namespace import _get_index_map, read_delta
 from pyspark.pandas.utils import spark_column_equals
-from pyspark.pandas.missing.general_functions import _MissingPandasLikeGeneralFunctions
+from pyspark.pandas.missing.general_functions import MissingPandasLikeGeneralFunctions
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -334,19 +334,23 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             ([psdf.reset_index(), psdf], [pdf.reset_index(), pdf]),
             ([psdf, psdf[["C", "A"]]], [pdf, pdf[["C", "A"]]]),
             ([psdf[["C", "A"]], psdf], [pdf[["C", "A"]], pdf]),
-            # only one Series
-            ([psdf, psdf["C"]], [pdf, pdf["C"]]),
-            ([psdf["C"], psdf], [pdf["C"], pdf]),
             # more than two Series
             ([psdf["C"], psdf, psdf["A"]], [pdf["C"], pdf, pdf["A"]]),
+            # only Series
+            ([psdf["C"], psdf["A"]], [pdf["C"], pdf["A"]]),
         ]
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.4"):
-            # more than two Series
-            psdfs, pdfs = ([psdf, psdf["C"], psdf["A"]], [pdf, pdf["C"], pdf["A"]])
-            for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
-                # See also https://github.com/pandas-dev/pandas/issues/47127
-                if (join, sort) != ("outer", True):
+        # See also https://github.com/pandas-dev/pandas/issues/47127
+        if LooseVersion(pd.__version__) >= LooseVersion("1.4.3"):
+            series_objs = [
+                # more than two Series
+                ([psdf, psdf["C"], psdf["A"]], [pdf, pdf["C"], pdf["A"]]),
+                # only one Series
+                ([psdf, psdf["C"]], [pdf, pdf["C"]]),
+                ([psdf["C"], psdf], [pdf["C"], pdf]),
+            ]
+            for psdfs, pdfs in series_objs:
+                for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
                     self.assert_eq(
                         ps.concat(psdfs, ignore_index=ignore_index, join=join, sort=sort),
                         pd.concat(pdfs, ignore_index=ignore_index, join=join, sort=sort),
@@ -599,7 +603,7 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
 
     def test_missing(self):
         missing_functions = inspect.getmembers(
-            _MissingPandasLikeGeneralFunctions, inspect.isfunction
+            MissingPandasLikeGeneralFunctions, inspect.isfunction
         )
         unsupported_functions = [
             name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"

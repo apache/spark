@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
 
-class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with PredicateHelper {
+class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("SimplifyConditionals", FixedPoint(50),

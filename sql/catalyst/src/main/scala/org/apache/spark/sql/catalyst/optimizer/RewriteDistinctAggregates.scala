@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPl
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.util.collection.Utils
 
 /**
  * This rule rewrites an aggregate query with distinct aggregations into an expanded double
@@ -219,7 +220,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
     // Extract distinct aggregate expressions.
     val distinctAggGroups = aggExpressions.filter(_.isDistinct).groupBy { e =>
-        val unfoldableChildren = e.aggregateFunction.children.filter(!_.foldable).toSet
+        val unfoldableChildren = ExpressionSet(e.aggregateFunction.children.filter(!_.foldable))
         if (unfoldableChildren.nonEmpty) {
           // Only expand the unfoldable children
           unfoldableChildren
@@ -230,7 +231,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           // count(distinct 1) will be explained to count(1) after the rewrite function.
           // Generally, the distinct aggregateFunction should not run
           // foldable TypeCheck for the first child.
-          e.aggregateFunction.children.take(1).toSet
+          ExpressionSet(e.aggregateFunction.children.take(1))
         }
     }
 
@@ -253,7 +254,9 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
       // Setup unique distinct aggregate children.
       val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq.distinct
-      val distinctAggChildAttrMap = distinctAggChildren.map(expressionAttributePair)
+      val distinctAggChildAttrMap = distinctAggChildren.map { e =>
+        e.canonicalized -> AttributeReference(e.sql, e.dataType, nullable = true)()
+      }
       val distinctAggChildAttrs = distinctAggChildAttrMap.map(_._2)
       // Setup all the filters in distinct aggregate.
       val (distinctAggFilters, distinctAggFilterAttrs, maxConds) = distinctAggs.collect {
@@ -265,7 +268,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
       // Setup expand & aggregate operators for distinct aggregate expressions.
       val distinctAggChildAttrLookup = distinctAggChildAttrMap.toMap
-      val distinctAggFilterAttrLookup = distinctAggFilters.zip(maxConds.map(_.toAttribute)).toMap
+      val distinctAggFilterAttrLookup = Utils.toMap(distinctAggFilters, maxConds.map(_.toAttribute))
       val distinctAggOperatorMap = distinctAggGroups.toSeq.zipWithIndex.map {
         case ((group, expressions), i) =>
           val id = Literal(i + 1)
@@ -291,7 +294,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
               af
             } else {
               patchAggregateFunctionChildren(af) { x =>
-                distinctAggChildAttrLookup.get(x)
+                distinctAggChildAttrLookup.get(x.canonicalized)
               }
             }
             val newCondition = if (condition.isDefined) {
@@ -330,11 +333,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         val operator = Alias(e.copy(aggregateFunction = af, filter = filterOpt), e.sql)()
 
         // Select the result of the first aggregate in the last aggregate.
-        val result = AggregateExpression(
-          aggregate.First(operator.toAttribute, ignoreNulls = true),
-          mode = Complete,
-          isDistinct = false,
-          filter = Some(EqualTo(gid, regularGroupId)))
+        val result = aggregate.First(operator.toAttribute, ignoreNulls = true)
+          .toAggregateExpression(isDistinct = false, filter = Some(EqualTo(gid, regularGroupId)))
 
         // Some aggregate functions (COUNT) have the special property that they can return a
         // non-null result without any input. We need to make sure we return a result in this case.

@@ -21,7 +21,20 @@ WITH s AS (SELECT 1 FROM s) SELECT * FROM s
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: s; line 1 pos 25
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`s`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 26,
+    "fragment" : "s"
+  } ]
+}
 
 
 -- !query
@@ -31,7 +44,20 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: r; line 1 pos 33
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`r`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 34,
+    "fragment" : "r"
+  } ]
+}
 
 
 -- !query
@@ -50,7 +76,20 @@ WITH s1 AS (SELECT 1 FROM s2), s2 AS (SELECT 1 FROM s1) SELECT * FROM s1, s2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: s2; line 1 pos 26
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`s2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 28,
+    "fragment" : "s2"
+  } ]
+}
 
 
 -- !query
@@ -129,13 +168,14 @@ SELECT * FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near ')'(line 1, pos 7)
-
-== SQL ==
-WITH t() AS (SELECT 1)
--------^^^
-SELECT * FROM t
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "')'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -147,15 +187,42 @@ SELECT * FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0038",
+  "messageParameters" : {
+    "duplicateNames" : "'t'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 63,
+    "fragment" : "WITH\n  t(x) AS (SELECT 1),\n  t(x) AS (SELECT 2)\nSELECT * FROM t"
+  } ]
+}
 
-CTE definition can't have duplicate names: 't'.(line 1, pos 0)
 
-== SQL ==
-WITH
-^^^
-  t(x) AS (SELECT 1),
-  t(x) AS (SELECT 2)
-SELECT * FROM t
+-- !query
+WITH t AS (SELECT 1 FROM non_existing_table)
+SELECT 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`non_existing_table`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 43,
+    "fragment" : "non_existing_table"
+  } ]
+}
 
 
 -- !query

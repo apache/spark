@@ -30,14 +30,28 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         ):
             psdf.interpolate(method="quadratic")
 
+        with self.assertRaisesRegex(
+            NotImplementedError, "interpolate currently works only for method='linear'"
+        ):
+            psdf.id.interpolate(method="quadratic")
+
         with self.assertRaisesRegex(ValueError, "limit must be > 0"):
             psdf.interpolate(limit=0)
+
+        with self.assertRaisesRegex(ValueError, "limit must be > 0"):
+            psdf.id.interpolate(limit=0)
 
         with self.assertRaisesRegex(ValueError, "invalid limit_direction"):
             psdf.interpolate(limit_direction="jump")
 
+        with self.assertRaisesRegex(ValueError, "invalid limit_direction"):
+            psdf.id.interpolate(limit_direction="jump")
+
         with self.assertRaisesRegex(ValueError, "invalid limit_area"):
             psdf.interpolate(limit_area="jump")
+
+        with self.assertRaisesRegex(ValueError, "invalid limit_area"):
+            psdf.id.interpolate(limit_area="jump")
 
     def _test_interpolate(self, pobj):
         psobj = ps.from_pandas(pobj)
@@ -119,6 +133,18 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         )
         self._test_interpolate(pdf)
 
+        pdf = pd.DataFrame(
+            [
+                (0.0, np.nan, -1.0, False, np.nan),
+                (np.nan, 2.0, np.nan, True, np.nan),
+                (2.0, 3.0, np.nan, True, np.nan),
+                (np.nan, 4.0, -4.0, False, np.nan),
+                (np.nan, 1.0, np.nan, True, np.nan),
+            ],
+            columns=list("abcde"),
+        )
+        self._test_interpolate(pdf)
+
     def _test_stat_functions(self, stat_func):
         pdf = pd.DataFrame({"a": [np.nan, np.nan, np.nan], "b": [1, np.nan, 2], "c": [1, 2, 3]})
         psdf = ps.from_pandas(pdf)
@@ -140,6 +166,9 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         self._test_stat_functions(lambda x: x.max(skipna=False))
         self._test_stat_functions(lambda x: x.std())
         self._test_stat_functions(lambda x: x.std(skipna=False))
+        self._test_stat_functions(lambda x: x.std(ddof=2))
+        self._test_stat_functions(lambda x: x.var())
+        self._test_stat_functions(lambda x: x.var(ddof=2))
         self._test_stat_functions(lambda x: x.sem())
         self._test_stat_functions(lambda x: x.sem(skipna=False))
         # self._test_stat_functions(lambda x: x.skew())
@@ -148,6 +177,16 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         # Test cases below return differently from pandas (either by design or to be fixed)
         pdf = pd.DataFrame({"a": [np.nan, np.nan, np.nan], "b": [1, np.nan, 2], "c": [1, 2, 3]})
         psdf = ps.from_pandas(pdf)
+
+        with self.assertRaisesRegex(TypeError, "ddof must be integer"):
+            psdf.std(ddof="ddof")
+        with self.assertRaisesRegex(TypeError, "ddof must be integer"):
+            psdf.a.std(ddof="ddof")
+
+        with self.assertRaisesRegex(TypeError, "ddof must be integer"):
+            psdf.var(ddof="ddof")
+        with self.assertRaisesRegex(TypeError, "ddof must be integer"):
+            psdf.a.var(ddof="ddof")
 
         self.assert_eq(pdf.a.median(), psdf.a.median())
         self.assert_eq(pdf.a.median(skipna=False), psdf.a.median(skipna=False))
@@ -160,6 +199,22 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(pdf.b.kurtosis(skipna=False), psdf.b.kurtosis(skipna=False))
         self.assert_eq(pdf.b.kurtosis(), psdf.b.kurtosis())
         self.assert_eq(pdf.c.kurtosis(), psdf.c.kurtosis())
+
+    def test_prod_precision(self):
+        pdf = pd.DataFrame(
+            {
+                "a": [np.nan, np.nan, np.nan, np.nan],
+                "b": [1, np.nan, np.nan, -4],
+                "c": [1, -2, 3, -4],
+                "d": [55108, 55108, 55108, 55108],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(pdf.prod(), psdf.prod())
+        self.assert_eq(pdf.prod(skipna=False), psdf.prod(skipna=False))
+        self.assert_eq(pdf.prod(min_count=3), psdf.prod(min_count=3))
+        self.assert_eq(pdf.prod(skipna=False, min_count=3), psdf.prod(skipna=False, min_count=3))
 
 
 if __name__ == "__main__":

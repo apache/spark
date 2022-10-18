@@ -90,6 +90,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [pla
 (15) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [i_manufact#2]
 Right keys [1]: [i_manufact#5]
+Join type: Inner
 Join condition: None
 
 (16) Project [codegen id : 3]

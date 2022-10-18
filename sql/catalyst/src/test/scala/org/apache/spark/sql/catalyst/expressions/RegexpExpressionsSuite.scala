@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -461,6 +461,21 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       StringSplit(s1, s2, -1), Seq("aa", "bb", "cc"), row1)
     checkEvaluation(StringSplit(s1, s2, -1), null, row2)
     checkEvaluation(StringSplit(s1, s2, -1), null, row3)
+    // Empty regex
+    checkEvaluation(
+      StringSplit(Literal("hello"), Literal(""), 0), Seq("h", "e", "l", "l", "o"), row1)
+    checkEvaluation(
+      StringSplit(Literal("hello"), Literal(""), -1), Seq("h", "e", "l", "l", "o"), row1)
+    checkEvaluation(
+      StringSplit(Literal("hello"), Literal(""), 5), Seq("h", "e", "l", "l", "o"), row1)
+    checkEvaluation(
+      StringSplit(Literal("hello"), Literal(""), 3), Seq("h", "e", "l"), row1)
+    checkEvaluation(
+      StringSplit(Literal("hello"), Literal(""), 100), Seq("h", "e", "l", "l", "o"), row1)
+    checkEvaluation(
+      StringSplit(Literal(""), Literal(""), -1), Seq(""), row1)
+    checkEvaluation(
+      StringSplit(Literal(""), Literal(""), 0), Seq(""), row1)
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
@@ -482,5 +497,38 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Literal.create("foo", StringType)
         .likeAll("%foo%", Literal.create(null, StringType)), null)
     }
+  }
+
+  test("RegExpInStr") {
+    val expr = new RegExpInStr($"s".string.at(0), $"p".string.at(1))
+    checkEvaluation(expr, 1, create_row("100-200", "(\\d+)-(\\d+)"))
+    checkEvaluation(expr, 1, create_row("100-200", "(\\d+).*"))
+    // will not match anything, empty string get
+    checkEvaluation(expr, 0, create_row("100-200", "([a-z])"))
+    checkEvaluation(expr, null, create_row(null, "([a-z])"))
+    checkEvaluation(expr, null, create_row("100-200", null))
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(
+      new RegExpInStr(Literal("\"quote"), Literal("\"quote")) :: Nil)
+  }
+
+  test("SPARK-39758: invalid regexp pattern") {
+    val s = $"s".string.at(0)
+    val p = $"p".string.at(1)
+    val r = $"r".int.at(2)
+    val prefix = "[INVALID_PARAMETER_VALUE] The value of parameter(s) 'regexp' in"
+    checkExceptionInExpression[SparkRuntimeException](
+      RegExpExtract(s, p, r),
+      create_row("1a 2b 14m", "(?l)", 0),
+      s"$prefix `regexp_extract` is invalid: (?l)")
+    checkExceptionInExpression[SparkRuntimeException](
+      RegExpExtractAll(s, p, r),
+      create_row("abc", "] [", 0),
+      s"$prefix `regexp_extract_all` is invalid: ] [")
+    checkExceptionInExpression[SparkRuntimeException](
+      RegExpInStr(s, p, r),
+      create_row("abc", ", (", 0),
+      s"$prefix `regexp_instr` is invalid: , (")
   }
 }

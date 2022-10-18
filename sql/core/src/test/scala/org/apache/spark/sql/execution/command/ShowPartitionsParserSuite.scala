@@ -19,12 +19,9 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartitionSpec, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ShowPartitions
-import org.apache.spark.sql.errors.QueryErrorsSuiteBase
-import org.apache.spark.sql.execution.SparkSqlParser
 
-class ShowPartitionsParserSuite extends AnalysisTest with QueryErrorsSuiteBase {
+class ShowPartitionsParserSuite extends AnalysisTest {
   test("SHOW PARTITIONS") {
     val commandName = "SHOW PARTITIONS"
     Seq(
@@ -48,18 +45,14 @@ class ShowPartitionsParserSuite extends AnalysisTest with QueryErrorsSuiteBase {
   }
 
   test("empty values in non-optional partition specs") {
-    checkParsingError(
-      exception = intercept[ParseException] {
-        new SparkSqlParser().parsePlan("SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
-      },
+    checkError(
+      exception = parseException(parsePlan)("SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)"),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
-      message =
-        """Invalid SQL syntax: Partition key `b` must set value (can't be empty).(line 1, pos 25)
-          |
-          |== SQL ==
-          |SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)
-          |-------------------------^^^
-          |""".stripMargin)
+      parameters = Map("inputString" -> "Partition key `b` must set value (can't be empty)."),
+      context = ExpectedContext(
+        fragment = "PARTITION (a='1', b)",
+        start = 25,
+        stop = 44))
   }
 }

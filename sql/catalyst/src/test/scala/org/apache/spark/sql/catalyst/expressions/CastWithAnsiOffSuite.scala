@@ -38,7 +38,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 class CastWithAnsiOffSuite extends CastSuiteBase {
 
-  override def ansiEnabled: Boolean = false
+  override def evalMode: EvalMode.Value = EvalMode.LEGACY
 
   test("null cast #2") {
     import DataTypeTestUtils._
@@ -601,6 +601,11 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
 
   test("SPARK-36286: invalid string cast to timestamp") {
     checkEvaluation(cast(Literal("2015-03-18T"), TimestampType), null)
+  }
+
+  test("SPARK-39749: cast Decimal to string") {
+    val input = Literal.create(Decimal(0.000000123), DecimalType(9, 9))
+    checkEvaluation(cast(input, StringType), "1.23E-7")
   }
 
   private def castOverflowErrMsg(targetType: DataType): String = {

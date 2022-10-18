@@ -453,9 +453,10 @@ object FunctionRegistry {
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
-    expression[TryAverage]("try_avg"),
-    expression[TrySum]("try_sum"),
+    expressionBuilder("try_avg", TryAverageExpressionBuilder, setAlias = true),
+    expressionBuilder("try_sum", TrySumExpressionBuilder, setAlias = true),
     expression[TryToBinary]("try_to_binary"),
+    expressionBuilder("try_to_timestamp", TryToTimestampExpressionBuilder, setAlias = true),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -508,6 +509,7 @@ object FunctionRegistry {
     expression[RegrSYY]("regr_syy"),
     expression[RegrSlope]("regr_slope"),
     expression[RegrIntercept]("regr_intercept"),
+    expression[Mode]("mode"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -535,6 +537,7 @@ object FunctionRegistry {
     expression[StringInstr]("instr"),
     expression[Lower]("lcase", true),
     expression[Length]("length"),
+    expression[Length]("len", setAlias = true, Some("3.4.0")),
     expression[Levenshtein]("levenshtein"),
     expression[Like]("like"),
     expression[ILike]("ilike"),
@@ -544,7 +547,6 @@ object FunctionRegistry {
     expressionBuilder("lpad", LPadExpressionBuilder),
     expression[StringTrimLeft]("ltrim"),
     expression[JsonTuple]("json_tuple"),
-    expression[ParseUrl]("parse_url"),
     expression[StringLocate]("position", true),
     expression[FormatString]("printf", true),
     expression[RegExpExtract]("regexp_extract"),
@@ -585,15 +587,25 @@ object FunctionRegistry {
     expression[XPathShort]("xpath_short"),
     expression[XPathString]("xpath_string"),
     expression[RegExpCount]("regexp_count"),
+    expression[RegExpSubStr]("regexp_substr"),
+    expression[RegExpInStr]("regexp_instr"),
+
+    // url functions
+    expression[UrlEncode]("url_encode"),
+    expression[UrlDecode]("url_decode"),
+    expression[ParseUrl]("parse_url"),
 
     // datetime functions
     expression[AddMonths]("add_months"),
     expression[CurrentDate]("current_date"),
+    expressionBuilder("curdate", CurDateExpressionBuilder, setAlias = true),
     expression[CurrentTimestamp]("current_timestamp"),
     expression[CurrentTimeZone]("current_timezone"),
     expression[LocalTimestamp]("localtimestamp"),
     expression[DateDiff]("datediff"),
+    expression[DateDiff]("date_diff", setAlias = true, Some("3.4.0")),
     expression[DateAdd]("date_add"),
+    expression[DateAdd]("dateadd", setAlias = true, Some("3.4.0")),
     expression[DateFormatClass]("date_format"),
     expression[DateSub]("date_sub"),
     expression[DayOfMonth]("day", true),
@@ -638,6 +650,7 @@ object FunctionRegistry {
     expression[Extract]("extract"),
     // We keep the `DatePartExpressionBuilder` to have different function docs.
     expressionBuilder("date_part", DatePartExpressionBuilder, setAlias = true),
+    expressionBuilder("datepart", DatePartExpressionBuilder, setAlias = true, Some("3.4.0")),
     expression[DateFromUnixDate]("date_from_unix_date"),
     expression[UnixDate]("unix_date"),
     expression[SecondsToTimestamp]("timestamp_seconds"),
@@ -694,6 +707,7 @@ object FunctionRegistry {
     expression[TransformKeys]("transform_keys"),
     expression[MapZipWith]("map_zip_with"),
     expression[ZipWith]("zip_with"),
+    expression[Get]("get"),
 
     CreateStruct.registryEntry,
 
@@ -863,8 +877,9 @@ object FunctionRegistry {
   private def expressionBuilder[T <: ExpressionBuilder : ClassTag](
       name: String,
       builder: T,
-      setAlias: Boolean = false): (String, (ExpressionInfo, FunctionBuilder)) = {
-    val info = FunctionRegistryBase.expressionInfo[T](name, None)
+      setAlias: Boolean = false,
+      since: Option[String] = None): (String, (ExpressionInfo, FunctionBuilder)) = {
+    val info = FunctionRegistryBase.expressionInfo[T](name, since)
     val funcBuilder = (expressions: Seq[Expression]) => {
       assert(expressions.forall(_.resolved), "function arguments must be resolved.")
       val expr = builder.build(name, expressions)

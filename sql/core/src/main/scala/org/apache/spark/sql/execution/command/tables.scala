@@ -290,7 +290,7 @@ case class AlterTableAddColumnsCommand(
     colsToAdd.map { col: StructField =>
       if (col.metadata.contains(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
         val foldedStructType = ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          StructType(Seq(col)), tableProvider, "ALTER TABLE ADD COLUMNS")
+          StructType(Seq(col)), tableProvider, "ALTER TABLE ADD COLUMNS", true)
         foldedStructType.fields(0)
       } else {
         col
@@ -1342,7 +1342,7 @@ case class ShowCreateTableAsSerdeCommand(
     storage.serde.foreach { serde =>
       builder ++= s"ROW FORMAT SERDE '$serde'\n"
 
-      val serdeProps = conf.redactOptions(metadata.storage.properties).map {
+      val serdeProps = conf.redactOptions(metadata.storage.properties).toSeq.sortBy(_._1).map {
         case (key, value) =>
           s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }

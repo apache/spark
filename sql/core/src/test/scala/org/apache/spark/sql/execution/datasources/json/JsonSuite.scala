@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.{SparkConf, SparkException, TestUtils}
+import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
@@ -60,7 +60,7 @@ abstract class JsonSuite
   override protected def dataSourceFormat = "json"
 
   override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.ANSI_STRICT_INDEX_OPERATOR.key, "false")
+    super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
 
   test("Type promotion") {
     def checkTypePromotion(expected: Any, actual: Any): Unit = {
@@ -2934,9 +2934,9 @@ abstract class JsonSuite
           exp.write.option("timestampNTZFormat", pattern).json(path.getAbsolutePath)
         }
         assert(
-          err.getCause.getMessage.contains("Unsupported field: OffsetSeconds") ||
-          err.getCause.getMessage.contains("Unable to extract value") ||
-          err.getCause.getMessage.contains("Unable to extract ZoneId"))
+          err.getMessage.contains("Unsupported field: OffsetSeconds") ||
+          err.getMessage.contains("Unable to extract value") ||
+          err.getMessage.contains("Unable to extract ZoneId"))
       }
     }
   }
@@ -3041,11 +3041,12 @@ abstract class JsonSuite
             val readback = spark.read.schema("aaa integer, BBB integer")
               .json(path.getCanonicalPath)
             checkAnswer(readback, Seq(Row(null, null), Row(0, 1)))
-            val ex = intercept[AnalysisException] {
-              readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
-            }
-            assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
-            assert(ex.messageParameters.head == "`AAA`")
+            checkError(
+              exception = intercept[AnalysisException] {
+                readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
+              },
+              errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+              parameters = Map("objectName" -> "`AAA`", "proposal" -> "`BBB`, `aaa`"))
             // Schema inferring
             val readback2 = spark.read.json(path.getCanonicalPath)
             checkAnswer(
@@ -3248,6 +3249,194 @@ abstract class JsonSuite
         checkAnswer(df3, df.collect().toSeq)
       }
     }
+  }
+
+  test("SPARK-39731: Correctly parse dates and timestamps with yyyyMMdd pattern") {
+    withTempPath { path =>
+      Seq(
+        """{"date": "2020011", "ts": "2020011"}""",
+        """{"date": "20201203", "ts": "20201203"}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+      val schema = new StructType()
+        .add("date", DateType)
+        .add("ts", TimestampType)
+      val output = spark.read
+        .schema(schema)
+        .option("dateFormat", "yyyyMMdd")
+        .option("timestampFormat", "yyyyMMdd")
+        .json(path.getAbsolutePath)
+
+      def check(mode: String, res: Seq[Row]): Unit = {
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> mode) {
+          checkAnswer(output, res)
+        }
+      }
+
+      check(
+        "legacy",
+        Seq(
+          Row(Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00")),
+          Row(Date.valueOf("2020-12-03"), Timestamp.valueOf("2020-12-03 00:00:00"))
+        )
+      )
+
+      check(
+        "corrected",
+        Seq(
+          Row(null, null),
+          Row(Date.valueOf("2020-12-03"), Timestamp.valueOf("2020-12-03 00:00:00"))
+        )
+      )
+
+      val err = intercept[SparkException] {
+        check("exception", Nil)
+      }.getCause
+      assert(err.isInstanceOf[SparkUpgradeException])
+    }
+  }
+
+  test("SPARK-39731: Handle date and timestamp parsing fallback") {
+    withTempPath { path =>
+      Seq("""{"date": "2020-01-01", "ts": "2020-01-01"}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+      val schema = new StructType()
+        .add("date", DateType)
+        .add("ts", TimestampType)
+
+      def output(enableFallback: Boolean): DataFrame = spark.read
+        .schema(schema)
+        .option("dateFormat", "invalid")
+        .option("timestampFormat", "invalid")
+        .option("enableDateTimeParsingFallback", enableFallback)
+        .json(path.getAbsolutePath)
+
+      checkAnswer(
+        output(enableFallback = true),
+        Seq(Row(Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00")))
+      )
+
+      checkAnswer(
+        output(enableFallback = false),
+        Seq(Row(null, null))
+      )
+    }
+  }
+
+  test("SPARK-40215: enable parsing fallback for JSON in CORRECTED mode with a SQL config") {
+    withTempPath { path =>
+      Seq("""{"date": "2020-01-01", "ts": "2020-01-01"}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      for (fallbackEnabled <- Seq(true, false)) {
+        withSQLConf(
+            SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED",
+            SQLConf.LEGACY_JSON_ENABLE_DATE_TIME_PARSING_FALLBACK.key -> s"$fallbackEnabled") {
+          val df = spark.read
+            .schema("date date, ts timestamp")
+            .option("dateFormat", "invalid")
+            .option("timestampFormat", "invalid")
+            .json(path.getAbsolutePath)
+
+          if (fallbackEnabled) {
+            checkAnswer(
+              df,
+              Seq(Row(Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00")))
+            )
+          } else {
+            checkAnswer(
+              df,
+              Seq(Row(null, null))
+            )
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-40496: disable parsing fallback when the date/timestamp format is provided") {
+    // The test verifies that the fallback can be disabled by providing dateFormat or
+    // timestampFormat without any additional configuration.
+    //
+    // We also need to disable "legacy" parsing mode that implicitly enables parsing fallback.
+    for (policy <- Seq("exception", "corrected")) {
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+        withTempPath { path =>
+          Seq("""{"col": "2020-01-01"}""").toDF()
+            .repartition(1)
+            .write.text(path.getAbsolutePath)
+
+          var df = spark.read.schema("col date").option("dateFormat", "yyyy/MM/dd")
+            .json(path.getAbsolutePath)
+          checkAnswer(df, Seq(Row(null)))
+
+          df = spark.read.schema("col timestamp").option("timestampFormat", "yyyy/MM/dd HH:mm:ss")
+            .json(path.getAbsolutePath)
+
+          checkAnswer(df, Seq(Row(null)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-40646: parse subsequent fields if the first JSON field does not match schema") {
+    // In this example, the first record has "a.y" as boolean but it needs to be an object.
+    // We should parse "a" as null but continue parsing "b" correctly as it is valid.
+    withTempPath { path =>
+      Seq(
+        """{"a": {"x": 1, "y": true}, "b": {"x": 1}}""",
+        """{"a": {"x": 2}, "b": {"x": 2}}"""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      val df = spark.read
+        .schema("a struct<x: int, y: struct<x: int>>, b struct<x: int>")
+        .json(path.getAbsolutePath)
+
+      checkAnswer(
+        df,
+        Seq(Row(null, Row(1)), Row(Row(2, null), Row(2)))
+      )
+    }
+  }
+
+  test("SPARK-40667: validate JSON Options") {
+    assert(JSONOptions.getAllOptions.size == 28)
+    // Please add validation on any new Json options here
+    assert(JSONOptions.isValidOption("samplingRatio"))
+    assert(JSONOptions.isValidOption("primitivesAsString"))
+    assert(JSONOptions.isValidOption("prefersDecimal"))
+    assert(JSONOptions.isValidOption("allowComments"))
+    assert(JSONOptions.isValidOption("allowUnquotedFieldNames"))
+    assert(JSONOptions.isValidOption("allowSingleQuotes"))
+    assert(JSONOptions.isValidOption("allowNumericLeadingZeros"))
+    assert(JSONOptions.isValidOption("allowNonNumericNumbers"))
+    assert(JSONOptions.isValidOption("allowBackslashEscapingAnyCharacter"))
+    assert(JSONOptions.isValidOption("allowUnquotedControlChars"))
+    assert(JSONOptions.isValidOption("compression"))
+    assert(JSONOptions.isValidOption("mode"))
+    assert(JSONOptions.isValidOption("dropFieldIfAllNull"))
+    assert(JSONOptions.isValidOption("ignoreNullFields"))
+    assert(JSONOptions.isValidOption("locale"))
+    assert(JSONOptions.isValidOption("dateFormat"))
+    assert(JSONOptions.isValidOption("timestampFormat"))
+    assert(JSONOptions.isValidOption("timestampNTZFormat"))
+    assert(JSONOptions.isValidOption("enableDateTimeParsingFallback"))
+    assert(JSONOptions.isValidOption("multiLine"))
+    assert(JSONOptions.isValidOption("lineSep"))
+    assert(JSONOptions.isValidOption("pretty"))
+    assert(JSONOptions.isValidOption("inferTimestamp"))
+    assert(JSONOptions.isValidOption("columnNameOfCorruptRecord"))
+    assert(JSONOptions.isValidOption("timeZone"))
+    assert(JSONOptions.isValidOption("writeNonAsciiCharacterAsCodePoint"))
+    assert(JSONOptions.isValidOption("encoding"))
+    assert(JSONOptions.isValidOption("charset"))
+    // Please add validation on any new Json options with alternative here
+    assert(JSONOptions.getAlternativeOption("encoding").contains("charset"))
+    assert(JSONOptions.getAlternativeOption("charset").contains("encoding"))
+    assert(JSONOptions.getAlternativeOption("dateFormat").isEmpty)
   }
 }
 

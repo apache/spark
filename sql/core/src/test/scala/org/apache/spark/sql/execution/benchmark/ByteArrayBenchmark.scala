@@ -29,8 +29,8 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
  *   To run this benchmark:
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/<this class>-results.txt".
  * }}}
  */

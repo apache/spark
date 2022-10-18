@@ -138,3 +138,7 @@ over10k
 exported_table/*
 ansible-for-test-node/*
 node_modules
+spark-events-broken/*
+# Spark Connect related files with custom licence
+any.proto
+empty.proto

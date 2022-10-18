@@ -19,10 +19,12 @@ package org.apache.spark.sql.errors
 
 import java.util.Locale
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, toPrettySQL}
-import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType, FloatType, TypeCollection}
 
 /**
  * The trait exposes util methods for preparing error messages such as quoting of error elements.
@@ -76,8 +78,10 @@ private[sql] trait QueryErrorsBase {
     toSQLId(UnresolvedAttribute.parseAttributeName(parts))
   }
 
-  def toSQLType(t: DataType): String = {
-    quoteByDefault(t.sql)
+  def toSQLType(t: AbstractDataType): String = t match {
+    case TypeCollection(types) => types.map(toSQLType).mkString("(", " or ", ")")
+    case dt: DataType => quoteByDefault(dt.sql)
+    case at => quoteByDefault(at.simpleString.toUpperCase(Locale.ROOT))
   }
 
   def toSQLType(text: String): String = {
@@ -94,5 +98,13 @@ private[sql] trait QueryErrorsBase {
 
   def toSQLExpr(e: Expression): String = {
     quoteByDefault(toPrettySQL(e))
+  }
+
+  def getSummary(sqlContext: SQLQueryContext): String = {
+    if (sqlContext == null) "" else sqlContext.summary
+  }
+
+  def getQueryContext(sqlContext: SQLQueryContext): Array[QueryContext] = {
+    if (sqlContext == null) Array.empty else Array(sqlContext.asInstanceOf[QueryContext])
   }
 }

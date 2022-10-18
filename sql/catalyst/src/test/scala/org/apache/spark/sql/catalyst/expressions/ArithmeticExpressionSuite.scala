@@ -23,7 +23,7 @@ import java.time.temporal.ChronoUnit
 
 import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
@@ -95,7 +95,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         stopIndex = Some(7 + query.length -1),
         sqlText = Some(s"select $query"))
       withOrigin(o) {
-        val expr = Add(maxValue, maxValue, failOnError = true)
+        val expr = Add(maxValue, maxValue, EvalMode.ANSI)
         checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)
       }
     }
@@ -180,7 +180,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         stopIndex = Some(7 + query.length -1),
         sqlText = Some(s"select $query"))
       withOrigin(o) {
-        val expr = Subtract(minValue, maxValue, failOnError = true)
+        val expr = Subtract(minValue, maxValue, EvalMode.ANSI)
         checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)
       }
     }
@@ -219,7 +219,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         stopIndex = Some(7 + query.length -1),
         sqlText = Some(s"select $query"))
       withOrigin(o) {
-        val expr = Multiply(maxValue, maxValue, failOnError = true)
+        val expr = Multiply(maxValue, maxValue, EvalMode.ANSI)
         checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)
       }
     }
@@ -264,7 +264,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       stopIndex = Some(7 + query.length -1),
       sqlText = Some(s"select $query"))
     withOrigin(o) {
-      val expr = Divide(Literal(1234.5, DoubleType), Literal(0.0, DoubleType), failOnError = true)
+      val expr = Divide(Literal(1234.5, DoubleType), Literal(0.0, DoubleType), EvalMode.ANSI)
       checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)
     }
   }
@@ -320,7 +320,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       withOrigin(o) {
         val expr =
           IntegralDivide(
-            Literal(Long.MinValue, LongType), Literal(right, LongType), failOnError = true)
+            Literal(Long.MinValue, LongType), Literal(right, LongType), EvalMode.ANSI)
         checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)
       }
     }
@@ -367,7 +367,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         stopIndex = Some(7 + query.length -1),
         sqlText = Some(s"select $query"))
       withOrigin(o) {
-        val expression = exprBuilder(Literal(1L, LongType), Literal(0L, LongType), true)
+        val expression = exprBuilder(Literal(1L, LongType), Literal(0L, LongType), EvalMode.ANSI)
         checkExceptionInExpression[ArithmeticException](expression, EmptyRow, query)
       }
     }
@@ -503,10 +503,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       Timestamp.valueOf("2015-07-01 08:00:00"), InternalRow.empty)
 
     // Type checking error
-    assert(
-      Least(Seq(Literal(1), Literal("1"))).checkInputDataTypes() ==
-        TypeCheckFailure("The expressions should all have the same type, " +
-          "got LEAST(int, string)."))
+    Least(Seq(Literal(1), Literal("1"))).checkInputDataTypes() match {
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass == "DATA_DIFF_TYPES")
+        assert(messageParameters === Map(
+          "functionName" -> "`least`",
+          "dataType" -> "[\"INT\", \"STRING\"]"))
+    }
 
     DataTypeTestUtils.ordered.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(Least, dt, 2)
@@ -561,10 +564,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       Timestamp.valueOf("2015-07-01 10:00:00"), InternalRow.empty)
 
     // Type checking error
-    assert(
-      Greatest(Seq(Literal(1), Literal("1"))).checkInputDataTypes() ==
-        TypeCheckFailure("The expressions should all have the same type, " +
-          "got GREATEST(int, string)."))
+    Greatest(Seq(Literal(1), Literal("1"))).checkInputDataTypes() match {
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass == "DATA_DIFF_TYPES")
+        assert(messageParameters === Map(
+          "functionName" -> "`greatest`",
+          "dataType" -> "[\"INT\", \"STRING\"]"))
+    }
 
     DataTypeTestUtils.ordered.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(Greatest, dt, 2)
@@ -760,24 +766,24 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("SPARK-34677: exact add and subtract of day-time and year-month intervals") {
-    Seq(true, false).foreach { failOnError =>
+    Seq(EvalMode.ANSI, EvalMode.LEGACY).foreach { evalMode =>
       checkExceptionInExpression[ArithmeticException](
         UnaryMinus(
           Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType()),
-          failOnError),
+          evalMode == EvalMode.ANSI),
         "overflow")
       checkExceptionInExpression[ArithmeticException](
         Subtract(
           Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType()),
           Literal.create(Period.ofMonths(10), YearMonthIntervalType()),
-          failOnError
+          evalMode
         ),
         "overflow")
       checkExceptionInExpression[ArithmeticException](
         Add(
           Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType()),
           Literal.create(Period.ofMonths(10), YearMonthIntervalType()),
-          failOnError
+          evalMode
         ),
         "overflow")
 
@@ -785,14 +791,14 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         Subtract(
           Literal.create(Duration.ofDays(-106751991), DayTimeIntervalType()),
           Literal.create(Duration.ofDays(10), DayTimeIntervalType()),
-          failOnError
+          evalMode
         ),
         "overflow")
       checkExceptionInExpression[ArithmeticException](
         Add(
           Literal.create(Duration.ofDays(106751991), DayTimeIntervalType()),
           Literal.create(Duration.ofDays(10), DayTimeIntervalType()),
-          failOnError
+          evalMode
         ),
         "overflow")
     }

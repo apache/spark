@@ -19,6 +19,9 @@ package org.apache.spark;
 
 import org.apache.spark.annotation.Evolving;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * Interface mixed into Throwables thrown from Spark.
  *
@@ -36,10 +39,6 @@ public interface SparkThrowable {
   // If null, error class is not set
   String getErrorClass();
 
-  default String getErrorSubClass() {
-    return null;
-  }
-
   // Portable error identifier across SQL engines
   // If null, error class or SQLSTATE is not set
   default String getSqlState() {
@@ -51,12 +50,9 @@ public interface SparkThrowable {
     return SparkThrowableHelper.isInternalError(this.getErrorClass());
   }
 
-  default String[] getMessageParameters() {
-    return new String[]{};
+  default Map<String, String> getMessageParameters() {
+    return new HashMap<>();
   }
 
-  // Returns a string array of all parameters that need to be passed to this error message.
-  default String[] getParameterNames() {
-    return SparkThrowableHelper.getParameterNames(this.getErrorClass(), this.getErrorSubClass());
-  }
+  default QueryContext[] getQueryContext() { return new QueryContext[0]; }
 }

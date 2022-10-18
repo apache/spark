@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
+import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 
 /**
  * The general representation of user defined aggregate function, which implements
@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
  * @since 3.4.0
  */
 @Evolving
-public class UserDefinedAggregateFunc implements AggregateFunc {
+public class UserDefinedAggregateFunc extends ExpressionWithToString implements AggregateFunc {
   private final String name;
   private String canonicalName;
   private final boolean isDistinct;
@@ -50,10 +50,4 @@ public class UserDefinedAggregateFunc implements AggregateFunc {
 
   @Override
   public Expression[] children() { return children; }
-
-  @Override
-  public String toString() {
-    ToStringSQLBuilder builder = new ToStringSQLBuilder();
-    return builder.build(this);
-  }
 }

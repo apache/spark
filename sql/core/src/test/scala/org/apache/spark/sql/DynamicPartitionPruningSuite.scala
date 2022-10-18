@@ -22,7 +22,7 @@ import org.scalatest.GivenWhenThen
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
-import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
+import org.apache.spark.sql.connector.catalog.{InMemoryTableCatalog, InMemoryTableWithV2FilterCatalog}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -1804,4 +1804,21 @@ class DynamicPartitionPruningV2SuiteAEOff extends DynamicPartitionPruningV2Suite
   with DisableAdaptiveExecutionSuite
 
 class DynamicPartitionPruningV2SuiteAEOn extends DynamicPartitionPruningV2Suite
+  with EnableAdaptiveExecutionSuite
+
+abstract class DynamicPartitionPruningV2FilterSuite
+    extends DynamicPartitionPruningV2Suite {
+
+  override protected def initState(): Unit = {
+    super.initState()
+    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableWithV2FilterCatalog].getName)
+  }
+}
+
+class DynamicPartitionPruningV2FilterSuiteAEOff
+    extends DynamicPartitionPruningV2FilterSuite
+  with DisableAdaptiveExecutionSuite
+
+class DynamicPartitionPruningV2FilterSuiteAEOn
+    extends DynamicPartitionPruningV2FilterSuite
   with EnableAdaptiveExecutionSuite

@@ -161,3 +161,7 @@ select date_part(NULL, interval '123 12:34:56.789123123' DAY TO SECOND);
 
 select extract(MONTH from interval '123 12:34:56.789123123' DAY TO SECOND);
 select date_part('not_supported', interval '123 12:34:56.789123123' DAY TO SECOND);
+
+-- alias for date_part
+select datepart('year', c), datepart('year', ntz), datepart('year', i) from t;
+select datepart('DAY', interval '123 12:34:56.789123123' DAY TO SECOND);

@@ -21,6 +21,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.internal.SQLConf
@@ -45,14 +47,17 @@ trait AlterTableTests extends SharedSparkSession {
 
   test("AlterTable: table does not exist") {
     val t2 = s"${catalogAndNamespace}fake_table"
+    val quoted = UnresolvedAttribute.parseAttributeName(s"${catalogAndNamespace}table_name")
+      .map(part => quoteIdentifier(part)).mkString(".")
     withTable(t2) {
       sql(s"CREATE TABLE $t2 (id int) USING $v2Format")
       val exc = intercept[AnalysisException] {
         sql(s"ALTER TABLE ${catalogAndNamespace}table_name DROP COLUMN id")
       }
 
-      assert(exc.getMessage.contains(s"${catalogAndNamespace}table_name"))
-      assert(exc.getMessage.contains("Table not found"))
+      checkErrorTableNotFound(exc, quoted,
+        ExpectedContext(s"${catalogAndNamespace}table_name", 12,
+          11 + s"${catalogAndNamespace}table_name".length))
     }
   }
 
@@ -1157,34 +1162,6 @@ trait AlterTableTests extends SharedSparkSession {
       val table = getTableMetadata(fullTableName(t))
       assert(table.schema == new StructType()
         .add("points", ArrayType(StructType(Seq(StructField("y", DoubleType))))))
-    }
-  }
-
-  test("AlterTable: set location") {
-    val t = s"${catalogAndNamespace}table_name"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      sql(s"ALTER TABLE $t SET LOCATION 's3://bucket/path'")
-
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
-
-      assert(table.name === tableName)
-      assert(table.properties ===
-        withDefaultOwnership(Map("provider" -> v2Format, "location" -> "s3://bucket/path")).asJava)
-    }
-  }
-
-  test("AlterTable: set partition location") {
-    val t = s"${catalogAndNamespace}table_name"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t PARTITION(ds='2017-06-10') SET LOCATION 's3://bucket/path'")
-      }
-      assert(exc.getMessage.contains(
-        "ALTER TABLE SET LOCATION does not support partition for v2 tables"))
     }
   }
 

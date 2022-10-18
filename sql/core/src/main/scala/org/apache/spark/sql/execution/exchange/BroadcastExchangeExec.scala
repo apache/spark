@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPartitioning, Partitioning}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.joins.{HashedRelation, HashedRelationBroadcastMode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -166,8 +166,8 @@ case class BroadcastExchangeExec(
             val beforeBroadcast = System.nanoTime()
             longMetric("buildTime") += NANOSECONDS.toMillis(beforeBroadcast - beforeBuild)
 
-            // Broadcast the relation
-            val broadcasted = sparkContext.broadcast(relation)
+            // SPARK-39983 - Broadcast the relation without caching the unserialized object.
+            val broadcasted = sparkContext.broadcastInternal(relation, serializedOnly = true)
             longMetric("broadcastTime") += NANOSECONDS.toMillis(
               System.nanoTime() - beforeBroadcast)
             val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
@@ -179,8 +179,9 @@ case class BroadcastExchangeExec(
             // SparkFatalException, which is a subclass of Exception. ThreadUtils.awaitResult
             // will catch this exception and re-throw the wrapped fatal throwable.
             case oe: OutOfMemoryError =>
+              val tables = child.collect { case f: FileSourceScanExec => f.tableIdentifier }.flatten
               val ex = new SparkFatalException(
-                QueryExecutionErrors.notEnoughMemoryToBuildAndBroadcastTableError(oe))
+                QueryExecutionErrors.notEnoughMemoryToBuildAndBroadcastTableError(oe, tables))
               promise.tryFailure(ex)
               throw ex
             case e if !NonFatal(e) =>

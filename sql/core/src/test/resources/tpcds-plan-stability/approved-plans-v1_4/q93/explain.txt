@@ -75,6 +75,7 @@ Arguments: [sr_item_sk#7 ASC NULLS FIRST, sr_ticket_number#9 ASC NULLS FIRST], f
 (12) SortMergeJoin [codegen id : 6]
 Left keys [2]: [ss_item_sk#1, ss_ticket_number#3]
 Right keys [2]: [sr_item_sk#7, sr_ticket_number#9]
+Join type: Inner
 Join condition: None
 
 (13) Project [codegen id : 6]
@@ -106,6 +107,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (19) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [sr_reason_sk#8]
 Right keys [1]: [r_reason_sk#12]
+Join type: Inner
 Join condition: None
 
 (20) Project [codegen id : 6]

@@ -284,7 +284,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // about not case preserving and make Hive serde table and view support mixed-case column
         // names.
         properties = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition))
-      client.createTable(tableWithDataSourceProps, ignoreIfExists)
+      try {
+        client.createTable(tableWithDataSourceProps, ignoreIfExists)
+      } catch {
+        case NonFatal(e) if (tableDefinition.tableType == CatalogTableType.VIEW) =>
+          // If for some reason we fail to store the schema we store it as empty there
+          // since we already store the real schema in the table properties. This try-catch
+          // should only be necessary for Spark views which are incompatible with Hive
+          client.createTable(
+            tableWithDataSourceProps.copy(schema = EMPTY_DATA_SCHEMA),
+            ignoreIfExists)
+      }
     }
   }
 
@@ -1286,11 +1296,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       predicates: Seq[Expression],
       defaultTimeZoneId: String): Seq[CatalogTablePartition] = withClient {
-    val rawTable = getRawTable(db, table)
-    val catalogTable = restoreTableMetadata(rawTable)
+    val rawHiveTable = client.getRawHiveTable(db, table)
+    val catalogTable = restoreTableMetadata(rawHiveTable.toCatalogTable)
     val partColNameMap = buildLowerCasePartColNameMap(catalogTable)
     val clientPrunedPartitions =
-      client.getPartitionsByFilter(rawTable, predicates).map { part =>
+      client.getPartitionsByFilter(rawHiveTable, predicates).map { part =>
         part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
       }
     prunePartitionsByFilter(catalogTable, clientPrunedPartitions, predicates, defaultTimeZoneId)

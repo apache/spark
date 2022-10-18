@@ -69,7 +69,7 @@ select to_json(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Must use a map() function for options; line 1 pos 7
+Must use a map() function for options.; line 1 pos 7
 
 
 -- !query
@@ -78,7 +78,7 @@ select to_json(named_struct('a', 1, 'b', 2), map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-A type of keys and values in map() must be string, but got map<string,int>; line 1 pos 7
+A type of keys and values in map() must be string, but got map<string,int>.; line 1 pos 7
 
 
 -- !query
@@ -87,7 +87,21 @@ select to_json()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function to_json. Expected: one of 1 and 2; Found: 0; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "messageParameters" : {
+    "actualNumber" : "0",
+    "expectedInfo" : "one of 1 and 2",
+    "name" : "to_json"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "to_json()"
+  } ]
+}
 
 
 -- !query
@@ -143,7 +157,7 @@ select from_json('{"a":1}', 'a INT', named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Must use a map() function for options; line 1 pos 7
+Must use a map() function for options.; line 1 pos 7
 
 
 -- !query
@@ -152,7 +166,7 @@ select from_json('{"a":1}', 'a INT', map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-A type of keys and values in map() must be string, but got map<string,int>; line 1 pos 7
+A type of keys and values in map() must be string, but got map<string,int>.; line 1 pos 7
 
 
 -- !query
@@ -161,7 +175,21 @@ select from_json()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function from_json. Expected: one of 2 and 3; Found: 0; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "messageParameters" : {
+    "actualNumber" : "0",
+    "expectedInfo" : "one of 2 and 3",
+    "name" : "from_json"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "from_json()"
+  } ]
+}
 
 
 -- !query
@@ -336,8 +364,13 @@ select from_json(
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to parse '02-29' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'02-29'"
+  }
+}
 
 
 -- !query
@@ -349,8 +382,13 @@ select from_json(
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to parse '02-29' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'02-29'"
+  }
+}
 
 
 -- !query
@@ -391,7 +429,20 @@ select schema_of_json(null)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'schema_of_json(NULL)' due to data type mismatch: The input json should be a foldable string expression and not null; however, got NULL.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "messageParameters" : {
+    "exprName" : "json",
+    "sqlExpr" : "\"schema_of_json(NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 27,
+    "fragment" : "schema_of_json(null)"
+  } ]
+}
 
 
 -- !query
@@ -408,7 +459,22 @@ SELECT schema_of_json(jsonField) FROM jsonTable
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'schema_of_json(jsontable.jsonField)' due to data type mismatch: The input json should be a foldable string expression and not null; however, got jsontable.jsonField.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "messageParameters" : {
+    "inputExpr" : "\"jsonField\"",
+    "inputName" : "json",
+    "inputType" : "\"STRING\"",
+    "sqlExpr" : "\"schema_of_json(jsonField)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "schema_of_json(jsonField)"
+  } ]
+}
 
 
 -- !query
@@ -425,7 +491,23 @@ select json_array_length(2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'json_array_length(2)' due to data type mismatch: argument 1 requires string type, however, '2' is of int type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"2\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"json_array_length(2)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 27,
+    "fragment" : "json_array_length(2)"
+  } ]
+}
 
 
 -- !query
@@ -434,7 +516,21 @@ select json_array_length()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function json_array_length. Expected: 1; Found: 0; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "messageParameters" : {
+    "actualNumber" : "0",
+    "expectedInfo" : "1",
+    "name" : "json_array_length"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "json_array_length()"
+  } ]
+}
 
 
 -- !query
@@ -507,7 +603,21 @@ select json_object_keys()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function json_object_keys. Expected: 1; Found: 0; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "messageParameters" : {
+    "actualNumber" : "0",
+    "expectedInfo" : "1",
+    "name" : "json_object_keys"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "json_object_keys()"
+  } ]
+}
 
 
 -- !query
@@ -524,7 +634,23 @@ select json_object_keys(200)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'json_object_keys(200)' due to data type mismatch: argument 1 requires string type, however, '200' is of int type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"200\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"json_object_keys(200)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "json_object_keys(200)"
+  } ]
+}
 
 
 -- !query

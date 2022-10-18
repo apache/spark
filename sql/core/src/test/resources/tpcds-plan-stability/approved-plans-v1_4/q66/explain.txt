@@ -89,6 +89,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (8) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_warehouse_sk#3]
 Right keys [1]: [w_warehouse_sk#9]
+Join type: Inner
 Join condition: None
 
 (9) Project [codegen id : 5]
@@ -101,6 +102,7 @@ Output [3]: [d_date_sk#16, d_year#17, d_moy#18]
 (11) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_sold_date_sk#7]
 Right keys [1]: [d_date_sk#16]
+Join type: Inner
 Join condition: None
 
 (12) Project [codegen id : 5]
@@ -132,6 +134,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (18) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_sold_time_sk#1]
 Right keys [1]: [t_time_sk#19]
+Join type: Inner
 Join condition: None
 
 (19) Project [codegen id : 5]
@@ -163,6 +166,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (25) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_ship_mode_sk#2]
 Right keys [1]: [sm_ship_mode_sk#21]
+Join type: Inner
 Join condition: None
 
 (26) Project [codegen id : 5]
@@ -208,6 +212,7 @@ Output [7]: [w_warehouse_sk#176, w_warehouse_name#177, w_warehouse_sq_ft#178, w_
 (34) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [cs_warehouse_sk#171]
 Right keys [1]: [w_warehouse_sk#176]
+Join type: Inner
 Join condition: None
 
 (35) Project [codegen id : 11]
@@ -220,6 +225,7 @@ Output [3]: [d_date_sk#183, d_year#184, d_moy#185]
 (37) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [cs_sold_date_sk#175]
 Right keys [1]: [d_date_sk#183]
+Join type: Inner
 Join condition: None
 
 (38) Project [codegen id : 11]
@@ -232,6 +238,7 @@ Output [1]: [t_time_sk#186]
 (40) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [cs_sold_time_sk#169]
 Right keys [1]: [t_time_sk#186]
+Join type: Inner
 Join condition: None
 
 (41) Project [codegen id : 11]
@@ -244,6 +251,7 @@ Output [1]: [sm_ship_mode_sk#187]
 (43) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [cs_ship_mode_sk#170]
 Right keys [1]: [sm_ship_mode_sk#187]
+Join type: Inner
 Join condition: None
 
 (44) Project [codegen id : 11]

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, TestRelation2, TestTable2, UnresolvedDBObjectName, UnresolvedFieldName, UnresolvedFieldPosition}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, TestRelation2, TestTable2, UnresolvedFieldName, UnresolvedFieldPosition, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, CreateTableAsSelect, DropColumns, LogicalPlan, QualifiedColType, RenameColumn, ReplaceColumns, ReplaceTableAsSelect, TableSpec}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -49,7 +49,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           val tableSpec = TableSpec(Map.empty, None, Map.empty,
             None, None, None, false)
           val plan = CreateTableAsSelect(
-            UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
+            UnresolvedIdentifier(Array("table_name")),
             Expressions.identity(ref) :: Nil,
             TestRelation2,
             tableSpec,
@@ -73,7 +73,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           val tableSpec = TableSpec(Map.empty, None, Map.empty,
             None, None, None, false)
           val plan = CreateTableAsSelect(
-            UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
+            UnresolvedIdentifier(Array("table_name")),
             Expressions.bucket(4, ref) :: Nil,
             TestRelation2,
             tableSpec,
@@ -98,7 +98,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           val tableSpec = TableSpec(Map.empty, None, Map.empty,
             None, None, None, false)
           val plan = ReplaceTableAsSelect(
-            UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
+            UnresolvedIdentifier(Array("table_name")),
             Expressions.identity(ref) :: Nil,
             TestRelation2,
             tableSpec,
@@ -122,7 +122,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           val tableSpec = TableSpec(Map.empty, None, Map.empty,
             None, None, None, false)
           val plan = ReplaceTableAsSelect(
-            UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
+            UnresolvedIdentifier(Array("table_name")),
             Expressions.bucket(4, ref) :: Nil,
             TestRelation2,
             tableSpec,

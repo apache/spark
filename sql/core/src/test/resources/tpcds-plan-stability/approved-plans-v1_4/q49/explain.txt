@@ -122,6 +122,7 @@ Input [5]: [wr_item_sk#8, wr_order_number#9, wr_return_quantity#10, wr_return_am
 (10) BroadcastHashJoin [codegen id : 3]
 Left keys [2]: [ws_order_number#2, ws_item_sk#1]
 Right keys [2]: [wr_order_number#9, wr_item_sk#8]
+Join type: Inner
 Join condition: None
 
 (11) Project [codegen id : 3]
@@ -134,6 +135,7 @@ Output [1]: [d_date_sk#13]
 (13) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ws_sold_date_sk#6]
 Right keys [1]: [d_date_sk#13]
+Join type: Inner
 Join condition: None
 
 (14) Project [codegen id : 3]
@@ -230,6 +232,7 @@ Input [5]: [cr_item_sk#42, cr_order_number#43, cr_return_quantity#44, cr_return_
 (34) BroadcastHashJoin [codegen id : 10]
 Left keys [2]: [cs_order_number#37, cs_item_sk#36]
 Right keys [2]: [cr_order_number#43, cr_item_sk#42]
+Join type: Inner
 Join condition: None
 
 (35) Project [codegen id : 10]
@@ -242,6 +245,7 @@ Output [1]: [d_date_sk#47]
 (37) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [cs_sold_date_sk#41]
 Right keys [1]: [d_date_sk#47]
+Join type: Inner
 Join condition: None
 
 (38) Project [codegen id : 10]
@@ -338,6 +342,7 @@ Input [5]: [sr_item_sk#76, sr_ticket_number#77, sr_return_quantity#78, sr_return
 (58) BroadcastHashJoin [codegen id : 17]
 Left keys [2]: [ss_ticket_number#71, ss_item_sk#70]
 Right keys [2]: [sr_ticket_number#77, sr_item_sk#76]
+Join type: Inner
 Join condition: None
 
 (59) Project [codegen id : 17]
@@ -350,6 +355,7 @@ Output [1]: [d_date_sk#81]
 (61) BroadcastHashJoin [codegen id : 17]
 Left keys [1]: [ss_sold_date_sk#75]
 Right keys [1]: [d_date_sk#81]
+Join type: Inner
 Join condition: None
 
 (62) Project [codegen id : 17]

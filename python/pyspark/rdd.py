@@ -105,6 +105,7 @@ if TYPE_CHECKING:
         PandasMapIterUDFType,
         PandasCogroupedMapUDFType,
         ArrowMapIterUDFType,
+        PandasGroupedMapUDFWithStateType,
     )
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.types import AtomicType, StructType
@@ -147,6 +148,7 @@ class PythonEvalType:
     SQL_MAP_PANDAS_ITER_UDF: "PandasMapIterUDFType" = 205
     SQL_COGROUPED_MAP_PANDAS_UDF: "PandasCogroupedMapUDFType" = 206
     SQL_MAP_ARROW_ITER_UDF: "ArrowMapIterUDFType" = 207
+    SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE: "PandasGroupedMapUDFWithStateType" = 208
 
 
 def portable_hash(x: Hashable) -> int:
@@ -237,12 +239,12 @@ def _load_from_socket(sock_info: "JavaArray", serializer: Serializer) -> Iterato
     ----------
     sock_info : tuple
         Tuple containing port number and authentication secret for a local socket.
-    serializer : :py:class:`Serializer`
+    serializer : class:`Serializer`
         The PySpark serializer to use
 
     Returns
     -------
-    result of :py:meth:`Serializer.load_stream`,
+    result of meth:`Serializer.load_stream`,
     usually a generator that yields deserialized data
     """
     sockfile = _create_local_socket(sock_info)
@@ -345,6 +347,19 @@ class RDD(Generic[T_co]):
     def id(self) -> int:
         """
         A unique ID for this RDD (within its SparkContext).
+
+        .. versionadded:: 0.7.0
+
+        Returns
+        -------
+        int
+            The unique ID for this :class:`RDD`
+
+        Examples
+        --------
+        >>> rdd = sc.range(5)
+        >>> rdd.id()  # doctest: +SKIP
+        3
         """
         return self._id
 
@@ -366,12 +381,50 @@ class RDD(Generic[T_co]):
     def context(self) -> "SparkContext":
         """
         The :class:`SparkContext` that this RDD was created on.
+
+        .. versionadded:: 0.7.0
+
+        Returns
+        -------
+        :class:`SparkContext`
+            The :class:`SparkContext` that this RDD was created on
+
+        Examples
+        --------
+        >>> rdd = sc.range(5)
+        >>> rdd.context
+        <SparkContext ...>
+        >>> rdd.context is sc
+        True
         """
         return self.ctx
 
     def cache(self: "RDD[T]") -> "RDD[T]":
         """
         Persist this RDD with the default storage level (`MEMORY_ONLY`).
+
+        .. versionadded:: 0.7.0
+
+        Returns
+        -------
+        :class:`RDD`
+            The same :class:`RDD` with storage level set to `MEMORY_ONLY`
+
+        See Also
+        --------
+        :meth:`RDD.persist`
+        :meth:`RDD.unpersist`
+        :meth:`RDD.getStorageLevel`
+
+        Examples
+        --------
+        >>> rdd = sc.range(5)
+        >>> rdd2 = rdd.cache()
+        >>> rdd2 is rdd
+        True
+        >>> str(rdd.getStorageLevel())
+        'Memory Serialized 1x Replicated'
+        >>> _ = rdd.unpersist()
         """
         self.is_cached = True
         self.persist(StorageLevel.MEMORY_ONLY)
@@ -384,11 +437,61 @@ class RDD(Generic[T_co]):
         a new storage level if the RDD does not have a storage level set yet.
         If no storage level is specified defaults to (`MEMORY_ONLY`).
 
+        .. versionadded:: 0.9.1
+
+        Parameters
+        ----------
+        storageLevel : :class:`StorageLevel`, default `MEMORY_ONLY`
+            the target storage level
+
+        Returns
+        -------
+        :class:`RDD`
+            The same :class:`RDD` with storage level set to `storageLevel`.
+
+        See Also
+        --------
+        :meth:`RDD.cache`
+        :meth:`RDD.unpersist`
+        :meth:`RDD.getStorageLevel`
+
         Examples
         --------
         >>> rdd = sc.parallelize(["b", "a", "c"])
         >>> rdd.persist().is_cached
         True
+        >>> str(rdd.getStorageLevel())
+        'Memory Serialized 1x Replicated'
+        >>> _ = rdd.unpersist()
+        >>> rdd.is_cached
+        False
+
+        >>> from pyspark import StorageLevel
+        >>> rdd2 = sc.range(5)
+        >>> _ = rdd2.persist(StorageLevel.MEMORY_AND_DISK)
+        >>> rdd2.is_cached
+        True
+        >>> str(rdd2.getStorageLevel())
+        'Disk Memory Serialized 1x Replicated'
+
+        Can not override existing storage level
+
+        >>> _ = rdd2.persist(StorageLevel.MEMORY_ONLY_2)
+        Traceback (most recent call last):
+            ...
+        py4j.protocol.Py4JJavaError: ...
+
+        Assign another storage level after `unpersist`
+
+        >>> _ = rdd2.unpersist()
+        >>> rdd2.is_cached
+        False
+        >>> _ = rdd2.persist(StorageLevel.MEMORY_ONLY_2)
+        >>> str(rdd2.getStorageLevel())
+        'Memory Serialized 2x Replicated'
+        >>> rdd2.is_cached
+        True
+        >>> _ = rdd2.unpersist()
         """
         self.is_cached = True
         javaStorageLevel = self.ctx._getJavaStorageLevel(storageLevel)
@@ -400,9 +503,41 @@ class RDD(Generic[T_co]):
         Mark the RDD as non-persistent, and remove all blocks for it from
         memory and disk.
 
-        .. versionchanged:: 3.0.0
-           Added optional argument `blocking` to specify whether to block until all
-           blocks are deleted.
+        .. versionadded:: 0.9.1
+
+        Parameters
+        ----------
+        blocking : bool, optional, default False
+            whether to block until all blocks are deleted
+
+            .. versionadded:: 3.0.0
+
+        Returns
+        -------
+        :class:`RDD`
+            The same :class:`RDD`
+
+        See Also
+        --------
+        :meth:`RDD.cache`
+        :meth:`RDD.persist`
+        :meth:`RDD.getStorageLevel`
+
+        Examples
+        --------
+        >>> rdd = sc.range(5)
+        >>> rdd.is_cached
+        False
+        >>> _ = rdd.unpersist()
+        >>> rdd.is_cached
+        False
+        >>> _ = rdd.cache()
+        >>> rdd.is_cached
+        True
+        >>> _ = rdd.unpersist()
+        >>> rdd.is_cached
+        False
+        >>> _ = rdd.unpersist()
         """
         self.is_cached = False
         self._jrdd.unpersist(blocking)
@@ -416,6 +551,37 @@ class RDD(Generic[T_co]):
         be called before any job has been executed on this RDD. It is strongly
         recommended that this RDD is persisted in memory, otherwise saving it
         on a file will require recomputation.
+
+        .. versionadded:: 0.7.0
+
+        See Also
+        --------
+        :meth:`RDD.isCheckpointed`
+        :meth:`RDD.getCheckpointFile`
+        :meth:`RDD.localCheckpoint`
+        :meth:`SparkContext.setCheckpointDir`
+        :meth:`SparkContext.getCheckpointDir`
+
+        Examples
+        --------
+        >>> rdd = sc.range(5)
+        >>> rdd.is_checkpointed
+        False
+        >>> rdd.getCheckpointFile() == None
+        True
+
+        >>> rdd.checkpoint()
+        >>> rdd.is_checkpointed
+        True
+        >>> rdd.getCheckpointFile() == None
+        True
+
+        >>> rdd.count()
+        5
+        >>> rdd.is_checkpointed
+        True
+        >>> rdd.getCheckpointFile() == None
+        False
         """
         self.is_checkpointed = True
         self._jrdd.rdd().checkpoint()
@@ -423,6 +589,20 @@ class RDD(Generic[T_co]):
     def isCheckpointed(self) -> bool:
         """
         Return whether this RDD is checkpointed and materialized, either reliably or locally.
+
+        .. versionadded:: 0.7.0
+
+        Returns
+        -------
+        bool
+            whether this :class:`RDD` is checkpointed and materialized, either reliably or locally
+
+        See Also
+        --------
+        :meth:`RDD.checkpoint`
+        :meth:`RDD.getCheckpointFile`
+        :meth:`SparkContext.setCheckpointDir`
+        :meth:`SparkContext.getCheckpointDir`
         """
         return self._jrdd.rdd().isCheckpointed()
 
@@ -444,6 +624,23 @@ class RDD(Generic[T_co]):
         `spark.dynamicAllocation.cachedExecutorIdleTimeout` to a high value.
 
         The checkpoint directory set through :meth:`SparkContext.setCheckpointDir` is not used.
+
+        .. versionadded:: 2.2.0
+
+        See Also
+        --------
+        :meth:`RDD.checkpoint`
+        :meth:`RDD.isLocallyCheckpointed`
+
+        Examples
+        --------
+        >>> rdd = sc.range(5)
+        >>> rdd.isLocallyCheckpointed()
+        False
+
+        >>> rdd.localCheckpoint()
+        >>> rdd.isLocallyCheckpointed()
+        True
         """
         self._jrdd.rdd().localCheckpoint()
 
@@ -452,6 +649,17 @@ class RDD(Generic[T_co]):
         Return whether this RDD is marked for local checkpointing.
 
         Exposed for testing.
+
+        .. versionadded:: 2.2.0
+
+        Returns
+        -------
+        bool
+            whether this :class:`RDD` is marked for local checkpointing
+
+        See Also
+        --------
+        :meth:`RDD.localCheckpoint`
         """
         return self._jrdd.rdd().isLocallyCheckpointed()
 
@@ -460,6 +668,19 @@ class RDD(Generic[T_co]):
         Gets the name of the file to which this RDD was checkpointed
 
         Not defined if RDD is checkpointed locally.
+
+        .. versionadded:: 0.7.0
+
+        Returns
+        -------
+        str
+            the name of the file to which this :class:`RDD` was checkpointed
+
+        See Also
+        --------
+        :meth:`RDD.checkpoint`
+        :meth:`SparkContext.setCheckpointDir`
+        :meth:`SparkContext.getCheckpointDir`
         """
         checkpointFile = self._jrdd.rdd().getCheckpointFile()
 
@@ -476,8 +697,8 @@ class RDD(Generic[T_co]):
 
         Parameters
         ----------
-        blocking : bool, optional
-           block on shuffle cleanup tasks. Disabled by default.
+        blocking : bool, optional, default False
+           whether to block on shuffle cleanup tasks
 
         Notes
         -----
@@ -488,6 +709,28 @@ class RDD(Generic[T_co]):
     def map(self: "RDD[T]", f: Callable[[T], U], preservesPartitioning: bool = False) -> "RDD[U]":
         """
         Return a new RDD by applying a function to each element of this RDD.
+
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        f : function
+            a function to run on each element of the RDD
+        preservesPartitioning : bool, optional, default False
+            indicates whether the input function preserves the partitioner,
+            which should be False unless this is a pair RDD and the input
+
+        Returns
+        -------
+        :class:`RDD`
+            a new :class:`RDD` by applying a function to all elements
+
+        See Also
+        --------
+        :meth:`RDD.flatMap`
+        :meth:`RDD.mapPartitions`
+        :meth:`RDD.mapPartitionsWithIndex`
+        :meth:`RDD.mapPartitionsWithSplit`
 
         Examples
         --------
@@ -508,6 +751,28 @@ class RDD(Generic[T_co]):
         Return a new RDD by first applying a function to all elements of this
         RDD, and then flattening the results.
 
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        f : function
+            a function to trun a T into a sequence of U
+        preservesPartitioning : bool, optional, default False
+            indicates whether the input function preserves the partitioner,
+            which should be False unless this is a pair RDD and the input
+
+        Returns
+        -------
+        :class:`RDD`
+            a new :class:`RDD` by applying a function to all elements
+
+        See Also
+        --------
+        :meth:`RDD.map`
+        :meth:`RDD.mapPartitions`
+        :meth:`RDD.mapPartitionsWithIndex`
+        :meth:`RDD.mapPartitionsWithSplit`
+
         Examples
         --------
         >>> rdd = sc.parallelize([2, 3, 4])
@@ -527,6 +792,29 @@ class RDD(Generic[T_co]):
     ) -> "RDD[U]":
         """
         Return a new RDD by applying a function to each partition of this RDD.
+
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        f : function
+            a function to run on each partition of the RDD
+        preservesPartitioning : bool, optional, default False
+            indicates whether the input function preserves the partitioner,
+            which should be False unless this is a pair RDD and the input
+
+        Returns
+        -------
+        :class:`RDD`
+            a new :class:`RDD` by applying a function to each partition
+
+        See Also
+        --------
+        :meth:`RDD.map`
+        :meth:`RDD.flatMap`
+        :meth:`RDD.mapPartitionsWithIndex`
+        :meth:`RDD.mapPartitionsWithSplit`
+        :meth:`RDDBarrier.mapPartitions`
 
         Examples
         --------
@@ -550,6 +838,29 @@ class RDD(Generic[T_co]):
         Return a new RDD by applying a function to each partition of this RDD,
         while tracking the index of the original partition.
 
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        f : function
+            a function to run on each partition of the RDD
+        preservesPartitioning : bool, optional, default False
+            indicates whether the input function preserves the partitioner,
+            which should be False unless this is a pair RDD and the input
+
+        Returns
+        -------
+        :class:`RDD`
+            a new :class:`RDD` by applying a function to each partition
+
+        See Also
+        --------
+        :meth:`RDD.map`
+        :meth:`RDD.flatMap`
+        :meth:`RDD.mapPartitions`
+        :meth:`RDD.mapPartitionsWithSplit`
+        :meth:`RDDBarrier.mapPartitionsWithIndex`
+
         Examples
         --------
         >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
@@ -565,12 +876,33 @@ class RDD(Generic[T_co]):
         preservesPartitioning: bool = False,
     ) -> "RDD[U]":
         """
-
         Return a new RDD by applying a function to each partition of this RDD,
         while tracking the index of the original partition.
 
+        .. versionadded:: 0.7.0
+
         .. deprecated:: 0.9.0
-            use :py:meth:`RDD.mapPartitionsWithIndex` instead.
+            use meth:`RDD.mapPartitionsWithIndex` instead.
+
+        Parameters
+        ----------
+        f : function
+            a function to run on each partition of the RDD
+        preservesPartitioning : bool, optional, default False
+            indicates whether the input function preserves the partitioner,
+            which should be False unless this is a pair RDD and the input
+
+        Returns
+        -------
+        :class:`RDD`
+            a new :class:`RDD` by applying a function to each partition
+
+        See Also
+        --------
+        :meth:`RDD.map`
+        :meth:`RDD.flatMap`
+        :meth:`RDD.mapPartitions`
+        :meth:`RDD.mapPartitionsWithIndex`
 
         Examples
         --------
@@ -590,6 +922,13 @@ class RDD(Generic[T_co]):
         """
         Returns the number of partitions in RDD
 
+        .. versionadded:: 1.1.0
+
+        Returns
+        -------
+        int
+            number of partitions
+
         Examples
         --------
         >>> rdd = sc.parallelize([1, 2, 3, 4], 2)
@@ -601,6 +940,22 @@ class RDD(Generic[T_co]):
     def filter(self: "RDD[T]", f: Callable[[T], bool]) -> "RDD[T]":
         """
         Return a new RDD containing only the elements that satisfy a predicate.
+
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        f : function
+            a function to run on each element of the RDD
+
+        Returns
+        -------
+        :class:`RDD`
+            a new :class:`RDD` by applying a function to each element
+
+        See Also
+        --------
+        :meth:`RDD.map`
 
         Examples
         --------
@@ -617,6 +972,22 @@ class RDD(Generic[T_co]):
     def distinct(self: "RDD[T]", numPartitions: Optional[int] = None) -> "RDD[T]":
         """
         Return a new RDD containing the distinct elements in this RDD.
+
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+
+        Returns
+        -------
+        :class:`RDD`
+            a new :class:`RDD` containing the distinct elements
+
+        See Also
+        --------
+        :meth:`RDD.countApproxDistinct`
 
         Examples
         --------
@@ -635,6 +1006,8 @@ class RDD(Generic[T_co]):
         """
         Return a sampled subset of this RDD.
 
+        .. versionadded:: 0.7.0
+
         Parameters
         ----------
         withReplacement : bool
@@ -645,6 +1018,17 @@ class RDD(Generic[T_co]):
             with replacement: expected number of times each element is chosen; fraction must be >= 0
         seed : int, optional
             seed for the random number generator
+
+        Returns
+        -------
+        :class:`RDD`
+            a new :class:`RDD` containing a sampled subset of elements
+
+        See Also
+        --------
+        :meth:`RDD.takeSample`
+        :meth:`RDD.sampleByKey`
+        :meth:`pyspark.sql.DataFrame.sample`
 
         Notes
         -----
@@ -657,7 +1041,8 @@ class RDD(Generic[T_co]):
         >>> 6 <= rdd.sample(False, 0.1, 81).count() <= 14
         True
         """
-        assert fraction >= 0.0, "Negative fraction value: %s" % fraction
+        if not fraction >= 0:
+            raise ValueError("Fraction must be nonnegative.")
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
 
     def randomSplit(
@@ -666,6 +1051,10 @@ class RDD(Generic[T_co]):
         """
         Randomly splits this RDD with the provided weights.
 
+        .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
         weights : list
             weights for splits, will be normalized if they don't sum to 1
         seed : int, optional
@@ -674,7 +1063,11 @@ class RDD(Generic[T_co]):
         Returns
         -------
         list
-            split RDDs in a list
+            split :class:`RDD`\\s in a list
+
+        See Also
+        --------
+        :meth:`pyspark.sql.DataFrame.randomSplit`
 
         Examples
         --------
@@ -687,12 +1080,16 @@ class RDD(Generic[T_co]):
         >>> 250 < rdd2.count() < 350
         True
         """
+        if not all(w >= 0 for w in weights):
+            raise ValueError("Weights must be nonnegative")
         s = float(sum(weights))
+        if not s > 0:
+            raise ValueError("Sum of weights must be positive")
         cweights = [0.0]
         for w in weights:
             cweights.append(cweights[-1] + w / s)
         if seed is None:
-            seed = random.randint(0, 2 ** 32 - 1)
+            seed = random.randint(0, 2**32 - 1)
         return [
             self.mapPartitionsWithIndex(RDDRangeSampler(lb, ub, seed).func, True)
             for lb, ub in zip(cweights, cweights[1:])
@@ -705,6 +1102,26 @@ class RDD(Generic[T_co]):
         """
         Return a fixed-size sampled subset of this RDD.
 
+        .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        withReplacement : list
+            whether sampling is done with replacement
+        num : int
+            size of the returned sample
+        seed : int, optional
+            random seed
+
+        Returns
+        -------
+        list
+            a fixed-size sampled subset of this :class:`RDD` in an array
+
+        See Also
+        --------
+        :meth:`RDD.sample`
+
         Notes
         -----
         This method should only be used if the resulting array is expected
@@ -712,6 +1129,7 @@ class RDD(Generic[T_co]):
 
         Examples
         --------
+        >>> import sys
         >>> rdd = sc.parallelize(range(0, 10))
         >>> len(rdd.takeSample(True, 20, 1))
         20
@@ -719,12 +1137,19 @@ class RDD(Generic[T_co]):
         5
         >>> len(rdd.takeSample(False, 15, 3))
         10
+        >>> sc.range(0, 10).takeSample(False, sys.maxsize)
+        Traceback (most recent call last):
+            ...
+        ValueError: Sample size cannot be greater than ...
         """
         numStDev = 10.0
-
+        maxSampleSize = sys.maxsize - int(numStDev * sqrt(sys.maxsize))
         if num < 0:
             raise ValueError("Sample size cannot be negative.")
-        elif num == 0:
+        elif num > maxSampleSize:
+            raise ValueError("Sample size cannot be greater than %d." % maxSampleSize)
+
+        if num == 0 or self.getNumPartitions() == 0:
             return []
 
         initialCount = self.count()
@@ -738,10 +1163,6 @@ class RDD(Generic[T_co]):
             samples = self.collect()
             rand.shuffle(samples)
             return samples
-
-        maxSampleSize = sys.maxsize - int(numStDev * sqrt(sys.maxsize))
-        if num > maxSampleSize:
-            raise ValueError("Sample size cannot be greater than %d." % maxSampleSize)
 
         fraction = RDD._computeFractionForSampleSize(num, initialCount, withReplacement)
         samples = self.sample(withReplacement, fraction, seed).collect()
@@ -797,6 +1218,23 @@ class RDD(Generic[T_co]):
         """
         Return the union of this RDD and another one.
 
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        other : :class:`RDD`
+            another :class:`RDD`
+
+        Returns
+        -------
+        :class:`RDD`
+            the union of this :class:`RDD` and another one
+
+        See Also
+        --------
+        :meth:`SparkContext.union`
+        :meth:`pyspark.sql.DataFrame.union`
+
         Examples
         --------
         >>> rdd = sc.parallelize([1, 1, 2, 3])
@@ -824,6 +1262,22 @@ class RDD(Generic[T_co]):
         """
         Return the intersection of this RDD and another one. The output will
         not contain any duplicate elements, even if the input RDDs did.
+
+        .. versionadded:: 1.0.0
+
+        Parameters
+        ----------
+        other : :class:`RDD`
+            another :class:`RDD`
+
+        Returns
+        -------
+        :class:`RDD`
+            the intersection of this :class:`RDD` and another one
+
+        See Also
+        --------
+        :meth:`pyspark.sql.DataFrame.intersect`
 
         Notes
         -----
@@ -905,6 +1359,31 @@ class RDD(Generic[T_co]):
         Repartition the RDD according to the given partitioner and, within each resulting partition,
         sort records by their keys.
 
+        .. versionadded:: 1.2.0
+
+        Parameters
+        ----------
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+        partitionFunc : function, optional, default `portable_hash`
+            a function to compute the partition index
+        ascending : bool, optional, default True
+            sort the keys in ascending or descending order
+        keyfunc : function, optional, default identity mapping
+            a function to compute the key
+
+        Returns
+        -------
+        :class:`RDD`
+            a new :class:`RDD`
+
+        See Also
+        --------
+        :meth:`RDD.repartition`
+        :meth:`RDD.partitionBy`
+        :meth:`RDD.sortBy`
+        :meth:`RDD.sortByKey`
+
         Examples
         --------
         >>> rdd = sc.parallelize([(0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)])
@@ -959,6 +1438,27 @@ class RDD(Generic[T_co]):
     ) -> "RDD[Tuple[K, V]]":
         """
         Sorts this RDD, which is assumed to consist of (key, value) pairs.
+
+        .. versionadded:: 0.9.1
+
+        Parameters
+        ----------
+        ascending : bool, optional, default True
+            sort the keys in ascending or descending order
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+        keyfunc : function, optional, default identity mapping
+            a function to compute the key
+
+        Returns
+        -------
+        :class:`RDD`
+            a new :class:`RDD`
+
+        See Also
+        --------
+        :meth:`RDD.sortBy`
+        :meth:`pyspark.sql.DataFrame.sort`
 
         Examples
         --------
@@ -1025,6 +1525,27 @@ class RDD(Generic[T_co]):
         """
         Sorts this RDD by the given keyfunc
 
+        .. versionadded:: 1.1.0
+
+        Parameters
+        ----------
+        keyfunc : function
+            a function to compute the key
+        ascending : bool, optional, default True
+            sort the keys in ascending or descending order
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+
+        Returns
+        -------
+        :class:`RDD`
+            a new :class:`RDD`
+
+        See Also
+        --------
+        :meth:`RDD.sortByKey`
+        :meth:`pyspark.sql.DataFrame.sort`
+
         Examples
         --------
         >>> tmp = [('a', 1), ('b', 2), ('1', 3), ('d', 4), ('2', 5)]
@@ -1044,6 +1565,13 @@ class RDD(Generic[T_co]):
         Return an RDD created by coalescing all elements within each partition
         into a list.
 
+        .. versionadded:: 0.7.0
+
+        Returns
+        -------
+        :class:`RDD`
+            a new :class:`RDD` coalescing all elements within each partition into a list
+
         Examples
         --------
         >>> rdd = sc.parallelize([1, 2, 3, 4], 2)
@@ -1061,6 +1589,22 @@ class RDD(Generic[T_co]):
         Return the Cartesian product of this RDD and another one, that is, the
         RDD of all pairs of elements ``(a, b)`` where ``a`` is in `self` and
         ``b`` is in `other`.
+
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        other : :class:`RDD`
+            another :class:`RDD`
+
+        Returns
+        -------
+        :class:`RDD`
+            the Cartesian product of this :class:`RDD` and another one
+
+        See Also
+        --------
+        :meth:`pyspark.sql.DataFrame.crossJoin`
 
         Examples
         --------
@@ -1081,6 +1625,27 @@ class RDD(Generic[T_co]):
         """
         Return an RDD of grouped items.
 
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        f : function
+            a function to compute the key
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+        partitionFunc : function, optional, default `portable_hash`
+            a function to compute the partition index
+
+        Returns
+        -------
+        :class:`RDD`
+            a new :class:`RDD` of grouped items
+
+        See Also
+        --------
+        :meth:`RDD.groupByKey`
+        :meth:`pyspark.sql.DataFrame.groupBy`
+
         Examples
         --------
         >>> rdd = sc.parallelize([1, 1, 2, 3, 5, 8])
@@ -1096,6 +1661,8 @@ class RDD(Generic[T_co]):
         """
         Return an RDD created by piping elements to a forked external process.
 
+        .. versionadded:: 0.7.0
+
         Parameters
         ----------
         command : str
@@ -1103,7 +1670,12 @@ class RDD(Generic[T_co]):
         env : dict, optional
             environment variables to set.
         checkCode : bool, optional
-            whether or not to check the return value of the shell command.
+            whether to check the return value of the shell command.
+
+        Returns
+        -------
+        :class:`RDD`
+            a new :class:`RDD` of strings
 
         Examples
         --------
@@ -1148,6 +1720,19 @@ class RDD(Generic[T_co]):
         """
         Applies a function to all elements of this RDD.
 
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        f : function
+            a function applyed to each element
+
+        See Also
+        --------
+        :meth:`RDD.foreachPartition`
+        :meth:`pyspark.sql.DataFrame.foreach`
+        :meth:`pyspark.sql.DataFrame.foreachPartition`
+
         Examples
         --------
         >>> def f(x): print(x)
@@ -1165,6 +1750,19 @@ class RDD(Generic[T_co]):
     def foreachPartition(self: "RDD[T]", f: Callable[[Iterable[T]], None]) -> None:
         """
         Applies a function to each partition of this RDD.
+
+        .. versionadded:: 1.0.0
+
+        Parameters
+        ----------
+        f : function
+            a function applyed to each partition
+
+        See Also
+        --------
+        :meth:`RDD.foreach`
+        :meth:`pyspark.sql.DataFrame.foreach`
+        :meth:`pyspark.sql.DataFrame.foreachPartition`
 
         Examples
         --------
@@ -1185,12 +1783,31 @@ class RDD(Generic[T_co]):
 
     def collect(self: "RDD[T]") -> List[T]:
         """
-        Return a list that contains all of the elements in this RDD.
+        Return a list that contains all the elements in this RDD.
+
+        .. versionadded:: 0.7.0
+
+        Returns
+        -------
+        list
+            a list containing all the elements
 
         Notes
         -----
         This method should only be used if the resulting array is expected
         to be small, as all the data is loaded into the driver's memory.
+
+        See Also
+        --------
+        :meth:`RDD.toLocalIterator`
+        :meth:`pyspark.sql.DataFrame.collect`
+
+        Examples
+        --------
+        >>> sc.range(5).collect()
+        [0, 1, 2, 3, 4]
+        >>> sc.parallelize(["x", "y", "z"]).collect()
+        ['x', 'y', 'z']
         """
         with SCCallSiteSync(self.context):
             assert self.ctx._jvm is not None
@@ -1204,8 +1821,28 @@ class RDD(Generic[T_co]):
         When collect rdd, use this method to specify job group.
 
         .. versionadded:: 3.0.0
+
         .. deprecated:: 3.1.0
             Use :class:`pyspark.InheritableThread` with the pinned thread mode enabled.
+
+        Parameters
+        ----------
+        groupId : str
+            The group ID to assign.
+        description : str
+            The description to set for the job group.
+        interruptOnCancel : bool, optional, default False
+            whether to interrupt jobs on job cancellation.
+
+        Returns
+        -------
+        list
+            a list containing all the elements
+
+        See Also
+        --------
+        :meth:`RDD.collect`
+        :meth:`SparkContext.setJobGroup`
         """
         warnings.warn(
             "Deprecated in 3.1, Use pyspark.InheritableThread with "
@@ -1224,6 +1861,24 @@ class RDD(Generic[T_co]):
         """
         Reduces the elements of this RDD using the specified commutative and
         associative binary operator. Currently reduces partitions locally.
+
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        f : function
+            the reduce function
+
+        Returns
+        -------
+        T
+            the aggregated result
+
+        See Also
+        --------
+        :meth:`RDD.treeReduce`
+        :meth:`RDD.aggregate`
+        :meth:`RDD.treeAggregate`
 
         Examples
         --------
@@ -1256,11 +1911,25 @@ class RDD(Generic[T_co]):
         """
         Reduces the elements of this RDD in a multi-level tree pattern.
 
+        .. versionadded:: 1.3.0
+
         Parameters
         ----------
         f : function
-        depth : int, optional
+            the reduce function
+        depth : int, optional, default 2
             suggested depth of the tree (default: 2)
+
+        Returns
+        -------
+        T
+            the aggregated result
+
+        See Also
+        --------
+        :meth:`RDD.reduce`
+        :meth:`RDD.aggregate`
+        :meth:`RDD.treeAggregate`
 
         Examples
         --------
@@ -1316,6 +1985,26 @@ class RDD(Generic[T_co]):
         that are not commutative, the result may differ from that of a fold
         applied to a non-distributed collection.
 
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        zeroValue : T
+            the initial value for the accumulated result of each partition
+        op : function
+            a function used to both accumulate results within a partition and combine
+            results from different partitions
+
+        Returns
+        -------
+        T
+            the aggregated result
+
+        See Also
+        --------
+        :meth:`RDD.reduce`
+        :meth:`RDD.aggregate`
+
         Examples
         --------
         >>> from operator import add
@@ -1352,6 +2041,27 @@ class RDD(Generic[T_co]):
         the type of this RDD. Thus, we need one operation for merging a T into
         an U and one operation for merging two U
 
+        .. versionadded:: 1.1.0
+
+        Parameters
+        ----------
+        zeroValue : U
+            the initial value for the accumulated result of each partition
+        seqOp : function
+            a function used to accumulate results within a partition
+        combOp : function
+            an associative function used to combine results from different partitions
+
+        Returns
+        -------
+        U
+            the aggregated result
+
+        See Also
+        --------
+        :meth:`RDD.reduce`
+        :meth:`RDD.fold`
+
         Examples
         --------
         >>> seqOp = (lambda x, y: (x[0] + y, x[1] + 1))
@@ -1387,8 +2097,28 @@ class RDD(Generic[T_co]):
         Aggregates the elements of this RDD in a multi-level tree
         pattern.
 
-        depth : int, optional
-            suggested depth of the tree (default: 2)
+        .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        zeroValue : U
+            the initial value for the accumulated result of each partition
+        seqOp : function
+            a function used to accumulate results within a partition
+        combOp : function
+            an associative function used to combine results from different partitions
+        depth : int, optional, default 2
+            suggested depth of the tree
+
+        Returns
+        -------
+        U
+            the aggregated result
+
+        See Also
+        --------
+        :meth:`RDD.aggregate`
+        :meth:`RDD.treeReduce`
 
         Examples
         --------
@@ -1450,10 +2180,21 @@ class RDD(Generic[T_co]):
         """
         Find the maximum item in this RDD.
 
+        .. versionadded:: 1.0.0
+
         Parameters
         ----------
         key : function, optional
             A function used to generate key for comparing
+
+        Returns
+        -------
+        T
+            the maximum item
+
+        See Also
+        --------
+        :meth:`RDD.min`
 
         Examples
         --------
@@ -1479,10 +2220,21 @@ class RDD(Generic[T_co]):
         """
         Find the minimum item in this RDD.
 
+        .. versionadded:: 1.0.0
+
         Parameters
         ----------
         key : function, optional
             A function used to generate key for comparing
+
+        Returns
+        -------
+        T
+            the minimum item
+
+        See Also
+        --------
+        :meth:`RDD.max`
 
         Examples
         --------
@@ -1500,6 +2252,18 @@ class RDD(Generic[T_co]):
         """
         Add up the elements in this RDD.
 
+        .. versionadded:: 0.7.0
+
+        Returns
+        -------
+        float, int, or complex
+            the sum of all elements
+
+        See Also
+        --------
+        :meth:`RDD.mean`
+        :meth:`RDD.sumApprox`
+
         Examples
         --------
         >>> sc.parallelize([1.0, 2.0, 3.0]).sum()
@@ -1513,6 +2277,18 @@ class RDD(Generic[T_co]):
         """
         Return the number of elements in this RDD.
 
+        .. versionadded:: 0.7.0
+
+        Returns
+        -------
+        int
+            the number of elements
+
+        See Also
+        --------
+        :meth:`RDD.countApprox`
+        :meth:`pyspark.sql.DataFrame.count`
+
         Examples
         --------
         >>> sc.parallelize([2, 3, 4]).count()
@@ -1524,6 +2300,22 @@ class RDD(Generic[T_co]):
         """
         Return a :class:`StatCounter` object that captures the mean, variance
         and count of the RDD's elements in one operation.
+
+        .. versionadded:: 0.9.1
+
+        Returns
+        -------
+        :class:`StatCounter`
+            a :class:`StatCounter` capturing the mean, variance and count of all elements
+
+        See Also
+        --------
+        :meth:`RDD.stdev`
+        :meth:`RDD.sampleStdev`
+        :meth:`RDD.variance`
+        :meth:`RDD.sampleVariance`
+        :meth:`RDD.histogram`
+        :meth:`pyspark.sql.DataFrame.stat`
         """
 
         def redFunc(left_counter: StatCounter, right_counter: StatCounter) -> StatCounter:
@@ -1558,7 +2350,23 @@ class RDD(Generic[T_co]):
         If the elements in the RDD do not vary (max == min), a single bucket
         will be used.
 
-        The return value is a tuple of buckets and histogram.
+        .. versionadded:: 1.2.0
+
+        Parameters
+        ----------
+        buckets : int, or list, or tuple
+            if `buckets` is a number, it computes a histogram of the data using
+            `buckets` number of buckets evenly, otherwise, `buckets` is the provided
+            buckets to bin the data.
+
+        Returns
+        -------
+        tuple
+            a tuple of buckets and histogram
+
+        See Also
+        --------
+        :meth:`RDD.stats`
 
         Examples
         --------
@@ -1573,7 +2381,6 @@ class RDD(Generic[T_co]):
         >>> rdd.histogram(("a", "b", "c"))
         (('a', 'b', 'c'), [2, 2])
         """
-
         if isinstance(buckets, int):
             if buckets < 1:
                 raise ValueError("number of buckets must be >= 1")
@@ -1672,68 +2479,149 @@ class RDD(Generic[T_co]):
 
         return buckets, self.mapPartitions(histogram).reduce(mergeCounters)
 
-    def mean(self: "RDD[NumberOrArray]") -> "NumberOrArray":
+    def mean(self: "RDD[NumberOrArray]") -> float:
         """
         Compute the mean of this RDD's elements.
+
+        .. versionadded:: 0.9.1
+
+        Returns
+        -------
+        float
+            the mean of all elements
+
+        See Also
+        --------
+        :meth:`RDD.stats`
+        :meth:`RDD.sum`
+        :meth:`RDD.meanApprox`
 
         Examples
         --------
         >>> sc.parallelize([1, 2, 3]).mean()
         2.0
         """
-        return self.stats().mean()  # type: ignore[return-value]
+        return self.stats().mean()
 
-    def variance(self: "RDD[NumberOrArray]") -> "NumberOrArray":
+    def variance(self: "RDD[NumberOrArray]") -> float:
         """
         Compute the variance of this RDD's elements.
+
+        .. versionadded:: 0.9.1
+
+        Returns
+        -------
+        float
+            the variance of all elements
+
+        See Also
+        --------
+        :meth:`RDD.stats`
+        :meth:`RDD.sampleVariance`
+        :meth:`RDD.stdev`
+        :meth:`RDD.sampleStdev`
 
         Examples
         --------
         >>> sc.parallelize([1, 2, 3]).variance()
         0.666...
         """
-        return self.stats().variance()  # type: ignore[return-value]
+        return self.stats().variance()
 
-    def stdev(self: "RDD[NumberOrArray]") -> "NumberOrArray":
+    def stdev(self: "RDD[NumberOrArray]") -> float:
         """
         Compute the standard deviation of this RDD's elements.
+
+        .. versionadded:: 0.9.1
+
+        Returns
+        -------
+        float
+            the standard deviation of all elements
+
+        See Also
+        --------
+        :meth:`RDD.stats`
+        :meth:`RDD.sampleStdev`
+        :meth:`RDD.variance`
+        :meth:`RDD.sampleVariance`
 
         Examples
         --------
         >>> sc.parallelize([1, 2, 3]).stdev()
         0.816...
         """
-        return self.stats().stdev()  # type: ignore[return-value]
+        return self.stats().stdev()
 
-    def sampleStdev(self: "RDD[NumberOrArray]") -> "NumberOrArray":
+    def sampleStdev(self: "RDD[NumberOrArray]") -> float:
         """
         Compute the sample standard deviation of this RDD's elements (which
         corrects for bias in estimating the standard deviation by dividing by
         N-1 instead of N).
+
+        .. versionadded:: 0.9.1
+
+        Returns
+        -------
+        float
+            the sample standard deviation of all elements
+
+        See Also
+        --------
+        :meth:`RDD.stats`
+        :meth:`RDD.stdev`
+        :meth:`RDD.variance`
+        :meth:`RDD.sampleVariance`
 
         Examples
         --------
         >>> sc.parallelize([1, 2, 3]).sampleStdev()
         1.0
         """
-        return self.stats().sampleStdev()  # type: ignore[return-value]
+        return self.stats().sampleStdev()
 
-    def sampleVariance(self: "RDD[NumberOrArray]") -> "NumberOrArray":
+    def sampleVariance(self: "RDD[NumberOrArray]") -> float:
         """
         Compute the sample variance of this RDD's elements (which corrects
         for bias in estimating the variance by dividing by N-1 instead of N).
+
+        .. versionadded:: 0.9.1
+
+        Returns
+        -------
+        float
+            the sample variance of all elements
+
+        See Also
+        --------
+        :meth:`RDD.stats`
+        :meth:`RDD.variance`
+        :meth:`RDD.stdev`
+        :meth:`RDD.sampleStdev`
 
         Examples
         --------
         >>> sc.parallelize([1, 2, 3]).sampleVariance()
         1.0
         """
-        return self.stats().sampleVariance()  # type: ignore[return-value]
+        return self.stats().sampleVariance()
 
     def countByValue(self: "RDD[K]") -> Dict[K, int]:
         """
         Return the count of each unique value in this RDD as a dictionary of
         (value, count) pairs.
+
+        .. versionadded:: 0.7.0
+
+        Returns
+        -------
+        dict
+            a dictionary of (value, count) pairs
+
+        See Also
+        --------
+        :meth:`RDD.collectAsMap`
+        :meth:`RDD.countByKey`
 
         Examples
         --------
@@ -1765,6 +2653,26 @@ class RDD(Generic[T_co]):
     def top(self: "RDD[T]", num: int, key: Optional[Callable[[T], "S"]] = None) -> List[T]:
         """
         Get the top N elements from an RDD.
+
+        .. versionadded:: 1.0.0
+
+        Parameters
+        ----------
+        num : int
+            top N
+        key : function, optional
+            a function used to generate key for comparing
+
+        Returns
+        -------
+        list
+            the top N elements
+
+        See Also
+        --------
+        :meth:`RDD.takeOrdered`
+        :meth:`RDD.max`
+        :meth:`RDD.min`
 
         Notes
         -----
@@ -1804,6 +2712,26 @@ class RDD(Generic[T_co]):
         Get the N elements from an RDD ordered in ascending order or as
         specified by the optional key function.
 
+        .. versionadded:: 1.0.0
+
+        Parameters
+        ----------
+        num : int
+            top N
+        key : function, optional
+            a function used to generate key for comparing
+
+        Returns
+        -------
+        list
+            the top N elements
+
+        See Also
+        --------
+        :meth:`RDD.top`
+        :meth:`RDD.max`
+        :meth:`RDD.min`
+
         Notes
         -----
         This method should only be used if the resulting array is expected
@@ -1815,12 +2743,20 @@ class RDD(Generic[T_co]):
         [1, 2, 3, 4, 5, 6]
         >>> sc.parallelize([10, 1, 2, 9, 3, 4, 5, 6, 7], 2).takeOrdered(6, key=lambda x: -x)
         [10, 9, 7, 6, 5, 4]
+        >>> sc.emptyRDD().takeOrdered(3)
+        []
         """
+        if num < 0:
+            raise ValueError("top N cannot be negative.")
 
-        def merge(a: List[T], b: List[T]) -> List[T]:
-            return heapq.nsmallest(num, a + b, key)
+        if num == 0 or self.getNumPartitions() == 0:
+            return []
+        else:
 
-        return self.mapPartitions(lambda it: [heapq.nsmallest(num, it, key)]).reduce(merge)
+            def merge(a: List[T], b: List[T]) -> List[T]:
+                return heapq.nsmallest(num, a + b, key)
+
+            return self.mapPartitions(lambda it: [heapq.nsmallest(num, it, key)]).reduce(merge)
 
     def take(self: "RDD[T]", num: int) -> List[T]:
         """
@@ -1831,6 +2767,23 @@ class RDD(Generic[T_co]):
         to satisfy the limit.
 
         Translated from the Scala implementation in RDD#take().
+
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        num : int
+            first number of elements
+
+        Returns
+        -------
+        list
+            the first `num` elements
+
+        See Also
+        --------
+        :meth:`RDD.first`
+        :meth:`pyspark.sql.DataFrame.take`
 
         Notes
         -----
@@ -1891,6 +2844,19 @@ class RDD(Generic[T_co]):
         """
         Return the first element in this RDD.
 
+        .. versionadded:: 0.7.0
+
+        Returns
+        -------
+        T
+            the first element
+
+        See Also
+        --------
+        :meth:`RDD.take`
+        :meth:`pyspark.sql.DataFrame.first`
+        :meth:`pyspark.sql.DataFrame.head`
+
         Examples
         --------
         >>> sc.parallelize([2, 3, 4]).first()
@@ -1908,6 +2874,18 @@ class RDD(Generic[T_co]):
     def isEmpty(self) -> bool:
         """
         Returns true if and only if the RDD contains no elements at all.
+
+        .. versionadded:: 1.3.0
+
+        Returns
+        -------
+        bool
+            whether the :class:`RDD` is empty
+
+        See Also
+        --------
+        :meth:`RDD.first`
+        :meth:`pyspark.sql.DataFrame.isEmpty`
 
         Notes
         -----
@@ -1934,6 +2912,8 @@ class RDD(Generic[T_co]):
         converted for output using either user specified converters or, by default,
         "org.apache.spark.api.python.JavaToWritableConverter".
 
+        .. versionadded:: 1.1.0
+
         Parameters
         ----------
         conf : dict
@@ -1942,6 +2922,50 @@ class RDD(Generic[T_co]):
             fully qualified classname of key converter (None by default)
         valueConverter : str, optional
             fully qualified classname of value converter (None by default)
+
+        See Also
+        --------
+        :meth:`SparkContext.newAPIHadoopRDD`
+        :meth:`RDD.saveAsHadoopDataset`
+        :meth:`RDD.saveAsHadoopFile`
+        :meth:`RDD.saveAsNewAPIHadoopFile`
+        :meth:`RDD.saveAsSequenceFile`
+
+        Examples
+        --------
+        >>> import os
+        >>> import tempfile
+
+        Set the related classes
+
+        >>> output_format_class = "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat"
+        >>> input_format_class = "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat"
+        >>> key_class = "org.apache.hadoop.io.IntWritable"
+        >>> value_class = "org.apache.hadoop.io.Text"
+
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path = os.path.join(d, "new_hadoop_file")
+        ...
+        ...     # Create the conf for writing
+        ...     write_conf = {
+        ...         "mapreduce.job.outputformat.class": (output_format_class),
+        ...         "mapreduce.job.output.key.class": key_class,
+        ...         "mapreduce.job.output.value.class": value_class,
+        ...         "mapreduce.output.fileoutputformat.outputdir": path,
+        ...     }
+        ...
+        ...     # Write a temporary Hadoop file
+        ...     rdd = sc.parallelize([(1, ""), (1, "a"), (3, "x")])
+        ...     rdd.saveAsNewAPIHadoopDataset(conf=write_conf)
+        ...
+        ...     # Create the conf for reading
+        ...     read_conf = {"mapreduce.input.fileinputformat.inputdir": path}
+        ...
+        ...     # Load this Hadoop file as an RDD
+        ...     loaded = sc.newAPIHadoopRDD(input_format_class,
+        ...         key_class, value_class, conf=read_conf)
+        ...     sorted(loaded.collect())
+        [(1, ''), (1, 'a'), (3, 'x')]
         """
         jconf = self.ctx._dictToJavaMap(conf)
         pickledRDD = self._pickled()
@@ -1969,6 +2993,10 @@ class RDD(Generic[T_co]):
         `conf` is applied on top of the base Hadoop conf associated with the SparkContext
         of this RDD to create a merged Hadoop MapReduce job configuration for saving the data.
 
+        .. versionadded:: 1.1.0
+
+        Parameters
+        ----------
         path : str
             path to Hadoop file
         outputFormatClass : str
@@ -1986,6 +3014,34 @@ class RDD(Generic[T_co]):
             fully qualified classname of value converter (None by default)
         conf : dict, optional
             Hadoop job configuration (None by default)
+
+        See Also
+        --------
+        :meth:`SparkContext.newAPIHadoopFile`
+        :meth:`RDD.saveAsHadoopDataset`
+        :meth:`RDD.saveAsNewAPIHadoopDataset`
+        :meth:`RDD.saveAsHadoopFile`
+        :meth:`RDD.saveAsSequenceFile`
+
+        Examples
+        --------
+        >>> import os
+        >>> import tempfile
+
+        Set the class of output format
+
+        >>> output_format_class = "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat"
+
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path = os.path.join(d, "hadoop_file")
+        ...
+        ...     # Write a temporary Hadoop file
+        ...     rdd = sc.parallelize([(1, {3.0: "bb"}), (2, {1.0: "aa"}), (3, {2.0: "dd"})])
+        ...     rdd.saveAsNewAPIHadoopFile(path, output_format_class)
+        ...
+        ...     # Load this Hadoop file as an RDD
+        ...     sorted(sc.sequenceFile(path).collect())
+        [(1, {3.0: 'bb'}), (2, {1.0: 'aa'}), (3, {2.0: 'dd'})]
         """
         jconf = self.ctx._dictToJavaMap(conf)
         pickledRDD = self._pickled()
@@ -2015,6 +3071,8 @@ class RDD(Generic[T_co]):
         converted for output using either user specified converters or, by default,
         "org.apache.spark.api.python.JavaToWritableConverter".
 
+        .. versionadded:: 1.1.0
+
         Parameters
         ----------
         conf : dict
@@ -2023,6 +3081,49 @@ class RDD(Generic[T_co]):
             fully qualified classname of key converter (None by default)
         valueConverter : str, optional
             fully qualified classname of value converter (None by default)
+
+        See Also
+        --------
+        :meth:`SparkContext.hadoopRDD`
+        :meth:`RDD.saveAsNewAPIHadoopDataset`
+        :meth:`RDD.saveAsHadoopFile`
+        :meth:`RDD.saveAsNewAPIHadoopFile`
+        :meth:`RDD.saveAsSequenceFile`
+
+        Examples
+        --------
+        >>> import os
+        >>> import tempfile
+
+        Set the related classes
+
+        >>> output_format_class = "org.apache.hadoop.mapred.TextOutputFormat"
+        >>> input_format_class = "org.apache.hadoop.mapred.TextInputFormat"
+        >>> key_class = "org.apache.hadoop.io.IntWritable"
+        >>> value_class = "org.apache.hadoop.io.Text"
+
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path = os.path.join(d, "old_hadoop_file")
+        ...
+        ...     # Create the conf for writing
+        ...     write_conf = {
+        ...         "mapred.output.format.class": output_format_class,
+        ...         "mapreduce.job.output.key.class": key_class,
+        ...         "mapreduce.job.output.value.class": value_class,
+        ...         "mapreduce.output.fileoutputformat.outputdir": path,
+        ...     }
+        ...
+        ...     # Write a temporary Hadoop file
+        ...     rdd = sc.parallelize([(1, ""), (1, "a"), (3, "x")])
+        ...     rdd.saveAsHadoopDataset(conf=write_conf)
+        ...
+        ...     # Create the conf for reading
+        ...     read_conf = {"mapreduce.input.fileinputformat.inputdir": path}
+        ...
+        ...     # Load this Hadoop file as an RDD
+        ...     loaded = sc.hadoopRDD(input_format_class, key_class, value_class, conf=read_conf)
+        ...     sorted(loaded.collect())
+        [(0, '1\\t'), (0, '1\\ta'), (0, '3\\tx')]
         """
         jconf = self.ctx._dictToJavaMap(conf)
         pickledRDD = self._pickled()
@@ -2051,6 +3152,8 @@ class RDD(Generic[T_co]):
         `conf` is applied on top of the base Hadoop conf associated with the SparkContext
         of this RDD to create a merged Hadoop MapReduce job configuration for saving the data.
 
+        .. versionadded:: 1.1.0
+
         Parameters
         ----------
         path : str
@@ -2073,6 +3176,38 @@ class RDD(Generic[T_co]):
         compressionCodecClass : str
             fully qualified classname of the compression codec class
             i.e. "org.apache.hadoop.io.compress.GzipCodec" (None by default)
+
+        See Also
+        --------
+        :meth:`SparkContext.hadoopFile`
+        :meth:`RDD.saveAsNewAPIHadoopFile`
+        :meth:`RDD.saveAsHadoopDataset`
+        :meth:`RDD.saveAsNewAPIHadoopDataset`
+        :meth:`RDD.saveAsSequenceFile`
+
+        Examples
+        --------
+        >>> import os
+        >>> import tempfile
+
+        Set the related classes
+
+        >>> output_format_class = "org.apache.hadoop.mapred.TextOutputFormat"
+        >>> input_format_class = "org.apache.hadoop.mapred.TextInputFormat"
+        >>> key_class = "org.apache.hadoop.io.IntWritable"
+        >>> value_class = "org.apache.hadoop.io.Text"
+
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path = os.path.join(d, "old_hadoop_file")
+        ...
+        ...     # Write a temporary Hadoop file
+        ...     rdd = sc.parallelize([(1, ""), (1, "a"), (3, "x")])
+        ...     rdd.saveAsHadoopFile(path, output_format_class, key_class, value_class)
+        ...
+        ...     # Load this Hadoop file as an RDD
+        ...     loaded = sc.hadoopFile(path, input_format_class, key_class, value_class)
+        ...     sorted(loaded.collect())
+        [(0, '1\\t'), (0, '1\\ta'), (0, '3\\tx')]
         """
         jconf = self.ctx._dictToJavaMap(conf)
         pickledRDD = self._pickled()
@@ -2102,6 +3237,8 @@ class RDD(Generic[T_co]):
             1. Pickle is used to convert pickled Python RDD into RDD of Java objects.
             2. Keys and values of this Java RDD are converted to Writables and written out.
 
+        .. versionadded:: 1.1.0
+
         Parameters
         ----------
         path : str
@@ -2109,6 +3246,34 @@ class RDD(Generic[T_co]):
         compressionCodecClass : str, optional
             fully qualified classname of the compression codec class
             i.e. "org.apache.hadoop.io.compress.GzipCodec" (None by default)
+
+        See Also
+        --------
+        :meth:`SparkContext.sequenceFile`
+        :meth:`RDD.saveAsHadoopFile`
+        :meth:`RDD.saveAsNewAPIHadoopFile`
+        :meth:`RDD.saveAsHadoopDataset`
+        :meth:`RDD.saveAsNewAPIHadoopDataset`
+        :meth:`RDD.saveAsSequenceFile`
+
+        Examples
+        --------
+        >>> import os
+        >>> import tempfile
+
+        Set the related classes
+
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path = os.path.join(d, "sequence_file")
+        ...
+        ...     # Write a temporary sequence file
+        ...     rdd = sc.parallelize([(1, ""), (1, "a"), (3, "x")])
+        ...     rdd.saveAsSequenceFile(path)
+        ...
+        ...     # Load this sequence file as an RDD
+        ...     loaded = sc.sequenceFile(path)
+        ...     sorted(loaded.collect())
+        [(1, ''), (1, 'a'), (3, 'x')]
         """
         pickledRDD = self._pickled()
         assert self.ctx._jvm is not None
@@ -2123,14 +3288,32 @@ class RDD(Generic[T_co]):
         used is :class:`pyspark.serializers.CPickleSerializer`, default batch size
         is 10.
 
+        .. versionadded:: 1.1.0
+
+        Parameters
+        ----------
+        path : str
+            path to pickled file
+        batchSize : int, optional, default 10
+            the number of Python objects represented as a single Java object.
+
+        See Also
+        --------
+        :meth:`SparkContext.pickleFile`
+
         Examples
         --------
-        >>> from tempfile import NamedTemporaryFile
-        >>> tmpFile = NamedTemporaryFile(delete=True)
-        >>> tmpFile.close()
-        >>> sc.parallelize([1, 2, 'spark', 'rdd']).saveAsPickleFile(tmpFile.name, 3)
-        >>> sorted(sc.pickleFile(tmpFile.name, 5).map(str).collect())
-        ['1', '2', 'rdd', 'spark']
+        >>> import os
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path = os.path.join(d, "pickle_file")
+        ...
+        ...     # Write a temporary pickled file
+        ...     sc.parallelize(range(10)).saveAsPickleFile(path, 3)
+        ...
+        ...     # Load picked file as an RDD
+        ...     sorted(sc.pickleFile(path, 3).collect())
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         """
         ser: Serializer
         if batchSize == 0:
@@ -2143,6 +3326,8 @@ class RDD(Generic[T_co]):
         """
         Save this RDD as a text file, using string representations of elements.
 
+        .. versionadded:: 0.7.0
+
         Parameters
         ----------
         path : str
@@ -2151,36 +3336,52 @@ class RDD(Generic[T_co]):
             fully qualified classname of the compression codec class
             i.e. "org.apache.hadoop.io.compress.GzipCodec" (None by default)
 
+        See Also
+        --------
+        :meth:`SparkContext.textFile`
+        :meth:`SparkContext.wholeTextFiles`
+
         Examples
         --------
-        >>> from tempfile import NamedTemporaryFile
-        >>> tempFile = NamedTemporaryFile(delete=True)
-        >>> tempFile.close()
-        >>> sc.parallelize(range(10)).saveAsTextFile(tempFile.name)
+        >>> import os
+        >>> import tempfile
         >>> from fileinput import input
         >>> from glob import glob
-        >>> ''.join(sorted(input(glob(tempFile.name + "/part-0000*"))))
+        >>> with tempfile.TemporaryDirectory() as d1:
+        ...     path1 = os.path.join(d1, "text_file1")
+        ...
+        ...     # Write a temporary text file
+        ...     sc.parallelize(range(10)).saveAsTextFile(path1)
+        ...
+        ...     # Load text file as an RDD
+        ...     ''.join(sorted(input(glob(path1 + "/part-0000*"))))
         '0\\n1\\n2\\n3\\n4\\n5\\n6\\n7\\n8\\n9\\n'
 
         Empty lines are tolerated when saving to text files.
 
-        >>> from tempfile import NamedTemporaryFile
-        >>> tempFile2 = NamedTemporaryFile(delete=True)
-        >>> tempFile2.close()
-        >>> sc.parallelize(['', 'foo', '', 'bar', '']).saveAsTextFile(tempFile2.name)
-        >>> ''.join(sorted(input(glob(tempFile2.name + "/part-0000*"))))
+        >>> with tempfile.TemporaryDirectory() as d2:
+        ...     path2 = os.path.join(d2, "text2_file2")
+        ...
+        ...     # Write another temporary text file
+        ...     sc.parallelize(['', 'foo', '', 'bar', '']).saveAsTextFile(path2)
+        ...
+        ...     # Load text file as an RDD
+        ...     ''.join(sorted(input(glob(path2 + "/part-0000*"))))
         '\\n\\n\\nbar\\nfoo\\n'
 
         Using compressionCodecClass
 
-        >>> from tempfile import NamedTemporaryFile
-        >>> tempFile3 = NamedTemporaryFile(delete=True)
-        >>> tempFile3.close()
-        >>> codec = "org.apache.hadoop.io.compress.GzipCodec"
-        >>> sc.parallelize(['foo', 'bar']).saveAsTextFile(tempFile3.name, codec)
         >>> from fileinput import input, hook_compressed
-        >>> result = sorted(input(glob(tempFile3.name + "/part*.gz"), openhook=hook_compressed))
-        >>> ''.join([r.decode('utf-8') if isinstance(r, bytes) else r for r in result])
+        >>> with tempfile.TemporaryDirectory() as d3:
+        ...     path3 = os.path.join(d3, "text3")
+        ...     codec = "org.apache.hadoop.io.compress.GzipCodec"
+        ...
+        ...     # Write another temporary text file with specified codec
+        ...     sc.parallelize(['foo', 'bar']).saveAsTextFile(path3, codec)
+        ...
+        ...     # Load text file as an RDD
+        ...     result = sorted(input(glob(path3 + "/part*.gz"), openhook=hook_compressed))
+        ...     ''.join([r.decode('utf-8') if isinstance(r, bytes) else r for r in result])
         'bar\\nfoo\\n'
         """
 
@@ -2210,6 +3411,17 @@ class RDD(Generic[T_co]):
         """
         Return the key-value pairs in this RDD to the master as a dictionary.
 
+        .. versionadded:: 0.7.0
+
+        Returns
+        -------
+        :class:`dict`
+            a dictionary of (key, value) pairs
+
+        See Also
+        --------
+        :meth:`RDD.countByValue`
+
         Notes
         -----
         This method should only be used if the resulting data is expected
@@ -2229,10 +3441,21 @@ class RDD(Generic[T_co]):
         """
         Return an RDD with the keys of each tuple.
 
+        .. versionadded:: 0.7.0
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` only containing the keys
+
+        See Also
+        --------
+        :meth:`RDD.values`
+
         Examples
         --------
-        >>> m = sc.parallelize([(1, 2), (3, 4)]).keys()
-        >>> m.collect()
+        >>> rdd = sc.parallelize([(1, 2), (3, 4)]).keys()
+        >>> rdd.collect()
         [1, 3]
         """
         return self.map(lambda x: x[0])
@@ -2241,10 +3464,21 @@ class RDD(Generic[T_co]):
         """
         Return an RDD with the values of each tuple.
 
+        .. versionadded:: 0.7.0
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` only containing the values
+
+        See Also
+        --------
+        :meth:`RDD.keys`
+
         Examples
         --------
-        >>> m = sc.parallelize([(1, 2), (3, 4)]).values()
-        >>> m.collect()
+        >>> rdd = sc.parallelize([(1, 2), (3, 4)]).values()
+        >>> rdd.collect()
         [2, 4]
         """
         return self.map(lambda x: x[1])
@@ -2265,6 +3499,30 @@ class RDD(Generic[T_co]):
         the default parallelism level if `numPartitions` is not specified.
         Default partitioner is hash-partition.
 
+        .. versionadded:: 1.6.0
+
+        Parameters
+        ----------
+        func : function
+            the reduce function
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+        partitionFunc : function, optional, default `portable_hash`
+            function to compute the partition index
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing the keys and the aggregated result for each key
+
+        See Also
+        --------
+        :meth:`RDD.reduceByKeyLocally`
+        :meth:`RDD.combineByKey`
+        :meth:`RDD.aggregateByKey`
+        :meth:`RDD.foldByKey`
+        :meth:`RDD.groupByKey`
+
         Examples
         --------
         >>> from operator import add
@@ -2281,6 +3539,23 @@ class RDD(Generic[T_co]):
 
         This will also perform the merging locally on each mapper before
         sending results to a reducer, similarly to a "combiner" in MapReduce.
+
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        func : function
+            the reduce function
+
+        Returns
+        -------
+        dict
+            a dict containing the keys and the aggregated result for each key
+
+        See Also
+        --------
+        :meth:`RDD.reduceByKey`
+        :meth:`RDD.aggregateByKey`
 
         Examples
         --------
@@ -2309,6 +3584,18 @@ class RDD(Generic[T_co]):
         Count the number of elements for each key, and return the result to the
         master as a dictionary.
 
+        .. versionadded:: 0.7.0
+
+        Returns
+        -------
+        dict
+            a dictionary of (key, count) pairs
+
+        See Also
+        --------
+        :meth:`RDD.collectAsMap`
+        :meth:`RDD.countByValue`
+
         Examples
         --------
         >>> rdd = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
@@ -2331,11 +3618,34 @@ class RDD(Generic[T_co]):
 
         Performs a hash join across the cluster.
 
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        other : :class:`RDD`
+            another :class:`RDD`
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing all pairs of elements with matching keys
+
+        See Also
+        --------
+        :meth:`RDD.leftOuterJoin`
+        :meth:`RDD.rightOuterJoin`
+        :meth:`RDD.fullOuterJoin`
+        :meth:`RDD.cogroup`
+        :meth:`RDD.groupWith`
+        :meth:`pyspark.sql.DataFrame.join`
+
         Examples
         --------
-        >>> x = sc.parallelize([("a", 1), ("b", 4)])
-        >>> y = sc.parallelize([("a", 2), ("a", 3)])
-        >>> sorted(x.join(y).collect())
+        >>> rdd1 = sc.parallelize([("a", 1), ("b", 4)])
+        >>> rdd2 = sc.parallelize([("a", 2), ("a", 3)])
+        >>> sorted(rdd1.join(rdd2).collect())
         [('a', (1, 2)), ('a', (1, 3))]
         """
         return python_join(self, other, numPartitions)
@@ -2354,11 +3664,32 @@ class RDD(Generic[T_co]):
 
         Hash-partitions the resulting RDD into the given number of partitions.
 
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        other : :class:`RDD`
+            another :class:`RDD`
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing all pairs of elements with matching keys
+
+        See Also
+        --------
+        :meth:`RDD.join`
+        :meth:`RDD.rightOuterJoin`
+        :meth:`RDD.fullOuterJoin`
+        :meth:`pyspark.sql.DataFrame.join`
+
         Examples
         --------
-        >>> x = sc.parallelize([("a", 1), ("b", 4)])
-        >>> y = sc.parallelize([("a", 2)])
-        >>> sorted(x.leftOuterJoin(y).collect())
+        >>> rdd1 = sc.parallelize([("a", 1), ("b", 4)])
+        >>> rdd2 = sc.parallelize([("a", 2)])
+        >>> sorted(rdd1.leftOuterJoin(rdd2).collect())
         [('a', (1, 2)), ('b', (4, None))]
         """
         return python_left_outer_join(self, other, numPartitions)
@@ -2377,11 +3708,32 @@ class RDD(Generic[T_co]):
 
         Hash-partitions the resulting RDD into the given number of partitions.
 
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        other : :class:`RDD`
+            another :class:`RDD`
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing all pairs of elements with matching keys
+
+        See Also
+        --------
+        :meth:`RDD.join`
+        :meth:`RDD.leftOuterJoin`
+        :meth:`RDD.fullOuterJoin`
+        :meth:`pyspark.sql.DataFrame.join`
+
         Examples
         --------
-        >>> x = sc.parallelize([("a", 1), ("b", 4)])
-        >>> y = sc.parallelize([("a", 2)])
-        >>> sorted(y.rightOuterJoin(x).collect())
+        >>> rdd1 = sc.parallelize([("a", 1), ("b", 4)])
+        >>> rdd2 = sc.parallelize([("a", 2)])
+        >>> sorted(rdd2.rightOuterJoin(rdd1).collect())
         [('a', (2, 1)), ('b', (None, 4))]
         """
         return python_right_outer_join(self, other, numPartitions)
@@ -2404,11 +3756,32 @@ class RDD(Generic[T_co]):
 
         Hash-partitions the resulting RDD into the given number of partitions.
 
+        .. versionadded:: 1.2.0
+
+        Parameters
+        ----------
+        other : :class:`RDD`
+            another :class:`RDD`
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing all pairs of elements with matching keys
+
+        See Also
+        --------
+        :meth:`RDD.join`
+        :meth:`RDD.leftOuterJoin`
+        :meth:`RDD.fullOuterJoin`
+        :meth:`pyspark.sql.DataFrame.join`
+
         Examples
         --------
-        >>> x = sc.parallelize([("a", 1), ("b", 4)])
-        >>> y = sc.parallelize([("a", 2), ("c", 8)])
-        >>> sorted(x.fullOuterJoin(y).collect())
+        >>> rdd1 = sc.parallelize([("a", 1), ("b", 4)])
+        >>> rdd2 = sc.parallelize([("a", 2), ("c", 8)])
+        >>> sorted(rdd1.fullOuterJoin(rdd2).collect())
         [('a', (1, 2)), ('b', (4, None)), ('c', (None, 8))]
         """
         return python_full_outer_join(self, other, numPartitions)
@@ -2423,6 +3796,25 @@ class RDD(Generic[T_co]):
     ) -> "RDD[Tuple[K, V]]":
         """
         Return a copy of the RDD partitioned using the specified partitioner.
+
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+        partitionFunc : function, optional, default `portable_hash`
+            function to compute the partition index
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` partitioned using the specified partitioner
+
+        See Also
+        --------
+        :meth:`RDD.repartition`
+        :meth:`RDD.repartitionAndSortWithinPartitions`
 
         Examples
         --------
@@ -2506,19 +3898,37 @@ class RDD(Generic[T_co]):
         Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined
         type" C.
 
-        Users provide three functions:
-
-            - `createCombiner`, which turns a V into a C (e.g., creates
-              a one-element list)
-            - `mergeValue`, to merge a V into a C (e.g., adds it to the end of
-              a list)
-            - `mergeCombiners`, to combine two C's into a single one (e.g., merges
-              the lists)
-
         To avoid memory allocation, both mergeValue and mergeCombiners are allowed to
         modify and return their first argument instead of creating a new C.
 
         In addition, users can control the partitioning of the output RDD.
+
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        createCombiner : function
+            a function to turns a V into a C
+        mergeValue : function
+            a function to merge a V into a C
+        mergeCombiners : function
+            a function to combine two C's into a single one
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+        partitionFunc : function, optional, default `portable_hash`
+            function to compute the partition index
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing the keys and the aggregated result for each key
+
+        See Also
+        --------
+        :meth:`RDD.reduceByKey`
+        :meth:`RDD.aggregateByKey`
+        :meth:`RDD.foldByKey`
+        :meth:`RDD.groupByKey`
 
         Notes
         -----
@@ -2527,7 +3937,7 @@ class RDD(Generic[T_co]):
 
         Examples
         --------
-        >>> x = sc.parallelize([("a", 1), ("b", 1), ("a", 2)])
+        >>> rdd = sc.parallelize([("a", 1), ("b", 1), ("a", 2)])
         >>> def to_list(a):
         ...     return [a]
         ...
@@ -2539,7 +3949,7 @@ class RDD(Generic[T_co]):
         ...     a.extend(b)
         ...     return a
         ...
-        >>> sorted(x.combineByKey(to_list, append, extend).collect())
+        >>> sorted(rdd.combineByKey(to_list, append, extend).collect())
         [('a', [1, 2]), ('b', [1])]
         """
         if numPartitions is None:
@@ -2580,6 +3990,41 @@ class RDD(Generic[T_co]):
         values within a partition, and the latter is used for merging values between
         partitions. To avoid memory allocation, both of these functions are
         allowed to modify and return their first argument instead of creating a new U.
+
+        .. versionadded:: 1.1.0
+
+        Parameters
+        ----------
+        zeroValue : U
+            the initial value for the accumulated result of each partition
+        seqFunc : function
+            a function to merge a V into a U
+        combFunc : function
+            a function to combine two U's into a single one
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+        partitionFunc : function, optional, default `portable_hash`
+            function to compute the partition index
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing the keys and the aggregated result for each key
+
+        See Also
+        --------
+        :meth:`RDD.reduceByKey`
+        :meth:`RDD.combineByKey`
+        :meth:`RDD.foldByKey`
+        :meth:`RDD.groupByKey`
+
+        Examples
+        --------
+        >>> rdd = sc.parallelize([("a", 1), ("b", 1), ("a", 2)])
+        >>> seqFunc = (lambda x, y: (x[0] + y, x[1] + 1))
+        >>> combFunc = (lambda x, y: (x[0] + y[0], x[1] + y[1]))
+        >>> sorted(rdd.aggregateByKey((0, 0), seqFunc, combFunc).collect())
+        [('a', (3, 2)), ('b', (1, 1))]
         """
 
         def createZero() -> U:
@@ -2601,6 +4046,31 @@ class RDD(Generic[T_co]):
         and a neutral "zeroValue" which may be added to the result an
         arbitrary number of times, and must not change the result
         (e.g., 0 for addition, or 1 for multiplication.).
+
+        .. versionadded:: 1.1.0
+
+        Parameters
+        ----------
+        zeroValue : V
+            the initial value for the accumulated result of each partition
+        func : function
+            a function to combine two V's into a single one
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+        partitionFunc : function, optional, default `portable_hash`
+            function to compute the partition index
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing the keys and the aggregated result for each key
+
+        See Also
+        --------
+        :meth:`RDD.reduceByKey`
+        :meth:`RDD.combineByKey`
+        :meth:`RDD.aggregateByKey`
+        :meth:`RDD.groupByKey`
 
         Examples
         --------
@@ -2629,6 +4099,27 @@ class RDD(Generic[T_co]):
         """
         Group the values for each key in the RDD into a single sequence.
         Hash-partitions the resulting RDD with numPartitions partitions.
+
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+        partitionFunc : function, optional, default `portable_hash`
+            function to compute the partition index
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing the keys and the grouped result for each key
+
+        See Also
+        --------
+        :meth:`RDD.reduceByKey`
+        :meth:`RDD.combineByKey`
+        :meth:`RDD.aggregateByKey`
+        :meth:`RDD.foldByKey`
 
         Notes
         -----
@@ -2683,11 +4174,28 @@ class RDD(Generic[T_co]):
         without changing the keys; this also retains the original RDD's
         partitioning.
 
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        f : function
+           a function to trun a V into a sequence of U
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing the keys and the flat-mapped value
+
+        See Also
+        --------
+        :meth:`RDD.flatMap`
+        :meth:`RDD.mapValues`
+
         Examples
         --------
-        >>> x = sc.parallelize([("a", ["x", "y", "z"]), ("b", ["p", "r"])])
+        >>> rdd = sc.parallelize([("a", ["x", "y", "z"]), ("b", ["p", "r"])])
         >>> def f(x): return x
-        >>> x.flatMapValues(f).collect()
+        >>> rdd.flatMapValues(f).collect()
         [('a', 'x'), ('a', 'y'), ('a', 'z'), ('b', 'p'), ('b', 'r')]
         """
 
@@ -2702,11 +4210,28 @@ class RDD(Generic[T_co]):
         without changing the keys; this also retains the original RDD's
         partitioning.
 
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        f : function
+           a function to trun a V into a U
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing the keys and the mapped value
+
+        See Also
+        --------
+        :meth:`RDD.map`
+        :meth:`RDD.flatMapValues`
+
         Examples
         --------
-        >>> x = sc.parallelize([("a", ["apple", "banana", "lemon"]), ("b", ["grapes"])])
+        >>> rdd = sc.parallelize([("a", ["apple", "banana", "lemon"]), ("b", ["grapes"])])
         >>> def f(x): return len(x)
-        >>> x.mapValues(f).collect()
+        >>> rdd.mapValues(f).collect()
         [('a', 3), ('b', 1)]
         """
 
@@ -2752,13 +4277,33 @@ class RDD(Generic[T_co]):
         """
         Alias for cogroup but with support for multiple RDDs.
 
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        other : :class:`RDD`
+            another :class:`RDD`
+        others : :class:`RDD`
+            other :class:`RDD`\\s
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing the keys and cogouped values
+
+        See Also
+        --------
+        :meth:`RDD.cogroup`
+        :meth:`RDD.join`
+
         Examples
         --------
-        >>> w = sc.parallelize([("a", 5), ("b", 6)])
-        >>> x = sc.parallelize([("a", 1), ("b", 4)])
-        >>> y = sc.parallelize([("a", 2)])
-        >>> z = sc.parallelize([("b", 42)])
-        >>> [(x, tuple(map(list, y))) for x, y in sorted(list(w.groupWith(x, y, z).collect()))]
+        >>> rdd1 = sc.parallelize([("a", 5), ("b", 6)])
+        >>> rdd2 = sc.parallelize([("a", 1), ("b", 4)])
+        >>> rdd3 = sc.parallelize([("a", 2)])
+        >>> rdd4 = sc.parallelize([("b", 42)])
+        >>> [(x, tuple(map(list, y))) for x, y in
+        ...     sorted(list(rdd1.groupWith(rdd2, rdd3, rdd4).collect()))]
         [('a', ([5], [1], [2], [])), ('b', ([6], [4], [], [42]))]
 
         """
@@ -2775,11 +4320,28 @@ class RDD(Generic[T_co]):
         contains a tuple with the list of values for that key in `self` as
         well as `other`.
 
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        other : :class:`RDD`
+            another :class:`RDD`
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing the keys and cogouped values
+
+        See Also
+        --------
+        :meth:`RDD.groupWith`
+        :meth:`RDD.join`
+
         Examples
         --------
-        >>> x = sc.parallelize([("a", 1), ("b", 4)])
-        >>> y = sc.parallelize([("a", 2)])
-        >>> [(x, tuple(map(list, y))) for x, y in sorted(list(x.cogroup(y).collect()))]
+        >>> rdd1 = sc.parallelize([("a", 1), ("b", 4)])
+        >>> rdd2 = sc.parallelize([("a", 2)])
+        >>> [(x, tuple(map(list, y))) for x, y in sorted(list(rdd1.cogroup(rdd2).collect()))]
         [('a', ([1], [2])), ('b', ([4], []))]
         """
         return python_cogroup((self, other), numPartitions)
@@ -2794,6 +4356,26 @@ class RDD(Generic[T_co]):
         Return a subset of this RDD sampled by key (via stratified sampling).
         Create a sample of this RDD using variable sampling rates for
         different keys as specified by fractions, a key to sampling rate map.
+
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        withReplacement : bool
+            whether to sample with or without replacement
+        fractions : dict
+            map of specific keys to sampling rates
+        seed : int, optional
+            seed for the random number generator
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing the stratified sampling result
+
+        See Also
+        --------
+        :meth:`RDD.sample`
 
         Examples
         --------
@@ -2822,11 +4404,29 @@ class RDD(Generic[T_co]):
         Return each (key, value) pair in `self` that has no pair with matching
         key in `other`.
 
+        .. versionadded:: 0.9.1
+
+        Parameters
+        ----------
+        other : :class:`RDD`
+            another :class:`RDD`
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` with the pairs from this whose keys are not in `other`
+
+        See Also
+        --------
+        :meth:`RDD.subtract`
+
         Examples
         --------
-        >>> x = sc.parallelize([("a", 1), ("b", 4), ("b", 5), ("a", 2)])
-        >>> y = sc.parallelize([("a", 3), ("c", None)])
-        >>> sorted(x.subtractByKey(y).collect())
+        >>> rdd1 = sc.parallelize([("a", 1), ("b", 4), ("b", 5), ("a", 2)])
+        >>> rdd2 = sc.parallelize([("a", 3), ("c", None)])
+        >>> sorted(rdd1.subtractByKey(rdd2).collect())
         [('b', 4), ('b', 5)]
         """
 
@@ -2844,11 +4444,29 @@ class RDD(Generic[T_co]):
         """
         Return each value in `self` that is not contained in `other`.
 
+        .. versionadded:: 0.9.1
+
+        Parameters
+        ----------
+        other : :class:`RDD`
+            another :class:`RDD`
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` with the elements from this that are not in `other`
+
+        See Also
+        --------
+        :meth:`RDD.subtractByKey`
+
         Examples
         --------
-        >>> x = sc.parallelize([("a", 1), ("b", 4), ("b", 5), ("a", 3)])
-        >>> y = sc.parallelize([("a", 3), ("c", None)])
-        >>> sorted(x.subtract(y).collect())
+        >>> rdd1 = sc.parallelize([("a", 1), ("b", 4), ("b", 5), ("a", 3)])
+        >>> rdd2 = sc.parallelize([("a", 3), ("c", None)])
+        >>> sorted(rdd1.subtract(rdd2).collect())
         [('a', 1), ('b', 4), ('b', 5)]
         """
         # note: here 'True' is just a placeholder
@@ -2859,11 +4477,29 @@ class RDD(Generic[T_co]):
         """
         Creates tuples of the elements in this RDD by applying `f`.
 
+        .. versionadded:: 0.9.1
+
+        Parameters
+        ----------
+        f : function
+            a function to compute the key
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` with the elements from this that are not in `other`
+
+        See Also
+        --------
+        :meth:`RDD.map`
+        :meth:`RDD.keys`
+        :meth:`RDD.values`
+
         Examples
         --------
-        >>> x = sc.parallelize(range(0,3)).keyBy(lambda x: x*x)
-        >>> y = sc.parallelize(zip(range(0,5), range(0,5)))
-        >>> [(x, list(map(list, y))) for x, y in sorted(x.cogroup(y).collect())]
+        >>> rdd1 = sc.parallelize(range(0,3)).keyBy(lambda x: x*x)
+        >>> rdd2 = sc.parallelize(zip(range(0,5), range(0,5)))
+        >>> [(x, list(map(list, y))) for x, y in sorted(rdd1.cogroup(rdd2).collect())]
         [(0, [[0], [0]]), (1, [[1], [1]]), (2, [[], [2]]), (3, [[], [3]]), (4, [[2], [4]])]
         """
         return self.map(lambda x: (f(x), x))
@@ -2876,6 +4512,24 @@ class RDD(Generic[T_co]):
          Internally, this uses a shuffle to redistribute data.
          If you are decreasing the number of partitions in this RDD, consider
          using `coalesce`, which can avoid performing a shuffle.
+
+        .. versionadded:: 1.0.0
+
+        Parameters
+        ----------
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` with exactly numPartitions partitions
+
+        See Also
+        --------
+        :meth:`RDD.coalesce`
+        :meth:`RDD.partitionBy`
+        :meth:`RDD.repartitionAndSortWithinPartitions`
 
         Examples
         --------
@@ -2893,6 +4547,24 @@ class RDD(Generic[T_co]):
         """
         Return a new RDD that is reduced into `numPartitions` partitions.
 
+        .. versionadded:: 1.0.0
+
+        Parameters
+        ----------
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+        shuffle : bool, optional, default False
+            whether to add a shuffle step
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` that is reduced into `numPartitions` partitions
+
+        See Also
+        --------
+        :meth:`RDD.repartition`
+
         Examples
         --------
         >>> sc.parallelize([1, 2, 3, 4, 5], 3).glom().collect()
@@ -2900,6 +4572,8 @@ class RDD(Generic[T_co]):
         >>> sc.parallelize([1, 2, 3, 4, 5], 3).coalesce(1).glom().collect()
         [[1, 2, 3, 4, 5]]
         """
+        if not numPartitions > 0:
+            raise ValueError("Number of partitions must be positive.")
         if shuffle:
             # Decrease the batch size in order to distribute evenly the elements across output
             # partitions. Otherwise, repartition will possibly produce highly skewed partitions.
@@ -2921,11 +4595,28 @@ class RDD(Generic[T_co]):
         number of elements in each partition (e.g. one was made through
         a map on the other).
 
+        .. versionadded:: 1.0.0
+
+        Parameters
+        ----------
+        other : :class:`RDD`
+            another :class:`RDD`
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing the zipped key-value pairs
+
+        See Also
+        --------
+        :meth:`RDD.zipWithIndex`
+        :meth:`RDD.zipWithUniqueId`
+
         Examples
         --------
-        >>> x = sc.parallelize(range(0,5))
-        >>> y = sc.parallelize(range(1000, 1005))
-        >>> x.zip(y).collect()
+        >>> rdd1 = sc.parallelize(range(0,5))
+        >>> rdd2 = sc.parallelize(range(1000, 1005))
+        >>> rdd1.zip(rdd2).collect()
         [(0, 1000), (1, 1001), (2, 1002), (3, 1003), (4, 1004)]
         """
 
@@ -2969,6 +4660,18 @@ class RDD(Generic[T_co]):
         This method needs to trigger a spark job when this RDD contains
         more than one partitions.
 
+        .. versionadded:: 1.2.0
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing the zipped key-index pairs
+
+        See Also
+        --------
+        :meth:`RDD.zip`
+        :meth:`RDD.zipWithUniqueId`
+
         Examples
         --------
         >>> sc.parallelize(["a", "b", "c", "d"], 3).zipWithIndex().collect()
@@ -2995,6 +4698,18 @@ class RDD(Generic[T_co]):
         method won't trigger a spark job, which is different from
         :meth:`zipWithIndex`.
 
+        .. versionadded:: 1.2.0
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` containing the zipped key-UniqueId pairs
+
+        See Also
+        --------
+        :meth:`RDD.zip`
+        :meth:`RDD.zipWithIndex`
+
         Examples
         --------
         >>> sc.parallelize(["a", "b", "c", "d", "e"], 3).zipWithUniqueId().collect()
@@ -3011,6 +4726,23 @@ class RDD(Generic[T_co]):
     def name(self) -> Optional[str]:
         """
         Return the name of this RDD.
+
+        .. versionadded:: 1.0.0
+
+        Returns
+        -------
+        str
+            :class:`RDD` name
+
+        See Also
+        --------
+        :meth:`RDD.setName`
+
+        Examples
+        --------
+        >>> rdd = sc.range(5)
+        >>> rdd.name() == None
+        True
         """
         n = self._jrdd.name()
         return n if n else None
@@ -3019,11 +4751,27 @@ class RDD(Generic[T_co]):
         """
         Assign a name to this RDD.
 
+        .. versionadded:: 1.0.0
+
+        Parameters
+        ----------
+        name : str
+            new name
+
+        Returns
+        -------
+        :class:`RDD`
+            the same :class:`RDD` with name updated
+
+        See Also
+        --------
+        :meth:`RDD.name`
+
         Examples
         --------
-        >>> rdd1 = sc.parallelize([1, 2])
-        >>> rdd1.setName('RDD1').name()
-        'RDD1'
+        >>> rdd = sc.parallelize([1, 2])
+        >>> rdd.setName('I am an RDD').name()
+        'I am an RDD'
         """
         self._jrdd.setName(name)
         return self
@@ -3031,6 +4779,19 @@ class RDD(Generic[T_co]):
     def toDebugString(self) -> Optional[bytes]:
         """
         A description of this RDD and its recursive dependencies for debugging.
+
+        .. versionadded:: 1.0.0
+
+        Returns
+        -------
+        bytes
+            debugging information of this :class:`RDD`
+
+        Examples
+        --------
+        >>> rdd = sc.range(5)
+        >>> rdd.toDebugString()
+        b'...PythonRDD...ParallelCollectionRDD...'
         """
         debug_string = self._jrdd.toDebugString()
 
@@ -3040,12 +4801,23 @@ class RDD(Generic[T_co]):
         """
         Get the RDD's current storage level.
 
+        .. versionadded:: 1.0.0
+
+        Returns
+        -------
+        :class:`StorageLevel`
+            current :class:`StorageLevel`
+
+        See Also
+        --------
+        :meth:`RDD.name`
+
         Examples
         --------
-        >>> rdd1 = sc.parallelize([1,2])
-        >>> rdd1.getStorageLevel()
+        >>> rdd = sc.parallelize([1,2])
+        >>> rdd.getStorageLevel()
         StorageLevel(False, False, False, False, 1)
-        >>> print(rdd1.getStorageLevel())
+        >>> print(rdd.getStorageLevel())
         Serialized 1x Replicated
         """
         java_storage_level = self._jrdd.getStorageLevel()
@@ -3078,6 +4850,18 @@ class RDD(Generic[T_co]):
         Return the list of values in the RDD for key `key`. This operation
         is done efficiently if the RDD has a known partitioner by only
         searching the partition that the key maps to.
+
+        .. versionadded:: 1.2.0
+
+        Parameters
+        ----------
+        key : K
+            the key to look up
+
+        Returns
+        -------
+        list
+            the list of values in the :class:`RDD` for key `key`
 
         Examples
         --------
@@ -3117,6 +4901,24 @@ class RDD(Generic[T_co]):
         Approximate version of count() that returns a potentially incomplete
         result within a timeout, even if not all tasks have finished.
 
+        .. versionadded:: 1.2.0
+
+        Parameters
+        ----------
+        timeout : int
+            maximum time to wait for the job, in milliseconds
+        confidence : float
+            the desired statistical confidence in the result
+
+        Returns
+        -------
+        int
+            a potentially incomplete result, with error bounds
+
+        See Also
+        --------
+        :meth:`RDD.count`
+
         Examples
         --------
         >>> rdd = sc.parallelize(range(1000), 10)
@@ -3132,6 +4934,24 @@ class RDD(Generic[T_co]):
         """
         Approximate operation to return the sum within a timeout
         or meet the confidence.
+
+        .. versionadded:: 1.2.0
+
+        Parameters
+        ----------
+        timeout : int
+            maximum time to wait for the job, in milliseconds
+        confidence : float
+            the desired statistical confidence in the result
+
+        Returns
+        -------
+        :class:`BoundedFloat`
+            a potentially incomplete result, with error bounds
+
+        See Also
+        --------
+        :meth:`RDD.sum`
 
         Examples
         --------
@@ -3153,6 +4973,24 @@ class RDD(Generic[T_co]):
         Approximate operation to return the mean within a timeout
         or meet the confidence.
 
+        .. versionadded:: 1.2.0
+
+        Parameters
+        ----------
+        timeout : int
+            maximum time to wait for the job, in milliseconds
+        confidence : float
+            the desired statistical confidence in the result
+
+        Returns
+        -------
+        :class:`BoundedFloat`
+            a potentially incomplete result, with error bounds
+
+        See Also
+        --------
+        :meth:`RDD.mean`
+
         Examples
         --------
         >>> rdd = sc.parallelize(range(1000), 10)
@@ -3170,12 +5008,23 @@ class RDD(Generic[T_co]):
         """
         Return approximate number of distinct elements in the RDD.
 
+        .. versionadded:: 1.2.0
+
         Parameters
         ----------
         relativeSD : float, optional
             Relative accuracy. Smaller values create
             counters that require more space.
             It must be greater than 0.000017.
+
+        Returns
+        -------
+        int
+            approximate number of distinct elements
+
+        See Also
+        --------
+        :meth:`RDD.distinct`
 
         Notes
         -----
@@ -3205,11 +5054,23 @@ class RDD(Generic[T_co]):
         The iterator will consume as much memory as the largest partition in this RDD.
         With prefetch it may consume up to the memory of the 2 largest partitions.
 
+        .. versionadded:: 1.3.0
+
         Parameters
         ----------
         prefetchPartitions : bool, optional
             If Spark should pre-fetch the next partition
             before it is needed.
+
+        Returns
+        -------
+        :class:`collections.abc.Iterator`
+            an iterator that contains all of the elements in this :class:`RDD`
+
+        See Also
+        --------
+        :meth:`RDD.collect`
+        :meth:`pyspark.sql.DataFrame.toLocalIterator`
 
         Examples
         --------
@@ -3242,7 +5103,7 @@ class RDD(Generic[T_co]):
 
         See Also
         --------
-        pyspark.BarrierTaskContext
+        :class:`pyspark.BarrierTaskContext`
 
         Notes
         -----
@@ -3269,6 +5130,20 @@ class RDD(Generic[T_co]):
         being acquired to calculate the RDD.
 
         .. versionadded:: 3.1.0
+
+        Parameters
+        ----------
+        profile : :class:`pyspark.resource.ResourceProfile`
+            a resource profile
+
+        Returns
+        -------
+        :class:`RDD`
+            the same :class:`RDD` with user specified profile
+
+        See Also
+        --------
+        :meth:`RDD.getResourceProfile`
 
         Notes
         -----
@@ -3299,8 +5174,12 @@ class RDD(Generic[T_co]):
 
         Returns
         -------
-        :py:class:`pyspark.resource.ResourceProfile`
+        class:`pyspark.resource.ResourceProfile`
             The user specified profile or None if none were specified
+
+        See Also
+        --------
+        :meth:`RDD.withResources`
 
         Notes
         -----
@@ -3376,7 +5255,7 @@ class RDDBarrier(Generic[T]):
 
     """
     Wraps an RDD in a barrier stage, which forces Spark to launch tasks of this stage together.
-    :class:`RDDBarrier` instances are created by :func:`RDD.barrier`.
+    :class:`RDDBarrier` instances are created by :meth:`RDD.barrier`.
 
     .. versionadded:: 2.4.0
 
@@ -3394,14 +5273,41 @@ class RDDBarrier(Generic[T]):
         """
         Returns a new RDD by applying a function to each partition of the wrapped RDD,
         where tasks are launched together in a barrier stage.
-        The interface is the same as :func:`RDD.mapPartitions`.
+        The interface is the same as :meth:`RDD.mapPartitions`.
         Please see the API doc there.
 
         .. versionadded:: 2.4.0
 
+        Parameters
+        ----------
+        f : function
+           a function to run on each partition of the RDD
+        preservesPartitioning : bool, optional, default False
+            indicates whether the input function preserves the partitioner,
+            which should be False unless this is a pair RDD and the input
+
+        Returns
+        -------
+        :class:`RDD`
+            a new :class:`RDD` by applying a function to each partition
+
+        See Also
+        --------
+        :meth:`RDD.mapPartitions`
+
         Notes
         -----
         This API is experimental
+
+        Examples
+        --------
+        >>> rdd = sc.parallelize([1, 2, 3, 4], 2)
+        >>> def f(iterator): yield sum(iterator)
+        >>> barrier = rdd.barrier()
+        >>> barrier
+        <pyspark.rdd.RDDBarrier ...>
+        >>> barrier.mapPartitions(f).collect()
+        [3, 7]
         """
 
         def func(s: int, iterator: Iterable[T]) -> Iterable[U]:
@@ -3418,14 +5324,41 @@ class RDDBarrier(Generic[T]):
         Returns a new RDD by applying a function to each partition of the wrapped RDD, while
         tracking the index of the original partition. And all tasks are launched together
         in a barrier stage.
-        The interface is the same as :func:`RDD.mapPartitionsWithIndex`.
+        The interface is the same as :meth:`RDD.mapPartitionsWithIndex`.
         Please see the API doc there.
 
         .. versionadded:: 3.0.0
 
+        Parameters
+        ----------
+        f : function
+           a function to run on each partition of the RDD
+        preservesPartitioning : bool, optional, default False
+            indicates whether the input function preserves the partitioner,
+            which should be False unless this is a pair RDD and the input
+
+        Returns
+        -------
+        :class:`RDD`
+            a new :class:`RDD` by applying a function to each partition
+
+        See Also
+        --------
+        :meth:`RDD.mapPartitionsWithIndex`
+
         Notes
         -----
         This API is experimental
+
+        Examples
+        --------
+        >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
+        >>> def f(splitIndex, iterator): yield splitIndex
+        >>> barrier = rdd.barrier()
+        >>> barrier
+        <pyspark.rdd.RDDBarrier ...>
+        >>> barrier.mapPartitionsWithIndex(f).sum()
+        6
         """
         return PipelinedRDD(self.rdd, f, preservesPartitioning, isFromBarrier=True)
 
@@ -3532,15 +5465,20 @@ class PipelinedRDD(RDD[U], Generic[T, U]):
 
 def _test() -> None:
     import doctest
+    import tempfile
     from pyspark.context import SparkContext
 
+    tmp_dir = tempfile.TemporaryDirectory()
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     globs["sc"] = SparkContext("local[4]", "PythonTest")
+    globs["sc"].setCheckpointDir(tmp_dir.name)
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["sc"].stop()
+    tmp_dir.cleanup()
     if failure_count:
+        tmp_dir.cleanup()
         sys.exit(-1)
 
 

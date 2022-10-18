@@ -66,6 +66,7 @@ Arguments: HashedRelationBroadcastMode(List(input[2, int, false], input[0, int, 
 (8) BroadcastHashJoin [codegen id : 5]
 Left keys [3]: [ss_ticket_number#4, ss_item_sk#1, ss_customer_sk#2]
 Right keys [3]: [sr_ticket_number#8, sr_item_sk#6, sr_customer_sk#7]
+Join type: Inner
 Join condition: None
 
 (9) Project [codegen id : 5]
@@ -93,6 +94,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (14) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_store_sk#3]
 Right keys [1]: [s_store_sk#11]
+Join type: Inner
 Join condition: None
 
 (15) Project [codegen id : 5]
@@ -120,6 +122,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (20) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_sold_date_sk#5]
 Right keys [1]: [d_date_sk#22]
+Join type: Inner
 Join condition: None
 
 (21) Project [codegen id : 5]
@@ -132,6 +135,7 @@ Output [1]: [d_date_sk#23]
 (23) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [sr_returned_date_sk#9]
 Right keys [1]: [d_date_sk#23]
+Join type: Inner
 Join condition: None
 
 (24) Project [codegen id : 5]

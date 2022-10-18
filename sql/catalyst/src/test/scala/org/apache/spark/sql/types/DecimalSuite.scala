@@ -201,6 +201,27 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(Decimal(10, 2, 0) - Decimal(-90, 2, 0) === Decimal(100, 3, 0))
   }
 
+  test("quot") {
+    assert(Decimal(100).quot(Decimal(100)) === Decimal(BigDecimal("1")))
+    assert(Decimal(100).quot(Decimal(33)) === Decimal(BigDecimal("3")))
+    assert(Decimal(100).quot(Decimal(-100)) === Decimal(BigDecimal("-1")))
+    assert(Decimal(100).quot(Decimal(-33)) === Decimal(BigDecimal("-3")))
+  }
+
+  test("negate & abs") {
+    assert(-Decimal(100) === Decimal(BigDecimal("-100")))
+    assert(-Decimal(-100) === Decimal(BigDecimal("100")))
+    assert(Decimal(100).abs === Decimal(BigDecimal("100")))
+    assert(Decimal(-100).abs === Decimal(BigDecimal("100")))
+  }
+
+  test("floor & ceil") {
+    assert(Decimal("10.03").floor === Decimal(BigDecimal("10")))
+    assert(Decimal("10.03").ceil === Decimal(BigDecimal("11")))
+    assert(Decimal("-10.03").floor === Decimal(BigDecimal("-11")))
+    assert(Decimal("-10.03").ceil === Decimal(BigDecimal("-10")))
+  }
+
   // regression test for SPARK-8359
   test("accurate precision after multiplication") {
     val decimal = (Decimal(Long.MaxValue, 38, 0) * Decimal(Long.MaxValue, 38, 0)).toJavaBigDecimal

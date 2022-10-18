@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.Utils
 import org.apache.spark.util.random.RandomSampler
 
 /**
@@ -88,7 +89,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     getAllValidConstraints(projectList)
 
   override def metadataOutput: Seq[Attribute] =
-    getTagValue(Project.hiddenOutputTag).getOrElse(Nil)
+    getTagValue(Project.hiddenOutputTag).getOrElse(child.metadataOutput)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Project =
     copy(child = newChild)
@@ -96,6 +97,135 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
 
 object Project {
   val hiddenOutputTag: TreeNodeTag[Seq[Attribute]] = TreeNodeTag[Seq[Attribute]]("hidden_output")
+
+  def matchSchema(plan: LogicalPlan, schema: StructType, conf: SQLConf): Project = {
+    assert(plan.resolved)
+    val projectList = reorderFields(plan.output.map(a => (a.name, a)), schema.fields, Nil, conf)
+    Project(projectList, plan)
+  }
+
+  private def reconcileColumnType(
+      col: Expression,
+      columnPath: Seq[String],
+      dt: DataType,
+      nullable: Boolean,
+      conf: SQLConf): Expression = {
+    if (col.nullable && !nullable) {
+      throw QueryCompilationErrors.nullableColumnOrFieldError(columnPath)
+    }
+    (col.dataType, dt) match {
+      case (StructType(fields), expected: StructType) =>
+        val newFields = reorderFields(
+          fields.zipWithIndex.map { case (f, index) =>
+            (f.name, GetStructField(col, index))
+          },
+          expected.fields,
+          columnPath,
+          conf)
+        if (col.nullable) {
+          If(IsNull(col), Literal(null, dt), CreateStruct(newFields))
+        } else {
+          CreateStruct(newFields)
+        }
+
+      case (ArrayType(et, containsNull), expected: ArrayType) =>
+        if (containsNull & !expected.containsNull) {
+          throw QueryCompilationErrors.nullableArrayOrMapElementError(columnPath)
+        }
+        val param = NamedLambdaVariable("x", et, containsNull)
+        val reconciledElement = reconcileColumnType(
+          param, columnPath :+ "element", expected.elementType, expected.containsNull, conf)
+        val func = LambdaFunction(reconciledElement, Seq(param))
+        ArrayTransform(col, func)
+
+      case (MapType(kt, vt, valueContainsNull), expected: MapType) =>
+        if (valueContainsNull & !expected.valueContainsNull) {
+          throw QueryCompilationErrors.nullableArrayOrMapElementError(columnPath)
+        }
+        val keyParam = NamedLambdaVariable("key", kt, nullable = false)
+        val valueParam = NamedLambdaVariable("value", vt, valueContainsNull)
+        val reconciledKey = reconcileColumnType(
+          keyParam, columnPath :+ "key", expected.keyType, false, conf)
+        val reconciledValue = reconcileColumnType(
+          valueParam, columnPath :+ "value", expected.valueType, expected.valueContainsNull, conf)
+        val keyFunc = LambdaFunction(reconciledKey, Seq(keyParam))
+        val valueFunc = LambdaFunction(reconciledValue, Seq(valueParam))
+        val newKeys = ArrayTransform(MapKeys(col), keyFunc)
+        val newValues = ArrayTransform(MapValues(col), valueFunc)
+        MapFromArrays(newKeys, newValues)
+
+      case (other, target) =>
+        if (other == target) {
+          col
+        } else if (Cast.canANSIStoreAssign(other, target)) {
+          Cast(col, target, Option(conf.sessionLocalTimeZone), ansiEnabled = true)
+        } else {
+          throw QueryCompilationErrors.invalidColumnOrFieldDataTypeError(columnPath, other, target)
+        }
+    }
+  }
+
+  private def reorderFields(
+      fields: Seq[(String, Expression)],
+      expected: Seq[StructField],
+      columnPath: Seq[String],
+      conf: SQLConf): Seq[NamedExpression] = {
+    expected.map { f =>
+      val matched = fields.filter(field => conf.resolver(field._1, f.name))
+      if (matched.isEmpty) {
+        if (f.nullable) {
+          val columnExpr = Literal.create(null, f.dataType)
+          // Fill nullable missing new column with null value.
+          createNewColumn(columnExpr, f.name, f.metadata, Metadata.empty)
+        } else {
+          if (columnPath.isEmpty) {
+            val candidates = fields.map(_._1)
+            val orderedCandidates =
+              StringUtils.orderStringsBySimilarity(f.name, candidates)
+            throw QueryCompilationErrors.unresolvedColumnError(f.name, orderedCandidates)
+          } else {
+            throw QueryCompilationErrors.unresolvedFieldError(f.name, columnPath, fields.map(_._1))
+          }
+        }
+      } else if (matched.length > 1) {
+        throw QueryCompilationErrors.ambiguousColumnOrFieldError(
+          columnPath :+ f.name, matched.length)
+      } else {
+        val columnExpr = matched.head._2
+        val originalMetadata = columnExpr match {
+          case ne: NamedExpression => ne.metadata
+          case g: GetStructField => g.childSchema(g.ordinal).metadata
+          case _ => Metadata.empty
+        }
+
+        val newColumnPath = columnPath :+ matched.head._1
+        val newColumnExpr = reconcileColumnType(
+          columnExpr, newColumnPath, f.dataType, f.nullable, conf)
+        createNewColumn(newColumnExpr, f.name, f.metadata, originalMetadata)
+      }
+    }
+  }
+
+  private def createNewColumn(
+      col: Expression,
+      name: String,
+      newMetadata: Metadata,
+      originalMetadata: Metadata): NamedExpression = {
+    val metadata = new MetadataBuilder()
+      .withMetadata(originalMetadata)
+      .withMetadata(newMetadata)
+      .build()
+
+    col match {
+      case a: Attribute => a.withName(name).withMetadata(metadata)
+      case other =>
+        if (metadata == Metadata.empty) {
+          Alias(other, name)()
+        } else {
+          Alias(other, name)(explicitMetadata = Some(metadata))
+        }
+    }
+  }
 }
 
 /**
@@ -1106,7 +1236,7 @@ object Expand {
     groupByAttrs: Seq[Attribute],
     gid: Attribute,
     child: LogicalPlan): Expand = {
-    val attrMap = groupByAttrs.zipWithIndex.toMap
+    val attrMap = Utils.toMapWithIndex(groupByAttrs)
 
     val hasDuplicateGroupingSets = groupingSetsAttrs.size !=
       groupingSetsAttrs.map(_.map(_.exprId).toSet).distinct.size
@@ -1245,6 +1375,115 @@ case class Pivot(
   override protected def withNewChildInternal(newChild: LogicalPlan): Pivot = copy(child = newChild)
 }
 
+
+/**
+ * A constructor for creating an Unpivot, which will later be converted to an [[Expand]]
+ * during the query analysis.
+ *
+ * Either ids or values array must be set. The ids array can be empty,
+ * the values array must not be empty if not None.
+ *
+ * A None ids array will be replaced during analysis with all resolved outputs of child except
+ * the values. This expansion allows to easily select all non-value columns as id columns.
+ *
+ * A None values array will be replaced during analysis with all resolved outputs of child except
+ * the ids. This expansion allows to easily unpivot all non-id columns.
+ *
+ * @see `org.apache.spark.sql.catalyst.analysis.Analyzer.ResolveUnpivot`
+ *
+ * Multiple columns can be unpivoted in one row by providing multiple value column names
+ * and the same number of unpivot value expressions:
+ * {{{
+ *   // one-dimensional value columns
+ *   Unpivot(
+ *     Some(Seq("id")),
+ *     Some(Seq(
+ *       Seq("val1"),
+ *       Seq("val2")
+ *     )),
+ *     None,
+ *     "var",
+ *     Seq("val")
+ *   )
+ *
+ *   // two-dimensional value columns
+ *   Unpivot(
+ *     Some(Seq("id")),
+ *     Some(Seq(
+ *       Seq("val1.1", "val1.2"),
+ *       Seq("val2.1", "val2.2")
+ *     )),
+ *     None,
+ *     "var",
+ *     Seq("val1", "val2")
+ *   )
+ * }}}
+ *
+ * The variable column will contain the name of the unpivot value while the value columns contain
+ * the unpivot values. Multi-dimensional unpivot values can be given `aliases`:
+ * }}}
+ *   // two-dimensional value columns with aliases
+ *   Unpivot(
+ *     Some(Seq("id")),
+ *     Some(Seq(
+ *       Seq("val1.1", "val1.2"),
+ *       Seq("val2.1", "val2.2")
+ *     )),
+ *     Some(Seq(
+ *       Some("val1"),
+ *       Some("val2")
+ *     )),
+ *     "var",
+ *     Seq("val1", "val2")
+ *   )
+ * }}}
+ *
+ * All "value" columns must share a least common data type. Unless they are the same data type,
+ * all "value" columns are cast to the nearest common data type. For instance,
+ * types `IntegerType` and `LongType` are cast to `LongType`, while `IntegerType` and `StringType`
+ * do not have a common data type and `unpivot` fails with an `AnalysisException`.
+ *
+ * @see `org.apache.spark.sql.catalyst.analysis.TypeCoercionBase.UnpivotCoercion`
+ *
+ * @param ids                Id columns
+ * @param values             Value columns to unpivot
+ * @param aliases            Optional aliases for values
+ * @param variableColumnName Name of the variable column
+ * @param valueColumnNames   Names of the value columns
+ * @param child              Child operator
+ */
+case class Unpivot(
+    ids: Option[Seq[NamedExpression]],
+    values: Option[Seq[Seq[NamedExpression]]],
+    aliases: Option[Seq[Option[String]]],
+    variableColumnName: String,
+    valueColumnNames: Seq[String],
+    child: LogicalPlan) extends UnaryNode {
+  // There should be no code path that creates `Unpivot` with both set None
+  assert(ids.isDefined || values.isDefined, "at least one of `ids` and `values` must be defined")
+
+  override lazy val resolved = false  // Unpivot will be replaced after being resolved.
+  override def output: Seq[Attribute] = Nil
+  override def metadataOutput: Seq[Attribute] = Nil
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNPIVOT)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): Unpivot =
+    copy(child = newChild)
+
+  def canBeCoercioned: Boolean = values.exists(_.nonEmpty) &&
+    values.exists(_.forall(_.forall(_.resolved))) &&
+    // when no ids are given, values must be Attributes (column names) to allow detecting ids
+    // coercion will add aliases, would disallow detecting ids, so defer coercion after id detection
+    ids.exists(_.forall(_.resolved))
+
+  def valuesTypeCoercioned: Boolean = canBeCoercioned &&
+    // all inner values at position idx must have the same data type
+    values.get.head.zipWithIndex.forall { case (v, idx) =>
+      values.get.tail.forall(vals => vals(idx).dataType.sameType(v.dataType))
+    }
+
+}
+
 /**
  * A constructor for creating a logical limit, which is split into two separate logical nodes:
  * a [[LocalLimit]], which is a partition local limit, followed by a [[GlobalLimit]].
@@ -1283,8 +1522,13 @@ object Limit {
  * A global (coordinated) limit. This operator can emit at most `limitExpr` number in total.
  *
  * See [[Limit]] for more information.
+ *
+ * Note that, we can not make it inherit [[OrderPreservingUnaryNode]] due to the different strategy
+ * of physical plan. The output ordering of child will be broken if a shuffle exchange comes in
+ * between the child and global limit, due to the fact that shuffle reader fetches blocks in random
+ * order.
  */
-case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
+case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = {
     limitExpr match {
@@ -1386,9 +1630,14 @@ case class SubqueryAlias(
   }
 
   override def metadataOutput: Seq[Attribute] = {
-    val qualifierList = identifier.qualifier :+ alias
-    val nonHiddenMetadataOutput = child.metadataOutput.filter(!_.supportsQualifiedStar)
-    nonHiddenMetadataOutput.map(_.withQualifier(qualifierList))
+    // Propagate metadata columns from leaf nodes through a chain of `SubqueryAlias`.
+    if (child.isInstanceOf[LeafNode] || child.isInstanceOf[SubqueryAlias]) {
+      val qualifierList = identifier.qualifier :+ alias
+      val nonHiddenMetadataOutput = child.metadataOutput.filter(!_.qualifiedAccessOnly)
+      nonHiddenMetadataOutput.map(_.withQualifier(qualifierList))
+    } else {
+      Nil
+    }
   }
 
   override def maxRows: Option[Long] = child.maxRows

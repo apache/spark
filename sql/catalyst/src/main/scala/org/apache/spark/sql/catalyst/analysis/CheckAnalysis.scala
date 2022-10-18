@@ -33,6 +33,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.Utils
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
@@ -113,12 +114,22 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
-    // We transform up and order the rules so as to catch the first possible failure instead
-    // of the result of cascading resolution failures. Inline all CTEs in the plan to help check
-    // query plan structures in subqueries.
     val inlineCTE = InlineCTE(alwaysInline = true)
-    inlineCTE(plan).foreachUp {
+    val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int)]
+    inlineCTE.buildCTEMap(plan, cteMap)
+    cteMap.values.foreach { case (relation, refCount) =>
+      // If a CTE relation is never used, it will disappear after inline. Here we explicitly check
+      // analysis for it, to make sure the entire query plan is valid.
+      if (refCount == 0) checkAnalysis0(relation.child)
+    }
+    // Inline all CTEs in the plan to help check query plan structures in subqueries.
+    checkAnalysis0(inlineCTE(plan))
+  }
 
+  def checkAnalysis0(plan: LogicalPlan): Unit = {
+    // We transform up and order the rules so as to catch the first possible failure instead
+    // of the result of cascading resolution failures.
+    plan.foreachUp {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case leaf: LeafNode if leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
@@ -126,27 +137,19 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           "[BUG] logical plan should not have output of char/varchar type: " + leaf)
 
       case u: UnresolvedNamespace =>
-        u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
+        u.schemaNotFound(u.multipartIdentifier)
 
       case u: UnresolvedTable =>
-        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
-
-      case u @ UnresolvedView(NonSessionCatalogAndIdentifier(catalog, ident), cmd, _, _) =>
-        u.failAnalysis(
-          s"Cannot specify catalog `${catalog.name}` for view ${ident.quoted} " +
-            "because view support in v2 catalog has not been implemented yet. " +
-            s"$cmd expects a view.")
+        u.tableNotFound(u.multipartIdentifier)
 
       case u: UnresolvedView =>
-        u.failAnalysis(s"View not found: ${u.multipartIdentifier.quoted}")
+        u.tableNotFound(u.multipartIdentifier)
 
       case u: UnresolvedTableOrView =>
-        val viewStr = if (u.allowTempView) "view" else "permanent view"
-        u.failAnalysis(
-          s"Table or $viewStr not found: ${u.multipartIdentifier.quoted}")
+        u.tableNotFound(u.multipartIdentifier)
 
       case u: UnresolvedRelation =>
-        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+        u.tableNotFound(u.multipartIdentifier)
 
       case u: UnresolvedFunc =>
         throw QueryCompilationErrors.noSuchFunctionError(
@@ -156,12 +159,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         u.failAnalysis(s"Hint not found: ${u.name}")
 
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
-        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+        u.tableNotFound(u.multipartIdentifier)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
-        write.table.failAnalysis(s"Table or view not found: ${tblName.quoted}")
+        write.table.tableNotFound(tblName)
 
       case command: V2PartitionCommand =>
         command.table match {
@@ -189,6 +192,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case hof: HigherOrderFunction
               if hof.argumentsResolved && hof.checkArgumentDataTypes().isFailure =>
             hof.checkArgumentDataTypes() match {
+              case checkRes: TypeCheckResult.DataTypeMismatch =>
+                hof.dataTypeMismatch(hof, checkRes)
               case TypeCheckResult.TypeCheckFailure(message) =>
                 hof.failAnalysis(
                   s"cannot resolve '${hof.sql}' due to argument data type mismatch: $message")
@@ -196,7 +201,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           // If an attribute can't be resolved as a map key of string type, either the key should be
           // surrounded with single quotes, or there is a typo in the attribute name.
-          case GetMapValue(map, key: Attribute, _) if isMapWithStringKey(map) && !key.resolved =>
+          case GetMapValue(map, key: Attribute) if isMapWithStringKey(map) && !key.resolved =>
             failUnresolvedAttribute(operator, key, "UNRESOLVED_MAP_KEY")
         }
 
@@ -211,6 +216,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
+              case checkRes: TypeCheckResult.DataTypeMismatch =>
+                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
+                e.dataTypeMismatch(e, checkRes)
               case TypeCheckResult.TypeCheckFailure(message) =>
                 e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
                 e.failAnalysis(
@@ -221,7 +229,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case c: Cast if !c.resolved =>
             failAnalysis(s"invalid cast from ${c.child.dataType.catalogString} to " +
               c.dataType.catalogString)
-
           case e: RuntimeReplaceable if !e.replacement.resolved =>
             throw new IllegalStateException("Illegal RuntimeReplaceable: " + e +
               "\nReplacement is unresolved: " + e.replacement)
@@ -343,11 +350,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                     s"if you don't care which value you get."
                 )
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
-                failAnalysis(
-                  s"expression '${e.sql}' is neither present in the group by, " +
-                    s"nor is it an aggregate function. " +
-                    "Add to group by or wrap in first() (or first_value) if you don't care " +
-                    "which value you get.")
+                throw QueryCompilationErrors.columnNotInGroupByClauseError(e)
               case s: ScalarSubquery
                   if s.children.nonEmpty && !groupingExprs.exists(_.semanticEquals(s)) =>
                 failAnalysis(s"Correlated scalar subquery '${s.sql}' is neither " +
@@ -422,6 +425,30 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             }
             metrics.foreach(m => checkMetric(m, m))
 
+          // see Analyzer.ResolveUnpivot
+          // given ids must be AttributeReference when no values given
+          case up @Unpivot(Some(ids), None, _, _, _, _)
+            if up.childrenResolved && ids.forall(_.resolved) &&
+              ids.exists(! _.isInstanceOf[AttributeReference]) =>
+            throw QueryCompilationErrors.unpivotRequiresAttributes("id", "value", up.ids.get)
+          // given values must be AttributeReference when no ids given
+          case up @Unpivot(None, Some(values), _, _, _, _)
+            if up.childrenResolved && values.forall(_.forall(_.resolved)) &&
+              values.exists(_.exists(! _.isInstanceOf[AttributeReference])) =>
+            throw QueryCompilationErrors.unpivotRequiresAttributes("value", "id", values.flatten)
+          // given values must not be empty seq
+          case up @Unpivot(Some(ids), Some(Seq()), _, _, _, _)
+            if up.childrenResolved && ids.forall(_.resolved) =>
+            throw QueryCompilationErrors.unpivotRequiresValueColumns()
+          // all values must have same length as there are value column names
+          case up @Unpivot(Some(ids), Some(values), _, _, _, _)
+            if up.childrenResolved && ids.forall(_.resolved) &&
+              values.exists(_.length != up.valueColumnNames.length) =>
+            throw QueryCompilationErrors.unpivotValueSizeMismatchError(up.valueColumnNames.length)
+          // see TypeCoercionBase.UnpivotCoercion
+          case up: Unpivot if up.canBeCoercioned && !up.valuesTypeCoercioned =>
+            throw QueryCompilationErrors.unpivotValueDataTypeMismatchError(up.values.get)
+
           case Sort(orders, _, _) =>
             orders.foreach { order =>
               if (!RowOrdering.isOrderable(order.dataType)) {
@@ -480,10 +507,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 if (!dataTypesAreCompatibleFn(dt1, dt2)) {
                   val errorMessage =
                     s"""
-                       |${operator.nodeName} can only be performed on tables with the compatible
+                       |${operator.nodeName} can only be performed on tables with compatible
                        |column types. The ${ordinalNumber(ci)} column of the
                        |${ordinalNumber(ti + 1)} table is ${dt1.catalogString} type which is not
-                       |compatible with ${dt2.catalogString} at same column of first table
+                       |compatible with ${dt2.catalogString} at the same column of the first table
                     """.stripMargin.replace("\n", " ").trim()
                   failAnalysis(errorMessage + extraHintForAnsiTypeCoercionPlan(operator))
                 }
@@ -686,7 +713,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         case e: Expression if e.getTagValue(DATA_TYPE_MISMATCH_ERROR).contains(true) &&
             e.checkInputDataTypes().isFailure =>
           e.checkInputDataTypes() match {
-            case TypeCheckResult.TypeCheckFailure(_) =>
+            case TypeCheckResult.TypeCheckFailure(_) | _: TypeCheckResult.DataTypeMismatch =>
               issueFixedIfAnsiOff = false
           }
 
@@ -723,6 +750,19 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }
   }
 
+  private def scrubOutIds(string: String): String =
+    string.replaceAll("#\\d+", "#x")
+      .replaceAll("operator id = \\d+", "operator id = #x")
+
+  private def planToString(plan: LogicalPlan): String = {
+    if (Utils.isTesting) scrubOutIds(plan.toString) else plan.toString
+  }
+
+  private def exprsToString(exprs: Seq[Expression]): String = {
+    val result = exprs.map(_.toString).mkString("\n")
+    if (Utils.isTesting) scrubOutIds(result) else result
+  }
+
   /**
    * Validates subquery expressions in the plan. Upon failure, returns an user facing error.
    */
@@ -736,7 +776,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         case a: AggregateExpression => a
       })
       if (aggregates.isEmpty) {
-        failAnalysis("The output of a correlated scalar subquery must be aggregated")
+        expr.failAnalysis(
+          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT",
+          messageParameters = Map.empty)
       }
 
       // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
@@ -749,10 +792,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       val invalidCols = groupByCols -- correlatedCols
       // GROUP BY columns must be a subset of columns in the predicates
       if (invalidCols.nonEmpty) {
-        failAnalysis(
-          "A GROUP BY clause in a scalar correlated subquery " +
-            "cannot contain non-correlated columns: " +
-            invalidCols.mkString(","))
+        expr.failAnalysis(
+          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            "NON_CORRELATED_COLUMNS_IN_GROUP_BY",
+          messageParameters = Map("value" -> invalidCols.map(_.name).mkString(",")))
       }
     }
 
@@ -777,7 +820,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             case o: OuterReference =>
               p.children.foreach(e =>
                 if (!e.output.exists(_.exprId == o.exprId)) {
-                  failAnalysis("outer attribute not found")
+                  o.failAnalysis(
+                    errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+                      "CORRELATED_COLUMN_NOT_FOUND",
+                    messageParameters = Map("value" -> o.name))
                 })
             case _ =>
           })
@@ -795,8 +841,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case ScalarSubquery(query, outerAttrs, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
-          failAnalysis(
-            s"Scalar subquery must return only one column, but got ${query.output.size}")
+          expr.failAnalysis(
+            errorClass = "INVALID_SUBQUERY_EXPRESSION." +
+              "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+            messageParameters = Map("number" -> query.output.size.toString))
         }
 
         if (outerAttrs.nonEmpty) {
@@ -804,7 +852,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             case a: Aggregate => checkAggregateInScalarSubquery(outerAttrs, query, a)
             case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(outerAttrs, query, a)
             case p: LogicalPlan if p.maxRows.exists(_ <= 1) => // Ok
-            case fail => failAnalysis(s"Correlated scalar subqueries must be aggregated: $fail")
+            case other =>
+              expr.failAnalysis(
+                errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+                  "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
+                messageParameters = Map("treeNode" -> planToString(other)))
           }
 
           // Only certain operators are allowed to host subquery expression containing
@@ -816,12 +868,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               // it must also be in the aggregate expressions to be rewritten in the optimization
               // phase.
               if (containsExpr(a.groupingExpressions) && !containsExpr(a.aggregateExpressions)) {
-                failAnalysis("Correlated scalar subqueries in the group by clause " +
-                  s"must also be in the aggregate expressions:\n$a")
+                a.failAnalysis(
+                  errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+                    "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
+                  messageParameters = Map("treeNode" -> planToString(a)))
               }
-            case other => failAnalysis(
-              "Correlated scalar sub-queries can only be used in a " +
-                s"Filter/Aggregate/Project and a few commands: $plan")
+            case other =>
+              other.failAnalysis(
+                errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+                  "UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY",
+                messageParameters = Map("treeNode" -> planToString(other)))
           }
         }
         // Validate to make sure the correlations appearing in the query are valid and
@@ -835,13 +891,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         // cannot be decorrelated. Otherwise it may produce incorrect results.
         if (!expr.deterministic && !join.left.maxRows.exists(_ <= 1)) {
           expr.failAnalysis(
-            s"Non-deterministic lateral subqueries are not supported when joining with " +
-              s"outer relations that produce more than one row\n${expr.plan}")
+            errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+              "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+            messageParameters = Map("treeNode" -> planToString(plan)))
         }
         // Check if the lateral join's join condition is deterministic.
         if (join.condition.exists(!_.deterministic)) {
-          join.failAnalysis(
-            s"Lateral join condition cannot be non-deterministic: ${join.condition.get.sql}")
+          join.condition.get.failAnalysis(
+            errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+              "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC",
+            messageParameters = Map("condition" -> join.condition.get.sql))
         }
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.
@@ -852,8 +911,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case _: Filter | _: SupportsSubquery | _: Join |
             _: Project | _: Aggregate | _: Window => // Ok
           case _ =>
-            failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
-              s" Filter/Join/Project/Aggregate/Window and a few commands: $plan")
+            expr.failAnalysis(
+              errorClass =
+                "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_IN_EXISTS_SUBQUERY",
+              messageParameters = Map("treeNode" -> planToString(plan)))
         }
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.
@@ -907,16 +968,22 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       expr.foreach {
         case a: AggregateExpression if containsOuter(a) =>
           if (a.references.nonEmpty) {
-            throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql)
+            a.failAnalysis(
+              errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+                "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
+              messageParameters = Map("function" -> a.sql))
           }
         case _ =>
       }
     }
 
-    // Make sure a plan's subtree does not contain outer references
-    def failOnOuterReferenceInSubTree(p: LogicalPlan): Unit = {
-      if (hasOuterReferences(p)) {
-        failAnalysis(s"Accessing outer query column is not allowed in:\n$p")
+    // Make sure expressions of a plan do not contain outer references.
+    def failOnOuterReferenceInPlan(p: LogicalPlan): Unit = {
+      if (p.expressions.exists(containsOuter)) {
+        p.failAnalysis(
+          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+          messageParameters = Map("treeNode" -> planToString(p)))
       }
     }
 
@@ -935,9 +1002,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     def failOnInvalidOuterReference(p: LogicalPlan): Unit = {
       p.expressions.foreach(checkMixedReferencesInsideAggregateExpr)
       if (!canHostOuter(p) && p.expressions.exists(containsOuter)) {
-        failAnalysis(
-          "Expressions referencing the outer query are not supported outside of WHERE/HAVING " +
-            s"clauses:\n$p")
+        p.failAnalysis(
+          errorClass =
+            "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_REFERENCE",
+          messageParameters = Map("treeNode" -> planToString(p)))
       }
     }
 
@@ -1000,15 +1068,24 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     def failOnUnsupportedCorrelatedPredicate(predicates: Seq[Expression], p: LogicalPlan): Unit = {
       if (predicates.nonEmpty) {
         // Report a non-supported case as an exception
-        failAnalysis("Correlated column is not allowed in predicate " +
-          s"${predicates.map(_.sql).mkString}:\n$p")
+        p.failAnalysis(
+          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
+          messageParameters =
+            Map("treeNode" -> s"${exprsToString(predicates)}\n${planToString(p)}"))
       }
     }
 
-    val unsupportedPredicates = mutable.ArrayBuffer.empty[Expression]
+    // Recursively check invalid outer references in the plan.
+    def checkPlan(
+        plan: LogicalPlan,
+        aggregated: Boolean = false,
+        canContainOuter: Boolean = true): Unit = {
 
-    // Simplify the predicates before validating any unsupported correlation patterns in the plan.
-    AnalysisHelper.allowInvokingTransformsInAnalyzer { BooleanSimplification(sub).foreachUp {
+      if (!canContainOuter) {
+        failOnOuterReferenceInPlan(plan)
+      }
+
       // Approve operators allowed in a correlated subquery
       // There are 4 categories:
       // 1. Operators that are allowed anywhere in a correlated subquery, and,
@@ -1016,7 +1093,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       //    any columns or cannot host outer references.
       // 2. Operators that are allowed anywhere in a correlated subquery
       //    so long as they do not host outer references.
-      // 3. Operators that need special handlings. These operators are
+      // 3. Operators that need special handling. These operators are
       //    Filter, Join, Aggregate, and Generate.
       //
       // Any operators that are not in the above list are allowed
@@ -1026,99 +1103,114 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       // A correlation path is defined as the sub-tree of all the operators that
       // are on the path from the operator hosting the correlated expressions
       // up to the operator producing the correlated values.
+      plan match {
+        // Category 1:
+        // ResolvedHint, LeafNode, Repartition, and SubqueryAlias
+        case p @ (_: ResolvedHint | _: LeafNode | _: Repartition | _: SubqueryAlias) =>
+          p.children.foreach(child => checkPlan(child, aggregated, canContainOuter))
 
-      // Category 1:
-      // ResolvedHint, LeafNode, Repartition, and SubqueryAlias
-      case _: ResolvedHint | _: LeafNode | _: Repartition | _: SubqueryAlias =>
+        // Category 2:
+        // These operators can be anywhere in a correlated subquery.
+        // so long as they do not host outer references in the operators.
+        case p: Project =>
+          failOnInvalidOuterReference(p)
+          checkPlan(p.child, aggregated, canContainOuter)
 
-      // Category 2:
-      // These operators can be anywhere in a correlated subquery.
-      // so long as they do not host outer references in the operators.
-      case p: Project =>
-        failOnInvalidOuterReference(p)
+        case s: Sort =>
+          failOnInvalidOuterReference(s)
+          checkPlan(s.child, aggregated, canContainOuter)
 
-      case s: Sort =>
-        failOnInvalidOuterReference(s)
+        case r: RepartitionByExpression =>
+          failOnInvalidOuterReference(r)
+          checkPlan(r.child, aggregated, canContainOuter)
 
-      case r: RepartitionByExpression =>
-        failOnInvalidOuterReference(r)
+        case l: LateralJoin =>
+          failOnInvalidOuterReference(l)
+          checkPlan(l.child, aggregated, canContainOuter)
 
-      case l: LateralJoin =>
-        failOnInvalidOuterReference(l)
+        // Category 3:
+        // Filter is one of the two operators allowed to host correlated expressions.
+        // The other operator is Join. Filter can be anywhere in a correlated subquery.
+        case f: Filter =>
+          failOnInvalidOuterReference(f)
+          val (correlated, _) = splitConjunctivePredicates(f.condition).partition(containsOuter)
+          val unsupportedPredicates = correlated.filterNot(DecorrelateInnerQuery.canPullUpOverAgg)
+          if (aggregated) {
+            failOnUnsupportedCorrelatedPredicate(unsupportedPredicates, f)
+          }
+          checkPlan(f.child, aggregated, canContainOuter)
 
-      // Category 3:
-      // Filter is one of the two operators allowed to host correlated expressions.
-      // The other operator is Join. Filter can be anywhere in a correlated subquery.
-      case f: Filter =>
-        val (correlated, _) = splitConjunctivePredicates(f.condition).partition(containsOuter)
-        unsupportedPredicates ++= correlated.filterNot(DecorrelateInnerQuery.canPullUpOverAgg)
-        failOnInvalidOuterReference(f)
+        // Aggregate cannot host any correlated expressions
+        // It can be on a correlation path if the correlation contains
+        // only supported correlated equality predicates.
+        // It cannot be on a correlation path if the correlation has
+        // non-equality correlated predicates.
+        case a: Aggregate =>
+          failOnInvalidOuterReference(a)
+          checkPlan(a.child, aggregated = true, canContainOuter)
 
-      // Aggregate cannot host any correlated expressions
-      // It can be on a correlation path if the correlation contains
-      // only supported correlated equality predicates.
-      // It cannot be on a correlation path if the correlation has
-      // non-equality correlated predicates.
-      case a: Aggregate =>
-        failOnInvalidOuterReference(a)
-        failOnUnsupportedCorrelatedPredicate(unsupportedPredicates.toSeq, a)
+        // Distinct does not host any correlated expressions, but during the optimization phase
+        // it will be rewritten as Aggregate, which can only be on a correlation path if the
+        // correlation contains only the supported correlated equality predicates.
+        // Only block it for lateral subqueries because scalar subqueries must be aggregated
+        // and it does not impact the results for IN/EXISTS subqueries.
+        case d: Distinct =>
+          checkPlan(d.child, aggregated = isLateral, canContainOuter)
 
-      // Distinct does not host any correlated expressions, but during the optimization phase
-      // it will be rewritten as Aggregate, which can only be on a correlation path if the
-      // correlation contains only the supported correlated equality predicates.
-      // Only block it for lateral subqueries because scalar subqueries must be aggregated
-      // and it does not impact the results for IN/EXISTS subqueries.
-      case d: Distinct =>
-        if (isLateral) {
-          failOnUnsupportedCorrelatedPredicate(unsupportedPredicates.toSeq, d)
-        }
+        // Join can host correlated expressions.
+        case j @ Join(left, right, joinType, _, _) =>
+          failOnInvalidOuterReference(j)
+          joinType match {
+            // Inner join, like Filter, can be anywhere.
+            case _: InnerLike =>
+              j.children.foreach(child => checkPlan(child, aggregated, canContainOuter))
 
-      // Join can host correlated expressions.
-      case j @ Join(left, right, joinType, _, _) =>
-        joinType match {
-          // Inner join, like Filter, can be anywhere.
-          case _: InnerLike =>
-            failOnInvalidOuterReference(j)
+            // Left outer join's right operand cannot be on a correlation path.
+            // LeftAnti and ExistenceJoin are special cases of LeftOuter.
+            // Note that ExistenceJoin cannot be expressed externally in both SQL and DataFrame
+            // so it should not show up here in Analysis phase. This is just a safety net.
+            //
+            // LeftSemi does not allow output from the right operand.
+            // Any correlated references in the subplan
+            // of the right operand cannot be pulled up.
+            case LeftOuter | LeftSemi | LeftAnti | ExistenceJoin(_) =>
+              checkPlan(left, aggregated, canContainOuter)
+              checkPlan(right, aggregated, canContainOuter = false)
 
-          // Left outer join's right operand cannot be on a correlation path.
-          // LeftAnti and ExistenceJoin are special cases of LeftOuter.
-          // Note that ExistenceJoin cannot be expressed externally in both SQL and DataFrame
-          // so it should not show up here in Analysis phase. This is just a safety net.
-          //
-          // LeftSemi does not allow output from the right operand.
-          // Any correlated references in the subplan
-          // of the right operand cannot be pulled up.
-          case LeftOuter | LeftSemi | LeftAnti | ExistenceJoin(_) =>
-            failOnInvalidOuterReference(j)
-            failOnOuterReferenceInSubTree(right)
+            // Likewise, Right outer join's left operand cannot be on a correlation path.
+            case RightOuter =>
+              checkPlan(left, aggregated, canContainOuter = false)
+              checkPlan(right, aggregated, canContainOuter)
 
-          // Likewise, Right outer join's left operand cannot be on a correlation path.
-          case RightOuter =>
-            failOnInvalidOuterReference(j)
-            failOnOuterReferenceInSubTree(left)
+            // Any other join types not explicitly listed above,
+            // including Full outer join, are treated as Category 4.
+            case _ =>
+              j.children.foreach(child => checkPlan(child, aggregated, canContainOuter = false))
+          }
 
-          // Any other join types not explicitly listed above,
-          // including Full outer join, are treated as Category 4.
-          case _ =>
-            failOnOuterReferenceInSubTree(j)
-        }
+        // Generator with join=true, i.e., expressed with
+        // LATERAL VIEW [OUTER], similar to inner join,
+        // allows to have correlation under it
+        // but must not host any outer references.
+        // Note:
+        // Generator with requiredChildOutput.isEmpty is treated as Category 4.
+        case g: Generate if g.requiredChildOutput.nonEmpty =>
+          failOnInvalidOuterReference(g)
+          checkPlan(g.child, aggregated, canContainOuter)
 
-      // Generator with join=true, i.e., expressed with
-      // LATERAL VIEW [OUTER], similar to inner join,
-      // allows to have correlation under it
-      // but must not host any outer references.
-      // Note:
-      // Generator with requiredChildOutput.isEmpty is treated as Category 4.
-      case g: Generate if g.requiredChildOutput.nonEmpty =>
-        failOnInvalidOuterReference(g)
+        // Category 4: Any other operators not in the above 3 categories
+        // cannot be on a correlation path, that is they are allowed only
+        // under a correlation point but they and their descendant operators
+        // are not allowed to have any correlated expressions.
+        case p =>
+          p.children.foreach(p => checkPlan(p, aggregated, canContainOuter = false))
+      }
+    }
 
-      // Category 4: Any other operators not in the above 3 categories
-      // cannot be on a correlation path, that is they are allowed only
-      // under a correlation point but they and their descendant operators
-      // are not allowed to have any correlated expressions.
-      case p =>
-        failOnOuterReferenceInSubTree(p)
-    }}
+    // Simplify the predicates before validating any unsupported correlation patterns in the plan.
+    AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      checkPlan(BooleanSimplification(sub))
+    }
   }
 
   /**

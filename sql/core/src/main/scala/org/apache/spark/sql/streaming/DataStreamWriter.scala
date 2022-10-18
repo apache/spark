@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.UnresolvedDBObjectName
+import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, TableSpec}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
@@ -298,9 +298,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         None,
         false)
       val cmd = CreateTable(
-        UnresolvedDBObjectName(
-          originalMultipartIdentifier,
-          isNamespace = false),
+        UnresolvedIdentifier(originalMultipartIdentifier),
         df.schema.asNullable,
         partitioningColumns.getOrElse(Nil).asTransforms.toSeq,
         tableSpec,

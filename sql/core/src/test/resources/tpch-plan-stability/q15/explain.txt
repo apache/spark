@@ -78,6 +78,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [pla
 (13) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [s_suppkey#1]
 Right keys [1]: [supplier_no#14]
+Join type: Inner
 Join condition: None
 
 (14) Project [codegen id : 3]

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
@@ -30,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 
-class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with SQLHelper {
+class DataSourceAnalysisSuite extends SparkFunSuite with SQLHelper {
 
   private var targetAttributes: Seq[Attribute] = _
   private var targetPartitionSchema: StructType = _

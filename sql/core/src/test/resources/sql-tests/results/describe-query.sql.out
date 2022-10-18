@@ -108,12 +108,14 @@ DESCRIBE INSERT INTO desc_temp1 values (1, 'val1')
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'desc_temp1'(line 1, pos 21)
-
-== SQL ==
-DESCRIBE INSERT INTO desc_temp1 values (1, 'val1')
----------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'desc_temp1'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -122,12 +124,14 @@ DESCRIBE INSERT INTO desc_temp1 SELECT * FROM desc_temp2
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'desc_temp1'(line 1, pos 21)
-
-== SQL ==
-DESCRIBE INSERT INTO desc_temp1 SELECT * FROM desc_temp2
----------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'desc_temp1'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -139,15 +143,14 @@ DESCRIBE
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'insert'(line 3, pos 5)
-
-== SQL ==
-DESCRIBE
-   FROM desc_temp1 a
-     insert into desc_temp1 select *
------^^^
-     insert into desc_temp2 select *
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'insert'",
+    "hint" : ""
+  }
+}
 
 
 -- !query

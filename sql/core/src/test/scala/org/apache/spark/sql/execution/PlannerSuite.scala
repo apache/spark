@@ -95,6 +95,10 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       // 2 distinct columns with different order
       val query3 = sql("SELECT corr(DISTINCT j, k), count(DISTINCT k, j) FROM v GROUP BY i")
       assertNoExpand(query3.queryExecution.executedPlan)
+
+      // SPARK-40382: 1 distinct expression with cosmetic differences
+      val query4 = sql("SELECT sum(DISTINCT j), max(DISTINCT J) FROM v GROUP BY i")
+      assertNoExpand(query4.queryExecution.executedPlan)
     }
   }
 
@@ -277,7 +281,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
           val numExchanges = collect(plan) {
             case exchange: ShuffleExchangeExec => exchange
           }.length
-          assert(numExchanges === 3)
+          assert(numExchanges === 5)
         }
 
         {
@@ -293,7 +297,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
           val numExchanges = collect(plan) {
             case exchange: ShuffleExchangeExec => exchange
           }.length
-          assert(numExchanges === 3)
+          assert(numExchanges === 5)
         }
 
       }
@@ -1292,6 +1296,23 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       assert(numShuffles.size == 2)
       assert(numSorts.size == 2)
     }
+  }
+
+  test("SPARK-39890: Make TakeOrderedAndProjectExec inherit AliasAwareOutputOrdering") {
+    val df = spark.range(20).repartition($"id")
+      .orderBy("id")
+      .selectExpr("id as c")
+      .limit(10)
+      .orderBy("c")
+
+    val topKs = collect(df.queryExecution.executedPlan) {
+      case topK: TakeOrderedAndProjectExec => topK
+    }
+    val sorts = collect(df.queryExecution.executedPlan) {
+      case sort: SortExec => sort
+    }
+    assert(topKs.size == 1)
+    assert(sorts.isEmpty)
   }
 }
 

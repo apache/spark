@@ -31,7 +31,7 @@
     <suppress checks=".*"
               files="core/src/main/java/org/apache/spark/util/collection/TimSort.java"/>
     <suppress checks=".*"
-              files="external/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java"/>
+              files="connector/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java"/>
     <suppress checks=".*"
               files="sql/core/src/main/java/org/apache/spark/sql/api.java/*"/>
     <suppress checks="LineLength"

@@ -17,12 +17,9 @@
 
 package org.apache.spark.sql.hive
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
-
-class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEach {
+class HiveContextCompatibilitySuite extends SparkFunSuite {
 
   override protected val enableAutoThreadAudit = false
   private var sc: SparkContext = null

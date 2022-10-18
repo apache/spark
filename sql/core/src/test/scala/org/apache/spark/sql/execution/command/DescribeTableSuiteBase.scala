@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
 
 /**
@@ -37,10 +39,13 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("DESCRIBE TABLE in a catalog when table does not exist") {
     withNamespaceAndTable("ns", "table") { tbl =>
+      val parsed = CatalystSqlParser.parseMultipartIdentifier(s"${tbl}_non_existence")
+        .map(part => quoteIdentifier(part)).mkString(".")
       val e = intercept[AnalysisException] {
         sql(s"DESCRIBE TABLE ${tbl}_non_existence")
       }
-      assert(e.getMessage.contains(s"Table or view not found: ${tbl}_non_existence"))
+      checkErrorTableNotFound(e, parsed,
+        ExpectedContext(s"${tbl}_non_existence", 15, 14 + s"${tbl}_non_existence".length))
     }
   }
 
@@ -118,6 +123,59 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       val isNullDataset = noCommentDataset
         .withColumn("is_null", noCommentDataset("info_name").isNull)
       assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
+    }
+  }
+
+  test("describe a column") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"""
+        |CREATE TABLE $tbl
+        |(key int COMMENT 'column_comment', col struct<x:int, y:string>)
+        |$defaultUsing""".stripMargin)
+      val descriptionDf = sql(s"DESC $tbl key")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+        ("info_name", StringType),
+        ("info_value", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf,
+        Seq(
+          Row("col_name", "key"),
+          Row("data_type", "int"),
+          Row("comment", "column_comment")))
+    }
+  }
+
+  test("describe a column with fully qualified name") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"CREATE TABLE $tbl (key int COMMENT 'comment1') $defaultUsing")
+      QueryTest.checkAnswer(
+        sql(s"DESC $tbl $tbl.key"),
+        Seq(Row("col_name", "key"), Row("data_type", "int"), Row("comment", "comment1")))
+    }
+  }
+
+  test("describe complex columns") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"CREATE TABLE $tbl (`a.b` int, col struct<x:int, y:string>) $defaultUsing")
+      QueryTest.checkAnswer(
+        sql(s"DESC $tbl `a.b`"),
+        Seq(Row("col_name", "a.b"), Row("data_type", "int"), Row("comment", "NULL")))
+      QueryTest.checkAnswer(
+        sql(s"DESCRIBE $tbl col"),
+        Seq(
+          Row("col_name", "col"),
+          Row("data_type", "struct<x:int,y:string>"),
+          Row("comment", "NULL")))
+    }
+  }
+
+  test("describe a nested column") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"CREATE TABLE $tbl (`a.b` int, col struct<x:int, y:string>) $defaultUsing")
+      val errMsg = intercept[AnalysisException] {
+        sql(s"DESCRIBE TABLE $tbl col.x")
+      }.getMessage
+      assert(errMsg === "DESC TABLE COLUMN does not support nested column: col.x.")
     }
   }
 }

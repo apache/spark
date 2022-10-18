@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
+import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
@@ -214,8 +214,17 @@ trait FileSourceScanLike extends DataSourceScanExec {
       requiredSchema = requiredSchema,
       partitionSchema = relation.partitionSchema,
       relation.sparkSession.sessionState.conf).map { vectorTypes =>
-        // for column-based file format, append metadata column's vector type classes if any
-        vectorTypes ++ Seq.fill(metadataColumns.size)(classOf[ConstantColumnVector].getName)
+        vectorTypes ++
+          // for column-based file format, append metadata column's vector type classes if any
+          metadataColumns.map { metadataCol =>
+            if (FileFormat.isConstantMetadataAttr(metadataCol.name)) {
+              classOf[ConstantColumnVector].getName
+            } else if (relation.sparkSession.sessionState.conf.offHeapColumnVectorEnabled) {
+              classOf[OffHeapColumnVector].getName
+            } else {
+              classOf[OnHeapColumnVector].getName
+            }
+          }
       }
 
   lazy val driverMetrics = Map(
@@ -650,7 +659,9 @@ case class FileSourceScanExec(
     }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions,
-      requiredSchema, metadataColumns, new FileSourceOptions(CaseInsensitiveMap(relation.options)))
+      new StructType(requiredSchema.fields ++ fsRelation.partitionSchema.fields), metadataColumns,
+      new FileSourceOptions(CaseInsensitiveMap(relation.options)))
+
   }
 
   /**
@@ -688,7 +699,10 @@ case class FileSourceScanExec(
 
         if (shouldProcess(filePath)) {
           val isSplitable = relation.fileFormat.isSplitable(
-            relation.sparkSession, relation.options, filePath)
+              relation.sparkSession, relation.options, filePath) &&
+            // SPARK-39634: Allow file splitting in combination with row index generation once
+            // the fix for PARQUET-2161 is available.
+            !RowIndexUtil.isNeededForSchema(requiredSchema)
           PartitionedFileUtil.splitFiles(
             sparkSession = relation.sparkSession,
             file = file,
@@ -707,7 +721,8 @@ case class FileSourceScanExec(
       FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)
 
     new FileScanRDD(fsRelation.sparkSession, readFile, partitions,
-      requiredSchema, metadataColumns, new FileSourceOptions(CaseInsensitiveMap(relation.options)))
+      new StructType(requiredSchema.fields ++ fsRelation.partitionSchema.fields), metadataColumns,
+      new FileSourceOptions(CaseInsensitiveMap(relation.options)))
   }
 
   // Filters unused DynamicPruningExpression expressions - one which has been replaced

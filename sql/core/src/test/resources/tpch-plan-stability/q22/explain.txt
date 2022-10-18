@@ -44,6 +44,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [pla
 (7) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [c_custkey#1]
 Right keys [1]: [o_custkey#6]
+Join type: LeftAnti
 Join condition: None
 
 (8) Project [codegen id : 2]

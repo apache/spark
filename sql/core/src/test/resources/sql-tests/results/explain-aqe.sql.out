@@ -308,6 +308,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (6) BroadcastHashJoin
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
+Join type: Inner
 Join condition: None
 
 (7) AdaptiveSparkPlan
@@ -357,6 +358,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (5) BroadcastHashJoin
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
+Join type: LeftOuter
 Join condition: None
 
 (6) AdaptiveSparkPlan
@@ -779,6 +781,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (6) BroadcastHashJoin
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
+Join type: Inner
 Join condition: None
 
 (7) AdaptiveSparkPlan
@@ -879,6 +882,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (12) BroadcastHashJoin
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
+Join type: Inner
 Join condition: None
 
 (13) AdaptiveSparkPlan

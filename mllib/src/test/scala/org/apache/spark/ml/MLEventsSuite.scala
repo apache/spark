@@ -23,7 +23,6 @@ import scala.concurrent.duration._
 import org.apache.hadoop.fs.Path
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.when
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 import org.scalatestplus.mockito.MockitoSugar.mock
 
@@ -35,9 +34,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql._
 import org.apache.spark.util.JsonProtocol
 
-
-class MLEventsSuite
-  extends SparkFunSuite with BeforeAndAfterEach with MLlibTestSparkContext with Eventually {
+class MLEventsSuite extends SparkFunSuite with MLlibTestSparkContext with Eventually {
 
   private val events = mutable.ArrayBuffer.empty[MLEvent]
   private val listener: SparkListener = new SparkListener {

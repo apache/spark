@@ -278,7 +278,7 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
     covarPop.mergeExpressions ++ varPop.mergeExpressions
 
   override lazy val evaluateExpression: Expression = {
-    If(covarPop.n === 0.0, Literal.create(null, DoubleType), covarPop.ck / varPop.m2)
+    If(varPop.m2 === 0.0, Literal.create(null, DoubleType), covarPop.ck / varPop.m2)
   }
 
   override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
@@ -331,7 +331,7 @@ case class RegrIntercept(left: Expression, right: Expression) extends Declarativ
     covarPop.mergeExpressions ++ varPop.mergeExpressions
 
   override lazy val evaluateExpression: Expression = {
-    If(covarPop.n === 0.0, Literal.create(null, DoubleType),
+    If(varPop.m2 === 0.0, Literal.create(null, DoubleType),
       covarPop.yAvg - covarPop.ck / varPop.m2 * covarPop.xAvg)
   }
 

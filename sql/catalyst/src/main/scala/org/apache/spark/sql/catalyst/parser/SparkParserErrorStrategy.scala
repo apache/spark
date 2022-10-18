@@ -30,14 +30,14 @@ class SparkRecognitionException(
     input: IntStream,
     ctx: ParserRuleContext,
     val errorClass: Option[String] = None,
-    val messageParameters: Array[String] = Array.empty)
+    val messageParameters: Map[String, String] = Map.empty)
   extends RecognitionException(message, recognizer, input, ctx) {
 
   /** Construct from a given [[RecognitionException]], with additional error information. */
   def this(
       recognitionException: RecognitionException,
       errorClass: String,
-      messageParameters: Array[String]) =
+      messageParameters: Map[String, String]) =
     this(
       recognitionException.getMessage,
       recognitionException.getRecognizer,
@@ -50,7 +50,7 @@ class SparkRecognitionException(
       messageParameters)
 
   /** Construct with pure errorClass and messageParameter information.  */
-  def this(errorClass: String, messageParameters: Array[String]) =
+  def this(errorClass: String, messageParameters: Map[String, String]) =
     this("", null, null, null, Some(errorClass), messageParameters)
 }
 
@@ -75,7 +75,9 @@ class SparkParserErrorStrategy() extends DefaultErrorStrategy {
     val exceptionWithErrorClass = new SparkRecognitionException(
       e,
       "PARSE_SYNTAX_ERROR",
-      Array(getTokenErrorDisplay(e.getOffendingToken), ""))
+      messageParameters = Map(
+        "error" -> getTokenErrorDisplay(e.getOffendingToken),
+        "hint" -> ""))
     recognizer.notifyErrorListeners(e.getOffendingToken, "", exceptionWithErrorClass)
   }
 
@@ -83,7 +85,7 @@ class SparkParserErrorStrategy() extends DefaultErrorStrategy {
     val exceptionWithErrorClass = new SparkRecognitionException(
       e,
       "PARSE_SYNTAX_ERROR",
-      Array(getTokenErrorDisplay(e.getOffendingToken), ""))
+      Map("error" -> getTokenErrorDisplay(e.getOffendingToken), "hint" -> ""))
     recognizer.notifyErrorListeners(e.getOffendingToken, "", exceptionWithErrorClass)
   }
 
@@ -94,7 +96,7 @@ class SparkParserErrorStrategy() extends DefaultErrorStrategy {
       val hint = ": extra input " + errorTokenDisplay
       val exceptionWithErrorClass = new SparkRecognitionException(
         "PARSE_SYNTAX_ERROR",
-        Array(errorTokenDisplay, hint))
+        Map("error" -> errorTokenDisplay, "hint" -> hint))
       recognizer.notifyErrorListeners(recognizer.getCurrentToken, "", exceptionWithErrorClass)
     }
   }
@@ -105,7 +107,7 @@ class SparkParserErrorStrategy() extends DefaultErrorStrategy {
       val hint = ": missing " + getExpectedTokens(recognizer).toString(recognizer.getVocabulary)
       val exceptionWithErrorClass = new SparkRecognitionException(
         "PARSE_SYNTAX_ERROR",
-        Array(getTokenErrorDisplay(recognizer.getCurrentToken), hint))
+        Map("error" -> getTokenErrorDisplay(recognizer.getCurrentToken), "hint" -> hint))
       recognizer.notifyErrorListeners(recognizer.getCurrentToken, "", exceptionWithErrorClass)
     }
   }
