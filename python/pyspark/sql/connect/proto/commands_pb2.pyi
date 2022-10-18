@@ -39,6 +39,7 @@ import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
+import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
 import typing
@@ -58,28 +59,42 @@ class Command(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     CREATE_FUNCTION_FIELD_NUMBER: builtins.int
+    WRITE_OPERATION_FIELD_NUMBER: builtins.int
     @property
     def create_function(self) -> global___CreateScalarFunction: ...
+    @property
+    def write_operation(self) -> global___WriteOperation: ...
     def __init__(
         self,
         *,
         create_function: global___CreateScalarFunction | None = ...,
+        write_operation: global___WriteOperation | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "command_type", b"command_type", "create_function", b"create_function"
+            "command_type",
+            b"command_type",
+            "create_function",
+            b"create_function",
+            "write_operation",
+            b"write_operation",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "command_type", b"command_type", "create_function", b"create_function"
+            "command_type",
+            b"command_type",
+            "create_function",
+            b"create_function",
+            "write_operation",
+            b"write_operation",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command_type", b"command_type"]
-    ) -> typing_extensions.Literal["create_function"] | None: ...
+    ) -> typing_extensions.Literal["create_function", "write_operation"] | None: ...
 
 global___Command = Command
 
@@ -194,3 +209,166 @@ class CreateScalarFunction(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["serialized_function", "literal_string"] | None: ...
 
 global___CreateScalarFunction = CreateScalarFunction
+
+class WriteOperation(google.protobuf.message.Message):
+    """As writes are not directly handled during analysis and planning, they are modeled as commands."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class _SaveMode:
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+
+    class _SaveModeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            WriteOperation._SaveMode.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        SAVE_MODE_UNSPECIFIED: WriteOperation._SaveMode.ValueType  # 0
+        SAVE_MODE_APPEND: WriteOperation._SaveMode.ValueType  # 1
+        SAVE_MODE_OVERWRITE: WriteOperation._SaveMode.ValueType  # 2
+        SAVE_MODE_ERROR_IF_EXISTS: WriteOperation._SaveMode.ValueType  # 3
+        SAVE_MODE_IGNORE: WriteOperation._SaveMode.ValueType  # 4
+
+    class SaveMode(_SaveMode, metaclass=_SaveModeEnumTypeWrapper): ...
+    SAVE_MODE_UNSPECIFIED: WriteOperation.SaveMode.ValueType  # 0
+    SAVE_MODE_APPEND: WriteOperation.SaveMode.ValueType  # 1
+    SAVE_MODE_OVERWRITE: WriteOperation.SaveMode.ValueType  # 2
+    SAVE_MODE_ERROR_IF_EXISTS: WriteOperation.SaveMode.ValueType  # 3
+    SAVE_MODE_IGNORE: WriteOperation.SaveMode.ValueType  # 4
+
+    class OptionsEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        value: builtins.str
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
+
+    class BucketBy(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        BUCKET_COLUMN_NAMES_FIELD_NUMBER: builtins.int
+        NUM_BUCKETS_FIELD_NUMBER: builtins.int
+        @property
+        def bucket_column_names(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+        num_buckets: builtins.int
+        def __init__(
+            self,
+            *,
+            bucket_column_names: collections.abc.Iterable[builtins.str] | None = ...,
+            num_buckets: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "bucket_column_names", b"bucket_column_names", "num_buckets", b"num_buckets"
+            ],
+        ) -> None: ...
+
+    INPUT_FIELD_NUMBER: builtins.int
+    SOURCE_FIELD_NUMBER: builtins.int
+    PATH_FIELD_NUMBER: builtins.int
+    TABLE_NAME_FIELD_NUMBER: builtins.int
+    MODE_FIELD_NUMBER: builtins.int
+    SORT_COLUMN_NAMES_FIELD_NUMBER: builtins.int
+    PARTITIONING_COLUMNS_FIELD_NUMBER: builtins.int
+    BUCKET_BY_FIELD_NUMBER: builtins.int
+    OPTIONS_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+        """The output of the `input` relation will be persisted according to the options."""
+    source: builtins.str
+    """Format value according to the Spark documentation. Examples are: text, parquet, delta."""
+    path: builtins.str
+    table_name: builtins.str
+    mode: global___WriteOperation.SaveMode.ValueType
+    @property
+    def sort_column_names(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """List of columns to sort the output by."""
+    @property
+    def partitioning_columns(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """List of columns for partitioning."""
+    @property
+    def bucket_by(self) -> global___WriteOperation.BucketBy:
+        """Optional bucketing specification. Bucketing must set the number of buckets and the columns
+        to bucket by.
+        """
+    @property
+    def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+        """Optional list of configuration options."""
+    def __init__(
+        self,
+        *,
+        input: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+        source: builtins.str = ...,
+        path: builtins.str = ...,
+        table_name: builtins.str = ...,
+        mode: global___WriteOperation.SaveMode.ValueType = ...,
+        sort_column_names: collections.abc.Iterable[builtins.str] | None = ...,
+        partitioning_columns: collections.abc.Iterable[builtins.str] | None = ...,
+        bucket_by: global___WriteOperation.BucketBy | None = ...,
+        options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "bucket_by",
+            b"bucket_by",
+            "input",
+            b"input",
+            "path",
+            b"path",
+            "save_type",
+            b"save_type",
+            "table_name",
+            b"table_name",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "bucket_by",
+            b"bucket_by",
+            "input",
+            b"input",
+            "mode",
+            b"mode",
+            "options",
+            b"options",
+            "partitioning_columns",
+            b"partitioning_columns",
+            "path",
+            b"path",
+            "save_type",
+            b"save_type",
+            "sort_column_names",
+            b"sort_column_names",
+            "source",
+            b"source",
+            "table_name",
+            b"table_name",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["save_type", b"save_type"]
+    ) -> typing_extensions.Literal["path", "table_name"] | None: ...
+
+global___WriteOperation = WriteOperation

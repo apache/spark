@@ -5,7 +5,20 @@ SELECT 1 FROM "not_exist"
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: not_exist; line 1 pos 14
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`not_exist`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 25,
+    "fragment" : "\"not_exist\""
+  } ]
+}
 
 
 -- !query
@@ -14,7 +27,13 @@ USE SCHEMA "not_exist"
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
-Database 'not_exist' not found
+{
+  "errorClass" : "SCHEMA_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "schemaName" : "`not_exist`"
+  }
+}
 
 
 -- !query
@@ -23,7 +42,20 @@ ALTER TABLE "not_exist" ADD COLUMN not_exist int
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table not found: not_exist; line 1 pos 12
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`not_exist`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 23,
+    "fragment" : "\"not_exist\""
+  } ]
+}
 
 
 -- !query
@@ -32,7 +64,20 @@ ALTER TABLE not_exist ADD COLUMN "not_exist" int
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table not found: not_exist; line 1 pos 12
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`not_exist`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 21,
+    "fragment" : "not_exist"
+  } ]
+}
 
 
 -- !query
@@ -41,7 +86,20 @@ SELECT 1 AS "not_exist" FROM not_exist
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: not_exist; line 1 pos 29
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`not_exist`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 30,
+    "stopIndex" : 38,
+    "fragment" : "not_exist"
+  } ]
+}
 
 
 -- !query
@@ -50,7 +108,20 @@ SELECT 1 FROM not_exist AS X("hello")
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: not_exist; line 1 pos 14
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`not_exist`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 37,
+    "fragment" : "not_exist AS X(\"hello\")"
+  } ]
+}
 
 
 -- !query
@@ -102,7 +173,20 @@ SELECT 1 FROM `hello`
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: hello; line 1 pos 14
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`hello`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 21,
+    "fragment" : "`hello`"
+  } ]
+}
 
 
 -- !query
@@ -111,7 +195,13 @@ USE SCHEMA `not_exist`
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
-Database 'not_exist' not found
+{
+  "errorClass" : "SCHEMA_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "schemaName" : "`not_exist`"
+  }
+}
 
 
 -- !query
@@ -120,7 +210,20 @@ ALTER TABLE `not_exist` ADD COLUMN not_exist int
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table not found: not_exist; line 1 pos 12
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`not_exist`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 23,
+    "fragment" : "`not_exist`"
+  } ]
+}
 
 
 -- !query
@@ -129,7 +232,20 @@ ALTER TABLE not_exist ADD COLUMN `not_exist` int
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table not found: not_exist; line 1 pos 12
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`not_exist`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 21,
+    "fragment" : "not_exist"
+  } ]
+}
 
 
 -- !query
@@ -138,7 +254,20 @@ SELECT 1 AS `not_exist` FROM `not_exist`
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: not_exist; line 1 pos 29
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`not_exist`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 30,
+    "stopIndex" : 40,
+    "fragment" : "`not_exist`"
+  } ]
+}
 
 
 -- !query
@@ -147,7 +276,20 @@ SELECT 1 FROM not_exist AS X(`hello`)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: not_exist; line 1 pos 14
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`not_exist`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 37,
+    "fragment" : "not_exist AS X(`hello`)"
+  } ]
+}
 
 
 -- !query
@@ -238,9 +380,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1115",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "msg" : "Table spark_catalog.default.v not found"
+    "relationName" : "`spark_catalog`.`default`.`v`"
   }
 }
 

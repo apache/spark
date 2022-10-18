@@ -21,7 +21,20 @@ WITH s AS (SELECT 1 FROM s) SELECT * FROM s
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: s; line 1 pos 25
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`s`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 26,
+    "fragment" : "s"
+  } ]
+}
 
 
 -- !query
@@ -31,7 +44,20 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: r; line 1 pos 33
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`r`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 34,
+    "fragment" : "r"
+  } ]
+}
 
 
 -- !query
@@ -50,7 +76,20 @@ WITH s1 AS (SELECT 1 FROM s2), s2 AS (SELECT 1 FROM s1) SELECT * FROM s1, s2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: s2; line 1 pos 26
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`s2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 28,
+    "fragment" : "s2"
+  } ]
+}
 
 
 -- !query
@@ -170,7 +209,20 @@ SELECT 2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: non_existing_table; line 1 pos 25
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`non_existing_table`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 43,
+    "fragment" : "non_existing_table"
+  } ]
+}
 
 
 -- !query

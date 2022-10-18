@@ -57,7 +57,7 @@ trait ExternalCatalog {
 
   protected def requireFunctionNotExists(db: String, funcName: String): Unit = {
     if (functionExists(db, funcName)) {
-      throw new FunctionAlreadyExistsException(db = db, func = funcName)
+      throw new FunctionAlreadyExistsException(Seq(db, funcName))
     }
   }
 
