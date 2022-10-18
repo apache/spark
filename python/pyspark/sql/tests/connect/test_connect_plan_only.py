@@ -40,7 +40,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
                 plan.root.filter.condition.unresolved_function, proto.Expression.UnresolvedFunction
             )
         )
-        self.assertEqual(plan.root.filter.condition.unresolved_function.parts, ["gt"])
+        self.assertEqual(plan.root.filter.condition.unresolved_function.parts, [">"])
         self.assertEqual(len(plan.root.filter.condition.unresolved_function.arguments), 2)
 
     def test_relation_alias(self):

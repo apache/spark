@@ -92,6 +92,44 @@ package object dsl {
           .build()
     }
 
+    /**
+     * Create an unresolved function from name parts.
+     *
+     * @param nameParts
+     * @param args
+     * @return
+     *   Expression wrapping the unresolved function.
+     */
+    def callFunction(nameParts: Seq[String], args: Seq[proto.Expression]): proto.Expression = {
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          proto.Expression.UnresolvedFunction
+            .newBuilder()
+            .addAllParts(nameParts.asJava)
+            .addAllArguments(args.asJava))
+        .build()
+    }
+
+    /**
+     * Creates an UnresolvedFunction from a single identifier.
+     *
+     * @param name
+     * @param args
+     * @return
+     *   Expression wrapping the unresolved function.
+     */
+    def callFunction(name: String, args: Seq[proto.Expression]): proto.Expression = {
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          proto.Expression.UnresolvedFunction
+            .newBuilder()
+            .addParts(name)
+            .addAllArguments(args.asJava))
+        .build()
+    }
+
     implicit def intToLiteral(i: Int): proto.Expression =
       proto.Expression
         .newBuilder()

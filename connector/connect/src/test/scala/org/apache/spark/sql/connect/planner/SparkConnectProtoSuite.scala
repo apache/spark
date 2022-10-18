@@ -50,6 +50,34 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
+  test("UnresolvedFunction resolution.") {
+    {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      assertThrows[IllegalArgumentException] {
+        transform(connectTestRelation.select(callFunction("default.hex", Seq("id".protoAttr))))
+      }
+    }
+
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(
+        connectTestRelation.select(callFunction(Seq("default", "hex"), Seq("id".protoAttr))))
+    }
+
+    assertThrows[UnsupportedOperationException] {
+      connectPlan.analyze
+    }
+
+    val validPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.select(callFunction(Seq("hex"), Seq("id".protoAttr))))
+    }
+    assert(validPlan.analyze != null)
+  }
+
   test("Basic filter") {
     val connectPlan = {
       import org.apache.spark.sql.connect.dsl.expressions._
