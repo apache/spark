@@ -627,7 +627,6 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
         val fromProtoDf = toProtoDf
           .select(from_protobuf_wrapper($"to_proto", name, descFilePathOpt) as 'timeStampMsg)
-        fromProtoDf.show(truncate = false)
 
         val actualFields = fromProtoDf.schema.fields.toList
         val expectedFields = inputDf.schema.fields.toList
