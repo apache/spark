@@ -24,7 +24,6 @@ import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 
-
 /**
  * A collection of implicit conversions that create a DSL for constructing connect protos.
  */

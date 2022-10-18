@@ -108,7 +108,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Simple Project") {
-    val readWithTable = proto.Read.newBuilder()
+    val readWithTable = proto.Read
+      .newBuilder()
       .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name").build())
       .build()
     val project =
@@ -138,10 +139,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .newBuilder()
       .setNulls(proto.Sort.SortNulls.SORT_NULLS_LAST)
       .setDirection(proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING)
-      .setExpression(proto.Expression.newBuilder
-        .setUnresolvedAttribute(
-          proto.Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier("col").build())
-        .build())
+      .setExpression(
+        proto.Expression.newBuilder
+          .setUnresolvedAttribute(
+            proto.Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier("col").build())
+          .build())
       .build()
 
     val res = transform(
