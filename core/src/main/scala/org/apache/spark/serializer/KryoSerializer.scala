@@ -20,7 +20,6 @@ package org.apache.spark.serializer
 import java.io._
 import java.lang.invoke.SerializedLambda
 import java.nio.ByteBuffer
-import java.util.Locale
 import javax.annotation.Nullable
 
 import scala.collection.JavaConverters._
@@ -306,15 +305,14 @@ class KryoDeserializationStream(
 
   private[this] var kryo: Kryo = serInstance.borrowKryo()
 
+  final private[this] def hasNext: Boolean = {
+    val eof = input.eof()
+    if (eof) close()
+    !eof
+  }
+
   override def readObject[T: ClassTag](): T = {
-    try {
       kryo.readClassAndObject(input).asInstanceOf[T]
-    } catch {
-      // DeserializationStream uses the EOF exception to indicate stopping condition.
-      case e: KryoException
-        if e.getMessage.toLowerCase(Locale.ROOT).contains("buffer underflow") =>
-        throw new EOFException
-    }
   }
 
   override def close(): Unit = {
@@ -328,6 +326,16 @@ class KryoDeserializationStream(
         input = null
       }
     }
+  }
+
+  override def asIterator: Iterator[Any] = new Iterator[Any] {
+    final override def next(): Any = readObject[Any]()
+    final override def hasNext: Boolean = KryoDeserializationStream.this.hasNext
+  }
+
+  override def asKeyValueIterator: Iterator[(Any, Any)] = new Iterator[(Any, Any)] {
+    final override def next(): (Any, Any) = (readKey[Any], readObject[Any]())
+    final override def hasNext: Boolean = KryoDeserializationStream.this.hasNext
   }
 }
 
