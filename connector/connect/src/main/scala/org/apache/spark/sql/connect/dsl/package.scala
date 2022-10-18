@@ -44,6 +44,34 @@ package object dsl {
               .addAllParts(identifier.asJava)
               .build())
           .build()
+
+      def struct(
+          attrs: proto.Expression.QualifiedAttribute*): proto.Expression.QualifiedAttribute = {
+        val structExpr = proto.DataType.Struct.newBuilder()
+        for (attr <- attrs) {
+          val structField = proto.DataType.StructField.newBuilder()
+          structField.setName(attr.getName)
+          structField.setType(attr.getType)
+          structExpr.addFields(structField)
+        }
+        proto.Expression.QualifiedAttribute
+          .newBuilder()
+          .setName(s)
+          .setType(proto.DataType.newBuilder().setStruct(structExpr))
+          .build()
+      }
+
+      /** Creates a new AttributeReference of type int */
+      def int: proto.Expression.QualifiedAttribute = protoQualifiedAttrWithType(
+        proto.DataType.newBuilder().setI32(proto.DataType.I32.newBuilder()).build())
+
+      private def protoQualifiedAttrWithType(
+          dataType: proto.DataType): proto.Expression.QualifiedAttribute =
+        proto.Expression.QualifiedAttribute
+          .newBuilder()
+          .setName(s)
+          .setType(dataType)
+          .build()
     }
 
     implicit class DslExpression(val expr: proto.Expression) {
@@ -62,6 +90,44 @@ package object dsl {
               .addArguments(expr)
               .addArguments(other))
           .build()
+    }
+
+    /**
+     * Create an unresolved function from name parts.
+     *
+     * @param nameParts
+     * @param args
+     * @return
+     *   Expression wrapping the unresolved function.
+     */
+    def callFunction(nameParts: Seq[String], args: Seq[proto.Expression]): proto.Expression = {
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          proto.Expression.UnresolvedFunction
+            .newBuilder()
+            .addAllParts(nameParts.asJava)
+            .addAllArguments(args.asJava))
+        .build()
+    }
+
+    /**
+     * Creates an UnresolvedFunction from a single identifier.
+     *
+     * @param name
+     * @param args
+     * @return
+     *   Expression wrapping the unresolved function.
+     */
+    def callFunction(name: String, args: Seq[proto.Expression]): proto.Expression = {
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          proto.Expression.UnresolvedFunction
+            .newBuilder()
+            .addParts(name)
+            .addAllArguments(args.asJava))
+        .build()
     }
 
     implicit def intToLiteral(i: Int): proto.Expression =
@@ -151,6 +217,24 @@ package object dsl {
         proto.Relation
           .newBuilder(logicalPlan)
           .setCommon(proto.RelationCommon.newBuilder().setAlias(alias))
+          .build()
+      }
+
+      def sample(
+          lowerBound: Double,
+          upperBound: Double,
+          withReplacement: Boolean,
+          seed: Long): proto.Relation = {
+        proto.Relation
+          .newBuilder()
+          .setSample(
+            proto.Sample
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setUpperBound(upperBound)
+              .setLowerBound(lowerBound)
+              .setWithReplacement(withReplacement)
+              .setSeed(seed))
           .build()
       }
 

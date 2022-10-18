@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, quoteNameParts}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.types.StructType
@@ -30,95 +31,104 @@ import org.apache.spark.sql.types.StructType
  * as an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
  */
 case class NoSuchDatabaseException(db: String)
-  extends AnalysisException(s"Database '$db' not found")
+  extends AnalysisException(errorClass = "SCHEMA_NOT_FOUND",
+    messageParameters = Map("schemaName" -> quoteIdentifier(db)))
 
-case class NoSuchNamespaceException(
-    override val message: String,
-    override val cause: Option[Throwable] = None)
-  extends AnalysisException(message, cause = cause) {
+class NoSuchNamespaceException(errorClass: String, messageParameters: Map[String, String])
+  extends AnalysisException(errorClass, messageParameters) {
 
+  def this(namespace: Seq[String]) = {
+    this(errorClass = "SCHEMA_NOT_FOUND",
+      Map("schemaName" -> quoteNameParts(namespace)))
+  }
   def this(namespace: Array[String]) = {
-    this(s"Namespace '${namespace.quoted}' not found")
+    this(errorClass = "SCHEMA_NOT_FOUND",
+      Map("schemaName" -> quoteNameParts(namespace)))
   }
 }
 
-case class NoSuchTableException(
-    override val message: String,
-    override val cause: Option[Throwable] = None)
-  extends AnalysisException(
-    message,
-    errorClass = Some("_LEGACY_ERROR_TEMP_1115"),
-    messageParameters = Map("msg" -> message),
-    cause = cause) {
+class NoSuchTableException(errorClass: String, messageParameters: Map[String, String])
+  extends AnalysisException(errorClass, messageParameters) {
 
   def this(db: String, table: String) = {
-    this(s"Table or view '$table' not found in database '$db'")
+    this(errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      messageParameters = Map("relationName" ->
+        (quoteIdentifier(db) + "." + quoteIdentifier(table))))
   }
 
-  def this(tableIdent: Identifier) = {
-    this(s"Table ${tableIdent.quoted} not found")
+  def this(name : Seq[String]) = {
+    this(errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      messageParameters = Map("relationName" -> quoteNameParts(name)))
   }
 
-  def this(nameParts: Seq[String]) = {
-    this(s"Table ${nameParts.quoted} not found")
+  def this(table: String) = {
+    this(errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      messageParameters = Map("relationName" ->
+        quoteNameParts(UnresolvedAttribute.parseAttributeName(table))))
   }
 }
 
-case class NoSuchPartitionException(
-    override val message: String)
-  extends AnalysisException(
-    message,
-    errorClass = Some("_LEGACY_ERROR_TEMP_1238"),
-    messageParameters = Map("msg" -> message)) {
+class NoSuchPartitionException(errorClass: String, messageParameters: Map[String, String])
+  extends AnalysisException(errorClass, messageParameters) {
 
   def this(db: String, table: String, spec: TablePartitionSpec) = {
-    this(s"Partition not found in table '$table' database '$db':\n" + spec.mkString("\n"))
+    this(errorClass = "PARTITIONS_NOT_FOUND",
+      Map("partitionList" ->
+        ("PARTITION (" +
+          spec.map( kv => quoteIdentifier(kv._1) + s" = ${kv._2}").mkString(", ") + ")"),
+        "tableName" -> (quoteIdentifier(db) + "." + quoteIdentifier(table))))
   }
 
   def this(tableName: String, partitionIdent: InternalRow, partitionSchema: StructType) = {
-    this(s"Partition not found in table $tableName: "
-      + partitionIdent.toSeq(partitionSchema).zip(partitionSchema.map(_.name))
-        .map( kv => s"${kv._1} -> ${kv._2}").mkString(","))
+    this(errorClass = "PARTITIONS_NOT_FOUND",
+      Map("partitionList" ->
+        ("PARTITION (" + partitionIdent.toSeq(partitionSchema).zip(partitionSchema.map(_.name))
+        .map( kv => quoteIdentifier(s"${kv._2}") + s" = ${kv._1}").mkString(", ") + ")"),
+        "tableName" -> quoteNameParts(UnresolvedAttribute.parseAttributeName(tableName))))
   }
 }
 
-case class NoSuchPermanentFunctionException(db: String, func: String)
-  extends AnalysisException(s"Function '$func' not found in database '$db'")
+class NoSuchPermanentFunctionException(db: String, func: String)
+  extends AnalysisException(errorClass = "ROUTINE_NOT_FOUND",
+    Map("routineName" -> (quoteIdentifier(db) + "." + quoteIdentifier(func))))
 
-case class NoSuchFunctionException(override val message: String)
-  extends AnalysisException(
-    message,
-    errorClass = Some("_LEGACY_ERROR_TEMP_1258"),
-    messageParameters = Map("msg" -> message)) {
+class NoSuchFunctionException(errorClass: String, messageParameters: Map[String, String])
+  extends AnalysisException(errorClass, messageParameters) {
 
   def this(db: String, func: String) = {
-    this(s"Undefined function: '$func'. " +
-        "This function is neither a registered temporary function nor " +
-        s"a permanent function registered in the database '$db'.")
+    this(errorClass = "ROUTINE_NOT_FOUND",
+      Map("routineName" -> (quoteIdentifier(db) + "." + quoteIdentifier(func))))
   }
 
   def this(identifier: Identifier) = {
-    this(s"Undefined function: ${identifier.quoted}")
+    this(errorClass = "ROUTINE_NOT_FOUND", Map("routineName" -> identifier.quoted))
   }
 }
 
-case class NoSuchPartitionsException(override val message: String)
-  extends AnalysisException(message) {
+class NoSuchPartitionsException(errorClass: String, messageParameters: Map[String, String])
+  extends AnalysisException(errorClass, messageParameters) {
 
   def this(db: String, table: String, specs: Seq[TablePartitionSpec]) = {
-    this(s"The following partitions not found in table '$table' database '$db':\n"
-      + specs.mkString("\n===\n"))
+    this(errorClass = "PARTITIONS_NOT_FOUND",
+      Map("partitionList" -> ("PARTITION (" +
+        specs.map(spec => spec.map(kv => quoteIdentifier(kv._1) + s" = ${kv._2}").mkString(", "))
+        .mkString("), PARTITION (") + ")"),
+        "tableName" -> (quoteIdentifier(db) + "." + quoteIdentifier(table))))
   }
 
   def this(tableName: String, partitionIdents: Seq[InternalRow], partitionSchema: StructType) = {
-    this(s"The following partitions not found in table $tableName: "
-      + partitionIdents.map(_.toSeq(partitionSchema).zip(partitionSchema.map(_.name))
-        .map( kv => s"${kv._1} -> ${kv._2}").mkString(",")).mkString("\n===\n"))
+    this(errorClass = "PARTITIONS_NOT_FOUND",
+      Map("partitionList" -> ("PARTITION (" +
+        partitionIdents.map(_.toSeq(partitionSchema).zip(partitionSchema.map(_.name))
+          .map( kv => quoteIdentifier(s"${kv._2}") + s" = ${kv._1}")
+          .mkString(", ")).mkString("), PARTITION (") + ")"),
+        "tableName" -> quoteNameParts(UnresolvedAttribute.parseAttributeName(tableName))))
   }
 }
 
-case class NoSuchTempFunctionException(func: String)
-  extends AnalysisException(s"Temporary function '$func' not found")
+class NoSuchTempFunctionException(func: String)
+  extends AnalysisException(errorClass = "ROUTINE_NOT_FOUND", Map("routineName" -> s"`$func`"))
 
 class NoSuchIndexException(message: String, cause: Option[Throwable] = None)
-  extends AnalysisException(message, cause = cause)
+  extends AnalysisException(errorClass = "INDEX_NOT_FOUND",
+    Map("message" -> message), cause)

@@ -152,15 +152,45 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
       spark.sql("""|SELECT might_contain(1.0, 1L)"""
         .stripMargin)
     }
-    assert(exception1.getMessage.contains(
-      "Input to function might_contain should have been binary followed by a value with bigint"))
+    checkError(
+      exception = exception1,
+      errorClass = "DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"might_contain(1.0, 1)\"",
+        "functionName" -> "`might_contain`",
+        "expectedLeft" -> "\"BINARY\"",
+        "expectedRight" -> "\"BIGINT\"",
+        "actualLeft" -> "\"DECIMAL(2,1)\"",
+        "actualRight" -> "\"BIGINT\""
+      ),
+      context = ExpectedContext(
+        fragment = "might_contain(1.0, 1L)",
+        start = 7,
+        stop = 28
+      )
+    )
 
     val exception2 = intercept[AnalysisException] {
       spark.sql("""|SELECT might_contain(NULL, 0.1)"""
         .stripMargin)
     }
-    assert(exception2.getMessage.contains(
-      "Input to function might_contain should have been binary followed by a value with bigint"))
+    checkError(
+      exception = exception2,
+      errorClass = "DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"might_contain(NULL, 0.1)\"",
+        "functionName" -> "`might_contain`",
+        "expectedLeft" -> "\"BINARY\"",
+        "expectedRight" -> "\"BIGINT\"",
+        "actualLeft" -> "\"VOID\"",
+        "actualRight" -> "\"DECIMAL(1,1)\""
+      ),
+      context = ExpectedContext(
+        fragment = "might_contain(NULL, 0.1)",
+        start = 7,
+        stop = 30
+      )
+    )
   }
 
   test("Test that might_contain errors out non-constant Bloom filter") {
@@ -170,9 +200,20 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
                   |FROM values (cast(1 as string)), (cast(2 as string)) as t(a)"""
         .stripMargin)
     }
-    assert(exception1.getMessage.contains(
-      "The Bloom filter binary input to might_contain should be either a constant value or " +
-        "a scalar subquery expression"))
+    checkError(
+      exception = exception1,
+      errorClass = "DATATYPE_MISMATCH.BLOOM_FILTER_BINARY_OP_WRONG_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"might_contain(CAST(a AS BINARY), CAST(5 AS BIGINT))\"",
+        "functionName" -> "`might_contain`",
+        "actual" -> "\"CAST(a AS BINARY)\""
+      ),
+      context = ExpectedContext(
+        fragment = "might_contain(cast(a as binary), cast(5 as long))",
+        start = 8,
+        stop = 56
+      )
+    )
 
     val exception2 = intercept[AnalysisException] {
       spark.sql("""
@@ -180,9 +221,20 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
                   |FROM values (cast(1 as string)), (cast(2 as string)) as t(a)"""
         .stripMargin)
     }
-    assert(exception2.getMessage.contains(
-      "The Bloom filter binary input to might_contain should be either a constant value or " +
-        "a scalar subquery expression"))
+    checkError(
+      exception = exception2,
+      errorClass = "DATATYPE_MISMATCH.BLOOM_FILTER_BINARY_OP_WRONG_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"might_contain(scalarsubquery(a), CAST(5 AS BIGINT))\"",
+        "functionName" -> "`might_contain`",
+        "actual" -> "\"scalarsubquery(a)\""
+      ),
+      context = ExpectedContext(
+        fragment = "might_contain((select cast(a as binary)), cast(5 as long))",
+        start = 8,
+        stop = 65
+      )
+    )
   }
 
   test("Test that might_contain can take a constant value input") {

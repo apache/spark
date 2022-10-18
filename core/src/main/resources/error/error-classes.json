@@ -101,6 +101,16 @@
           "the binary operator requires the input type <inputType>, not <actualDataType>."
         ]
       },
+      "BLOOM_FILTER_BINARY_OP_WRONG_TYPE" : {
+        "message" : [
+          "The Bloom filter binary input to <functionName> should be either a constant value or a scalar subquery expression, but it's <actual>."
+        ]
+      },
+      "BLOOM_FILTER_WRONG_TYPE" : {
+        "message" : [
+          "Input to function <functionName> should have been <expectedLeft> followed by a value with <expectedRight>, but it's [<actualLeft>, <actualRight>]."
+        ]
+      },
       "CANNOT_CONVERT_TO_JSON" : {
         "message" : [
           "Unable to convert column <name> of type <type> to JSON."
@@ -223,6 +233,11 @@
           "The lower bound of a window frame must be <comparison> to the upper bound."
         ]
       },
+      "UNEXPECTED_CLASS_TYPE" : {
+        "message" : [
+          "class <className> not found"
+        ]
+      },
       "UNEXPECTED_INPUT_TYPE" : {
         "message" : [
           "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
@@ -231,6 +246,11 @@
       "UNEXPECTED_NULL" : {
         "message" : [
           "The <exprName> must not be null"
+        ]
+      },
+      "UNEXPECTED_STATIC_METHOD" : {
+        "message" : [
+          "cannot find a static method <methodName> that matches the argument types in <className>"
         ]
       },
       "UNSPECIFIED_FRAME" : {
@@ -396,6 +416,18 @@
       }
     }
   },
+  "INDEX_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot create the index because it already exists. <message>."
+    ],
+    "sqlState" : "42000"
+  },
+  "INDEX_NOT_FOUND" : {
+    "message" : [
+      "Cannot find the index. <message>."
+    ],
+    "sqlState" : "42000"
+  },
   "INTERNAL_ERROR" : {
     "message" : [
       "<message>"
@@ -506,6 +538,28 @@
       "More than one row returned by a subquery used as an expression."
     ]
   },
+  "NAMESPACE_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot create namespace <nameSpaceName> because it already exists.",
+      "Choose a different name, drop the existing namespace, or add the IF NOT EXISTS clause to tolerate pre-existing namespace."
+    ],
+    "sqlState" : "42000"
+  },
+  "NAMESPACE_NOT_EMPTY" : {
+    "message" : [
+      "Cannot drop a namespace <nameSpaceNameName> because it contains objects.",
+      "Use DROP NAMESPACE ... CASCADE to drop the namespace and all its objects."
+    ],
+    "sqlState" : "42000"
+  },
+  "NAMESPACE_NOT_FOUND" : {
+    "message" : [
+      "The namespace <nameSpaceName> cannot be found. Verify the spelling and correctness of the namespace.",
+      "If you did not qualify the name with, verify the current_schema() output, or qualify the name with the correctly.",
+      "To tolerate the error on drop use DROP NAMESPACE IF EXISTS."
+    ],
+    "sqlState" : "42000"
+  },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [
       "Literal expressions required for pivot values, found <expression>."
@@ -569,6 +623,21 @@
     ],
     "sqlState" : "42000"
   },
+  "PARTITIONS_ALREADY_EXIST" : {
+    "message" : [
+      "Cannot ADD or RENAME TO partition(s) <partitionList> in table <tableName> because they already exist.",
+      "Choose a different name, drop the existing partition, or add the IF NOT EXISTS clause to tolerate a pre-existing partition."
+    ],
+    "sqlState" : "42000"
+  },
+  "PARTITIONS_NOT_FOUND" : {
+    "message" : [
+      "The partition(s) <partitionList> cannot be found in table <tableName>.",
+      "Verify the partition specification and table name.",
+      "To tolerate the error on drop use ALTER TABLE … DROP IF EXISTS PARTITION."
+    ],
+    "sqlState" : "42000"
+  },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
       "Invalid pivot value '<value>': value data type <valueType> does not match pivot column data type <pivotType>"
@@ -586,11 +655,70 @@
       "Failed to set original permission <permission> back to the created path: <path>. Exception: <message>"
     ]
   },
+  "ROUTINE_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot create the function <routineName> because it already exists.",
+      "Choose a different name, drop or replace the existing function, or add the IF NOT EXISTS clause to tolerate a pre-existing function."
+    ],
+    "sqlState" : "42000"
+  },
+  "ROUTINE_NOT_FOUND" : {
+    "message" : [
+      "The function <routineName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
+      "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
+    ],
+    "sqlState" : "42000"
+  },
+  "SCHEMA_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot create schema <schemaName> because it already exists.",
+      "Choose a different name, drop the existing schema, or add the IF NOT EXISTS clause to tolerate pre-existing schema."
+    ],
+    "sqlState" : "42000"
+  },
+  "SCHEMA_NOT_EMPTY" : {
+    "message" : [
+      "Cannot drop a schema <schemaName> because it contains objects.",
+      "Use DROP SCHEMA ... CASCADE to drop the schema and all its objects."
+    ],
+    "sqlState" : "42000"
+  },
+  "SCHEMA_NOT_FOUND" : {
+    "message" : [
+      "The schema <schemaName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "If you did not qualify the name with a catalog, verify the current_schema() output, or qualify the name with the correct catalog.",
+      "To tolerate the error on drop use DROP SCHEMA IF EXISTS."
+    ],
+    "sqlState" : "42000"
+  },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [
       "The second argument of <functionName> function needs to be an integer."
     ],
     "sqlState" : "22023"
+  },
+  "TABLE_OR_VIEW_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot create table or view <relationName> because it already exists.",
+      "Choose a different name, drop or replace the existing object, or add the IF NOT EXISTS clause to tolerate pre-existing objects."
+    ],
+    "sqlState" : "42000"
+  },
+  "TABLE_OR_VIEW_NOT_FOUND" : {
+    "message" : [
+      "The table or view <relationName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
+      "To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS."
+    ],
+    "sqlState" : "42000"
+  },
+  "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot create the temporary view <relationName> because it already exists.",
+      "Choose a different name, drop or replace the existing view,  or add the IF NOT EXISTS clause to tolerate pre-existing views."
+    ],
+    "sqlState" : "42000"
   },
   "TOO_MANY_ARRAY_ELEMENTS" : {
     "message" : [
@@ -939,6 +1067,11 @@
       "UNSUPPORTED_CORRELATED_REFERENCE" : {
         "message" : [
           "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses<treeNode>"
+        ]
+      },
+      "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE" : {
+        "message" : [
+          "Correlated column reference '<expr>' cannot be <dataType> type"
         ]
       },
       "UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY" : {
@@ -1593,21 +1726,6 @@
       "Column <colName> does not exist."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1062" : {
-    "message" : [
-      "Rename temporary view from '<oldName>' to '<newName>': destination view already exists."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1063" : {
-    "message" : [
-      "Cannot drop a non-empty database: <db>. Use CASCADE option to drop a non-empty database."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1064" : {
-    "message" : [
-      "Cannot drop a non-empty namespace: <namespace>. Use CASCADE option to drop a non-empty namespace."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1065" : {
     "message" : [
       "`<name>` is not a valid name for tables/databases. Valid names only contain alphabet characters, numbers and _."
@@ -1658,19 +1776,9 @@
       "RENAME TEMPORARY VIEW from '<oldName>' to '<newName>': cannot specify database name '<db>' in the destination table."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1075" : {
-    "message" : [
-      "RENAME TEMPORARY VIEW from '<oldName>' to '<newName>': destination table already exists."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1076" : {
     "message" : [
       "Partition spec is invalid. <details>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1077" : {
-    "message" : [
-      "Function <func> already exists."
     ]
   },
   "_LEGACY_ERROR_TEMP_1078" : {
@@ -1843,11 +1951,6 @@
       "DESCRIBE does not support partition for v2 tables."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1112" : {
-    "message" : [
-      "Table <table> cannot be replaced as it did not exist. Use CREATE OR REPLACE TABLE to create the table."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1113" : {
     "message" : [
       "Table <table> does not support <cmd>."
@@ -1860,24 +1963,9 @@
       "Sources support continuous: <continuousSources>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_1115" : {
-    "message" : [
-      "<msg>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1116" : {
-    "message" : [
-      "<msg>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1117" : {
     "message" : [
       "<sessionCatalog> requires a single-part namespace, but got <ns>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1118" : {
-    "message" : [
-      "<msg>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1119" : {
@@ -2395,11 +2483,6 @@
       "The pattern '<pattern>' is invalid, <message>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1217" : {
-    "message" : [
-      "<tableIdentifier> already exists."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1218" : {
     "message" : [
       "<tableIdentifier> should be converted to HadoopFsRelation."
@@ -2501,19 +2584,9 @@
       "The list of partition columns with values in partition specification for table '<table>' in database '<database>' is not a prefix of the list of partition columns defined in the table schema. Expected a prefix of [<schemaColumns>], but got [<specColumns>]."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1238" : {
-    "message" : [
-      "<msg>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1239" : {
     "message" : [
       "Analyzing column statistics is not supported for column <name> of data type: <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1240" : {
-    "message" : [
-      "Table <table> already exists.<guide>"
     ]
   },
   "_LEGACY_ERROR_TEMP_1241" : {
@@ -2599,11 +2672,6 @@
   "_LEGACY_ERROR_TEMP_1257" : {
     "message" : [
       "Cannot refresh temporary function <functionName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1258" : {
-    "message" : [
-      "<msg>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1259" : {
@@ -2838,9 +2906,9 @@
       "Boundary end is not a valid integer: <end>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1303" : {
+  "_LEGACY_ERROR_TEMP_1304" : {
     "message" : [
-      "Table or view '<ident>' not found."
+      "Unexpected type <className> of the relation <tableName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1305" : {
@@ -2886,11 +2954,6 @@
   "_LEGACY_ERROR_TEMP_1313" : {
     "message" : [
       "'<operation>' does not support bucketBy and sortBy right now."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1314" : {
-    "message" : [
-      "Table <tableIdent> already exists."
     ]
   },
   "_LEGACY_ERROR_TEMP_1315" : {
