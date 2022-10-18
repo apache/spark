@@ -355,7 +355,22 @@ SELECT regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', -2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', -2)' due to data type mismatch: The position must be positive (current value = -2); line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_VALUE",
+  "messageParameters" : {
+    "currentValue" : "-2",
+    "expectedValue" : "positive",
+    "exprName" : "position",
+    "sqlExpr" : "\"regexp_replace(healthy, wealthy, and wise, \\w+thy, something, -2)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 79,
+    "fragment" : "regexp_replace('healthy, wealthy, and wise', '\\\\w+thy', 'something', -2)"
+  } ]
+}
 
 
 -- !query
@@ -364,7 +379,22 @@ SELECT regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', 0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', 0)' due to data type mismatch: The position must be positive (current value = 0); line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_VALUE",
+  "messageParameters" : {
+    "currentValue" : "0",
+    "expectedValue" : "positive",
+    "exprName" : "position",
+    "sqlExpr" : "\"regexp_replace(healthy, wealthy, and wise, \\w+thy, something, 0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 78,
+    "fragment" : "regexp_replace('healthy, wealthy, and wise', '\\\\w+thy', 'something', 0)"
+  } ]
+}
 
 
 -- !query
