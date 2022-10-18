@@ -41,6 +41,7 @@ if TYPE_CHECKING:
 
 ColumnOrName = Union[ColumnRef, str]
 
+
 class GroupingFrame(object):
 
     MeasuresType = Union[Sequence[Tuple["ExpressionOrString", str]], Dict[str, str]]
