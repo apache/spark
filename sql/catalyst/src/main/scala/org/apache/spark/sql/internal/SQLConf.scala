@@ -1834,6 +1834,7 @@ object SQLConf {
     buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
       .doc("When true, Spark will validate if renamed checkpoint file exists.")
       .internal()
+      .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
 
