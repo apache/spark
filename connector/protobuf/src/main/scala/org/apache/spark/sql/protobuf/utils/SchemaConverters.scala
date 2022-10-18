@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.protobuf.ScalaReflectionLock
 import org.apache.spark.sql.types._
 
@@ -96,10 +97,8 @@ object SchemaConverters {
             .toSeq)
           .filter(_.nonEmpty)
           .map(StructType.apply)
-      case _ =>
-        throw new IncompatibleSchemaException(
-          s"Cannot convert Protobuf type" +
-            s" ${fd.getJavaType}")
+      case other =>
+        throw QueryCompilationErrors.protobufTypeUnsupportedYetError(other.toString)
     }
     dataType.map(dt =>
       StructField(

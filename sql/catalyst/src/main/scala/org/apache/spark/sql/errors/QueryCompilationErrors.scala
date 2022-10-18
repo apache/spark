@@ -1751,6 +1751,66 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("field" -> field))
   }
 
+  def cannotConvertProtobufTypeToDataTypeError(
+      protobufColumn: String,
+      sqlColumn: String,
+      protobufType: String,
+      sqlType: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2251",
+      messageParameters = Map(
+        "protobufColumn" -> protobufColumn,
+        "sqlColumn" -> sqlColumn,
+        "protobufType" -> protobufType,
+        "sqlType" -> sqlType))
+  }
+
+  def cannotConvertDataTypeToProtobufTypeError(
+    sqlColumn: String,
+    protobufColumn: String,
+    sqlType: String,
+    protobufType: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2252",
+      messageParameters = Map(
+        "sqlColumn" -> sqlColumn,
+        "protobufColumn" -> protobufColumn,
+        "sqlType" -> sqlType,
+        "protobufType" -> protobufType))
+  }
+
+  def cannotConvertDataTypeToProtobufEnumTypeError(
+    sqlColumn: String,
+    protobufColumn: String,
+    data: String,
+    enumString: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2253",
+      messageParameters = Map(
+        "sqlColumn" -> sqlColumn,
+        "protobufColumn" -> protobufColumn,
+        "data" -> data,
+        "enumString" -> enumString))
+  }
+
+  def cannotConvertProtobufTypeToTypeError(
+    protobufType: String,
+    sqlType: String,
+    errorMessage: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2254",
+      messageParameters = Map(
+        "protobufType" -> protobufType,
+        "toType" -> sqlType,
+        "errorMessage" -> errorMessage))
+  }
+
+  def protobufTypeUnsupportedYetError(protobufType: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2255",
+      messageParameters = Map("protobufType" -> protobufType))
+  }
+
   def cannotConvertDataTypeToParquetTypeError(field: StructField): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1175",

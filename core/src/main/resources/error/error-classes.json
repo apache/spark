@@ -4207,5 +4207,30 @@
     "message" : [
       "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastjoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
     ]
+  },
+  "_LEGACY_ERROR_TEMP_2251" : {
+    "message" : [
+      "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protoType>, sqlType = <sqlType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2252" : {
+    "message" : [
+      "Cannot convert SQL <sqlColumn> to SQL <protobufColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2253" : {
+    "message" : [
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> cannot be written since it's not defined in ENUM <enumString>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2254" : {
+    "message" : [
+      "Unable to convert <protobufType> of Protobuf to data type <toType>. <errorMessage>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2255" : {
+    "message" : [
+      "Protobuf type not yet supported: <protobufType>."
+    ]
   }
 }

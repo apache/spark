@@ -20,9 +20,9 @@ package org.apache.spark.sql.protobuf
 import com.google.protobuf.Descriptors.Descriptor
 import com.google.protobuf.DynamicMessage
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.NoopFilters
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
-import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
@@ -160,7 +160,7 @@ class ProtobufSerdeSuite extends SharedSparkSession {
       fieldMatchType: MatchType,
       expectedCauseMessage: String,
       catalystSchema: StructType = CATALYST_STRUCT): Unit = {
-    val e = intercept[IncompatibleSchemaException] {
+    val e = intercept[AnalysisException] {
       serdeFactory.create(catalystSchema, protoSchema, fieldMatchType)
     }
     val expectMsg = serdeFactory match {
@@ -170,6 +170,8 @@ class ProtobufSerdeSuite extends SharedSparkSession {
         s"Cannot convert SQL type ${catalystSchema.sql} to Protobuf type ${protoSchema.getName}."
     }
 
+    println(s"${e.getMessage}, : ${expectMsg}")
+    println(s"${e.getCause.getMessage}, : ${expectedCauseMessage}")
     assert(e.getMessage === expectMsg)
     assert(e.getCause.getMessage === expectedCauseMessage)
   }
