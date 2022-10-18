@@ -216,7 +216,20 @@ SELECT * FROM outermost ORDER BY 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: outermost; line 4 pos 23
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`outermost`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 96,
+    "stopIndex" : 104,
+    "fragment" : "outermost"
+  } ]
+}
 
 
 -- !query
@@ -396,7 +409,20 @@ WITH test AS (SELECT 42) INSERT INTO test VALUES (1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table not found: test; line 1 pos 37
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`test`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 38,
+    "stopIndex" : 41,
+    "fragment" : "test"
+  } ]
+}
 
 
 -- !query

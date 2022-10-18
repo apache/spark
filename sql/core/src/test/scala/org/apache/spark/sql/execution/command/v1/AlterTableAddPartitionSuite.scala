@@ -143,13 +143,14 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       sql(s"ALTER TABLE $t ADD PARTITION (id=2) LOCATION 'loc1'")
 
-      val errMsg = intercept[PartitionsAlreadyExistException] {
+      val e = intercept[PartitionsAlreadyExistException] {
         sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'" +
           " PARTITION (id=2) LOCATION 'loc1'")
-      }.getMessage
-      assert(errMsg ===
-      """The following partitions already exist in table 'tbl' database 'ns':
-        |Map(id -> 2)""".stripMargin)
+      }
+      checkError(e,
+        errorClass = "PARTITIONS_ALREADY_EXIST",
+        parameters = Map("partitionList" -> "PARTITION (`id` = 2)",
+          "tableName" -> "`ns`.`tbl`"))
 
       sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
         " PARTITION (id=2) LOCATION 'loc1'")

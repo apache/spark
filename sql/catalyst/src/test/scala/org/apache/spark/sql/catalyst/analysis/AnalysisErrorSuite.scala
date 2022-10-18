@@ -119,7 +119,8 @@ class AnalysisErrorSuite extends AnalysisTest {
       messageParameters: Map[String, String],
       caseSensitive: Boolean = true): Unit = {
     test(name) {
-      assertAnalysisErrorClass(plan, errorClass, messageParameters, caseSensitive)
+      assertAnalysisErrorClass(plan, errorClass, messageParameters,
+        caseSensitive = true, line = -1, pos = -1)
     }
   }
 
@@ -809,10 +810,12 @@ class AnalysisErrorSuite extends AnalysisTest {
         Project(
           Alias(Literal(1), "x")() :: Nil,
           UnresolvedRelation(TableIdentifier("t", Option("nonexist")))))))
-    assertAnalysisError(plan, "Table or view not found:" :: Nil)
+    assertAnalysisErrorClass(plan,
+      expectedErrorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      Map("relationName" -> "`nonexist`.`t`"))
   }
 
-  test("SPARK-33909: Check rand functions seed is legal at analyer side") {
+  test("SPARK-33909: Check rand functions seed is legal at analyzer side") {
     Seq(Rand("a".attr), Randn("a".attr)).foreach { r =>
       val plan = Project(Seq(r.as("r")), testRelation)
       assertAnalysisError(plan,
@@ -832,7 +835,9 @@ class AnalysisErrorSuite extends AnalysisTest {
           "inputSql" -> inputSql,
           "inputType" -> inputType,
           "requiredType" -> "(\"INT\" or \"BIGINT\")"),
-        caseSensitive = false)
+        caseSensitive = false,
+        line = -1,
+        pos = -1)
     }
   }
 
