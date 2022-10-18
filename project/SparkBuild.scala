@@ -717,15 +717,17 @@ object SparkProtobuf {
     // For some reason the resolution from the imported Maven build does not work for some
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= Seq(
-      "com.google.protobuf" % "protobuf-java"        % protoVersion % "protobuf"
+      "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
     ),
 
     dependencyOverrides ++= Seq(
-      "com.google.protobuf" % "protobuf-java"        % protoVersion
+      "com.google.protobuf" % "protobuf-java" % protoVersion
     ),
 
-    (Compile / PB.targets) := Seq(
-      PB.gens.java                -> (Compile / sourceManaged).value,
+    (Test / PB.protoSources) := Seq((Test / sourceDirectory).value / "resources/protobuf"),
+
+    (Test / PB.targets) := Seq(
+      PB.gens.java -> target.value / "generated-test-sources"
     ),
 
     (assembly / test) := false,

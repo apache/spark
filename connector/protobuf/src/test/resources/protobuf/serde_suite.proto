@@ -24,7 +24,7 @@ package org.apache.spark.sql.protobuf.protos;
 option java_outer_classname = "SerdeSuiteProtos";
 
 /* Clean Message*/
-message BasicMessage {
+message SerdeBasicMessage {
   Foo foo = 1;
 }
 
