@@ -194,7 +194,7 @@ public class RemoteBlockPushResolverSuite {
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[3]));
     assertEquals("cached bytes", 3L,
       ((Counter) pushResolver.getMetrics().getMetrics()
-        .get(PushMergeMetrics.CACHED_BLOCKS_BYTES_METRIC)).getCount());
+        .get(PushMergeMetrics.DEFERRED_BLOCK_BYTES_METRIC)).getCount());
     // stream 1 now completes
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     stream1.onComplete(stream1.getID());
@@ -221,7 +221,7 @@ public class RemoteBlockPushResolverSuite {
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[3]));
     assertEquals("cached bytes", 6L,
       ((Counter) pushResolver.getMetrics().getMetrics()
-        .get(PushMergeMetrics.CACHED_BLOCKS_BYTES_METRIC)).getCount());
+        .get(PushMergeMetrics.DEFERRED_BLOCK_BYTES_METRIC)).getCount());
     // stream 1 now completes
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     stream1.onComplete(stream1.getID());
@@ -423,7 +423,7 @@ public class RemoteBlockPushResolverSuite {
     stream3.onData(stream3.getID(), ByteBuffer.wrap(new byte[5]));
     assertEquals("cached bytes", 5L,
       ((Counter) pushResolver.getMetrics().getMetrics()
-        .get(PushMergeMetrics.CACHED_BLOCKS_BYTES_METRIC)).getCount());
+        .get(PushMergeMetrics.DEFERRED_BLOCK_BYTES_METRIC)).getCount());
     // Since this stream didn't get any opportunity it will throw couldn't find opportunity error
     BlockPushNonFatalFailure e = assertThrows(BlockPushNonFatalFailure.class,
       () -> stream3.onComplete(stream3.getID()));
@@ -1465,14 +1465,14 @@ public class RemoteBlockPushResolverSuite {
       long expectedTooLateResponses,
       long expectedCachedBlocksBytes) {
     Map<String, Metric> metrics = pushResolver.getMetrics().getMetrics();
-    Meter writtenBytes = (Meter) metrics.get(PushMergeMetrics.PUSHED_BYTES_WRITTEN_METRIC);
+    Meter writtenBytes = (Meter) metrics.get(PushMergeMetrics.BLOCK_BYTES_WRITTEN_METRIC);
     assertEquals("bytes written", expectedPushBytesWritten, writtenBytes.getCount());
-    Meter collidedBlocks = (Meter) metrics.get(PushMergeMetrics.NO_OPPORTUNITY_RESPONSES_METRIC);
+    Meter collidedBlocks = (Meter) metrics.get(PushMergeMetrics.BLOCK_APPEND_COLLISIONS_METRIC);
     assertEquals("could not find opportunity responses", expectedNoOpportunityResponses,
       collidedBlocks.getCount());
-    Meter tooLateBlocks = (Meter) metrics.get(PushMergeMetrics.TOO_LATE_RESPONSES_METRIC);
+    Meter tooLateBlocks = (Meter) metrics.get(PushMergeMetrics.LATE_BLOCK_PUSHES_METRIC);
     assertEquals("too late responses", expectedTooLateResponses, tooLateBlocks.getCount());
-    Counter cachedBytes = (Counter) metrics.get(PushMergeMetrics.CACHED_BLOCKS_BYTES_METRIC);
+    Counter cachedBytes = (Counter) metrics.get(PushMergeMetrics.DEFERRED_BLOCK_BYTES_METRIC);
     assertEquals("cached block bytes", expectedCachedBlocksBytes,
       cachedBytes.getCount());
   }
