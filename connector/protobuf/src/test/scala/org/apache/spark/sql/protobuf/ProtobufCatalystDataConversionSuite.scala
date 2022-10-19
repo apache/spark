@@ -241,7 +241,7 @@ class ProtobufCatalystDataConversionSuite
     assert(withShortName.findFieldByName("bytes_type") != null)
 
     val withFullName = ProtobufUtils.buildDescriptor(
-      testFileDesc, "org.apache.spark.sql.protobuf.BytesMsg") // XXX
-    assert(withShortName.findFieldByName("bytes_type") != null)
+      testFileDesc, "org.apache.spark.sql.protobuf.BytesMsg")
+    assert(withFullName.findFieldByName("bytes_type") != null)
   }
 }
