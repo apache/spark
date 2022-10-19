@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 from typing import Any
-import uuid
 import unittest
 import tempfile
 
@@ -47,18 +46,29 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
         cls.df = cls.sc.parallelize(cls.testData).toDF()
 
+        cls.tbl_name = "test_connect_basic_table_1"
+
+        # Cleanup test data
+        cls.spark_connect_clean_up_test_data()
         # Load test data
-        cls.spark_connect_test_data()
+        cls.spark_connect_load_test_data()
 
     @classmethod
-    def spark_connect_test_data(cls: Any):
+    def tearDownClass(cls: Any) -> None:
+        cls.spark_connect_clean_up_test_data()
+
+    @classmethod
+    def spark_connect_load_test_data(cls: Any):
         # Setup Remote Spark Session
-        cls.tbl_name = f"tbl{uuid.uuid4()}".replace("-", "")
         cls.connect = RemoteSparkSession(user_id="test_user")
         df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
         # Since we might create multiple Spark sessions, we need to creata global temporary view
         # that is specifically maintained in the "global_temp" schema.
         df.write.saveAsTable(cls.tbl_name)
+
+    @classmethod
+    def spark_connect_clean_up_test_data(cls: Any) -> None:
+        cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name))
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
