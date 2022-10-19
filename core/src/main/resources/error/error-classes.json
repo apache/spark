@@ -178,11 +178,6 @@
           "The <functionName> accepts only arrays of pair structs, but <childExpr> is of <childType>."
         ]
       },
-      "NON_FOLDABLE_ENDPOINT" : {
-        "message" : [
-          "The endpoints provided must be constant literals."
-        ]
-      },
       "NON_FOLDABLE_INPUT" : {
         "message" : [
           "the input <inputName> should be a foldable <inputType> expression; however, got <inputExpr>."

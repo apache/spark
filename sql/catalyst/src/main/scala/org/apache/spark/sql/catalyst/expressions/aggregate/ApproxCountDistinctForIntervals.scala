@@ -81,7 +81,11 @@ case class ApproxCountDistinctForIntervals(
     if (defaultCheck.isFailure) {
       defaultCheck
     } else if (!endpointsExpression.foldable) {
-      DataTypeMismatch("NON_FOLDABLE_ENDPOINT")
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "endpointsExpression",
+          "inputType" -> toSQLType(endpointsExpression.dataType)))
     } else {
       endpointsExpression.dataType match {
         case ArrayType(_: NumericType | DateType | TimestampType | TimestampNTZType |
