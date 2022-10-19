@@ -253,14 +253,14 @@
           "The <functionName> requires at least <num> arguments."
         ]
       },
-      "UNEXPECTED_VALUE" : {
-        "message" : [
-          "The <exprName> must be <expectedValue> (current value = <currentValue>)"
-        ]
-      },
       "UNEXPECTED_STATIC_METHOD" : {
         "message" : [
           "cannot find a static method <methodName> that matches the argument types in <className>"
+        ]
+      },
+      "UNEXPECTED_VALUE" : {
+        "message" : [
+          "The <exprName> must be <expectedValue> (current value = <currentValue>)"
         ]
       },
       "UNSPECIFIED_FRAME" : {
