@@ -25,6 +25,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sample, SubqueryAlias}
 import org.apache.spark.sql.types._
@@ -102,7 +103,9 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       common: Option[proto.RelationCommon]): LogicalPlan = {
     val baseRelation = rel.getReadTypeCase match {
       case proto.Read.ReadTypeCase.NAMED_TABLE =>
-        val child = UnresolvedRelation(rel.getNamedTable.getPartsList.asScala.toSeq)
+        val multipartIdentifier =
+          CatalystSqlParser.parseMultipartIdentifier(rel.getNamedTable.getUnparsedIdentifier)
+        val child = UnresolvedRelation(multipartIdentifier)
         if (common.nonEmpty && common.get.getAlias.nonEmpty) {
           SubqueryAlias(identifier = common.get.getAlias, child = child)
         } else {
@@ -139,7 +142,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   }
 
   private def transformUnresolvedExpression(exp: proto.Expression): UnresolvedAttribute = {
-    UnresolvedAttribute(exp.getUnresolvedAttribute.getPartsList.asScala.toSeq)
+    UnresolvedAttribute(exp.getUnresolvedAttribute.getUnparsedIdentifier)
   }
 
   private def transformExpression(exp: proto.Expression): Expression = {
