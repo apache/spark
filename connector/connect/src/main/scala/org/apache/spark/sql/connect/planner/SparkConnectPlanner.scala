@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Offset, Sample, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sample, SubqueryAlias}
 import org.apache.spark.sql.types._
 
 final case class InvalidPlanInput(
@@ -202,7 +202,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   }
 
   private def transformOffset(offset: proto.Offset): LogicalPlan = {
-    Offset(
+    logical.Offset(
       offsetExpr = expressions.Literal(offset.getOffset, IntegerType),
       transformRelation(offset.getInput))
   }
