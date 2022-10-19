@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import List, cast, get_args, TYPE_CHECKING, Optional, Callable, Any
+from typing import cast, get_args, TYPE_CHECKING, Optional, Callable, Any
 
 
 import pyspark.sql.connect.proto as proto
@@ -46,7 +46,7 @@ class Expression(object):
     """
 
     __gt__ = _bin_op(">")
-    __lt__ = _bin_op(">")
+    __lt__ = _bin_op("<")
     __add__ = _bin_op("+")
     __sub__ = _bin_op("-")
     __mul__ = _bin_op("*")
@@ -121,20 +121,20 @@ class ColumnRef(Expression):
 
     @classmethod
     def from_qualified_name(cls, name: str) -> "ColumnRef":
-        return ColumnRef(*name.split("."))
+        return ColumnRef(name)
 
-    def __init__(self, *parts: str) -> None:
+    def __init__(self, name: str) -> None:
         super().__init__()
-        self._parts: List[str] = list(parts)
+        self._unparsed_identifier: str = name
 
     def name(self) -> str:
         """Returns the qualified name of the column reference."""
-        return ".".join(self._parts)
+        return self._unparsed_identifier
 
     def to_plan(self, session: Optional["RemoteSparkSession"]) -> proto.Expression:
         """Returns the Proto representation of the expression."""
         expr = proto.Expression()
-        expr.unresolved_attribute.parts.extend(self._parts)
+        expr.unresolved_attribute.unparsed_identifier = self._unparsed_identifier
         return expr
 
     def desc(self) -> "SortOrder":
@@ -144,7 +144,7 @@ class ColumnRef(Expression):
         return SortOrder(self, ascending=True)
 
     def __str__(self) -> str:
-        return f"Column({'.'.join(self._parts)})"
+        return f"Column({self._unparsed_identifier})"
 
 
 class SortOrder(Expression):

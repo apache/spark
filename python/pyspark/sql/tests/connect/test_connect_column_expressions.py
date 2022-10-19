@@ -46,7 +46,7 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
     def test_column_literals(self):
         df = c.DataFrame.withPlan(p.Read("table"))
         lit_df = df.select(fun.lit(10))
-        self.assertIsNotNone(lit_df._plan.collect(None))
+        self.assertIsNotNone(lit_df._plan.to_proto(None))
 
         self.assertIsNotNone(fun.lit(10).to_plan(None))
         plan = fun.lit(10).to_plan(None)
@@ -56,6 +56,11 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         """Test a more complex combination of expressions and their translation into
         the protobuf structure."""
         df = c.DataFrame.withPlan(p.Read("table"))
+
+        expr = fun.lit(10) < fun.lit(10)
+        expr_plan = expr.to_plan(None)
+        self.assertIsNotNone(expr_plan.unresolved_function)
+        self.assertEqual(expr_plan.unresolved_function.parts[0], "<")
 
         expr = df.id % fun.lit(10) == fun.lit(10)
         expr_plan = expr.to_plan(None)
@@ -77,7 +82,7 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
             ProtoExpression.UnresolvedAttribute,
         )
         self.assertEqual(
-            mod_fun.unresolved_function.arguments[0].unresolved_attribute.parts, ["id"]
+            mod_fun.unresolved_function.arguments[0].unresolved_attribute.unparsed_identifier, "id"
         )
 
 
