@@ -84,10 +84,12 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("non-existent global temp view") {
     val global_temp_db = spark.conf.get(GLOBAL_TEMP_DATABASE)
-    val message = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       spark.sql(s"select * from ${global_temp_db}.nonexistentview")
-    }.getMessage
-    assert(message.contains("Table or view not found"))
+    }
+    checkErrorTableNotFound(e, s"`${global_temp_db}`.`nonexistentview`",
+      ExpectedContext(s"${global_temp_db}.nonexistentview", 14,
+        13 + s"${global_temp_db}.nonexistentview".length))
   }
 
   test("script") {
@@ -439,10 +441,10 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       withTable("ctas1") {
         sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
         sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-        val message = intercept[AnalysisException] {
+        val e = intercept[AnalysisException] {
           sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-        }.getMessage
-        assert(message.contains("already exists"))
+        }
+        checkErrorTableAlreadyExists(e, "`spark_catalog`.`default`.`ctas1`")
         checkRelation("ctas1", isDataSourceTable = true, defaultDataSource)
       }
 

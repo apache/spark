@@ -80,9 +80,19 @@ class LogicalPlan(object):
 
         return test_plan == plan
 
-    def collect(
+    def to_proto(
         self, session: Optional["RemoteSparkSession"] = None, debug: bool = False
     ) -> proto.Plan:
+        """
+        Generates connect proto plan based on this LogicalPlan.
+
+        Parameters
+        ----------
+        session : :class:`RemoteSparkSession`, optional.
+            a session that connects remote spark cluster.
+        debug: bool
+            if enabled, the proto plan will be printed.
+        """
         plan = proto.Plan()
         plan.root.CopyFrom(self.plan(session))
 
@@ -322,15 +332,11 @@ class Aggregate(LogicalPlan):
     ) -> proto.Aggregate.AggregateFunction:
         exp, fun = m
         measure = proto.Aggregate.AggregateFunction()
-        measure.function.name = fun  # type: ignore[attr-defined]
+        measure.name = fun
         if type(exp) is str:
-            measure.function.arguments.append(  # type: ignore[attr-defined]
-                self.unresolved_attr(exp)
-            )
+            measure.arguments.append(self.unresolved_attr(exp))
         else:
-            measure.function.arguments.append(  # type: ignore[attr-defined]
-                cast(Expression, exp).to_plan(session)
-            )
+            measure.arguments.append(cast(Expression, exp).to_plan(session))
         return measure
 
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
@@ -339,13 +345,11 @@ class Aggregate(LogicalPlan):
 
         agg = proto.Relation()
         agg.aggregate.input.CopyFrom(self._child.plan(session))
-        agg.aggregate.measures.extend(  # type: ignore[attr-defined]
+        agg.aggregate.result_expressions.extend(
             list(map(lambda x: self._convert_measure(x, session), self.measures))
         )
 
-        gs = proto.Aggregate.GroupingSet()  # type: ignore[attr-defined]
-        gs.aggregate_expressions.extend(groupings)
-        agg.aggregate.grouping_sets.append(gs)  # type: ignore[attr-defined]
+        agg.aggregate.grouping_expressions.extend(groupings)
         return agg
 
     def print(self, indent: int = 0) -> str:

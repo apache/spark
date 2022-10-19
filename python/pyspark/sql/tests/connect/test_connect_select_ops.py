@@ -24,7 +24,7 @@ import pyspark.sql.connect.proto as proto
 class SparkConnectToProtoSuite(PlanOnlyTestFixture):
     def test_select_with_literal(self):
         df = DataFrame.withPlan(Read("table"))
-        self.assertIsNotNone(df.select(col("name"))._plan.collect())
+        self.assertIsNotNone(df.select(col("name"))._plan.to_proto())
         self.assertRaises(InputValidationError, df.select, "name")
 
     def test_join_with_join_type(self):
@@ -39,7 +39,7 @@ class SparkConnectToProtoSuite(PlanOnlyTestFixture):
             ("leftanti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
             ("leftsemi", proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI),
         ]:
-            joined_df = df_left.join(df_right, on=col("name"), how=join_type_str)._plan.collect()
+            joined_df = df_left.join(df_right, on=col("name"), how=join_type_str)._plan.to_proto()
             self.assertEqual(joined_df.root.join.join_type, join_type)
 
 

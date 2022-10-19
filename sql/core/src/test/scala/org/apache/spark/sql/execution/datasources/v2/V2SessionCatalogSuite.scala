@@ -29,6 +29,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
@@ -44,6 +45,8 @@ abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeA
   val testNs: Array[String] = Array("db")
   val defaultNs: Array[String] = Array("default")
   val testIdent: Identifier = Identifier.of(testNs, "test_table")
+  val testIdentQuoted: String = (testIdent.namespace :+ testIdent.name)
+    .map(part => quoteIdentifier(part)).mkString(".")
 
   def newCatalog(): V2SessionCatalog = {
     val newCatalog = new V2SessionCatalog(spark.sessionState.catalog)
@@ -81,6 +84,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   }
 
   private val testIdentNew = Identifier.of(testNs, "test_table_new")
+  private val testIdentNewQuoted = (testIdentNew.namespace :+ testIdentNew.name)
+    .map(part => quoteIdentifier(part)).mkString(".")
 
   test("listTables") {
     val catalog = newCatalog()
@@ -153,12 +158,14 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
 
+    val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
+      .map(part => quoteIdentifier(part)).mkString(".")
+
     val exc = intercept[TableAlreadyExistsException] {
       catalog.createTable(testIdent, schema, Array.empty, emptyProps)
     }
 
-    assert(exc.message.contains(table.name()))
-    assert(exc.message.contains("already exists"))
+    checkErrorTableAlreadyExists(exc, parsed)
 
     assert(catalog.tableExists(testIdent))
   }
@@ -232,7 +239,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.loadTable(testIdent)
     }
 
-    assert(exc.message.contains("Table or view 'test_table' not found in database 'db'"))
+    checkErrorTableNotFound(exc, testIdentQuoted)
   }
 
   test("invalidateTable") {
@@ -683,8 +690,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.alterTable(testIdent, TableChange.setProperty("prop", "val"))
     }
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("not found"))
+    checkErrorTableNotFound(exc, testIdentQuoted)
   }
 
   test("alterTable: location") {
@@ -760,7 +766,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.renameTable(testIdent, testIdentNew)
     }
 
-    assert(exc.message.contains("Table or view 'test_table' not found in database 'db'"))
+    checkErrorTableNotFound(exc, testIdentQuoted)
   }
 
   test("renameTable: fail if new table name already exists") {
@@ -779,8 +785,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.renameTable(testIdent, testIdentNew)
     }
 
-    assert(exc.message.contains(testIdentNew.quoted))
-    assert(exc.message.contains("already exists"))
+    checkErrorTableAlreadyExists(exc, testIdentNewQuoted)
   }
 
   test("renameTable: fail if db does not match for old and new table names") {

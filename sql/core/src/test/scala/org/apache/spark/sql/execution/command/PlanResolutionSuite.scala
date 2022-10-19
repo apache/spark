@@ -154,7 +154,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "defaultvalues" => defaultValues
         case "defaultvalues2" => defaultValues2
         case "tablewithcolumnnameddefault" => tableWithColumnNamedDefault
-        case name => throw new NoSuchTableException(name)
+        case name => throw new NoSuchTableException(Seq(name))
       }
     })
     when(newCatalog.name()).thenReturn("testcat")
@@ -172,7 +172,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "v2Table1" => table1
         case "v2TableWithAcceptAnySchemaCapability" => tableWithAcceptAnySchemaCapability
         case "view" => createV1TableMock(ident, tableType = CatalogTableType.VIEW)
-        case name => throw new NoSuchTableException(name)
+        case name => throw new NoSuchTableException(Seq(name))
       }
     })
     when(newCatalog.name()).thenReturn(CatalogManager.SESSION_CATALOG_NAME)
