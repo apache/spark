@@ -1262,7 +1262,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkArithmeticException(
       errorClass = "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION",
       messageParameters = Map(
-        "ANSIEnabled" -> SQLConf.ANSI_ENABLED.key),
+        "ansiConfig" -> SQLConf.ANSI_ENABLED.key),
       context = Array.empty,
       summary = "")
   }
@@ -2387,11 +2387,29 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkException("Foreach writer has been aborted due to a task failure")
   }
 
-  def integerOverflowError(message: String): SparkArithmeticException = {
+  def incorrectRumpUpRate(rowsPerSecond: Long,
+                          maxSeconds: Long,
+                          rampUpTimeSeconds: Long): Throwable = {
     new SparkArithmeticException(
-      errorClass = "INTEGER_OVERFLOW",
+      errorClass = "INCORRECT_RUMP_UP_RATE",
       messageParameters = Map(
-        "message" -> message
+        "rowsPerSecond" -> rowsPerSecond.toString,
+        "maxSeconds" -> maxSeconds.toString,
+        "rampUpTimeSeconds" -> rampUpTimeSeconds.toString
+      ),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def incorrectEndOffset(rowsPerSecond: Long,
+                         maxSeconds: Long,
+                         endSeconds: Long): Throwable = {
+    new SparkArithmeticException(
+      errorClass = "INCORRECT_END_OFFSET",
+      messageParameters = Map(
+        "rowsPerSecond" -> rowsPerSecond.toString,
+        "maxSeconds" -> maxSeconds.toString,
+        "endSeconds" -> endSeconds.toString
       ),
       context = Array.empty,
       summary = "")

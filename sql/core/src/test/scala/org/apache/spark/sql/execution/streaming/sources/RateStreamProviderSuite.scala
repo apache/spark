@@ -197,7 +197,7 @@ class RateStreamProviderSuite extends StreamTest {
     }
   }
 
-  testQuietly("microbatch - error class") {
+  testQuietly("microbatch - rump up error") {
     val e = intercept[SparkArithmeticException](
       new RateStreamMicroBatchStream(
         rowsPerSecond = Long.MaxValue,
@@ -207,9 +207,28 @@ class RateStreamProviderSuite extends StreamTest {
 
     checkError(
       exception = e,
-      errorClass = "INTEGER_OVERFLOW",
-      parameters = Map("message" -> (s"Max offset with ${Long.MaxValue.toString} " +
-        "rowsPerSecond is 1, but 'rampUpTimeSeconds' is 2.")))
+      errorClass = "INCORRECT_RUMP_UP_RATE",
+      parameters = Map(
+        "rowsPerSecond" -> Long.MaxValue.toString,
+        "maxSeconds" -> "1",
+        "rampUpTimeSeconds" -> "2"))
+  }
+
+  testQuietly("microbatch - end offset error") {
+    val e = intercept[SparkArithmeticException](
+      new RateStreamMicroBatchStream(
+        rowsPerSecond = 100,
+        rampUpTimeSeconds = 2,
+        options = CaseInsensitiveStringMap.empty(),
+        checkpointLocation = "").planInputPartitions(LongOffset(0L), LongOffset(Long.MaxValue)))
+
+    checkError(
+      exception = e,
+      errorClass = "INCORRECT_END_OFFSET",
+      parameters = Map(
+        "rowsPerSecond" -> 100.toString,
+        "maxSeconds" -> (Long.MaxValue/100).toString,
+        "endSeconds" -> Long.MaxValue.toString))
   }
 
   test("valueAtSecond") {
