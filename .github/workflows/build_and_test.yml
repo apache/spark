@@ -630,8 +630,8 @@ jobs:
       fail-fast: false
       matrix:
         java:
-          - 11.0.16
-          - 17.0.4
+          - 11
+          - 17
     runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
