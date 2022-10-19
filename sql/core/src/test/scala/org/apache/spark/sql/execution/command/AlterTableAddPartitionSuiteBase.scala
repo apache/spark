@@ -243,7 +243,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
               context = ExpectedContext(
                 fragment = s"ALTER TABLE $t ADD PARTITION (p='aaa')",
                 start = 0,
-                stop = 55))
+                stop = 35 + t.length))
           } else {
             sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
             checkPartitions(t, Map("p" -> defaultPartitionName))
