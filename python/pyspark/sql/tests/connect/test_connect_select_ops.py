@@ -17,15 +17,19 @@
 from pyspark.testing.connectutils import PlanOnlyTestFixture
 from pyspark.sql.connect import DataFrame
 from pyspark.sql.connect.functions import col
-from pyspark.sql.connect.plan import Read, InputValidationError
+from pyspark.sql.connect.plan import Read
 import pyspark.sql.connect.proto as proto
 
 
 class SparkConnectToProtoSuite(PlanOnlyTestFixture):
-    def test_select_with_literal(self):
+    def test_select_with_columns_and_strings(self):
         df = DataFrame.withPlan(Read("table"))
         self.assertIsNotNone(df.select(col("name"))._plan.to_proto())
-        self.assertRaises(InputValidationError, df.select, "name")
+        self.assertIsNotNone(df.select("name"))
+        self.assertIsNotNone(df.select("name", "name2"))
+        self.assertIsNotNone(df.select(col("name"), col("name2")))
+        self.assertIsNotNone(df.select(col("name"), "name2"))
+        self.assertIsNotNone(df.select("*"))
 
     def test_join_with_join_type(self):
         df_left = DataFrame.withPlan(Read("table"))
