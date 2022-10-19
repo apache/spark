@@ -201,5 +201,9 @@ message Sample {
   double lower_bound = 2;
   double upper_bound = 3;
   bool with_replacement = 4;
-  int64 seed = 5;
+  Seed seed = 5;
+
+  message Seed {
+    int64 seed = 1;
+  }
 }

@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, LogicalPlan, Sa
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 final case class InvalidPlanInput(
     private val message: String = "",
@@ -80,7 +81,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   /**
    * All fields of [[proto.Sample]] are optional. However, given those are proto primitive types,
-   * we cannot differentiate if the fied is not or set when the field's value equals to the type
+   * we cannot differentiate if the field is not or set when the field's value equals to the type
    * default value. In the future if this ever become a problem, one solution could be that to
    * wrap such fields into proto messages.
    */
@@ -89,7 +90,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       rel.getLowerBound,
       rel.getUpperBound,
       rel.getWithReplacement,
-      rel.getSeed,
+      if (rel.hasSeed) rel.getSeed.getSeed else Utils.random.nextLong,
       transformRelation(rel.getInput))
   }
 
