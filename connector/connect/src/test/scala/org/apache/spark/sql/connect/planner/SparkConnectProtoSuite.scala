@@ -50,6 +50,34 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
+  test("UnresolvedFunction resolution.") {
+    {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      assertThrows[IllegalArgumentException] {
+        transform(connectTestRelation.select(callFunction("default.hex", Seq("id".protoAttr))))
+      }
+    }
+
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(
+        connectTestRelation.select(callFunction(Seq("default", "hex"), Seq("id".protoAttr))))
+    }
+
+    assertThrows[UnsupportedOperationException] {
+      connectPlan.analyze
+    }
+
+    val validPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.select(callFunction(Seq("hex"), Seq("id".protoAttr))))
+    }
+    assert(validPlan.analyze != null)
+  }
+
   test("Basic filter") {
     val connectPlan = {
       import org.apache.spark.sql.connect.dsl.expressions._
@@ -137,6 +165,36 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
     val sparkPlan = LocalRelation($"a".struct($"id".int))
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
+  test("Test limit offset") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.limit(10))
+    }
+    val sparkPlan = sparkTestRelation.limit(10)
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+
+    val connectPlan2 = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.offset(2))
+    }
+    val sparkPlan2 = sparkTestRelation.offset(2)
+    comparePlans(connectPlan2.analyze, sparkPlan2.analyze, false)
+
+    val connectPlan3 = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.limit(10).offset(2))
+    }
+    val sparkPlan3 = sparkTestRelation.limit(10).offset(2)
+    comparePlans(connectPlan3.analyze, sparkPlan3.analyze, false)
+
+    val connectPlan4 = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.offset(2).limit(10))
+    }
+    val sparkPlan4 = sparkTestRelation.offset(2).limit(10)
+    comparePlans(connectPlan4.analyze, sparkPlan4.analyze, false)
   }
 
   private def createLocalRelationProtoByQualifiedAttributes(

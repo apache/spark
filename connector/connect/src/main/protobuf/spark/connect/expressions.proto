@@ -142,7 +142,7 @@ message Expression {
   // An unresolved attribute that is not explicitly bound to a specific column, but the column
   // is resolved during analysis by name.
   message UnresolvedAttribute {
-    repeated string parts = 1;
+    string unparsed_identifier = 1;
   }
 
   // An unresolved function is not explicitly bound to one explicit function, but the function
