@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartitionSpec, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.DropPartitions
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSession {
+
   test("drop partition") {
     val sql = """
       |ALTER TABLE table_name DROP PARTITION
@@ -92,9 +92,13 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
 
   test("drop partition from view") {
     val sql = "ALTER VIEW table_name DROP PARTITION (p=1)"
-    val errMsg = intercept[ParseException] {
-      parsePlan(sql)
-    }.getMessage
-    assert(errMsg.contains("Operation not allowed"))
+    checkError(
+      exception = parseException(parsePlan)(sql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "ALTER VIEW ... DROP PARTITION"),
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 41))
   }
 }

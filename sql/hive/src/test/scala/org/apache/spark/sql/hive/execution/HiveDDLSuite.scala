@@ -776,6 +776,13 @@ class HiveDDLSuite
     assert(e.message.contains(message))
   }
 
+  private def assertAnalysisErrorClass(sqlText: String, errorClass: String,
+                                  parameters: Map[String, String]): Unit = {
+    val e = intercept[AnalysisException](sql(sqlText))
+    checkError(e,
+      errorClass = errorClass, parameters = parameters)
+  }
+
   private def assertErrorForAlterTableOnView(sqlText: String): Unit = {
     val message = intercept[AnalysisException](sql(sqlText)).getMessage
     assert(message.contains("Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
@@ -1212,9 +1219,10 @@ class HiveDDLSuite
     sql(s"USE default")
     val sqlDropDatabase = s"DROP DATABASE $dbName ${if (cascade) "CASCADE" else "RESTRICT"}"
     if (tableExists && !cascade) {
-      assertAnalysisError(
+      assertAnalysisErrorClass(
         sqlDropDatabase,
-        s"Cannot drop a non-empty database: $dbName.")
+        "SCHEMA_NOT_EMPTY",
+        Map("schemaName" -> s"`$dbName`"))
       // the database directory was not removed
       assert(fs.exists(new Path(expectedDBLocation)))
     } else {
@@ -2731,6 +2739,24 @@ class HiveDDLSuite
     }
   }
 
+  test("Create Table LIKE VIEW STORED AS Hive Format") {
+    val catalog = spark.sessionState.catalog
+    withView("v") {
+      sql("CREATE TEMPORARY VIEW v AS SELECT 1 AS A, 1 AS B;")
+      hiveFormats.foreach { tableType =>
+        val expectedSerde = HiveSerDe.sourceToSerDe(tableType)
+        withTable("t") {
+          sql(s"CREATE TABLE t LIKE v STORED AS $tableType")
+          val table = catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.provider == Some("hive"))
+          assert(table.storage.serde == expectedSerde.get.serde)
+          assert(table.storage.inputFormat == expectedSerde.get.inputFormat)
+          assert(table.storage.outputFormat == expectedSerde.get.outputFormat)
+        }
+      }
+    }
+  }
+
   test("Create Table LIKE with specified TBLPROPERTIES") {
     val catalog = spark.sessionState.catalog
     withTable("s", "t") {
@@ -2956,11 +2982,13 @@ class HiveDDLSuite
       spark.sparkContext.addedJars.keys.find(_.contains(jarName))
         .foreach(spark.sparkContext.addedJars.remove)
       assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
-      val msg = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         sql("CREATE TEMPORARY FUNCTION f1 AS " +
           s"'org.apache.hadoop.hive.ql.udf.UDFUUID' USING JAR '$jar'")
-      }.getMessage
-      assert(msg.contains("Function f1 already exists"))
+      }
+      checkError(e,
+        errorClass = "ROUTINE_ALREADY_EXISTS",
+        parameters = Map("routineName" -> "`f1`"))
       assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
 
       sql("CREATE OR REPLACE TEMPORARY FUNCTION f1 AS " +
