@@ -165,7 +165,7 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (c int) $defaultUsing PARTITIONED BY (p int)")
 
-      withSQLConf(SQLConf.SKIP_PARTITION_SPEC_TYPE_VALIDATION.key -> "true") {
+      withSQLConf(SQLConf.SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION.key -> "true") {
         sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
         checkPartitions(t, Map("p" -> "aaa"))
         sql(s"ALTER TABLE $t DROP PARTITION (p='aaa')")

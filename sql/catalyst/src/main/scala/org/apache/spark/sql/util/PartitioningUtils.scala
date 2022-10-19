@@ -48,7 +48,7 @@ private[sql] object PartitioningUtils {
     }
   }
 
-  private def castPartitionSpecToString(value: String, field: StructField): String = {
+  private def normalizePartitionStringValue(value: String, field: StructField): String = {
     val casted = Cast(
       castPartitionSpec(value, field.dataType, SQLConf.get),
       StringType,
@@ -94,11 +94,11 @@ private[sql] object PartitioningUtils {
               case other => other
             }
             v.asInstanceOf[T]
-          case _ if !SQLConf.get.getConf(SQLConf.SKIP_PARTITION_SPEC_TYPE_VALIDATION) &&
+          case _ if !SQLConf.get.getConf(SQLConf.SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION) &&
               value != null && value != DEFAULT_PARTITION_NAME =>
             val v = value match {
-              case Some(str: String) => Some(castPartitionSpecToString(str, normalizedFiled))
-              case str: String => castPartitionSpecToString(str, normalizedFiled)
+              case Some(str: String) => Some(normalizePartitionStringValue(str, normalizedFiled))
+              case str: String => normalizePartitionStringValue(str, normalizedFiled)
               case other => other
             }
             v.asInstanceOf[T]

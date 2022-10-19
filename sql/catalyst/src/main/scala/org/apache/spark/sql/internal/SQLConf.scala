@@ -2995,10 +2995,10 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val SKIP_PARTITION_SPEC_TYPE_VALIDATION =
-    buildConf("spark.sql.legacy.skipPartitionSpecTypeValidation")
+  val SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION =
+    buildConf("spark.sql.legacy.skipTypeValidationOnAlterPartition")
       .internal()
-      .doc("When true, skip do validation for partition spec. E.g., " +
+      .doc("When true, skip validation for partition spec in ALTER PARTITION. E.g., " +
         "`ALTER TABLE .. ADD PARTITION(p='a')` would work even the partition type is int. " +
         s"When false, the behavior follows ${STORE_ASSIGNMENT_POLICY.key}")
       .version("3.4.0")

@@ -230,11 +230,20 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
 
         withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString) {
           if (shouldThrowException(policy)) {
-            val errMsg = intercept[SparkNumberFormatException] {
-              sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
-            }.getMessage
-            assert(errMsg.contains(
-              "The value 'aaa' of the type \"STRING\" cannot be cast to \"INT\""))
+            checkError(
+              exception = intercept[SparkNumberFormatException] {
+                sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
+              },
+              errorClass = "CAST_INVALID_INPUT",
+              parameters = Map(
+                "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
+                "expression" -> "'aaa'",
+                "sourceType" -> "\"STRING\"",
+                "targetType" -> "\"INT\""),
+              context = ExpectedContext(
+                fragment = s"ALTER TABLE $t ADD PARTITION (p='aaa')",
+                start = 0,
+                stop = 55))
           } else {
             sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
             checkPartitions(t, Map("p" -> defaultPartitionName))
