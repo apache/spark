@@ -201,11 +201,20 @@ public abstract class BloomFilter {
    * @param n expected insertions (must be positive)
    * @param p false positive rate (must be 0 < p < 1)
    */
-  public static long optimalNumOfBits(long n, double p) {
+  private static long optimalNumOfBits(long n, double p) {
     return (long) (-n * Math.log(p) / (Math.log(2) * Math.log(2)));
   }
 
-  public static final double DEFAULT_FPP = 0.03;
+  static final double DEFAULT_FPP = 0.03;
+
+  /**
+   * Computes m (total bits of Bloom filter) which is expected to achieve.
+   * The smaller the expectedNumItems, the smaller the fpp.
+   */
+  public static long optimalNumOfBits(long expectedNumItems, long maxNumItems, long maxNumOfBits) {
+    double fpp = Math.min(expectedNumItems / (maxNumItems / DEFAULT_FPP), DEFAULT_FPP);
+    return Math.min(optimalNumOfBits(expectedNumItems, fpp), maxNumOfBits);
+  }
 
   /**
    * Creates a {@link BloomFilter} with the expected number of insertions and a default expected
