@@ -27,13 +27,13 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
     generation but do not call Spark."""
 
     def test_simple_project(self):
-        plan = self.connect.readTable(table_name=self.tbl_name)._plan.collect(self.connect)
+        plan = self.connect.readTable(table_name=self.tbl_name)._plan.to_proto(self.connect)
         self.assertIsNotNone(plan.root, "Root relation must be set")
         self.assertIsNotNone(plan.root.read)
 
     def test_filter(self):
         df = self.connect.readTable(table_name=self.tbl_name)
-        plan = df.filter(df.col_name > 3)._plan.collect(self.connect)
+        plan = df.filter(df.col_name > 3)._plan.to_proto(self.connect)
         self.assertIsNotNone(plan.root.filter)
         self.assertTrue(
             isinstance(
@@ -45,7 +45,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
 
     def test_relation_alias(self):
         df = self.connect.readTable(table_name=self.tbl_name)
-        plan = df.alias("table_alias")._plan.collect(self.connect)
+        plan = df.alias("table_alias")._plan.to_proto(self.connect)
         self.assertEqual(plan.root.common.alias, "table_alias")
 
     def test_simple_udf(self):
@@ -59,7 +59,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
     def test_all_the_plans(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         df = df.select(df.col1).filter(df.col2 == 2).sort(df.col3.asc())
-        plan = df._plan.collect(self.connect)
+        plan = df._plan.to_proto(self.connect)
         self.assertIsNotNone(plan.root, "Root relation must be set")
         self.assertIsNotNone(plan.root.read)
 
