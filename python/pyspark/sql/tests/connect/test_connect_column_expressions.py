@@ -57,6 +57,11 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         the protobuf structure."""
         df = c.DataFrame.withPlan(p.Read("table"))
 
+        expr = fun.lit(10) < fun.lit(10)
+        expr_plan = expr.to_plan(None)
+        self.assertIsNotNone(expr_plan.unresolved_function)
+        self.assertEqual(expr_plan.unresolved_function.parts[0], "<")
+
         expr = df.id % fun.lit(10) == fun.lit(10)
         expr_plan = expr.to_plan(None)
         self.assertIsNotNone(expr_plan.unresolved_function)

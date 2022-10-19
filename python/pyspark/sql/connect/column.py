@@ -46,7 +46,7 @@ class Expression(object):
     """
 
     __gt__ = _bin_op(">")
-    __lt__ = _bin_op(">")
+    __lt__ = _bin_op("<")
     __add__ = _bin_op("+")
     __sub__ = _bin_op("-")
     __mul__ = _bin_op("*")
