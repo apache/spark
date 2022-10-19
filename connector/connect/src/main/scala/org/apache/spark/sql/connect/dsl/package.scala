@@ -22,7 +22,6 @@ import scala.language.implicitConversions
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 
 /**
@@ -33,16 +32,13 @@ package object dsl {
 
   object expressions { // scalastyle:ignore
     implicit class DslString(val s: String) {
-      val identifier = CatalystSqlParser.parseMultipartIdentifier(s)
-
       def protoAttr: proto.Expression =
         proto.Expression
           .newBuilder()
           .setUnresolvedAttribute(
             proto.Expression.UnresolvedAttribute
               .newBuilder()
-              .addAllParts(identifier.asJava)
-              .build())
+              .setUnparsedIdentifier(s))
           .build()
 
       def struct(
@@ -90,6 +86,44 @@ package object dsl {
               .addArguments(expr)
               .addArguments(other))
           .build()
+    }
+
+    /**
+     * Create an unresolved function from name parts.
+     *
+     * @param nameParts
+     * @param args
+     * @return
+     *   Expression wrapping the unresolved function.
+     */
+    def callFunction(nameParts: Seq[String], args: Seq[proto.Expression]): proto.Expression = {
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          proto.Expression.UnresolvedFunction
+            .newBuilder()
+            .addAllParts(nameParts.asJava)
+            .addAllArguments(args.asJava))
+        .build()
+    }
+
+    /**
+     * Creates an UnresolvedFunction from a single identifier.
+     *
+     * @param name
+     * @param args
+     * @return
+     *   Expression wrapping the unresolved function.
+     */
+    def callFunction(name: String, args: Seq[proto.Expression]): proto.Expression = {
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          proto.Expression.UnresolvedFunction
+            .newBuilder()
+            .addParts(name)
+            .addAllArguments(args.asJava))
+        .build()
     }
 
     implicit def intToLiteral(i: Int): proto.Expression =
@@ -179,6 +213,24 @@ package object dsl {
         proto.Relation
           .newBuilder(logicalPlan)
           .setCommon(proto.RelationCommon.newBuilder().setAlias(alias))
+          .build()
+      }
+
+      def sample(
+          lowerBound: Double,
+          upperBound: Double,
+          withReplacement: Boolean,
+          seed: Long): proto.Relation = {
+        proto.Relation
+          .newBuilder()
+          .setSample(
+            proto.Sample
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setUpperBound(upperBound)
+              .setLowerBound(lowerBound)
+              .setWithReplacement(withReplacement)
+              .setSeed(seed))
           .build()
       }
 

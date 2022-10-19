@@ -50,6 +50,34 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
+  test("UnresolvedFunction resolution.") {
+    {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      assertThrows[IllegalArgumentException] {
+        transform(connectTestRelation.select(callFunction("default.hex", Seq("id".protoAttr))))
+      }
+    }
+
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(
+        connectTestRelation.select(callFunction(Seq("default", "hex"), Seq("id".protoAttr))))
+    }
+
+    assertThrows[UnsupportedOperationException] {
+      connectPlan.analyze
+    }
+
+    val validPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.select(callFunction(Seq("hex"), Seq("id".protoAttr))))
+    }
+    assert(validPlan.analyze != null)
+  }
+
   test("Basic filter") {
     val connectPlan = {
       import org.apache.spark.sql.connect.dsl.expressions._
@@ -91,6 +119,15 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
   }
 
+  test("Test sample") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.sample(0, 0.2, false, 1))
+    }
+    val sparkPlan = sparkTestRelation.sample(0, 0.2, false, 1)
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
   test("column alias") {
     val connectPlan = {
       import org.apache.spark.sql.connect.dsl.expressions._
@@ -98,6 +135,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       transform(connectTestRelation.select("id".protoAttr.as("id2")))
     }
     val sparkPlan = sparkTestRelation.select($"id".as("id2"))
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
   test("Aggregate with more than 1 grouping expressions") {

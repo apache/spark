@@ -54,10 +54,12 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
 
   test("Namespace does not exist") {
     val ns = "not_exist"
-    val message = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql(s"ALTER DATABASE $catalog.$ns SET LOCATION 'loc'")
-    }.getMessage
-    assert(message.contains(s"$notFoundMsgPrefix '$ns' not found"))
+    }
+    checkError(e,
+      errorClass = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> "`not_exist`"))
   }
 
   // Hive catalog does not support "ALTER NAMESPACE ... SET LOCATION", thus

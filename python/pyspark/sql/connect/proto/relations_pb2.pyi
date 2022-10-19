@@ -70,6 +70,7 @@ class Relation(google.protobuf.message.Message):
     AGGREGATE_FIELD_NUMBER: builtins.int
     SQL_FIELD_NUMBER: builtins.int
     LOCAL_RELATION_FIELD_NUMBER: builtins.int
+    SAMPLE_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -94,6 +95,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def local_relation(self) -> global___LocalRelation: ...
     @property
+    def sample(self) -> global___Sample: ...
+    @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
         self,
@@ -109,6 +112,7 @@ class Relation(google.protobuf.message.Message):
         aggregate: global___Aggregate | None = ...,
         sql: global___SQL | None = ...,
         local_relation: global___LocalRelation | None = ...,
+        sample: global___Sample | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -132,6 +136,8 @@ class Relation(google.protobuf.message.Message):
             b"read",
             "rel_type",
             b"rel_type",
+            "sample",
+            b"sample",
             "sort",
             b"sort",
             "sql",
@@ -163,6 +169,8 @@ class Relation(google.protobuf.message.Message):
             b"read",
             "rel_type",
             b"rel_type",
+            "sample",
+            b"sample",
             "sort",
             b"sort",
             "sql",
@@ -186,6 +194,7 @@ class Relation(google.protobuf.message.Message):
         "aggregate",
         "sql",
         "local_relation",
+        "sample",
         "unknown",
     ] | None: ...
 
@@ -250,17 +259,17 @@ class Read(google.protobuf.message.Message):
     class NamedTable(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        PARTS_FIELD_NUMBER: builtins.int
-        @property
-        def parts(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+        UNPARSED_IDENTIFIER_FIELD_NUMBER: builtins.int
+        unparsed_identifier: builtins.str
         def __init__(
             self,
             *,
-            parts: collections.abc.Iterable[builtins.str] | None = ...,
+            unparsed_identifier: builtins.str = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["parts", b"parts"]) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal["unparsed_identifier", b"unparsed_identifier"],
+        ) -> None: ...
 
     NAMED_TABLE_FIELD_NUMBER: builtins.int
     @property
@@ -694,3 +703,49 @@ class LocalRelation(google.protobuf.message.Message):
     ) -> None: ...
 
 global___LocalRelation = LocalRelation
+
+class Sample(google.protobuf.message.Message):
+    """Relation of type [[Sample]] that samples a fraction of the dataset."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    LOWER_BOUND_FIELD_NUMBER: builtins.int
+    UPPER_BOUND_FIELD_NUMBER: builtins.int
+    WITH_REPLACEMENT_FIELD_NUMBER: builtins.int
+    SEED_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation: ...
+    lower_bound: builtins.float
+    upper_bound: builtins.float
+    with_replacement: builtins.bool
+    seed: builtins.int
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        lower_bound: builtins.float = ...,
+        upper_bound: builtins.float = ...,
+        with_replacement: builtins.bool = ...,
+        seed: builtins.int = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "input",
+            b"input",
+            "lower_bound",
+            b"lower_bound",
+            "seed",
+            b"seed",
+            "upper_bound",
+            b"upper_bound",
+            "with_replacement",
+            b"with_replacement",
+        ],
+    ) -> None: ...
+
+global___Sample = Sample

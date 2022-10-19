@@ -25,8 +25,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sample, SubqueryAlias}
 import org.apache.spark.sql.types._
 
 final case class InvalidPlanInput(
@@ -62,6 +63,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
       case proto.Relation.RelTypeCase.LOCAL_RELATION =>
         transformLocalRelation(rel.getLocalRelation)
+      case proto.Relation.RelTypeCase.SAMPLE => transformSample(rel.getSample)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -70,6 +72,21 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
     session.sessionState.sqlParser.parsePlan(sql.getQuery)
+  }
+
+  /**
+   * All fields of [[proto.Sample]] are optional. However, given those are proto primitive types,
+   * we cannot differentiate if the fied is not or set when the field's value equals to the type
+   * default value. In the future if this ever become a problem, one solution could be that to
+   * wrap such fields into proto messages.
+   */
+  private def transformSample(rel: proto.Sample): LogicalPlan = {
+    Sample(
+      rel.getLowerBound,
+      rel.getUpperBound,
+      rel.getWithReplacement,
+      rel.getSeed,
+      transformRelation(rel.getInput))
   }
 
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
@@ -86,7 +103,9 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       common: Option[proto.RelationCommon]): LogicalPlan = {
     val baseRelation = rel.getReadTypeCase match {
       case proto.Read.ReadTypeCase.NAMED_TABLE =>
-        val child = UnresolvedRelation(rel.getNamedTable.getPartsList.asScala.toSeq)
+        val multipartIdentifier =
+          CatalystSqlParser.parseMultipartIdentifier(rel.getNamedTable.getUnparsedIdentifier)
+        val child = UnresolvedRelation(multipartIdentifier)
         if (common.nonEmpty && common.get.getAlias.nonEmpty) {
           SubqueryAlias(identifier = common.get.getAlias, child = child)
         } else {
@@ -123,7 +142,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   }
 
   private def transformUnresolvedExpression(exp: proto.Expression): UnresolvedAttribute = {
-    UnresolvedAttribute(exp.getUnresolvedAttribute.getPartsList.asScala.toSeq)
+    UnresolvedAttribute(exp.getUnresolvedAttribute.getUnparsedIdentifier)
   }
 
   private def transformExpression(exp: proto.Expression): Expression = {
@@ -181,10 +200,6 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       limitExpr = expressions.Literal(limit.getLimit, IntegerType))
   }
 
-  private def lookupFunction(name: String, args: Seq[Expression]): Expression = {
-    UnresolvedFunction(Seq(name), args, isDistinct = false)
-  }
-
   /**
    * Translates a scalar function from proto to the Catalyst expression.
    *
@@ -195,21 +210,14 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
    * @return
    */
   private def transformScalarFunction(fun: proto.Expression.UnresolvedFunction): Expression = {
-    val funName = fun.getPartsList.asScala.mkString(".")
-    funName match {
-      case "gt" =>
-        assert(fun.getArgumentsCount == 2, "`gt` function must have two arguments.")
-        expressions.GreaterThan(
-          transformExpression(fun.getArguments(0)),
-          transformExpression(fun.getArguments(1)))
-      case "eq" =>
-        assert(fun.getArgumentsCount == 2, "`eq` function must have two arguments.")
-        expressions.EqualTo(
-          transformExpression(fun.getArguments(0)),
-          transformExpression(fun.getArguments(1)))
-      case _ =>
-        lookupFunction(funName, fun.getArgumentsList.asScala.map(transformExpression).toSeq)
+    if (fun.getPartsCount == 1 && fun.getParts(0).contains(".")) {
+      throw new IllegalArgumentException(
+        "Function identifier must be passed as sequence of name parts.")
     }
+    UnresolvedFunction(
+      fun.getPartsList.asScala.toSeq,
+      fun.getArgumentsList.asScala.map(transformExpression).toSeq,
+      isDistinct = false)
   }
 
   private def transformAlias(alias: proto.Expression.Alias): Expression = {

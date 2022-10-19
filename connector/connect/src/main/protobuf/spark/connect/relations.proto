@@ -41,6 +41,7 @@ message Relation {
     Aggregate aggregate = 9;
     SQL sql = 10;
     LocalRelation local_relation = 11;
+    Sample sample = 12;
 
     Unknown unknown = 999;
   }
@@ -68,7 +69,7 @@ message Read {
   }
 
   message NamedTable {
-    repeated string parts = 1;
+    string unparsed_identifier = 1;
   }
 }
 
@@ -166,4 +167,13 @@ message Sort {
 message LocalRelation {
   repeated Expression.QualifiedAttribute attributes = 1;
   // TODO: support local data.
+}
+
+// Relation of type [[Sample]] that samples a fraction of the dataset.
+message Sample {
+  Relation input = 1;
+  double lower_bound = 2;
+  double upper_bound = 3;
+  bool with_replacement = 4;
+  int64 seed = 5;
 }

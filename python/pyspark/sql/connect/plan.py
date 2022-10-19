@@ -49,10 +49,10 @@ class LogicalPlan(object):
     def __init__(self, child: Optional["LogicalPlan"]) -> None:
         self._child = child
 
-    def unresolved_attr(self, *colNames: str) -> proto.Expression:
+    def unresolved_attr(self, colName: str) -> proto.Expression:
         """Creates an unresolved attribute from a column name."""
         exp = proto.Expression()
-        exp.unresolved_attribute.parts.extend(list(colNames))
+        exp.unresolved_attribute.unparsed_identifier = colName
         return exp
 
     def to_attr_or_expression(
@@ -80,9 +80,19 @@ class LogicalPlan(object):
 
         return test_plan == plan
 
-    def collect(
+    def to_proto(
         self, session: Optional["RemoteSparkSession"] = None, debug: bool = False
     ) -> proto.Plan:
+        """
+        Generates connect proto plan based on this LogicalPlan.
+
+        Parameters
+        ----------
+        session : :class:`RemoteSparkSession`, optional.
+            a session that connects remote spark cluster.
+        debug: bool
+            if enabled, the proto plan will be printed.
+        """
         plan = proto.Plan()
         plan.root.CopyFrom(self.plan(session))
 
@@ -108,7 +118,7 @@ class Read(LogicalPlan):
 
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         plan = proto.Relation()
-        plan.read.named_table.parts.extend(self.table_name.split("."))
+        plan.read.named_table.unparsed_identifier = self.table_name
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -155,9 +165,7 @@ class Project(LogicalPlan):
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
         proj_exprs = [
-            c.to_plan(session)
-            if isinstance(c, Expression)
-            else self.unresolved_attr(*(c.split(".")))
+            c.to_plan(session) if isinstance(c, Expression) else self.unresolved_attr(c)
             for c in self._raw_columns
         ]
         common = proto.RelationCommon()
