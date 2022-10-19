@@ -65,29 +65,31 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
     // Only process up to 10MB of data.
     val sb = new StringBuilder
     var rowCount = 0
-    rows.toJSON.collect().foreach(row => {
-      if (sb.size + row.size > MAX_BATCH_SIZE) {
-        val response = proto.Response.newBuilder().setClientId(clientId)
-        val batch = proto.Response.JSONBatch
-          .newBuilder()
-          .setData(ByteString.copyFromUtf8(sb.toString()))
-          .setRowCount(rowCount)
-          .build()
-        response.setJsonBatch(batch)
-        responseObserver.onNext(response.build())
-        // When the data is sent, we have to clear the batch data and reset the row count for
-        // this batch.
-        sb.clear()
-        rowCount = 0
-      } else {
-        // Make sure to put the newline delimiters only between items and not at the end.
-        if (rowCount > 0) {
-          sb.append("\n")
+    rows.toJSON
+      .collect()
+      .foreach(row => {
+        if (sb.size + row.size > MAX_BATCH_SIZE) {
+          val response = proto.Response.newBuilder().setClientId(clientId)
+          val batch = proto.Response.JSONBatch
+            .newBuilder()
+            .setData(ByteString.copyFromUtf8(sb.toString()))
+            .setRowCount(rowCount)
+            .build()
+          response.setJsonBatch(batch)
+          responseObserver.onNext(response.build())
+          // When the data is sent, we have to clear the batch data and reset the row count for
+          // this batch.
+          sb.clear()
+          rowCount = 0
+        } else {
+          // Make sure to put the newline delimiters only between items and not at the end.
+          if (rowCount > 0) {
+            sb.append("\n")
+          }
+          sb.append(row)
+          rowCount += 1
         }
-        sb.append(row)
-        rowCount += 1
-      }
-    })
+      })
 
     // If the last batch is not empty, send out the data to the client.
     if (sb.size > 0) {
