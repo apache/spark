@@ -82,7 +82,7 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
             ProtoExpression.UnresolvedAttribute,
         )
         self.assertEqual(
-            mod_fun.unresolved_function.arguments[0].unresolved_attribute.parts, ["id"]
+            mod_fun.unresolved_function.arguments[0].unresolved_attribute.unparsed_identifier, "id"
         )
 
 
