@@ -1592,10 +1592,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expr1 = Elt(Seq(indexExpr1))
     assert(expr1.checkInputDataTypes() ==
       DataTypeMismatch(
-        errorSubClass = "UNEXPECTED_NUM_PARAMS",
+        errorSubClass = "WRONG_NUM_PARAMS",
         messageParameters = Map(
-          "functionName" -> "elt function",
-          "num" -> "two"
+          "functionName" -> "elt",
+          "expectedNum" -> "at least two",
+          "actualNum" -> "1"
         )
       )
     )

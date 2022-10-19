@@ -276,10 +276,11 @@ case class Elt(
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {
       DataTypeMismatch(
-        errorSubClass = "UNEXPECTED_NUM_PARAMS",
+        errorSubClass = "WRONG_NUM_PARAMS",
         messageParameters = Map(
-          "functionName" -> "elt function",
-          "num" -> "two"
+          "functionName" -> "elt",
+          "expectedNum" -> "at least two",
+          "actualNum" -> children.length.toString
         )
       )
     } else {

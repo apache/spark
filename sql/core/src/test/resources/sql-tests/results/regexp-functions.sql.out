@@ -356,12 +356,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_VALUE",
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "messageParameters" : {
     "currentValue" : "-2",
-    "expectedValue" : "positive",
     "exprName" : "position",
-    "sqlExpr" : "\"regexp_replace(healthy, wealthy, and wise, \\w+thy, something, -2)\""
+    "sqlExpr" : "\"regexp_replace(healthy, wealthy, and wise, \\w+thy, something, -2)\"",
+    "valueRange" : "(0, 2147483647]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -383,9 +383,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_VALUE",
   "messageParameters" : {
     "currentValue" : "0",
-    "expectedValue" : "positive",
     "exprName" : "position",
-    "sqlExpr" : "\"regexp_replace(healthy, wealthy, and wise, \\w+thy, something, 0)\""
+    "sqlExpr" : "\"regexp_replace(healthy, wealthy, and wise, \\w+thy, something, 0)\"",
+    "valueRange" : "(0, 2147483647]"
   },
   "queryContext" : [ {
     "objectType" : "",

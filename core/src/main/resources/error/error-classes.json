@@ -248,19 +248,9 @@
           "The <exprName> must not be null"
         ]
       },
-      "UNEXPECTED_NUM_PARAMS" : {
-        "message" : [
-          "The <functionName> requires at least <num> arguments."
-        ]
-      },
       "UNEXPECTED_STATIC_METHOD" : {
         "message" : [
           "cannot find a static method <methodName> that matches the argument types in <className>"
-        ]
-      },
-      "UNEXPECTED_VALUE" : {
-        "message" : [
-          "The <exprName> must be <expectedValue> (current value = <currentValue>)"
         ]
       },
       "UNSPECIFIED_FRAME" : {
@@ -275,7 +265,7 @@
       },
       "WRONG_NUM_PARAMS" : {
         "message" : [
-          "wrong number of parameters: <actualNum>."
+          "The <functionName> requires <expectedNum> arguments (actual number = <actualNum>)"
         ]
       }
     }

@@ -609,10 +609,10 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       TypeCheckSuccess
     } else {
       DataTypeMismatch(
-        errorSubClass = "UNEXPECTED_VALUE",
+        errorSubClass = "VALUE_OUT_OF_RANGE",
         messageParameters = Map(
           "exprName" -> "position",
-          "expectedValue" -> "positive",
+          "valueRange" -> s"(0, ${Int.MaxValue}]",
           "currentValue" -> toSQLValue(posEval, pos.dataType)
         )
       )
