@@ -2469,10 +2469,16 @@ class SubquerySuite extends QueryTest
         Row(2))
 
       // Cannot use non-orderable data type in one row subquery that cannot be collapsed.
-      val error = intercept[AnalysisException] {
-        sql("select (select concat(a, a) from (select upper(x['a']) as a)) from v1").collect()
-      }
-      assert(error.getMessage.contains("Correlated column reference 'v1.x' cannot be map type"))
+        val error = intercept[AnalysisException] {
+          sql(
+            """
+              |select (
+              |  select concat(a, a) from
+              |  (select upper(x['a'] + rand()) as a)
+              |) from v1
+              |""".stripMargin).collect()
+        }
+        assert(error.getMessage.contains("Correlated column reference 'v1.x' cannot be map type"))
     }
   }
 
