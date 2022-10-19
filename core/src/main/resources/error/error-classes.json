@@ -244,7 +244,7 @@
         ]
       },
       "UNEXPECTED_ENDPOINT_TYPE" : {
-        "message": [
+        "message" : [
           "Endpoints require (numeric or \"TIMESTAMP\" or \"DATE\" or \"TIMESTAMP_NTZ\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\") type."
         ]
       },
