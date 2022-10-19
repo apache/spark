@@ -250,7 +250,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
 
         val dataType = expression.dataType
         if (!checkResult(unsafeRow.get(0, dataType), expected, dataType, expression.nullable)) {
-          fail("Incorrect evaluation in unsafe mode (fallback mode = $fallbackMode): " +
+          fail(s"Incorrect evaluation in unsafe mode (fallback mode = $fallbackMode): " +
             s"$expression, actual: $unsafeRow, expected: $expected, " +
             s"dataType: $dataType, nullable: ${expression.nullable}")
         }

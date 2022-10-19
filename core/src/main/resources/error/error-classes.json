@@ -101,6 +101,16 @@
           "the binary operator requires the input type <inputType>, not <actualDataType>."
         ]
       },
+      "BLOOM_FILTER_BINARY_OP_WRONG_TYPE" : {
+        "message" : [
+          "The Bloom filter binary input to <functionName> should be either a constant value or a scalar subquery expression, but it's <actual>."
+        ]
+      },
+      "BLOOM_FILTER_WRONG_TYPE" : {
+        "message" : [
+          "Input to function <functionName> should have been <expectedLeft> followed by a value with <expectedRight>, but it's [<actualLeft>, <actualRight>]."
+        ]
+      },
       "CANNOT_CONVERT_TO_JSON" : {
         "message" : [
           "Unable to convert column <name> of type <type> to JSON."
@@ -223,6 +233,11 @@
           "The lower bound of a window frame must be <comparison> to the upper bound."
         ]
       },
+      "UNEXPECTED_CLASS_TYPE" : {
+        "message" : [
+          "class <className> not found"
+        ]
+      },
       "UNEXPECTED_INPUT_TYPE" : {
         "message" : [
           "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
@@ -231,6 +246,11 @@
       "UNEXPECTED_NULL" : {
         "message" : [
           "The <exprName> must not be null"
+        ]
+      },
+      "UNEXPECTED_STATIC_METHOD" : {
+        "message" : [
+          "cannot find a static method <methodName> that matches the argument types in <className>"
         ]
       },
       "UNSPECIFIED_FRAME" : {
@@ -817,6 +837,11 @@
       }
     }
   },
+  "UNSUPPORTED_EMPTY_LOCATION" : {
+    "message" : [
+      "Unsupported empty location."
+    ]
+  },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
       "The feature is not supported:"
@@ -1047,6 +1072,11 @@
       "UNSUPPORTED_CORRELATED_REFERENCE" : {
         "message" : [
           "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses<treeNode>"
+        ]
+      },
+      "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE" : {
+        "message" : [
+          "Correlated column reference '<expr>' cannot be <dataType> type"
         ]
       },
       "UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY" : {

@@ -39,6 +39,8 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString
     from pyspark.sql.connect.client import RemoteSparkSession
 
+ColumnOrName = Union[ColumnRef, str]
+
 
 class GroupingFrame(object):
 
@@ -111,7 +113,7 @@ class DataFrame(object):
         new_frame._session = session
         return new_frame
 
-    def select(self, *cols: ColumnRef) -> "DataFrame":
+    def select(self, *cols: ColumnOrName) -> "DataFrame":
         return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
 
     def agg(self, exprs: Optional[GroupingFrame.MeasuresType]) -> "DataFrame":
@@ -247,12 +249,12 @@ class DataFrame(object):
             raise Exception("Cannot collect on empty plan.")
         if self._session is None:
             raise Exception("Cannot collect on empty session.")
-        query = self._plan.collect(self._session)
+        query = self._plan.to_proto(self._session)
         return self._session._to_pandas(query)
 
     def explain(self) -> str:
         if self._plan is not None:
-            query = self._plan.collect(self._session)
+            query = self._plan.to_proto(self._session)
             if self._session is None:
                 raise Exception("Cannot analyze without RemoteSparkSession.")
             return self._session.analyze(query).explain_string
