@@ -1869,9 +1869,13 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         # Regression in pandas 1.5.0
         # See https://github.com/pandas-dev/pandas/issues/49141 for the reported issue,
         # and https://github.com/pandas-dev/pandas/pull/46174 for the initial PR that causes.
-        # df_bool = ps.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
-        # ser_bool = ps.Series([True, True, False, True])
-        # self._test_corrwith(df_bool, ser_bool)
+        df_bool = ps.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
+        ser_bool = ps.Series([True, True, False, True])
+        if LooseVersion(pd.__version__) >= LooseVersion("1.5.0"):
+            expected = ps.Series([0.5773502691896257, 0.5773502691896257], index=["B", "A"])
+            self.assert_eq(df_bool.corrwith(ser_bool), expected, almost=True)
+        else:
+            self._test_corrwith(df_bool, ser_bool)
 
         self._test_corrwith(self.psdf1, self.psdf1)
         self._test_corrwith(self.psdf1, self.psdf2)
@@ -1882,7 +1886,12 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         # Regression in pandas 1.5.0
         # See https://github.com/pandas-dev/pandas/issues/49141 for the reported issue,
         # and https://github.com/pandas-dev/pandas/pull/46174 for the initial PR that causes.
-        # self._test_corrwith(self.psdf1, self.psdf2.b)
+        if LooseVersion(pd.__version__) >= LooseVersion("1.5.0"):
+            expected = ps.Series([-0.08827348295047496, 0.4413674147523748], index=["b", "a"])
+            self.assert_eq(self.psdf1.corrwith(self.psdf2.b), expected, almost=True)
+        else:
+            self._test_corrwith(self.psdf1, self.psdf2.b)
+
         self._test_corrwith(self.psdf2, self.psdf3.c)
         self._test_corrwith(self.psdf3, self.psdf4.f)
 
