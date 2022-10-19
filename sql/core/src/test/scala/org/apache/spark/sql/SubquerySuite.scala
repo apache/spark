@@ -1608,12 +1608,12 @@ class SubquerySuite extends QueryTest
           checkAnswer(df, Seq(Row(0, 0), Row(2, 0)))
           // need to execute the query before we can examine fs.inputRDDs()
           assert(stripAQEPlan(df.queryExecution.executedPlan) match {
-            case WholeStageCodegenExec(ColumnarToRowExec(InputAdapter(
-                bs @ BatchScanExec(_, _, runtimeFilters, _, _)))) =>
-              runtimeFilters.exists(ExecSubqueryExpression.hasSubquery)
+            case WholeStageCodegenExec(ColumnarToRowExec(InputAdapter(bs: BatchScanExec))) =>
+              bs.runtimeFilters.exists(ExecSubqueryExpression.hasSubquery) &&
                 bs.inputRDDs().forall(
                   _.asInstanceOf[DataSourceRDD].inputPartitions.flatten.forall(
-                    _.asInstanceOf[FilePartition].files.forall(_.filePath.contains("p=0"))))
+                    _.asInstanceOf[FilePartition].files.forall(
+                      _.filePath.toString.contains("p=0"))))
             case _ => false
           })
         }
