@@ -636,7 +636,20 @@ CREATE VIEW v10_temp AS SELECT * FROM v7_temp
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: v7_temp; line 1 pos 38
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`v7_temp`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 45,
+    "fragment" : "v7_temp"
+  } ]
+}
 
 
 -- !query
@@ -645,7 +658,20 @@ CREATE VIEW v11_temp AS SELECT t1.id, t2.a FROM base_table t1, v10_temp t2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: v10_temp; line 1 pos 63
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`v10_temp`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 64,
+    "stopIndex" : 74,
+    "fragment" : "v10_temp t2"
+  } ]
+}
 
 
 -- !query
@@ -654,7 +680,20 @@ CREATE VIEW v12_temp AS SELECT true FROM v11_temp
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: v11_temp; line 1 pos 41
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`v11_temp`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 42,
+    "stopIndex" : 49,
+    "fragment" : "v11_temp"
+  } ]
+}
 
 
 -- !query

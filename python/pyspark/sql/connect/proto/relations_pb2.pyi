@@ -66,9 +66,12 @@ class Relation(google.protobuf.message.Message):
     JOIN_FIELD_NUMBER: builtins.int
     UNION_FIELD_NUMBER: builtins.int
     SORT_FIELD_NUMBER: builtins.int
-    FETCH_FIELD_NUMBER: builtins.int
+    LIMIT_FIELD_NUMBER: builtins.int
     AGGREGATE_FIELD_NUMBER: builtins.int
     SQL_FIELD_NUMBER: builtins.int
+    LOCAL_RELATION_FIELD_NUMBER: builtins.int
+    SAMPLE_FIELD_NUMBER: builtins.int
+    OFFSET_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -85,11 +88,17 @@ class Relation(google.protobuf.message.Message):
     @property
     def sort(self) -> global___Sort: ...
     @property
-    def fetch(self) -> global___Fetch: ...
+    def limit(self) -> global___Limit: ...
     @property
     def aggregate(self) -> global___Aggregate: ...
     @property
     def sql(self) -> global___SQL: ...
+    @property
+    def local_relation(self) -> global___LocalRelation: ...
+    @property
+    def sample(self) -> global___Sample: ...
+    @property
+    def offset(self) -> global___Offset: ...
     @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
@@ -102,9 +111,12 @@ class Relation(google.protobuf.message.Message):
         join: global___Join | None = ...,
         union: global___Union | None = ...,
         sort: global___Sort | None = ...,
-        fetch: global___Fetch | None = ...,
+        limit: global___Limit | None = ...,
         aggregate: global___Aggregate | None = ...,
         sql: global___SQL | None = ...,
+        local_relation: global___LocalRelation | None = ...,
+        sample: global___Sample | None = ...,
+        offset: global___Offset | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -114,18 +126,24 @@ class Relation(google.protobuf.message.Message):
             b"aggregate",
             "common",
             b"common",
-            "fetch",
-            b"fetch",
             "filter",
             b"filter",
             "join",
             b"join",
+            "limit",
+            b"limit",
+            "local_relation",
+            b"local_relation",
+            "offset",
+            b"offset",
             "project",
             b"project",
             "read",
             b"read",
             "rel_type",
             b"rel_type",
+            "sample",
+            b"sample",
             "sort",
             b"sort",
             "sql",
@@ -143,18 +161,24 @@ class Relation(google.protobuf.message.Message):
             b"aggregate",
             "common",
             b"common",
-            "fetch",
-            b"fetch",
             "filter",
             b"filter",
             "join",
             b"join",
+            "limit",
+            b"limit",
+            "local_relation",
+            b"local_relation",
+            "offset",
+            b"offset",
             "project",
             b"project",
             "read",
             b"read",
             "rel_type",
             b"rel_type",
+            "sample",
+            b"sample",
             "sort",
             b"sort",
             "sql",
@@ -168,7 +192,19 @@ class Relation(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["rel_type", b"rel_type"]
     ) -> typing_extensions.Literal[
-        "read", "project", "filter", "join", "union", "sort", "fetch", "aggregate", "sql", "unknown"
+        "read",
+        "project",
+        "filter",
+        "join",
+        "union",
+        "sort",
+        "limit",
+        "aggregate",
+        "sql",
+        "local_relation",
+        "sample",
+        "offset",
+        "unknown",
     ] | None: ...
 
 global___Relation = Relation
@@ -232,17 +268,17 @@ class Read(google.protobuf.message.Message):
     class NamedTable(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        PARTS_FIELD_NUMBER: builtins.int
-        @property
-        def parts(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+        UNPARSED_IDENTIFIER_FIELD_NUMBER: builtins.int
+        unparsed_identifier: builtins.str
         def __init__(
             self,
             *,
-            parts: collections.abc.Iterable[builtins.str] | None = ...,
+            unparsed_identifier: builtins.str = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["parts", b"parts"]) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal["unparsed_identifier", b"unparsed_identifier"],
+        ) -> None: ...
 
     NAMED_TABLE_FIELD_NUMBER: builtins.int
     @property
@@ -353,45 +389,57 @@ class Join(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         JOIN_TYPE_UNSPECIFIED: Join._JoinType.ValueType  # 0
         JOIN_TYPE_INNER: Join._JoinType.ValueType  # 1
-        JOIN_TYPE_OUTER: Join._JoinType.ValueType  # 2
+        JOIN_TYPE_FULL_OUTER: Join._JoinType.ValueType  # 2
         JOIN_TYPE_LEFT_OUTER: Join._JoinType.ValueType  # 3
         JOIN_TYPE_RIGHT_OUTER: Join._JoinType.ValueType  # 4
-        JOIN_TYPE_ANTI: Join._JoinType.ValueType  # 5
+        JOIN_TYPE_LEFT_ANTI: Join._JoinType.ValueType  # 5
+        JOIN_TYPE_LEFT_SEMI: Join._JoinType.ValueType  # 6
 
     class JoinType(_JoinType, metaclass=_JoinTypeEnumTypeWrapper): ...
     JOIN_TYPE_UNSPECIFIED: Join.JoinType.ValueType  # 0
     JOIN_TYPE_INNER: Join.JoinType.ValueType  # 1
-    JOIN_TYPE_OUTER: Join.JoinType.ValueType  # 2
+    JOIN_TYPE_FULL_OUTER: Join.JoinType.ValueType  # 2
     JOIN_TYPE_LEFT_OUTER: Join.JoinType.ValueType  # 3
     JOIN_TYPE_RIGHT_OUTER: Join.JoinType.ValueType  # 4
-    JOIN_TYPE_ANTI: Join.JoinType.ValueType  # 5
+    JOIN_TYPE_LEFT_ANTI: Join.JoinType.ValueType  # 5
+    JOIN_TYPE_LEFT_SEMI: Join.JoinType.ValueType  # 6
 
     LEFT_FIELD_NUMBER: builtins.int
     RIGHT_FIELD_NUMBER: builtins.int
-    ON_FIELD_NUMBER: builtins.int
-    HOW_FIELD_NUMBER: builtins.int
+    JOIN_CONDITION_FIELD_NUMBER: builtins.int
+    JOIN_TYPE_FIELD_NUMBER: builtins.int
     @property
     def left(self) -> global___Relation: ...
     @property
     def right(self) -> global___Relation: ...
     @property
-    def on(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression: ...
-    how: global___Join.JoinType.ValueType
+    def join_condition(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression: ...
+    join_type: global___Join.JoinType.ValueType
     def __init__(
         self,
         *,
         left: global___Relation | None = ...,
         right: global___Relation | None = ...,
-        on: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
-        how: global___Join.JoinType.ValueType = ...,
+        join_condition: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        join_type: global___Join.JoinType.ValueType = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["left", b"left", "on", b"on", "right", b"right"]
+        self,
+        field_name: typing_extensions.Literal[
+            "join_condition", b"join_condition", "left", b"left", "right", b"right"
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "how", b"how", "left", b"left", "on", b"on", "right", b"right"
+            "join_condition",
+            b"join_condition",
+            "join_type",
+            b"join_type",
+            "left",
+            b"left",
+            "right",
+            b"right",
         ],
     ) -> None: ...
 
@@ -440,91 +488,62 @@ class Union(google.protobuf.message.Message):
 
 global___Union = Union
 
-class Fetch(google.protobuf.message.Message):
-    """Relation of type [[Fetch]] that is used to read `limit` / `offset` rows from the input relation."""
+class Limit(google.protobuf.message.Message):
+    """Relation of type [[Limit]] that is used to `limit` rows from the input relation."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     LIMIT_FIELD_NUMBER: builtins.int
-    OFFSET_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation: ...
     limit: builtins.int
-    offset: builtins.int
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
         limit: builtins.int = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["input", b"input", "limit", b"limit"]
+    ) -> None: ...
+
+global___Limit = Limit
+
+class Offset(google.protobuf.message.Message):
+    """Relation of type [[Offset]] that is used to read rows staring from the `offset` on
+    the input relation.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    OFFSET_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation: ...
+    offset: builtins.int
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
         offset: builtins.int = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
     ) -> builtins.bool: ...
     def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "input", b"input", "limit", b"limit", "offset", b"offset"
-        ],
+        self, field_name: typing_extensions.Literal["input", b"input", "offset", b"offset"]
     ) -> None: ...
 
-global___Fetch = Fetch
+global___Offset = Offset
 
 class Aggregate(google.protobuf.message.Message):
     """Relation of type [[Aggregate]]."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    class GroupingSet(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        AGGREGATE_EXPRESSIONS_FIELD_NUMBER: builtins.int
-        @property
-        def aggregate_expressions(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]: ...
-        def __init__(
-            self,
-            *,
-            aggregate_expressions: collections.abc.Iterable[
-                pyspark.sql.connect.proto.expressions_pb2.Expression
-            ]
-            | None = ...,
-        ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "aggregate_expressions", b"aggregate_expressions"
-            ],
-        ) -> None: ...
-
-    class Measure(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        FUNCTION_FIELD_NUMBER: builtins.int
-        FILTER_FIELD_NUMBER: builtins.int
-        @property
-        def function(self) -> global___Aggregate.AggregateFunction: ...
-        @property
-        def filter(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
-            """Conditional filter for SUM(x FILTER WHERE x < 10)"""
-        def __init__(
-            self,
-            *,
-            function: global___Aggregate.AggregateFunction | None = ...,
-            filter: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
-        ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal["filter", b"filter", "function", b"function"],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal["filter", b"filter", "function", b"function"],
-        ) -> None: ...
 
     class AggregateFunction(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -552,30 +571,32 @@ class Aggregate(google.protobuf.message.Message):
         ) -> None: ...
 
     INPUT_FIELD_NUMBER: builtins.int
-    GROUPING_SETS_FIELD_NUMBER: builtins.int
-    MEASURES_FIELD_NUMBER: builtins.int
+    GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
+    RESULT_EXPRESSIONS_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation: ...
     @property
-    def grouping_sets(
+    def grouping_expressions(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        global___Aggregate.GroupingSet
-    ]:
-        """Grouping sets are used in rollups"""
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]: ...
     @property
-    def measures(
+    def result_expressions(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        global___Aggregate.Measure
-    ]:
-        """Measures"""
+        global___Aggregate.AggregateFunction
+    ]: ...
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
-        grouping_sets: collections.abc.Iterable[global___Aggregate.GroupingSet] | None = ...,
-        measures: collections.abc.Iterable[global___Aggregate.Measure] | None = ...,
+        grouping_expressions: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
+        result_expressions: collections.abc.Iterable[global___Aggregate.AggregateFunction]
+        | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
@@ -583,7 +604,12 @@ class Aggregate(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "grouping_sets", b"grouping_sets", "input", b"input", "measures", b"measures"
+            "grouping_expressions",
+            b"grouping_expressions",
+            "input",
+            b"input",
+            "result_expressions",
+            b"result_expressions",
         ],
     ) -> None: ...
 
@@ -682,3 +708,74 @@ class Sort(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Sort = Sort
+
+class LocalRelation(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ATTRIBUTES_FIELD_NUMBER: builtins.int
+    @property
+    def attributes(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression.QualifiedAttribute
+    ]:
+        """TODO: support local data."""
+    def __init__(
+        self,
+        *,
+        attributes: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression.QualifiedAttribute
+        ]
+        | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["attributes", b"attributes"]
+    ) -> None: ...
+
+global___LocalRelation = LocalRelation
+
+class Sample(google.protobuf.message.Message):
+    """Relation of type [[Sample]] that samples a fraction of the dataset."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    LOWER_BOUND_FIELD_NUMBER: builtins.int
+    UPPER_BOUND_FIELD_NUMBER: builtins.int
+    WITH_REPLACEMENT_FIELD_NUMBER: builtins.int
+    SEED_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation: ...
+    lower_bound: builtins.float
+    upper_bound: builtins.float
+    with_replacement: builtins.bool
+    seed: builtins.int
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        lower_bound: builtins.float = ...,
+        upper_bound: builtins.float = ...,
+        with_replacement: builtins.bool = ...,
+        seed: builtins.int = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "input",
+            b"input",
+            "lower_bound",
+            b"lower_bound",
+            "seed",
+            b"seed",
+            "upper_bound",
+            b"upper_bound",
+            "with_replacement",
+            b"with_replacement",
+        ],
+    ) -> None: ...
+
+global___Sample = Sample

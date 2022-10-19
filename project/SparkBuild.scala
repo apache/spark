@@ -45,8 +45,8 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, tokenProviderKafka010, sqlKafka010, avro) = Seq(
-    "catalyst", "sql", "hive", "hive-thriftserver", "token-provider-kafka-0-10", "sql-kafka-0-10", "avro"
+  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, tokenProviderKafka010, sqlKafka010, avro, protobuf) = Seq(
+    "catalyst", "sql", "hive", "hive-thriftserver", "token-provider-kafka-0-10", "sql-kafka-0-10", "avro", "protobuf"
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(streaming, streamingKafka010) =
@@ -390,7 +390,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connect
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, connect, protobuf
     ).contains(x)
   }
 
@@ -432,6 +432,9 @@ object SparkBuild extends PomBuild {
   enable(Hive.settings)(hive)
 
   enable(SparkConnect.settings)(connect)
+
+  /* Protobuf settings */
+  enable(SparkProtobuf.settings)(protobuf)
 
   // SPARK-14738 - Remove docker tests from main Spark build
   // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
@@ -696,6 +699,55 @@ object SparkConnect {
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
     }
+  )
+}
+
+object SparkProtobuf {
+  import BuildCommons.protoVersion
+
+  lazy val settings = Seq(
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
+    PB.protocVersion := BuildCommons.protoVersion,
+
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies += "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf",
+
+    dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
+
+    (Compile / PB.targets) := Seq(
+      PB.gens.java -> (Compile / sourceManaged).value,
+    ),
+
+    (assembly / test) := { },
+
+    (assembly / logLevel) := Level.Info,
+
+    // Exclude `scala-library` from assembly.
+    (assembly / assemblyPackageScala / assembleArtifact) := false,
+
+    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`,
+    // `spark-tags_*.jar`, "guava-*.jar" and `unused-1.0.0.jar` from assembly.
+    (assembly / assemblyExcludedJars) := {
+      val cp = (assembly / fullClasspath).value
+      cp filter { v =>
+        val name = v.data.getName
+        name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
+          name.startsWith("spark-tags_") || name.startsWith("guava-") || name == "unused-1.0.0.jar"
+      }
+    },
+
+    (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.spark-protobuf.protobuf.@1").inAll,
+    ),
+
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      // Drop all proto files that are not needed as artifacts of the build.
+      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    },
   )
 }
 
@@ -1143,10 +1195,10 @@ object Unidoc {
 
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connect),
+        yarn, tags, streamingKafka010, sqlKafka010, connect, protobuf),
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connect),
+        yarn, tags, streamingKafka010, sqlKafka010, connect, protobuf),
 
     (ScalaUnidoc / unidoc / unidocAllClasspaths) := {
       ignoreClasspaths((ScalaUnidoc / unidoc / unidocAllClasspaths).value)
@@ -1232,6 +1284,7 @@ object CopyDependencies {
       // produce the shaded Jar which happens automatically in the case of Maven.
       // Later, when the dependencies are copied, we manually copy the shaded Jar only.
       val fid = (LocalProject("connect") / assembly).value
+      val fidProtobuf = (LocalProject("protobuf") / assembly).value
 
       (Compile / dependencyClasspath).value.map(_.data)
         .filter { jar => jar.isFile() }
@@ -1244,6 +1297,9 @@ object CopyDependencies {
           if (jar.getName.contains("spark-connect") &&
             !SbtPomKeys.profiles.value.contains("noshade-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
+          } else if (jar.getName.contains("spark-protobuf") &&
+            !SbtPomKeys.profiles.value.contains("noshade-protobuf")) {
+            Files.copy(fidProtobuf.toPath, destJar.toPath)
           } else {
             Files.copy(jar.toPath(), destJar.toPath())
           }
@@ -1313,7 +1369,8 @@ object TestSettings {
         "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
-        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED").mkString(" ")
+        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+        "-Djdk.reflect.useDirectMethodHandle=false").mkString(" ")
       s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
         .split(" ").toSeq
     },

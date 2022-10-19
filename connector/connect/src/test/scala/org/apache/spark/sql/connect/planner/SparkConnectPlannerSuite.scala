@@ -23,6 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.UnresolvedStar
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
@@ -40,9 +41,28 @@ trait SparkConnectPlanTest {
       .setRead(
         proto.Read
           .newBuilder()
-          .setNamedTable(proto.Read.NamedTable.newBuilder().addParts("table"))
+          .setNamedTable(proto.Read.NamedTable.newBuilder().setUnparsedIdentifier("table"))
           .build())
       .build()
+
+  /**
+   * Creates a local relation for testing purposes. The local relation is mapped to it's
+   * equivalent in Catalyst and can be easily used for planner testing.
+   *
+   * @param attrs
+   * @return
+   */
+  def createLocalRelationProto(attrs: Seq[AttributeReference]): proto.Relation = {
+    val localRelationBuilder = proto.LocalRelation.newBuilder()
+    for (attr <- attrs) {
+      localRelationBuilder.addAttributes(
+        proto.Expression.QualifiedAttribute
+          .newBuilder()
+          .setName(attr.name)
+          .setType(DataTypeProtoConverter.toConnectProtoType(attr.dataType)))
+    }
+    proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
+  }
 }
 
 /**
@@ -57,7 +77,9 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("Simple Limit") {
     assertThrows[IndexOutOfBoundsException] {
       new SparkConnectPlanner(
-        proto.Relation.newBuilder.setFetch(proto.Fetch.newBuilder.setLimit(10).build()).build(),
+        proto.Relation.newBuilder
+          .setLimit(proto.Limit.newBuilder.setLimit(10))
+          .build(),
         None.orNull)
         .transform()
     }
@@ -80,7 +102,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     // Invalid read without Table name.
     intercept[InvalidPlanInput](transform(proto.Relation.newBuilder.setRead(read).build()))
     val readWithTable = read.toBuilder
-      .setNamedTable(proto.Read.NamedTable.newBuilder.addParts("name").build())
+      .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name").build())
       .build()
     val res = transform(proto.Relation.newBuilder.setRead(readWithTable).build())
     assert(res !== null)
@@ -88,16 +110,20 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Simple Project") {
-    val readWithTable = proto.Read.newBuilder()
-      .setNamedTable(proto.Read.NamedTable.newBuilder.addParts("name").build())
+    val readWithTable = proto.Read
+      .newBuilder()
+      .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name").build())
       .build()
     val project =
-      proto.Project.newBuilder()
+      proto.Project
+        .newBuilder()
         .setInput(proto.Relation.newBuilder().setRead(readWithTable).build())
         .addExpressions(
-          proto.Expression.newBuilder()
-            .setUnresolvedStar(UnresolvedStar.newBuilder().build()).build()
-        ).build()
+          proto.Expression
+            .newBuilder()
+            .setUnresolvedStar(UnresolvedStar.newBuilder().build())
+            .build())
+        .build()
     val res = transform(proto.Relation.newBuilder.setProject(project).build())
     assert(res !== null)
     assert(res.nodeName == "Project")
@@ -115,10 +141,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .newBuilder()
       .setNulls(proto.Sort.SortNulls.SORT_NULLS_LAST)
       .setDirection(proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING)
-      .setExpression(proto.Expression.newBuilder
-        .setUnresolvedAttribute(
-          proto.Expression.UnresolvedAttribute.newBuilder.addAllParts(Seq("col").asJava).build())
-        .build())
+      .setExpression(
+        proto.Expression.newBuilder
+          .setUnresolvedAttribute(
+            proto.Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier("col").build())
+          .build())
       .build()
 
     val res = transform(
@@ -168,12 +195,12 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val unresolvedAttribute = proto.Expression
       .newBuilder()
       .setUnresolvedAttribute(
-        proto.Expression.UnresolvedAttribute.newBuilder().addAllParts(Seq("left").asJava).build())
+        proto.Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier("left").build())
       .build()
 
     val joinCondition = proto.Expression.newBuilder.setUnresolvedFunction(
       proto.Expression.UnresolvedFunction.newBuilder
-        .addAllParts(Seq("eq").asJava)
+        .addAllParts(Seq("==").asJava)
         .addArguments(unresolvedAttribute)
         .addArguments(unresolvedAttribute)
         .build())
@@ -212,7 +239,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val unresolvedAttribute = proto.Expression
       .newBuilder()
       .setUnresolvedAttribute(
-        proto.Expression.UnresolvedAttribute.newBuilder().addAllParts(Seq("left").asJava).build())
+        proto.Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier("left").build())
       .build()
 
     val agg = proto.Aggregate.newBuilder

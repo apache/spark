@@ -527,8 +527,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         val (functionsWithDistinct, functionsWithoutDistinct) =
           aggregateExpressions.partition(_.isDistinct)
-        if (functionsWithDistinct.map(
-          _.aggregateFunction.children.filterNot(_.foldable).toSet).distinct.length > 1) {
+        val distinctAggChildSets = functionsWithDistinct.map { ae =>
+          ExpressionSet(ae.aggregateFunction.children.filterNot(_.foldable))
+        }.distinct
+        if (distinctAggChildSets.length > 1) {
           // This is a sanity check. We should not reach here when we have multiple distinct
           // column sets. Our `RewriteDistinctAggregates` should take care this case.
           throw new IllegalStateException(

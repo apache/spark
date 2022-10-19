@@ -890,8 +890,13 @@ select to_timestamp('2019-10-06 A', 'yyyy-MM-dd GGGGG')
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-Fail to recognize 'yyyy-MM-dd GGGGG' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "messageParameters" : {
+    "pattern" : "yyyy-MM-dd GGGGG"
+  }
+}
 
 
 -- !query
@@ -899,8 +904,13 @@ select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEEE')
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-Fail to recognize 'dd MM yyyy EEEEEE' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "messageParameters" : {
+    "pattern" : "dd MM yyyy EEEEEE"
+  }
+}
 
 
 -- !query
@@ -908,8 +918,13 @@ select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE')
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-Fail to recognize 'dd MM yyyy EEEEE' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "messageParameters" : {
+    "pattern" : "dd MM yyyy EEEEE"
+  }
+}
 
 
 -- !query

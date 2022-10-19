@@ -265,6 +265,8 @@ case class AdaptiveSparkPlanExec(
                 } else {
                   events.offer(StageFailure(stage, res.failed.get))
                 }
+                // explicitly clean up the resources in this stage
+                stage.cleanupResources()
               }(AdaptiveSparkPlanExec.executionContext)
             } catch {
               case e: Throwable =>
