@@ -271,6 +271,8 @@ class ParquetToSparkSchemaConverter(
             } else {
               TimestampNTZType
             }
+          case timestamp: TimestampLogicalTypeAnnotation if timestamp.getUnit == TimeUnit.NANOS =>
+            LongType
           case _ => illegalType()
         }
 
