@@ -243,11 +243,6 @@
           "class <className> not found"
         ]
       },
-      "UNEXPECTED_ENDPOINT_TYPE" : {
-        "message" : [
-          "Endpoints require (numeric or \"TIMESTAMP\" or \"DATE\" or \"TIMESTAMP_NTZ\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\") type."
-        ]
-      },
       "UNEXPECTED_INPUT_TYPE" : {
         "message" : [
           "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."

@@ -58,7 +58,16 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
     wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = CreateArray(Array("foobar").map(Literal(_))))
-    assert(wrongEndpoints.checkInputDataTypes() == DataTypeMismatch("UNEXPECTED_ENDPOINT_TYPE"))
+    // scalastyle:off line.size.limit
+    assert(wrongEndpoints.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> "ARRAY OF (\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")",
+          "inputSql" -> "\"array(foobar)\"",
+          "inputType" -> "\"ARRAY<STRING>\"")))
+    // scalastyle:on line.size.limit
   }
 
   /** Create an ApproxCountDistinctForIntervals instance and an input and output buffer. */

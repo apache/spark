@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, GenericInternalRow}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, HyperLogLogPlusPlusHelper}
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 
@@ -49,7 +50,10 @@ case class ApproxCountDistinctForIntervals(
     relativeSD: Double = 0.05,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[Array[Long]] with ExpectsInputTypes with BinaryLike[Expression] {
+  extends TypedImperativeAggregate[Array[Long]]
+  with ExpectsInputTypes
+  with BinaryLike[Expression]
+  with QueryErrorsBase {
 
   def this(child: Expression, endpointsExpression: Expression, relativeSD: Expression) = {
     this(
@@ -89,7 +93,17 @@ case class ApproxCountDistinctForIntervals(
           } else {
             TypeCheckSuccess
           }
-        case _ => DataTypeMismatch("UNEXPECTED_ENDPOINT_TYPE")
+        case inputType =>
+          val requiredElemTypes = toSQLType(TypeCollection(NumericType,
+            DateType, TimestampType, TimestampNTZType,
+            YearMonthIntervalType, DayTimeIntervalType))
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> "2",
+              "requiredType" -> s"ARRAY OF $requiredElemTypes",
+              "inputSql" -> toSQLExpr(endpointsExpression),
+              "inputType" -> toSQLType(inputType)))
       }
     }
   }
