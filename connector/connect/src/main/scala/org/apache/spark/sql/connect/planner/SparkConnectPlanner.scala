@@ -55,7 +55,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead, common)
       case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject, common)
       case proto.Relation.RelTypeCase.FILTER => transformFilter(rel.getFilter)
-      case proto.Relation.RelTypeCase.FETCH => transformFetch(rel.getFetch)
+      case proto.Relation.RelTypeCase.LIMIT => transformLimit(rel.getLimit)
+      case proto.Relation.RelTypeCase.OFFSET => transformOffset(rel.getOffset)
       case proto.Relation.RelTypeCase.JOIN => transformJoin(rel.getJoin)
       case proto.Relation.RelTypeCase.UNION => transformUnion(rel.getUnion)
       case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
@@ -194,10 +195,16 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     }
   }
 
-  private def transformFetch(limit: proto.Fetch): LogicalPlan = {
+  private def transformLimit(limit: proto.Limit): LogicalPlan = {
     logical.Limit(
-      child = transformRelation(limit.getInput),
-      limitExpr = expressions.Literal(limit.getLimit, IntegerType))
+      limitExpr = expressions.Literal(limit.getLimit, IntegerType),
+      transformRelation(limit.getInput))
+  }
+
+  private def transformOffset(offset: proto.Offset): LogicalPlan = {
+    logical.Offset(
+      offsetExpr = expressions.Literal(offset.getOffset, IntegerType),
+      transformRelation(offset.getInput))
   }
 
   /**

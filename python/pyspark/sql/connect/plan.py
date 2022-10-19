@@ -231,8 +231,8 @@ class Limit(LogicalPlan):
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
-        plan.fetch.input.CopyFrom(self._child.plan(session))
-        plan.fetch.limit = self.limit
+        plan.limit.input.CopyFrom(self._child.plan(session))
+        plan.limit.limit = self.limit
         return plan
 
     def print(self, indent: int = 0) -> str:

@@ -186,6 +186,28 @@ package object dsl {
           .build()
       }
 
+      def limit(limit: Int): proto.Relation = {
+        proto.Relation
+          .newBuilder()
+          .setLimit(
+            proto.Limit
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setLimit(limit))
+          .build()
+      }
+
+      def offset(offset: Int): proto.Relation = {
+        proto.Relation
+          .newBuilder()
+          .setOffset(
+            proto.Offset
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setOffset(offset))
+          .build()
+      }
+
       def where(condition: proto.Expression): proto.Relation = {
         proto.Relation
           .newBuilder()
