@@ -28,7 +28,7 @@ RUN apt-get update && \
     apt install -y python3 python3-pip && \
     pip3 install --upgrade pip setuptools && \
     # Removed the .cache to save space
-    rm -rf /root/.cache && rm -rf /var/cache/apt/*
+    rm -rf /root/.cache && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
 
 COPY python/pyspark ${SPARK_HOME}/python/pyspark
 COPY python/lib ${SPARK_HOME}/python/lib
