@@ -2135,6 +2135,7 @@ class SubquerySuite extends QueryTest
           |FROM (SELECT CAST(c1 AS SHORT) a FROM t1)
           |""".stripMargin)
       checkAnswer(df, Row(5) :: Row(null) :: Nil)
+      // The optimized plan should have one left outer join and one domain (inner) join.
       checkNumJoins(df.queryExecution.optimizedPlan, 2)
     }
   }
