@@ -23,6 +23,7 @@ from typing import (
     Union,
     cast,
     TYPE_CHECKING,
+    Mapping,
 )
 
 import pyspark.sql.connect.proto as proto
@@ -109,6 +110,46 @@ class LogicalPlan(object):
 
     def _child_repr_(self) -> str:
         return self._child._repr_html_() if self._child is not None else ""
+
+
+class DataSource(LogicalPlan):
+    """A datasource with a format and optional a schema from which Spark reads data"""
+
+    def __init__(
+        self,
+        format: str = "",
+        schema: Optional[str] = None,
+        options: Optional[Mapping[str, str]] = None,
+    ) -> None:
+        super().__init__(None)
+        self.format = format
+        self.schema = schema
+        self.options = options
+
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+        plan = proto.Relation()
+        if self.format is not None:
+            plan.read.data_source.format = self.format
+        if self.schema is not None:
+            plan.read.data_source.schema = self.schema
+        if self.options is not None:
+            for k in self.options.keys():
+                v = self.options.get(k)
+                if v is not None:
+                    plan.read.data_source.options[k] = v
+        return plan
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>DataSource</b><br />
+                format: {self.format}
+                schema: {self.schema}
+                options: {self.options}
+            </li>
+        </ul>
+        """
 
 
 class Read(LogicalPlan):

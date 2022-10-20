@@ -18,6 +18,7 @@ import unittest
 
 from pyspark.testing.connectutils import PlanOnlyTestFixture
 import pyspark.sql.connect.proto as proto
+from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
 from pyspark.sql.types import StringType
 
@@ -47,6 +48,18 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.alias("table_alias")._plan.to_proto(self.connect)
         self.assertEqual(plan.root.common.alias, "table_alias")
+
+    def test_datasource_read(self):
+        reader = DataFrameReader(self.connect)
+        df = reader.load(path="test_path", format="text", schema="id INT", op1="opv", op2="opv2")
+        plan = df._plan.to_proto(self.connect)
+        data_source = plan.root.read.data_source
+        self.assertEqual(data_source.format, "text")
+        self.assertEqual(data_source.schema, "id INT")
+        self.assertEqual(len(data_source.options), 3)
+        self.assertEqual(data_source.options.get("path"), "test_path")
+        self.assertEqual(data_source.options.get("op1"), "opv")
+        self.assertEqual(data_source.options.get("op2"), "opv2")
 
     def test_simple_udf(self):
         u = udf(lambda x: "Martin", StringType())
