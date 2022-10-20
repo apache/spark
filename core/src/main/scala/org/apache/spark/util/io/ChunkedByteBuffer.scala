@@ -55,7 +55,8 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
   private[this] var disposed: Boolean = false
 
   /**
-   * This size of this buffer, in bytes.
+   * This size of this buffer, in bytes. Using var here for serialization purpose(need to set a
+   * object after default construction)
    */
   private var _size: Long = chunks.map(_.limit().asInstanceOf[Long]).sum
 
@@ -92,10 +93,10 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
   }
 
   /**
-   * write to ObjectOutput with zero copy if possible
+   * Writes to the provided ObjectOutput with zero copy if possible.
    */
   override def writeExternal(out: ObjectOutput): Unit = {
-    // we want to keep the chunks layout
+    // We want to keep the chunks layout
     out.writeInt(chunks.length)
     val chunksCopy = getChunks()
     chunksCopy.foreach(buffer => out.writeInt(buffer.limit()))
@@ -104,10 +105,10 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
 
     chunksCopy.foreach { chunk => {
       if (chunk.hasArray) {
-        // zero copy if the bytebuffer is backed by bytes array
+        // Zero copy if the bytebuffer is backed by bytes array
         out.write(chunk.array(), chunk.arrayOffset(), chunk.limit())
       } else {
-        // fallback to copy approach
+        // Fallback to copy approach
         if (buffer == null) {
           buffer = new Array[Byte](bufferLen)
         }
@@ -130,14 +131,14 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
     // We deserialize all chunks into on-heap buffer by default. If we have use case in the future
     // where we want to preserve the on-heap/off-heap nature of chunks, then we need to record the
     // `isDirect` property of each chunk during serialization
-    indices.foreach { i => {
+    indices.foreach { i =>
       val chunkSize = chunksSize(i)
       chunks(i) = {
         val arr = new Array[Byte](chunkSize)
         in.readFully(arr, 0, chunkSize)
         ByteBuffer.wrap(arr)
       }
-    }}
+    }
     this.chunks = chunks
     this._size = chunks.map(_.limit().toLong).sum
   }
@@ -269,8 +270,8 @@ private[spark] object ChunkedByteBuffer {
   }
 
   /**
-   * Try to estimate appropriate chunk size so that it's not too large(waste memory) or too
-   * small(too many segments)
+   * Try to estimate appropriate chunk size so that it's not too large (waste memory) or too
+   * small (too many segments)
    */
   def estimateBufferChunkSize(estimatedSize: Long = -1): Int = {
     if (estimatedSize < 0) {
