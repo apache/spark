@@ -150,7 +150,7 @@ def to_protobuf(data: "ColumnOrName", messageName: str, descFilePath: str) -> Co
     ...         f.flush()
     ...         message_name = 'SimpleMessage'
     ...         proto_df = df.select(
-    ...             to_protobuf(df.value, , message_name, desc_file_path).alias("suite"))
+    ...             to_protobuf(df.value, message_name, desc_file_path).alias("suite"))
     ...         proto_df.show(truncate=False)
     +-------------------------------------------+
     |suite                                      |
