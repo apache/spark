@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{Request, Response}
@@ -59,15 +60,32 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
     processRows(request.getClientId, rows)
   }
 
-  private def processRows(clientId: String, rows: DataFrame) = {
+  private[connect] def processRows(clientId: String, rows: DataFrame): Unit = {
     val timeZoneId = SQLConf.get.sessionLocalTimeZone
 
     // Only process up to 10MB of data.
     val sb = new StringBuilder
     var rowCount = 0
     rows.toJSON
-      .collect()
+      .toLocalIterator()
+      .asScala
       .foreach(row => {
+
+        // There are a few cases to cover here.
+        // 1. The aggregated buffer size is larger than the MAX_BATCH_SIZE
+        //     -> send the current batch and reset.
+        // 2. The aggregated buffer size is smaller than the MAX_BATCH_SIZE
+        //     -> append the row to the buffer.
+        // 3. The row in question is larger than the MAX_BATCH_SIZE
+        //     -> fail the query.
+
+        // Case 3. - Fail
+        if (row.size > MAX_BATCH_SIZE) {
+          throw SparkException.internalError(
+            s"Serialized row is larger than MAX_BATCH_SIZE: ${row.size} > ${MAX_BATCH_SIZE}")
+        }
+
+        // Case 1 - FLush and send.
         if (sb.size + row.size > MAX_BATCH_SIZE) {
           val response = proto.Response.newBuilder().setClientId(clientId)
           val batch = proto.Response.JSONBatch
@@ -77,11 +95,11 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
             .build()
           response.setJsonBatch(batch)
           responseObserver.onNext(response.build())
-          // When the data is sent, we have to clear the batch data and reset the row count for
-          // this batch.
           sb.clear()
-          rowCount = 0
+          sb.append(row)
+          rowCount = 1
         } else {
+          // Case 2 - Append.
           // Make sure to put the newline delimiters only between items and not at the end.
           if (rowCount > 0) {
             sb.append("\n")
