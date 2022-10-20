@@ -49,7 +49,7 @@ object DateTimeTestUtils {
     CET.getId,
     "Africa/Dakar",
     LA.getId,
-    "Antarctica/Vostok",
+    "Asia/Urumqi",
     "Asia/Hong_Kong",
     "Europe/Amsterdam")
   val outstandingZoneIds: Seq[ZoneId] = outstandingTimezonesIds.map(getZoneId)

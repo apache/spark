@@ -44,7 +44,7 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       CET.getId -> 1543741872001234L,
       "Africa/Dakar" -> 1543745472001234L,
       "America/Los_Angeles" -> 1543774272001234L,
-      "Antarctica/Vostok" -> 1543723872001234L,
+      "Asia/Urumqi" -> 1543723872001234L,
       "Asia/Hong_Kong" -> 1543716672001234L,
       "Europe/Amsterdam" -> 1543741872001234L)
     outstandingTimezonesIds.foreach { zoneId =>
@@ -65,7 +65,7 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       CET.getId -> "2018-12-02 11:11:12.001234",
       "Africa/Dakar" -> "2018-12-02 10:11:12.001234",
       "America/Los_Angeles" -> "2018-12-02 02:11:12.001234",
-      "Antarctica/Vostok" -> "2018-12-02 16:11:12.001234",
+      "Asia/Urumqi" -> "2018-12-02 16:11:12.001234",
       "Asia/Hong_Kong" -> "2018-12-02 18:11:12.001234",
       "Europe/Amsterdam" -> "2018-12-02 11:11:12.001234")
     outstandingTimezonesIds.foreach { zoneId =>
