@@ -271,6 +271,8 @@ class ParquetToSparkSchemaConverter(
             } else {
               TimestampNTZType
             }
+          // SPARK-40819: NANOS are not support as a Timestamp, convert to LongType without
+          // timezone awareness to address behaviour regression introduced by SPARK-34661
           case timestamp: TimestampLogicalTypeAnnotation if timestamp.getUnit == TimeUnit.NANOS =>
             LongType
           case _ => illegalType()
