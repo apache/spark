@@ -164,7 +164,7 @@ private[spark] object ThreadUtils {
    */
   def newDaemonSingleThreadExecutor(threadName: String): ThreadPoolExecutor = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
-    Executors.newSingleThreadExecutor(threadFactory).asInstanceOf[ThreadPoolExecutor]
+    Executors.newFixedThreadPool(1, threadFactory).asInstanceOf[ThreadPoolExecutor]
   }
 
   /**
