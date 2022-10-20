@@ -64,11 +64,11 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(170L, 2, 1)),
       errorClass = "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION",
-      parameters = Map("ANSIEnabled" -> "spark.sql.ansi.enabled"))
+      parameters = Map("ansiConfig" -> "spark.sql.ansi.enabled"))
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(170L, 2, 0)),
       errorClass = "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION",
-      parameters = Map("ANSIEnabled" -> "spark.sql.ansi.enabled"))
+      parameters = Map("ansiConfig" -> "spark.sql.ansi.enabled"))
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(BigDecimal("10.030"), 2, 1)),
       errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
@@ -80,7 +80,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(1e17.toLong, 17, 0)),
       errorClass = "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION",
-      parameters = Map("ANSIEnabled" -> "spark.sql.ansi.enabled"))
+      parameters = Map("ansiConfig" -> "spark.sql.ansi.enabled"))
   }
 
   test("creating decimals with negative scale under legacy mode") {

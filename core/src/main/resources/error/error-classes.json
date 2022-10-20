@@ -421,6 +421,16 @@
       }
     }
   },
+  "INCORRECT_END_OFFSET" : {
+    "message" : [
+      "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but it's <endSeconds> now."
+    ]
+  },
+  "INCORRECT_RUMP_UP_RATE" : {
+    "message" : [
+      "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but 'rampUpTimeSeconds' is <rampUpTimeSeconds>."
+    ]
+  },
   "INDEX_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the index because it already exists. <message>."
@@ -454,16 +464,6 @@
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead."
     ],
     "sqlState" : "22012"
-  },
-  "INCORRECT_RUMP_UP_RATE" : {
-    "message" : [
-      "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but 'rampUpTimeSeconds' is <rampUpTimeSeconds>."
-    ]
-  },
-  "INCORRECT_END_OFFSET" : {
-    "message" : [
-      "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but it's <endSeconds> now."
-    ]
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [
@@ -841,7 +841,7 @@
   },
   "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION" : {
     "message" : [
-      "Unscaled value too large for precision. If necessary set <ANSIEnabled> to false to bypass this error."
+      "Unscaled value too large for precision. If necessary set <ansiConfig> to false to bypass this error."
     ]
   },
   "UNSUPPORTED_DATATYPE" : {

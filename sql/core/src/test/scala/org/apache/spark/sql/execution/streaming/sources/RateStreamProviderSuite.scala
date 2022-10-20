@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkArithmeticException
+import org.apache.spark.SparkStreamingException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
@@ -198,7 +198,7 @@ class RateStreamProviderSuite extends StreamTest {
   }
 
   testQuietly("microbatch - rump up error") {
-    val e = intercept[SparkArithmeticException](
+    val e = intercept[SparkStreamingException](
       new RateStreamMicroBatchStream(
         rowsPerSecond = Long.MaxValue,
         rampUpTimeSeconds = 2,
@@ -215,20 +215,25 @@ class RateStreamProviderSuite extends StreamTest {
   }
 
   testQuietly("microbatch - end offset error") {
-    val e = intercept[SparkArithmeticException](
-      new RateStreamMicroBatchStream(
-        rowsPerSecond = 100,
-        rampUpTimeSeconds = 2,
-        options = CaseInsensitiveStringMap.empty(),
-        checkpointLocation = "").planInputPartitions(LongOffset(0L), LongOffset(Long.MaxValue)))
+    withTempDir { temp =>
+      val maxSeconds = (Long.MaxValue / 100)
+      val endSeconds = Long.MaxValue
+      val e = intercept[SparkStreamingException](
+        new RateStreamMicroBatchStream(
+          rowsPerSecond = 100,
+          rampUpTimeSeconds = 2,
+          options = CaseInsensitiveStringMap.empty(),
+          checkpointLocation = temp.getCanonicalPath)
+          .planInputPartitions(LongOffset(1), LongOffset(endSeconds)))
 
-    checkError(
-      exception = e,
-      errorClass = "INCORRECT_END_OFFSET",
-      parameters = Map(
-        "rowsPerSecond" -> 100.toString,
-        "maxSeconds" -> (Long.MaxValue/100).toString,
-        "endSeconds" -> Long.MaxValue.toString))
+      checkError(
+        exception = e,
+        errorClass = "INCORRECT_END_OFFSET",
+        parameters = Map(
+          "rowsPerSecond" -> "100",
+          "maxSeconds" -> maxSeconds.toString,
+          "endSeconds" -> endSeconds.toString))
+    }
   }
 
   test("valueAtSecond") {
@@ -305,8 +310,8 @@ class RateStreamProviderSuite extends StreamTest {
       .distinct()
     testStream(input)(
       AdvanceRateManualClock(2),
-      ExpectFailure[SparkArithmeticException](t => {
-        Seq("overflow", "rowsPerSecond").foreach { msg =>
+      ExpectFailure[SparkStreamingException](t => {
+        Seq("INCORRECT_END_OFFSET", "rowsPerSecond").foreach { msg =>
           assert(t.getMessage.contains(msg))
         }
       })

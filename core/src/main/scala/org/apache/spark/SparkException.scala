@@ -348,3 +348,19 @@ private[spark] class SparkSQLFeatureNotSupportedException(
 
   override def getErrorClass: String = errorClass
 }
+
+/**
+ * Exception thrown from Spark Streaming framework.
+ */
+private[spark] class SparkStreamingException(
+    errorClass: String,
+    messageParameters: Map[String, String],
+    cause: Throwable = null)
+  extends RuntimeException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters), cause)
+    with SparkThrowable {
+
+  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+
+  override def getErrorClass: String = errorClass
+}

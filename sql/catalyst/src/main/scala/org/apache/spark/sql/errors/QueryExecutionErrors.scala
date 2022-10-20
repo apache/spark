@@ -2390,29 +2390,25 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def incorrectRumpUpRate(rowsPerSecond: Long,
                           maxSeconds: Long,
                           rampUpTimeSeconds: Long): Throwable = {
-    new SparkArithmeticException(
+    new SparkStreamingException(
       errorClass = "INCORRECT_RUMP_UP_RATE",
       messageParameters = Map(
         "rowsPerSecond" -> rowsPerSecond.toString,
         "maxSeconds" -> maxSeconds.toString,
         "rampUpTimeSeconds" -> rampUpTimeSeconds.toString
-      ),
-      context = Array.empty,
-      summary = "")
+      ))
   }
 
   def incorrectEndOffset(rowsPerSecond: Long,
                          maxSeconds: Long,
                          endSeconds: Long): Throwable = {
-    new SparkArithmeticException(
+    new SparkStreamingException(
       errorClass = "INCORRECT_END_OFFSET",
       messageParameters = Map(
         "rowsPerSecond" -> rowsPerSecond.toString,
         "maxSeconds" -> maxSeconds.toString,
         "endSeconds" -> endSeconds.toString
-      ),
-      context = Array.empty,
-      summary = "")
+      ))
   }
 
   def failedToReadDeltaFileError(fileToRead: Path, clazz: String, keySize: Int): Throwable = {
