@@ -581,8 +581,8 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       ("2016-03-27 19:38:18"), ("2016-03-27 19:39:25")
     ).toDF("time")
 
-    checkAnswer(df
-        .select(window($"time", "10 seconds").as("window"))
+    checkAnswer(
+      df.select(window($"time", "10 seconds").as("window"))
         .select(
           $"window.end".cast("string"),
           window_time($"window").cast("string")
@@ -590,6 +590,25 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       Seq(
         Row("2016-03-27 19:38:20", "2016-03-27 19:38:19.999999"),
         Row("2016-03-27 19:39:30", "2016-03-27 19:39:29.999999")
+      )
+    )
+  }
+
+  test("2 window_time functions on raw window column") {
+    val df = Seq(
+      ("2016-03-27 19:38:18"), ("2016-03-27 19:39:25")
+    ).toDF("time")
+
+    checkAnswer(
+      df.select(window($"time", "10 seconds").as("window"))
+        .select(
+          $"window.end".cast("string"),
+          window_time($"window").cast("string").as("window1"),
+          window_time($"window").cast("string").as("window2")
+        ),
+      Seq(
+        Row("2016-03-27 19:38:20", "2016-03-27 19:38:19.999999", "2016-03-27 19:38:19.999999"),
+        Row("2016-03-27 19:39:30", "2016-03-27 19:39:29.999999", "2016-03-27 19:39:29.999999")
       )
     )
   }
@@ -613,5 +632,4 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       )
     )
   }
-
 }

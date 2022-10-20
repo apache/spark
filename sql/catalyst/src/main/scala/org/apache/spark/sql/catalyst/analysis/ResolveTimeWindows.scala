@@ -325,13 +325,11 @@ object ResolveWindowTime extends Rule[LogicalPlan] {
         val subtractExpr =
         PreciseTimestampConversion(
           Subtract(PreciseTimestampConversion(
-            // FIXME: better handling of window.end
             GetStructField(windowTime.windowColumn, 1),
             windowTime.dataType, LongType), Literal(1L)),
           LongType,
           windowTime.dataType)
 
-        // FIXME: Can there already be a window_time column? Will this lead to conflict?
         val newColumn = Alias(subtractExpr, "window_time")(
           exprId = attr.exprId, explicitMetadata = Some(newMetadata))
 
