@@ -3778,8 +3778,7 @@ object functions {
   }
 
   /**
-   * Extracts the event time from the window column of a record produced by window aggregation
-   * operator.
+   * Extracts the event time from the window column of a record produced by window aggregation.
    *
    * The window column is of StructType { start: Timestamp, end: Timestamp } where start is
    * inclusive and end is exclusive. Since event time can support microsecond precision,
