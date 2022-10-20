@@ -280,29 +280,79 @@ class Read(google.protobuf.message.Message):
             field_name: typing_extensions.Literal["unparsed_identifier", b"unparsed_identifier"],
         ) -> None: ...
 
+    class DataSource(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        class OptionsEntry(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            KEY_FIELD_NUMBER: builtins.int
+            VALUE_FIELD_NUMBER: builtins.int
+            key: builtins.str
+            value: builtins.str
+            def __init__(
+                self,
+                *,
+                key: builtins.str = ...,
+                value: builtins.str = ...,
+            ) -> None: ...
+            def ClearField(
+                self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+            ) -> None: ...
+
+        FORMAT_FIELD_NUMBER: builtins.int
+        SCHEMA_FIELD_NUMBER: builtins.int
+        OPTIONS_FIELD_NUMBER: builtins.int
+        format: builtins.str
+        """Required. Supported formats include: parquet, orc, text, json, parquet, csv, avro."""
+        schema: builtins.str
+        """Optional. If not set, Spark will infer the schema."""
+        @property
+        def options(
+            self,
+        ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+            """The key is case insensitive."""
+        def __init__(
+            self,
+            *,
+            format: builtins.str = ...,
+            schema: builtins.str = ...,
+            options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "format", b"format", "options", b"options", "schema", b"schema"
+            ],
+        ) -> None: ...
+
     NAMED_TABLE_FIELD_NUMBER: builtins.int
+    DATA_SOURCE_FIELD_NUMBER: builtins.int
     @property
     def named_table(self) -> global___Read.NamedTable: ...
+    @property
+    def data_source(self) -> global___Read.DataSource: ...
     def __init__(
         self,
         *,
         named_table: global___Read.NamedTable | None = ...,
+        data_source: global___Read.DataSource | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "named_table", b"named_table", "read_type", b"read_type"
+            "data_source", b"data_source", "named_table", b"named_table", "read_type", b"read_type"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "named_table", b"named_table", "read_type", b"read_type"
+            "data_source", b"data_source", "named_table", b"named_table", "read_type", b"read_type"
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["read_type", b"read_type"]
-    ) -> typing_extensions.Literal["named_table"] | None: ...
+    ) -> typing_extensions.Literal["named_table", "data_source"] | None: ...
 
 global___Read = Read
 

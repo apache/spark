@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeRef
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sample, SubqueryAlias}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.types._
 
 final case class InvalidPlanInput(
@@ -112,7 +113,19 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
         } else {
           child
         }
-      case _ => throw InvalidPlanInput()
+      case proto.Read.ReadTypeCase.DATA_SOURCE =>
+        if (rel.getDataSource.getFormat == "") {
+          throw InvalidPlanInput("DataSource requires a format")
+        }
+        val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
+        val reader = session.read
+        reader.format(rel.getDataSource.getFormat)
+        localMap.foreach { case (key, value) => reader.option(key, value) }
+        if (rel.getDataSource.getSchema != null) {
+          reader.schema(rel.getDataSource.getSchema)
+        }
+        reader.load().queryExecution.analyzed
+      case _ => throw InvalidPlanInput("Does not support " + rel.getReadTypeCase.name())
     }
     baseRelation
   }
