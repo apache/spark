@@ -699,17 +699,17 @@
     "sqlState" : "22023"
   },
   "SPARK_CONNECT" : {
-    "message":[
+    "message" : [
       "Generic Spark Connect error."
     ],
-    "subClass": {
-      "INTERCEPTOR_CTOR_MISSING": {
-        "message": [
+    "subClass" : {
+      "INTERCEPTOR_CTOR_MISSING" : {
+        "message" : [
           "Cannot instantiate GRPC interceptor because <cls> is missing a default constructor without arguments."
         ]
       },
       "INTERCEPTOR_RUNTIME_ERROR" : {
-        "message": [
+        "message" : [
           "Error instantiating GRPC interceptor: <msg>"
         ]
       }
