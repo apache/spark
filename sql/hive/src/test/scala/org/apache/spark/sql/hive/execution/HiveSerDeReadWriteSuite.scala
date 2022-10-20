@@ -25,7 +25,7 @@ import java.sql.{Date, Timestamp}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
+import org.apache.spark.sql.internal.SQLConf.{ORC_IMPLEMENTATION, USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.SlowHiveTest
 
@@ -253,6 +253,15 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
           sql("SELECT id FROM t ORDER BY id ASC"),
           (0 until 10).map(Row(_))
         )
+
+        // Verify that with the flag disabled, we use the original SymlinkTextInputFormat
+        // which has the empty splits issue and therefore the result should be empty.
+        withSQLConf(USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT.key -> "false") {
+          checkAnswer(
+            sql("SELECT id FROM t ORDER BY id ASC"),
+            Seq.empty[Row]
+          )
+        }
       }
     }
   }
