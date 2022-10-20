@@ -16,28 +16,13 @@
     under the License.
 
 
-=========
-Spark SQL
-=========
+========
+Protobuf
+========
+.. currentmodule:: pyspark.sql.protobuf.functions
 
-This page gives an overview of all public Spark SQL API.
+.. autosummary::
+    :toctree: api/
 
-.. toctree::
-    :maxdepth: 2
-
-    core_classes
-    spark_session
-    configuration
-    io
-    dataframe
-    column
-    data_types
-    row
-    functions
-    window
-    grouping
-    catalog
-    avro
-    observation
-    udf
-    protobuf
+    from_protobuf
+    to_protobuf

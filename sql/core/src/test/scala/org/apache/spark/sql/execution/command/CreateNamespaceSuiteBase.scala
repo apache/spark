@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
@@ -68,15 +69,15 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
         // The generated temp path is not qualified.
         val path = tmpDir.getCanonicalPath
         assert(!path.startsWith("file:/"))
-
-        val e = intercept[IllegalArgumentException] {
-          sql(s"CREATE NAMESPACE $ns LOCATION ''")
-        }
-        assert(e.getMessage.contains("Can not create a Path from an empty string"))
-
+        val sqlText = s"CREATE NAMESPACE $ns LOCATION ''"
+        checkError(
+          exception = intercept[SparkIllegalArgumentException] {
+            sql(sqlText)
+          },
+          errorClass = "UNSUPPORTED_EMPTY_LOCATION",
+          parameters = Map.empty)
         val uri = new Path(path).toUri
         sql(s"CREATE NAMESPACE $ns LOCATION '$uri'")
-
         // Make sure the location is qualified.
         val expected = makeQualifiedPath(tmpDir.toString)
         assert("file" === expected.getScheme)

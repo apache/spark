@@ -16,6 +16,7 @@
 #
 from typing import Any
 import unittest
+import shutil
 import tempfile
 
 import pandas
@@ -24,6 +25,7 @@ from pyspark.sql import SparkSession, Row
 from pyspark.sql.connect.client import RemoteSparkSession
 from pyspark.sql.connect.function_builder import udf
 from pyspark.sql.connect.functions import lit
+from pyspark.sql.dataframe import DataFrame
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import ReusedPySparkTestCase
 
@@ -35,6 +37,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
 
     connect: RemoteSparkSession
     tbl_name: str
+    df_text: "DataFrame"
 
     @classmethod
     def setUpClass(cls: Any):
@@ -44,7 +47,9 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
         # Create the new Spark Session
         cls.spark = SparkSession(cls.sc)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
+        cls.testDataStr = [Row(key=str(i)) for i in range(100)]
         cls.df = cls.sc.parallelize(cls.testData).toDF()
+        cls.df_text = cls.sc.parallelize(cls.testDataStr).toDF()
 
         cls.tbl_name = "test_connect_basic_table_1"
 
@@ -100,6 +105,21 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
         res = pandas.DataFrame(data={"id": [0, 30, 60, 90]})
         self.assert_(pd.equals(res), f"{pd.to_string()} != {res.to_string()}")
+
+    def test_simple_datasource_read(self) -> None:
+        writeDf = self.df_text
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        writeDf.write.text(tmpPath)
+
+        readDf = self.connect.read.format("text").schema("id STRING").load(path=tmpPath)
+        expectResult = writeDf.collect()
+        pandasResult = readDf.toPandas()
+        if pandasResult is None:
+            self.assertTrue(False, "Empty pandas dataframe")
+        else:
+            actualResult = pandasResult.values.tolist()
+            self.assertEqual(len(expectResult), len(actualResult))
 
 
 if __name__ == "__main__":
