@@ -103,16 +103,15 @@ jobs:
               \"k8s-integration-tests\" : \"true\",
             }"
           echo $precondition # For debugging
-          # GitHub Actions set-output doesn't take newlines
-          # https://github.community/t/set-output-truncates-multiline-strings/16852/3
-          precondition="${precondition//$'\n'/'%0A'}"
-          echo "::set-output name=required::$precondition"
+          # Remove `\n` to avoid "Invalid format" error
+          precondition="${precondition//$'\n'/}}"
+          echo "required=$precondition" >> $GITHUB_OUTPUT
         else
           # This is usually set by scheduled jobs.
           precondition='${{ inputs.jobs }}'
           echo $precondition # For debugging
-          precondition="${precondition//$'\n'/'%0A'}"
-          echo "::set-output name=required::$precondition"
+          precondition="${precondition//$'\n'/}"
+          echo "required=$precondition" >> $GITHUB_OUTPUT
         fi
     - name: Generate infra image URL
       id: infra-image-outputs
@@ -121,7 +120,7 @@ jobs:
         REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
         IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
-        echo ::set-output name=image_url::$IMG_URL
+        echo "image_url=$IMG_URL" >> $GITHUB_OUTPUT
 
   # Build: build Spark and run the tests for specified modules.
   build:
