@@ -837,6 +837,11 @@
       }
     }
   },
+  "UNSUPPORTED_EMPTY_LOCATION" : {
+    "message" : [
+      "Unsupported empty location."
+    ]
+  },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
       "The feature is not supported:"

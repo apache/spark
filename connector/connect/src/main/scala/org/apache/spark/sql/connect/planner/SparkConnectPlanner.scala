@@ -25,8 +25,10 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sample, SubqueryAlias}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.types._
 
 final case class InvalidPlanInput(
@@ -54,7 +56,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead, common)
       case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject, common)
       case proto.Relation.RelTypeCase.FILTER => transformFilter(rel.getFilter)
-      case proto.Relation.RelTypeCase.FETCH => transformFetch(rel.getFetch)
+      case proto.Relation.RelTypeCase.LIMIT => transformLimit(rel.getLimit)
+      case proto.Relation.RelTypeCase.OFFSET => transformOffset(rel.getOffset)
       case proto.Relation.RelTypeCase.JOIN => transformJoin(rel.getJoin)
       case proto.Relation.RelTypeCase.UNION => transformUnion(rel.getUnion)
       case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
@@ -102,13 +105,27 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       common: Option[proto.RelationCommon]): LogicalPlan = {
     val baseRelation = rel.getReadTypeCase match {
       case proto.Read.ReadTypeCase.NAMED_TABLE =>
-        val child = UnresolvedRelation(rel.getNamedTable.getPartsList.asScala.toSeq)
+        val multipartIdentifier =
+          CatalystSqlParser.parseMultipartIdentifier(rel.getNamedTable.getUnparsedIdentifier)
+        val child = UnresolvedRelation(multipartIdentifier)
         if (common.nonEmpty && common.get.getAlias.nonEmpty) {
           SubqueryAlias(identifier = common.get.getAlias, child = child)
         } else {
           child
         }
-      case _ => throw InvalidPlanInput()
+      case proto.Read.ReadTypeCase.DATA_SOURCE =>
+        if (rel.getDataSource.getFormat == "") {
+          throw InvalidPlanInput("DataSource requires a format")
+        }
+        val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
+        val reader = session.read
+        reader.format(rel.getDataSource.getFormat)
+        localMap.foreach { case (key, value) => reader.option(key, value) }
+        if (rel.getDataSource.getSchema != null) {
+          reader.schema(rel.getDataSource.getSchema)
+        }
+        reader.load().queryExecution.analyzed
+      case _ => throw InvalidPlanInput("Does not support " + rel.getReadTypeCase.name())
     }
     baseRelation
   }
@@ -139,7 +156,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   }
 
   private def transformUnresolvedExpression(exp: proto.Expression): UnresolvedAttribute = {
-    UnresolvedAttribute(exp.getUnresolvedAttribute.getPartsList.asScala.toSeq)
+    UnresolvedAttribute(exp.getUnresolvedAttribute.getUnparsedIdentifier)
   }
 
   private def transformExpression(exp: proto.Expression): Expression = {
@@ -191,10 +208,16 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     }
   }
 
-  private def transformFetch(limit: proto.Fetch): LogicalPlan = {
+  private def transformLimit(limit: proto.Limit): LogicalPlan = {
     logical.Limit(
-      child = transformRelation(limit.getInput),
-      limitExpr = expressions.Literal(limit.getLimit, IntegerType))
+      limitExpr = expressions.Literal(limit.getLimit, IntegerType),
+      transformRelation(limit.getInput))
+  }
+
+  private def transformOffset(offset: proto.Offset): LogicalPlan = {
+    logical.Offset(
+      offsetExpr = expressions.Literal(offset.getOffset, IntegerType),
+      transformRelation(offset.getInput))
   }
 
   /**

@@ -23,6 +23,7 @@ from typing import (
     Union,
     cast,
     TYPE_CHECKING,
+    Mapping,
 )
 
 import pyspark.sql.connect.proto as proto
@@ -49,10 +50,10 @@ class LogicalPlan(object):
     def __init__(self, child: Optional["LogicalPlan"]) -> None:
         self._child = child
 
-    def unresolved_attr(self, *colNames: str) -> proto.Expression:
+    def unresolved_attr(self, colName: str) -> proto.Expression:
         """Creates an unresolved attribute from a column name."""
         exp = proto.Expression()
-        exp.unresolved_attribute.parts.extend(list(colNames))
+        exp.unresolved_attribute.unparsed_identifier = colName
         return exp
 
     def to_attr_or_expression(
@@ -80,9 +81,19 @@ class LogicalPlan(object):
 
         return test_plan == plan
 
-    def collect(
+    def to_proto(
         self, session: Optional["RemoteSparkSession"] = None, debug: bool = False
     ) -> proto.Plan:
+        """
+        Generates connect proto plan based on this LogicalPlan.
+
+        Parameters
+        ----------
+        session : :class:`RemoteSparkSession`, optional.
+            a session that connects remote spark cluster.
+        debug: bool
+            if enabled, the proto plan will be printed.
+        """
         plan = proto.Plan()
         plan.root.CopyFrom(self.plan(session))
 
@@ -101,6 +112,46 @@ class LogicalPlan(object):
         return self._child._repr_html_() if self._child is not None else ""
 
 
+class DataSource(LogicalPlan):
+    """A datasource with a format and optional a schema from which Spark reads data"""
+
+    def __init__(
+        self,
+        format: str = "",
+        schema: Optional[str] = None,
+        options: Optional[Mapping[str, str]] = None,
+    ) -> None:
+        super().__init__(None)
+        self.format = format
+        self.schema = schema
+        self.options = options
+
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+        plan = proto.Relation()
+        if self.format is not None:
+            plan.read.data_source.format = self.format
+        if self.schema is not None:
+            plan.read.data_source.schema = self.schema
+        if self.options is not None:
+            for k in self.options.keys():
+                v = self.options.get(k)
+                if v is not None:
+                    plan.read.data_source.options[k] = v
+        return plan
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>DataSource</b><br />
+                format: {self.format}
+                schema: {self.schema}
+                options: {self.options}
+            </li>
+        </ul>
+        """
+
+
 class Read(LogicalPlan):
     def __init__(self, table_name: str) -> None:
         super().__init__(None)
@@ -108,7 +159,7 @@ class Read(LogicalPlan):
 
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         plan = proto.Relation()
-        plan.read.named_table.parts.extend(self.table_name.split("."))
+        plan.read.named_table.unparsed_identifier = self.table_name
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -143,10 +194,12 @@ class Project(LogicalPlan):
         self._verify_expressions()
 
     def _verify_expressions(self) -> None:
-        """Ensures that all input arguments are instances of Expression."""
+        """Ensures that all input arguments are instances of Expression or String."""
         for c in self._raw_columns:
-            if not isinstance(c, Expression):
-                raise InputValidationError(f"Only Expressions can be used for projections: '{c}'.")
+            if not isinstance(c, (Expression, str)):
+                raise InputValidationError(
+                    f"Only Expressions or String can be used for projections: '{c}'."
+                )
 
     def withAlias(self, alias: str) -> LogicalPlan:
         self.alias = alias
@@ -154,12 +207,16 @@ class Project(LogicalPlan):
 
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
-        proj_exprs = [
-            c.to_plan(session)
-            if isinstance(c, Expression)
-            else self.unresolved_attr(*(c.split(".")))
-            for c in self._raw_columns
-        ]
+        proj_exprs = []
+        for c in self._raw_columns:
+            if isinstance(c, Expression):
+                proj_exprs.append(c.to_plan(session))
+            elif c == "*":
+                exp = proto.Expression()
+                exp.unresolved_star.SetInParent()
+                proj_exprs.append(exp)
+            else:
+                proj_exprs.append(self.unresolved_attr(c))
         common = proto.RelationCommon()
         if self.alias is not None:
             common.alias = self.alias
@@ -223,8 +280,8 @@ class Limit(LogicalPlan):
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
-        plan.fetch.input.CopyFrom(self._child.plan(session))
-        plan.fetch.limit = self.limit
+        plan.limit.input.CopyFrom(self._child.plan(session))
+        plan.limit.limit = self.limit
         return plan
 
     def print(self, indent: int = 0) -> str:

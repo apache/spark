@@ -473,8 +473,12 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
         assert(zone === String.format("%+03d:00", Integer.valueOf(i)))
       }
     }
-    val e2 = intercept[ParseException](sql("set time zone interval 19 hours"))
-    assert(e2.getMessage contains "The interval value must be in the range of [-18, +18] hours")
+    val sqlText = "set time zone interval 19 hours"
+    checkError(
+      exception = intercept[ParseException](sql(sqlText)),
+      errorClass = "_LEGACY_ERROR_TEMP_0044",
+      parameters = Map.empty,
+      context = ExpectedContext(sqlText, 0, 30))
   }
 
   test("SPARK-34454: configs from the legacy namespace should be internal") {
