@@ -415,7 +415,7 @@ abstract class StreamExecution(
   /**
    * Any clean up that needs to happen when the query is stopped or exits
    */
-  protected def cleanup(): Unit
+  protected def cleanup(): Unit = {}
 
   /**
    * Interrupts the query execution thread and awaits its termination until until it exceeds the
