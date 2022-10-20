@@ -37,11 +37,12 @@ message Relation {
     Join join = 5;
     Union union = 6;
     Sort sort = 7;
-    Fetch fetch = 8;
+    Limit limit = 8;
     Aggregate aggregate = 9;
     SQL sql = 10;
     LocalRelation local_relation = 11;
     Sample sample = 12;
+    Offset offset = 13;
 
     Unknown unknown = 999;
   }
@@ -66,10 +67,20 @@ message SQL {
 message Read {
   oneof read_type {
     NamedTable named_table = 1;
+    DataSource data_source = 2;
   }
 
   message NamedTable {
     string unparsed_identifier = 1;
+  }
+
+  message DataSource {
+    // Required. Supported formats include: parquet, orc, text, json, parquet, csv, avro.
+    string format = 1;
+    // Optional. If not set, Spark will infer the schema.
+    string schema = 2;
+    // The key is case insensitive.
+    map<string, string> options = 3;
   }
 }
 
@@ -121,11 +132,17 @@ message Union {
   }
 }
 
-// Relation of type [[Fetch]] that is used to read `limit` / `offset` rows from the input relation.
-message Fetch {
+// Relation of type [[Limit]] that is used to `limit` rows from the input relation.
+message Limit {
   Relation input = 1;
   int32 limit = 2;
-  int32 offset = 3;
+}
+
+// Relation of type [[Offset]] that is used to read rows staring from the `offset` on
+// the input relation.
+message Offset {
+  Relation input = 1;
+  int32 offset = 2;
 }
 
 // Relation of type [[Aggregate]].

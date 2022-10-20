@@ -39,6 +39,8 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString
     from pyspark.sql.connect.client import RemoteSparkSession
 
+ColumnOrName = Union[ColumnRef, str]
+
 
 class GroupingFrame(object):
 
@@ -111,7 +113,7 @@ class DataFrame(object):
         new_frame._session = session
         return new_frame
 
-    def select(self, *cols: ColumnRef) -> "DataFrame":
+    def select(self, *cols: ColumnOrName) -> "DataFrame":
         return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
 
     def agg(self, exprs: Optional[GroupingFrame.MeasuresType]) -> "DataFrame":

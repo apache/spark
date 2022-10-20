@@ -77,7 +77,9 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("Simple Limit") {
     assertThrows[IndexOutOfBoundsException] {
       new SparkConnectPlanner(
-        proto.Relation.newBuilder.setFetch(proto.Fetch.newBuilder.setLimit(10).build()).build(),
+        proto.Relation.newBuilder
+          .setLimit(proto.Limit.newBuilder.setLimit(10))
+          .build(),
         None.orNull)
         .transform()
     }
@@ -253,4 +255,15 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(res.nodeName == "Aggregate")
   }
 
+  test("Invalid DataSource") {
+    val dataSource = proto.Read.DataSource.newBuilder()
+
+    val e = intercept[InvalidPlanInput](
+      transform(
+        proto.Relation
+          .newBuilder()
+          .setRead(proto.Read.newBuilder().setDataSource(dataSource))
+          .build()))
+    assert(e.getMessage.contains("DataSource requires a format"))
+  }
 }
