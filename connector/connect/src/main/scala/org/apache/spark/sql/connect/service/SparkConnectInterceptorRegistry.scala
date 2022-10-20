@@ -80,7 +80,7 @@ object SparkConnectInterceptorRegistry {
     if (classes.nonEmpty) {
       classes.get
         .split(",")
-        .map(_.strip)
+        .map(_.trim)
         .filter(_.nonEmpty)
         .map(Utils.classForName[ServerInterceptor](_))
         .map(createInstance(_))
