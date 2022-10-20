@@ -67,10 +67,20 @@ message SQL {
 message Read {
   oneof read_type {
     NamedTable named_table = 1;
+    DataSource data_source = 2;
   }
 
   message NamedTable {
     string unparsed_identifier = 1;
+  }
+
+  message DataSource {
+    // Required. Supported formats include: parquet, orc, text, json, parquet, csv, avro.
+    string format = 1;
+    // Optional. If not set, Spark will infer the schema.
+    string schema = 2;
+    // The key is case insensitive.
+    map<string, string> options = 3;
   }
 }
 
