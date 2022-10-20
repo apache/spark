@@ -15,13 +15,17 @@
 # limitations under the License.
 #
 from typing import Any
-import uuid
 import unittest
+import shutil
 import tempfile
+
+import pandas
 
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.connect.client import RemoteSparkSession
 from pyspark.sql.connect.function_builder import udf
+from pyspark.sql.connect.functions import lit
+from pyspark.sql.dataframe import DataFrame
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import ReusedPySparkTestCase
 
@@ -33,6 +37,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
 
     connect: RemoteSparkSession
     tbl_name: str
+    df_text: "DataFrame"
 
     @classmethod
     def setUpClass(cls: Any):
@@ -42,20 +47,33 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
         # Create the new Spark Session
         cls.spark = SparkSession(cls.sc)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
+        cls.testDataStr = [Row(key=str(i)) for i in range(100)]
         cls.df = cls.sc.parallelize(cls.testData).toDF()
+        cls.df_text = cls.sc.parallelize(cls.testDataStr).toDF()
 
+        cls.tbl_name = "test_connect_basic_table_1"
+
+        # Cleanup test data
+        cls.spark_connect_clean_up_test_data()
         # Load test data
-        cls.spark_connect_test_data()
+        cls.spark_connect_load_test_data()
 
     @classmethod
-    def spark_connect_test_data(cls: Any):
+    def tearDownClass(cls: Any) -> None:
+        cls.spark_connect_clean_up_test_data()
+
+    @classmethod
+    def spark_connect_load_test_data(cls: Any):
         # Setup Remote Spark Session
-        cls.tbl_name = f"tbl{uuid.uuid4()}".replace("-", "")
         cls.connect = RemoteSparkSession(user_id="test_user")
         df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
         # Since we might create multiple Spark sessions, we need to creata global temporary view
         # that is specifically maintained in the "global_temp" schema.
         df.write.saveAsTable(cls.tbl_name)
+
+    @classmethod
+    def spark_connect_clean_up_test_data(cls: Any) -> None:
+        cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name))
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
@@ -78,6 +96,30 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         df = self.connect.read.table(self.tbl_name).limit(10)
         result = df.explain()
         self.assertGreater(len(result), 0)
+
+    def test_simple_binary_expressions(self):
+        """Test complex expression"""
+        df = self.connect.read.table(self.tbl_name)
+        pd = df.select(df.id).where(df.id % lit(30) == lit(0)).sort(df.id.asc()).toPandas()
+        self.assertEqual(len(pd.index), 4)
+
+        res = pandas.DataFrame(data={"id": [0, 30, 60, 90]})
+        self.assert_(pd.equals(res), f"{pd.to_string()} != {res.to_string()}")
+
+    def test_simple_datasource_read(self) -> None:
+        writeDf = self.df_text
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        writeDf.write.text(tmpPath)
+
+        readDf = self.connect.read.format("text").schema("id STRING").load(path=tmpPath)
+        expectResult = writeDf.collect()
+        pandasResult = readDf.toPandas()
+        if pandasResult is None:
+            self.assertTrue(False, "Empty pandas dataframe")
+        else:
+            actualResult = pandasResult.values.tolist()
+            self.assertEqual(len(expectResult), len(actualResult))
 
 
 if __name__ == "__main__":

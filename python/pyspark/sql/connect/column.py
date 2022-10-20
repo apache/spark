@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import List, cast, get_args, TYPE_CHECKING, Optional, Callable, Any
+from typing import cast, get_args, TYPE_CHECKING, Optional, Callable, Any
 
 
 import pyspark.sql.connect.proto as proto
@@ -26,10 +26,50 @@ if TYPE_CHECKING:
     import pyspark.sql.connect.proto as proto
 
 
+def _bin_op(
+    name: str, doc: str = "binary function", reverse: bool = False
+) -> Callable[["ColumnRef", Any], "Expression"]:
+    def _(self: "ColumnRef", other: Any) -> "Expression":
+        if isinstance(other, get_args(PrimitiveType)):
+            other = LiteralExpression(other)
+        if not reverse:
+            return ScalarFunctionExpression(name, self, other)
+        else:
+            return ScalarFunctionExpression(name, other, self)
+
+    return _
+
+
 class Expression(object):
     """
     Expression base class.
     """
+
+    __gt__ = _bin_op(">")
+    __lt__ = _bin_op("<")
+    __add__ = _bin_op("+")
+    __sub__ = _bin_op("-")
+    __mul__ = _bin_op("*")
+    __div__ = _bin_op("/")
+    __truediv__ = _bin_op("/")
+    __mod__ = _bin_op("%")
+    __radd__ = _bin_op("+", reverse=True)
+    __rsub__ = _bin_op("-", reverse=True)
+    __rmul__ = _bin_op("*", reverse=True)
+    __rdiv__ = _bin_op("/", reverse=True)
+    __rtruediv__ = _bin_op("/", reverse=True)
+    __pow__ = _bin_op("pow")
+    __rpow__ = _bin_op("pow", reverse=True)
+    __ge__ = _bin_op(">=")
+    __le__ = _bin_op("<=")
+
+    def __eq__(self, other: Any) -> "Expression":  # type: ignore[override]
+        """Returns a binary expression with the current column as the left
+        side and the other expression as the right side.
+        """
+        if isinstance(other, get_args(PrimitiveType)):
+            other = LiteralExpression(other)
+        return ScalarFunctionExpression("==", self, other)
 
     def __init__(self) -> None:
         pass
@@ -73,20 +113,6 @@ class LiteralExpression(Expression):
         return f"Literal({self._value})"
 
 
-def _bin_op(
-    name: str, doc: str = "binary function", reverse: bool = False
-) -> Callable[["ColumnRef", Any], Expression]:
-    def _(self: "ColumnRef", other: Any) -> Expression:
-        if isinstance(other, get_args(PrimitiveType)):
-            other = LiteralExpression(other)
-        if not reverse:
-            return ScalarFunctionExpression(name, self, other)
-        else:
-            return ScalarFunctionExpression(name, other, self)
-
-    return _
-
-
 class ColumnRef(Expression):
     """Represents a column reference. There is no guarantee that this column
     actually exists. In the context of this project, we refer by its name and
@@ -95,46 +121,20 @@ class ColumnRef(Expression):
 
     @classmethod
     def from_qualified_name(cls, name: str) -> "ColumnRef":
-        return ColumnRef(*name.split("."))
+        return ColumnRef(name)
 
-    def __init__(self, *parts: str) -> None:
+    def __init__(self, name: str) -> None:
         super().__init__()
-        self._parts: List[str] = list(parts)
+        self._unparsed_identifier: str = name
 
     def name(self) -> str:
         """Returns the qualified name of the column reference."""
-        return ".".join(self._parts)
-
-    __gt__ = _bin_op("gt")
-    __lt__ = _bin_op("lt")
-    __add__ = _bin_op("plus")
-    __sub__ = _bin_op("minus")
-    __mul__ = _bin_op("multiply")
-    __div__ = _bin_op("divide")
-    __truediv__ = _bin_op("divide")
-    __mod__ = _bin_op("modulo")
-    __radd__ = _bin_op("plus", reverse=True)
-    __rsub__ = _bin_op("minus", reverse=True)
-    __rmul__ = _bin_op("multiply", reverse=True)
-    __rdiv__ = _bin_op("divide", reverse=True)
-    __rtruediv__ = _bin_op("divide", reverse=True)
-    __pow__ = _bin_op("pow")
-    __rpow__ = _bin_op("pow", reverse=True)
-    __ge__ = _bin_op("greterEquals")
-    __le__ = _bin_op("lessEquals")
-
-    def __eq__(self, other: Any) -> Expression:  # type: ignore[override]
-        """Returns a binary expression with the current column as the left
-        side and the other expression as the right side.
-        """
-        if isinstance(other, get_args(PrimitiveType)):
-            other = LiteralExpression(other)
-        return ScalarFunctionExpression("eq", self, other)
+        return self._unparsed_identifier
 
     def to_plan(self, session: Optional["RemoteSparkSession"]) -> proto.Expression:
         """Returns the Proto representation of the expression."""
         expr = proto.Expression()
-        expr.unresolved_attribute.parts.extend(self._parts)
+        expr.unresolved_attribute.unparsed_identifier = self._unparsed_identifier
         return expr
 
     def desc(self) -> "SortOrder":
@@ -144,7 +144,7 @@ class ColumnRef(Expression):
         return SortOrder(self, ascending=True)
 
     def __str__(self) -> str:
-        return f"Column({'.'.join(self._parts)})"
+        return f"Column({self._unparsed_identifier})"
 
 
 class SortOrder(Expression):

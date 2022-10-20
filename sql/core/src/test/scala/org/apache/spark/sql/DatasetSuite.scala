@@ -1994,6 +1994,51 @@ class DatasetSuite extends QueryTest
     }
   }
 
+  test("SPARK-39783: Fix error messages for columns with dots/periods") {
+    forAll(dotColumnTestModes) { (caseSensitive, colName) =>
+      val ds = Seq(SpecialCharClass("1", "2")).toDS
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        checkError(
+          exception = intercept[AnalysisException] {
+            // Note: ds(colName) "SPARK-25153: Improve error messages for columns with dots/periods"
+            // has different semantics than ds.select(colName)
+            ds.select(colName)
+          },
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          sqlState = None,
+          parameters = Map(
+            "objectName" -> s"`${colName.replace(".", "`.`")}`",
+            "proposal" -> "`field.1`, `field 2`"))
+      }
+    }
+  }
+
+  test("SPARK-39783: backticks in error message for candidate column with dots") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(0).toDF("the.id").select("the.id")
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map(
+        "objectName" -> "`the`.`id`",
+        "proposal" -> "`the.id`"))
+  }
+
+  test("SPARK-39783: backticks in error message for map candidate key with dots") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(1)
+          .select(map(lit("key"), lit(1)).as("map"), lit(2).as("other.column"))
+          .select($"`map`"($"nonexisting")).show()
+      },
+      errorClass = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map(
+        "objectName" -> "`nonexisting`",
+        "proposal" -> "`map`, `other.column`"))
+  }
+
   test("groupBy.as") {
     val df1 = Seq(DoubleData(1, "one"), DoubleData(2, "two"), DoubleData(3, "three")).toDS()
       .repartition($"id").sortWithinPartitions("id")
