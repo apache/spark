@@ -26,4 +26,9 @@ private[spark] object Connect {
       .intConf
       .createWithDefault(15002)
 
+  val CONNECT_GRPC_INTERCEPTOR_CLASSES =
+    ConfigBuilder("spark.connect.grpc.interceptor.classes")
+      .version("3.4.0")
+      .stringConf
+      .createOptional
 }

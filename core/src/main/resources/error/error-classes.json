@@ -698,6 +698,23 @@
     ],
     "sqlState" : "22023"
   },
+  "SPARK_CONNECT" : {
+    "message":[
+      "Generic Spark Connect error."
+    ],
+    "subClass": {
+      "INTERCEPTOR_CTOR_MISSING": {
+        "message": [
+          "Cannot instantiate GRPC interceptor because <cls> is missing a default constructor without arguments."
+        ]
+      },
+      "INTERCEPTOR_RUNTIME_ERROR" : {
+        "message": [
+          "Error instantiating GRPC interceptor: <msg>"
+        ]
+      }
+    }
+  },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create table or view <relationName> because it already exists.",
