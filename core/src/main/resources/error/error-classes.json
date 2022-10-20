@@ -265,7 +265,7 @@
       },
       "WRONG_NUM_PARAMS" : {
         "message" : [
-          "wrong number of parameters: <actualNum>."
+          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
         ]
       }
     }

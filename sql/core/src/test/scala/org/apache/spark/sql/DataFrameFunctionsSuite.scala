@@ -4237,6 +4237,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"greatest()\"",
+        "functionName" -> "greatest",
+        "expectedNum" -> "at least two",
         "actualNum" -> "0")
     )
 
@@ -4248,6 +4250,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"greatest()\"",
+        "functionName" -> "greatest",
+        "expectedNum" -> "at least two",
         "actualNum" -> "0"),
       context = ExpectedContext(
         fragment = "greatest()",
@@ -4263,6 +4267,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"least()\"",
+        "functionName" -> "least",
+        "expectedNum" -> "at least two",
         "actualNum" -> "0")
     )
 
@@ -4274,6 +4280,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"least()\"",
+        "functionName" -> "least",
+        "expectedNum" -> "at least two",
         "actualNum" -> "0"),
       context = ExpectedContext(
         fragment = "least()",
