@@ -1177,7 +1177,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         "paramIndex" -> "1",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
-        "requiredType" -> "a numeric or interval"),
+        "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""),
       caseSensitive = false)
 
     assertAnalysisErrorClass(
@@ -1194,7 +1194,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         "paramIndex" -> "1",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
-        "requiredType" -> "a numeric or interval"),
+        "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""),
       caseSensitive = false)
 
     assertAnalysisErrorClass(

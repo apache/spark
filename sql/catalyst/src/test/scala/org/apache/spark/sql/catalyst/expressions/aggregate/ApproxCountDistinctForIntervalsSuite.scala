@@ -69,7 +69,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
           "paramIndex" -> "2",
-          "requiredType" -> "ARRAY OF (\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")",
+          "requiredType" -> "ARRAY OF (\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"ANSI INTERVAL\")",
           "inputSql" -> "\"array(foobar)\"",
           "inputType" -> "\"ARRAY<STRING>\"")))
     // scalastyle:on line.size.limit

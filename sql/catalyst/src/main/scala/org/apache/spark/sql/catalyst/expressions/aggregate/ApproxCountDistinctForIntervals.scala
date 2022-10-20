@@ -98,9 +98,8 @@ case class ApproxCountDistinctForIntervals(
             TypeCheckSuccess
           }
         case inputType =>
-          val requiredElemTypes = toSQLType(TypeCollection(NumericType,
-            DateType, TimestampType, TimestampNTZType,
-            YearMonthIntervalType, DayTimeIntervalType))
+          val requiredElemTypes = toSQLType(TypeCollection(
+            NumericType, DateType, TimestampType, TimestampNTZType, AnsiIntervalType))
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(

@@ -407,7 +407,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         "paramIndex" -> "1",
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
-        "requiredType" -> "a numeric or interval"))
+        "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""))
     checkError(
       exception = intercept[AnalysisException] {
         assertSuccess(Average($"booleanField"))
@@ -418,7 +418,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         "paramIndex" -> "1",
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
-        "requiredType" -> "a numeric or interval"))
+        "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""))
   }
 
   test("check types for others") {
