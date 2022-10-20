@@ -124,11 +124,11 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       case (name, descFilePathOpt) =>
         val fromProtoDF = df.select(
           from_protobuf_wrapper($"value", name, descFilePathOpt).as("value_from"))
-      val toProtoDF = fromProtoDF.select(
-        to_protobuf_wrapper($"value_from", name, descFilePathOpt).as("value_to"))
-      val toFromProtoDF = toProtoDF.select(
-        from_protobuf_wrapper($"value_to", name, descFilePathOpt).as("value_to_from"))
-      checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+        val toProtoDF = fromProtoDF.select(
+          to_protobuf_wrapper($"value_from", name, descFilePathOpt).as("value_to"))
+        val toFromProtoDF = toProtoDF.select(
+          from_protobuf_wrapper($"value_to", name, descFilePathOpt).as("value_to_from"))
+        checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
     }
   }
 
