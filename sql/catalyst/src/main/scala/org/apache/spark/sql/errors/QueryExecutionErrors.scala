@@ -1262,7 +1262,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkArithmeticException(
       errorClass = "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION",
       messageParameters = Map(
-        "ansiConfig" -> SQLConf.ANSI_ENABLED.key),
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = Array.empty,
       summary = "")
   }
@@ -2388,9 +2388,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def incorrectRumpUpRate(rowsPerSecond: Long,
-                          maxSeconds: Long,
-                          rampUpTimeSeconds: Long): Throwable = {
-    new SparkStreamingException(
+      maxSeconds: Long,
+      rampUpTimeSeconds: Long): Throwable = {
+    new SparkRuntimeException(
       errorClass = "INCORRECT_RUMP_UP_RATE",
       messageParameters = Map(
         "rowsPerSecond" -> rowsPerSecond.toString,
@@ -2400,9 +2400,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def incorrectEndOffset(rowsPerSecond: Long,
-                         maxSeconds: Long,
-                         endSeconds: Long): Throwable = {
-    new SparkStreamingException(
+      maxSeconds: Long,
+      endSeconds: Long): Throwable = {
+    new SparkRuntimeException(
       errorClass = "INCORRECT_END_OFFSET",
       messageParameters = Map(
         "rowsPerSecond" -> rowsPerSecond.toString,
