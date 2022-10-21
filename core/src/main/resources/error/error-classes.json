@@ -278,7 +278,7 @@
   },
   "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION" : {
     "message" : [
-      "Decimal precision <precision> exceeds max precision <maxPrecision>"
+      "Decimal precision <precision> exceeds max precision <maxPrecision>."
     ]
   },
   "DEFAULT_DATABASE_NOT_EXISTS" : {
