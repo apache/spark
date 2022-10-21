@@ -839,6 +839,18 @@ class Sample(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class Seed(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        SEED_FIELD_NUMBER: builtins.int
+        seed: builtins.int
+        def __init__(
+            self,
+            *,
+            seed: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["seed", b"seed"]) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
     LOWER_BOUND_FIELD_NUMBER: builtins.int
     UPPER_BOUND_FIELD_NUMBER: builtins.int
@@ -849,7 +861,8 @@ class Sample(google.protobuf.message.Message):
     lower_bound: builtins.float
     upper_bound: builtins.float
     with_replacement: builtins.bool
-    seed: builtins.int
+    @property
+    def seed(self) -> global___Sample.Seed: ...
     def __init__(
         self,
         *,
@@ -857,10 +870,10 @@ class Sample(google.protobuf.message.Message):
         lower_bound: builtins.float = ...,
         upper_bound: builtins.float = ...,
         with_replacement: builtins.bool = ...,
-        seed: builtins.int = ...,
+        seed: global___Sample.Seed | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["input", b"input"]
+        self, field_name: typing_extensions.Literal["input", b"input", "seed", b"seed"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
