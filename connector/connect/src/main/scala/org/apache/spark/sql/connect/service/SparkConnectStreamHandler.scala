@@ -67,8 +67,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
     val sb = new StringBuilder
     var rowCount = 0
     rows.toJSON
-      .toLocalIterator()
-      .asScala
+      .collect()
       .foreach(row => {
 
         // There are a few cases to cover here.
