@@ -19,8 +19,7 @@ package org.apache.spark.sql.connect.service
 
 import java.lang.reflect.InvocationTargetException
 
-import io.grpc.{Metadata, ServerCall, ServerCallHandler, ServerInterceptor}
-import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener
+import io.grpc.ServerInterceptor
 import io.grpc.netty.NettyServerBuilder
 
 import org.apache.spark.{SparkEnv, SparkIllegalArgumentException, SparkRuntimeException}
