@@ -28,23 +28,6 @@ import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.util.Utils
 
 /**
- * Used for testing only, does not do anything.
- */
-class DummyInterceptor extends ServerInterceptor {
-  override def interceptCall[ReqT, RespT](
-      call: ServerCall[ReqT, RespT],
-      headers: Metadata,
-      next: ServerCallHandler[ReqT, RespT]): ServerCall.Listener[ReqT] = {
-    val listener = next.startCall(call, headers)
-    new SimpleForwardingServerCallListener[ReqT](listener) {
-      override def onMessage(message: ReqT): Unit = {
-        delegate().onMessage(message)
-      }
-    }
-  }
-}
-
-/**
  * This object provides a global list of configured interceptors for GRPC. The interceptors are
  * added to the GRPC server in order of their position in the list. Once the statically compiled
  * interceptors are added, dynamically configured interceptors are added.
@@ -99,7 +82,7 @@ object SparkConnectInterceptorRegistry {
     val ctorOpt = cls.getConstructors.find(_.getParameterCount == 0)
     if (ctorOpt.isEmpty) {
       throw new SparkIllegalArgumentException(
-        errorClass = "SPARK_CONNECT.INTERCEPTOR_CTOR_MISSING",
+        errorClass = "CONNECT.INTERCEPTOR_CTOR_MISSING",
         messageParameters = Map("cls" -> cls.getName))
     }
     try {
@@ -107,12 +90,12 @@ object SparkConnectInterceptorRegistry {
     } catch {
       case e: InvocationTargetException =>
         throw new SparkRuntimeException(
-          errorClass = "SPARK_CONNECT.INTERCEPTOR_RUNTIME_ERROR",
+          errorClass = "CONNECT.INTERCEPTOR_RUNTIME_ERROR",
           messageParameters = Map("msg" -> e.getTargetException.getMessage),
           cause = e)
       case e: Exception =>
         throw new SparkRuntimeException(
-          errorClass = "SPARK_CONNECT.INTERCEPTOR_RUNTIME_ERROR",
+          errorClass = "CONNECT.INTERCEPTOR_RUNTIME_ERROR",
           messageParameters = Map("msg" -> "Unknown error"),
           cause = e)
     }

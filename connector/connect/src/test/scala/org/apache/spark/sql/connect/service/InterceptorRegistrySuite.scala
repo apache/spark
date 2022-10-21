@@ -26,6 +26,23 @@ import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
+ * Used for testing only, does not do anything.
+ */
+class DummyInterceptor extends ServerInterceptor {
+  override def interceptCall[ReqT, RespT](
+      call: ServerCall[ReqT, RespT],
+      headers: Metadata,
+      next: ServerCallHandler[ReqT, RespT]): ServerCall.Listener[ReqT] = {
+    val listener = next.startCall(call, headers)
+    new SimpleForwardingServerCallListener[ReqT](listener) {
+      override def onMessage(message: ReqT): Unit = {
+        delegate().onMessage(message)
+      }
+    }
+  }
+}
+
+/**
  * Used for testing only.
  */
 class TestingInterceptorNoTrivialCtor(id: Int) extends ServerInterceptor {
@@ -61,11 +78,20 @@ class TestingInterceptorInstantiationError extends ServerInterceptor {
   }
 }
 
-class InterceptorRegistryTest extends SharedSparkSession {
+class InterceptorRegistrySuite extends SharedSparkSession {
 
   override def beforeEach(): Unit = {
     if (SparkEnv.get.conf.contains(Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES)) {
       SparkEnv.get.conf.remove(Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES)
+    }
+  }
+
+  def withSparkConf(pairs: (String, String)*)(f: => Unit): Unit = {
+    val conf = SparkEnv.get.conf
+    pairs.foreach { kv => conf.set(kv._1, kv._2) }
+    try f
+    finally {
+      pairs.foreach { kv => conf.remove(kv._1) }
     }
   }
 
@@ -75,36 +101,40 @@ class InterceptorRegistryTest extends SharedSparkSession {
   }
 
   test("Test server builder and configured interceptor") {
-    SparkEnv.get.conf.set(
-      Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES,
-      "org.apache.spark.sql.connect.service.DummyInterceptor")
-    val sb = NettyServerBuilder.forPort(9999)
-    SparkConnectInterceptorRegistry.chainInterceptors(sb)
-  }
-
-  test("Test server build throws when using bad configured interceptor") {
-    SparkEnv.get.conf.set(
-      Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES,
-      "org.apache.spark.sql.connect.service.TestingInterceptorNoTrivialCtor")
-    val sb = NettyServerBuilder.forPort(9999)
-    assertThrows[SparkIllegalArgumentException] {
+    withSparkConf(
+      Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key ->
+        "org.apache.spark.sql.connect.service.DummyInterceptor") {
+      val sb = NettyServerBuilder.forPort(9999)
       SparkConnectInterceptorRegistry.chainInterceptors(sb)
     }
   }
 
+  test("Test server build throws when using bad configured interceptor") {
+    withSparkConf(
+      Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key ->
+        "org.apache.spark.sql.connect.service.TestingInterceptorNoTrivialCtor") {
+      val sb = NettyServerBuilder.forPort(9999)
+      assertThrows[SparkIllegalArgumentException] {
+        SparkConnectInterceptorRegistry.chainInterceptors(sb)
+      }
+    }
+  }
+
   test("Exception handling for interceptor classes") {
-    SparkEnv.get.conf.set(
-      Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES,
-      "org.apache.spark.sql.connect.service.TestingInterceptorNoTrivialCtor")
-    assertThrows[SparkIllegalArgumentException] {
-      SparkConnectInterceptorRegistry.createConfiguredInterceptors
+    withSparkConf(
+      Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key ->
+        "org.apache.spark.sql.connect.service.TestingInterceptorNoTrivialCtor") {
+      assertThrows[SparkIllegalArgumentException] {
+        SparkConnectInterceptorRegistry.createConfiguredInterceptors
+      }
     }
 
-    SparkEnv.get.conf.set(
-      Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES,
-      "org.apache.spark.sql.connect.service.TestingInterceptorInstantiationError")
-    assertThrows[SparkRuntimeException] {
-      SparkConnectInterceptorRegistry.createConfiguredInterceptors
+    withSparkConf(
+      Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key ->
+        "org.apache.spark.sql.connect.service.TestingInterceptorInstantiationError") {
+      assertThrows[SparkRuntimeException] {
+        SparkConnectInterceptorRegistry.createConfiguredInterceptors
+      }
     }
   }
 
@@ -112,22 +142,25 @@ class InterceptorRegistryTest extends SharedSparkSession {
     // Not set.
     assert(SparkConnectInterceptorRegistry.createConfiguredInterceptors.isEmpty)
     // Set to empty string
-    SparkEnv.get.conf.set(Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES, "")
-    assert(SparkConnectInterceptorRegistry.createConfiguredInterceptors.isEmpty)
+    withSparkConf(Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key -> "") {
+      assert(SparkConnectInterceptorRegistry.createConfiguredInterceptors.isEmpty)
+    }
   }
 
   test("Configured classes can have multiple entries") {
-    SparkEnv.get.conf.set(
-      Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES,
-      " org.apache.spark.sql.connect.service.DummyInterceptor," +
-        "    org.apache.spark.sql.connect.service.DummyInterceptor   ")
-    assert(SparkConnectInterceptorRegistry.createConfiguredInterceptors.size == 2)
+    withSparkConf(
+      Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key ->
+        (" org.apache.spark.sql.connect.service.DummyInterceptor," +
+          "    org.apache.spark.sql.connect.service.DummyInterceptor   ")) {
+      assert(SparkConnectInterceptorRegistry.createConfiguredInterceptors.size == 2)
+    }
   }
 
   test("Configured class not found is properly thrown") {
-    SparkEnv.get.conf.set(Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES, "this.class.does.not.exist")
-    assertThrows[ClassNotFoundException] {
-      SparkConnectInterceptorRegistry.createConfiguredInterceptors
+    withSparkConf(Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key -> "this.class.does.not.exist") {
+      assertThrows[ClassNotFoundException] {
+        SparkConnectInterceptorRegistry.createConfiguredInterceptors
+      }
     }
   }
 

@@ -698,7 +698,7 @@
     ],
     "sqlState" : "22023"
   },
-  "SPARK_CONNECT" : {
+  "CONNECT" : {
     "message" : [
       "Generic Spark Connect error."
     ],
