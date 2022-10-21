@@ -85,9 +85,7 @@ object SchemaConverters {
             nullable = false))
       case MESSAGE =>
         if (existingRecordNames.contains(fd.getFullName)) {
-          throw new IncompatibleSchemaException(s"""
-               |Found recursive reference in Protobuf schema, which can not be processed by Spark:
-               |${fd.toString()}""".stripMargin)
+          throw QueryCompilationErrors.foundRecursionInProtobufSchema(fd.toString())
         }
         val newRecordNames = existingRecordNames + fd.getFullName
 

@@ -26,8 +26,8 @@ import com.google.protobuf.{DescriptorProtos, Descriptors, InvalidProtocolBuffer
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.types._
 
 private[sql] object ProtobufUtils extends Logging {
@@ -60,9 +60,9 @@ private[sql] object ProtobufUtils extends Logging {
       protoPath: Seq[String],
       catalystPath: Seq[String]) {
     if (descriptor.getName == null) {
-      throw new IncompatibleSchemaException(
-        s"Attempting to treat ${descriptor.getName} as a RECORD, " +
-          s"but it was: ${descriptor.getContainingType}")
+      throw QueryCompilationErrors.unknownProtobufMessageTypeError(
+        descriptor.getName,
+        descriptor.getContainingType)
     }
 
     private[this] val protoFieldArray = descriptor.getFields.asScala.toArray
@@ -78,7 +78,7 @@ private[sql] object ProtobufUtils extends Logging {
 
     /**
      * Validate that there are no Catalyst fields which don't have a matching Protobuf field,
-     * throwing [[IncompatibleSchemaException]] if such extra fields are found. If
+     * throwing [[AnalysisException]] if such extra fields are found. If
      * `ignoreNullable` is false, consider nullable Catalyst fields to be eligible to be an extra
      * field; otherwise, ignore nullable Catalyst fields when checking for extras.
      */
@@ -86,22 +86,21 @@ private[sql] object ProtobufUtils extends Logging {
       catalystSchema.fields.foreach { sqlField =>
         if (getFieldByName(sqlField.name).isEmpty &&
           (!ignoreNullable || !sqlField.nullable)) {
-          throw new IncompatibleSchemaException(
-            s"Cannot find ${toFieldStr(catalystPath :+ sqlField.name)} in Protobuf schema")
+          throw QueryCompilationErrors.cannotFindCatalystTypeInProtobufSchemaError(
+            toFieldStr(catalystPath :+ sqlField.name))
         }
       }
 
     /**
      * Validate that there are no Protobuf fields which don't have a matching Catalyst field,
-     * throwing [[IncompatibleSchemaException]] if such extra fields are found. Only required
+     * throwing [[AnalysisException]] if such extra fields are found. Only required
      * (non-nullable) fields are checked; nullable fields are ignored.
      */
     def validateNoExtraRequiredProtoFields(): Unit = {
       val extraFields = protoFieldArray.toSet -- matchedFields.map(_.fieldDescriptor)
       extraFields.filterNot(isNullable).foreach { extraField =>
-        throw new IncompatibleSchemaException(
-          s"Found ${toFieldStr(protoPath :+ extraField.getName())} in Protobuf schema " +
-            "but there is no match in the SQL schema")
+        throw QueryCompilationErrors.cannotFindProtobufFieldInInCatalystError(
+          toFieldStr(protoPath :+ extraField.getName()))
       }
     }
 
@@ -124,10 +123,11 @@ private[sql] object ProtobufUtils extends Logging {
         case Seq(protoField) => Some(protoField)
         case Seq() => None
         case matches =>
-          throw new IncompatibleSchemaException(
-            s"Searching for '$name' in " +
-              s"Protobuf schema at ${toFieldStr(protoPath)} gave ${matches.size} matches. " +
-              s"Candidates: " + matches.map(_.getName()).mkString("[", ", ", "]"))
+          throw QueryCompilationErrors.protobufFieldMatchError(
+            name,
+            toFieldStr(protoPath),
+            matches.size,
+            matches.map(_.getName()).mkString("[", ", ", "]"))
       }
     }
   }
@@ -143,7 +143,7 @@ private[sql] object ProtobufUtils extends Logging {
     }
 
     if (null == result) {
-      throw new RuntimeException("Unable to locate Message '" + messageName + "' in Descriptor");
+      throw QueryCompilationErrors.unableToLocateProtobuMessageError(messageName)
     }
     result
   }
@@ -155,13 +155,9 @@ private[sql] object ProtobufUtils extends Logging {
       fileDescriptorSet = DescriptorProtos.FileDescriptorSet.parseFrom(dscFile)
     } catch {
       case ex: InvalidProtocolBufferException =>
-        // TODO move all the exceptions to core/src/main/resources/error/error-classes.json
-        throw new RuntimeException("Error parsing descriptor byte[] into Descriptor object", ex)
+        throw QueryCompilationErrors.descrioptorParseError(ex)
       case ex: IOException =>
-        throw new RuntimeException(
-          "Error reading Protobuf descriptor file at path: " +
-            descFilePath,
-          ex)
+        throw QueryCompilationErrors.cannotFindDescriptorFileError(descFilePath, ex)
     }
 
     val descriptorProto: DescriptorProtos.FileDescriptorProto = fileDescriptorSet.getFile(0)
@@ -170,12 +166,12 @@ private[sql] object ProtobufUtils extends Logging {
         descriptorProto,
         new Array[Descriptors.FileDescriptor](0))
       if (fileDescriptor.getMessageTypes().isEmpty()) {
-        throw new RuntimeException("No MessageTypes returned, " + fileDescriptor.getName());
+        throw QueryCompilationErrors.noMessageTypeReturnError(fileDescriptor.getName())
       }
       fileDescriptor
     } catch {
       case e: Descriptors.DescriptorValidationException =>
-        throw new RuntimeException("Error constructing FileDescriptor", e)
+        throw QueryCompilationErrors.failedParsingDescriptorError(e)
     }
   }
 

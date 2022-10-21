@@ -23,6 +23,7 @@ import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
@@ -30,7 +31,6 @@ import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils.{toFieldStr, ProtoMatchedField}
-import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.types._
 
 /**
@@ -54,10 +54,10 @@ private[sql] class ProtobufSerializer(
             newStructConverter(st, rootDescriptor, Nil, Nil).asInstanceOf[Any => Any]
         }
       } catch {
-        case ise: IncompatibleSchemaException =>
-          throw new IncompatibleSchemaException(
-            s"Cannot convert SQL type ${rootCatalystType.sql} to Protobuf type " +
-              s"${rootDescriptor.getName}.",
+        case ise: AnalysisException =>
+          throw QueryCompilationErrors.cannotConvertSqlTypeToProtobufError(
+            rootDescriptor.getName,
+            rootCatalystType.sql,
             ise)
       }
     if (nullable) { (data: Any) =>

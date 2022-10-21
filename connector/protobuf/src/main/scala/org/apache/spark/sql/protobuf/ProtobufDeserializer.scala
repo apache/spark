@@ -62,10 +62,10 @@ private[sql] class ProtobufDeserializer(
       }
     } catch {
       case ise: AnalysisException =>
-        throw QueryCompilationErrors.cannotConvertProtobufTypeToTypeError(
+        throw QueryCompilationErrors.cannotConvertProtobufTypeToSqlTypeError(
           rootDescriptor.getName,
           rootCatalystType.sql,
-          ise.getMessage())
+          ise)
     }
 
   def deserialize(data: Message): Option[InternalRow] = converter(data)

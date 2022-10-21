@@ -1793,22 +1793,110 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "enumString" -> enumString))
   }
 
-  def cannotConvertProtobufTypeToTypeError(
+  def protobufTypeUnsupportedYetError(protobufType: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2256",
+      messageParameters = Map("protobufType" -> protobufType))
+  }
+
+  def cannotConvertProtobufTypeToSqlTypeError(
     protobufType: String,
     sqlType: String,
-    errorMessage: String): Throwable = {
+    e1: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_2254",
       messageParameters = Map(
         "protobufType" -> protobufType,
-        "toType" -> sqlType,
-        "errorMessage" -> errorMessage))
+        "toType" -> sqlType),
+      cause = Some(e1.getCause))
   }
 
-  def protobufTypeUnsupportedYetError(protobufType: String): Throwable = {
+  def cannotConvertSqlTypeToProtobufError(
+    protobufType: String,
+    sqlType: String,
+    e1: Throwable): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_2255",
-      messageParameters = Map("protobufType" -> protobufType))
+      errorClass = "_LEGACY_ERROR_TEMP_2256",
+      messageParameters = Map(
+        "protobufType" -> protobufType,
+        "toType" -> sqlType),
+      cause = Some(e1.getCause))
+  }
+
+  def unknownProtobufMessageTypeError(
+    descriptorName: String,
+    containingType: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2257",
+      messageParameters = Map(
+        "descriptorName" -> descriptorName,
+        "containingType" -> containingType))
+  }
+
+  def cannotFindCatalystTypeInProtobufSchemaError(catalystFieldPath: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2258",
+      messageParameters = Map("catalystFieldPath" -> catalystFieldPath))
+  }
+
+  def cannotFindProtobufFieldInInCatalystError(field: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2259",
+      messageParameters = Map("field" -> field))
+  }
+
+  def protobufFieldMatchError(
+    field: String,
+    protobufSchema: String,
+    matchSize: Int,
+    matches: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2260",
+      messageParameters = Map(
+        "field" -> field,
+        "protobufSchema" -> protobufSchema,
+        "matchSize" -> matchSize,
+        "matches" -> matches))
+  }
+
+  def unableToLocateProtobuMessageError(messageName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2261",
+      messageParameters = Map("messageName" -> messageName))
+  }
+
+  def descrioptorParseError(e1: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2262",
+      messageParameters = Map("errorMessage" -> e1.getMessage()),
+      cause = Some(e1.getCause))
+  }
+
+  def cannotFindDescriptorFileError(filePath: String, e1: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2263",
+      messageParameters = Map("filePath" -> filePath),
+      cause = Some(e1.getCause))
+  }
+
+  def noMessageTypeReturnError(descriptorName: String, e1: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2264",
+      messageParameters = Map("descriptorName" -> descriptorName),
+      cause = Some(e1.getCause))
+  }
+
+  def failedParsingDescriptorError(e1: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2265",
+      messageParameters = Map("errorMessage" -> e1.getMessage()),
+      cause = Some(e1.getCause))
+  }
+
+  def foundRecursionInProtobufSchema(fieldDescriptor: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2266",
+      messageParameters = Map("fieldDescriptor" -> fieldDescriptor))
   }
 
   def cannotConvertDataTypeToParquetTypeError(field: StructField): Throwable = {

@@ -4210,12 +4210,12 @@
   },
   "_LEGACY_ERROR_TEMP_2251" : {
     "message" : [
-      "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protoType>, sqlType = <sqlType>."
+      "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2252" : {
     "message" : [
-      "Cannot convert SQL <sqlColumn> to SQL <protobufColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>."
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2253" : {
@@ -4225,12 +4225,67 @@
   },
   "_LEGACY_ERROR_TEMP_2254" : {
     "message" : [
-      "Unable to convert <protobufType> of Protobuf to data type <toType>. <errorMessage>"
+      "Unable to convert <protobufType> of Protobuf to SQL type <toType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2255" : {
     "message" : [
+      "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2256" : {
+    "message" : [
       "Protobuf type not yet supported: <protobufType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2257" : {
+    "message" : [
+      "Attempting to treat <descriptorName> as a Message, but it was <containingType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2258" : {
+    "message" : [
+      "Cannot find <catalystFieldPath> in Protobuf schema"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2259" : {
+    "message" : [
+      "Found <field> in Protobuf schema but there is no match in the SQL schema"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2260" : {
+    "message" : [
+      "Searching for <field> in Protobuf schema at <protobufSchema> gave <matchSize> matches. Candidates: <matches>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2261" : {
+    "message" : [
+      "Unable to locate Message <messageName> in Descriptor"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2262" : {
+    "message" : [
+      "Error parsing descriptor byte[] into Descriptor object Error: <errorMessage>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2263" : {
+    "message" : [
+      "Error reading Protobuf descriptor file at path: <filePath>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2264" : {
+    "message" : [
+      "No MessageTypes returned, <descriptorName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2265" : {
+    "message" : [
+      "Error constructing FileDescriptor, Error: <errorMessage>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2266" : {
+    "message" : [
+      "Found recursive reference in Protobuf schema, which can not be processed by Spark: <fieldDescriptor>"
     ]
   }
 }
