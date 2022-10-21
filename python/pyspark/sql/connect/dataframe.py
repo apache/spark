@@ -208,16 +208,17 @@ class DataFrame(object):
 
     def sample(
         self,
-        withReplacement: Optional[bool] = None,
-        fraction: Optional[float] = None,
+        fraction: float,
+        *,
+        withReplacement: bool = False,
         seed: Optional[int] = None,
     ) -> "DataFrame":
-        if withReplacement is not None and not isinstance(withReplacement, bool):
-            raise TypeError(
-                f"'withReplacement' must be None or bool, but got {type(withReplacement).__name__}"
-            )
         if not isinstance(fraction, float):
             raise TypeError(f"'fraction' must be float, but got {type(fraction).__name__}")
+        if not isinstance(withReplacement, bool):
+            raise TypeError(
+                f"'withReplacement' must be bool, but got {type(withReplacement).__name__}"
+            )
         if seed is not None and not isinstance(seed, int):
             raise TypeError(f"'seed' must be None or int, but got {type(seed).__name__}")
 
@@ -226,7 +227,7 @@ class DataFrame(object):
                 child=self._plan,
                 lower_bound=0.0,
                 upper_bound=fraction,
-                with_replacement=withReplacement is not None and withReplacement,
+                with_replacement=withReplacement,
                 seed=seed,
             ),
             session=self._session,
