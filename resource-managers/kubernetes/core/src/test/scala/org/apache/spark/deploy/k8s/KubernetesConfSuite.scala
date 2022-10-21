@@ -250,4 +250,8 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(KubernetesConf.getAppNameLabel("a" * 62 + "-aaa") === "a" * 62)
     assert(KubernetesConf.getAppNameLabel("-" + "a" * 63) === "a" * 62)
   }
+
+  test("SPARK-40869: KubernetesConf.getResourceNamePrefix creates invalid name prefixes") {
+    assert(KubernetesConf.getResourceNamePrefix("_hello_").startsWith("hello"))
+  }
 }
