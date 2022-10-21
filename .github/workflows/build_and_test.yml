@@ -231,6 +231,7 @@ jobs:
       with:
         distribution: 'zulu'
         java-version: ${{ matrix.java }}
+        check-latest: true
     - name: Install Python 3.8
       uses: actions/setup-python@v2
       # We should install one Python that is higher then 3+ for SQL and Yarn because:
@@ -389,6 +390,7 @@ jobs:
       with:
         distribution: 'zulu'
         java-version: ${{ matrix.java }}
+        check-latest: true
     - name: List Python packages (Python 3.9, PyPy3)
       run: |
         python3.9 -m pip list
@@ -479,6 +481,7 @@ jobs:
       with:
         distribution: 'zulu'
         java-version: ${{ inputs.java }}
+        check-latest: true
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
@@ -604,6 +607,7 @@ jobs:
       with:
         distribution: 'zulu'
         java-version: 8
+        check-latest: true
     - name: Scala linter
       run: ./dev/lint-scala
     - name: Java linter
@@ -672,6 +676,7 @@ jobs:
       with:
         distribution: 'zulu'
         java-version: ${{ matrix.java }}
+        check-latest: true
     - name: Build with Maven
       run: |
         export MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
@@ -722,6 +727,7 @@ jobs:
       with:
         distribution: 'zulu'
         java-version: 8
+        check-latest: true
     - name: Build with SBT
       run: |
         ./dev/change-scala-version.sh 2.13
@@ -771,6 +777,7 @@ jobs:
       with:
         distribution: 'zulu'
         java-version: 8
+        check-latest: true
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
       uses: actions/cache@v2
@@ -875,6 +882,7 @@ jobs:
       with:
         distribution: 'zulu'
         java-version: 8
+        check-latest: true
     - name: Run tests
       run: |
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
@@ -933,6 +941,7 @@ jobs:
         with:
           distribution: 'zulu'
           java-version: ${{ inputs.java }}
+          check-latest: true
       - name: start minikube
         run: |
           # See more in "Installation" https://minikube.sigs.k8s.io/docs/start/
