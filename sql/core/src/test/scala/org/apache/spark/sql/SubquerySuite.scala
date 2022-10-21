@@ -2462,11 +2462,6 @@ class SubquerySuite extends QueryTest
           |create temp view v1(x) as values
           |from_json('{"a":1, "b":2}', 'map<string,int>') t(x)
           |""".stripMargin)
-      sql(
-        """
-          |create temp view v2(x) as values
-          |from_json('{"b":0, "c":2}', 'map<string,int>') t(x)
-          |""".stripMargin)
 
       // Can use non-orderable data type in one row subquery that can be collapsed.
       checkAnswer(
@@ -2475,7 +2470,7 @@ class SubquerySuite extends QueryTest
 
       // Cannot use non-orderable data type in one row subquery that cannot be collapsed.
       val error = intercept[AnalysisException] {
-        sql("select (select a + a from (select upper(x['a']) as a)) from v1").collect()
+        sql("select (select concat(a, a) from (select upper(x['a']) as a)) from v1").collect()
       }
       assert(error.getMessage.contains("Correlated column reference 'v1.x' cannot be map type"))
     }
