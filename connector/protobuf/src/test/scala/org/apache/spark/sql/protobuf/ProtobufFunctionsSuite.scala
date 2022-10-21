@@ -23,8 +23,10 @@ import scala.collection.JavaConverters._
 
 import com.google.protobuf.{ByteString, DynamicMessage}
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{Column, QueryTest, Row}
 import org.apache.spark.sql.functions.{lit, struct}
+import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated
+import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.test.SharedSparkSession
@@ -35,6 +37,39 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   import testImplicits._
 
   val testFileDesc = testFile("protobuf/functions_suite.desc").replace("file:/", "/")
+  private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SimpleMessageProtos$"
+
+  /**
+   * Runs the given closure twice. Once with descriptor file and second time with Java class name.
+   */
+  private def checkWithFileAndClassName(messageName: String)(
+    fn: (String, Option[String]) => Unit): Unit = {
+      withClue("(With descriptor file)") {
+        fn(messageName, Some(testFileDesc))
+      }
+      withClue("(With Java class name)") {
+        fn(s"$javaClassNamePrefix$messageName", None)
+      }
+  }
+
+  // A wrapper to invoke the right variable of from_protobuf() depending on arguments.
+  private def from_protobuf_wrapper(
+    col: Column, messageName: String, descFilePathOpt: Option[String]): Column = {
+    descFilePathOpt match {
+      case Some(descFilePath) => functions.from_protobuf(col, messageName, descFilePath)
+      case None => functions.from_protobuf(col, messageName)
+    }
+  }
+
+  // A wrapper to invoke the right variable of to_protobuf() depending on arguments.
+  private def to_protobuf_wrapper(
+    col: Column, messageName: String, descFilePathOpt: Option[String]): Column = {
+    descFilePathOpt match {
+      case Some(descFilePath) => functions.to_protobuf(col, messageName, descFilePath)
+      case None => functions.to_protobuf(col, messageName)
+    }
+  }
+
 
   test("roundtrip in to_protobuf and from_protobuf - struct") {
     val df = spark
@@ -56,44 +91,45 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
         lit(1202.00).cast(org.apache.spark.sql.types.FloatType).as("float_value"),
         lit(true).as("bool_value"),
         lit("0".getBytes).as("bytes_value")).as("SimpleMessage"))
-    val protoStructDF = df.select(
-      functions.to_protobuf($"SimpleMessage", testFileDesc, "SimpleMessage").as("proto"))
-    val actualDf = protoStructDF.select(
-      functions.from_protobuf($"proto", testFileDesc, "SimpleMessage").as("proto.*"))
-    checkAnswer(actualDf, df)
+
+    checkWithFileAndClassName("SimpleMessage") {
+      case (name, descFilePathOpt) =>
+        val protoStructDF = df.select(
+          to_protobuf_wrapper($"SimpleMessage", name, descFilePathOpt).as("proto"))
+        val actualDf = protoStructDF.select(
+          from_protobuf_wrapper($"proto", name, descFilePathOpt).as("proto.*"))
+        checkAnswer(actualDf, df)
+    }
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Repeated") {
-    val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "SimpleMessageRepeated")
 
-    val dynamicMessage = DynamicMessage
-      .newBuilder(descriptor)
-      .setField(descriptor.findFieldByName("key"), "key")
-      .setField(descriptor.findFieldByName("value"), "value")
-      .addRepeatedField(descriptor.findFieldByName("rbool_value"), false)
-      .addRepeatedField(descriptor.findFieldByName("rbool_value"), true)
-      .addRepeatedField(descriptor.findFieldByName("rdouble_value"), 1092092.654d)
-      .addRepeatedField(descriptor.findFieldByName("rdouble_value"), 1092093.654d)
-      .addRepeatedField(descriptor.findFieldByName("rfloat_value"), 10903.0f)
-      .addRepeatedField(descriptor.findFieldByName("rfloat_value"), 10902.0f)
-      .addRepeatedField(
-        descriptor.findFieldByName("rnested_enum"),
-        descriptor.findEnumTypeByName("NestedEnum").findValueByName("ESTED_NOTHING"))
-      .addRepeatedField(
-        descriptor.findFieldByName("rnested_enum"),
-        descriptor.findEnumTypeByName("NestedEnum").findValueByName("NESTED_FIRST"))
+    val protoMessage = SimpleMessageRepeated
+      .newBuilder()
+      .setKey("key")
+      .setValue("value")
+      .addRboolValue(false)
+      .addRboolValue(true)
+      .addRdoubleValue(1092092.654d)
+      .addRdoubleValue(1092093.654d)
+      .addRfloatValue(10903.0f)
+      .addRfloatValue(10902.0f)
+      .addRnestedEnum(NestedEnum.ESTED_NOTHING)
+      .addRnestedEnum(NestedEnum.NESTED_FIRST)
       .build()
 
-    val df = Seq(dynamicMessage.toByteArray).toDF("value")
-    val fromProtoDF = df.select(
-      functions.from_protobuf($"value", testFileDesc, "SimpleMessageRepeated").as("value_from"))
-    val toProtoDF = fromProtoDF.select(
-      functions.to_protobuf($"value_from", testFileDesc, "SimpleMessageRepeated").as("value_to"))
-    val toFromProtoDF = toProtoDF.select(
-      functions
-        .from_protobuf($"value_to", testFileDesc, "SimpleMessageRepeated")
-        .as("value_to_from"))
-    checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+    val df = Seq(protoMessage.toByteArray).toDF("value")
+
+    checkWithFileAndClassName("SimpleMessageRepeated") {
+      case (name, descFilePathOpt) =>
+        val fromProtoDF = df.select(
+          from_protobuf_wrapper($"value", name, descFilePathOpt).as("value_from"))
+        val toProtoDF = fromProtoDF.select(
+          to_protobuf_wrapper($"value_from", name, descFilePathOpt).as("value_to"))
+        val toFromProtoDF = toProtoDF.select(
+          from_protobuf_wrapper($"value_to", name, descFilePathOpt).as("value_to_from"))
+        checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+    }
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Repeated Message Once") {
@@ -120,13 +156,17 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       .build()
 
     val df = Seq(dynamicMessage.toByteArray).toDF("value")
-    val fromProtoDF = df.select(
-      functions.from_protobuf($"value", testFileDesc, "RepeatedMessage").as("value_from"))
-    val toProtoDF = fromProtoDF.select(
-      functions.to_protobuf($"value_from", testFileDesc, "RepeatedMessage").as("value_to"))
-    val toFromProtoDF = toProtoDF.select(
-      functions.from_protobuf($"value_to", testFileDesc, "RepeatedMessage").as("value_to_from"))
-    checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+
+    checkWithFileAndClassName("RepeatedMessage") {
+      case (name, descFilePathOpt) =>
+        val fromProtoDF = df.select(
+          from_protobuf_wrapper($"value", name, descFilePathOpt).as("value_from"))
+        val toProtoDF = fromProtoDF.select(
+          to_protobuf_wrapper($"value_from", name, descFilePathOpt).as("value_to"))
+        val toFromProtoDF = toProtoDF.select(
+          from_protobuf_wrapper($"value_to", name, descFilePathOpt).as("value_to_from"))
+        checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+    }
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Repeated Message Twice") {
@@ -167,13 +207,17 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       .build()
 
     val df = Seq(dynamicMessage.toByteArray).toDF("value")
-    val fromProtoDF = df.select(
-      functions.from_protobuf($"value", testFileDesc, "RepeatedMessage").as("value_from"))
-    val toProtoDF = fromProtoDF.select(
-      functions.to_protobuf($"value_from", testFileDesc, "RepeatedMessage").as("value_to"))
-    val toFromProtoDF = toProtoDF.select(
-      functions.from_protobuf($"value_to", testFileDesc, "RepeatedMessage").as("value_to_from"))
-    checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+
+    checkWithFileAndClassName("RepeatedMessage") {
+      case (name, descFilePathOpt) =>
+        val fromProtoDF = df.select(
+          from_protobuf_wrapper($"value", name, descFilePathOpt).as("value_from"))
+        val toProtoDF = fromProtoDF.select(
+          to_protobuf_wrapper($"value_from", name, descFilePathOpt).as("value_to"))
+        val toFromProtoDF = toProtoDF.select(
+          from_protobuf_wrapper($"value_to", name, descFilePathOpt).as("value_to_from"))
+        checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+    }
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Map") {
@@ -257,13 +301,17 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       .build()
 
     val df = Seq(dynamicMessage.toByteArray).toDF("value")
-    val fromProtoDF = df.select(
-      functions.from_protobuf($"value", testFileDesc, "SimpleMessageMap").as("value_from"))
-    val toProtoDF = fromProtoDF.select(
-      functions.to_protobuf($"value_from", testFileDesc, "SimpleMessageMap").as("value_to"))
-    val toFromProtoDF = toProtoDF.select(
-      functions.from_protobuf($"value_to", testFileDesc, "SimpleMessageMap").as("value_to_from"))
-    checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+
+    checkWithFileAndClassName("SimpleMessageMap") {
+      case (name, descFilePathOpt) =>
+        val fromProtoDF = df.select(
+          from_protobuf_wrapper($"value", name, descFilePathOpt).as("value_from"))
+        val toProtoDF = fromProtoDF.select(
+          to_protobuf_wrapper($"value_from", name, descFilePathOpt).as("value_to"))
+        val toFromProtoDF = toProtoDF.select(
+          from_protobuf_wrapper($"value_to", name, descFilePathOpt).as("value_to_from"))
+        checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+    }
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Enum") {
@@ -289,13 +337,17 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       .build()
 
     val df = Seq(dynamicMessage.toByteArray).toDF("value")
-    val fromProtoDF = df.select(
-      functions.from_protobuf($"value", testFileDesc, "SimpleMessageEnum").as("value_from"))
-    val toProtoDF = fromProtoDF.select(
-      functions.to_protobuf($"value_from", testFileDesc, "SimpleMessageEnum").as("value_to"))
-    val toFromProtoDF = toProtoDF.select(
-      functions.from_protobuf($"value_to", testFileDesc, "SimpleMessageEnum").as("value_to_from"))
-    checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+
+    checkWithFileAndClassName("SimpleMessageEnum") {
+      case (name, descFilePathOpt) =>
+        val fromProtoDF = df.select(
+          from_protobuf_wrapper($"value", name, descFilePathOpt).as("value_from"))
+        val toProtoDF = fromProtoDF.select(
+          to_protobuf_wrapper($"value_from", name, descFilePathOpt).as("value_to"))
+        val toFromProtoDF = toProtoDF.select(
+          from_protobuf_wrapper($"value_to", name, descFilePathOpt).as("value_to_from"))
+        checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+    }
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Multiple Message") {
@@ -320,13 +372,17 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       .build()
 
     val df = Seq(dynamicMessage.toByteArray).toDF("value")
-    val fromProtoDF = df.select(
-      functions.from_protobuf($"value", testFileDesc, "MultipleExample").as("value_from"))
-    val toProtoDF = fromProtoDF.select(
-      functions.to_protobuf($"value_from", testFileDesc, "MultipleExample").as("value_to"))
-    val toFromProtoDF = toProtoDF.select(
-      functions.from_protobuf($"value_to", testFileDesc, "MultipleExample").as("value_to_from"))
-    checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+
+    checkWithFileAndClassName("MultipleExample") {
+      case (name, descFilePathOpt) =>
+        val fromProtoDF = df.select(
+          from_protobuf_wrapper($"value", name, descFilePathOpt).as("value_from"))
+        val toProtoDF = fromProtoDF.select(
+          to_protobuf_wrapper($"value_from", name, descFilePathOpt).as("value_to"))
+        val toFromProtoDF = toProtoDF.select(
+          from_protobuf_wrapper($"value_to", name, descFilePathOpt).as("value_to_from"))
+        checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+    }
   }
 
   test("Handle recursive fields in Protobuf schema, A->B->A") {
@@ -352,15 +408,17 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
     val df = Seq(messageB.toByteArray).toDF("messageB")
 
-    val e = intercept[IncompatibleSchemaException] {
-      df.select(
-        functions.from_protobuf($"messageB", testFileDesc, "recursiveB").as("messageFromProto"))
-        .show()
+    checkWithFileAndClassName("recursiveB") {
+      case (name, descFilePathOpt) =>
+        val e = intercept[IncompatibleSchemaException] {
+          df.select(
+            from_protobuf_wrapper($"messageB", name, descFilePathOpt).as("messageFromProto"))
+            .show()
+        }
+        assert(e.getMessage.contains(
+          "Found recursive reference in Protobuf schema, which can not be processed by Spark:"
+        ))
     }
-    val expectedMessage = s"""
-         |Found recursive reference in Protobuf schema, which can not be processed by Spark:
-         |org.apache.spark.sql.protobuf.recursiveB.messageA""".stripMargin
-    assert(e.getMessage == expectedMessage)
   }
 
   test("Handle recursive fields in Protobuf schema, C->D->Array(C)") {
@@ -386,16 +444,17 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
     val df = Seq(messageD.toByteArray).toDF("messageD")
 
-    val e = intercept[IncompatibleSchemaException] {
-      df.select(
-        functions.from_protobuf($"messageD", testFileDesc, "recursiveD").as("messageFromProto"))
-        .show()
+    checkWithFileAndClassName("recursiveD") {
+      case (name, descFilePathOpt) =>
+        val e = intercept[IncompatibleSchemaException] {
+          df.select(
+            from_protobuf_wrapper($"messageD", name, descFilePathOpt).as("messageFromProto"))
+            .show()
+        }
+        assert(e.getMessage.contains(
+          "Found recursive reference in Protobuf schema, which can not be processed by Spark:"
+        ))
     }
-    val expectedMessage =
-      s"""
-         |Found recursive reference in Protobuf schema, which can not be processed by Spark:
-         |org.apache.spark.sql.protobuf.recursiveD.messageC""".stripMargin
-    assert(e.getMessage == expectedMessage)
   }
 
   test("Handle extra fields : oldProducer -> newConsumer") {
@@ -411,17 +470,17 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
     val df = Seq(oldProducerMessage.toByteArray).toDF("oldProducerData")
     val fromProtoDf = df.select(
       functions
-        .from_protobuf($"oldProducerData", testFileDesc, "newConsumer")
+        .from_protobuf($"oldProducerData", "newConsumer", testFileDesc)
         .as("fromProto"))
 
     val toProtoDf = fromProtoDf.select(
       functions
-        .to_protobuf($"fromProto", testFileDesc, "newConsumer")
+        .to_protobuf($"fromProto", "newConsumer", testFileDesc)
         .as("toProto"))
 
     val toProtoDfToFromProtoDf = toProtoDf.select(
       functions
-        .from_protobuf($"toProto", testFileDesc, "newConsumer")
+        .from_protobuf($"toProto", "newConsumer", testFileDesc)
         .as("toProtoToFromProto"))
 
     val actualFieldNames =
@@ -452,7 +511,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
     val df = Seq(newProducerMessage.toByteArray).toDF("newProducerData")
     val fromProtoDf = df.select(
       functions
-        .from_protobuf($"newProducerData", testFileDesc, "oldConsumer")
+        .from_protobuf($"newProducerData", "oldConsumer", testFileDesc)
         .as("oldConsumerProto"))
 
     val expectedFieldNames = oldConsumer.getFields.asScala.map(f => f.getName)
@@ -481,8 +540,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       )),
       schema
     )
+
     val toProtobuf = inputDf.select(
-      functions.to_protobuf($"requiredMsg", testFileDesc, "requiredMsg")
+      functions.to_protobuf($"requiredMsg", "requiredMsg", testFileDesc)
         .as("to_proto"))
 
     val binary = toProtobuf.take(1).toSeq(0).get(0).asInstanceOf[Array[Byte]]
@@ -498,7 +558,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
     assert(actualMessage.getField(messageDescriptor.findFieldByName("col_3")) == 0)
 
     val fromProtoDf = toProtobuf.select(
-      functions.from_protobuf($"to_proto", testFileDesc, "requiredMsg") as 'from_proto)
+      functions.from_protobuf($"to_proto", "requiredMsg", testFileDesc) as 'from_proto)
 
     assert(fromProtoDf.select("from_proto.key").take(1).toSeq(0).get(0)
       == inputDf.select("requiredMsg.key").take(1).toSeq(0).get(0))
@@ -526,16 +586,20 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       .build()
 
     val df = Seq(basicMessage.toByteArray).toDF("value")
-    val resultFrom = df
-      .select(functions.from_protobuf($"value", testFileDesc, "BasicMessage") as 'sample)
-      .where("sample.string_value == \"slam\"")
 
-    val resultToFrom = resultFrom
-      .select(functions.to_protobuf($"sample", testFileDesc, "BasicMessage") as 'value)
-      .select(functions.from_protobuf($"value", testFileDesc, "BasicMessage") as 'sample)
-      .where("sample.string_value == \"slam\"")
+    checkWithFileAndClassName("BasicMessage") {
+      case (name, descFilePathOpt) =>
+        val resultFrom = df
+          .select(from_protobuf_wrapper($"value", name, descFilePathOpt) as 'sample)
+          .where("sample.string_value == \"slam\"")
 
-    assert(resultFrom.except(resultToFrom).isEmpty)
+        val resultToFrom = resultFrom
+          .select(to_protobuf_wrapper($"sample", name, descFilePathOpt) as 'value)
+          .select(from_protobuf_wrapper($"value", name, descFilePathOpt) as 'sample)
+          .where("sample.string_value == \"slam\"")
+
+        assert(resultFrom.except(resultToFrom).isEmpty)
+    }
   }
 
   test("Handle TimestampType between to_protobuf and from_protobuf") {
@@ -556,22 +620,24 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       schema
     )
 
-    val toProtoDf = inputDf
-      .select(functions.to_protobuf($"timeStampMsg", testFileDesc, "timeStampMsg") as 'to_proto)
+    checkWithFileAndClassName("timeStampMsg") {
+      case (name, descFilePathOpt) =>
+        val toProtoDf = inputDf
+          .select(to_protobuf_wrapper($"timeStampMsg", name, descFilePathOpt) as 'to_proto)
 
-    val fromProtoDf = toProtoDf
-      .select(functions.from_protobuf($"to_proto", testFileDesc, "timeStampMsg") as 'timeStampMsg)
-    fromProtoDf.show(truncate = false)
+        val fromProtoDf = toProtoDf
+          .select(from_protobuf_wrapper($"to_proto", name, descFilePathOpt) as 'timeStampMsg)
 
-    val actualFields = fromProtoDf.schema.fields.toList
-    val expectedFields = inputDf.schema.fields.toList
+        val actualFields = fromProtoDf.schema.fields.toList
+        val expectedFields = inputDf.schema.fields.toList
 
-    assert(actualFields.size === expectedFields.size)
-    assert(actualFields === expectedFields)
-    assert(fromProtoDf.select("timeStampMsg.key").take(1).toSeq(0).get(0)
-      === inputDf.select("timeStampMsg.key").take(1).toSeq(0).get(0))
-    assert(fromProtoDf.select("timeStampMsg.stmp").take(1).toSeq(0).get(0)
-      === inputDf.select("timeStampMsg.stmp").take(1).toSeq(0).get(0))
+        assert(actualFields.size === expectedFields.size)
+        assert(actualFields === expectedFields)
+        assert(fromProtoDf.select("timeStampMsg.key").take(1).toSeq(0).get(0)
+          === inputDf.select("timeStampMsg.key").take(1).toSeq(0).get(0))
+        assert(fromProtoDf.select("timeStampMsg.stmp").take(1).toSeq(0).get(0)
+          === inputDf.select("timeStampMsg.stmp").take(1).toSeq(0).get(0))
+    }
   }
 
   test("Handle DayTimeIntervalType between to_protobuf and from_protobuf") {
@@ -595,21 +661,23 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       schema
     )
 
-    val toProtoDf = inputDf
-      .select(functions.to_protobuf($"durationMsg", testFileDesc, "durationMsg") as 'to_proto)
+    checkWithFileAndClassName("durationMsg") {
+      case (name, descFilePathOpt) =>
+        val toProtoDf = inputDf
+          .select(to_protobuf_wrapper($"durationMsg", name, descFilePathOpt) as 'to_proto)
 
-    val fromProtoDf = toProtoDf
-      .select(functions.from_protobuf($"to_proto", testFileDesc, "durationMsg") as 'durationMsg)
+        val fromProtoDf = toProtoDf
+          .select(from_protobuf_wrapper($"to_proto", name, descFilePathOpt) as 'durationMsg)
 
-    val actualFields = fromProtoDf.schema.fields.toList
-    val expectedFields = inputDf.schema.fields.toList
+        val actualFields = fromProtoDf.schema.fields.toList
+        val expectedFields = inputDf.schema.fields.toList
 
-    assert(actualFields.size === expectedFields.size)
-    assert(actualFields === expectedFields)
-    assert(fromProtoDf.select("durationMsg.key").take(1).toSeq(0).get(0)
-      === inputDf.select("durationMsg.key").take(1).toSeq(0).get(0))
-    assert(fromProtoDf.select("durationMsg.duration").take(1).toSeq(0).get(0)
-      === inputDf.select("durationMsg.duration").take(1).toSeq(0).get(0))
-
+        assert(actualFields.size === expectedFields.size)
+        assert(actualFields === expectedFields)
+        assert(fromProtoDf.select("durationMsg.key").take(1).toSeq(0).get(0)
+          === inputDf.select("durationMsg.key").take(1).toSeq(0).get(0))
+        assert(fromProtoDf.select("durationMsg.duration").take(1).toSeq(0).get(0)
+          === inputDf.select("durationMsg.duration").take(1).toSeq(0).get(0))
+    }
   }
 }
