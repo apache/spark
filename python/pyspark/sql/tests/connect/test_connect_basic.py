@@ -106,6 +106,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         res = pandas.DataFrame(data={"id": [0, 30, 60, 90]})
         self.assert_(pd.equals(res), f"{pd.to_string()} != {res.to_string()}")
 
+    def test_limit_offset(self):
+        df = self.connect.read.table(self.tbl_name)
+        pd = df.limit(10).offset(1).toPandas()
+        self.assertEqual(9, len(pd.index))
+        pd2 = df.offset(98).limit(10).toPandas()
+        self.assertEqual(2, len(pd2.index))
+
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text
         tmpPath = tempfile.mkdtemp()
