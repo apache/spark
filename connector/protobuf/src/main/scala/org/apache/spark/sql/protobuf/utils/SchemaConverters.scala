@@ -63,14 +63,16 @@ object SchemaConverters {
       case STRING => Some(StringType)
       case BYTE_STRING => Some(BinaryType)
       case ENUM => Some(StringType)
-      case MESSAGE if fd.getMessageType.getName == "Duration" =>
+      case MESSAGE if fd.getMessageType.getName == "Duration" &&
+        fd.getMessageType.getFields.size() == 2 &&
+        fd.getMessageType.getFields.get(0).getName.equals("seconds") &&
+        fd.getMessageType.getFields.get(1).getName.equals("nanos") =>
         Some(DayTimeIntervalType.defaultConcreteType)
-      case MESSAGE if fd.getMessageType.getName == "Timestamp" =>
-        Some(TimestampType)
-        // FIXME: Is the above accurate? Users can have protos named "Timestamp" but are not
-        //        expected to be TimestampType in Spark. How about verifying fields?
-        //        Same for "Duration". Only the Timestamp & Duration protos defined in
-        //        google.protobuf package should default to corresponding Catalylist types.
+      case MESSAGE if fd.getMessageType.getName == "Timestamp" &&
+        fd.getMessageType.getFields.size() == 2 &&
+        fd.getMessageType.getFields.get(0).getName.equals("seconds") &&
+        fd.getMessageType.getFields.get(1).getName.equals("nanos") =>
+          Some(TimestampType)
       case MESSAGE if fd.isRepeated && fd.getMessageType.getOptions.hasMapEntry =>
         var keyType: DataType = NullType
         var valueType: DataType = NullType

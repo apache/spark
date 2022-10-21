@@ -16,11 +16,14 @@
  */
 // To compile and create test class:
 // protoc --java_out=connector/protobuf/src/test/resources/protobuf/ connector/protobuf/src/test/resources/protobuf/functions_suite.proto
-// protoc --descriptor_set_out=connector/protobuf/src/test/resources/protobuf/functions_suite.desc --java_out=connector/protobuf/src/test/resources/protobuf/org/apache/spark/sql/protobuf/ connector/protobuf/src/test/resources/protobuf/functions_suite.proto
+// protoc --include_imports --descriptor_set_out=connector/protobuf/src/test/resources/protobuf/functions_suite.desc --java_out=connector/protobuf/src/test/resources/protobuf/org/apache/spark/sql/protobuf/ connector/protobuf/src/test/resources/protobuf/functions_suite.proto
 
 syntax = "proto3";
 
 package org.apache.spark.sql.protobuf.protos;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 
 option java_outer_classname = "SimpleMessageProtos";
 
@@ -119,7 +122,7 @@ message SimpleMessageEnum {
   string key = 1;
   string value = 2;
   enum NestedEnum {
-    ESTED_NOTHING = 0; // TODO: Fix the name.
+    NESTED_NOTHING = 0;
     NESTED_FIRST = 1;
     NESTED_SECOND = 2;
   }
@@ -168,23 +171,12 @@ message requiredMsg {
   int32 col_3 = 4;
 }
 
-// https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/timestamp.proto
-message Timestamp {
-  int64 seconds = 1;
-  int32 nanos = 2;
-}
-
 message timeStampMsg {
   string key = 1;
-  Timestamp stmp = 2;
-}
-// https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/duration.proto
-message Duration {
-  int64 seconds = 1;
-  int32 nanos = 2;
+  google.protobuf.Timestamp stmp = 2;
 }
 
 message durationMsg {
   string key = 1;
-  Duration duration = 2;
+  google.protobuf.Duration duration = 2;
 }
