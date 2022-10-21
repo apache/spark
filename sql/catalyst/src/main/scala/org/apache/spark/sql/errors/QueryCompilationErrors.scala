@@ -1816,7 +1816,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     sqlType: String,
     e1: Throwable): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_2256",
+      errorClass = "_LEGACY_ERROR_TEMP_2255",
       messageParameters = Map(
         "protobufType" -> protobufType,
         "toType" -> sqlType),
@@ -1848,7 +1848,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def protobufFieldMatchError(
     field: String,
     protobufSchema: String,
-    matchSize: Int,
+    matchSize: String,
     matches: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_2260",
@@ -1879,11 +1879,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       cause = Some(e1.getCause))
   }
 
-  def noMessageTypeReturnError(descriptorName: String, e1: Throwable): Throwable = {
+  def noMessageTypeReturnError(descriptorName: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_2264",
-      messageParameters = Map("descriptorName" -> descriptorName),
-      cause = Some(e1.getCause))
+      messageParameters = Map("descriptorName" -> descriptorName))
   }
 
   def failedParsingDescriptorError(e1: Throwable): Throwable = {

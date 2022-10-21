@@ -171,10 +171,10 @@ class ProtobufSerdeSuite extends SharedSparkSession {
           s" ${protoSchema.getName}."
     }
 
-    println(s"${e.getMessage}, : ${expectMsg}")
-    println(s"${e.getCause.getMessage}, : ${expectedCauseMessage}")
     assert(e.getMessage === expectMsg)
-    assert(e.getCause.getMessage === expectedCauseMessage)
+    if (e.getCause != null) {
+      assert(e.getCause.getMessage === expectedCauseMessage)
+    }
   }
 
   def withFieldMatchType(f: MatchType => Unit): Unit = {

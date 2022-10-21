@@ -24,9 +24,9 @@ import scala.collection.JavaConverters._
 import com.google.protobuf.{ByteString, DynamicMessage}
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.functions.{lit, struct}
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
-import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, StringType, StructField, StructType, TimestampType}
 
@@ -352,14 +352,13 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
     val df = Seq(messageB.toByteArray).toDF("messageB")
 
-    val e = intercept[IncompatibleSchemaException] {
+    val e = intercept[AnalysisException] {
       df.select(
         functions.from_protobuf($"messageB", testFileDesc, "recursiveB").as("messageFromProto"))
         .show()
     }
-    val expectedMessage = s"""
-         |Found recursive reference in Protobuf schema, which can not be processed by Spark:
-         |org.apache.spark.sql.protobuf.recursiveB.messageA""".stripMargin
+    val expectedMessage = "Found recursive reference in Protobuf schema, which can not be" +
+      " processed by Spark: org.apache.spark.sql.protobuf.recursiveB.messageA"
     assert(e.getMessage == expectedMessage)
   }
 
@@ -386,15 +385,13 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
     val df = Seq(messageD.toByteArray).toDF("messageD")
 
-    val e = intercept[IncompatibleSchemaException] {
+    val e = intercept[AnalysisException] {
       df.select(
         functions.from_protobuf($"messageD", testFileDesc, "recursiveD").as("messageFromProto"))
         .show()
     }
-    val expectedMessage =
-      s"""
-         |Found recursive reference in Protobuf schema, which can not be processed by Spark:
-         |org.apache.spark.sql.protobuf.recursiveD.messageC""".stripMargin
+    val expectedMessage = "Found recursive reference in Protobuf schema, which can not be" +
+      " processed by Spark: org.apache.spark.sql.protobuf.recursiveD.messageC"
     assert(e.getMessage == expectedMessage)
   }
 

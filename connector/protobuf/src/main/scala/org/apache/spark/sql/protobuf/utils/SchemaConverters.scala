@@ -104,7 +104,4 @@ object SchemaConverters {
         if (fd.isRepeated) ArrayType(dt, containsNull = false) else dt,
         nullable = !fd.isRequired && !fd.isRepeated))
   }
-
-  private[protobuf] class IncompatibleSchemaException(msg: String, ex: Throwable = null)
-      extends Exception(msg, ex)
 }

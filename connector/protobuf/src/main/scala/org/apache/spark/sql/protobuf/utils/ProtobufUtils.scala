@@ -62,7 +62,7 @@ private[sql] object ProtobufUtils extends Logging {
     if (descriptor.getName == null) {
       throw QueryCompilationErrors.unknownProtobufMessageTypeError(
         descriptor.getName,
-        descriptor.getContainingType)
+        descriptor.getContainingType().getName)
     }
 
     private[this] val protoFieldArray = descriptor.getFields.asScala.toArray
@@ -126,7 +126,7 @@ private[sql] object ProtobufUtils extends Logging {
           throw QueryCompilationErrors.protobufFieldMatchError(
             name,
             toFieldStr(protoPath),
-            matches.size,
+            s"${matches.size}",
             matches.map(_.getName()).mkString("[", ", ", "]"))
       }
     }
