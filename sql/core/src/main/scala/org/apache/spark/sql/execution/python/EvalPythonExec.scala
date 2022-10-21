@@ -85,8 +85,6 @@ trait EvalPythonExec extends UnaryExecNode {
       context: TaskContext): Iterator[InternalRow]
 
   protected override def doExecute(): RDD[InternalRow] = {
-    // metrics // force lazy init at driver
-
     val inputRDD = child.execute().map(_.copy())
 
     inputRDD.mapPartitions { iter =>
