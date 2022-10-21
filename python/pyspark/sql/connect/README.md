@@ -49,3 +49,7 @@ To use the release version of Spark Connect:
 ./python/run-tests --testnames 'pyspark.sql.tests.connect.test_connect_basic'
 ```
 
+## Generate proto generated files for the Python client
+1. Install `buf`: https://docs.buf.build/installation
+2. Run `./dev/generate_protos.sh`
+
