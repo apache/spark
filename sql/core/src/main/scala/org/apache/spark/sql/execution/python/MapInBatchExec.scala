@@ -50,8 +50,6 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override protected def doExecute(): RDD[InternalRow] = {
-    metrics // force lazy init at driver
-
     child.execute().mapPartitionsInternal { inputIter =>
       // Single function with one struct.
       val argOffsets = Array(Array(0))

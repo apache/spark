@@ -94,8 +94,6 @@ case class AggregateInPandasExec(
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
-    metrics // force lazy init at driver
-
     val inputRDD = child.execute()
 
     val sessionLocalTimeZone = conf.sessionLocalTimeZone

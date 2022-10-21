@@ -73,8 +73,6 @@ case class FlatMapGroupsInPandasExec(
     Seq(groupingAttributes.map(SortOrder(_, Ascending)))
 
   override protected def doExecute(): RDD[InternalRow] = {
-    metrics // force lazy init at driver
-
     val inputRDD = child.execute()
 
     val (dedupAttributes, argOffsets) = resolveArgOffsets(child.output, groupingAttributes)

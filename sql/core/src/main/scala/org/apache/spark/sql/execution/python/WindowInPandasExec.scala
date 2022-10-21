@@ -158,8 +158,6 @@ case class WindowInPandasExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    metrics // force lazy init at driver
-
     // Unwrap the expressions and factories from the map.
     val expressionsWithFrameIndex =
       windowFrameExpressionFactoryPairs.map(_._1).zipWithIndex.flatMap {

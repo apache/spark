@@ -77,8 +77,6 @@ case class FlatMapCoGroupsInPandasExec(
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
-    metrics // force lazy init at driver
-
     val (leftDedup, leftArgOffsets) = resolveArgOffsets(left.output, leftGroup)
     val (rightDedup, rightArgOffsets) = resolveArgOffsets(right.output, rightGroup)
 
