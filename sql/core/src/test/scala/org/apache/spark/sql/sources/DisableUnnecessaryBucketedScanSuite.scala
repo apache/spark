@@ -284,4 +284,34 @@ abstract class DisableUnnecessaryBucketedScanSuite
       }
     }
   }
+
+  test("Avoid introducing too many partitions when bucketed scan disabled by sql planner") {
+    withTable("t1") {
+      withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true",
+        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "4",
+        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "128") {
+        spark.range(0, 500).toDF("k").write.bucketBy(5, "k").saveAsTable("t1")
+
+        val query = "SELECT k FROM t1"
+
+        val df = sql(query)
+        val scan = collectFirst(df.queryExecution.executedPlan) {
+          case scan: FileSourceScanExec => scan
+        }
+        assert(scan.nonEmpty)
+        assert(!scan.get.bucketedScan)
+        assert(scan.get.inputRDD.partitions.size > 50)
+
+        withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_MAX_PARTITIONS.key -> "10") {
+          val df = sql(query)
+          val scan = collectFirst(df.queryExecution.executedPlan) {
+            case scan: FileSourceScanExec => scan
+          }
+          assert(scan.nonEmpty)
+          assert(!scan.get.bucketedScan)
+          assert(scan.get.inputRDD.partitions.size <= 10 + 1)
+        }
+      }
+    }
+  }
 }

@@ -95,4 +95,30 @@ object FilePartition extends Logging {
 
     Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
   }
+
+  def minPartitionNumberBySpecifiedSize(
+      sparkSession: SparkSession,
+      selectedPartitions: Seq[PartitionDirectory],
+      maxSplitSize: Long): Int = {
+    val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
+    val minPartitionNum = sparkSession.sessionState.conf.filesMinPartitionNum
+      .getOrElse(sparkSession.leafNodeDefaultParallelism)
+    val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
+
+    Math.max(minPartitionNum,
+      Math.min(totalBytes / openCostInBytes, totalBytes / maxSplitSize)).intValue()
+  }
+
+  def maxSplitBytesBySpecifiedNumber(
+      sparkSession: SparkSession,
+      selectedPartitions: Seq[PartitionDirectory],
+      partitionNumber: Int): Long = {
+    val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
+    val minPartitionNum = sparkSession.sessionState.conf.filesMinPartitionNum
+      .getOrElse(sparkSession.leafNodeDefaultParallelism)
+    val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
+    val bytesPerCore = totalBytes / Math.max(minPartitionNum, partitionNumber)
+
+    Math.max(openCostInBytes, bytesPerCore)
+  }
 }

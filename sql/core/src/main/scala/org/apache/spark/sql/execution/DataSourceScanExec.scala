@@ -677,8 +677,23 @@ case class FileSourceScanExec(
       selectedPartitions: Array[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
     val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
-    val maxSplitBytes =
+    val originMaxSplitBytes =
       FilePartition.maxSplitBytes(fsRelation.sparkSession, selectedPartitions)
+
+    // Check if bucketed scan disabled by planner
+    val maxSplitBytes = if (!disableBucketedScan) {
+      originMaxSplitBytes
+    } else {
+      val partitionNumber = FilePartition.minPartitionNumberBySpecifiedSize(
+        fsRelation.sparkSession, selectedPartitions, originMaxSplitBytes)
+
+      if (partitionNumber <= conf.autoBucketedScanMaxPartitions) {
+        originMaxSplitBytes
+      } else {
+        FilePartition.maxSplitBytesBySpecifiedNumber(
+          fsRelation.sparkSession, selectedPartitions, conf.autoBucketedScanMaxPartitions)
+      }
+    }
     logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
       s"open cost is considered as scanning $openCostInBytes bytes.")
 

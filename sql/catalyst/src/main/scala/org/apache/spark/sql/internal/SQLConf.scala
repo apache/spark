@@ -1423,6 +1423,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val AUTO_BUCKETED_SCAN_MAX_PARTITIONS =
+    buildConf("spark.sql.sources.bucketing.autoBucketedScan.max.partitions")
+      .doc("The maximum partition number allowed if one bucket table is disabled by planner.")
+      .version("3.4.0")
+      .fallbackConf(BUCKETING_MAX_BUCKETS)
+
   val CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING =
     buildConf("spark.sql.optimizer.canChangeCachedPlanOutputPartitioning")
       .internal()
@@ -4442,6 +4448,8 @@ class SQLConf extends Serializable with Logging {
   def bucketingMaxBuckets: Int = getConf(SQLConf.BUCKETING_MAX_BUCKETS)
 
   def autoBucketedScanEnabled: Boolean = getConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
+
+  def autoBucketedScanMaxPartitions: Int = getConf(SQLConf.AUTO_BUCKETED_SCAN_MAX_PARTITIONS)
 
   def v2BucketingEnabled: Boolean = getConf(SQLConf.V2_BUCKETING_ENABLED)
 
