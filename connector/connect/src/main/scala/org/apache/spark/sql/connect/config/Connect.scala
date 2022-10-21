@@ -29,7 +29,8 @@ private[spark] object Connect {
   val CONNECT_GRPC_INTERCEPTOR_CLASSES =
     ConfigBuilder("spark.connect.grpc.interceptor.classes")
       .doc(
-        "Comma separated list of class names that must implement the io.grpc.ServerInterceptor interface.")
+        "Comma separated list of class names that must " +
+          "implement the io.grpc.ServerInterceptor interface.")
       .version("3.4.0")
       .stringConf
       .createOptional
