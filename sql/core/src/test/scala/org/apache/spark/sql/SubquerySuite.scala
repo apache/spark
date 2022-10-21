@@ -2113,7 +2113,7 @@ class SubquerySuite extends QueryTest
     }
   }
 
-  test("SPARK-38180: allow safe cast expressions in correlated equality conditions") {
+  test("SPARK-38180, SPARK-36114: allow safe cast expressions in correlated equality conditions") {
     withTempView("t1", "t2") {
       Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq((0, 2), (0, 3)).toDF("c1", "c2").createOrReplaceTempView("t2")
