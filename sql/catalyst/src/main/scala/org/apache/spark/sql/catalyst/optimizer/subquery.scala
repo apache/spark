@@ -511,17 +511,18 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * (first part of returned value), the HAVING clause of the innermost query block
    * (optional second part) and the parts below the HAVING CLAUSE (third part).
    */
-  private def splitSubquery(plan: LogicalPlan) : (Seq[LogicalPlan], Option[Filter], Aggregate) = {
+  private def splitSubquery(
+      plan: LogicalPlan): (Seq[LogicalPlan], Option[Filter], Option[Aggregate]) = {
     val topPart = ArrayBuffer.empty[LogicalPlan]
     var bottomPart: LogicalPlan = plan
     while (true) {
       bottomPart match {
         case havingPart @ Filter(_, aggPart: Aggregate) =>
-          return (topPart.toSeq, Option(havingPart), aggPart)
+          return (topPart.toSeq, Option(havingPart), Some(aggPart))
 
         case aggPart: Aggregate =>
           // No HAVING clause
-          return (topPart.toSeq, None, aggPart)
+          return (topPart.toSeq, None, Some(aggPart))
 
         case p @ Project(_, child) =>
           topPart += p
@@ -530,6 +531,10 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         case s @ SubqueryAlias(_, child) =>
           topPart += s
           bottomPart = child
+
+        case p: LogicalPlan if p.maxRows.exists(_ <= 1) =>
+          // Non-aggregated one row subquery.
+          return (topPart.toSeq, None, None)
 
         case Filter(_, op) =>
           throw QueryExecutionErrors.unexpectedOperatorInCorrelatedSubquery(op, " below filter")
@@ -561,14 +566,18 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         val origOutput = query.output.head
 
         val resultWithZeroTups = evalSubqueryOnZeroTups(query)
-        if (resultWithZeroTups.isEmpty) {
+        lazy val (topPart, havingNode, aggNode) = splitSubquery(query)
+        // SPARK-40862: When the aggregate node is empty, it means the subquery produces
+        // at most one row and it is not subject to the COUNT bug.
+        if (resultWithZeroTups.isEmpty || aggNode.isEmpty) {
           // CASE 1: Subquery guaranteed not to have the COUNT bug
           Project(
             currentChild.output :+ origOutput,
             Join(currentChild, query, LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
         } else {
           // Subquery might have the COUNT bug. Add appropriate corrections.
-          val (topPart, havingNode, aggNode) = splitSubquery(query)
+          assert(aggNode.isDefined)
+          val aggregate = aggNode.get
 
           // The next two cases add a leading column to the outer join input to make it
           // possible to distinguish between the case when no tuples join and the case
@@ -599,8 +608,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
             // CASE 3: Subquery with HAVING clause. Pull the HAVING clause above the join.
             // Need to modify any operators below the join to pass through all columns
             // referenced in the HAVING clause.
-            var subqueryRoot: UnaryNode = aggNode
-            val havingInputs: Seq[NamedExpression] = aggNode.output
+            var subqueryRoot: UnaryNode = aggregate
+            val havingInputs: Seq[NamedExpression] = aggregate.output
 
             topPart.reverse.foreach {
               case Project(projList, _) =>
