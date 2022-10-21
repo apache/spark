@@ -216,7 +216,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             series = [series]
         series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
-        def create_array(s, t, n):
+        def create_array(s, t):
             if hasattr(s.array, "__arrow_array__"):
                 mask = None
             else:
@@ -236,7 +236,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                     "Exception thrown when converting pandas.Series (%s) "
                     "with name '%s' to Arrow Array (%s)."
                 )
-                raise TypeError(error_msg % (s.dtype, n, t)) from e
+                raise TypeError(error_msg % (s.dtype, s.name, t)) from e
             except ValueError as e:
                 error_msg = (
                     "Exception thrown when converting pandas.Series (%s) "
@@ -249,7 +249,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                         "can be disabled by using SQL config "
                         "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                     )
-                raise ValueError(error_msg % (s.dtype, n, t)) from e
+                raise ValueError(error_msg % (s.dtype, s.name, t)) from e
             return array
 
         arrs = []
@@ -267,20 +267,21 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 # Assign result columns by schema name if user labeled with strings
                 elif self._assign_cols_by_name and any(isinstance(name, str) for name in s.columns):
                     arrs_names = [
-                        (create_array(s[field.name], field.type, field.name), field.name)
-                        for field in t
+                        (create_array(s[field.name], field.type), field.name) for field in t
                     ]
                 # Assign result columns by  position
                 else:
                     arrs_names = [
-                        (create_array(s[s.columns[i]], field.type, field.name), field.name)
+                        # the selected series has name '1', so we rename it to field.name
+                        # as the name is used by create_array to provide a meaningful error message
+                        (create_array(s[s.columns[i]].rename(field.name), field.type), field.name)
                         for i, field in enumerate(t)
                     ]
 
                 struct_arrs, struct_names = zip(*arrs_names)
                 arrs.append(pa.StructArray.from_arrays(struct_arrs, struct_names))
             else:
-                arrs.append(create_array(s, t, str(t)))
+                arrs.append(create_array(s, t))
 
         return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
