@@ -160,7 +160,14 @@ private[sql] object ProtobufUtils extends Logging {
         throw QueryCompilationErrors.cannotFindDescriptorFileError(descFilePath, ex)
     }
 
-    val descriptorProto: DescriptorProtos.FileDescriptorProto = fileDescriptorSet.getFile(0)
+    val fileDescriptorSetBuilder = fileDescriptorSet.getFile(0).toBuilder
+    for (fd <- fileDescriptorSet.getFileList.asScala) {
+      if (fileDescriptorSetBuilder.getName != fd.getName ) {
+        fileDescriptorSetBuilder.mergeFrom(fd)
+      }
+    }
+
+    val descriptorProto: DescriptorProtos.FileDescriptorProto = fileDescriptorSetBuilder.build()
     try {
       val fileDescriptor: Descriptors.FileDescriptor = Descriptors.FileDescriptor.buildFrom(
         descriptorProto,
