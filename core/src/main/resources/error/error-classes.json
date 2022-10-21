@@ -76,6 +76,23 @@
       "Another instance of this query was just started by a concurrent session."
     ]
   },
+  "CONNECT" : {
+    "message" : [
+      "Generic Spark Connect error."
+    ],
+    "subClass" : {
+      "INTERCEPTOR_CTOR_MISSING" : {
+        "message" : [
+          "Cannot instantiate GRPC interceptor because <cls> is missing a default constructor without arguments."
+        ]
+      },
+      "INTERCEPTOR_RUNTIME_ERROR" : {
+        "message" : [
+          "Error instantiating GRPC interceptor: <msg>"
+        ]
+      }
+    }
+  },
   "CONVERSION_INVALID_INPUT" : {
     "message" : [
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
@@ -697,23 +714,6 @@
       "The second argument of <functionName> function needs to be an integer."
     ],
     "sqlState" : "22023"
-  },
-  "CONNECT" : {
-    "message" : [
-      "Generic Spark Connect error."
-    ],
-    "subClass" : {
-      "INTERCEPTOR_CTOR_MISSING" : {
-        "message" : [
-          "Cannot instantiate GRPC interceptor because <cls> is missing a default constructor without arguments."
-        ]
-      },
-      "INTERCEPTOR_RUNTIME_ERROR" : {
-        "message" : [
-          "Error instantiating GRPC interceptor: <msg>"
-        ]
-      }
-    }
   },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
