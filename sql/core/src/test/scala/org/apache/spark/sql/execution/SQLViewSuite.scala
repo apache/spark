@@ -230,6 +230,21 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     assert(e.message.contains(message))
   }
 
+  private def assertAnalysisErrorClass(query: String,
+                                       errorClass: String,
+                                       parameters: Map[String, String]): Unit = {
+    val e = intercept[AnalysisException](sql(query))
+    checkError(e, errorClass = errorClass, parameters = parameters)
+  }
+
+  private def assertAnalysisErrorClass(query: String,
+                                       errorClass: String,
+                                       parameters: Map[String, String],
+                                       context: ExpectedContext): Unit = {
+    val e = intercept[AnalysisException](sql(query))
+    checkError(e, errorClass = errorClass, parameters = parameters, context = context)
+  }
+
   private def assertErrorForAlterTableOnTempView(
     sqlText: String, viewName: String, cmdName: String): Unit = {
     assertAnalysisError(
@@ -258,10 +273,16 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("error handling: fail if the view sql itself is invalid") {
     // A database that does not exist
-    assertInvalidReference("CREATE OR REPLACE VIEW myabcdview AS SELECT * FROM db_not_exist234.jt")
+    assertRelationNotFound(
+      "CREATE OR REPLACE VIEW myabcdview AS SELECT * FROM db_not_exist234.jt",
+      "`db_not_exist234`.`jt`",
+      ExpectedContext("db_not_exist234.jt", 51, 50 + "db_not_exist234.jt".length))
 
     // A table that does not exist
-    assertInvalidReference("CREATE OR REPLACE VIEW myabcdview AS SELECT * FROM table_not_exist345")
+    assertRelationNotFound(
+      "CREATE OR REPLACE VIEW myabcdview AS SELECT * FROM table_not_exist345",
+      "`table_not_exist345`",
+      ExpectedContext("table_not_exist345", 51, 50 + "table_not_exist345".length))
 
     // A column that does not exist
     intercept[AnalysisException] {
@@ -269,11 +290,19 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def assertInvalidReference(query: String): Unit = {
+  private def assertRelationNotFound(query: String, relation: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(query)
-    }.getMessage
-    assert(e.contains("Table or view not found"))
+    }
+    checkErrorTableNotFound(e, relation)
+  }
+
+  private def assertRelationNotFound(query: String, relation: String, context: ExpectedContext):
+  Unit = {
+    val e = intercept[AnalysisException] {
+      sql(query)
+    }
+    checkErrorTableNotFound(e, relation, context)
   }
 
 
@@ -296,12 +325,17 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("error handling: fail if the temp view sql itself is invalid") {
     // A database that does not exist
-    assertInvalidReference(
-      "CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT * FROM db_not_exist234.jt")
+    assertAnalysisErrorClass(
+      "CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT * FROM db_not_exist234.jt",
+      "TABLE_OR_VIEW_NOT_FOUND",
+      Map("relationName" -> "`db_not_exist234`.`jt`"),
+      ExpectedContext("db_not_exist234.jt", 61, 60 + "db_not_exist234.jt".length))
 
     // A table that does not exist
-    assertInvalidReference(
-      "CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT * FROM table_not_exist1345")
+    assertRelationNotFound(
+      "CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT * FROM table_not_exist1345",
+      "`table_not_exist1345`",
+      ExpectedContext("table_not_exist1345", 61, 60 + "table_not_exist1345".length))
 
     // A column that does not exist, for temporary view
     intercept[AnalysisException] {
@@ -311,11 +345,14 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("SPARK-32374: disallow setting properties for CREATE TEMPORARY VIEW") {
     withTempView("myabcdview") {
-      val e = intercept[ParseException] {
-        sql("CREATE TEMPORARY VIEW myabcdview TBLPROPERTIES ('a' = 'b') AS SELECT * FROM jt")
-      }
-      assert(e.message.contains(
-        "Operation not allowed: TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))
+      val sqlText = "CREATE TEMPORARY VIEW myabcdview TBLPROPERTIES ('a' = 'b') AS SELECT * FROM jt"
+      checkError(
+        exception = intercept[ParseException] {
+          sql(sqlText)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_0035",
+        parameters = Map("message" -> "TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"),
+        context = ExpectedContext(sqlText, 0, 77))
     }
   }
 
@@ -368,7 +405,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql("CREATE TEMPORARY VIEW testView AS SELECT id FROM jt")
       }
 
-      assert(e.message.contains("Temporary view") && e.message.contains("already exists"))
+      checkError(e,
+        "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+        parameters = Map("relationName" -> "`testView`"))
     }
   }
 
@@ -468,13 +507,15 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   test("should not allow ALTER VIEW AS when the view does not exist") {
-    assertAnalysisError(
+    assertRelationNotFound(
       "ALTER VIEW testView AS SELECT 1, 2",
-      "View not found: testView")
+      "`testView`",
+      ExpectedContext("testView", 11, 10 + "testView".length))
 
-    assertAnalysisError(
+    assertRelationNotFound(
       "ALTER VIEW default.testView AS SELECT 1, 2",
-      "View not found: default.testView")
+      "`default`.`testView`",
+      ExpectedContext("default.testView", 11, 10 + "default.testView".length))
   }
 
   test("ALTER VIEW AS should try to alter temp view first if view name has no database part") {
@@ -618,21 +659,25 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           }
         }
       }
-      assertInvalidReference("SELECT * FROM view1")
+      assertRelationNotFound("SELECT * FROM view1", "`table1`",
+        ExpectedContext("VIEW", "spark_catalog.default.view1", 14, 13 + "table1".length, "table1"))
 
       // Fail if the referenced table is invalid.
       withTable("table2") {
         sql("CREATE TABLE table2(a int, b string) USING parquet")
         sql("CREATE VIEW view2 AS SELECT * FROM table2")
       }
-      assertInvalidReference("SELECT * FROM view2")
+      assertRelationNotFound("SELECT * FROM view2", "`table2`",
+        ExpectedContext("VIEW", "spark_catalog.default.view2", 14, 13 + "table2".length, "table2"))
 
       // Fail if the referenced view is invalid.
       withView("testView") {
         sql("CREATE VIEW testView AS SELECT * FROM jt")
         sql("CREATE VIEW view3 AS SELECT * FROM testView")
       }
-      assertInvalidReference("SELECT * FROM view3")
+      assertRelationNotFound("SELECT * FROM view3", "`testView`",
+        ExpectedContext("VIEW", "spark_catalog.default.view3", 14,
+          13 + "testView".length, "testView"))
     }
   }
 

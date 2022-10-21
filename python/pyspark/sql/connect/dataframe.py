@@ -39,6 +39,8 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString
     from pyspark.sql.connect.client import RemoteSparkSession
 
+ColumnOrName = Union[ColumnRef, str]
+
 
 class GroupingFrame(object):
 
@@ -111,7 +113,7 @@ class DataFrame(object):
         new_frame._session = session
         return new_frame
 
-    def select(self, *cols: ColumnRef) -> "DataFrame":
+    def select(self, *cols: ColumnOrName) -> "DataFrame":
         return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
 
     def agg(self, exprs: Optional[GroupingFrame.MeasuresType]) -> "DataFrame":
@@ -197,9 +199,39 @@ class DataFrame(object):
     def limit(self, n: int) -> "DataFrame":
         return DataFrame.withPlan(plan.Limit(child=self._plan, limit=n), session=self._session)
 
+    def offset(self, n: int) -> "DataFrame":
+        return DataFrame.withPlan(plan.Offset(child=self._plan, offset=n), session=self._session)
+
     def sort(self, *cols: "ColumnOrString") -> "DataFrame":
         """Sort by a specific column"""
         return DataFrame.withPlan(plan.Sort(self._plan, *cols), session=self._session)
+
+    def sample(
+        self,
+        fraction: float,
+        *,
+        withReplacement: bool = False,
+        seed: Optional[int] = None,
+    ) -> "DataFrame":
+        if not isinstance(fraction, float):
+            raise TypeError(f"'fraction' must be float, but got {type(fraction).__name__}")
+        if not isinstance(withReplacement, bool):
+            raise TypeError(
+                f"'withReplacement' must be bool, but got {type(withReplacement).__name__}"
+            )
+        if seed is not None and not isinstance(seed, int):
+            raise TypeError(f"'seed' must be None or int, but got {type(seed).__name__}")
+
+        return DataFrame.withPlan(
+            plan.Sample(
+                child=self._plan,
+                lower_bound=0.0,
+                upper_bound=fraction,
+                with_replacement=withReplacement,
+                seed=seed,
+            ),
+            session=self._session,
+        )
 
     def show(self, n: int, truncate: Optional[Union[bool, int]], vertical: Optional[bool]) -> None:
         ...
@@ -247,12 +279,12 @@ class DataFrame(object):
             raise Exception("Cannot collect on empty plan.")
         if self._session is None:
             raise Exception("Cannot collect on empty session.")
-        query = self._plan.collect(self._session)
+        query = self._plan.to_proto(self._session)
         return self._session._to_pandas(query)
 
     def explain(self) -> str:
         if self._plan is not None:
-            query = self._plan.collect(self._session)
+            query = self._plan.to_proto(self._session)
             if self._session is None:
                 raise Exception("Cannot analyze without RemoteSparkSession.")
             return self._session.analyze(query).explain_string

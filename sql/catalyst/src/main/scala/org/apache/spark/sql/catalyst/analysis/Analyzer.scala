@@ -84,7 +84,7 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog {
   private def fail() = throw new UnsupportedOperationException
   override def listTables(namespace: Array[String]): Array[Identifier] = fail()
   override def loadTable(ident: Identifier): Table = {
-    throw new NoSuchTableException(ident.toString)
+    throw new NoSuchTableException(ident.asMultipartIdentifier)
   }
   override def createTable(
       ident: Identifier,
@@ -3479,7 +3479,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       i.userSpecifiedCols.map { col =>
         i.table.resolve(Seq(col), resolver).getOrElse {
-          val candidates = i.table.output.map(_.name)
+          val candidates = i.table.output.map(_.qualifiedName)
           val orderedCandidates = StringUtils.orderStringsBySimilarity(col, candidates)
           throw QueryCompilationErrors
             .unresolvedAttributeError("UNRESOLVED_COLUMN", col, orderedCandidates, i.origin)
