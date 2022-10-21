@@ -290,7 +290,7 @@ abstract class DisableUnnecessaryBucketedScanSuite
       withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true",
         SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "4",
         SQLConf.FILES_MAX_PARTITION_BYTES.key -> "128") {
-        spark.range(0, 500).toDF("k").write.bucketBy(5, "k").saveAsTable("t1")
+        spark.range(0, 1000).toDF("k").write.bucketBy(5, "k").saveAsTable("t1")
 
         val query = "SELECT k FROM t1"
 
