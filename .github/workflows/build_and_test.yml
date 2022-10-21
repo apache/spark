@@ -227,7 +227,7 @@ jobs:
         restore-keys: |
           ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
         java-version: ${{ matrix.java }}
     - name: Install Python 3.8
@@ -384,7 +384,7 @@ jobs:
         restore-keys: |
           pyspark-coursier-
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
         java-version: ${{ matrix.java }}
     - name: List Python packages (Python 3.9, PyPy3)
@@ -473,7 +473,7 @@ jobs:
         restore-keys: |
           sparkr-coursier-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
         java-version: ${{ inputs.java }}
     - name: Run tests
@@ -597,7 +597,7 @@ jobs:
         cd docs
         bundle install
     - name: Install Java 8
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
         java-version: 8
     - name: Scala linter
@@ -664,7 +664,7 @@ jobs:
         restore-keys: |
           java${{ matrix.java }}-maven-
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
         java-version: ${{ matrix.java }}
     - name: Build with Maven
@@ -713,7 +713,7 @@ jobs:
         restore-keys: |
           scala-213-coursier-
     - name: Install Java 8
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
         java-version: 8
     - name: Build with SBT
@@ -761,7 +761,7 @@ jobs:
         restore-keys: |
           tpcds-coursier-
     - name: Install Java 8
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
         java-version: 8
     - name: Cache TPC-DS generated data
@@ -864,7 +864,7 @@ jobs:
         restore-keys: |
           docker-integration-coursier-
     - name: Install Java 8
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
         java-version: 8
     - name: Run tests
@@ -921,7 +921,7 @@ jobs:
           restore-keys: |
             k8s-integration-coursier-
       - name: Install Java ${{ inputs.java }}
-        uses: actions/setup-java@v1
+        uses: actions/setup-java@v3
         with:
           java-version: ${{ inputs.java }}
       - name: start minikube
