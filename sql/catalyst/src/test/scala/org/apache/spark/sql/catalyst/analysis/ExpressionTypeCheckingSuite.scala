@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -420,8 +421,29 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     )
 
     assertError(Coalesce(Nil), "function coalesce requires at least one argument")
-    assertError(new Murmur3Hash(Nil), "function hash requires at least one argument")
-    assertError(new XxHash64(Nil), "function xxhash64 requires at least one argument")
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(new Murmur3Hash(Nil))
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      parameters = Map(
+        "sqlExpr" -> "\"hash()\"",
+        "functionName" -> "hash",
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(new XxHash64(Nil))
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      parameters = Map(
+        "sqlExpr" -> "\"xxhash64()\"",
+        "functionName" -> "xxhash64",
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0"))
+
     assertError(Explode($"intField"),
       "input to function explode should be array or map type")
     assertError(PosExplode($"intField"),
@@ -458,8 +480,17 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     assertSuccess(Round(Literal(null), Literal(null)))
     assertSuccess(Round($"intField", Literal(1)))
 
-    assertError(Round($"intField", $"intField"),
-      "Only foldable Expression is allowed")
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(Round($"intField", $"intField"))
+      },
+      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      parameters = Map(
+        "sqlExpr" -> "\"round(intField, intField)\"",
+        "inputName" -> "scala",
+        "inputType" -> "\"INT\"",
+        "inputExpr" -> "\"intField\""))
+
     checkError(
       exception = intercept[AnalysisException] {
         assertSuccess(Round($"intField", $"booleanField"))
@@ -496,9 +527,16 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
 
     assertSuccess(BRound(Literal(null), Literal(null)))
     assertSuccess(BRound($"intField", Literal(1)))
-
-    assertError(BRound($"intField", $"intField"),
-      "Only foldable Expression is allowed")
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(BRound($"intField", $"intField"))
+      },
+      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      parameters = Map(
+        "sqlExpr" -> "\"bround(intField, intField)\"",
+        "inputName" -> "scala",
+        "inputType" -> "\"INT\"",
+        "inputExpr" -> "\"intField\""))
     checkError(
       exception = intercept[AnalysisException] {
         assertSuccess(BRound($"intField", $"booleanField"))
@@ -579,5 +617,22 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       "MAP(42L, true)")
     assert(Literal.create(Map(42L -> null), MapType(LongType, NullType)).sql ==
       "MAP(42L, NULL)")
+  }
+
+  test("xxx") {
+    val argument = Literal.create(Map(42L -> true), MapType(LongType, BooleanType))
+    val murmur3Hash = new Murmur3Hash(Seq(argument))
+    assert(murmur3Hash.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "INVALID_ELEMENT_TYPE",
+        messageParameters = Map(
+          "functionName" -> "hash",
+          "elementType" -> "MapType",
+          "message" -> ("In Spark, same maps may have different hashcode, " +
+            "thus hash expressions are prohibited on MapType elements. " +
+            "To restore previous behavior set spark.sql.legacy.allowHashOnMapType to true.")
+        )
+      )
+    )
   }
 }

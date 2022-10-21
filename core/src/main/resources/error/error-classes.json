@@ -143,6 +143,11 @@
           "Offset expression <offset> must be a literal."
         ]
       },
+      "INVALID_ELEMENT_TYPE" : {
+        "message" : [
+          "Input to function <functionName> cannot contain elements of <elementType>. <message>"
+        ]
+      },
       "INVALID_JSON_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."
