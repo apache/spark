@@ -798,7 +798,15 @@ final class ShuffleBlockFetcherIterator(
             // since the last call.
             val msg = s"Received a zero-size buffer for block $blockId from $address " +
               s"(expectedApproxSize = $size, isNetworkReqDone=$isNetworkReqDone)"
-            throwFetchFailedException(blockId, mapIndex, address, new IOException(msg))
+            if (blockId.isShuffleChunk) {
+              logWarning(msg)
+              pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(blockId, address)
+              // Set result to null to trigger another iteration of the while loop to get either.
+              result = null
+              null
+            } else {
+              throwFetchFailedException(blockId, mapIndex, address, new IOException(msg))
+            }
           }
 
           val in = try {
