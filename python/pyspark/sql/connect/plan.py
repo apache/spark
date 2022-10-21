@@ -272,10 +272,9 @@ class Filter(LogicalPlan):
 
 
 class Limit(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], limit: int, offset: int = 0) -> None:
+    def __init__(self, child: Optional["LogicalPlan"], limit: int) -> None:
         super().__init__(child)
         self.limit = limit
-        self.offset = offset
 
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
@@ -286,7 +285,7 @@ class Limit(LogicalPlan):
 
     def print(self, indent: int = 0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{' ' * indent}<Limit limit={self.limit} offset={self.offset}>\n{c_buf}"
+        return f"{' ' * indent}<Limit limit={self.limit}>\n{c_buf}"
 
     def _repr_html_(self) -> str:
         return f"""
@@ -294,6 +293,33 @@ class Limit(LogicalPlan):
             <li>
                 <b>Limit</b><br />
                 Limit: {self.limit} <br />
+                {self._child_repr_()}
+            </li>
+        </uL>
+        """
+
+
+class Offset(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], offset: int = 0) -> None:
+        super().__init__(child)
+        self.offset = offset
+
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.offset.input.CopyFrom(self._child.plan(session))
+        plan.offset.offset = self.offset
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return f"{' ' * indent}<Offset={self.offset}>\n{c_buf}"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>Limit</b><br />
                 Offset: {self.offset} <br />
                 {self._child_repr_()}
             </li>

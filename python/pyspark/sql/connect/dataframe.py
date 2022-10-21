@@ -199,6 +199,9 @@ class DataFrame(object):
     def limit(self, n: int) -> "DataFrame":
         return DataFrame.withPlan(plan.Limit(child=self._plan, limit=n), session=self._session)
 
+    def offset(self, n: int) -> "DataFrame":
+        return DataFrame.withPlan(plan.Offset(child=self._plan, offset=n), session=self._session)
+
     def sort(self, *cols: "ColumnOrString") -> "DataFrame":
         """Sort by a specific column"""
         return DataFrame.withPlan(plan.Sort(self._plan, *cols), session=self._session)
