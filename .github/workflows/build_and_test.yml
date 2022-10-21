@@ -63,7 +63,7 @@ jobs:
         }}
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -195,7 +195,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       # In order to fetch changed files
       with:
         fetch-depth: 0
@@ -286,7 +286,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Checkout Spark repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         # In order to fetch changed files
         with:
           fetch-depth: 0
@@ -349,7 +349,7 @@ jobs:
       METASPACE_SIZE: 1g
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       # In order to fetch changed files
       with:
         fetch-depth: 0
@@ -438,7 +438,7 @@ jobs:
       SKIP_MIMA: true
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       # In order to fetch changed files
       with:
         fetch-depth: 0
@@ -508,7 +508,7 @@ jobs:
       image: ${{ needs.precondition.outputs.image_url }}
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -635,7 +635,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -684,7 +684,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -732,7 +732,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -773,7 +773,7 @@ jobs:
         key: tpcds-${{ hashFiles('.github/workflows/build_and_test.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
     - name: Checkout tpcds-kit repository
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         repository: databricks/tpcds-kit
         ref: 2a5078a782192ddb6efbcead8de9973d6ab4f069
@@ -834,7 +834,7 @@ jobs:
       SKIP_MIMA: true
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -891,7 +891,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
           repository: apache/spark
