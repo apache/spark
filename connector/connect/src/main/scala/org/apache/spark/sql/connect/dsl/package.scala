@@ -34,6 +34,8 @@ import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 
 package object dsl {
 
+  class MockRemoteSession {}
+
   object expressions { // scalastyle:ignore
     implicit class DslString(val s: String) {
       def protoAttr: Expression =
@@ -175,7 +177,29 @@ package object dsl {
   }
 
   object plans { // scalastyle:ignore
-    implicit class DslLogicalPlan(val logicalPlan: Relation) {
+    implicit class DslMockRemoteSession(val session: MockRemoteSession) {
+      def range(
+          start: Option[Int],
+          end: Int,
+          step: Option[Int],
+          numPartitions: Option[Int]): Relation = {
+        val range = proto.Range.newBuilder()
+        if (start.isDefined) {
+          range.setStart(start.get)
+        }
+        range.setEnd(end)
+        if (step.isDefined) {
+          range.setStep(proto.Range.Step.newBuilder().setStep(step.get))
+        }
+        if (numPartitions.isDefined) {
+          range.setNumPartitions(
+            proto.Range.NumPartitions.newBuilder().setNumPartitions(numPartitions.get))
+        }
+        Relation.newBuilder().setRange(range).build()
+      }
+    }
+
+    implicit class DslLogicalPlan(val logicalPlan: .Relation) {
       def select(exprs: Expression*): Relation = {
         Relation
           .newBuilder()
