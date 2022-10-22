@@ -248,58 +248,53 @@ object StatFunctions extends Logging {
     }
     require(percentiles.forall(p => p >= 0 && p <= 1), "Percentiles must be in the range [0, 1]")
 
-    val mapColumns = collection.mutable.ArrayBuffer.empty[Column]
-    val columnNames = collection.mutable.ArrayBuffer.empty[String]
+    var mapColumns = Seq.empty[Column]
+    var columnNames = Seq.empty[String]
 
     ds.schema.fields.foreach { field =>
-      field.dataType match {
-        case _: NumericType | StringType =>
-          val rawColumn = col(field.name)
-          val numColumn = field.dataType match {
-            case StringType =>
-              new Column(Cast(rawColumn.expr, DoubleType, evalMode = EvalMode.TRY))
-            case _ => rawColumn
+      if (field.dataType.isInstanceOf[NumericType] || field.dataType.isInstanceOf[StringType]) {
+        val column = col(field.name)
+        var casted = column
+        if (field.dataType.isInstanceOf[StringType]) {
+          casted = new Column(Cast(column.expr, DoubleType, evalMode = EvalMode.TRY))
+        }
+
+        val percentilesCol = if (percentiles.nonEmpty) {
+          percentile_approx(casted, lit(percentiles),
+            lit(ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY))
+        } else null
+
+        var aggColumns = Seq.empty[Column]
+        var percentileIndex = 0
+        selectedStatistics.foreach { stats =>
+          aggColumns :+= lit(stats)
+
+          stats.toLowerCase(Locale.ROOT) match {
+            case "count" => aggColumns :+= count(column)
+
+            case "count_distinct" => aggColumns :+= count_distinct(column)
+
+            case "approx_count_distinct" => aggColumns :+= approx_count_distinct(column)
+
+            case "mean" => aggColumns :+= avg(casted)
+
+            case "stddev" => aggColumns :+= stddev(casted)
+
+            case "min" => aggColumns :+= min(column)
+
+            case "max" => aggColumns :+= max(column)
+
+            case percentile if percentile.endsWith("%") =>
+              aggColumns :+= get(percentilesCol, lit(percentileIndex))
+              percentileIndex += 1
+
+            case _ => throw QueryExecutionErrors.statisticNotRecognizedError(stats)
           }
+        }
 
-          val percentilesCol = if (percentiles.nonEmpty) {
-            percentile_approx(numColumn, lit(percentiles),
-              lit(ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY))
-          } else null
-
-          val aggColumns = collection.mutable.ArrayBuffer.empty[Column]
-
-          var percentileIndex = 0
-          selectedStatistics.foreach { stats =>
-            aggColumns += lit(stats)
-
-            stats.toLowerCase(Locale.ROOT) match {
-              case "count" => aggColumns += count(rawColumn)
-
-              case "count_distinct" => aggColumns += count_distinct(rawColumn)
-
-              case "approx_count_distinct" => aggColumns += approx_count_distinct(rawColumn)
-
-              case "mean" => aggColumns += avg(numColumn)
-
-              case "stddev" => aggColumns += stddev(numColumn)
-
-              case "min" => aggColumns += min(rawColumn)
-
-              case "max" => aggColumns += max(rawColumn)
-
-              case percentile if percentile.endsWith("%") =>
-                aggColumns += get(percentilesCol, lit(percentileIndex))
-                percentileIndex += 1
-
-              case _ => throw QueryExecutionErrors.statisticNotRecognizedError(stats)
-            }
-          }
-
-          // map { "count" -> "1024", "min" -> "1.0", ... }
-          mapColumns += map(aggColumns.map(_.cast("string")): _*).as(field.name)
-          columnNames += field.name
-
-        case _ =>
+        // map { "count" -> "1024", "min" -> "1.0", ... }
+        mapColumns :+= map(aggColumns.map(_.cast(StringType)): _*).as(field.name)
+        columnNames :+= field.name
       }
     }
 
