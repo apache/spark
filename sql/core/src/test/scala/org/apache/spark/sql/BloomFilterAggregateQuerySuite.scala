@@ -19,11 +19,13 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLValue
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.LongType
 
 /**
  * Query tests for the Bloom filter aggregate and filter function.
@@ -62,8 +64,8 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     val table = "bloom_filter_test"
     for (numEstimatedItems <- Seq(Long.MinValue, -10L, 0L, 4096L, 4194304L, Long.MaxValue,
       conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS))) {
-      for (numBits <- Seq(Long.MinValue, -10L, 0L, 4096L, 4194304L, Long.MaxValue,
-        conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))) {
+      for ((numBits, index) <- Seq(Long.MinValue, -10L, 0L, 4096L, 4194304L, Long.MaxValue,
+        conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_BITS)).zipWithIndex) {
         val sqlString = s"""
                            |SELECT every(might_contain(
                            |            (SELECT bloom_filter_agg(col,
@@ -87,13 +89,57 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
             val exception = intercept[AnalysisException] {
               spark.sql(sqlString)
             }
-            assert(exception.getMessage.contains(
-              "The estimated number of items must be a positive value"))
+            val stop = numEstimatedItems match {
+              case Long.MinValue => Seq(169, 152, 150, 153, 156, 168, 157)
+              case -10L => Seq(152, 135, 133, 136, 139, 151, 140)
+              case 0L => Seq(150, 133, 131, 134, 137, 149, 138)
+            }
+            checkError(
+              exception = exception,
+              errorClass = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+              parameters = Map(
+                "exprName" -> "estimatedNumItems",
+                "valueRange" -> "[0, positive]",
+                "currentValue" -> toSQLValue(numEstimatedItems, LongType),
+                "sqlExpr" -> (s""""bloom_filter_agg(col, CAST($numEstimatedItems AS BIGINT), """ +
+                  s"""CAST($numBits AS BIGINT))"""")
+              ),
+              context = ExpectedContext(
+                fragment = "bloom_filter_agg(col,\n" +
+                  s"              cast($numEstimatedItems as long),\n" +
+                  s"              cast($numBits as long))",
+                start = 49,
+                stop = stop(index)
+              )
+            )
           } else if (numBits <= 0) {
             val exception = intercept[AnalysisException] {
               spark.sql(sqlString)
             }
-            assert(exception.getMessage.contains("The number of bits must be a positive value"))
+            val stop = numEstimatedItems match {
+              case 4096L => Seq(153, 136, 134)
+              case 4194304L => Seq(156, 139, 137)
+              case Long.MaxValue => Seq(168, 151, 149)
+              case 4000000 => Seq(156, 139, 137)
+            }
+            checkError(
+              exception = exception,
+              errorClass = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+              parameters = Map(
+                "exprName" -> "numBits",
+                "valueRange" -> "[0, positive]",
+                "currentValue" -> toSQLValue(numBits, LongType),
+                "sqlExpr" -> (s""""bloom_filter_agg(col, CAST($numEstimatedItems AS BIGINT), """ +
+                  s"""CAST($numBits AS BIGINT))"""")
+              ),
+              context = ExpectedContext(
+                fragment = "bloom_filter_agg(col,\n" +
+                  s"              cast($numEstimatedItems as long),\n" +
+                  s"              cast($numBits as long))",
+                start = 49,
+                stop = stop(index)
+              )
+            )
           } else {
             checkAnswer(spark.sql(sqlString), Row(true, false))
           }
@@ -109,8 +155,22 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
         |FROM values (1.2), (2.5) as t(a)"""
         .stripMargin)
     }
-    assert(exception1.getMessage.contains(
-      "Input to function bloom_filter_agg should have been a bigint value"))
+    checkError(
+      exception = exception1,
+      errorClass = "DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE",
+      parameters = Map(
+        "functionName" -> "`bloom_filter_agg`",
+        "sqlExpr" -> "\"bloom_filter_agg(a, 1000000, 8388608)\"",
+        "expectedLeft" -> "\"BINARY\"",
+        "expectedRight" -> "\"BIGINT\"",
+        "actual" -> "\"DECIMAL(2,1)\", \"BIGINT\", \"BIGINT\""
+      ),
+      context = ExpectedContext(
+        fragment = "bloom_filter_agg(a)",
+        start = 8,
+        stop = 26
+      )
+    )
 
     val exception2 = intercept[AnalysisException] {
       spark.sql("""
@@ -118,8 +178,22 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
         |FROM values (cast(1 as long)), (cast(2 as long)) as t(a)"""
         .stripMargin)
     }
-    assert(exception2.getMessage.contains(
-      "function bloom_filter_agg should have been a bigint value followed with two bigint"))
+    checkError(
+      exception = exception2,
+      errorClass = "DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE",
+      parameters = Map(
+        "functionName" -> "`bloom_filter_agg`",
+        "sqlExpr" -> "\"bloom_filter_agg(a, 2, (2 * 8))\"",
+        "expectedLeft" -> "\"BINARY\"",
+        "expectedRight" -> "\"BIGINT\"",
+        "actual" -> "\"BIGINT\", \"INT\", \"BIGINT\""
+      ),
+      context = ExpectedContext(
+        fragment = "bloom_filter_agg(a, 2)",
+        start = 8,
+        stop = 29
+      )
+    )
 
     val exception3 = intercept[AnalysisException] {
       spark.sql("""
@@ -127,8 +201,22 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
         |FROM values (cast(1 as long)), (cast(2 as long)) as t(a)"""
         .stripMargin)
     }
-    assert(exception3.getMessage.contains(
-      "function bloom_filter_agg should have been a bigint value followed with two bigint"))
+    checkError(
+      exception = exception3,
+      errorClass = "DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE",
+      parameters = Map(
+        "functionName" -> "`bloom_filter_agg`",
+        "sqlExpr" -> "\"bloom_filter_agg(a, CAST(2 AS BIGINT), 5)\"",
+        "expectedLeft" -> "\"BINARY\"",
+        "expectedRight" -> "\"BIGINT\"",
+        "actual" -> "\"BIGINT\", \"BIGINT\", \"INT\""
+      ),
+      context = ExpectedContext(
+        fragment = "bloom_filter_agg(a, cast(2 as long), 5)",
+        start = 8,
+        stop = 46
+      )
+    )
 
     val exception4 = intercept[AnalysisException] {
       spark.sql("""
@@ -136,7 +224,19 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
         |FROM values (cast(1 as long)), (cast(2 as long)) as t(a)"""
         .stripMargin)
     }
-    assert(exception4.getMessage.contains("Null typed values cannot be used as size arguments"))
+    checkError(
+      exception = exception4,
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      parameters = Map(
+        "exprName" -> "estimatedNumItems or numBits",
+        "sqlExpr" -> "\"bloom_filter_agg(a, NULL, 5)\""
+      ),
+      context = ExpectedContext(
+        fragment = "bloom_filter_agg(a, null, 5)",
+        start = 8,
+        stop = 35
+      )
+    )
 
     val exception5 = intercept[AnalysisException] {
       spark.sql("""
@@ -144,7 +244,19 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
         |FROM values (cast(1 as long)), (cast(2 as long)) as t(a)"""
         .stripMargin)
     }
-    assert(exception5.getMessage.contains("Null typed values cannot be used as size arguments"))
+    checkError(
+      exception = exception5,
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      parameters = Map(
+        "exprName" -> "estimatedNumItems or numBits",
+        "sqlExpr" -> "\"bloom_filter_agg(a, 5, NULL)\""
+      ),
+      context = ExpectedContext(
+        fragment = "bloom_filter_agg(a, 5, null)",
+        start = 8,
+        stop = 35
+      )
+    )
   }
 
   test("Test that might_contain errors out disallowed input value types") {
@@ -160,8 +272,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
         "functionName" -> "`might_contain`",
         "expectedLeft" -> "\"BINARY\"",
         "expectedRight" -> "\"BIGINT\"",
-        "actualLeft" -> "\"DECIMAL(2,1)\"",
-        "actualRight" -> "\"BIGINT\""
+        "actual" -> "\"DECIMAL(2,1)\", \"BIGINT\""
       ),
       context = ExpectedContext(
         fragment = "might_contain(1.0, 1L)",
@@ -182,8 +293,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
         "functionName" -> "`might_contain`",
         "expectedLeft" -> "\"BINARY\"",
         "expectedRight" -> "\"BIGINT\"",
-        "actualLeft" -> "\"VOID\"",
-        "actualRight" -> "\"DECIMAL(1,1)\""
+        "actual" -> "\"VOID\", \"DECIMAL(1,1)\""
       ),
       context = ExpectedContext(
         fragment = "might_contain(NULL, 0.1)",

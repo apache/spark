@@ -54,7 +54,7 @@ jobs:
     steps:
     - name: Generate matrix
       id: set-matrix
-      run: echo "::set-output name=matrix::["`seq -s, 1 $SPARK_BENCHMARK_NUM_SPLITS`"]"
+      run: echo "matrix=["`seq -s, 1 $SPARK_BENCHMARK_NUM_SPLITS`"]" >> $GITHUB_OUTPUT
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g job of build_and_test.yml as well
   tpcds-1g-gen:
@@ -65,7 +65,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         # In order to get diff files
         with:
           fetch-depth: 0
@@ -95,7 +95,7 @@ jobs:
           key: tpcds-${{ hashFiles('.github/workflows/benchmark.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
       - name: Checkout tpcds-kit repository
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: databricks/tpcds-kit
           ref: 2a5078a782192ddb6efbcead8de9973d6ab4f069
@@ -133,7 +133,7 @@ jobs:
       SPARK_TPCDS_DATA: ${{ github.workspace }}/tpcds-sf-1
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       # In order to get diff files
       with:
         fetch-depth: 0

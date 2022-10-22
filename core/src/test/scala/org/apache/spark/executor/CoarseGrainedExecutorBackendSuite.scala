@@ -395,7 +395,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
       // Fake tasks with different taskIds.
       val taskDescriptions = (1 to numTasks).map {
-        taskId => new TaskDescription(taskId, 2, "1", "TASK ${taskId}", 19,
+        taskId => new TaskDescription(taskId, 2, "1", s"TASK $taskId", 19,
           1, mutable.Map.empty, mutable.Map.empty, mutable.Map.empty, new Properties, 1,
           Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
       }
@@ -483,7 +483,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
       // Fake tasks with different taskIds.
       val taskDescriptions = (1 to numTasks).map {
-        taskId => new TaskDescription(taskId, 2, "1", "TASK ${taskId}", 19,
+        taskId => new TaskDescription(taskId, 2, "1", s"TASK $taskId", 19,
           1, mutable.Map.empty, mutable.Map.empty, mutable.Map.empty, new Properties, 1,
           Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
       }
