@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
@@ -3356,5 +3357,37 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_2266",
       messageParameters = Map("fieldDescriptor" -> fieldDescriptor))
+  }
+
+  def protobufFieldTypeMismatchError(field: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2267",
+      messageParameters = Map("field" -> field))
+  }
+
+  def protobufClassLoadError(protobufClassName: String, errorMessage: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2268",
+      messageParameters = Map(
+        "protobufClassName" -> protobufClassName,
+        "errorMessage" -> errorMessage))
+  }
+
+  def protobufMessageTypeError(protobufClassName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2269",
+      messageParameters = Map("protobufClassName" -> protobufClassName))
+  }
+
+  def invalidBytStringFormatError(): Throwable = {
+    new AnalysisException(errorClass = "_LEGACY_ERROR_TEMP_2270", messageParameters = Map.empty)
+  }
+
+  def malformedRecordsDetectedInRecordParsingError(e1: Throwable): Throwable = {
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2177",
+      messageParameters = Map(
+        "failFastMode" -> FailFastMode.name),
+      cause = e1)
   }
 }

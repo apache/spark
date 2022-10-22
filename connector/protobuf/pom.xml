@@ -123,6 +123,7 @@
             <configuration>
               <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
               <protocVersion>${protobuf.version}</protocVersion>
+              <includeMavenTypes>direct</includeMavenTypes>
               <inputDirectories>
                 <include>src/test/resources/protobuf</include>
               </inputDirectories>

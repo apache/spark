@@ -324,7 +324,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       .setField(messageEnumDesc.findFieldByName("value"), "value")
       .setField(
         messageEnumDesc.findFieldByName("nested_enum"),
-        messageEnumDesc.findEnumTypeByName("NestedEnum").findValueByName("ESTED_NOTHING"))
+        messageEnumDesc.findEnumTypeByName("NestedEnum").findValueByName("NESTED_NOTHING"))
       .setField(
         messageEnumDesc.findFieldByName("nested_enum"),
         messageEnumDesc.findEnumTypeByName("NestedEnum").findValueByName("NESTED_FIRST"))

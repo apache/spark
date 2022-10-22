@@ -4355,5 +4355,25 @@
     "message" : [
       "Found recursive reference in Protobuf schema, which can not be processed by Spark: <fieldDescriptor>"
     ]
+  },
+  "_LEGACY_ERROR_TEMP_2267" : {
+    "message" : [
+      "Type mismatch encountered for field: <field>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2268" : {
+    "message" : [
+      "Could not load Protobuf class with name <protobufClassName> <errorMessage>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2269" : {
+    "message" : [
+      "<protobufClassName> is not a Protobuf message type"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2270" : {
+    "message" : [
+      "Invalid ByteString format"
+    ]
   }
 }
