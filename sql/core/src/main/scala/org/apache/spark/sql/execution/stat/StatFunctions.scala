@@ -273,21 +273,22 @@ object StatFunctions extends Logging {
             aggColumns += lit(stats)
 
             stats.toLowerCase(Locale.ROOT) match {
-              case "count" =>
-                aggColumns += count(rawColumn).cast("string")
-              case "count_distinct" =>
-                aggColumns += count_distinct(rawColumn).cast("string")
-              case "approx_count_distinct" =>
-                aggColumns += approx_count_distinct(rawColumn).cast("string")
-              case "mean" => aggColumns += avg(numColumn).cast("string")
-              case "stddev" =>
-                aggColumns += stddev(numColumn).cast("string")
-              case "min" =>
-                aggColumns += min(rawColumn).cast("string")
-              case "max" =>
-                aggColumns += max(rawColumn).cast("string")
+              case "count" => aggColumns += count(rawColumn)
+
+              case "count_distinct" => aggColumns += count_distinct(rawColumn)
+
+              case "approx_count_distinct" => aggColumns += approx_count_distinct(rawColumn)
+
+              case "mean" => aggColumns += avg(numColumn)
+
+              case "stddev" => aggColumns += stddev(numColumn)
+
+              case "min" => aggColumns += min(rawColumn)
+
+              case "max" => aggColumns += max(rawColumn)
+
               case percentile if percentile.endsWith("%") =>
-                aggColumns += get(percentilesCol, lit(percentileIndex)).cast("string")
+                aggColumns += get(percentilesCol, lit(percentileIndex))
                 percentileIndex += 1
 
               case _ => throw QueryExecutionErrors.statisticNotRecognizedError(stats)
@@ -295,7 +296,7 @@ object StatFunctions extends Logging {
           }
 
           // map { "count" -> "1024", "min" -> "1.0", ... }
-          mapColumns += map(aggColumns.result(): _*).as(field.name)
+          mapColumns += map(aggColumns.map(_.cast("string")): _*).as(field.name)
           columnNames += field.name
 
         case _ =>
