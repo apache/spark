@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
@@ -72,7 +74,11 @@ case class SortOrder(
     if (RowOrdering.isOrderable(dataType)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(s"cannot sort data type ${dataType.catalogString}")
+      DataTypeMismatch(
+        errorSubClass = "UNSUPPORTED_INPUT_TYPE",
+        messageParameters = Map(
+          "functionName" -> prettyName,
+          "inputType" -> toSQLType(dataType)))
     }
   }
 
