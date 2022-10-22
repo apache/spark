@@ -30,8 +30,8 @@ import org.mockito.Mockito.{mock, spy, when}
 import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
-import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
+import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
