@@ -227,8 +227,9 @@ jobs:
         restore-keys: |
           ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
+        distribution: zulu
         java-version: ${{ matrix.java }}
     - name: Install Python 3.8
       uses: actions/setup-python@v2
@@ -384,8 +385,9 @@ jobs:
         restore-keys: |
           pyspark-coursier-
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
+        distribution: zulu
         java-version: ${{ matrix.java }}
     - name: List Python packages (Python 3.9, PyPy3)
       run: |
@@ -473,8 +475,9 @@ jobs:
         restore-keys: |
           sparkr-coursier-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
+        distribution: zulu
         java-version: ${{ inputs.java }}
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -597,8 +600,9 @@ jobs:
         cd docs
         bundle install
     - name: Install Java 8
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
+        distribution: zulu
         java-version: 8
     - name: Scala linter
       run: ./dev/lint-scala
@@ -664,8 +668,9 @@ jobs:
         restore-keys: |
           java${{ matrix.java }}-maven-
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
+        distribution: zulu
         java-version: ${{ matrix.java }}
     - name: Build with Maven
       run: |
@@ -713,8 +718,9 @@ jobs:
         restore-keys: |
           scala-213-coursier-
     - name: Install Java 8
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
+        distribution: zulu
         java-version: 8
     - name: Build with SBT
       run: |
@@ -761,8 +767,9 @@ jobs:
         restore-keys: |
           tpcds-coursier-
     - name: Install Java 8
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
+        distribution: zulu
         java-version: 8
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
@@ -864,8 +871,9 @@ jobs:
         restore-keys: |
           docker-integration-coursier-
     - name: Install Java 8
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v3
       with:
+        distribution: zulu
         java-version: 8
     - name: Run tests
       run: |
@@ -921,8 +929,9 @@ jobs:
           restore-keys: |
             k8s-integration-coursier-
       - name: Install Java ${{ inputs.java }}
-        uses: actions/setup-java@v1
+        uses: actions/setup-java@v3
         with:
+          distribution: zulu
           java-version: ${{ inputs.java }}
       - name: start minikube
         run: |
