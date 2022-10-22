@@ -64,7 +64,10 @@ case class CallMethodViaReflection(children: Seq[Expression])
     if (children.size < 2) {
       DataTypeMismatch(
         errorSubClass = "WRONG_NUM_PARAMS",
-        messageParameters = Map("actualNum" -> children.length.toString))
+        messageParameters = Map(
+          "functionName" -> prettyName,
+          "expectedNum" -> "> 1",
+          "actualNum" -> children.length.toString))
     } else {
       val unexpectedParameter = children.zipWithIndex.collectFirst {
         case (e, 0) if !(e.dataType == StringType && e.foldable) =>
