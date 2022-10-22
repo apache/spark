@@ -443,11 +443,6 @@
     ],
     "sqlState" : "42000"
   },
-  "INTEGER_OVERFLOW" : {
-    "message" : [
-      "Integer overflow. <message>"
-    ]
-  },
   "INTERNAL_ERROR" : {
     "message" : [
       "<message>"
