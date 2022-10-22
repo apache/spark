@@ -599,18 +599,21 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       ("2016-03-27 19:38:18"), ("2016-03-27 19:39:25")
     ).toDF("time")
 
-    checkAnswer(
-      df.select(window($"time", "10 seconds").as("window"))
-        .select(
-          $"window.end".cast("string"),
-          window_time($"window").cast("string").as("window1"),
-          window_time($"window").cast("string").as("window2")
-        ),
-      Seq(
-        Row("2016-03-27 19:38:20", "2016-03-27 19:38:19.999999", "2016-03-27 19:38:19.999999"),
-        Row("2016-03-27 19:39:30", "2016-03-27 19:39:29.999999", "2016-03-27 19:39:29.999999")
+    val e = intercept[AnalysisException] {
+      df.select(
+        window($"time", "10 seconds").as("window1"),
+        window($"time - INTERVAL 5m", "10 seconds").as("window2")
       )
-    )
+      .select(
+        $"window1.end".cast("string"),
+        window_time($"window1").cast("string"),
+        $"window2.end".cast("string"),
+        window_time($"window2").cast("string")
+      )
+    }
+    assert(e.getMessage.contains(
+      "Multiple time/session window expressions would result in a cartesian product of rows, " +
+        "therefore they are currently not supported"))
   }
 
   test("window_time function on agg output") {
