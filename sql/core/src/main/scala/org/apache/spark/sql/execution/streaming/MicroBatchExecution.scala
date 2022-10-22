@@ -583,9 +583,8 @@ class MicroBatchExecution(
             case FileSourceMetadataAttribute(_) => true
             case _ => false
           }
-          val finalDataPlan = dataPlan match {
+          val finalDataPlan = dataPlan transformUp {
             case l: LogicalRelation if hasFileMetadata => l.withMetadataColumns()
-            case _ => dataPlan
           }
           // SPARK-40460: overwrite the entry with the new logicalPlan
           // because it might contain the _metadata column. It is a necessary change,
