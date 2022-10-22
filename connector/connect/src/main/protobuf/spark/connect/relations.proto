@@ -109,6 +109,7 @@ message Join {
   Relation right = 2;
   Expression join_condition = 3;
   JoinType join_type = 4;
+  repeated string using_columns = 5;
 
   enum JoinType {
     JOIN_TYPE_UNSPECIFIED = 0;

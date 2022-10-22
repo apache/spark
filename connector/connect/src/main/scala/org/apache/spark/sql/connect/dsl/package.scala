@@ -238,6 +238,7 @@ package object dsl {
       def join(
           otherPlan: proto.Relation,
           joinType: JoinType = JoinType.JOIN_TYPE_INNER,
+          usingColumns: Seq[String] = Seq(),
           condition: Option[proto.Expression] = None): proto.Relation = {
         val relation = proto.Relation.newBuilder()
         val join = proto.Join.newBuilder()
@@ -245,6 +246,9 @@ package object dsl {
           .setLeft(logicalPlan)
           .setRight(otherPlan)
           .setJoinType(joinType)
+        if (usingColumns.nonEmpty) {
+          join.addAllUsingColumns(usingColumns.asJava)
+        }
         if (condition.isDefined) {
           join.setJoinCondition(condition.get)
         }
