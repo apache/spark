@@ -24,11 +24,11 @@ import scala.collection.JavaConverters._
 import com.google.protobuf.{ByteString, DynamicMessage}
 
 import org.apache.spark.sql.{Column, QueryTest, Row}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.functions.{lit, struct}
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
-import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, StringType, StructField, StructType, TimestampType}
 
@@ -410,7 +410,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
     checkWithFileAndClassName("recursiveB") {
       case (name, descFilePathOpt) =>
-        val e = intercept[IncompatibleSchemaException] {
+        val e = intercept[AnalysisException] {
           df.select(
             from_protobuf_wrapper($"messageB", name, descFilePathOpt).as("messageFromProto"))
             .show()
@@ -446,7 +446,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
     checkWithFileAndClassName("recursiveD") {
       case (name, descFilePathOpt) =>
-        val e = intercept[IncompatibleSchemaException] {
+        val e = intercept[AnalysisException] {
           df.select(
             from_protobuf_wrapper($"messageD", name, descFilePathOpt).as("messageFromProto"))
             .show()

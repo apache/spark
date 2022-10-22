@@ -3210,4 +3210,151 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("expression" -> toSQLExpr(expression))
     )
   }
+
+  def cannotConvertProtobufTypeToDataTypeError(
+    protobufColumn: String,
+    sqlColumn: String,
+    protobufType: String,
+    sqlType: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2251",
+      messageParameters = Map(
+        "protobufColumn" -> protobufColumn,
+        "sqlColumn" -> sqlColumn,
+        "protobufType" -> protobufType,
+        "sqlType" -> sqlType))
+  }
+
+  def cannotConvertDataTypeToProtobufTypeError(
+    sqlColumn: String,
+    protobufColumn: String,
+    sqlType: String,
+    protobufType: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2252",
+      messageParameters = Map(
+        "sqlColumn" -> sqlColumn,
+        "protobufColumn" -> protobufColumn,
+        "sqlType" -> sqlType,
+        "protobufType" -> protobufType))
+  }
+
+  def cannotConvertDataTypeToProtobufEnumTypeError(
+    sqlColumn: String,
+    protobufColumn: String,
+    data: String,
+    enumString: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2253",
+      messageParameters = Map(
+        "sqlColumn" -> sqlColumn,
+        "protobufColumn" -> protobufColumn,
+        "data" -> data,
+        "enumString" -> enumString))
+  }
+
+  def protobufTypeUnsupportedYetError(protobufType: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2256",
+      messageParameters = Map("protobufType" -> protobufType))
+  }
+
+  def cannotConvertProtobufTypeToSqlTypeError(
+    protobufType: String,
+    sqlType: String,
+    e1: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2254",
+      messageParameters = Map(
+        "protobufType" -> protobufType,
+        "toType" -> sqlType),
+      cause = Some(e1.getCause))
+  }
+
+  def cannotConvertSqlTypeToProtobufError(
+    protobufType: String,
+    sqlType: String,
+    e1: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2255",
+      messageParameters = Map(
+        "protobufType" -> protobufType,
+        "toType" -> sqlType),
+      cause = Some(e1.getCause))
+  }
+
+  def unknownProtobufMessageTypeError(
+    descriptorName: String,
+    containingType: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2257",
+      messageParameters = Map(
+        "descriptorName" -> descriptorName,
+        "containingType" -> containingType))
+  }
+
+  def cannotFindCatalystTypeInProtobufSchemaError(catalystFieldPath: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2258",
+      messageParameters = Map("catalystFieldPath" -> catalystFieldPath))
+  }
+
+  def cannotFindProtobufFieldInInCatalystError(field: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2259",
+      messageParameters = Map("field" -> field))
+  }
+
+  def protobufFieldMatchError(
+    field: String,
+    protobufSchema: String,
+    matchSize: String,
+    matches: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2260",
+      messageParameters = Map(
+        "field" -> field,
+        "protobufSchema" -> protobufSchema,
+        "matchSize" -> matchSize,
+        "matches" -> matches))
+  }
+
+  def unableToLocateProtobuMessageError(messageName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2261",
+      messageParameters = Map("messageName" -> messageName))
+  }
+
+  def descrioptorParseError(e1: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2262",
+      messageParameters = Map("errorMessage" -> e1.getMessage()),
+      cause = Some(e1.getCause))
+  }
+
+  def cannotFindDescriptorFileError(filePath: String, e1: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2263",
+      messageParameters = Map("filePath" -> filePath),
+      cause = Some(e1.getCause))
+  }
+
+  def noMessageTypeReturnError(descriptorName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2264",
+      messageParameters = Map("descriptorName" -> descriptorName))
+  }
+
+  def failedParsingDescriptorError(e1: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2265",
+      messageParameters = Map("errorMessage" -> e1.getMessage()),
+      cause = Some(e1.getCause))
+  }
+
+  def foundRecursionInProtobufSchema(fieldDescriptor: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_2266",
+      messageParameters = Map("fieldDescriptor" -> fieldDescriptor))
+  }
 }
