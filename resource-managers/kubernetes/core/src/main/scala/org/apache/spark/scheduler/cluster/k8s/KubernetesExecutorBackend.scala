@@ -18,6 +18,8 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_NAMESPACE
+import org.apache.spark.deploy.k8s.Constants.{ENV_APPLICATION_ID, ENV_EXECUTOR_POD_NAME}
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.executor.CoarseGrainedExecutorBackend
 import org.apache.spark.internal.Logging
@@ -51,7 +53,14 @@ private[spark] object KubernetesExecutorBackend extends Logging {
       CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env, resourceProfile, execId) =>
         new CoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, execId,
         arguments.bindAddress, arguments.hostname, arguments.cores,
-        env, arguments.resourcesFileOpt, resourceProfile)
+        env, arguments.resourcesFileOpt, resourceProfile) {
+          override def extractAttributes: Map[String, String] =
+            super.extractAttributes ++ Map(
+              "APP_ID" -> System.getenv(ENV_APPLICATION_ID),
+              "KUBERNETES_NAMESPACE" -> env.conf.get(KUBERNETES_NAMESPACE),
+              "KUBERNETES_POD_NAME" -> System.getenv(ENV_EXECUTOR_POD_NAME)
+            )
+        }
     }
     run(parseArguments(args, this.getClass.getCanonicalName.stripSuffix("$")), createFn)
     System.exit(0)
