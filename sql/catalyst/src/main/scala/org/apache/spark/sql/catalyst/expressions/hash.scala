@@ -25,10 +25,10 @@ import scala.annotation.tailrec
 
 import org.apache.commons.codec.digest.DigestUtils
 import org.apache.commons.codec.digest.MessageDigestAlgorithms
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
@@ -281,7 +281,7 @@ abstract class HashExpression[E] extends Expression {
         errorSubClass = "INVALID_ELEMENT_TYPE",
         messageParameters = Map(
           "functionName" -> prettyName,
-          "elementType" -> "MapType",
+          "elementType" -> toSQLType(MapType),
           "message" -> ("In Spark, same maps may have different hashcode, " +
             "thus hash expressions are prohibited on MapType elements." +
             s" To restore previous behavior set ${SQLConf.LEGACY_ALLOW_HASH_ON_MAPTYPE.key} " +

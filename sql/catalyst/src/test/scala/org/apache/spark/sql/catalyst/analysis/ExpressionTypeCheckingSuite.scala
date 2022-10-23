@@ -621,7 +621,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       "MAP(42L, NULL)")
   }
 
-  test("xxx") {
+  test("hash expressions are prohibited on MapType elements") {
     val argument = Literal.create(Map(42L -> true), MapType(LongType, BooleanType))
     val murmur3Hash = new Murmur3Hash(Seq(argument))
     assert(murmur3Hash.checkInputDataTypes() ==
@@ -629,7 +629,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         errorSubClass = "INVALID_ELEMENT_TYPE",
         messageParameters = Map(
           "functionName" -> "hash",
-          "elementType" -> "MapType",
+          "elementType" -> toSQLType(MapType),
           "message" -> ("In Spark, same maps may have different hashcode, " +
             "thus hash expressions are prohibited on MapType elements. " +
             "To restore previous behavior set spark.sql.legacy.allowHashOnMapType to true.")
