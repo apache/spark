@@ -25,6 +25,7 @@ import scala.annotation.tailrec
 
 import org.apache.commons.codec.digest.DigestUtils
 import org.apache.commons.codec.digest.MessageDigestAlgorithms
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
