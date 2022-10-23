@@ -21,7 +21,9 @@ import java.math.{BigDecimal => JavaBigDecimal}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1582,5 +1584,52 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Contains(Literal("Spark SQL"), Literal("SPARK")), false)
     checkEvaluation(Contains(Literal("Spark SQL"), Literal("SQL")), true)
     checkEvaluation(Contains(Literal("Spark SQL"), Literal("k S")), true)
+  }
+
+  test("Elt: checkInputDataTypes") {
+    // requires at least two arguments
+    val indexExpr1 = Literal(8)
+    val expr1 = Elt(Seq(indexExpr1))
+    assert(expr1.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_PARAMS",
+        messageParameters = Map(
+          "functionName" -> "elt",
+          "expectedNum" -> "> 1",
+          "actualNum" -> "1"
+        )
+      )
+    )
+
+    // first input to function etl should have IntegerType
+    val indexExpr2 = Literal('a')
+    val expr2 = Elt(Seq(indexExpr2, Literal('b')))
+    assert(expr2.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> toSQLType(IntegerType),
+          "inputSql" -> toSQLExpr(indexExpr2),
+          "inputType" -> toSQLType(indexExpr2.dataType)
+        )
+      )
+    )
+
+    // input to function etl should have StringType or BinaryType
+    val indexExpr3 = Literal(1)
+    val inputExpr3 = Seq(Literal('a'), Literal('b'), Literal(12345))
+    val expr3 = Elt(indexExpr3 +: inputExpr3)
+    assert(expr3.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2...",
+          "requiredType" -> (toSQLType(StringType) + " or " + toSQLType(BinaryType)),
+          "inputSql" -> inputExpr3.map(toSQLExpr(_)).mkString(","),
+          "inputType" -> inputExpr3.map(expr => toSQLType(expr.dataType)).mkString(",")
+        )
+      )
+    )
   }
 }

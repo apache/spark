@@ -67,7 +67,7 @@ case class Sum(
     Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType))
 
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForAnsiIntervalOrNumericType(child.dataType, prettyName)
+    TypeUtils.checkForAnsiIntervalOrNumericType(child)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(SUM)
 
