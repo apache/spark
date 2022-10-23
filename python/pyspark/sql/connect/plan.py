@@ -385,6 +385,56 @@ class Sort(LogicalPlan):
         """
 
 
+class Sample(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        lower_bound: float,
+        upper_bound: float,
+        with_replacement: bool,
+        seed: Optional[int],
+    ) -> None:
+        super().__init__(child)
+        self.lower_bound = lower_bound
+        self.upper_bound = upper_bound
+        self.with_replacement = with_replacement
+        self.seed = seed
+
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.sample.input.CopyFrom(self._child.plan(session))
+        plan.sample.lower_bound = self.lower_bound
+        plan.sample.upper_bound = self.upper_bound
+        plan.sample.with_replacement = self.with_replacement
+        if self.seed is not None:
+            plan.sample.seed.seed = self.seed
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return (
+            f"{' ' * indent}"
+            f"<Sample lowerBound={self.lower_bound}, upperBound={self.upper_bound}, "
+            f"withReplacement={self.with_replacement}, seed={self.seed}>"
+            f"\n{c_buf}"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>Sample</b><br />
+                LowerBound: {self.lower_bound} <br />
+                UpperBound: {self.upper_bound} <br />
+                WithReplacement: {self.with_replacement} <br />
+                Seed: {self.seed} <br />
+                {self._child_repr_()}
+            </li>
+        </uL>
+        """
+
+
 class Aggregate(LogicalPlan):
     MeasureType = Tuple["ExpressionOrString", str]
     MeasuresType = Sequence[MeasureType]

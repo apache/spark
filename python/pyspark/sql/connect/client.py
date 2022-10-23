@@ -163,8 +163,8 @@ class RemoteSparkSession(object):
         if b.batch is not None and len(b.batch.data) > 0:
             with pa.ipc.open_stream(b.batch.data) as rd:
                 return rd.read_pandas()
-        elif b.csv_batch is not None and len(b.csv_batch.data) > 0:
-            return pd.read_csv(io.StringIO(b.csv_batch.data), delimiter="|")
+        elif b.json_batch is not None and len(b.json_batch.data) > 0:
+            return pd.read_json(io.BytesIO(b.json_batch.data), lines=True)
         return None
 
     def _execute_and_fetch(self, req: pb2.Request) -> typing.Optional[pandas.DataFrame]:

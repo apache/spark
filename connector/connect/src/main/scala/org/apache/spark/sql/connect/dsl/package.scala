@@ -272,7 +272,8 @@ package object dsl {
               .setUpperBound(upperBound)
               .setLowerBound(lowerBound)
               .setWithReplacement(withReplacement)
-              .setSeed(seed))
+              .setSeed(proto.Sample.Seed.newBuilder().setSeed(seed).build())
+              .build())
           .build()
       }
 
