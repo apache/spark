@@ -178,6 +178,11 @@
           "The <functionName> accepts only arrays of pair structs, but <childExpr> is of <childType>."
         ]
       },
+      "MAP_ZIP_WITH_DIFF_TYPES" : {
+        "message" : [
+          "Input to <functionName> should have been two maps with compatible key types, but it's [<leftType>, <rightType>]."
+        ]
+      },
       "NON_FOLDABLE_INPUT" : {
         "message" : [
           "the input <inputName> should be a foldable <inputType> expression; however, got <inputExpr>."
@@ -246,6 +251,11 @@
       "UNEXPECTED_NULL" : {
         "message" : [
           "The <exprName> must not be null"
+        ]
+      },
+      "UNEXPECTED_RETURN_TYPE" : {
+        "message" : [
+          "The <exprName> requires return <expectedType> type, but the actual is <actualType> type."
         ]
       },
       "UNEXPECTED_STATIC_METHOD" : {

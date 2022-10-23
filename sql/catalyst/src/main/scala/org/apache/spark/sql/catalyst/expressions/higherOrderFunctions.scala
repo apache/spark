@@ -23,7 +23,9 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedException}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, QuaternaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -400,11 +402,26 @@ case class ArraySort(
             if (function.dataType == IntegerType) {
               TypeCheckResult.TypeCheckSuccess
             } else {
-              TypeCheckResult.TypeCheckFailure("Return type of the given function has to be " +
-                "IntegerType")
+              DataTypeMismatch(
+                errorSubClass = "UNEXPECTED_RETURN_TYPE",
+                messageParameters = Map(
+                  "exprName" -> toSQLExpr(function),
+                  "expectedType" -> toSQLType(IntegerType),
+                  "actualType" -> toSQLType(function.dataType)
+                )
+              )
             }
           case _ =>
-            TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
+            DataTypeMismatch(
+              errorSubClass = "UNEXPECTED_INPUT_TYPE",
+              messageParameters = Map(
+                "paramIndex" -> "1",
+                "requiredType" -> toSQLType(ArrayType),
+                "inputSql" -> toSQLExpr(argument),
+                "inputType" -> toSQLType(argument.dataType)
+              )
+            )
+
         }
       case failure => failure
     }
@@ -804,9 +821,13 @@ case class ArrayAggregate(
       case TypeCheckResult.TypeCheckSuccess =>
         if (!DataType.equalsStructurally(
             zero.dataType, merge.dataType, ignoreNullability = true)) {
-          TypeCheckResult.TypeCheckFailure(
-            s"argument 3 requires ${zero.dataType.simpleString} type, " +
-              s"however, '${merge.sql}' is of ${merge.dataType.catalogString} type.")
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> "3",
+              "requiredType" -> toSQLType(zero.dataType),
+              "inputSql" -> toSQLExpr(merge),
+              "inputType" -> toSQLType(merge.dataType)))
         } else {
           TypeCheckResult.TypeCheckSuccess
         }
@@ -1025,9 +1046,14 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
         if (leftKeyType.sameType(rightKeyType)) {
           TypeUtils.checkForOrderingExpr(leftKeyType, s"function $prettyName")
         } else {
-          TypeCheckResult.TypeCheckFailure(s"The input to function $prettyName should have " +
-            s"been two ${MapType.simpleString}s with compatible key types, but the key types are " +
-            s"[${leftKeyType.catalogString}, ${rightKeyType.catalogString}].")
+          DataTypeMismatch(
+            errorSubClass = "MAP_ZIP_WITH_DIFF_TYPES",
+            messageParameters = Map(
+              "functionName" -> prettyName,
+              "leftType" -> toSQLType(leftKeyType),
+              "rightType" -> toSQLType(rightKeyType)
+            )
+          )
         }
       case failure => failure
     }

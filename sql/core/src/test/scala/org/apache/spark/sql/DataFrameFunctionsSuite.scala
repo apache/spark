@@ -3492,15 +3492,35 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "requiredType" -> "\"ARRAY\""))
     // scalastyle:on line.size.limit
 
-    val ex4 = intercept[AnalysisException] {
-      df.selectExpr("aggregate(s, 0, (acc, x) -> x)")
-    }
-    assert(ex4.getMessage.contains("data type mismatch: argument 3 requires int type"))
+    // scalastyle:off line.size.limit
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("aggregate(s, 0, (acc, x) -> x)")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> """"aggregate(s, 0, lambdafunction(namedlambdavariable(), namedlambdavariable(), namedlambdavariable()), lambdafunction(namedlambdavariable(), namedlambdavariable()))"""",
+        "paramIndex" -> "3",
+        "inputSql" -> "\"lambdafunction(namedlambdavariable(), namedlambdavariable(), namedlambdavariable())\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"INT\""
+      ))
+    // scalastyle:on line.size.limit
 
-    val ex4a = intercept[AnalysisException] {
-      df.select(aggregate(col("s"), lit(0), (acc, x) => x))
-    }
-    assert(ex4a.getMessage.contains("data type mismatch: argument 3 requires int type"))
+    // scalastyle:off line.size.limit
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(aggregate(col("s"), lit(0), (acc, x) => x))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> """"aggregate(s, 0, lambdafunction(namedlambdavariable(), namedlambdavariable(), namedlambdavariable()), lambdafunction(namedlambdavariable(), namedlambdavariable()))"""",
+        "paramIndex" -> "3",
+        "inputSql" -> "\"lambdafunction(namedlambdavariable(), namedlambdavariable(), namedlambdavariable())\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"INT\""
+      ))
+    // scalastyle:on line.size.limit
 
     checkError(
       exception =
@@ -3570,17 +3590,34 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
     assert(ex1.getMessage.contains("The number of lambda function arguments '2' does not match"))
 
-    val ex2 = intercept[AnalysisException] {
-      df.selectExpr("map_zip_with(mis, mmi, (x, y, z) -> concat(x, y, z))")
-    }
-    assert(ex2.getMessage.contains("The input to function map_zip_with should have " +
-      "been two maps with compatible key types"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("map_zip_with(mis, mmi, (x, y, z) -> concat(x, y, z))")
+      },
+      errorClass = "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"map_zip_with(mis, mmi, lambdafunction(concat(x, y, z), x, y, z))\"",
+        "functionName" -> "map_zip_with",
+        "leftType" -> "\"INT\"",
+        "rightType" -> "\"MAP<INT, INT>\""),
+      context = ExpectedContext(
+        fragment = "map_zip_with(mis, mmi, (x, y, z) -> concat(x, y, z))",
+        start = 0,
+        stop = 51))
 
-    val ex2a = intercept[AnalysisException] {
-      df.select(map_zip_with(df("mis"), col("mmi"), (x, y, z) => concat(x, y, z)))
-    }
-    assert(ex2a.getMessage.contains("The input to function map_zip_with should have " +
-      "been two maps with compatible key types"))
+    // scalastyle:off line.size.limit
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(map_zip_with(df("mis"), col("mmi"), (x, y, z) => concat(x, y, z)))
+      },
+      errorClass = "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+      matchPVals = true,
+      parameters = Map(
+        "sqlExpr" -> """"map_zip_with\(mis, mmi, lambdafunction\(concat\(x_\d+, y_\d+, z_\d+\), x_\d+, y_\d+, z_\d+\)\)"""",
+        "functionName" -> "map_zip_with",
+        "leftType" -> "\"INT\"",
+        "rightType" -> "\"MAP<INT, INT>\""))
+    // scalastyle:on line.size.limit
 
     checkError(
       exception = intercept[AnalysisException] {
