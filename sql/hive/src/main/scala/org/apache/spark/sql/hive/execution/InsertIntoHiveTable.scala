@@ -82,7 +82,12 @@ case class InsertIntoHiveTable(
 
   override def requiredOrdering: Seq[SortOrder] = {
     val options = getOptionsWithHiveBucketWrite(table.bucketSpec)
-    V1WritesUtils.getSortOrder(outputColumns, partitionColumns, table.bucketSpec, options)
+    val originSortedColumns = query.outputOrdering.flatMap(_.child match {
+      case attr: Attribute => Some(attr)
+      case _ => None
+    })
+    V1WritesUtils.getSortOrder(originSortedColumns, outputColumns,
+      partitionColumns, table.bucketSpec, options)
   }
 
   /**

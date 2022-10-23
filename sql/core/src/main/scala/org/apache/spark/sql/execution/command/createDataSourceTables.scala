@@ -156,7 +156,12 @@ case class CreateDataSourceTableAsSelectCommand(
 
   override def requiredOrdering: Seq[SortOrder] = {
     val options = table.storage.properties
-    V1WritesUtils.getSortOrder(outputColumns, partitionColumns, table.bucketSpec, options)
+    val originSortedColumns = query.outputOrdering.flatMap(_.child match {
+      case attr: Attribute => Some(attr)
+      case _ => None
+    })
+    V1WritesUtils.getSortOrder(originSortedColumns, outputColumns,
+      partitionColumns, table.bucketSpec, options)
   }
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {

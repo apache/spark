@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
@@ -74,9 +73,14 @@ case class InsertIntoHadoopFsRelationCommand(
       staticPartitions.size < partitionColumns.length
   }
 
-  override def requiredOrdering: Seq[SortOrder] =
-    V1WritesUtils.getSortOrder(outputColumns, partitionColumns, bucketSpec, options,
-      staticPartitions.size)
+  override def requiredOrdering: Seq[SortOrder] = {
+    val originSortedColumns = query.outputOrdering.flatMap(_.child match {
+      case attr: Attribute => Some(attr)
+      case _ => None
+    })
+    V1WritesUtils.getSortOrder(originSortedColumns, outputColumns,
+      partitionColumns, bucketSpec, options, staticPartitions.size)
+  }
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     // Most formats don't do well with duplicate columns, so lets not allow that

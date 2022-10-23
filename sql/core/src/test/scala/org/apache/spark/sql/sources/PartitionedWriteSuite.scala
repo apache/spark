@@ -220,6 +220,23 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-40885: V1 write uses the sort with partitionBy operator") {
+    withTempPath { f =>
+      Seq((20, 30, "partition"), (15, 20, "partition"),
+        (30, 70, "partition"), (18, 40, "partition"))
+        .toDF("id", "sort_col", "p")
+        .repartition(1)
+        .sortWithinPartitions("p", "sort_col")
+        .write
+        .partitionBy("p")
+        .parquet(f.getAbsolutePath)
+      val sortColList = spark.read.parquet(f.getAbsolutePath)
+        .map(_.getInt(1)).collect().toList
+      val expectList = List(20, 30, 40, 70)
+      assert(sortColList == expectList)
+    }
+  }
 }
 
 /**

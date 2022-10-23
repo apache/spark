@@ -54,7 +54,12 @@ trait CreateHiveTableAsSelectBase extends V1WriteCommand with V1WritesHiveUtils 
 
   override def requiredOrdering: Seq[SortOrder] = {
     val options = getOptionsWithHiveBucketWrite(tableDesc.bucketSpec)
-    V1WritesUtils.getSortOrder(outputColumns, partitionColumns, tableDesc.bucketSpec, options)
+    val originSortedColumns = query.outputOrdering.flatMap(_.child match {
+      case attr: Attribute => Some(attr)
+      case _ => None
+    })
+    V1WritesUtils.getSortOrder(originSortedColumns, outputColumns,
+      partitionColumns, tableDesc.bucketSpec, options)
   }
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {

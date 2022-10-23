@@ -158,6 +158,7 @@ object V1WritesUtils {
   }
 
   def getSortOrder(
+      originSortColumns: Seq[Attribute],
       outputColumns: Seq[Attribute],
       partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
@@ -165,6 +166,7 @@ object V1WritesUtils {
       numStaticPartitionCols: Int = 0): Seq[SortOrder] = {
     require(partitionColumns.size >= numStaticPartitionCols)
 
+    val originSortSet = AttributeSet(originSortColumns)
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = outputColumns.filterNot(partitionSet.contains)
     val writerBucketSpec = V1WritesUtils.getWriterBucketSpec(bucketSpec, dataColumns, options)
@@ -178,7 +180,9 @@ object V1WritesUtils {
     } else {
       // We should first sort by dynamic partition columns, then bucket id, and finally sorting
       // columns.
-      (dynamicPartitionColumns ++ writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns)
+      val sortOrder = (dynamicPartitionColumns ++ writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns)
+      val residualSort = originSortSet.filterNot(sortOrder.contains)
+      (sortOrder ++ residualSort)
         .map(SortOrder(_, Ascending))
     }
   }
