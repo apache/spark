@@ -32,12 +32,29 @@ private[spark] class ExecutorLogUrlHandler(logUrlPattern: Option[String]) extend
       logUrls: Map[String, String],
       attributes: Map[String, String]): Map[String, String] = {
     logUrlPattern match {
-      case Some(pattern) => doApplyPattern(logUrls, attributes, pattern)
-      case None => logUrls
+      case None => applySelfPattern(logUrls, attributes)
+      case Some(pattern) => applyExternalPattern(logUrls, attributes, pattern)
     }
   }
 
-  private def doApplyPattern(
+  private def applySelfPattern(
+      logUrls: Map[String, String],
+      attributes: Map[String, String]): Map[String, String] = {
+    val allAttributeKeys = attributes.keySet
+    logUrls.map { case (logFile, logUrl) =>
+      val allPatterns = extractPatterns(logUrl)
+      if (allPatterns.diff(allAttributeKeys).nonEmpty) {
+        logFailToRenewLogUrls("some of required attributes are missing.",
+          allPatterns, allAttributeKeys)
+        (logFile, logUrl)
+      } else {
+        val updatedUrl = replacePatterns(logUrl, allPatterns, attributes)
+        (logFile, updatedUrl)
+      }
+    }
+  }
+
+  private def applyExternalPattern(
       logUrls: Map[String, String],
       attributes: Map[String, String],
       urlPattern: String): Map[String, String] = {
@@ -47,25 +64,21 @@ private[spark] class ExecutorLogUrlHandler(logUrlPattern: Option[String]) extend
     // files, which are encouraged to be same as types of log files provided in original log URLs.
     // Once we get the list of log files, we need to expose them to end users as a pattern
     // so that end users can compose custom log URL(s) including log file name(s).
-    val allPatterns = CUSTOM_URL_PATTERN_REGEX.findAllMatchIn(urlPattern).map(_.group(1)).toSet
+    val allPatterns = extractPatterns(urlPattern)
     val allPatternsExceptFileName = allPatterns.filter(_ != "FILE_NAME")
     val allAttributeKeys = attributes.keySet
     val allAttributeKeysExceptLogFiles = allAttributeKeys.filter(_ != "LOG_FILES")
 
     if (allPatternsExceptFileName.diff(allAttributeKeysExceptLogFiles).nonEmpty) {
-      logFailToRenewLogUrls("some of required attributes are missing in app's event log.",
+      logFailToRenewLogUrls("some of required attributes are missing.",
         allPatternsExceptFileName, allAttributeKeys)
       logUrls
     } else if (allPatterns.contains("FILE_NAME") && !allAttributeKeys.contains("LOG_FILES")) {
       logFailToRenewLogUrls("'FILE_NAME' parameter is provided, but file information is " +
-        "missing in app's event log.", allPatternsExceptFileName, allAttributeKeys)
+        "missing.", allPatternsExceptFileName, allAttributeKeys)
       logUrls
     } else {
-      val updatedUrl = allPatternsExceptFileName.foldLeft(urlPattern) { case (orig, patt) =>
-        // we already checked the existence of attribute when comparing keys
-        orig.replace(s"{{$patt}}", attributes(patt))
-      }
-
+      val updatedUrl = replacePatterns(urlPattern, allPatternsExceptFileName, attributes)
       if (allPatterns.contains("FILE_NAME")) {
         // allAttributeKeys should contain "LOG_FILES"
         attributes("LOG_FILES").split(",").map { file =>
@@ -74,6 +87,20 @@ private[spark] class ExecutorLogUrlHandler(logUrlPattern: Option[String]) extend
       } else {
         Map("log" -> updatedUrl)
       }
+    }
+  }
+
+  private def extractPatterns(urlPattern: String): Set[String] = {
+    CUSTOM_URL_PATTERN_REGEX.findAllMatchIn(urlPattern).map(_.group(1)).toSet
+  }
+
+  private def replacePatterns(
+      logUrl: String,
+      patterns: Set[String],
+      attributes: Map[String, String]): String = {
+    patterns.foldLeft(logUrl) { case (orig, patt) =>
+      // we already checked the existence of attribute when comparing keys
+      orig.replace(s"{{$patt}}", attributes(patt))
     }
   }
 
