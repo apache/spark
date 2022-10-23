@@ -25,6 +25,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -273,18 +275,35 @@ case class Elt(
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {
-      TypeCheckResult.TypeCheckFailure("elt function requires at least two arguments")
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_PARAMS",
+        messageParameters = Map(
+          "functionName" -> "elt",
+          "expectedNum" -> "> 1",
+          "actualNum" -> children.length.toString
+        )
+      )
     } else {
       val (indexType, inputTypes) = (indexExpr.dataType, inputExprs.map(_.dataType))
       if (indexType != IntegerType) {
-        return TypeCheckResult.TypeCheckFailure(s"first input to function $prettyName should " +
-          s"have ${IntegerType.catalogString}, but it's ${indexType.catalogString}")
+        return DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "1",
+            "requiredType" -> toSQLType(IntegerType),
+            "inputSql" -> toSQLExpr(indexExpr),
+            "inputType" -> toSQLType(indexType)))
       }
       if (inputTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
-        return TypeCheckResult.TypeCheckFailure(
-          s"input to function $prettyName should have ${StringType.catalogString} or " +
-            s"${BinaryType.catalogString}, but it's " +
-            inputTypes.map(_.catalogString).mkString("[", ", ", "]"))
+        return DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "2...",
+            "requiredType" -> (toSQLType(StringType) + " or " + toSQLType(BinaryType)),
+            "inputSql" -> inputExprs.map(toSQLExpr(_)).mkString(","),
+            "inputType" -> inputTypes.map(toSQLType(_)).mkString(",")
+          )
+        )
       }
       TypeUtils.checkForSameTypeInputExpr(inputTypes, s"function $prettyName")
     }
