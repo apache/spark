@@ -62,7 +62,7 @@ message Response {
   // Result type
   oneof result_type {
     ArrowBatch batch = 2;
-    CSVBatch csv_batch = 3;
+    JSONBatch json_batch = 3;
   }
 
   // Metrics for the query execution. Typically, this field is only present in the last
@@ -78,9 +78,12 @@ message Response {
     bytes schema = 5;
   }
 
-  message CSVBatch {
+  // Message type when the result is returned as JSON. This is essentially a bulk wrapper
+  // for the JSON result of a Spark DataFrame. All rows are returned in the JSON record format
+  // of `{col -> row}`.
+  message JSONBatch {
     int64 row_count = 1;
-    string data = 2;
+    bytes data = 2;
   }
 
   message Metrics {

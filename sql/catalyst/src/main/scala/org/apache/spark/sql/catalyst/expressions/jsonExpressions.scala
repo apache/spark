@@ -395,7 +395,10 @@ case class JsonTuple(children: Seq[Expression])
     if (children.length < 2) {
       DataTypeMismatch(
         errorSubClass = "WRONG_NUM_PARAMS",
-        messageParameters = Map("actualNum" -> children.length.toString))
+        messageParameters = Map(
+          "functionName" -> prettyName,
+          "expectedNum" -> "> 1",
+          "actualNum" -> children.length.toString))
     } else if (children.forall(child => StringType.acceptsType(child.dataType))) {
       TypeCheckResult.TypeCheckSuccess
     } else {
