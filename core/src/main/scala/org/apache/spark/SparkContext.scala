@@ -45,7 +45,7 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Private}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
-import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSource}
+import org.apache.spark.executor.{Executor, ExecutorLogUrlHandler, ExecutorMetrics, ExecutorMetricsSource}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -2629,9 +2629,13 @@ class SparkContext(config: SparkConf) extends Logging {
   private def postApplicationStart(): Unit = {
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
+    val logUrls = schedulerBackend.getDriverLogUrls
+    val attributes = schedulerBackend.getDriverAttributes
+    val replacedLogUrls = logUrls.map {
+      new ExecutorLogUrlHandler(None).applyPattern(_, attributes.getOrElse(Map.empty).toMap)
+    }
     listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
-      startTime, sparkUser, applicationAttemptId, schedulerBackend.getDriverLogUrls,
-      schedulerBackend.getDriverAttributes))
+      startTime, sparkUser, applicationAttemptId, replacedLogUrls, attributes))
     _driverLogger.foreach(_.startSync(_hadoopConfiguration))
   }
 
