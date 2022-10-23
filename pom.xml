@@ -176,7 +176,7 @@
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.13.4</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.13.4.1</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.databind.version>2.13.4.2</fasterxml.jackson.databind.version>
     <snappy.version>1.1.8.4</snappy.version>
     <netlib.ludovic.dev.version>3.0.2</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
