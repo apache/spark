@@ -600,16 +600,18 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
     ).toDF("time")
 
     val e = intercept[AnalysisException] {
-      df.select(
-        window($"time", "10 seconds").as("window1"),
-        window($"time - INTERVAL 5m", "10 seconds").as("window2")
-      )
-      .select(
-        $"window1.end".cast("string"),
-        window_time($"window1").cast("string"),
-        $"window2.end".cast("string"),
-        window_time($"window2").cast("string")
-      )
+      df
+        .withColumn("time2", expr("time - INTERVAL 5 minutes"))
+        .select(
+          window($"time", "10 seconds").as("window1"),
+          window($"time2", "10 seconds").as("window2")
+        )
+        .select(
+          $"window1.end".cast("string"),
+          window_time($"window1").cast("string"),
+          $"window2.end".cast("string"),
+          window_time($"window2").cast("string")
+        )
     }
     assert(e.getMessage.contains(
       "Multiple time/session window expressions would result in a cartesian product of rows, " +
