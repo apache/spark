@@ -180,7 +180,8 @@ object V1WritesUtils {
     } else {
       // We should first sort by dynamic partition columns, then bucket id, and finally sorting
       // columns.
-      val sortOrder = (dynamicPartitionColumns ++ writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns)
+      val sortOrder = (dynamicPartitionColumns ++
+        writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns)
       val residualSort = originSortSet.filterNot(sortOrder.contains)
       (sortOrder ++ residualSort)
         .map(SortOrder(_, Ascending))
