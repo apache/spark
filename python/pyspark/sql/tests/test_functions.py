@@ -894,6 +894,22 @@ class FunctionsTests(ReusedSQLTestCase):
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[: len(r)])
 
+    def test_window_time(self):
+        df = self.spark.createDataFrame(
+            [(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)], ["date", "val"]
+        )
+        from pyspark.sql import functions as F
+
+        w = df.groupBy(F.window("date", "5 seconds")).agg(F.sum("val").alias("sum"))
+        r = w.select(
+            w.window.end.cast("string").alias("end"),
+            F.window_time(w.window).cast("string").alias("window_time"),
+            "sum",
+        ).collect()
+        self.assertEqual(
+            r[0], Row(end="2016-03-11 09:00:10", window_time="2016-03-11 09:00:09.999999", sum=1)
+        )
+
     def test_collect_functions(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
         from pyspark.sql import functions
