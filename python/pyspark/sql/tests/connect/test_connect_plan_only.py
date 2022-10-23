@@ -18,6 +18,7 @@ import unittest
 
 from pyspark.testing.connectutils import PlanOnlyTestFixture
 import pyspark.sql.connect.proto as proto
+from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
 from pyspark.sql.types import StringType
 
@@ -43,10 +44,50 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.filter.condition.unresolved_function.parts, [">"])
         self.assertEqual(len(plan.root.filter.condition.unresolved_function.arguments), 2)
 
+    def test_limit(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        limit_plan = df.limit(10)._plan.to_proto(self.connect)
+        self.assertEqual(limit_plan.root.limit.limit, 10)
+
+    def test_offset(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        offset_plan = df.offset(10)._plan.to_proto(self.connect)
+        self.assertEqual(offset_plan.root.offset.offset, 10)
+
+    def test_sample(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.filter(df.col_name > 3).sample(fraction=0.3)._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.sample.lower_bound, 0.0)
+        self.assertEqual(plan.root.sample.upper_bound, 0.3)
+        self.assertEqual(plan.root.sample.with_replacement, False)
+        self.assertEqual(plan.root.sample.HasField("seed"), False)
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .sample(withReplacement=True, fraction=0.4, seed=-1)
+            ._plan.to_proto(self.connect)
+        )
+        self.assertEqual(plan.root.sample.lower_bound, 0.0)
+        self.assertEqual(plan.root.sample.upper_bound, 0.4)
+        self.assertEqual(plan.root.sample.with_replacement, True)
+        self.assertEqual(plan.root.sample.seed.seed, -1)
+
     def test_relation_alias(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.alias("table_alias")._plan.to_proto(self.connect)
         self.assertEqual(plan.root.common.alias, "table_alias")
+
+    def test_datasource_read(self):
+        reader = DataFrameReader(self.connect)
+        df = reader.load(path="test_path", format="text", schema="id INT", op1="opv", op2="opv2")
+        plan = df._plan.to_proto(self.connect)
+        data_source = plan.root.read.data_source
+        self.assertEqual(data_source.format, "text")
+        self.assertEqual(data_source.schema, "id INT")
+        self.assertEqual(len(data_source.options), 3)
+        self.assertEqual(data_source.options.get("path"), "test_path")
+        self.assertEqual(data_source.options.get("op1"), "opv")
+        self.assertEqual(data_source.options.get("op2"), "opv2")
 
     def test_simple_udf(self):
         u = udf(lambda x: "Martin", StringType())

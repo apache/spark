@@ -542,7 +542,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         messageParameters = Map(
           "sqlExpr" -> toSQLExpr(expr1),
           "functionName" -> expr1.prettyName,
-          "expectedNum" -> "at least two",
+          "expectedNum" -> "> 1",
           "actualNum" -> "1")
       )
 

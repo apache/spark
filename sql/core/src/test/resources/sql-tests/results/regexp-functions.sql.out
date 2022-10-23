@@ -380,7 +380,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_VALUE",
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "messageParameters" : {
     "currentValue" : "0",
     "exprName" : "position",

@@ -23,6 +23,7 @@ from typing import (
     Union,
     cast,
     TYPE_CHECKING,
+    Mapping,
 )
 
 import pyspark.sql.connect.proto as proto
@@ -111,6 +112,46 @@ class LogicalPlan(object):
         return self._child._repr_html_() if self._child is not None else ""
 
 
+class DataSource(LogicalPlan):
+    """A datasource with a format and optional a schema from which Spark reads data"""
+
+    def __init__(
+        self,
+        format: str = "",
+        schema: Optional[str] = None,
+        options: Optional[Mapping[str, str]] = None,
+    ) -> None:
+        super().__init__(None)
+        self.format = format
+        self.schema = schema
+        self.options = options
+
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+        plan = proto.Relation()
+        if self.format is not None:
+            plan.read.data_source.format = self.format
+        if self.schema is not None:
+            plan.read.data_source.schema = self.schema
+        if self.options is not None:
+            for k in self.options.keys():
+                v = self.options.get(k)
+                if v is not None:
+                    plan.read.data_source.options[k] = v
+        return plan
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>DataSource</b><br />
+                format: {self.format}
+                schema: {self.schema}
+                options: {self.options}
+            </li>
+        </ul>
+        """
+
+
 class Read(LogicalPlan):
     def __init__(self, table_name: str) -> None:
         super().__init__(None)
@@ -153,10 +194,12 @@ class Project(LogicalPlan):
         self._verify_expressions()
 
     def _verify_expressions(self) -> None:
-        """Ensures that all input arguments are instances of Expression."""
+        """Ensures that all input arguments are instances of Expression or String."""
         for c in self._raw_columns:
-            if not isinstance(c, Expression):
-                raise InputValidationError(f"Only Expressions can be used for projections: '{c}'.")
+            if not isinstance(c, (Expression, str)):
+                raise InputValidationError(
+                    f"Only Expressions or String can be used for projections: '{c}'."
+                )
 
     def withAlias(self, alias: str) -> LogicalPlan:
         self.alias = alias
@@ -164,10 +207,16 @@ class Project(LogicalPlan):
 
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
-        proj_exprs = [
-            c.to_plan(session) if isinstance(c, Expression) else self.unresolved_attr(c)
-            for c in self._raw_columns
-        ]
+        proj_exprs = []
+        for c in self._raw_columns:
+            if isinstance(c, Expression):
+                proj_exprs.append(c.to_plan(session))
+            elif c == "*":
+                exp = proto.Expression()
+                exp.unresolved_star.SetInParent()
+                proj_exprs.append(exp)
+            else:
+                proj_exprs.append(self.unresolved_attr(c))
         common = proto.RelationCommon()
         if self.alias is not None:
             common.alias = self.alias
@@ -223,10 +272,9 @@ class Filter(LogicalPlan):
 
 
 class Limit(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], limit: int, offset: int = 0) -> None:
+    def __init__(self, child: Optional["LogicalPlan"], limit: int) -> None:
         super().__init__(child)
         self.limit = limit
-        self.offset = offset
 
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
@@ -237,7 +285,7 @@ class Limit(LogicalPlan):
 
     def print(self, indent: int = 0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{' ' * indent}<Limit limit={self.limit} offset={self.offset}>\n{c_buf}"
+        return f"{' ' * indent}<Limit limit={self.limit}>\n{c_buf}"
 
     def _repr_html_(self) -> str:
         return f"""
@@ -245,6 +293,33 @@ class Limit(LogicalPlan):
             <li>
                 <b>Limit</b><br />
                 Limit: {self.limit} <br />
+                {self._child_repr_()}
+            </li>
+        </uL>
+        """
+
+
+class Offset(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], offset: int = 0) -> None:
+        super().__init__(child)
+        self.offset = offset
+
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.offset.input.CopyFrom(self._child.plan(session))
+        plan.offset.offset = self.offset
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return f"{' ' * indent}<Offset={self.offset}>\n{c_buf}"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>Limit</b><br />
                 Offset: {self.offset} <br />
                 {self._child_repr_()}
             </li>
@@ -304,6 +379,56 @@ class Sort(LogicalPlan):
             <li>
                 <b>Sort</b><br />
                 {", ".join([str(c) for c in self.columns])}
+                {self._child_repr_()}
+            </li>
+        </uL>
+        """
+
+
+class Sample(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        lower_bound: float,
+        upper_bound: float,
+        with_replacement: bool,
+        seed: Optional[int],
+    ) -> None:
+        super().__init__(child)
+        self.lower_bound = lower_bound
+        self.upper_bound = upper_bound
+        self.with_replacement = with_replacement
+        self.seed = seed
+
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.sample.input.CopyFrom(self._child.plan(session))
+        plan.sample.lower_bound = self.lower_bound
+        plan.sample.upper_bound = self.upper_bound
+        plan.sample.with_replacement = self.with_replacement
+        if self.seed is not None:
+            plan.sample.seed.seed = self.seed
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return (
+            f"{' ' * indent}"
+            f"<Sample lowerBound={self.lower_bound}, upperBound={self.upper_bound}, "
+            f"withReplacement={self.with_replacement}, seed={self.seed}>"
+            f"\n{c_buf}"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>Sample</b><br />
+                LowerBound: {self.lower_bound} <br />
+                UpperBound: {self.upper_bound} <br />
+                WithReplacement: {self.with_replacement} <br />
+                Seed: {self.seed} <br />
                 {self._child_repr_()}
             </li>
         </uL>

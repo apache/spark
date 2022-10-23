@@ -195,18 +195,23 @@ class Response(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    class CSVBatch(google.protobuf.message.Message):
+    class JSONBatch(google.protobuf.message.Message):
+        """Message type when the result is returned as JSON. This is essentially a bulk wrapper
+        for the JSON result of a Spark DataFrame. All rows are returned in the JSON record format
+        of `{col -> row}`.
+        """
+
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         ROW_COUNT_FIELD_NUMBER: builtins.int
         DATA_FIELD_NUMBER: builtins.int
         row_count: builtins.int
-        data: builtins.str
+        data: builtins.bytes
         def __init__(
             self,
             *,
             row_count: builtins.int = ...,
-            data: builtins.str = ...,
+            data: builtins.bytes = ...,
         ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["data", b"data", "row_count", b"row_count"]
@@ -318,13 +323,13 @@ class Response(google.protobuf.message.Message):
 
     CLIENT_ID_FIELD_NUMBER: builtins.int
     BATCH_FIELD_NUMBER: builtins.int
-    CSV_BATCH_FIELD_NUMBER: builtins.int
+    JSON_BATCH_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     @property
     def batch(self) -> global___Response.ArrowBatch: ...
     @property
-    def csv_batch(self) -> global___Response.CSVBatch: ...
+    def json_batch(self) -> global___Response.JSONBatch: ...
     @property
     def metrics(self) -> global___Response.Metrics:
         """Metrics for the query execution. Typically, this field is only present in the last
@@ -335,7 +340,7 @@ class Response(google.protobuf.message.Message):
         *,
         client_id: builtins.str = ...,
         batch: global___Response.ArrowBatch | None = ...,
-        csv_batch: global___Response.CSVBatch | None = ...,
+        json_batch: global___Response.JSONBatch | None = ...,
         metrics: global___Response.Metrics | None = ...,
     ) -> None: ...
     def HasField(
@@ -343,8 +348,8 @@ class Response(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "batch",
             b"batch",
-            "csv_batch",
-            b"csv_batch",
+            "json_batch",
+            b"json_batch",
             "metrics",
             b"metrics",
             "result_type",
@@ -358,8 +363,8 @@ class Response(google.protobuf.message.Message):
             b"batch",
             "client_id",
             b"client_id",
-            "csv_batch",
-            b"csv_batch",
+            "json_batch",
+            b"json_batch",
             "metrics",
             b"metrics",
             "result_type",
@@ -368,7 +373,7 @@ class Response(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> typing_extensions.Literal["batch", "csv_batch"] | None: ...
+    ) -> typing_extensions.Literal["batch", "json_batch"] | None: ...
 
 global___Response = Response
 

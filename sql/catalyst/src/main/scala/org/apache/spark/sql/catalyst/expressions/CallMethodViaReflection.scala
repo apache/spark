@@ -66,7 +66,7 @@ case class CallMethodViaReflection(children: Seq[Expression])
         errorSubClass = "WRONG_NUM_PARAMS",
         messageParameters = Map(
           "functionName" -> prettyName,
-          "expectedNum" -> "at least two",
+          "expectedNum" -> "> 1",
           "actualNum" -> children.length.toString))
     } else {
       val unexpectedParameter = children.zipWithIndex.collectFirst {
