@@ -25,7 +25,7 @@ on:
       java:
         required: false
         type: string
-        default: 8.0.345
+        default: 8
       branch:
         description: Branch to run the build against
         required: false
@@ -63,7 +63,7 @@ jobs:
         }}
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -103,16 +103,15 @@ jobs:
               \"k8s-integration-tests\" : \"true\",
             }"
           echo $precondition # For debugging
-          # GitHub Actions set-output doesn't take newlines
-          # https://github.community/t/set-output-truncates-multiline-strings/16852/3
-          precondition="${precondition//$'\n'/'%0A'}"
-          echo "::set-output name=required::$precondition"
+          # Remove `\n` to avoid "Invalid format" error
+          precondition="${precondition//$'\n'/}}"
+          echo "required=$precondition" >> $GITHUB_OUTPUT
         else
           # This is usually set by scheduled jobs.
           precondition='${{ inputs.jobs }}'
           echo $precondition # For debugging
-          precondition="${precondition//$'\n'/'%0A'}"
-          echo "::set-output name=required::$precondition"
+          precondition="${precondition//$'\n'/}"
+          echo "required=$precondition" >> $GITHUB_OUTPUT
         fi
     - name: Generate infra image URL
       id: infra-image-outputs
@@ -121,7 +120,7 @@ jobs:
         REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
         IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
-        echo ::set-output name=image_url::$IMG_URL
+        echo "image_url=$IMG_URL" >> $GITHUB_OUTPUT
 
   # Build: build Spark and run the tests for specified modules.
   build:
@@ -195,7 +194,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       # In order to fetch changed files
       with:
         fetch-depth: 0
@@ -243,7 +242,7 @@ jobs:
     - name: Install Python packages (Python 3.8)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
       run: |
-        python3.8 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting grpcio protobuf
+        python3.8 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.48.1' 'protobuf==4.21.6'
         python3.8 -m pip list
     # Run the tests.
     - name: Run tests
@@ -286,7 +285,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Checkout Spark repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         # In order to fetch changed files
         with:
           fetch-depth: 0
@@ -300,12 +299,12 @@ jobs:
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
       - name: Build and push
         id: docker_build
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           context: ./dev/infra/
           push: true
@@ -349,7 +348,7 @@ jobs:
       METASPACE_SIZE: 1g
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       # In order to fetch changed files
       with:
         fetch-depth: 0
@@ -438,7 +437,7 @@ jobs:
       SKIP_MIMA: true
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       # In order to fetch changed files
       with:
         fetch-depth: 0
@@ -508,7 +507,7 @@ jobs:
       image: ${{ needs.precondition.outputs.image_url }}
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -587,7 +586,7 @@ jobs:
         #   See also https://issues.apache.org/jira/browse/SPARK-38279.
         python3.9 -m pip install 'sphinx<3.1.0' mkdocs pydata_sphinx_theme ipython nbsphinx numpydoc 'jinja2<3.0.0' 'markupsafe==2.0.1' 'pyzmq<24.0.0'
         python3.9 -m pip install ipython_genutils # See SPARK-38517
-        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8' grpcio protobuf mypy-protobuf
+        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8' 'grpcio==1.48.1' 'protobuf==4.21.6' 'mypy-protobuf==3.3.0'
         python3.9 -m pip install 'docutils<0.18.0' # See SPARK-39421
         apt-get update -y
         apt-get install -y ruby ruby-dev
@@ -635,7 +634,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -684,7 +683,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -732,7 +731,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -773,7 +772,7 @@ jobs:
         key: tpcds-${{ hashFiles('.github/workflows/build_and_test.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
     - name: Checkout tpcds-kit repository
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         repository: databricks/tpcds-kit
         ref: 2a5078a782192ddb6efbcead8de9973d6ab4f069
@@ -834,7 +833,7 @@ jobs:
       SKIP_MIMA: true
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
         repository: apache/spark
@@ -891,7 +890,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
           repository: apache/spark

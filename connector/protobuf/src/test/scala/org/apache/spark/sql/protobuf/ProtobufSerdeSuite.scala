@@ -36,6 +36,7 @@ class ProtobufSerdeSuite extends SharedSparkSession {
   import ProtoSerdeSuite.MatchType._
 
   val testFileDesc = testFile("protobuf/serde_suite.desc").replace("file:/", "/")
+  private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SerdeSuiteProtos$"
 
   test("Test basic conversion") {
     withFieldMatchType { fieldMatch =>
@@ -96,7 +97,9 @@ class ProtobufSerdeSuite extends SharedSparkSession {
   }
 
   test("Fail to convert with deeply nested field type mismatch") {
-    val protoFile = ProtobufUtils.buildDescriptor(testFileDesc, "MissMatchTypeInDeepNested")
+    val protoFile = ProtobufUtils.buildDescriptorFromJavaClass(
+      s"${javaClassNamePrefix}MissMatchTypeInDeepNested"
+    )
     val catalyst = new StructType().add("top", CATALYST_STRUCT)
 
     withFieldMatchType { fieldMatch =>
@@ -105,8 +108,8 @@ class ProtobufSerdeSuite extends SharedSparkSession {
         Deserializer,
         fieldMatch,
         s"Cannot convert Protobuf field 'top.foo.bar' to SQL field 'top.foo.bar' because schema " +
-          s"is incompatible (protoType = org.apache.spark.sql.protobuf.TypeMiss.bar " +
-          s"LABEL_OPTIONAL LONG INT64, sqlType = INT)".stripMargin,
+          s"is incompatible (protoType = org.apache.spark.sql.protobuf.protos.TypeMiss.bar " +
+          s"LABEL_OPTIONAL LONG INT64, sqlType = INT)",
         catalyst)
 
       assertFailedConversionMessage(

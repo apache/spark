@@ -730,7 +730,9 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
 
   object OneRowSubquery {
     def unapply(plan: LogicalPlan): Option[Seq[NamedExpression]] = {
-      CollapseProject(EliminateSubqueryAliases(plan)) match {
+      // SPARK-40800: always inline expressions to support a broader range of correlated
+      // subqueries and avoid expensive domain joins.
+      CollapseProject(EliminateSubqueryAliases(plan), alwaysInline = true) match {
         case Project(projectList, _: OneRowRelation) => Some(stripOuterReferences(projectList))
         case _ => None
       }

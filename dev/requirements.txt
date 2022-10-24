@@ -51,4 +51,4 @@ grpcio==1.48.1
 protobuf==4.21.6
 
 # Spark Connect python proto generation plugin (optional)
-mypy-protobuf
+mypy-protobuf==3.3.0

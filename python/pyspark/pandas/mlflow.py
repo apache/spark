@@ -159,7 +159,7 @@ def load_model(
     ...     lr = LinearRegression()
     ...     lr.fit(train_x, train_y)
     ...     mlflow.sklearn.log_model(lr, "model")
-    LinearRegression(...)
+    LinearRegression...
 
     Now that our model is logged using MLflow, we load it back and apply it on a pandas-on-Spark
     dataframe:
