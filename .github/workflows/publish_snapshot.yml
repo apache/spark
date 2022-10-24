@@ -41,7 +41,7 @@ jobs:
       with:
         ref: ${{ matrix.branch }}
     - name: Cache Maven local repository
-      uses: actions/cache@c64c572235d810460d0d6876e9c705ad5002b353 # pin@v2
+      uses: actions/cache@v3
       with:
         path: ~/.m2/repository
         key: snapshot-maven-${{ hashFiles('**/pom.xml') }}
