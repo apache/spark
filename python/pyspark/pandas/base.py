@@ -866,7 +866,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         5    False
         Name: animal, dtype: bool
 
-        >>> s.rename("a").to_frame().set_index("a").index.isin(['bool'])
+        >>> s.rename("a").to_frame().set_index("a").index.isin(['lama'])
         Index([True, False, True, False, True, False], dtype='bool', name='a')
         """
         if not is_list_like(values):
