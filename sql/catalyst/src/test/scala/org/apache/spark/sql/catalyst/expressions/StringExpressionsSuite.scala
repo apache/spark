@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -1122,8 +1122,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     ).foreach { case (str: String, format: String) =>
       val toNumberExpr = ToNumber(Literal(str), Literal(format))
       assert(toNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      checkExceptionInExpression[IllegalArgumentException](
-        toNumberExpr, "does not match the given number format")
+
+      checkExceptionInExpression[SparkException](
+        toNumberExpr, "[INTERNAL_ERROR] Undefined error message parameter")
 
       val tryToNumberExpr = TryToNumber(Literal(str), Literal(format))
       assert(tryToNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
