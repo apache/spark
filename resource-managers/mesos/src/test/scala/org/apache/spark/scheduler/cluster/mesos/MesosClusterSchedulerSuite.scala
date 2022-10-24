@@ -48,7 +48,8 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
   // submissions with same priority and if made in quick succession (such that submission
   // time is same due to millisecond granularity), this results in dropping the
   // second MesosDriverDescription from the queuedDrivers - as driverOrdering
-  // returns 0 when comparing the descriptions.
+  // returns 0 when comparing the descriptions. Ensure two seperate submissions
+  // have differnt dates
   private def getDate: Date = {
     new Date(submissionTime.incrementAndGet())
   }
