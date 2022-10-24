@@ -192,6 +192,9 @@ object SparkConnectService {
       .forPort(port)
       .addService(new SparkConnectService(debugMode))
 
+    // Add all registered interceptors to the server builder.
+    SparkConnectInterceptorRegistry.chainInterceptors(sb)
+
     // If debug mode is configured, load the ProtoReflection service so that tools like
     // grpcurl can introspect the API for debugging.
     if (debugMode) {
