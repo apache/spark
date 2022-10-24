@@ -123,8 +123,6 @@
             <configuration>
               <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
               <protocVersion>${protobuf.version}</protocVersion>
-              <!-- This extracts .proto files from maven dependencies and adds them to the protoc import path -->
-              <includeMavenTypes>direct</includeMavenTypes>
               <inputDirectories>
                 <include>src/test/resources/protobuf</include>
               </inputDirectories>

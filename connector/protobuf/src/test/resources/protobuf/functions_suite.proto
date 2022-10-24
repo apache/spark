@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 // To compile and create test class:
-// protoc --java_out=connector/protobuf/src/test/resources/protobuf/ connector/protobuf/src/test/resources/protobuf/functions_suite.proto
-// protoc --include_imports --descriptor_set_out=connector/protobuf/src/test/resources/protobuf/functions_suite.desc --java_out=connector/protobuf/src/test/resources/protobuf/org/apache/spark/sql/protobuf/ connector/protobuf/src/test/resources/protobuf/functions_suite.proto
+// cd connector/protobuf/src/test/resources/
+// protoc --java_out=./protobuf/ protobuf/functions_suite.proto
+// protoc --include_imports --descriptor_set_out=protobuf/functions_suite.desc --java_out=protobuf/org/apache/spark/sql/protobuf/ protobuf/functions_suite.prot
 
 syntax = "proto3";
 
 package org.apache.spark.sql.protobuf.protos;
 
-import "google/protobuf/timestamp.proto";
-import "google/protobuf/duration.proto";
+import "protobuf/timestamp.proto";
+import "protobuf/duration.proto";
 
 option java_outer_classname = "SimpleMessageProtos";
 
@@ -173,10 +174,10 @@ message requiredMsg {
 
 message timeStampMsg {
   string key = 1;
-  google.protobuf.Timestamp stmp = 2;
+  Timestamp stmp = 2;
 }
 
 message durationMsg {
   string key = 1;
-  google.protobuf.Duration duration = 2;
+  Duration duration = 2;
 }
