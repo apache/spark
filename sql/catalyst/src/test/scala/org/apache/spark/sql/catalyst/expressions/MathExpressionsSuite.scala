@@ -937,4 +937,135 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(WidthBucket(5.35, 0.024, Double.NegativeInfinity, 5L), null)
     checkEvaluation(WidthBucket(5.35, 0.024, Double.PositiveInfinity, 5L), null)
   }
+
+test("truncate number") {
+    def evaluateForEachItem(from: Int, to: Int, increment: Int)(f: (Int, Int) => Unit): Unit = {
+      Range(from, to, increment).zipWithIndex.foreach { case (scale, i) =>
+        f(scale, i)
+      }
+    }
+
+    // Decimal
+    val decimalInput = BigDecimal("123456789123456789.123456789")
+    val truncDecimalResults = Seq(
+      "123456789123456789.123456789",
+      "123456789123456789.123456789",
+      "123456789123456789.12345678",
+      "123456789123456789.1234567",
+      "123456789123456789.123456",
+      "123456789123456789.12345",
+      "123456789123456789.1234",
+      "123456789123456789.123",
+      "123456789123456789.12",
+      "123456789123456789.1",
+      "123456789123456789",
+      "123456789123456780",
+      "123456789123456700",
+      "123456789123456000",
+      "123456789123450000",
+      "123456789123400000",
+      "123456789123000000",
+      "123456789120000000",
+      "123456789100000000",
+      "123456789000000000",
+      "123456780000000000",
+      "123456700000000000",
+      "123456000000000000",
+      "123450000000000000",
+      "123400000000000000",
+      "123000000000000000",
+      "120000000000000000",
+      "100000000000000000",
+      "0",
+      "0")
+
+    evaluateForEachItem(10, -20, -1)((scale, index) => {
+      checkEvaluation(TruncNumber(decimalInput, scale), BigDecimal(truncDecimalResults(index)))
+      checkEvaluation(TruncNumber(-decimalInput, scale), -BigDecimal(truncDecimalResults(index)))
+    })
+    // Double
+    val negativeDouble = -12345678.1234
+    val neg_DoubleResults: Seq[Double] =
+      Seq(-12345678.0, -12345670.0, -12345600.0, -12345000.0, -12340000.0, -12300000.0,
+        -12000000.0, -10000000.0, 0.0, 0.0)
+    val positiveDouble = 12345678.1234
+    val pos_DoubleResults: Seq[Double] =
+      Seq(12345678.0, 12345670.0, 12345600.0, 12345000.0, 12340000.0, 12300000.0, 12000000.0,
+        10000000.0, 0.0, 0.0)
+
+    evaluateForEachItem(0, -10, -1)((scale, index) => {
+      checkEvaluation(TruncNumber(positiveDouble, scale), pos_DoubleResults(index))
+      checkEvaluation(TruncNumber(negativeDouble, scale), neg_DoubleResults(index))
+    })
+
+    // Float
+    val negativeFloat = -12345678.123f
+    val neg_floatResults: Seq[Float] =
+      Seq(-12345678f, -12345670f, -12345600f, -12345000f, -12340000f, -12300000f, -12000000f,
+        -10000000f, 0.0f, 0.0f)
+    val positiveFloat = 12345678.123f
+    val pos_FloatResults: Seq[Float] =
+      Seq(12345678f, 12345670f, 12345600f, 12345000f, 12340000f, 12300000f, 12000000f, 10000000f,
+        0.0f, 0.0f)
+
+    evaluateForEachItem(0, -10, -1)((scale, index) => {
+      checkEvaluation(TruncNumber(positiveFloat, scale), pos_FloatResults(index))
+      checkEvaluation(TruncNumber(negativeFloat, scale), neg_floatResults(index))
+    })
+
+    // Long
+    val longInput = 123456789L
+    val longResults: Seq[Long] =
+      Seq(123456789L, 123456789L, 123456789L, 123456789L, 123456780L, 123456700L, 123456000L,
+        123450000L, 123400000L, 123000000L, 120000000L, 100000000L, 0, 0)
+    evaluateForEachItem(3, -11, -1)((scale, index) => {
+      checkEvaluation(TruncNumber(longInput, scale), longResults(index))
+      checkEvaluation(TruncNumber(-longInput, scale), -longResults(index))
+    })
+
+    // Int
+    val intInput = 123456789
+    val intResults: Seq[Int] =
+      Seq(123456789, 123456789, 123456789, 123456789, 123456780, 123456700, 123456000, 123450000,
+        123400000, 123000000, 120000000, 100000000, 0, 0)
+    evaluateForEachItem(3, -11, -1)((scale, index) => {
+      checkEvaluation(TruncNumber(intInput, scale), intResults(index))
+      checkEvaluation(TruncNumber(-intInput, scale), -intResults(index))
+    })
+
+    // Short
+    val shortInput: Short = 32767
+    val shortResults: Seq[Short] =
+      Seq(32767, 32767, 32767, 32767, 32760, 32700, 32000, 30000, 0, 0)
+    evaluateForEachItem(3, -6, -1)((scale, index) => {
+      checkEvaluation(TruncNumber(shortInput, scale), shortResults(index))
+      checkEvaluation(TruncNumber(-shortInput, scale), -shortResults(index))
+    })
+
+    // Byte
+    val byteInput: Byte = 127
+    val byteResults: Seq[Byte] =
+      Seq(127, 127, 127, 127, 120, 100, 0, 0)
+    evaluateForEachItem(3, -4, -1)((scale, index) => {
+      checkEvaluation(TruncNumber(byteInput, scale), byteResults(index))
+      checkEvaluation(TruncNumber(-byteInput, scale), -byteResults(index))
+    })
+
+  checkEvaluation(TruncNumber( 12345.0, 1), 12345.0)
+  checkEvaluation(TruncNumber( Decimal(12345.1234), 1), Decimal(12345.1))
+  checkEvaluation(TruncNumber( Decimal(1.1), 1), Decimal(1.1))
+  checkEvaluation(TruncNumber( 12345.1234, 0), 12345.0)
+  checkEvaluation(TruncNumber( 12345.1234, -1), 12340.0)
+  checkEvaluation(TruncNumber( 0.1234, -1), 0.0)
+  checkEvaluation(TruncNumber( 0.1234, 0), 0.0)
+  checkEvaluation(TruncNumber( 0.0, 0), 0.0)
+  checkEvaluation(TruncNumber( 0.0, -1), 0.0)
+  checkEvaluation(TruncNumber( 0.0, 1), 0.0)
+  checkEvaluation(TruncNumber( 0.123456789, 0), 0.0)
+  checkEvaluation(TruncNumber( Decimal(0.123456789), 1), Decimal(0.1))
+  val decimalInput2 = Decimal(BigDecimal("0.123456789"), 10, 9)
+  checkEvaluation(TruncNumber(decimalInput2, -2), Decimal(0.0))
+  checkEvaluation(TruncNumber(decimalInput2, 2), Decimal(0.12))
+  checkEvaluation(TruncNumber(decimalInput2, 1), Decimal("0.1"))
+  }
 }

@@ -626,7 +626,7 @@ object FunctionRegistry {
     // We keep the 2 expression builders below to have different function docs.
     expressionBuilder("to_timestamp_ntz", ParseToTimestampNTZExpressionBuilder, setAlias = true),
     expressionBuilder("to_timestamp_ltz", ParseToTimestampLTZExpressionBuilder, setAlias = true),
-    expression[TruncDate]("trunc"),
+    expressionBuilder("trunc", TruncExpressionBuilder),
     expression[TruncTimestamp]("date_trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
     expression[DayOfWeek]("dayofweek"),

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.{lang => jl}
+import java.{math => jm}
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -329,6 +330,274 @@ case class RoundCeil(child: Expression, scale: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RoundCeil =
     copy(child = newLeft, scale = newRight)
+}
+
+
+/**
+ * Truncates a number to the specified number of digits.
+ * @param child
+ *   expression to get the number to be truncated.
+ * @param scale
+ *   expression to get the number of decimal places to truncate to.
+ */
+case class TruncNumber(child: Expression, scale: Expression)
+    extends BaseBinaryExpression
+    with NullIntolerant {
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): TruncNumber = copy(child = newLeft, scale = newRight)
+
+  override lazy val dataType: DataType = child.dataType
+
+  /**
+   * This overridden implementation delegates the overloaded TruncNumber.trunc methods based on
+   * data type of input values
+   */
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = {
+    (dataType, input1) match {
+      // Trunc function accepts a second parameter to truncate the input number.
+      // If 0, it removes all the decimal values and returns only the integer.
+      // If negative, the number is truncated to the left side of the decimal point.
+      // Value  of decimal places to truncate can range from -ve to +ve
+      // 1) In the case of integral numbers, as there is no decimal part if the value of decimal
+      // places to truncate is +ve, then we can return that input value without any
+      // modification as there is no +ve decimal place to be truncated from an integral number
+      // Truncate the input only if the value of decimal places to truncate is < 0
+      case (ByteType, input: Byte) if scaleValue < 0 =>
+        TruncNumber.trunc(input.toLong, scaleValue).toByte
+      case (ShortType, input: Short) if scaleValue < 0 =>
+        TruncNumber.trunc(input.toLong, scaleValue).shortValue
+      case (IntegerType, input: Int) if scaleValue < 0 =>
+        TruncNumber.trunc(input.toLong, scaleValue).intValue
+      case (LongType, input: Long) if scaleValue < 0 =>
+        TruncNumber.trunc(input, scaleValue).longValue
+      // 2) In the case of Float, Double, and Decimal , TruncNumber.trunc
+      // will accept both -ve and +ve values
+      case (FloatType, input: Float) =>
+        TruncNumber.trunc(input, scaleValue).floatValue
+      case (DoubleType, input: Double) =>
+        TruncNumber.trunc(input, scaleValue).doubleValue
+      case (DecimalType.Fixed(p, s), input: Decimal) =>
+        Decimal(TruncNumber.trunc(input.toJavaBigDecimal, scaleValue), p, s)
+      case _ => input1
+    }
+  }
+
+  /**
+   * Returns Java source code that can be compiled to evaluate this expression.
+   * This overridden implementation delegates the overloaded TruncNumber.trunc methods based on
+   * data type of input values
+   * @param ctx
+   *   a [[CodegenContext]]
+   * @param ev
+   *   an [[ExprCode]] with unique terms.
+   * @return
+   *   an [[ExprCode]] containing the Java source code to generate the given expression
+   */
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    defineCodeGen(
+      ctx,
+      ev,
+      (input, _) => {
+        val methodName = "org.apache.spark.sql.catalyst.expressions.TruncNumber.trunc"
+        // Trunc function accepts a second parameter to truncate the input number.
+        // If 0, it removes all the decimal values and returns only the integer.
+        // If negative, the number is truncated to the left side of the decimal point.
+        // Value  of decimal places to truncate can range from -ve to +ve
+        // 1) In the case of integral numbers, as there is no decimal part if the value of decimal
+        // places to truncate is +ve, then we can return that input value without any
+        // modification as there is no +ve decimal place to be truncated from an integral number
+        // Truncate the input only if the value of decimal places to truncate is < 0
+        dataType match {
+          case ByteType if scaleValue < 0 =>
+            s"""(byte)($methodName(
+               |(long)$input, $scaleValue))""".stripMargin
+          case ShortType if scaleValue < 0 =>
+            s"""(short)($methodName(
+               |(long)$input, $scaleValue))""".stripMargin
+          case IntegerType if scaleValue < 0 =>
+            s"""(int)($methodName(
+               |(long)$input, $scaleValue))""".stripMargin
+          case LongType if scaleValue < 0 =>
+            s"""($methodName(
+               |$input, $scaleValue))""".stripMargin
+          // 2) In the case of Float, Double, and Decimal , TruncNumber.trunc
+          // will accept both -ve and +ve values
+          case FloatType =>
+            s"""$methodName(
+               |$input, $scaleValue).floatValue()""".stripMargin
+          case DoubleType =>
+            s"""$methodName(
+               |$input, $scaleValue).doubleValue()""".stripMargin
+          case DecimalType.Fixed(p, s) =>
+            s"""Decimal.apply(
+               |$methodName(
+               |${input}.toJavaBigDecimal(), $scaleValue), $p, $s)""".stripMargin
+          case _ => s"$input"
+        }
+      })
+}
+
+object TruncNumber {
+
+  /**
+   * To truncate whole numbers; byte, short, int, and long types.
+   */
+  def trunc(input: Long, position: Int): Long = {
+    if (position >= 0) {
+      input
+    } else {
+      // Here we truncate the number by the absolute value of the position.
+      // For example, if the input is 123 and the scale is -2, then the result is 100.
+      val pow = getPower(10, position).toLong
+      (input / pow) * pow
+    }
+  }
+
+  private def getPower(base: Int, exponent: Int): Double = {
+    Math.pow(base, Math.abs(exponent))
+  }
+
+  /**
+   * To truncate double and float type.
+   */
+  def trunc(input: Double, position: Int): BigDecimal = {
+    trunc(jm.BigDecimal.valueOf(input), position)
+  }
+
+  /**
+   * To truncate decimal type.
+   */
+  def trunc(input: jm.BigDecimal, position: Int): jm.BigDecimal = {
+    if (input.scale < position) input
+    else {
+      val wholePart = input.toBigInteger
+      val pow = jm.BigDecimal.valueOf(getPower(10, position).toLong)
+      position match {
+        case pos if pos >= 0 =>
+          // Here we truncate only the decimal part by the value of the position.
+          val decimalPart = input.remainder(java.math.BigDecimal.ONE)
+          // If the position is zero OR Decimal part is zero,
+          // we extract the whole part and return it.
+          // For example,
+          // if the input is 123.456 and the scale is 0, the result will be 123.
+          // if the input is 123.000 and the scale is > 0, the result will be 123.
+          if (pos == 0 || jm.BigDecimal.ZERO.compareTo(decimalPart) == 0) {
+            new jm.BigDecimal(wholePart)
+          } else {
+            // To avoid overflow during multiplication, we extract the decimal part from the input,
+            // truncate it and then append it to the whole part.
+            // For example, if the input is 123.456 and the scale is 2, the result will be 123.45.
+            val truncated = new jm.BigDecimal(decimalPart.multiply(pow).toBigInteger).divide(pow)
+            new jm.BigDecimal(wholePart).add(truncated)
+          }
+        case pos if pos < 0 =>
+          // Here we truncate the whole part by the absolute value of the position.
+          // For example, if the input is 123.456 and the scale is -2, the result will be 100.
+          val power = pow.toBigInteger
+          new jm.BigDecimal(wholePart.divide(power).multiply(power), 0)
+      }
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """_FUNC_(number[, position]) - Returns the number after truncating to the specified number of digits.
+    An optional `position` parameter can be specified to truncate digits to the right of the decimal point.
+    If 0, it removes all the decimal values and returns only the integer.
+    If negative, the number is truncated to the left side of the decimal point.
+    Note that there is an overloaded version of this function to truncate date values.
+    _FUNC_(date, fmt) - Returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.
+  """,
+  arguments = """
+    Arguments:
+      * number - number to be truncated
+      * position - number of decimal places up to which the given number is to be truncated
+    Arguments: To truncate date values:
+      * date - date value or valid date string
+      * fmt - the format representing the unit to be truncated to
+          - "YEAR", "YYYY", "YY" - truncate to the first date of the year that the `date` falls in
+          - "QUARTER" - truncate to the first date of the quarter that the `date` falls in
+          - "MONTH", "MM", "MON" - truncate to the first date of the month that the `date` falls in
+          - "WEEK" - truncate to the Monday of the week that the `date` falls in
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2019-08-04', 'week');
+       2019-07-29
+      > SELECT _FUNC_('2019-08-04', 'quarter');
+       2019-07-01
+      > SELECT _FUNC_('2009-02-12', 'MM');
+       2009-02-01
+      > SELECT _FUNC_('2015-10-27', 'YEAR');
+       2015-01-01
+      > SELECT _FUNC_(-10.11, 0);
+       -10.00
+      > SELECT _FUNC_(10.11, -1);
+       10.00
+      > SELECT _FUNC_(100.61, 0);
+       100.00
+      > SELECT _FUNC_(-19087.1560, -3);
+       -19000.0000
+      > SELECT _FUNC_(10876.5489, -1);
+       10870.0000
+      > SELECT _FUNC_(-7767.1160, 2);
+       -7767.1100
+      > SELECT _FUNC_(17646.6019, 3);
+       17646.6010
+  """,
+  since = "3.5.0",
+  group = "math_funcs")
+// scalastyle:on line.size.limit
+object TruncExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs < 1) {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
+    }
+    expressions(0).dataType match {
+      case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
+          DecimalType.Fixed(_, _) =>
+        buildTruncNumber(funcName, expressions)
+      case _ => buildTruncDate(funcName, expressions)
+    }
+  }
+
+  private def buildTruncDate(funcName: String, expressions: Seq[Expression]) = {
+    val numArgs = expressions.length
+    if (numArgs == 2) {
+      TruncDate(expressions(0), expressions(1))
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
+    }
+  }
+
+  private def buildTruncNumber(funcName: String, expressions: Seq[Expression]) = {
+    val numArgs = expressions.length
+    if (numArgs < 1) {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
+    }
+    val position = if (numArgs == 2) {
+      val positionExpr = expressions(1)
+      val scale_value = positionExpr.eval()
+      if (!positionExpr.foldable || positionExpr.dataType != IntegerType||
+        scale_value == null) {
+        throw QueryCompilationErrors.requireLiteralParameter(funcName, "position", "int")
+      }
+      val scale = Math.abs(scale_value.asInstanceOf[Int])
+      if (scale > DecimalType.MAX_SCALE) {
+        throw QueryExecutionErrors.decimalPrecisionExceedsMaxPrecisionError(
+          scale,
+          DecimalType.MAX_SCALE)
+      }
+      positionExpr
+    } else {
+      Literal(0)
+    }
+    TruncNumber(expressions(0), position)
+  }
 }
 
 @ExpressionDescription(
@@ -1432,6 +1701,53 @@ case class Logarithm(left: Expression, right: Expression)
     newLeft: Expression, newRight: Expression): Logarithm = copy(left = newLeft, right = newRight)
 }
 
+trait BaseBinaryExpression extends BinaryExpression
+  with ExpectsInputTypes
+  with Serializable
+  with ImplicitCastInputTypes {
+  val child: Expression
+  val scale: Expression
+  override def left: Expression = child
+  override def right: Expression = scale
+  override def nullable: Boolean = true
+  override def foldable: Boolean = child.foldable
+
+  /**
+   * Expected input types from child expressions. The i-th position in the returned seq indicates
+   * the type requirement for the i-th child.
+   *
+   * The possible values at each position are:
+   *   1. a specific data type, such as LongType or StringType.
+   *   2. a non-leaf abstract data type,
+   *      such as NumericType, IntegralType, FractionalType.
+   */
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType)
+
+  // Avoid repeated evaluation since `scale` is a constant int,
+  // avoid unnecessary `child` evaluation in both codegen and non-codegen eval
+  // by checking if scaleV == null as well.
+  protected lazy val scaleV: Any = scale.eval(EmptyRow)
+
+  protected lazy val scaleValue: Int = scaleV.asInstanceOf[Int]
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case TypeCheckSuccess =>
+        if (scale.foldable) {
+          TypeCheckSuccess
+        } else {
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> "scale",
+              "inputType" -> toSQLType(scale.dataType),
+              "inputExpr" -> toSQLExpr(scale)))
+        }
+      case f => f
+    }
+  }
+}
+
 /**
  * Round the `child`'s result to `scale` decimal place when `scale` >= 0
  * or round at integral part when `scale` < 0.
@@ -1449,61 +1765,28 @@ case class Logarithm(left: Expression, right: Expression)
  */
 abstract class RoundBase(child: Expression, scale: Expression,
     mode: BigDecimal.RoundingMode.Value, modeStr: String)
-  extends BinaryExpression with Serializable with ImplicitCastInputTypes with SupportQueryContext {
-
-  override def left: Expression = child
-  override def right: Expression = scale
+  extends BaseBinaryExpression with SupportQueryContext {
 
   protected def ansiEnabled: Boolean = false
-
-  // round of Decimal would eval to null if it fails to `changePrecision`
-  override def nullable: Boolean = true
-
-  override def foldable: Boolean = child.foldable
 
   override lazy val dataType: DataType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
       // After rounding we may need one more digit in the integral part,
       // e.g. `ceil(9.9, 0)` -> `10`, `ceil(99, -1)` -> `100`.
       val integralLeastNumDigits = p - s + 1
-      if (_scale < 0) {
+      if (scaleValue < 0) {
         // negative scale means we need to adjust `-scale` number of digits before the decimal
         // point, which means we need at lease `-scale + 1` digits (after rounding).
-        val newPrecision = math.max(integralLeastNumDigits, -_scale + 1)
+        val newPrecision = math.max(integralLeastNumDigits, -scaleValue + 1)
         // We have to accept the risk of overflow as we can't exceed the max precision.
         DecimalType(math.min(newPrecision, DecimalType.MAX_PRECISION), 0)
       } else {
-        val newScale = math.min(s, _scale)
+        val newScale = math.min(s, scaleValue)
         // We have to accept the risk of overflow as we can't exceed the max precision.
         DecimalType(math.min(integralLeastNumDigits + newScale, 38), newScale)
       }
     case t => t
   }
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case TypeCheckSuccess =>
-        if (scale.foldable) {
-          TypeCheckSuccess
-        } else {
-          DataTypeMismatch(
-            errorSubClass = "NON_FOLDABLE_INPUT",
-            messageParameters = Map(
-              "inputName" -> "scala",
-              "inputType" -> toSQLType(scale.dataType),
-              "inputExpr" -> toSQLExpr(scale)))
-        }
-      case f => f
-    }
-  }
-
-  // Avoid repeated evaluation since `scale` is a constant int,
-  // avoid unnecessary `child` evaluation in both codegen and non-codegen eval
-  // by checking if scaleV == null as well.
-  private lazy val scaleV: Any = scale.eval(EmptyRow)
-  protected lazy val _scale: Int = scaleV.asInstanceOf[Int]
 
   override def initQueryContext(): Option[SQLQueryContext] = {
     if (ansiEnabled) {
@@ -1531,49 +1814,49 @@ abstract class RoundBase(child: Expression, scale: Expression,
     dataType match {
       case DecimalType.Fixed(p, s) =>
         val decimal = input1.asInstanceOf[Decimal]
-        if (_scale >= 0) {
+        if (scaleValue >= 0) {
           // Overflow cannot happen, so no need to control nullOnOverflow
           decimal.toPrecision(decimal.precision, s, mode)
         } else {
-          Decimal(decimal.toBigDecimal.setScale(_scale, mode), p, s)
+          Decimal(decimal.toBigDecimal.setScale(scaleValue, mode), p, s)
         }
       case ByteType if ansiEnabled =>
         MathUtils.withOverflow(
-          f = BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByteExact,
+          f = BigDecimal(input1.asInstanceOf[Byte]).setScale(scaleValue, mode).toByteExact,
           context = getContextOrNull)
       case ByteType =>
-        BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
+        BigDecimal(input1.asInstanceOf[Byte]).setScale(scaleValue, mode).toByte
       case ShortType if ansiEnabled =>
         MathUtils.withOverflow(
-          f = BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShortExact,
+          f = BigDecimal(input1.asInstanceOf[Short]).setScale(scaleValue, mode).toShortExact,
           context = getContextOrNull)
       case ShortType =>
-        BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShort
+        BigDecimal(input1.asInstanceOf[Short]).setScale(scaleValue, mode).toShort
       case IntegerType if ansiEnabled =>
         MathUtils.withOverflow(
-          f = BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toIntExact,
+          f = BigDecimal(input1.asInstanceOf[Int]).setScale(scaleValue, mode).toIntExact,
           context = getContextOrNull)
       case IntegerType =>
-        BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toInt
+        BigDecimal(input1.asInstanceOf[Int]).setScale(scaleValue, mode).toInt
       case LongType if ansiEnabled =>
         MathUtils.withOverflow(
-          f = BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLongExact,
+          f = BigDecimal(input1.asInstanceOf[Long]).setScale(scaleValue, mode).toLongExact,
           context = getContextOrNull)
       case LongType =>
-        BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLong
+        BigDecimal(input1.asInstanceOf[Long]).setScale(scaleValue, mode).toLong
       case FloatType =>
         val f = input1.asInstanceOf[Float]
         if (f.isNaN || f.isInfinite) {
           f
         } else {
-          BigDecimal(f.toDouble).setScale(_scale, mode).toFloat
+          BigDecimal(f.toDouble).setScale(scaleValue, mode).toFloat
         }
       case DoubleType =>
         val d = input1.asInstanceOf[Double]
         if (d.isNaN || d.isInfinite) {
           d
         } else {
-          BigDecimal(d).setScale(_scale, mode).toDouble
+          BigDecimal(d).setScale(scaleValue, mode).toDouble
         }
     }
   }
@@ -1582,18 +1865,18 @@ abstract class RoundBase(child: Expression, scale: Expression,
     val ce = child.genCode(ctx)
 
     def codegenForIntegralType(dt: String): String = {
-      if (_scale < 0) {
+      if (scaleValue < 0) {
         if (ansiEnabled) {
           val errorContext = getContextOrNullCode(ctx)
           val evalCode = s"""
             |${ev.value} = new java.math.BigDecimal(${ce.value}).
-            |setScale(${_scale}, java.math.BigDecimal.${modeStr}).${dt}ValueExact();
+            |setScale($scaleValue, java.math.BigDecimal.${modeStr}).${dt}ValueExact();
             |""".stripMargin
           MathUtils.withOverflowCode(evalCode, errorContext)
         } else {
           s"""
              |${ev.value} = new java.math.BigDecimal(${ce.value}).
-             |setScale(${_scale}, java.math.BigDecimal.${modeStr}).${dt}Value();
+             |setScale($scaleValue, java.math.BigDecimal.${modeStr}).${dt}Value();
              |""".stripMargin
         }
       } else {
@@ -1603,7 +1886,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
 
     val evaluationCode = dataType match {
       case DecimalType.Fixed(p, s) =>
-        if (_scale >= 0) {
+        if (scaleValue >= 0) {
           s"""
             ${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s,
             Decimal.$modeStr(), true, null);
@@ -1611,7 +1894,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
        } else {
           s"""
             ${ev.value} = new Decimal().set(${ce.value}.toBigDecimal()
-            .setScale(${_scale}, Decimal.$modeStr()), $p, $s);
+            .setScale($scaleValue, Decimal.$modeStr()), $p, $s);
             ${ev.isNull} = ${ev.value} == null;"""
         }
       case ByteType =>
@@ -1628,7 +1911,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
             ${ev.value} = ${ce.value};
           } else {
             ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).
-              setScale(${_scale}, java.math.BigDecimal.${modeStr}).floatValue();
+              setScale($scaleValue, java.math.BigDecimal.${modeStr}).floatValue();
           }"""
       case DoubleType => // if child eval to NaN or Infinity, just return it.
         s"""
@@ -1636,7 +1919,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
             ${ev.value} = ${ce.value};
           } else {
             ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).
-              setScale(${_scale}, java.math.BigDecimal.${modeStr}).doubleValue();
+              setScale($scaleValue, java.math.BigDecimal.${modeStr}).doubleValue();
           }"""
     }
 
