@@ -143,9 +143,9 @@
           "Offset expression <offset> must be a literal."
         ]
       },
-      "INVALID_ELEMENT_TYPE" : {
+      "HASH_MAP_TYPE" : {
         "message" : [
-          "Input to function <functionName> cannot contain elements of <elementType>. <message>"
+          "Input to function <functionName> cannot contain elements of MAP. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on MapType elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\".",
         ]
       },
       "INVALID_JSON_MAP_KEY_TYPE" : {

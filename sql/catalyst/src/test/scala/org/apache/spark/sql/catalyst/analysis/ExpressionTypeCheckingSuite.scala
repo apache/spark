@@ -626,14 +626,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     val murmur3Hash = new Murmur3Hash(Seq(argument))
     assert(murmur3Hash.checkInputDataTypes() ==
       DataTypeMismatch(
-        errorSubClass = "INVALID_ELEMENT_TYPE",
-        messageParameters = Map(
-          "functionName" -> "hash",
-          "elementType" -> toSQLType(MapType),
-          "message" -> ("In Spark, same maps may have different hashcode, " +
-            "thus hash expressions are prohibited on MapType elements. " +
-            "To restore previous behavior set spark.sql.legacy.allowHashOnMapType to true.")
-        )
+        errorSubClass = "HASH_MAP_TYPE",
+        messageParameters = Map("functionName" -> murmur3Hash.prettyName)
       )
     )
   }
