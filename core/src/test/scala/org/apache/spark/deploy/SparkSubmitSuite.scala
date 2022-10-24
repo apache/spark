@@ -1609,6 +1609,16 @@ class TestFileSystem extends org.apache.hadoop.fs.LocalFileSystem {
   }
 
   override def open(path: Path): FSDataInputStream = super.open(local(path))
+
+  // No-op methods
+
+  override def copyFromLocalFile(
+                                  delSrc: Boolean,
+                                  overwrite: Boolean,
+                                  src: Path,
+                                  dst: Path): Unit = {}
+
+  override def mkdirs(path: Path): Boolean = true
 }
 
 class TestSparkApplication extends SparkApplication with Matchers {
