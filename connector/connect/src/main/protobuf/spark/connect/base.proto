@@ -19,6 +19,7 @@ syntax = 'proto3';
 
 package spark.connect;
 
+import "google/protobuf/any.proto";
 import "spark/connect/commands.proto";
 import "spark/connect/relations.proto";
 
@@ -51,6 +52,12 @@ message Request {
   message UserContext {
     string user_id = 1;
     string user_name = 2;
+
+    // To extend the existing user context message that is used to identify incoming requests,
+    // Spark Connect leverages the Any protobuf type that can be used to inject arbitrary other
+    // messages into this message. Extensions are stored as a `repeated` type to be able to
+    // handle multiple active extensions.
+    repeated google.protobuf.Any extensions = 999;
   }
 }
 
