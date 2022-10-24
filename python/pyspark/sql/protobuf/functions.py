@@ -31,8 +31,8 @@ if TYPE_CHECKING:
 
 def from_protobuf(
     data: "ColumnOrName",
-    descFilePath: str,
     messageName: str,
+    descFilePath: str,
     options: Optional[Dict[str, str]] = None,
 ) -> Column:
     """
@@ -48,10 +48,10 @@ def from_protobuf(
     ----------
     data : :class:`~pyspark.sql.Column` or str
         the binary column.
-    descFilePath : str
-        the protobuf descriptor in Message GeneratedMessageV3 format.
     messageName: str
         the protobuf message name to look for in descriptor file.
+    descFilePath : str
+        the protobuf descriptor in Message GeneratedMessageV3 format.
     options : dict, optional
         options to control how the protobuf record is parsed.
 
@@ -80,10 +80,10 @@ def from_protobuf(
     ...         f.flush()
     ...         message_name = 'SimpleMessage'
     ...         proto_df = df.select(
-    ...             to_protobuf(df.value, desc_file_path, message_name).alias("value"))
+    ...             to_protobuf(df.value, message_name, desc_file_path).alias("value"))
     ...         proto_df.show(truncate=False)
     ...         proto_df = proto_df.select(
-    ...             from_protobuf(proto_df.value, desc_file_path, message_name).alias("value"))
+    ...             from_protobuf(proto_df.value, message_name, desc_file_path).alias("value"))
     ...         proto_df.show(truncate=False)
     +----------------------------------------+
     |value                                   |
@@ -101,7 +101,7 @@ def from_protobuf(
     assert sc is not None and sc._jvm is not None
     try:
         jc = sc._jvm.org.apache.spark.sql.protobuf.functions.from_protobuf(
-            _to_java_column(data), descFilePath, messageName, options or {}
+            _to_java_column(data), messageName, descFilePath, options or {}
         )
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":
@@ -110,7 +110,7 @@ def from_protobuf(
     return Column(jc)
 
 
-def to_protobuf(data: "ColumnOrName", descFilePath: str, messageName: str) -> Column:
+def to_protobuf(data: "ColumnOrName", messageName: str, descFilePath: str) -> Column:
     """
     Converts a column into binary of protobuf format.
 
@@ -120,10 +120,10 @@ def to_protobuf(data: "ColumnOrName", descFilePath: str, messageName: str) -> Co
     ----------
     data : :class:`~pyspark.sql.Column` or str
         the data column.
-    descFilePath : str
-        the protobuf descriptor in Message GeneratedMessageV3 format.
     messageName: str
         the protobuf message name to look for in descriptor file.
+    descFilePath : str
+        the protobuf descriptor in Message GeneratedMessageV3 format.
 
     Notes
     -----
@@ -150,7 +150,7 @@ def to_protobuf(data: "ColumnOrName", descFilePath: str, messageName: str) -> Co
     ...         f.flush()
     ...         message_name = 'SimpleMessage'
     ...         proto_df = df.select(
-    ...             to_protobuf(df.value, desc_file_path, message_name).alias("suite"))
+    ...             to_protobuf(df.value, message_name, desc_file_path).alias("suite"))
     ...         proto_df.show(truncate=False)
     +-------------------------------------------+
     |suite                                      |
@@ -162,7 +162,7 @@ def to_protobuf(data: "ColumnOrName", descFilePath: str, messageName: str) -> Co
     assert sc is not None and sc._jvm is not None
     try:
         jc = sc._jvm.org.apache.spark.sql.protobuf.functions.to_protobuf(
-            _to_java_column(data), descFilePath, messageName
+            _to_java_column(data), messageName, descFilePath
         )
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":

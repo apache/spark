@@ -31,8 +31,11 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * test cases.
  */
 trait SparkConnectPlanTest {
+
+  def getSession(): SparkSession = None.orNull
+
   def transform(rel: proto.Relation): LogicalPlan = {
-    new SparkConnectPlanner(rel, None.orNull).transform()
+    new SparkConnectPlanner(rel, getSession()).transform()
   }
 
   def readRel: proto.Relation =
@@ -71,8 +74,6 @@ trait SparkConnectPlanTest {
  * generated.
  */
 class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
-
-  protected var spark: SparkSession = null
 
   test("Simple Limit") {
     assertThrows[IndexOutOfBoundsException] {
@@ -265,5 +266,27 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .setRead(proto.Read.newBuilder().setDataSource(dataSource))
           .build()))
     assert(e.getMessage.contains("DataSource requires a format"))
+  }
+
+  test("Test invalid deduplicate") {
+    val deduplicate = proto.Deduplicate
+      .newBuilder()
+      .setInput(readRel)
+      .setAllColumnsAsKeys(true)
+      .addColumnNames("test")
+
+    val e = intercept[InvalidPlanInput] {
+      transform(proto.Relation.newBuilder.setDeduplicate(deduplicate).build())
+    }
+    assert(
+      e.getMessage.contains("Cannot deduplicate on both all columns and a subset of columns"))
+
+    val deduplicate2 = proto.Deduplicate
+      .newBuilder()
+      .setInput(readRel)
+    val e2 = intercept[InvalidPlanInput] {
+      transform(proto.Relation.newBuilder.setDeduplicate(deduplicate2).build())
+    }
+    assert(e2.getMessage.contains("either deduplicate on all columns or a subset of columns"))
   }
 }

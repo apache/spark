@@ -108,7 +108,7 @@
       },
       "BLOOM_FILTER_WRONG_TYPE" : {
         "message" : [
-          "Input to function <functionName> should have been <expectedLeft> followed by a value with <expectedRight>, but it's [<actualLeft>, <actualRight>]."
+          "Input to function <functionName> should have been <expectedLeft> followed by value with <expectedRight>, but it's [<actual>]."
         ]
       },
       "CANNOT_CONVERT_TO_JSON" : {
@@ -263,9 +263,14 @@
           "The <exprName> must be between <valueRange> (current value = <currentValue>)"
         ]
       },
+      "WRONG_NUM_ENDPOINTS" : {
+        "message" : [
+          "The number of endpoints must be >= 2 to construct intervals but the actual number is <actualNumber>."
+        ]
+      },
       "WRONG_NUM_PARAMS" : {
         "message" : [
-          "wrong number of parameters: <actualNum>."
+          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
         ]
       }
     }
@@ -275,6 +280,11 @@
       "Datetime operation overflow: <operation>."
     ],
     "sqlState" : "22008"
+  },
+  "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION" : {
+    "message" : [
+      "Decimal precision <precision> exceeds max precision <maxPrecision>."
+    ]
   },
   "DEFAULT_DATABASE_NOT_EXISTS" : {
     "message" : [
@@ -415,6 +425,16 @@
         ]
       }
     }
+  },
+  "INCORRECT_END_OFFSET" : {
+    "message" : [
+      "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but it's <endSeconds> now."
+    ]
+  },
+  "INCORRECT_RUMP_UP_RATE" : {
+    "message" : [
+      "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but 'rampUpTimeSeconds' is <rampUpTimeSeconds>."
+    ]
   },
   "INDEX_ALREADY_EXISTS" : {
     "message" : [
@@ -604,6 +624,11 @@
       "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22005"
+  },
+  "OUT_OF_DECIMAL_TYPE_RANGE" : {
+    "message" : [
+      "Out of decimal type range: <value>."
+    ]
   },
   "PARSE_CHAR_MISSING_LENGTH" : {
     "message" : [
@@ -813,6 +838,11 @@
       }
     },
     "sqlState" : "42000"
+  },
+  "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION" : {
+    "message" : [
+      "Unscaled value too large for precision. If necessary set <ansiConfig> to false to bypass this error."
+    ]
   },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
@@ -3705,21 +3735,6 @@
   "_LEGACY_ERROR_TEMP_2116" : {
     "message" : [
       "Unexpected: <o>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2117" : {
-    "message" : [
-      "Unscaled value too large for precision. If necessary set <ansiConfig> to false to bypass this error."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2118" : {
-    "message" : [
-      "Decimal precision <precision> exceeds max precision <maxPrecision>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2119" : {
-    "message" : [
-      "out of decimal type range: <str>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2120" : {
