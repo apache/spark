@@ -21,7 +21,7 @@ import io.grpc.{Metadata, ServerCall, ServerCallHandler, ServerInterceptor}
 import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener
 import io.grpc.netty.NettyServerBuilder
 
-import org.apache.spark.{SparkEnv, SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -114,7 +114,7 @@ class InterceptorRegistrySuite extends SharedSparkSession {
       Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key ->
         "org.apache.spark.sql.connect.service.TestingInterceptorNoTrivialCtor") {
       val sb = NettyServerBuilder.forPort(9999)
-      assertThrows[SparkIllegalArgumentException] {
+      assertThrows[SparkException] {
         SparkConnectInterceptorRegistry.chainInterceptors(sb)
       }
     }
@@ -124,7 +124,7 @@ class InterceptorRegistrySuite extends SharedSparkSession {
     withSparkConf(
       Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key ->
         "org.apache.spark.sql.connect.service.TestingInterceptorNoTrivialCtor") {
-      assertThrows[SparkIllegalArgumentException] {
+      assertThrows[SparkException] {
         SparkConnectInterceptorRegistry.createConfiguredInterceptors
       }
     }
@@ -132,7 +132,7 @@ class InterceptorRegistrySuite extends SharedSparkSession {
     withSparkConf(
       Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key ->
         "org.apache.spark.sql.connect.service.TestingInterceptorInstantiationError") {
-      assertThrows[SparkRuntimeException] {
+      assertThrows[SparkException] {
         SparkConnectInterceptorRegistry.createConfiguredInterceptors
       }
     }
