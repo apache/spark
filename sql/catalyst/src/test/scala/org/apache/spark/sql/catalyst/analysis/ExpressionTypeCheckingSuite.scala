@@ -298,7 +298,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = EqualTo($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField = mapField)\"",
-        "functionName" -> "EqualTo",
+        "functionName" -> "`=`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -306,7 +306,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = EqualTo($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField = mapField)\"",
-        "functionName" -> "EqualTo",
+        "functionName" -> "`=`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -314,7 +314,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = EqualNullSafe($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField <=> mapField)\"",
-        "functionName" -> "EqualNullSafe",
+        "functionName" -> "`<=>`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -322,7 +322,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = LessThan($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField < mapField)\"",
-        "functionName" -> "LessThan",
+        "functionName" -> "`<`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -330,7 +330,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = LessThanOrEqual($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField <= mapField)\"",
-        "functionName" -> "LessThanOrEqual",
+        "functionName" -> "`<=`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -338,7 +338,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = GreaterThan($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField > mapField)\"",
-        "functionName" -> "GreaterThan",
+        "functionName" -> "`>`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -346,7 +346,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = GreaterThanOrEqual($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField >= mapField)\"",
-        "functionName" -> "GreaterThanOrEqual",
+        "functionName" -> "`>=`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -385,7 +385,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = Min($"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"min(mapField)\"",
-        "functionName" -> "function min",
+        "functionName" -> "`min`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -393,7 +393,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = Max($"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"max(mapField)\"",
-        "functionName" -> "function max",
+        "functionName" -> "`max`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -427,7 +427,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = CreateArray(Seq($"intField", $"booleanField")),
       messageParameters = Map(
         "sqlExpr" -> "\"array(intField, booleanField)\"",
-        "functionName" -> "function array",
+        "functionName" -> "`array`",
         "dataType" -> "(\"INT\" or \"BOOLEAN\")"
       )
     )
@@ -435,7 +435,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = Coalesce(Seq($"intField", $"booleanField")),
       messageParameters = Map(
         "sqlExpr" -> "\"coalesce(intField, booleanField)\"",
-        "functionName" -> "function coalesce",
+        "functionName" -> "`coalesce`",
         "dataType" -> "(\"INT\" or \"BOOLEAN\")"
       )
     )
@@ -601,7 +601,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         expr = expr1,
         messageParameters = Map(
           "sqlExpr" -> toSQLExpr(expr1),
-          "functionName" -> expr1.prettyName,
+          "functionName" -> toSQLId(expr1.prettyName),
           "expectedNum" -> "> 1",
           "actualNum" -> "1")
       )
@@ -621,7 +621,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         expr = expr3,
         messageParameters = Map(
           "sqlExpr" -> toSQLExpr(expr3),
-          "functionName" -> s"function ${expr3.prettyName}",
+          "functionName" -> s"`${expr3.prettyName}`",
           "dataType" -> "\"MAP<STRING, BIGINT>\""
         )
       )

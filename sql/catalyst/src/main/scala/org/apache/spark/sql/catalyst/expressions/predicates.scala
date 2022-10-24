@@ -934,7 +934,7 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>
-      TypeUtils.checkForOrderingExpr(left.dataType, prettyName)
+      TypeUtils.checkForOrderingExpr(left.dataType, symbol)
     case failure => failure
   }
 
