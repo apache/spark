@@ -100,7 +100,7 @@ private[sql] object ProtobufUtils extends Logging {
     def validateNoExtraRequiredProtoFields(): Unit = {
       val extraFields = protoFieldArray.toSet -- matchedFields.map(_.fieldDescriptor)
       extraFields.filterNot(isNullable).foreach { extraField =>
-        throw QueryCompilationErrors.cannotFindProtobufFieldInInCatalystError(
+        throw QueryCompilationErrors.cannotFindProtobufFieldInCatalystError(
           toFieldStr(protoPath :+ extraField.getName()))
       }
     }
@@ -213,7 +213,7 @@ private[sql] object ProtobufUtils extends Logging {
         descriptorProto,
         fileDescriptorList.toArray)
       if (fileDescriptor.getMessageTypes().isEmpty()) {
-        throw QueryCompilationErrors.noMessageTypeReturnError(fileDescriptor.getName())
+        throw QueryCompilationErrors.noProtobufMessageTypeReturnError(fileDescriptor.getName())
       }
       fileDescriptor
     } catch {

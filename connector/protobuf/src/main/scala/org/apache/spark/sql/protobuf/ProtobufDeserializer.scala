@@ -62,7 +62,7 @@ private[sql] class ProtobufDeserializer(
       }
     } catch {
       case ise: AnalysisException =>
-        throw QueryCompilationErrors.cannotConvertProtobufTypeToSqlTypeError(
+        throw QueryCompilationErrors.cannotConvertProtobufTypeToCatalystTypeError(
           rootDescriptor.getName,
           rootCatalystType.sql,
           ise)
@@ -194,7 +194,7 @@ private[sql] class ProtobufDeserializer(
         (updater, ordinal, value) =>
           val byte_array = value match {
             case s: ByteString => s.toByteArray
-            case _ => throw QueryCompilationErrors.invalidBytStringFormatError()
+            case _ => throw QueryCompilationErrors.invalidByteStringFormatError()
           }
           updater.set(ordinal, byte_array)
 
@@ -240,7 +240,7 @@ private[sql] class ProtobufDeserializer(
         (updater, ordinal, value) => updater.set(ordinal, UTF8String.fromString(value.toString))
 
       case _ =>
-        throw QueryCompilationErrors.cannotConvertProtobufTypeToDataTypeError(
+        throw QueryCompilationErrors.cannotConvertProtobufTypeToSqlTypeError(
           toFieldStr(protoPath),
           toFieldStr(catalystPath),
           s"${protoType} ${protoType.toProto.getLabel} ${protoType.getJavaType}" +

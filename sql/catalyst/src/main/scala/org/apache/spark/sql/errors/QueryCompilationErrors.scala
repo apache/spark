@@ -3212,7 +3212,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     )
   }
 
-  def cannotConvertProtobufTypeToDataTypeError(
+  def cannotConvertProtobufTypeToSqlTypeError(
     protobufColumn: String,
     sqlColumn: String,
     protobufType: String,
@@ -3226,7 +3226,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "sqlType" -> sqlType))
   }
 
-  def cannotConvertDataTypeToProtobufTypeError(
+  def cannotConvertCatalystTypeToProtobufTypeError(
     sqlColumn: String,
     protobufColumn: String,
     sqlType: String,
@@ -3240,7 +3240,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "protobufType" -> protobufType))
   }
 
-  def cannotConvertDataTypeToProtobufEnumTypeError(
+  def cannotConvertCatalystTypeToProtobufEnumTypeError(
     sqlColumn: String,
     protobufColumn: String,
     data: String,
@@ -3260,7 +3260,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("protobufType" -> protobufType))
   }
 
-  def cannotConvertProtobufTypeToSqlTypeError(
+  def cannotConvertProtobufTypeToCatalystTypeError(
     protobufType: String,
     sqlType: String,
     e1: Throwable): Throwable = {
@@ -3300,7 +3300,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("catalystFieldPath" -> catalystFieldPath))
   }
 
-  def cannotFindProtobufFieldInInCatalystError(field: String): Throwable = {
+  def cannotFindProtobufFieldInCatalystError(field: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_2259",
       messageParameters = Map("field" -> field))
@@ -3340,7 +3340,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       cause = Some(e1.getCause))
   }
 
-  def noMessageTypeReturnError(descriptorName: String): Throwable = {
+  def noProtobufMessageTypeReturnError(descriptorName: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_2264",
       messageParameters = Map("descriptorName" -> descriptorName))
@@ -3379,7 +3379,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("protobufClassName" -> protobufClassName))
   }
 
-  def invalidBytStringFormatError(): Throwable = {
+  def invalidByteStringFormatError(): Throwable = {
     new AnalysisException(errorClass = "_LEGACY_ERROR_TEMP_2270", messageParameters = Map.empty)
   }
 
