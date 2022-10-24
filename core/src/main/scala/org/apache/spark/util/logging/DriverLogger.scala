@@ -126,7 +126,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
         throw new RuntimeException(s"${rootDir} does not exist." +
           s" Please create this dir in order to persist driver logs")
       }
-      val dfsLogFile: String = FileUtils.getFile(rootDir, appId
+      val dfsLogFile: String = FileUtils.getFile(new Path(rootDir).toUri.getPath, appId
         + DriverLogger.DRIVER_LOG_FILE_SUFFIX).getAbsolutePath()
       try {
         inStream = new BufferedInputStream(new FileInputStream(localLogFile))

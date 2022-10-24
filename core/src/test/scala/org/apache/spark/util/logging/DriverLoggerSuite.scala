@@ -20,6 +20,7 @@ package org.apache.spark.util.logging
 import java.io.File
 
 import org.apache.commons.io.FileUtils
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
 import org.apache.spark.{SparkContext, SparkFunSuite}
@@ -59,15 +60,18 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
 
     sc.stop()
     assert(!driverLogsDir.exists())
-    val dfsFile = FileUtils.getFile(sc.getConf.get(DRIVER_LOG_DFS_DIR).get,
-      app_id + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
-    assert(dfsFile.exists())
-    assert(dfsFile.length() > 0)
+    print(sc.getConf.get(DRIVER_LOG_DFS_DIR).get)
+    val dfsFile = new Path(sc.getConf.get(DRIVER_LOG_DFS_DIR).get +
+      "/" + app_id + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
+    val dfsFileStatus = dfsFile.getFileSystem(sc.hadoopConfiguration).getFileStatus(dfsFile)
+
+    assert(dfsFileStatus.isFile)
+    assert(dfsFileStatus.getLen > 0)
   }
 
   private def getSparkContext(): SparkContext = {
     val conf = new SparkConf()
-    conf.set(DRIVER_LOG_DFS_DIR, rootDfsDir.getAbsolutePath())
+    conf.set(DRIVER_LOG_DFS_DIR, "file://" + rootDfsDir.getAbsolutePath())
     conf.set(DRIVER_LOG_PERSISTTODFS, true)
     conf.set(SparkLauncher.SPARK_MASTER, "local")
     conf.set(SparkLauncher.DEPLOY_MODE, "client")
