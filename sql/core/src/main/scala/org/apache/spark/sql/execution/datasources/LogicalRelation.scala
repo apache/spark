@@ -16,12 +16,16 @@
  */
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
 
 /**
@@ -42,7 +46,53 @@ case class LogicalRelation(
   override def computeStats(): Statistics = {
     catalogTable
       .flatMap(_.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled)))
-      .getOrElse(Statistics(sizeInBytes = relation.sizeInBytes))
+      .getOrElse({
+        // fix SPARK-40793
+        val defaultSizeInBytes = conf.getConf(SQLConf.DEFAULT_SIZE_IN_BYTES)
+        val relationSizeInBytesIsDefaultValue = relation.sizeInBytes == defaultSizeInBytes
+        val applyRuntimeFilterJoin = conf.runtimeFilterSemiJoinReductionEnabled ||
+          conf.runtimeFilterBloomFilterEnabled
+        if (relationSizeInBytesIsDefaultValue && applyRuntimeFilterJoin) {
+          val spark = SparkSession.getDefaultSession
+          spark.map(spark => {
+            createAndAlterTaleStatsFromHDFSFileSize(spark)
+          }).getOrElse(Statistics(sizeInBytes = relation.sizeInBytes))
+        } else {
+          Statistics(sizeInBytes = relation.sizeInBytes)
+        }
+      })
+  }
+      
+   def createAndAlterTaleStatsFromHDFSFileSize(spark: SparkSession): Statistics = {
+    catalogTable.get.storage.locationUri.map(uri => {
+      val scheme = uri.getScheme
+      if ("file".equals(scheme) || "hdfs".equals(scheme)) {
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val storagePath = new Path(uri)
+        val rootPath = getRoot(storagePath)
+        val fs = rootPath.getFileSystem(hadoopConf)
+        val tableSizeInBytes = fs.getContentSummary(storagePath).getLength
+        alterTaleStats(spark, tableSizeInBytes)
+        Statistics(sizeInBytes = tableSizeInBytes)
+      } else {
+        Statistics(sizeInBytes = relation.sizeInBytes)
+      }
+    }).getOrElse(Statistics(sizeInBytes = relation.sizeInBytes))
+  }
+
+  def getRoot(current: Path): Path = {
+    var root = current
+    while (root.getParent != null) {
+      root = root.getParent
+    }
+    root
+  }
+
+  def alterTaleStats(spark: SparkSession, tableSizeInBytes: BigInt): Unit = {
+    spark.sessionState.catalog.alterTableStats(
+      catalogTable.get.identifier,
+      Some(CatalogStatistics(sizeInBytes = tableSizeInBytes))
+    )
   }
 
   /** Used to lookup original attribute capitalization */
