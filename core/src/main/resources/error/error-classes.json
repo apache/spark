@@ -4318,9 +4318,9 @@
       "Epoch marker generation failed"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2257" : {
+  "_LEGACY_ERROR_TEMP_2256" : {
     "message" : [
-      "Integer overflow. <message>"
+      "Foreach writer has been aborted due to a task failure"
     ]
   },
   "_LEGACY_ERROR_TEMP_2258" : {
