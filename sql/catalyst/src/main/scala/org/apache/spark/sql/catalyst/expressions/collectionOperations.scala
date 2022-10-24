@@ -246,7 +246,7 @@ case class MapContainsKey(left: Expression, right: Expression)
           errorSubClass = "NULL_TYPE",
           Map("functionName" -> toSQLId(prettyName)))
       case (MapType(kt, _, _), dt) if kt.sameType(dt) =>
-        TypeUtils.checkForOrderingExpr(kt, s"function $prettyName")
+        TypeUtils.checkForOrderingExpr(kt, prettyName)
       case _ =>
         DataTypeMismatch(
           errorSubClass = "MAP_CONTAINS_KEY_DIFF_TYPES",
@@ -1298,7 +1298,7 @@ case class ArrayContains(left: Expression, right: Expression)
       case (_, NullType) =>
         TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
       case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
-        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
+        TypeUtils.checkForOrderingExpr(e2, prettyName)
       case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
         s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
         s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
@@ -1381,7 +1381,7 @@ case class ArraysOverlap(left: Expression, right: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>
-      TypeUtils.checkForOrderingExpr(elementType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(elementType, prettyName)
     case failure => failure
   }
 
@@ -1909,7 +1909,7 @@ case class ArrayMin(child: Expression)
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()
     if (typeCheckResult.isSuccess) {
-      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(dataType, prettyName)
     } else {
       typeCheckResult
     }
@@ -1982,7 +1982,7 @@ case class ArrayMax(child: Expression)
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()
     if (typeCheckResult.isSuccess) {
-      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(dataType, prettyName)
     } else {
       typeCheckResult
     }
@@ -2071,7 +2071,7 @@ case class ArrayPosition(left: Expression, right: Expression)
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
       case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
-        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
+        TypeUtils.checkForOrderingExpr(e2, prettyName)
       case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
         s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
         s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
@@ -3481,7 +3481,7 @@ case class ArrayRemove(left: Expression, right: Expression)
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
       case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
-        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
+        TypeUtils.checkForOrderingExpr(e2, prettyName)
       case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
         s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
         s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
@@ -3681,7 +3681,7 @@ case class ArrayDistinct(child: Expression)
     super.checkInputDataTypes() match {
       case f if f.isFailure => f
       case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForOrderingExpr(elementType, s"function $prettyName")
+        TypeUtils.checkForOrderingExpr(elementType, prettyName)
     }
   }
 
@@ -3836,8 +3836,7 @@ trait ArrayBinaryLike
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()
     if (typeCheckResult.isSuccess) {
-      TypeUtils.checkForOrderingExpr(dataType.asInstanceOf[ArrayType].elementType,
-        s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(dataType.asInstanceOf[ArrayType].elementType, prettyName)
     } else {
       typeCheckResult
     }

@@ -1594,7 +1594,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DataTypeMismatch(
         errorSubClass = "WRONG_NUM_PARAMS",
         messageParameters = Map(
-          "functionName" -> "elt",
+          "functionName" -> "`elt`",
           "expectedNum" -> "> 1",
           "actualNum" -> "1"
         )
