@@ -60,7 +60,6 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
 
     sc.stop()
     assert(!driverLogsDir.exists())
-    print(sc.getConf.get(DRIVER_LOG_DFS_DIR).get)
     val dfsFile = new Path(sc.getConf.get(DRIVER_LOG_DFS_DIR).get +
       "/" + app_id + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
     val dfsFileStatus = dfsFile.getFileSystem(sc.hadoopConfiguration).getFileStatus(dfsFile)
