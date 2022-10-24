@@ -29,6 +29,7 @@ import org.apache.commons.codec.digest.MessageDigestAlgorithms
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
@@ -272,14 +273,14 @@ abstract class HashExpression[E] extends Expression {
       DataTypeMismatch(
         errorSubClass = "WRONG_NUM_PARAMS",
         messageParameters = Map(
-          "functionName" -> prettyName,
+          "functionName" ->  toSQLId(prettyName),
           "expectedNum" -> "> 0",
           "actualNum" -> children.length.toString))
     } else if (children.exists(child => hasMapType(child.dataType)) &&
         !SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_HASH_ON_MAPTYPE)) {
       DataTypeMismatch(
         errorSubClass = "HASH_MAP_TYPE",
-        messageParameters = Map("functionName" -> prettyName))
+        messageParameters = Map("functionName" -> toSQLId(prettyName)))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }

@@ -442,25 +442,27 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
 
     assertError(Coalesce(Nil), "function coalesce requires at least one argument")
 
+    val murmur3Hash = new Murmur3Hash(Nil)
     checkError(
       exception = intercept[AnalysisException] {
-        assertSuccess(new Murmur3Hash(Nil))
+        assertSuccess(murmur3Hash)
       },
       errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
       parameters = Map(
         "sqlExpr" -> "\"hash()\"",
-        "functionName" -> "hash",
+        "functionName" -> toSQLId(murmur3Hash.prettyName),
         "expectedNum" -> "> 0",
         "actualNum" -> "0"))
 
+    val xxHash64 = new XxHash64(Nil)
     checkError(
       exception = intercept[AnalysisException] {
-        assertSuccess(new XxHash64(Nil))
+        assertSuccess(xxHash64)
       },
       errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
       parameters = Map(
         "sqlExpr" -> "\"xxhash64()\"",
-        "functionName" -> "xxhash64",
+        "functionName" -> toSQLId(xxHash64.prettyName),
         "expectedNum" -> "> 0",
         "actualNum" -> "0"))
 
@@ -647,7 +649,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     assert(murmur3Hash.checkInputDataTypes() ==
       DataTypeMismatch(
         errorSubClass = "HASH_MAP_TYPE",
-        messageParameters = Map("functionName" -> murmur3Hash.prettyName)
+        messageParameters = Map("functionName" -> toSQLId(murmur3Hash.prettyName))
       )
     )
   }

@@ -4233,7 +4233,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"hash()\"",
-        "functionName" -> "hash",
+        "functionName" -> "`hash`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0"))
 
@@ -4245,7 +4245,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"hash()\"",
-        "functionName" -> "hash",
+        "functionName" -> "`hash`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0"),
       context = ExpectedContext(
@@ -4261,7 +4261,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"xxhash64()\"",
-        "functionName" -> "xxhash64",
+        "functionName" -> "`xxhash64`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0"))
 
@@ -4273,7 +4273,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"xxhash64()\"",
-        "functionName" -> "xxhash64",
+        "functionName" -> "`xxhash64`",
         "expectedNum" -> "> 0",
         "actualNum" -> "0"),
       context = ExpectedContext(
