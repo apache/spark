@@ -136,6 +136,8 @@ case class TimeWindow(
 }
 
 object TimeWindow {
+  val marker = "spark.timeWindow"
+
   /**
    * Parses the interval string for a valid time duration. CalendarInterval expects interval
    * strings to start with the string `interval`. For usability, we prepend `interval` to the string

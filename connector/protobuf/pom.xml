@@ -83,7 +83,6 @@
       <version>${protobuf.version}</version>
       <scope>compile</scope>
     </dependency>
-
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
@@ -109,6 +108,28 @@
             </relocation>
           </relocations>
         </configuration>
+      </plugin>
+      <plugin>
+        <groupId>com.github.os72</groupId>
+        <artifactId>protoc-jar-maven-plugin</artifactId>
+        <version>3.11.4</version>
+        <!-- Generates Java classes for tests. TODO(Raghu): Generate descriptor files too. -->
+        <executions>
+          <execution>
+            <phase>generate-test-sources</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
+              <protocVersion>${protobuf.version}</protocVersion>
+              <inputDirectories>
+                <include>src/test/resources/protobuf</include>
+              </inputDirectories>
+              <addSources>test</addSources>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

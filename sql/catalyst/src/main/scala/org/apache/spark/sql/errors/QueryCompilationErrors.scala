@@ -1957,6 +1957,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("function" -> funcStr))
   }
 
+  def unsupportedCorrelatedReferenceDataTypeError(
+      expr: Expression,
+      dataType: DataType,
+      origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE",
+      origin = origin,
+      messageParameters = Map("expr" -> expr.sql, "dataType" -> dataType.typeName))
+  }
+
   def functionCannotProcessInputError(
       unbound: UnboundFunction,
       arguments: Seq[Expression],

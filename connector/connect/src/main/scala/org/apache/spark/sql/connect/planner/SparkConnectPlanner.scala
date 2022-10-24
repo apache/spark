@@ -25,9 +25,13 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sample, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, LogicalPlan, Sample, SubqueryAlias}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 final case class InvalidPlanInput(
     private val message: String = "",
@@ -54,9 +58,11 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead, common)
       case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject, common)
       case proto.Relation.RelTypeCase.FILTER => transformFilter(rel.getFilter)
-      case proto.Relation.RelTypeCase.FETCH => transformFetch(rel.getFetch)
+      case proto.Relation.RelTypeCase.LIMIT => transformLimit(rel.getLimit)
+      case proto.Relation.RelTypeCase.OFFSET => transformOffset(rel.getOffset)
       case proto.Relation.RelTypeCase.JOIN => transformJoin(rel.getJoin)
       case proto.Relation.RelTypeCase.UNION => transformUnion(rel.getUnion)
+      case proto.Relation.RelTypeCase.DEDUPLICATE => transformDeduplicate(rel.getDeduplicate)
       case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
       case proto.Relation.RelTypeCase.AGGREGATE => transformAggregate(rel.getAggregate)
       case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
@@ -75,7 +81,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   /**
    * All fields of [[proto.Sample]] are optional. However, given those are proto primitive types,
-   * we cannot differentiate if the fied is not or set when the field's value equals to the type
+   * we cannot differentiate if the field is not or set when the field's value equals to the type
    * default value. In the future if this ever become a problem, one solution could be that to
    * wrap such fields into proto messages.
    */
@@ -84,8 +90,39 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       rel.getLowerBound,
       rel.getUpperBound,
       rel.getWithReplacement,
-      rel.getSeed,
+      if (rel.hasSeed) rel.getSeed.getSeed else Utils.random.nextLong,
       transformRelation(rel.getInput))
+  }
+
+  private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
+    if (!rel.hasInput) {
+      throw InvalidPlanInput("Deduplicate needs a plan input")
+    }
+    if (rel.getAllColumnsAsKeys && rel.getColumnNamesCount > 0) {
+      throw InvalidPlanInput("Cannot deduplicate on both all columns and a subset of columns")
+    }
+    if (!rel.getAllColumnsAsKeys && rel.getColumnNamesCount == 0) {
+      throw InvalidPlanInput(
+        "Deduplicate requires to either deduplicate on all columns or a subset of columns")
+    }
+    val queryExecution = new QueryExecution(session, transformRelation(rel.getInput))
+    val resolver = session.sessionState.analyzer.resolver
+    val allColumns = queryExecution.analyzed.output
+    if (rel.getAllColumnsAsKeys) {
+      Deduplicate(allColumns, queryExecution.analyzed)
+    } else {
+      val toGroupColumnNames = rel.getColumnNamesList.asScala.toSeq
+      val groupCols = toGroupColumnNames.flatMap { (colName: String) =>
+        // It is possibly there are more than one columns with the same name,
+        // so we call filter instead of find.
+        val cols = allColumns.filter(col => resolver(col.name, colName))
+        if (cols.isEmpty) {
+          throw InvalidPlanInput(s"Invalid deduplicate column ${colName}")
+        }
+        cols
+      }
+      Deduplicate(groupCols, queryExecution.analyzed)
+    }
   }
 
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
@@ -102,13 +139,27 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       common: Option[proto.RelationCommon]): LogicalPlan = {
     val baseRelation = rel.getReadTypeCase match {
       case proto.Read.ReadTypeCase.NAMED_TABLE =>
-        val child = UnresolvedRelation(rel.getNamedTable.getPartsList.asScala.toSeq)
+        val multipartIdentifier =
+          CatalystSqlParser.parseMultipartIdentifier(rel.getNamedTable.getUnparsedIdentifier)
+        val child = UnresolvedRelation(multipartIdentifier)
         if (common.nonEmpty && common.get.getAlias.nonEmpty) {
           SubqueryAlias(identifier = common.get.getAlias, child = child)
         } else {
           child
         }
-      case _ => throw InvalidPlanInput()
+      case proto.Read.ReadTypeCase.DATA_SOURCE =>
+        if (rel.getDataSource.getFormat == "") {
+          throw InvalidPlanInput("DataSource requires a format")
+        }
+        val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
+        val reader = session.read
+        reader.format(rel.getDataSource.getFormat)
+        localMap.foreach { case (key, value) => reader.option(key, value) }
+        if (rel.getDataSource.getSchema != null) {
+          reader.schema(rel.getDataSource.getSchema)
+        }
+        reader.load().queryExecution.analyzed
+      case _ => throw InvalidPlanInput("Does not support " + rel.getReadTypeCase.name())
     }
     baseRelation
   }
@@ -139,7 +190,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   }
 
   private def transformUnresolvedExpression(exp: proto.Expression): UnresolvedAttribute = {
-    UnresolvedAttribute(exp.getUnresolvedAttribute.getPartsList.asScala.toSeq)
+    UnresolvedAttribute(exp.getUnresolvedAttribute.getUnparsedIdentifier)
   }
 
   private def transformExpression(exp: proto.Expression): Expression = {
@@ -191,10 +242,16 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     }
   }
 
-  private def transformFetch(limit: proto.Fetch): LogicalPlan = {
+  private def transformLimit(limit: proto.Limit): LogicalPlan = {
     logical.Limit(
-      child = transformRelation(limit.getInput),
-      limitExpr = expressions.Literal(limit.getLimit, IntegerType))
+      limitExpr = expressions.Literal(limit.getLimit, IntegerType),
+      transformRelation(limit.getInput))
+  }
+
+  private def transformOffset(offset: proto.Offset): LogicalPlan = {
+    logical.Offset(
+      offsetExpr = expressions.Literal(offset.getOffset, IntegerType),
+      transformRelation(offset.getInput))
   }
 
   /**

@@ -1259,8 +1259,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def unscaledValueTooLargeForPrecisionError(): SparkArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "_LEGACY_ERROR_TEMP_2117",
-      messageParameters = Map("ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      errorClass = "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION",
+      messageParameters = Map(
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = Array.empty,
       summary = "")
   }
@@ -1268,18 +1269,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def decimalPrecisionExceedsMaxPrecisionError(
       precision: Int, maxPrecision: Int): SparkArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "_LEGACY_ERROR_TEMP_2118",
+      errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
       messageParameters = Map(
-        "precision" -> precision.toString(),
-        "maxPrecision" -> maxPrecision.toString()),
+        "precision" -> precision.toString,
+        "maxPrecision" -> maxPrecision.toString
+      ),
       context = Array.empty,
       summary = "")
   }
 
   def outOfDecimalTypeRangeError(str: UTF8String): SparkArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "_LEGACY_ERROR_TEMP_2119",
-      messageParameters = Map("str" -> str.toString()),
+      errorClass = "OUT_OF_DECIMAL_TYPE_RANGE",
+      messageParameters = Map(
+        "value" -> str.toString),
       context = Array.empty,
       summary = "")
   }
@@ -2402,13 +2405,28 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def integerOverflowError(message: String): SparkArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "_LEGACY_ERROR_TEMP_2257",
+  def incorrectRumpUpRate(rowsPerSecond: Long,
+      maxSeconds: Long,
+      rampUpTimeSeconds: Long): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "INCORRECT_RUMP_UP_RATE",
       messageParameters = Map(
-        "message" -> message),
-      context = Array.empty,
-      summary = "")
+        "rowsPerSecond" -> rowsPerSecond.toString,
+        "maxSeconds" -> maxSeconds.toString,
+        "rampUpTimeSeconds" -> rampUpTimeSeconds.toString
+      ))
+  }
+
+  def incorrectEndOffset(rowsPerSecond: Long,
+      maxSeconds: Long,
+      endSeconds: Long): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "INCORRECT_END_OFFSET",
+      messageParameters = Map(
+        "rowsPerSecond" -> rowsPerSecond.toString,
+        "maxSeconds" -> maxSeconds.toString,
+        "endSeconds" -> endSeconds.toString
+      ))
   }
 
   def failedToReadDeltaFileError(fileToRead: Path, clazz: String, keySize: Int): Throwable = {
@@ -2710,5 +2728,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "numElements" -> numElements.toString,
         "size" -> elementSize.toString))
+  }
+
+  def unsupportedEmptyLocationError(): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "UNSUPPORTED_EMPTY_LOCATION",
+      messageParameters = Map.empty)
   }
 }
