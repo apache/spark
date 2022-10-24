@@ -3089,13 +3089,14 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     submit(finalRdd, Array(0, 1), properties = new Properties())
 
     // Finish the first 2 shuffle map stages.
-    completeShuffleMapStageSuccessfully(0, 0, 2)
+    completeShuffleMapStageSuccessfully(0, 0, 2, Seq("hostA", "hostB"))
     assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
 
     completeShuffleMapStageSuccessfully(1, 0, 2, Seq("hostB", "hostD"))
     assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
 
-    // Executor lost on hostB, both of stage 0 and 1 should be reran.
+    // FetchFailed on stage 2, both of stage 1 and 2 should be reran. Besides, executor lost on
+    // hostB, both of stage 0 and 1 should be reran.
     runEvent(makeCompletionEvent(
       taskSets(2).tasks(0),
       FetchFailed(makeBlockManagerId("hostB"), shuffleId2, 0L, 0, 0, "ignored"),
@@ -3207,7 +3208,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(failure == null, "job should not fail")
     val failedStages = scheduler.failedStages.toSeq
     assert(failedStages.length == 2)
-    // Shuffle blocks of "hostA" is lost, so first task of the `shuffleMapRdd2` needs to retry.
+    // Shuffle blocks of "hostA" is lost, so first task of the `finalRdd` needs to retry.
     assert(failedStages.collect {
       case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId => stage
     }.head.findMissingPartitions() == Seq(0))
