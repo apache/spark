@@ -278,7 +278,7 @@ case class Elt(
       DataTypeMismatch(
         errorSubClass = "WRONG_NUM_PARAMS",
         messageParameters = Map(
-          "functionName" -> "elt",
+          "functionName" -> toSQLId(prettyName),
           "expectedNum" -> "> 1",
           "actualNum" -> children.length.toString
         )
@@ -305,7 +305,7 @@ case class Elt(
           )
         )
       }
-      TypeUtils.checkForSameTypeInputExpr(inputTypes, s"function $prettyName")
+      TypeUtils.checkForSameTypeInputExpr(inputTypes, prettyName)
     }
   }
 

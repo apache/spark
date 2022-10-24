@@ -22,8 +22,8 @@ import java.lang.reflect.{Method, Modifier}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -56,7 +56,9 @@ import org.apache.spark.util.Utils
   since = "2.0.0",
   group = "misc_funcs")
 case class CallMethodViaReflection(children: Seq[Expression])
-  extends Nondeterministic with CodegenFallback {
+  extends Nondeterministic
+  with CodegenFallback
+  with QueryErrorsBase {
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("reflect")
 
@@ -65,7 +67,7 @@ case class CallMethodViaReflection(children: Seq[Expression])
       DataTypeMismatch(
         errorSubClass = "WRONG_NUM_PARAMS",
         messageParameters = Map(
-          "functionName" -> prettyName,
+          "functionName" -> toSQLId(prettyName),
           "expectedNum" -> "> 1",
           "actualNum" -> children.length.toString))
     } else {

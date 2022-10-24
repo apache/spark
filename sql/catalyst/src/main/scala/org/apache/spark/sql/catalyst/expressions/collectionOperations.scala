@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
-import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext, UnaryLike}
@@ -34,7 +33,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, Tree
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SQLOpenHashSet
@@ -47,8 +46,10 @@ import org.apache.spark.unsafe.types.{ByteArray, CalendarInterval, UTF8String}
  * Base trait for [[BinaryExpression]]s with two arrays of the same element type and implicit
  * casting.
  */
-trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
-  with ImplicitCastInputTypes {
+trait BinaryArrayExpressionWithImplicitCast
+  extends BinaryExpression
+  with ImplicitCastInputTypes
+  with QueryErrorsBase {
 
   @transient protected lazy val elementType: DataType =
     inputTypes.head.asInstanceOf[ArrayType].elementType
@@ -72,7 +73,7 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
         DataTypeMismatch(
           errorSubClass = "BINARY_ARRAY_DIFF_TYPES",
           messageParameters = Map(
-            "functionName" -> prettyName,
+            "functionName" -> toSQLId(prettyName),
             "arrayType" -> toSQLType(ArrayType),
             "leftType" -> toSQLType(left.dataType),
             "rightType" -> toSQLType(right.dataType)
@@ -219,7 +220,10 @@ case class MapKeys(child: Expression)
   group = "map_funcs",
   since = "3.3.0")
 case class MapContainsKey(left: Expression, right: Expression)
-  extends RuntimeReplaceable with BinaryLike[Expression] with ImplicitCastInputTypes {
+  extends RuntimeReplaceable
+  with BinaryLike[Expression]
+  with ImplicitCastInputTypes
+  with QueryErrorsBase {
 
   override lazy val replacement: Expression = ArrayContains(MapKeys(left), right)
 
@@ -240,14 +244,14 @@ case class MapContainsKey(left: Expression, right: Expression)
       case (_, NullType) =>
         DataTypeMismatch(
           errorSubClass = "NULL_TYPE",
-          Map("functionName" -> prettyName))
+          Map("functionName" -> toSQLId(prettyName)))
       case (MapType(kt, _, _), dt) if kt.sameType(dt) =>
         TypeUtils.checkForOrderingExpr(kt, s"function $prettyName")
       case _ =>
         DataTypeMismatch(
           errorSubClass = "MAP_CONTAINS_KEY_DIFF_TYPES",
           messageParameters = Map(
-            "functionName" -> prettyName,
+            "functionName" -> toSQLId(prettyName),
             "dataType" -> toSQLType(MapType),
             "leftType" -> toSQLType(left.dataType),
             "rightType" -> toSQLType(right.dataType)
@@ -676,20 +680,21 @@ case class MapEntries(child: Expression)
   """,
   group = "map_funcs",
   since = "2.4.0")
-case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
+case class MapConcat(children: Seq[Expression])
+  extends ComplexTypeMergingExpression
+  with QueryErrorsBase {
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val funcName = s"function $prettyName"
     if (children.exists(!_.dataType.isInstanceOf[MapType])) {
       DataTypeMismatch(
         errorSubClass = "MAP_CONCAT_DIFF_TYPES",
         messageParameters = Map(
-          "functionName" -> funcName,
+          "functionName" -> toSQLId(prettyName),
           "dataType" -> children.map(_.dataType).map(toSQLType).mkString("[", ", ", "]")
         )
       )
     } else {
-      val sameTypeCheck = TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), funcName)
+      val sameTypeCheck = TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), prettyName)
       if (sameTypeCheck.isFailure) {
         sameTypeCheck
       } else {
@@ -802,7 +807,10 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
   """,
   group = "map_funcs",
   since = "2.4.0")
-case class MapFromEntries(child: Expression) extends UnaryExpression with NullIntolerant {
+case class MapFromEntries(child: Expression)
+  extends UnaryExpression
+  with NullIntolerant
+  with QueryErrorsBase {
 
   @transient
   private lazy val dataTypeDetails: Option[(MapType, Boolean, Boolean)] = child.dataType match {
@@ -827,7 +835,7 @@ case class MapFromEntries(child: Expression) extends UnaryExpression with NullIn
       DataTypeMismatch(
         errorSubClass = "MAP_FROM_ENTRIES_WRONG_TYPE",
         messageParameters = Map(
-          "functionName" -> prettyName,
+          "functionName" -> toSQLId(prettyName),
           "childExpr" -> toSQLExpr(child),
           "childType" -> toSQLType(child.dataType)
         )
