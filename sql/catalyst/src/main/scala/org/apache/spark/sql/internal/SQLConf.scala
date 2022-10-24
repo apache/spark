@@ -1830,6 +1830,14 @@ object SQLConf {
       .stringConf
       .createWithDefault("lz4")
 
+  val CHECKPOINT_RENAMEDFILE_CHECK_ENABLED =
+    buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
+      .doc("When true, Spark will validate if renamed checkpoint file exists.")
+      .internal()
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Note: this is defined in `RocksDBConf.FORMAT_VERSION`. These two places should be updated
    * together.
@@ -1916,7 +1924,7 @@ object SQLConf {
         "Integration Guide.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED =
     buildConf("spark.sql.streaming.statefulOperator.checkCorrectness.enabled")
@@ -1973,6 +1981,15 @@ object SQLConf {
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
+
+  val ASYNC_LOG_PURGE =
+    buildConf("spark.sql.streaming.asyncLogPurge.enabled")
+      .internal()
+      .doc("When true, purging the offset log and " +
+        "commit log of old entries will be done asynchronously.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
@@ -4233,6 +4250,8 @@ class SQLConf extends Serializable with Logging {
   def streamingMaintenanceInterval: Long = getConf(STREAMING_MAINTENANCE_INTERVAL)
 
   def stateStoreCompressionCodec: String = getConf(STATE_STORE_COMPRESSION_CODEC)
+
+  def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
 
   def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
 

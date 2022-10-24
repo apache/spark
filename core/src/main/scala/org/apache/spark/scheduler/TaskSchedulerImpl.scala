@@ -641,7 +641,7 @@ private[spark] class TaskSchedulerImpl(
                     if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
                       logInfo("Notifying ExecutorAllocationManager to allocate more executors to" +
                         " schedule the unschedulable task before aborting" +
-                        " stage ${taskSet.stageId}.")
+                        s" stage ${taskSet.stageId}.")
                       dagScheduler.unschedulableTaskSetAdded(taskSet.taskSet.stageId,
                         taskSet.taskSet.stageAttemptId)
                       updateUnschedulableTaskSetTimeoutAndStartAbortTimer(taskSet, taskIndex)

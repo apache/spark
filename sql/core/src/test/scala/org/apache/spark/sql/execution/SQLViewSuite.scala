@@ -345,11 +345,14 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("SPARK-32374: disallow setting properties for CREATE TEMPORARY VIEW") {
     withTempView("myabcdview") {
-      val e = intercept[ParseException] {
-        sql("CREATE TEMPORARY VIEW myabcdview TBLPROPERTIES ('a' = 'b') AS SELECT * FROM jt")
-      }
-      assert(e.message.contains(
-        "Operation not allowed: TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))
+      val sqlText = "CREATE TEMPORARY VIEW myabcdview TBLPROPERTIES ('a' = 'b') AS SELECT * FROM jt"
+      checkError(
+        exception = intercept[ParseException] {
+          sql(sqlText)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_0035",
+        parameters = Map("message" -> "TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"),
+        context = ExpectedContext(sqlText, 0, 77))
     }
   }
 

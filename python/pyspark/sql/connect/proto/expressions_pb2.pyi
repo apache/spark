@@ -536,17 +536,17 @@ class Expression(google.protobuf.message.Message):
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        PARTS_FIELD_NUMBER: builtins.int
-        @property
-        def parts(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+        UNPARSED_IDENTIFIER_FIELD_NUMBER: builtins.int
+        unparsed_identifier: builtins.str
         def __init__(
             self,
             *,
-            parts: collections.abc.Iterable[builtins.str] | None = ...,
+            unparsed_identifier: builtins.str = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["parts", b"parts"]) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal["unparsed_identifier", b"unparsed_identifier"],
+        ) -> None: ...
 
     class UnresolvedFunction(google.protobuf.message.Message):
         """An unresolved function is not explicitly bound to one explicit function, but the function

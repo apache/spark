@@ -101,6 +101,16 @@
           "the binary operator requires the input type <inputType>, not <actualDataType>."
         ]
       },
+      "BLOOM_FILTER_BINARY_OP_WRONG_TYPE" : {
+        "message" : [
+          "The Bloom filter binary input to <functionName> should be either a constant value or a scalar subquery expression, but it's <actual>."
+        ]
+      },
+      "BLOOM_FILTER_WRONG_TYPE" : {
+        "message" : [
+          "Input to function <functionName> should have been <expectedLeft> followed by value with <expectedRight>, but it's [<actual>]."
+        ]
+      },
       "CANNOT_CONVERT_TO_JSON" : {
         "message" : [
           "Unable to convert column <name> of type <type> to JSON."
@@ -223,6 +233,11 @@
           "The lower bound of a window frame must be <comparison> to the upper bound."
         ]
       },
+      "UNEXPECTED_CLASS_TYPE" : {
+        "message" : [
+          "class <className> not found"
+        ]
+      },
       "UNEXPECTED_INPUT_TYPE" : {
         "message" : [
           "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
@@ -231,6 +246,11 @@
       "UNEXPECTED_NULL" : {
         "message" : [
           "The <exprName> must not be null"
+        ]
+      },
+      "UNEXPECTED_STATIC_METHOD" : {
+        "message" : [
+          "cannot find a static method <methodName> that matches the argument types in <className>"
         ]
       },
       "UNSPECIFIED_FRAME" : {
@@ -243,9 +263,14 @@
           "The <exprName> must be between <valueRange> (current value = <currentValue>)"
         ]
       },
+      "WRONG_NUM_ENDPOINTS" : {
+        "message" : [
+          "The number of endpoints must be >= 2 to construct intervals but the actual number is <actualNumber>."
+        ]
+      },
       "WRONG_NUM_PARAMS" : {
         "message" : [
-          "wrong number of parameters: <actualNum>."
+          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
         ]
       }
     }
@@ -255,6 +280,11 @@
       "Datetime operation overflow: <operation>."
     ],
     "sqlState" : "22008"
+  },
+  "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION" : {
+    "message" : [
+      "Decimal precision <precision> exceeds max precision <maxPrecision>."
+    ]
   },
   "DEFAULT_DATABASE_NOT_EXISTS" : {
     "message" : [
@@ -395,6 +425,16 @@
         ]
       }
     }
+  },
+  "INCORRECT_END_OFFSET" : {
+    "message" : [
+      "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but it's <endSeconds> now."
+    ]
+  },
+  "INCORRECT_RUMP_UP_RATE" : {
+    "message" : [
+      "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but 'rampUpTimeSeconds' is <rampUpTimeSeconds>."
+    ]
   },
   "INDEX_ALREADY_EXISTS" : {
     "message" : [
@@ -584,6 +624,11 @@
       "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22005"
+  },
+  "OUT_OF_DECIMAL_TYPE_RANGE" : {
+    "message" : [
+      "Out of decimal type range: <value>."
+    ]
   },
   "PARSE_CHAR_MISSING_LENGTH" : {
     "message" : [
@@ -794,6 +839,11 @@
     },
     "sqlState" : "42000"
   },
+  "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION" : {
+    "message" : [
+      "Unscaled value too large for precision. If necessary set <ansiConfig> to false to bypass this error."
+    ]
+  },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
       "Unsupported data type <typeName>"
@@ -816,6 +866,11 @@
         ]
       }
     }
+  },
+  "UNSUPPORTED_EMPTY_LOCATION" : {
+    "message" : [
+      "Unsupported empty location."
+    ]
   },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
@@ -1047,6 +1102,11 @@
       "UNSUPPORTED_CORRELATED_REFERENCE" : {
         "message" : [
           "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses<treeNode>"
+        ]
+      },
+      "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE" : {
+        "message" : [
+          "Correlated column reference '<expr>' cannot be <dataType> type"
         ]
       },
       "UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY" : {
@@ -3675,21 +3735,6 @@
   "_LEGACY_ERROR_TEMP_2116" : {
     "message" : [
       "Unexpected: <o>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2117" : {
-    "message" : [
-      "Unscaled value too large for precision. If necessary set <ansiConfig> to false to bypass this error."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2118" : {
-    "message" : [
-      "Decimal precision <precision> exceeds max precision <maxPrecision>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2119" : {
-    "message" : [
-      "out of decimal type range: <str>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2120" : {

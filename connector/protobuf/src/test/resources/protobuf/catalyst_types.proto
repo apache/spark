@@ -19,8 +19,10 @@
 
 syntax = "proto3";
 
-package org.apache.spark.sql.protobuf;
+package org.apache.spark.sql.protobuf.protos;
 option java_outer_classname = "CatalystTypes";
+
+// TODO: import one or more protobuf files.
 
 message BooleanMsg {
   bool bool_type = 1;

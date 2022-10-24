@@ -22,7 +22,6 @@ import scala.language.implicitConversions
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 
 /**
@@ -33,16 +32,13 @@ package object dsl {
 
   object expressions { // scalastyle:ignore
     implicit class DslString(val s: String) {
-      val identifier = CatalystSqlParser.parseMultipartIdentifier(s)
-
       def protoAttr: proto.Expression =
         proto.Expression
           .newBuilder()
           .setUnresolvedAttribute(
             proto.Expression.UnresolvedAttribute
               .newBuilder()
-              .addAllParts(identifier.asJava)
-              .build())
+              .setUnparsedIdentifier(s))
           .build()
 
       def struct(
@@ -190,12 +186,54 @@ package object dsl {
           .build()
       }
 
+      def limit(limit: Int): proto.Relation = {
+        proto.Relation
+          .newBuilder()
+          .setLimit(
+            proto.Limit
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setLimit(limit))
+          .build()
+      }
+
+      def offset(offset: Int): proto.Relation = {
+        proto.Relation
+          .newBuilder()
+          .setOffset(
+            proto.Offset
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setOffset(offset))
+          .build()
+      }
+
       def where(condition: proto.Expression): proto.Relation = {
         proto.Relation
           .newBuilder()
           .setFilter(proto.Filter.newBuilder().setInput(logicalPlan).setCondition(condition))
           .build()
       }
+
+      def deduplicate(colNames: Seq[String]): proto.Relation =
+        proto.Relation
+          .newBuilder()
+          .setDeduplicate(
+            proto.Deduplicate
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllColumnNames(colNames.asJava))
+          .build()
+
+      def distinct(): proto.Relation =
+        proto.Relation
+          .newBuilder()
+          .setDeduplicate(
+            proto.Deduplicate
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setAllColumnsAsKeys(true))
+          .build()
 
       def join(
           otherPlan: proto.Relation,
@@ -234,7 +272,8 @@ package object dsl {
               .setUpperBound(upperBound)
               .setLowerBound(lowerBound)
               .setWithReplacement(withReplacement)
-              .setSeed(seed))
+              .setSeed(proto.Sample.Seed.newBuilder().setSeed(seed).build())
+              .build())
           .build()
       }
 

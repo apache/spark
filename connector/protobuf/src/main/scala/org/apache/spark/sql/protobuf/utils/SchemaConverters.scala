@@ -66,6 +66,10 @@ object SchemaConverters {
         Some(DayTimeIntervalType.defaultConcreteType)
       case MESSAGE if fd.getMessageType.getName == "Timestamp" =>
         Some(TimestampType)
+        // FIXME: Is the above accurate? Users can have protos named "Timestamp" but are not
+        //        expected to be TimestampType in Spark. How about verifying fields?
+        //        Same for "Duration". Only the Timestamp & Duration protos defined in
+        //        google.protobuf package should default to corresponding Catalylist types.
       case MESSAGE if fd.isRepeated && fd.getMessageType.getOptions.hasMapEntry =>
         var keyType: DataType = NullType
         var valueType: DataType = NullType

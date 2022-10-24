@@ -1202,7 +1202,10 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
     if (children.length <= 1) {
       DataTypeMismatch(
         errorSubClass = "WRONG_NUM_PARAMS",
-        messageParameters = Map("actualNum" -> children.length.toString))
+        messageParameters = Map(
+          "functionName" -> prettyName,
+          "expectedNum" -> "> 1",
+          "actualNum" -> children.length.toString))
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       DataTypeMismatch(
         errorSubClass = "DATA_DIFF_TYPES",
@@ -1290,7 +1293,10 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
     if (children.length <= 1) {
       DataTypeMismatch(
         errorSubClass = "WRONG_NUM_PARAMS",
-        messageParameters = Map("actualNum" -> children.length.toString))
+        messageParameters = Map(
+          "functionName" -> prettyName,
+          "expectedNum" -> "> 1",
+          "actualNum" -> children.length.toString))
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       DataTypeMismatch(
         errorSubClass = "DATA_DIFF_TYPES",

@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{Request, Response}
@@ -32,11 +33,13 @@ import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.util.ArrowUtils
 
 @Unstable
 @Since("3.4.0")
 class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) extends Logging {
+
+  // The maximum batch size in bytes for a single batch of data to be returned via proto.
+  val MAX_BATCH_SIZE: Long = 10 * 1024 * 1024
 
   def handle(v: Request): Unit = {
     val session =
@@ -57,21 +60,66 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
     processRows(request.getClientId, rows)
   }
 
-  private def processRows(clientId: String, rows: DataFrame) = {
+  private[connect] def processRows(clientId: String, rows: DataFrame): Unit = {
     val timeZoneId = SQLConf.get.sessionLocalTimeZone
-    val schema =
-      ByteString.copyFrom(ArrowUtils.toArrowSchema(rows.schema, timeZoneId).toByteArray)
 
-    val textSchema = rows.schema.fields.map(f => f.name).mkString("|")
-    val data = rows.collect().map(x => x.toSeq.mkString("|")).mkString("\n")
-    val bbb = proto.Response.CSVBatch.newBuilder
-      .setRowCount(-1)
-      .setData(textSchema ++ "\n" ++ data)
-      .build()
-    val response = proto.Response.newBuilder().setClientId(clientId).setCsvBatch(bbb).build()
+    // Only process up to 10MB of data.
+    val sb = new StringBuilder
+    var rowCount = 0
+    rows.toJSON
+      .collect()
+      .foreach(row => {
 
-    // Send all the data
-    responseObserver.onNext(response)
+        // There are a few cases to cover here.
+        // 1. The aggregated buffer size is larger than the MAX_BATCH_SIZE
+        //     -> send the current batch and reset.
+        // 2. The aggregated buffer size is smaller than the MAX_BATCH_SIZE
+        //     -> append the row to the buffer.
+        // 3. The row in question is larger than the MAX_BATCH_SIZE
+        //     -> fail the query.
+
+        // Case 3. - Fail
+        if (row.size > MAX_BATCH_SIZE) {
+          throw SparkException.internalError(
+            s"Serialized row is larger than MAX_BATCH_SIZE: ${row.size} > ${MAX_BATCH_SIZE}")
+        }
+
+        // Case 1 - FLush and send.
+        if (sb.size + row.size > MAX_BATCH_SIZE) {
+          val response = proto.Response.newBuilder().setClientId(clientId)
+          val batch = proto.Response.JSONBatch
+            .newBuilder()
+            .setData(ByteString.copyFromUtf8(sb.toString()))
+            .setRowCount(rowCount)
+            .build()
+          response.setJsonBatch(batch)
+          responseObserver.onNext(response.build())
+          sb.clear()
+          sb.append(row)
+          rowCount = 1
+        } else {
+          // Case 2 - Append.
+          // Make sure to put the newline delimiters only between items and not at the end.
+          if (rowCount > 0) {
+            sb.append("\n")
+          }
+          sb.append(row)
+          rowCount += 1
+        }
+      })
+
+    // If the last batch is not empty, send out the data to the client.
+    if (sb.size > 0) {
+      val response = proto.Response.newBuilder().setClientId(clientId)
+      val batch = proto.Response.JSONBatch
+        .newBuilder()
+        .setData(ByteString.copyFromUtf8(sb.toString()))
+        .setRowCount(rowCount)
+        .build()
+      response.setJsonBatch(batch)
+      responseObserver.onNext(response.build())
+    }
+
     responseObserver.onNext(sendMetricsToResponse(clientId, rows))
     responseObserver.onCompleted()
   }

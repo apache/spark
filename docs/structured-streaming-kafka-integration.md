@@ -568,8 +568,9 @@ Timestamp offset options require Kafka 0.10.1.0 or higher.
 ### Offset fetching
 
 In Spark 3.0 and before Spark uses <code>KafkaConsumer</code> for offset fetching which could cause infinite wait in the driver.
-In Spark 3.1 a new configuration option added <code>spark.sql.streaming.kafka.useDeprecatedOffsetFetching</code> (default: <code>true</code>)
-which could be set to `false` allowing Spark to use new offset fetching mechanism using <code>AdminClient</code>.
+In Spark 3.1 a new configuration option added <code>spark.sql.streaming.kafka.useDeprecatedOffsetFetching</code> (default: <code>false</code>)
+which allows Spark to use new offset fetching mechanism using <code>AdminClient</code>. (Set this to `true` to use old offset fetching with <code>KafkaConsumer</code>.)
+
 When the new mechanism used the following applies.
 
 First of all the new approach supports Kafka brokers `0.11.0.0+`.

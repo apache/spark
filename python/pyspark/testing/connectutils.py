@@ -18,7 +18,6 @@ import os
 from typing import Any, Dict
 import functools
 import unittest
-import uuid
 
 from pyspark.sql.connect import DataFrame
 from pyspark.sql.connect.plan import Read
@@ -74,7 +73,7 @@ class PlanOnlyTestFixture(unittest.TestCase):
     @classmethod
     def setUpClass(cls: Any) -> None:
         cls.connect = MockRemoteSession()
-        cls.tbl_name = f"tbl{uuid.uuid4()}".replace("-", "")
+        cls.tbl_name = "test_connect_plan_only_table_1"
 
         cls.connect.set_hook("register_udf", cls._udf_mock)
         cls.connect.set_hook("readTable", cls._read_table)
