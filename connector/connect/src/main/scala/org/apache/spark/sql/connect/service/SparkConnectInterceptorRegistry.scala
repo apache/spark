@@ -22,7 +22,7 @@ import java.lang.reflect.InvocationTargetException
 import io.grpc.ServerInterceptor
 import io.grpc.netty.NettyServerBuilder
 
-import org.apache.spark.{SparkEnv, SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.util.Utils
 
@@ -53,8 +53,7 @@ object SparkConnectInterceptorRegistry {
   type InterceptorBuilder = () => ServerInterceptor
 
   /**
-   * For testing only.
-   * @return
+   * Exposed for testing only.
    */
   def createConfiguredInterceptors(): Seq[ServerInterceptor] = {
     // Check all values from the Spark conf.
@@ -80,22 +79,23 @@ object SparkConnectInterceptorRegistry {
   private def createInstance[T <: ServerInterceptor](cls: Class[T]): ServerInterceptor = {
     val ctorOpt = cls.getConstructors.find(_.getParameterCount == 0)
     if (ctorOpt.isEmpty) {
-      throw new SparkIllegalArgumentException(
+      throw new SparkException(
         errorClass = "CONNECT.INTERCEPTOR_CTOR_MISSING",
-        messageParameters = Map("cls" -> cls.getName))
+        messageParameters = Map("cls" -> cls.getName),
+        cause = null)
     }
     try {
       ctorOpt.get.newInstance().asInstanceOf[T]
     } catch {
       case e: InvocationTargetException =>
-        throw new SparkRuntimeException(
+        throw new SparkException(
           errorClass = "CONNECT.INTERCEPTOR_RUNTIME_ERROR",
           messageParameters = Map("msg" -> e.getTargetException.getMessage),
           cause = e)
       case e: Exception =>
-        throw new SparkRuntimeException(
+        throw new SparkException(
           errorClass = "CONNECT.INTERCEPTOR_RUNTIME_ERROR",
-          messageParameters = Map("msg" -> "Unknown error"),
+          messageParameters = Map("msg" -> e.getMessage),
           cause = e)
     }
   }
