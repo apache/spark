@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 
 class AnalysisExceptionPositionSuite extends AnalysisTest {
@@ -48,12 +49,14 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     verifyTableOrViewPosition("REFRESH TABLE unknown", "unknown")
     verifyTableOrViewPosition("SHOW COLUMNS FROM unknown", "unknown")
     // Special case where namespace is prepended to the table name.
-    assertAnalysisErrorClass(
-      parsePlan("SHOW COLUMNS FROM unknown IN db"),
-      "TABLE_OR_VIEW_NOT_FOUND",
-      Map("relationName" -> "`db`.`unknown`"),
-      line = 1,
-      pos = 18)
+    val analyzer = getAnalyzer
+    checkError(
+      exception = intercept[SparkException] {
+        analyzer.checkAnalysis(analyzer.execute(parsePlan("SHOW COLUMNS FROM unknown IN db")))
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2221",
+      parameters = Map("key" -> "spark.sql.catalog.db")
+    )
     verifyTableOrViewPosition("ALTER TABLE unknown RENAME TO t", "unknown")
     verifyTableOrViewPosition("ALTER VIEW unknown RENAME TO v", "unknown")
   }
