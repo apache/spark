@@ -1066,7 +1066,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     //      1     | 2 | 4
     // and the plan after rewrite will give the original query incorrect results.
     def failOnUnsupportedCorrelatedPredicate(predicates: Seq[Expression], p: LogicalPlan): Unit = {
-      if (predicates.nonEmpty) {
+      // Correlated non-equality predicates are only supported with the decorrelate
+      // inner query framework. Currently we only use this new framework for scalar
+      // and lateral subqueries.
+      val allowNonEqualityPredicates =
+        SQLConf.get.decorrelateInnerQueryEnabled && (isScalar || isLateral)
+      if (!allowNonEqualityPredicates && predicates.nonEmpty) {
         // Report a non-supported case as an exception
         p.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +

@@ -327,6 +327,45 @@ class Offset(LogicalPlan):
         """
 
 
+class Deduplicate(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        all_columns_as_keys: bool = False,
+        column_names: Optional[List[str]] = None,
+    ) -> None:
+        super().__init__(child)
+        self.all_columns_as_keys = all_columns_as_keys
+        self.column_names = column_names
+
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.deduplicate.all_columns_as_keys = self.all_columns_as_keys
+        if self.column_names is not None:
+            plan.deduplicate.column_names.extend(self.column_names)
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return (
+            f"{' ' * indent}<all_columns_as_keys={self.all_columns_as_keys} "
+            f"column_names={self.column_names}>\n{c_buf}"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b></b>Deduplicate<br />
+                all_columns_as_keys: {self.all_columns_as_keys} <br />
+                column_names: {self.column_names} <br />
+                {self._child_repr_()}
+            </li>
+        </uL>
+        """
+
+
 class Sort(LogicalPlan):
     def __init__(
         self, child: Optional["LogicalPlan"], *columns: Union[SortOrder, ColumnRef, str]

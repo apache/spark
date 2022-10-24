@@ -1982,6 +1982,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ASYNC_LOG_PURGE =
+    buildConf("spark.sql.streaming.asyncLogPurge.enabled")
+      .internal()
+      .doc("When true, purging the offset log and " +
+        "commit log of old entries will be done asynchronously.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like `${var}`, `${system:var}`, " +
