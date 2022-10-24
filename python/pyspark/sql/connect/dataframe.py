@@ -157,11 +157,44 @@ class DataFrame(object):
     def describe(self, cols: List[ColumnRef]) -> Any:
         ...
 
+    def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
+        """Return a new :class:`DataFrame` with duplicate rows removed,
+        optionally only deduplicating based on certain columns.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        subset : List of column names, optional
+            List of columns to use for duplicate comparison (default All columns).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame without duplicated rows.
+        """
+        if subset is None:
+            return DataFrame.withPlan(
+                plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
+            )
+        else:
+            return DataFrame.withPlan(
+                plan.Deduplicate(child=self._plan, column_names=subset), session=self._session
+            )
+
     def distinct(self) -> "DataFrame":
-        """Returns all distinct rows."""
-        all_cols = self.columns
-        gf = self.groupBy(*all_cols)
-        return gf.agg()
+        """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with distinct rows.
+        """
+        return DataFrame.withPlan(
+            plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
+        )
 
     def drop(self, *cols: "ColumnOrString") -> "DataFrame":
         all_cols = self.columns
