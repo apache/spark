@@ -45,7 +45,6 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
 
   test("driver logs are persisted locally and synced to dfs") {
     val sc = getSparkContext()
-
     val app_id = sc.applicationId
     // Run a simple spark application
     sc.parallelize(1 to 1000).count()
@@ -60,6 +59,31 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
 
     sc.stop()
     assert(!driverLogsDir.exists())
+    val dfsFile = FileUtils.getFile(sc.getConf.get(DRIVER_LOG_DFS_DIR).get,
+      app_id + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
+    assert(dfsFile.exists())
+    assert(dfsFile.length() > 0)
+  }
+
+  test("driver logs are persisted locally and synced to dfs when log dir is absolute URI") {
+    val sparkConf = new SparkConf()
+    sparkConf.set(DRIVER_LOG_DFS_DIR, "file://" + rootDfsDir.getAbsolutePath())
+    val sc = getSparkContext(sparkConf)
+    val app_id = sc.applicationId
+    // Run a simple spark application
+    sc.parallelize(1 to 1000).count()
+
+    // Assert driver log file exists
+    val rootDir = Utils.getLocalDir(sc.getConf)
+    val driverLogsDir = FileUtils.getFile(rootDir, DriverLogger.DRIVER_LOG_DIR)
+    assert(driverLogsDir.exists())
+    val files = driverLogsDir.listFiles()
+    assert(files.length === 1)
+    assert(files(0).getName.equals(DriverLogger.DRIVER_LOG_FILE))
+
+    sc.stop()
+    assert(!driverLogsDir.exists())
+    assert(sc.getConf.get(DRIVER_LOG_DFS_DIR).get.startsWith("file:///"))
     val dfsFile = new Path(sc.getConf.get(DRIVER_LOG_DFS_DIR).get +
       "/" + app_id + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
     val dfsFileStatus = dfsFile.getFileSystem(sc.hadoopConfiguration).getFileStatus(dfsFile)
@@ -69,11 +93,14 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   private def getSparkContext(): SparkContext = {
-    val conf = new SparkConf()
-    conf.set(DRIVER_LOG_DFS_DIR, "file://" + rootDfsDir.getAbsolutePath())
-    conf.set(DRIVER_LOG_PERSISTTODFS, true)
-    conf.set(SparkLauncher.SPARK_MASTER, "local")
-    conf.set(SparkLauncher.DEPLOY_MODE, "client")
+    getSparkContext(new SparkConf())
+  }
+
+  private def getSparkContext(conf: SparkConf): SparkContext = {
+    conf.setIfMissing(DRIVER_LOG_DFS_DIR, rootDfsDir.getAbsolutePath())
+    conf.setIfMissing(DRIVER_LOG_PERSISTTODFS, true)
+    conf.setIfMissing(SparkLauncher.SPARK_MASTER, "local")
+    conf.setIfMissing(SparkLauncher.DEPLOY_MODE, "client")
     sc = new SparkContext("local", "DriverLogTest", conf)
     sc
   }
