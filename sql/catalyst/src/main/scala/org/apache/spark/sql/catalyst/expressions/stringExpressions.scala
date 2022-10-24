@@ -782,7 +782,7 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
       TypeUtils.checkForSameTypeInputExpr(
-        input.dataType :: replace.dataType :: Nil, s"function $prettyName")
+        input.dataType :: replace.dataType :: Nil, prettyName)
     } else {
       inputTypeCheck
     }

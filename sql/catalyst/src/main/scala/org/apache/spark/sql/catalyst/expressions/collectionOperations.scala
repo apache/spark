@@ -2427,7 +2427,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
             s" ${BinaryType.simpleString} or ${ArrayType.simpleString}, but it's " +
             childTypes.map(_.catalogString).mkString("[", ", ", "]"))
       }
-      TypeUtils.checkForSameTypeInputExpr(childTypes, s"function $prettyName")
+      TypeUtils.checkForSameTypeInputExpr(childTypes, prettyName)
     }
   }
 
