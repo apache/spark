@@ -44,7 +44,7 @@ import org.apache.spark.internal.io.FileCommitProtocol._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
-import org.apache.spark.util.{BoundedPriorityQueue, ByteBufferInputStream, SerializableConfiguration, SerializableJobConf, Utils}
+import org.apache.spark.util.{BoundedPriorityQueue, ByteBufferInputStream, NextIterator, SerializableConfiguration, SerializableJobConf, Utils}
 import org.apache.spark.util.collection.{BitSet, CompactBuffer}
 import org.apache.spark.util.io.ChunkedByteBuffer
 
@@ -306,6 +306,10 @@ class KryoDeserializationStream(
   private[this] var kryo: Kryo = serInstance.borrowKryo()
 
   final private[this] def hasNext: Boolean = {
+    if (input == null) {
+      return false
+    }
+
     val eof = input.eof()
     if (eof) close()
     !eof
@@ -328,14 +332,34 @@ class KryoDeserializationStream(
     }
   }
 
-  override def asIterator: Iterator[Any] = new Iterator[Any] {
-    final override def next(): Any = readObject[Any]()
-    final override def hasNext: Boolean = KryoDeserializationStream.this.hasNext
+  final override def asIterator: Iterator[Any] = new NextIterator[Any] {
+    override protected def getNext() = {
+      if (KryoDeserializationStream.this.hasNext) {
+        readValue[Any]()
+      } else {
+        finished = true
+        null
+      }
+    }
+
+    override protected def close(): Unit = {
+      KryoDeserializationStream.this.close()
+    }
   }
 
-  override def asKeyValueIterator: Iterator[(Any, Any)] = new Iterator[(Any, Any)] {
-    final override def next(): (Any, Any) = (readKey[Any], readObject[Any]())
-    final override def hasNext: Boolean = KryoDeserializationStream.this.hasNext
+  final override def asKeyValueIterator: Iterator[(Any, Any)] = new NextIterator[(Any, Any)] {
+    override protected def getNext() = {
+      if (KryoDeserializationStream.this.hasNext) {
+        (readKey[Any](), readValue[Any]())
+      } else {
+        finished = true
+        null
+      }
+    }
+
+    override protected def close(): Unit = {
+      KryoDeserializationStream.this.close()
+    }
   }
 }
 
