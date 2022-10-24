@@ -57,7 +57,7 @@ private[sql] class ProtobufSerializer(
         case ise: AnalysisException =>
           throw QueryCompilationErrors.cannotConvertSqlTypeToProtobufError(
             rootDescriptor.getName,
-            rootCatalystType.sql,
+            rootCatalystType,
             ise)
       }
     if (nullable) { (data: Any) =>
@@ -104,7 +104,9 @@ private[sql] class ProtobufSerializer(
           val data = getter.getUTF8String(ordinal).toString
           if (!enumSymbols.contains(data)) {
             throw QueryCompilationErrors.cannotConvertCatalystTypeToProtobufEnumTypeError(
-              toFieldStr(catalystPath), toFieldStr(protoPath), data,
+              toFieldStr(catalystPath),
+              toFieldStr(protoPath),
+              data,
               enumSymbols.mkString("\"", "\", \"", "\""))
           }
           fieldDescriptor.getEnumType.findValueByName(data)
@@ -122,7 +124,8 @@ private[sql] class ProtobufSerializer(
       case (TimestampType, MESSAGE) =>
         (getter, ordinal) =>
           val millis = DateTimeUtils.microsToMillis(getter.getLong(ordinal))
-          Timestamp.newBuilder()
+          Timestamp
+            .newBuilder()
             .setSeconds((millis / 1000))
             .setNanos(((millis % 1000) * 1000000).toInt)
             .build()
@@ -199,7 +202,8 @@ private[sql] class ProtobufSerializer(
           val calendarInterval = IntervalUtils.fromIntervalString(dayTimeIntervalString)
 
           val millis = DateTimeUtils.microsToMillis(calendarInterval.microseconds)
-          val duration = Duration.newBuilder()
+          val duration = Duration
+            .newBuilder()
             .setSeconds((millis / 1000))
             .setNanos(((millis % 1000) * 1000000).toInt)
 
@@ -216,7 +220,7 @@ private[sql] class ProtobufSerializer(
         throw QueryCompilationErrors.cannotConvertCatalystTypeToProtobufTypeError(
           toFieldStr(catalystPath),
           toFieldStr(protoPath),
-          catalystType.sql,
+          catalystType,
           s"${fieldDescriptor} ${fieldDescriptor.toProto.getLabel} ${fieldDescriptor.getJavaType}" +
             s" ${fieldDescriptor.getType}")
     }

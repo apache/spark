@@ -20,8 +20,8 @@ package org.apache.spark.sql.protobuf
 import com.google.protobuf.Descriptors.Descriptor
 import com.google.protobuf.DynamicMessage
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.NoopFilters
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -163,15 +163,16 @@ class ProtobufSerdeSuite extends SharedSparkSession {
       fieldMatchType: MatchType,
       expectedCauseMessage: String,
       catalystSchema: StructType = CATALYST_STRUCT): Unit = {
-    val e = intercept[AnalysisException] {
+    val e = intercept[Exception] {
       serdeFactory.create(catalystSchema, protoSchema, fieldMatchType)
     }
     val expectMsg = serdeFactory match {
       case Deserializer =>
-        s"Unable to convert ${protoSchema.getName} of Protobuf to SQL type ${catalystSchema.sql}."
+        s"[PROTOBUF_TYPE_TO_CATALYST_TYPE_ERROR] Unable to convert" +
+          s" ${protoSchema.getName} of Protobuf to SQL type ${toSQLType(catalystSchema)}."
       case Serializer =>
-        s"Unable to convert SQL type ${catalystSchema.sql} to Protobuf type" +
-          s" ${protoSchema.getName}."
+        s"[UNABLE_TO_CONVERT_TO_PROTOBUF_TYPE] Unable to convert SQL type" +
+          s" ${toSQLType(catalystSchema)} to Protobuf type ${protoSchema.getName}."
     }
 
     assert(e.getMessage === expectMsg)

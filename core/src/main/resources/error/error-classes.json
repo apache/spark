@@ -23,6 +23,11 @@
     ],
     "sqlState" : "42000"
   },
+  "CANNOT_FIND_PROTOBUF_DESCRIPTOR_FILE_ERROR" : {
+    "message" : [
+      "Error reading Protobuf descriptor file at path: <filePath>"
+    ]
+  },
   "CANNOT_INFER_DATE" : {
     "message" : [
       "Cannot infer date in schema inference when LegacyTimeParserPolicy is \"LEGACY\". Legacy Date formatter does not support strict date format matching which is required to avoid inferring timestamps and other non-date entries to date."
@@ -64,6 +69,11 @@
       "Fail to insert a value of <sourceType> type into the <targetType> type column <columnName> due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead."
     ],
     "sqlState" : "22005"
+  },
+  "CATALYST_TYPE_TO_PROTOBUF_ENUM_TYPE_ERROR" : {
+    "message" : [
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> cannot be written since it's not defined in ENUM <enumString>"
+    ]
   },
   "COLUMN_NOT_IN_GROUP_BY_CLAUSE" : {
     "message" : [
@@ -460,6 +470,11 @@
       "Invalid bucket file: <path>"
     ]
   },
+  "INVALID_BYTE_STRING_ERROR" : {
+    "message" : [
+      "Invalid ByteString format"
+    ]
+  },
   "INVALID_COLUMN_OR_FIELD_DATA_TYPE" : {
     "message" : [
       "Column or field <name> is of type <type> while it's required to be <expectedType>."
@@ -572,9 +587,19 @@
     ],
     "sqlState" : "42000"
   },
+  "NO_CATALYST_TYPE_IN_PROTOBUF_SCHEMA" : {
+    "message" : [
+      "Cannot find <catalystFieldPath> in Protobuf schema"
+    ]
+  },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
+    ]
+  },
+  "NO_PROTOBUF_MESSAGE_TYPE_ERROR" : {
+    "message" : [
+      "No MessageTypes returned, <descriptorName>"
     ]
   },
   "NO_UDF_INTERFACE_ERROR" : {
@@ -644,6 +669,61 @@
     ],
     "sqlState" : "42000"
   },
+  "PROTOBUF_CLASS_LOAD_ERROR" : {
+    "message" : [
+      "Could not load Protobuf class with name <protobufClassName> <errorMessage>"
+    ]
+  },
+  "PROTOBUF_DESCRIPTOR_ERROR" : {
+    "message" : [
+      "Error parsing descriptor byte[] into Descriptor object Error: <errorMessage>"
+    ]
+  },
+  "PROTOBUF_DESCRIPTOR_PARSING_ERROR" : {
+    "message" : [
+      "Error constructing FileDescriptor, Error: <errorMessage>"
+    ]
+  },
+  "PROTOBUF_FIELD_MISSING_ERROR" : {
+    "message" : [
+      "Searching for <field> in Protobuf schema at <protobufSchema> gave <matchSize> matches. Candidates: <matches>"
+    ]
+  },
+  "PROTOBUF_FIELD_MISSING_IN_CATALYST_SCHEMA" : {
+    "message" : [
+      "Found <field> in Protobuf schema but there is no match in the SQL schema"
+    ]
+  },
+  "PROTOBUF_FIELD_TYPE_MISMATCH" : {
+    "message" : [
+      "Type mismatch encountered for field: <field>"
+    ]
+  },
+  "PROTOBUF_MESSAGE_TYPE_ERROR" : {
+    "message" : [
+      "<protobufClassName> is not a Protobuf message type"
+    ]
+  },
+  "PROTOBUF_RECURSION_ERROR" : {
+    "message" : [
+      "Found recursive reference in Protobuf schema, which can not be processed by Spark: <fieldDescriptor>"
+    ]
+  },
+  "PROTOBUF_TYPE_NOT_SUPPORT_ERROR" : {
+    "message" : [
+      "Protobuf type not yet supported: <protobufType>."
+    ]
+  },
+  "PROTOBUF_TYPE_TO_CATALYST_TYPE_ERROR" : {
+    "message" : [
+      "Unable to convert <protobufType> of Protobuf to SQL type <toType>."
+    ]
+  },
+  "PROTOBUF_TYPE_TO_SQL_TYPE_ERROR" : {
+    "message" : [
+      "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
+    ]
+  },
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [
       "Failed to rename as <sourcePath> was not found"
@@ -698,6 +778,11 @@
     ],
     "sqlState" : "22023"
   },
+  "SQL_TYPE_TO_PROTOBUF_TYPE_ERROR" : {
+    "message" : [
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
+    ]
+  },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create table or view <relationName> because it already exists.",
@@ -728,6 +813,21 @@
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"
+    ]
+  },
+  "UNABLE_TO_CONVERT_TO_PROTOBUF_TYPE" : {
+    "message" : [
+      "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
+    ]
+  },
+  "UNABLE_TO_LOCATE_PROTOBUF_MESSAGE_ERROR" : {
+    "message" : [
+      "Unable to locate Message <messageName> in Descriptor"
+    ]
+  },
+  "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
+    "message" : [
+      "Attempting to treat <descriptorName> as a Message, but it was <containingType>"
     ]
   },
   "UNPIVOT_REQUIRES_ATTRIBUTES" : {
@@ -4274,106 +4374,6 @@
   "_LEGACY_ERROR_TEMP_2250" : {
     "message" : [
       "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastjoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2251" : {
-    "message" : [
-      "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2252" : {
-    "message" : [
-      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2253" : {
-    "message" : [
-      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> cannot be written since it's not defined in ENUM <enumString>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2254" : {
-    "message" : [
-      "Unable to convert <protobufType> of Protobuf to SQL type <toType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2255" : {
-    "message" : [
-      "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2256" : {
-    "message" : [
-      "Protobuf type not yet supported: <protobufType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2257" : {
-    "message" : [
-      "Attempting to treat <descriptorName> as a Message, but it was <containingType>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2258" : {
-    "message" : [
-      "Cannot find <catalystFieldPath> in Protobuf schema"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2259" : {
-    "message" : [
-      "Found <field> in Protobuf schema but there is no match in the SQL schema"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2260" : {
-    "message" : [
-      "Searching for <field> in Protobuf schema at <protobufSchema> gave <matchSize> matches. Candidates: <matches>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2261" : {
-    "message" : [
-      "Unable to locate Message <messageName> in Descriptor"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2262" : {
-    "message" : [
-      "Error parsing descriptor byte[] into Descriptor object Error: <errorMessage>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2263" : {
-    "message" : [
-      "Error reading Protobuf descriptor file at path: <filePath>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2264" : {
-    "message" : [
-      "No MessageTypes returned, <descriptorName>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2265" : {
-    "message" : [
-      "Error constructing FileDescriptor, Error: <errorMessage>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2266" : {
-    "message" : [
-      "Found recursive reference in Protobuf schema, which can not be processed by Spark: <fieldDescriptor>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2267" : {
-    "message" : [
-      "Type mismatch encountered for field: <field>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2268" : {
-    "message" : [
-      "Could not load Protobuf class with name <protobufClassName> <errorMessage>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2269" : {
-    "message" : [
-      "<protobufClassName> is not a Protobuf message type"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2270" : {
-    "message" : [
-      "Invalid ByteString format"
     ]
   }
 }

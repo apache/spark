@@ -63,12 +63,14 @@ object SchemaConverters {
       case STRING => Some(StringType)
       case BYTE_STRING => Some(BinaryType)
       case ENUM => Some(StringType)
-      case MESSAGE if fd.getMessageType.getName == "Duration" &&
+      case MESSAGE
+        if fd.getMessageType.getName == "Duration" &&
         fd.getMessageType.getFields.size() == 2 &&
         fd.getMessageType.getFields.get(0).getName.equals("seconds") &&
         fd.getMessageType.getFields.get(1).getName.equals("nanos") =>
         Some(DayTimeIntervalType.defaultConcreteType)
-      case MESSAGE if fd.getMessageType.getName == "Timestamp" &&
+      case MESSAGE
+        if fd.getMessageType.getName == "Timestamp" &&
         fd.getMessageType.getFields.size() == 2 &&
         fd.getMessageType.getFields.get(0).getName.equals("seconds") &&
         fd.getMessageType.getFields.get(1).getName.equals("nanos") =>

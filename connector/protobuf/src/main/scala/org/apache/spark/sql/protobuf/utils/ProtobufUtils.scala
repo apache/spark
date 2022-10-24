@@ -79,9 +79,9 @@ private[sql] object ProtobufUtils extends Logging {
 
     /**
      * Validate that there are no Catalyst fields which don't have a matching Protobuf field,
-     * throwing [[AnalysisException]] if such extra fields are found. If
-     * `ignoreNullable` is false, consider nullable Catalyst fields to be eligible to be an extra
-     * field; otherwise, ignore nullable Catalyst fields when checking for extras.
+     * throwing [[AnalysisException]] if such extra fields are found. If `ignoreNullable` is
+     * false, consider nullable Catalyst fields to be eligible to be an extra field; otherwise,
+     * ignore nullable Catalyst fields when checking for extras.
      */
     def validateNoExtraCatalystFields(ignoreNullable: Boolean): Unit =
       catalystSchema.fields.foreach { sqlField =>
@@ -94,8 +94,8 @@ private[sql] object ProtobufUtils extends Logging {
 
     /**
      * Validate that there are no Protobuf fields which don't have a matching Catalyst field,
-     * throwing [[AnalysisException]] if such extra fields are found. Only required
-     * (non-nullable) fields are checked; nullable fields are ignored.
+     * throwing [[AnalysisException]] if such extra fields are found. Only required (non-nullable)
+     * fields are checked; nullable fields are ignored.
      */
     def validateNoExtraRequiredProtoFields(): Unit = {
       val extraFields = protoFieldArray.toSet -- matchedFields.map(_.fieldDescriptor)
@@ -183,7 +183,8 @@ private[sql] object ProtobufUtils extends Logging {
     descriptor match {
       case Some(d) => d
       case None =>
-        throw QueryCompilationErrors.unableToLocateProtobuMessageError(messageName)    }
+        throw QueryCompilationErrors.unableToLocateProtobufMessageError(messageName)
+    }
   }
 
   private def parseFileDescriptor(descFilePath: String): Descriptors.FileDescriptor = {
@@ -199,7 +200,7 @@ private[sql] object ProtobufUtils extends Logging {
     }
 
     val descriptorProto: DescriptorProtos.FileDescriptorProto =
-      fileDescriptorSet.getFile(fileDescriptorSet.getFileList.size() - 1)
+      fileDescriptorSet.getFileList.asScala.last
 
     var fileDescriptorList = List[Descriptors.FileDescriptor]()
     for (fd <- fileDescriptorSet.getFileList.asScala) {
@@ -209,9 +210,8 @@ private[sql] object ProtobufUtils extends Logging {
       }
     }
     try {
-      val fileDescriptor: Descriptors.FileDescriptor = Descriptors.FileDescriptor.buildFrom(
-        descriptorProto,
-        fileDescriptorList.toArray)
+      val fileDescriptor: Descriptors.FileDescriptor =
+        Descriptors.FileDescriptor.buildFrom(descriptorProto, fileDescriptorList.toArray)
       if (fileDescriptor.getMessageTypes().isEmpty()) {
         throw QueryCompilationErrors.noProtobufMessageTypeReturnError(fileDescriptor.getName())
       }

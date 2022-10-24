@@ -64,7 +64,7 @@ private[sql] class ProtobufDeserializer(
       case ise: AnalysisException =>
         throw QueryCompilationErrors.cannotConvertProtobufTypeToCatalystTypeError(
           rootDescriptor.getName,
-          rootCatalystType.sql,
+          rootCatalystType,
           ise)
     }
 
@@ -170,8 +170,9 @@ private[sql] class ProtobufDeserializer(
       case (INT, ShortType) =>
         (updater, ordinal, value) => updater.setShort(ordinal, value.asInstanceOf[Short])
 
-      case  (BOOLEAN | INT | FLOAT | DOUBLE | LONG | STRING | ENUM | BYTE_STRING,
-      ArrayType(dataType: DataType, containsNull)) if protoType.isRepeated =>
+      case  (
+        BOOLEAN | INT | FLOAT | DOUBLE | LONG | STRING | ENUM | BYTE_STRING,
+        ArrayType(dataType: DataType, containsNull)) if protoType.isRepeated =>
         newArrayWriter(protoType, protoPath, catalystPath, dataType, containsNull)
 
       case (LONG, LongType) =>
@@ -245,7 +246,7 @@ private[sql] class ProtobufDeserializer(
           toFieldStr(catalystPath),
           s"${protoType} ${protoType.toProto.getLabel} ${protoType.getJavaType}" +
             s" ${protoType.getType}",
-          catalystType.sql)
+          catalystType)
     }
   }
 
