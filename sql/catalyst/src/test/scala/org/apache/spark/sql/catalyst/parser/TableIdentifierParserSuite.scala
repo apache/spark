@@ -290,35 +290,18 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
     assert(TableIdentifier("q", Option("d")) === parseTableIdentifier("d.q"))
 
     // Illegal names.
-    val identifier1 = ""
-    checkError(
-      exception = intercept[ParseException](parseTableIdentifier(identifier1)),
-      errorClass = "PARSE_EMPTY_STATEMENT",
-      parameters = Map.empty)
-
-    val identifier2 = "d.q.g"
-    checkError(
-      exception = intercept[ParseException](parseTableIdentifier(identifier2)),
-      errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'.'", "hint" -> ""))
-
-    val identifier3 = "t:"
-    checkError(
-      exception = intercept[ParseException](parseTableIdentifier(identifier3)),
-      errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "':'", "hint" -> ": extra input ':'"))
-
-    val identifier4 = "${some.var.x}"
-    checkError(
-      exception = intercept[ParseException](parseTableIdentifier(identifier4)),
-      errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'$'", "hint" -> ""))
-
-    val identifier5 = "tab:1"
-    checkError(
-      exception = intercept[ParseException](parseTableIdentifier(identifier5)),
-      errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "':'", "hint" -> ""))
+    Seq(
+      "" -> ("PARSE_EMPTY_STATEMENT", Map.empty[String, String]),
+      "d.q.g" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "'.'", "hint" -> "")),
+      "t:" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "':'", "hint" -> ": extra input ':'")),
+      "${some.var.x}" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "'$'", "hint" -> "")),
+      "tab:1" -> ("PARSE_SYNTAX_ERROR", Map("error" -> "':'", "hint" -> ""))
+    ).foreach { case (identifier, (errorClass, parameters)) =>
+      checkError(
+        exception = intercept[ParseException](parseTableIdentifier(identifier)),
+        errorClass = errorClass,
+        parameters = parameters)
+    }
   }
 
   test("quoted identifiers") {
