@@ -477,7 +477,10 @@ case class Add(
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Add =
     copy(left = newLeft, right = newRight)
 
-  override lazy val canonicalized: Expression = {
+  override lazy val canonicalized: Expression = dataType match {
+    case _: DecimalType =>
+      withCanonicalizedChildren
+    case _ =>
     // TODO: do not reorder consecutive `Add`s with different `evalMode`
     orderCommutative({ case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, evalMode))
   }
