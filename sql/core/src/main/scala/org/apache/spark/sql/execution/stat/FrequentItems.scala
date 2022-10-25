@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate,
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 object FrequentItems extends Logging {
 
@@ -137,7 +138,7 @@ case class CollectFrequentItems(
     val buffer = new Array[Byte](4 << 10) // 4K
     val bos = new ByteArrayOutputStream()
     val out = new DataOutputStream(bos)
-    try {
+    Utils.tryWithSafeFinally {
       // Write pairs in counts map to byte buffer.
       map.foreach { case (key, count) =>
         val row = InternalRow.apply(key, count)
@@ -149,7 +150,7 @@ case class CollectFrequentItems(
       out.flush()
 
       bos.toByteArray
-    } finally {
+    } {
       out.close()
       bos.close()
     }
@@ -158,7 +159,7 @@ case class CollectFrequentItems(
   override def deserialize(bytes: Array[Byte]): mutable.Map[Any, Long] = {
     val bis = new ByteArrayInputStream(bytes)
     val ins = new DataInputStream(bis)
-    try {
+    Utils.tryWithSafeFinally {
       val map = mutable.Map.empty[Any, Long]
       // Read unsafeRow size and content in bytes.
       var sizeOfNextRow = ins.readInt()
@@ -175,7 +176,7 @@ case class CollectFrequentItems(
       }
 
       map
-    } finally {
+    } {
       ins.close()
       bis.close()
     }
