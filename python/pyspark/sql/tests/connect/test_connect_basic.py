@@ -102,7 +102,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         schema = self.connect.read.table(self.tbl_name).schema()
         self.assertEqual(
             StructType(
-                [StructField("id", LongType(), False), StructField("name", StringType(), False)]
+                [StructField("id", LongType(), True), StructField("name", StringType(), True)]
             ),
             schema,
         )
