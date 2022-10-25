@@ -66,7 +66,8 @@ object DataTypeProtoConverter {
         proto.DataType.StructField
           .newBuilder()
           .setName(structField.name)
-          .setType(toConnectProtoType(structField.dataType)))
+          .setType(toConnectProtoType(structField.dataType))
+          .setNullable(structField.nullable))
     }
     proto.DataType.newBuilder().setStruct(struct).build()
   }
