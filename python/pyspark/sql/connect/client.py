@@ -33,6 +33,7 @@ from pyspark import cloudpickle
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.plan import SQL
+from pyspark.sql.types import DataType, StructType, StructField, LongType, StringType
 
 from typing import Optional, Any, Union
 
@@ -91,14 +92,13 @@ class PlanMetrics:
 
 
 class AnalyzeResult:
-    def __init__(self, cols: typing.List[str], types: typing.List[str], explain: str):
-        self.cols = cols
-        self.types = types
+    def __init__(self, schema: pb2.DataType, explain: str):
+        self.schema = schema
         self.explain_string = explain
 
     @classmethod
     def fromProto(cls, pb: typing.Any) -> "AnalyzeResult":
-        return AnalyzeResult(pb.column_names, pb.column_types, pb.explain_string)
+        return AnalyzeResult(pb.schema, pb.explain_string)
 
 
 class RemoteSparkSession(object):
@@ -151,7 +151,44 @@ class RemoteSparkSession(object):
         req.plan.CopyFrom(plan)
         return self._execute_and_fetch(req)
 
-    def analyze(self, plan: pb2.Plan) -> AnalyzeResult:
+    def _proto_schema_to_pyspark_schema(self, schema: pb2.DataType) -> DataType:
+        if schema.HasField("struct"):
+            structFields = []
+            for proto_field in schema.struct.fields:
+                structFields.append(
+                    StructField(
+                        proto_field.name,
+                        self._proto_schema_to_pyspark_schema(proto_field.type),
+                        proto_field.nullable,
+                    )
+                )
+            return StructType(structFields)
+        elif schema.HasField("i64"):
+            return LongType()
+        elif schema.HasField("string"):
+            return StringType()
+        else:
+            raise Exception("Only support long, string, struct conversion")
+
+    def schema(self, plan: pb2.Plan) -> StructType:
+        proto_schema = self._analyze(plan).schema
+        # Server side should populate the struct field which is the schema.
+        assert proto_schema.HasField("struct")
+        structFields = []
+        for proto_field in proto_schema.struct.fields:
+            structFields.append(
+                StructField(
+                    proto_field.name,
+                    self._proto_schema_to_pyspark_schema(proto_field.type),
+                    proto_field.nullable,
+                )
+            )
+        return StructType(structFields)
+
+    def explain_string(self, plan: pb2.Plan) -> str:
+        return self._analyze(plan).explain_string
+
+    def _analyze(self, plan: pb2.Plan) -> AnalyzeResult:
         req = pb2.Request()
         req.user_context.user_id = self._user_id
         req.plan.CopyFrom(plan)

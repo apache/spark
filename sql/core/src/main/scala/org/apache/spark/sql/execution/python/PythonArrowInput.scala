@@ -26,6 +26,7 @@ import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, PythonRDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
@@ -40,6 +41,8 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
   protected val schema: StructType
 
   protected val timeZoneId: String
+
+  protected def pythonMetrics: Map[String, SQLMetric]
 
   protected def writeIteratorToArrowStream(
       root: VectorSchemaRoot,
@@ -115,6 +118,7 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
     val arrowWriter = ArrowWriter.create(root)
 
     while (inputIterator.hasNext) {
+      val startData = dataOut.size()
       val nextBatch = inputIterator.next()
 
       while (nextBatch.hasNext) {
@@ -124,6 +128,8 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
       arrowWriter.finish()
       writer.writeBatch()
       arrowWriter.reset()
+      val deltaData = dataOut.size() - startData
+      pythonMetrics("pythonDataSent") += deltaData
     }
   }
 }

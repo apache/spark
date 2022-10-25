@@ -35,7 +35,7 @@ object TypeUtils extends QueryErrorsBase {
       DataTypeMismatch(
         errorSubClass = "INVALID_ORDERING_TYPE",
         Map(
-          "functionName" -> caller,
+          "functionName" -> toSQLId(caller),
           "dataType" -> toSQLType(dt)
         )
       )
@@ -49,7 +49,7 @@ object TypeUtils extends QueryErrorsBase {
       DataTypeMismatch(
         errorSubClass = "DATA_DIFF_TYPES",
         messageParameters = Map(
-          "functionName" -> caller,
+          "functionName" -> toSQLId(caller),
           "dataType" -> types.map(toSQLType).mkString("(", " or ", ")")
         )
       )

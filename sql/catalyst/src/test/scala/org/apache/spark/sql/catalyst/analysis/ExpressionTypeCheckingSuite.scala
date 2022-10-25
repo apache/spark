@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -297,7 +298,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = EqualTo($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField = mapField)\"",
-        "functionName" -> "EqualTo",
+        "functionName" -> "`=`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -305,7 +306,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = EqualTo($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField = mapField)\"",
-        "functionName" -> "EqualTo",
+        "functionName" -> "`=`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -313,7 +314,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = EqualNullSafe($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField <=> mapField)\"",
-        "functionName" -> "EqualNullSafe",
+        "functionName" -> "`<=>`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -321,7 +322,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = LessThan($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField < mapField)\"",
-        "functionName" -> "LessThan",
+        "functionName" -> "`<`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -329,7 +330,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = LessThanOrEqual($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField <= mapField)\"",
-        "functionName" -> "LessThanOrEqual",
+        "functionName" -> "`<=`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -337,7 +338,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = GreaterThan($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField > mapField)\"",
-        "functionName" -> "GreaterThan",
+        "functionName" -> "`>`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -345,7 +346,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = GreaterThanOrEqual($"mapField", $"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(mapField >= mapField)\"",
-        "functionName" -> "GreaterThanOrEqual",
+        "functionName" -> "`>=`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -384,7 +385,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = Min($"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"min(mapField)\"",
-        "functionName" -> "function min",
+        "functionName" -> "`min`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -392,7 +393,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = Max($"mapField"),
       messageParameters = Map(
         "sqlExpr" -> "\"max(mapField)\"",
-        "functionName" -> "function max",
+        "functionName" -> "`max`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""
       )
     )
@@ -426,7 +427,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = CreateArray(Seq($"intField", $"booleanField")),
       messageParameters = Map(
         "sqlExpr" -> "\"array(intField, booleanField)\"",
-        "functionName" -> "function array",
+        "functionName" -> "`array`",
         "dataType" -> "(\"INT\" or \"BOOLEAN\")"
       )
     )
@@ -434,14 +435,37 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       expr = Coalesce(Seq($"intField", $"booleanField")),
       messageParameters = Map(
         "sqlExpr" -> "\"coalesce(intField, booleanField)\"",
-        "functionName" -> "function coalesce",
+        "functionName" -> "`coalesce`",
         "dataType" -> "(\"INT\" or \"BOOLEAN\")"
       )
     )
 
     assertError(Coalesce(Nil), "function coalesce requires at least one argument")
-    assertError(new Murmur3Hash(Nil), "function hash requires at least one argument")
-    assertError(new XxHash64(Nil), "function xxhash64 requires at least one argument")
+
+    val murmur3Hash = new Murmur3Hash(Nil)
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(murmur3Hash)
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      parameters = Map(
+        "sqlExpr" -> "\"hash()\"",
+        "functionName" -> toSQLId(murmur3Hash.prettyName),
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0"))
+
+    val xxHash64 = new XxHash64(Nil)
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(xxHash64)
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      parameters = Map(
+        "sqlExpr" -> "\"xxhash64()\"",
+        "functionName" -> toSQLId(xxHash64.prettyName),
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0"))
+
     assertError(Explode($"intField"),
       "input to function explode should be array or map type")
     assertError(PosExplode($"intField"),
@@ -478,8 +502,17 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     assertSuccess(Round(Literal(null), Literal(null)))
     assertSuccess(Round($"intField", Literal(1)))
 
-    assertError(Round($"intField", $"intField"),
-      "Only foldable Expression is allowed")
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(Round($"intField", $"intField"))
+      },
+      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      parameters = Map(
+        "sqlExpr" -> "\"round(intField, intField)\"",
+        "inputName" -> "scala",
+        "inputType" -> "\"INT\"",
+        "inputExpr" -> "\"intField\""))
+
     checkError(
       exception = intercept[AnalysisException] {
         assertSuccess(Round($"intField", $"booleanField"))
@@ -516,9 +549,16 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
 
     assertSuccess(BRound(Literal(null), Literal(null)))
     assertSuccess(BRound($"intField", Literal(1)))
-
-    assertError(BRound($"intField", $"intField"),
-      "Only foldable Expression is allowed")
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(BRound($"intField", $"intField"))
+      },
+      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      parameters = Map(
+        "sqlExpr" -> "\"bround(intField, intField)\"",
+        "inputName" -> "scala",
+        "inputType" -> "\"INT\"",
+        "inputExpr" -> "\"intField\""))
     checkError(
       exception = intercept[AnalysisException] {
         assertSuccess(BRound($"intField", $"booleanField"))
@@ -561,7 +601,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         expr = expr1,
         messageParameters = Map(
           "sqlExpr" -> toSQLExpr(expr1),
-          "functionName" -> expr1.prettyName,
+          "functionName" -> toSQLId(expr1.prettyName),
           "expectedNum" -> "> 1",
           "actualNum" -> "1")
       )
@@ -581,7 +621,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         expr = expr3,
         messageParameters = Map(
           "sqlExpr" -> toSQLExpr(expr3),
-          "functionName" -> s"function ${expr3.prettyName}",
+          "functionName" -> s"`${expr3.prettyName}`",
           "dataType" -> "\"MAP<STRING, BIGINT>\""
         )
       )
@@ -601,5 +641,16 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       "MAP(42L, true)")
     assert(Literal.create(Map(42L -> null), MapType(LongType, NullType)).sql ==
       "MAP(42L, NULL)")
+  }
+
+  test("hash expressions are prohibited on MapType elements") {
+    val argument = Literal.create(Map(42L -> true), MapType(LongType, BooleanType))
+    val murmur3Hash = new Murmur3Hash(Seq(argument))
+    assert(murmur3Hash.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "HASH_MAP_TYPE",
+        messageParameters = Map("functionName" -> toSQLId(murmur3Hash.prettyName))
+      )
+    )
   }
 }

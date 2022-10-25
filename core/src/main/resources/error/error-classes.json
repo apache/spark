@@ -76,6 +76,23 @@
       "Another instance of this query was just started by a concurrent session."
     ]
   },
+  "CONNECT" : {
+    "message" : [
+      "Generic Spark Connect error."
+    ],
+    "subClass" : {
+      "INTERCEPTOR_CTOR_MISSING" : {
+        "message" : [
+          "Cannot instantiate GRPC interceptor because <cls> is missing a default constructor without arguments."
+        ]
+      },
+      "INTERCEPTOR_RUNTIME_ERROR" : {
+        "message" : [
+          "Error instantiating GRPC interceptor: <msg>"
+        ]
+      }
+    }
+  },
   "CONVERSION_INVALID_INPUT" : {
     "message" : [
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
@@ -141,6 +158,11 @@
       "FRAME_LESS_OFFSET_WITHOUT_FOLDABLE" : {
         "message" : [
           "Offset expression <offset> must be a literal."
+        ]
+      },
+      "HASH_MAP_TYPE" : {
+        "message" : [
+          "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
         ]
       },
       "INVALID_JSON_MAP_KEY_TYPE" : {
