@@ -277,7 +277,7 @@ private[spark] object ChunkedByteBuffer {
     if (estimatedSize < 0) {
       CHUNK_BUFFER_SIZE
     } else {
-      Math.max(Math.min(estimatedSize >> 3, CHUNK_BUFFER_SIZE).toInt, MINIMUM_CHUNK_BUFFER_SIZE)
+      Math.max(Math.min(estimatedSize, CHUNK_BUFFER_SIZE).toInt, MINIMUM_CHUNK_BUFFER_SIZE)
     }
   }
 }
