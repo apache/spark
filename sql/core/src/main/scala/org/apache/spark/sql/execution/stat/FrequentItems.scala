@@ -121,8 +121,10 @@ case class CollectFrequentItems(
   override def merge(
       buffer: mutable.Map[Any, Long],
       input: mutable.Map[Any, Long]): mutable.Map[Any, Long] = {
-    input.foreach { case (k, v) =>
-      add(buffer, k, v)
+    val otherIter = input.iterator
+    while (otherIter.hasNext) {
+      val (key, count) = otherIter.next
+      add(buffer, key, count)
     }
     buffer
   }
