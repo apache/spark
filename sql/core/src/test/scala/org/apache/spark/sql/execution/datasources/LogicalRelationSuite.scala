@@ -49,6 +49,8 @@ class LogicalRelationSuite extends SharedSparkSession {
       val logicalRelation = LogicalRelation(relation, tableMeta)
       val statistics = logicalRelation.computeStats()
       assert(statistics.sizeInBytes == 2863)
+      assert(spark.sharedState.externalCatalog.getTable(
+        "default", "test").stats.get.sizeInBytes == 2863)
     }
   }
 
