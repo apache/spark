@@ -33,7 +33,7 @@ import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 
 package object dsl {
 
-  private[connect] object expressions { // scalastyle:ignore
+  object expressions { // scalastyle:ignore
     implicit class DslString(val s: String) {
       def protoAttr: proto.Expression =
         proto.Expression
@@ -136,7 +136,7 @@ package object dsl {
         .build()
   }
 
-  private[connect] object commands { // scalastyle:ignore
+  object commands { // scalastyle:ignore
     implicit class DslCommands(val logicalPlan: proto.Relation) {
       def write(
           format: Option[String] = None,
@@ -175,7 +175,7 @@ package object dsl {
     }
   }
 
-  private[connect] object plans { // scalastyle:ignore
+  object plans { // scalastyle:ignore
     implicit class DslLogicalPlan(val logicalPlan: proto.Relation) {
       def select(exprs: proto.Expression*): proto.Relation = {
         proto.Relation
