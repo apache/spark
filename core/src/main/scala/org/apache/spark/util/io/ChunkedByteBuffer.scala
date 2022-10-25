@@ -55,7 +55,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
   private[this] var disposed: Boolean = false
 
   /**
-   * This size of this buffer, in bytes. Using var here for serialization purpose(need to set a
+   * This size of this buffer, in bytes. Using var here for serialization purpose (need to set a
    * object after default construction)
    */
   private var _size: Long = chunks.map(_.limit().asInstanceOf[Long]).sum

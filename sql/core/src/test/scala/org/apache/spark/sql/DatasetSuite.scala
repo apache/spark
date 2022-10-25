@@ -2189,6 +2189,7 @@ class DatasetLargeResultCollectingSuite extends QueryTest
 
   override protected def sparkConf: SparkConf = super.sparkConf.set(MAX_RESULT_SIZE.key, "4g")
   test("collect data with single partition larger than 2GB bytes array limit") {
+
     import org.apache.spark.sql.functions.udf
 
     val genData = udf((id: Long, bytesSize: Int) => {
@@ -2204,7 +2205,6 @@ class DatasetLargeResultCollectingSuite extends QueryTest
     val df = spark.range(0, 3000, 1, 1).selectExpr("id", s"genData(id, 1000000) as data")
     val res = df.queryExecution.executedPlan.executeCollect()
   }
-
 }
 
 case class Bar(a: Int)

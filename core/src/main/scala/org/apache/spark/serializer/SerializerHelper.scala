@@ -27,16 +27,19 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
 private[spark] object SerializerHelper extends Logging {
 
   /**
+   *
+   * @param serializerInstance instance of [[SerializerInstance]]
+   * @param objectToSerialize the object to serialize, of type `T`
    * @param estimatedSize estimated size of `t`, used as a hint to choose proper chunk size
    */
   def serializeToChunkedBuffer[T: ClassTag](
       serializerInstance: SerializerInstance,
-      t: T,
+      objectToSerialize: T,
       estimatedSize: Long = -1): ChunkedByteBuffer = {
     val chunkSize = ChunkedByteBuffer.estimateBufferChunkSize(estimatedSize)
     val cbbos = new ChunkedByteBufferOutputStream(chunkSize, ByteBuffer.allocate)
     val out = serializerInstance.serializeStream(cbbos)
-    out.writeObject(t)
+    out.writeObject(objectToSerialize)
     out.close()
     cbbos.close()
     cbbos.toChunkedByteBuffer
