@@ -2387,7 +2387,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkException("Foreach writer has been aborted due to a task failure")
   }
 
-  def incorrectRumpUpRate(rowsPerSecond: Long,
+  def incorrectRampUpRate(rowsPerSecond: Long,
       maxSeconds: Long,
       rampUpTimeSeconds: Long): Throwable = {
     new SparkRuntimeException(

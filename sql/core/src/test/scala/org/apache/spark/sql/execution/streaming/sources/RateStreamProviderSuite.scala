@@ -197,7 +197,7 @@ class RateStreamProviderSuite extends StreamTest {
     }
   }
 
-  testQuietly("microbatch - rump up error") {
+  testQuietly("microbatch - ramp up error") {
     val e = intercept[SparkRuntimeException](
       new RateStreamMicroBatchStream(
         rowsPerSecond = Long.MaxValue,
