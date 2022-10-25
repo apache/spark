@@ -4219,15 +4219,67 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val funcsMustHaveAtLeastOneArg =
       ("coalesce", (df: DataFrame) => df.select(coalesce())) ::
-      ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) ::
-      ("hash", (df: DataFrame) => df.select(hash())) ::
-      ("hash", (df: DataFrame) => df.selectExpr("hash()")) ::
-      ("xxhash64", (df: DataFrame) => df.select(xxhash64())) ::
-      ("xxhash64", (df: DataFrame) => df.selectExpr("xxhash64()")) :: Nil
+      ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) :: Nil
     funcsMustHaveAtLeastOneArg.foreach { case (name, func) =>
       val errMsg = intercept[AnalysisException] { func(df) }.getMessage
       assert(errMsg.contains(s"input to function $name requires at least one argument"))
     }
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(hash())
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"hash()\"",
+        "functionName" -> "`hash`",
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("hash()")
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"hash()\"",
+        "functionName" -> "`hash`",
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0"),
+      context = ExpectedContext(
+        fragment = "hash()",
+        start = 0,
+        stop = 5))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(xxhash64())
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"xxhash64()\"",
+        "functionName" -> "`xxhash64`",
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("xxhash64()")
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"xxhash64()\"",
+        "functionName" -> "`xxhash64`",
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0"),
+      context = ExpectedContext(
+        fragment = "xxhash64()",
+        start = 0,
+        stop = 9))
 
     checkError(
       exception = intercept[AnalysisException] {

@@ -14,24 +14,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect.config
 
-import org.apache.spark.internal.config.ConfigBuilder
+package org.apache.spark.sql.execution.python
 
-private[spark] object Connect {
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
-  val CONNECT_GRPC_BINDING_PORT =
-    ConfigBuilder("spark.connect.grpc.binding.port")
-      .version("3.4.0")
-      .intConf
-      .createWithDefault(15002)
+private[sql] trait PythonSQLMetrics { self: SparkPlan =>
 
-  val CONNECT_GRPC_INTERCEPTOR_CLASSES =
-    ConfigBuilder("spark.connect.grpc.interceptor.classes")
-      .doc(
-        "Comma separated list of class names that must " +
-          "implement the io.grpc.ServerInterceptor interface.")
-      .version("3.4.0")
-      .stringConf
-      .createOptional
+  val pythonMetrics = Map(
+    "pythonDataSent" -> SQLMetrics.createSizeMetric(sparkContext,
+      "data sent to Python workers"),
+    "pythonDataReceived" -> SQLMetrics.createSizeMetric(sparkContext,
+      "data returned from Python workers"),
+    "pythonNumRowsReceived" -> SQLMetrics.createMetric(sparkContext,
+      "number of output rows")
+  )
+
+  override lazy val metrics = pythonMetrics
 }
