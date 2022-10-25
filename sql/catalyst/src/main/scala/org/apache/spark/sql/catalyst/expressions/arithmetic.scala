@@ -1203,7 +1203,7 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
       DataTypeMismatch(
         errorSubClass = "WRONG_NUM_PARAMS",
         messageParameters = Map(
-          "functionName" -> prettyName,
+          "functionName" -> toSQLId(prettyName),
           "expectedNum" -> "> 1",
           "actualNum" -> children.length.toString))
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
@@ -1215,7 +1215,7 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
         )
       )
     } else {
-      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(dataType, prettyName)
     }
   }
 
@@ -1294,7 +1294,7 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
       DataTypeMismatch(
         errorSubClass = "WRONG_NUM_PARAMS",
         messageParameters = Map(
-          "functionName" -> prettyName,
+          "functionName" -> toSQLId(prettyName),
           "expectedNum" -> "> 1",
           "actualNum" -> children.length.toString))
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
@@ -1306,7 +1306,7 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
         )
       )
     } else {
-      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(dataType, prettyName)
     }
   }
 

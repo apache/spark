@@ -1023,7 +1023,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     super.checkArgumentDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess =>
         if (leftKeyType.sameType(rightKeyType)) {
-          TypeUtils.checkForOrderingExpr(leftKeyType, s"function $prettyName")
+          TypeUtils.checkForOrderingExpr(leftKeyType, prettyName)
         } else {
           TypeCheckResult.TypeCheckFailure(s"The input to function $prettyName should have " +
             s"been two ${MapType.simpleString}s with compatible key types, but the key types are " +

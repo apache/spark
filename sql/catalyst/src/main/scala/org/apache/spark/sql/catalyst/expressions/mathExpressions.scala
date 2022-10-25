@@ -1794,7 +1794,7 @@ case class WidthBucket(
             TypeCheckSuccess
           case _ =>
             val types = Seq(value.dataType, minValue.dataType, maxValue.dataType)
-            TypeUtils.checkForSameTypeInputExpr(types, s"function $prettyName")
+            TypeUtils.checkForSameTypeInputExpr(types, prettyName)
         }
       case f => f
     }
