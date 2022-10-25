@@ -36,7 +36,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
   import testImplicits._
 
-  val testFileDesc = testFile("protobuf/functions_suite.desc").replace("file:/", "/")
+  val testFileDesc = testFile("functions_suite.desc").replace("file:/", "/")
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SimpleMessageProtos$"
 
   /**
@@ -114,7 +114,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       .addRdoubleValue(1092093.654d)
       .addRfloatValue(10903.0f)
       .addRfloatValue(10902.0f)
-      .addRnestedEnum(NestedEnum.ESTED_NOTHING)
+      .addRnestedEnum(NestedEnum.NESTED_NOTHING)
       .addRnestedEnum(NestedEnum.NESTED_FIRST)
       .build()
 
@@ -134,7 +134,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
   test("roundtrip in from_protobuf and to_protobuf - Repeated Message Once") {
     val repeatedMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "RepeatedMessage")
-    val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
+    val basicMessageDesc = ProtobufUtils.buildDescriptor(
+      testFile("basicmessage.desc").replace("file:/", "/"),
+      "BasicMessage")
 
     val basicMessage = DynamicMessage
       .newBuilder(basicMessageDesc)
@@ -171,7 +173,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
   test("roundtrip in from_protobuf and to_protobuf - Repeated Message Twice") {
     val repeatedMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "RepeatedMessage")
-    val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
+    val basicMessageDesc = ProtobufUtils.buildDescriptor(
+      testFile("basicmessage.desc").replace("file:/", "/"),
+      "BasicMessage")
 
     val basicMessage1 = DynamicMessage
       .newBuilder(basicMessageDesc)
@@ -458,7 +462,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("Handle extra fields : oldProducer -> newConsumer") {
-    val testFileDesc = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
+    val testFileDesc = testFile("catalyst_types.desc").replace("file:/", "/")
     val oldProducer = ProtobufUtils.buildDescriptor(testFileDesc, "oldProducer")
     val newConsumer = ProtobufUtils.buildDescriptor(testFileDesc, "newConsumer")
 
@@ -498,7 +502,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("Handle extra fields : newProducer -> oldConsumer") {
-    val testFileDesc = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
+    val testFileDesc = testFile("catalyst_types.desc").replace("file:/", "/")
     val newProducer = ProtobufUtils.buildDescriptor(testFileDesc, "newProducer")
     val oldConsumer = ProtobufUtils.buildDescriptor(testFileDesc, "oldConsumer")
 
@@ -569,6 +573,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("from_protobuf filter to_protobuf") {
+    val testFileDesc = testFile("basicmessage.desc").replace("file:/", "/")
     val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
 
     val basicMessage = DynamicMessage
@@ -587,19 +592,16 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
     val df = Seq(basicMessage.toByteArray).toDF("value")
 
-    checkWithFileAndClassName("BasicMessage") {
-      case (name, descFilePathOpt) =>
-        val resultFrom = df
-          .select(from_protobuf_wrapper($"value", name, descFilePathOpt) as 'sample)
-          .where("sample.string_value == \"slam\"")
+    val resultFrom = df
+      .select(from_protobuf_wrapper($"value", "BasicMessage", Some(testFileDesc)) as 'sample)
+      .where("sample.string_value == \"slam\"")
 
-        val resultToFrom = resultFrom
-          .select(to_protobuf_wrapper($"sample", name, descFilePathOpt) as 'value)
-          .select(from_protobuf_wrapper($"value", name, descFilePathOpt) as 'sample)
-          .where("sample.string_value == \"slam\"")
+    val resultToFrom = resultFrom
+      .select(to_protobuf_wrapper($"sample", "BasicMessage", Some(testFileDesc)) as 'value)
+      .select(from_protobuf_wrapper($"value", "BasicMessage", Some(testFileDesc)) as 'sample)
+      .where("sample.string_value == \"slam\"")
 
-        assert(resultFrom.except(resultToFrom).isEmpty)
-    }
+    assert(resultFrom.except(resultToFrom).isEmpty)
   }
 
   test("Handle TimestampType between to_protobuf and from_protobuf") {

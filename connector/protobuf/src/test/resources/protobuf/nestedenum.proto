@@ -14,13 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 syntax = "proto3";
 
 package org.apache.spark.sql.protobuf.protos;
 
-option java_outer_classname = "DurationProto";
+option java_outer_classname = "NestedEnumProto";
 
-message Duration {
-  int64 seconds = 1;
-  int32 nanos = 2;
+enum NestedEnum {
+  NESTED_NOTHING = 0;
+  NESTED_FIRST = 1;
+  NESTED_SECOND = 2;
 }

@@ -3379,6 +3379,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("protobufClassName" -> protobufClassName))
   }
 
+  def protobufDescriptorDependencyError(dependencyName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "PROTOBUF_DEPENDENCY_ERROR",
+      messageParameters = Map("dependencyName" -> dependencyName))
+  }
+
   def invalidByteStringFormatError(): Throwable = {
     new AnalysisException(errorClass = "INVALID_BYTE_STRING_ERROR", messageParameters = Map.empty)
   }

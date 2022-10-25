@@ -674,6 +674,11 @@
       "Could not load Protobuf class with name <protobufClassName> <errorMessage>"
     ]
   },
+  "PROTOBUF_DEPENDENCY_ERROR" : {
+    "message" : [
+      "Could not find dependency: <dependencyName>"
+    ]
+  },
   "PROTOBUF_DESCRIPTOR_ERROR" : {
     "message" : [
       "Error parsing descriptor byte[] into Descriptor object Error: <errorMessage>"

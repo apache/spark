@@ -23,6 +23,7 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 
 import com.google.protobuf.{DescriptorProtos, Descriptors, InvalidProtocolBufferException, Message}
+import com.google.protobuf.DescriptorProtos.{FileDescriptorProto, FileDescriptorSet}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 
 import org.apache.spark.internal.Logging
@@ -198,20 +199,10 @@ private[sql] object ProtobufUtils extends Logging {
       case ex: IOException =>
         throw QueryCompilationErrors.cannotFindDescriptorFileError(descFilePath, ex)
     }
-
-    val descriptorProto: DescriptorProtos.FileDescriptorProto =
-      fileDescriptorSet.getFileList.asScala.last
-
-    var fileDescriptorList = List[Descriptors.FileDescriptor]()
-    for (fd <- fileDescriptorSet.getFileList.asScala) {
-      if (descriptorProto.getName != fd.getName) {
-        fileDescriptorList = fileDescriptorList ++
-          List(Descriptors.FileDescriptor.buildFrom(fd, new Array[Descriptors.FileDescriptor](0)))
-      }
-    }
     try {
+      val fileDescriptorProtoIndex = createDescriptorProtoIndex(fileDescriptorSet)
       val fileDescriptor: Descriptors.FileDescriptor =
-        Descriptors.FileDescriptor.buildFrom(descriptorProto, fileDescriptorList.toArray)
+        buildFileDescriptor(fileDescriptorSet.getFileList.asScala.last, fileDescriptorProtoIndex)
       if (fileDescriptor.getMessageTypes().isEmpty()) {
         throw QueryCompilationErrors.noProtobufMessageTypeReturnError(fileDescriptor.getName())
       }
@@ -220,6 +211,42 @@ private[sql] object ProtobufUtils extends Logging {
       case e: Descriptors.DescriptorValidationException =>
         throw QueryCompilationErrors.failedParsingDescriptorError(e)
     }
+  }
+
+  /**
+   * Recursively constructs file descriptors for all dependencies for given
+   * FileDescriptorProto and return.
+   * @param descriptorProto
+   * @param descriptorProtoIndex
+   * @return Descriptors.FileDescriptor
+   */
+  private def buildFileDescriptor(
+    fileDescriptorProto: FileDescriptorProto,
+    fileDescriptorProtoIndex: Map[String, FileDescriptorProto]): Descriptors.FileDescriptor = {
+    var fileDescriptorList = List[Descriptors.FileDescriptor]()
+    for (dependencyName <- fileDescriptorProto.getDependencyList().asScala) {
+      if (!fileDescriptorProtoIndex.contains(dependencyName)) {
+        throw QueryCompilationErrors.protobufDescriptorDependencyError(dependencyName)
+      }
+      val dependencyProto: FileDescriptorProto = fileDescriptorProtoIndex.get(dependencyName).get
+      fileDescriptorList = fileDescriptorList ++ List(
+        buildFileDescriptor(dependencyProto, fileDescriptorProtoIndex))
+    }
+    Descriptors.FileDescriptor.buildFrom(fileDescriptorProto, fileDescriptorList.toArray)
+  }
+
+  /**
+   * Returns a map from descriptor proto name as found inside the descriptors to protos.
+   * @param fileDescriptorSet
+   * @return Map[String, FileDescriptorProto]
+   */
+  private def createDescriptorProtoIndex(
+    fileDescriptorSet: FileDescriptorSet): Map[String, FileDescriptorProto] = {
+    var resultBuilder = Map[String, FileDescriptorProto]()
+    for (descriptorProto <- fileDescriptorSet.getFileList().asScala) {
+      resultBuilder = resultBuilder ++ Map(descriptorProto.getName() -> descriptorProto)
+    }
+    resultBuilder
   }
 
   /**

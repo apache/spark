@@ -15,16 +15,17 @@
  * limitations under the License.
  */
 // To compile and create test class:
-// cd connector/protobuf/src/test/resources/
-// protoc --java_out=./protobuf/ protobuf/functions_suite.proto
-// protoc --include_imports --descriptor_set_out=protobuf/functions_suite.desc --java_out=protobuf/org/apache/spark/sql/protobuf/ protobuf/functions_suite.prot
+// cd connector/protobuf/src/test/resources/protobuf
+// protoc --java_out=./ functions_suite.proto
+// protoc --include_imports --descriptor_set_out=functions_suite.desc --java_out=org/apache/spark/sql/protobuf/ functions_suite.proto
 
 syntax = "proto3";
 
 package org.apache.spark.sql.protobuf.protos;
 
-import "protobuf/timestamp.proto";
-import "protobuf/duration.proto";
+import "timestamp.proto";
+import "duration.proto";
+import "basicmessage.proto";
 
 option java_outer_classname = "SimpleMessageProtos";
 
@@ -62,7 +63,7 @@ message SimpleMessageRepeated {
   string key = 1;
   string value = 2;
   enum NestedEnum {
-    ESTED_NOTHING = 0;
+    NESTED_NOTHING = 0;
     NESTED_FIRST = 1;
     NESTED_SECOND = 2;
   }
@@ -74,17 +75,6 @@ message SimpleMessageRepeated {
   repeated double rdouble_value = 8;
   repeated bytes rbytes_value = 9;
   repeated NestedEnum rnested_enum = 10;
-}
-
-message BasicMessage {
-  int64 id = 1;
-  string string_value = 2;
-  int32 int32_value = 3;
-  int64 int64_value = 4;
-  double double_value = 5;
-  float float_value = 6;
-  bool bool_value = 7;
-  bytes bytes_value = 8;
 }
 
 message RepeatedMessage {
