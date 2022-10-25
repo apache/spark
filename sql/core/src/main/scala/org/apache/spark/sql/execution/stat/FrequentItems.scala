@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions, Column, DataFrame}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.GenericArrayData
@@ -69,7 +69,7 @@ case class CollectFrequentItems(
     size: Int,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends TypedImperativeAggregate[mutable.Map[Any, Long]]
-  with ImplicitCastInputTypes with UnaryLike[Expression] {
+  with UnaryLike[Expression] {
   require(size > 0)
 
   def this(child: Expression, size: Int) = this(child, size, 0, 0)
@@ -78,8 +78,6 @@ case class CollectFrequentItems(
   override def nullable: Boolean = false
 
   override def dataType: DataType = ArrayType(child.dataType, containsNull = child.nullable)
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
   override def prettyName: String = "collect_frequent_items"
 
