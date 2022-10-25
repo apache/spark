@@ -2316,7 +2316,7 @@ class StringMethods:
         left). 1000 remains unchanged as it is longer than width.
 
         >>> s.str.zfill(3)
-        0     0-1
+        0     -01
         1     001
         2    1000
         3    None
