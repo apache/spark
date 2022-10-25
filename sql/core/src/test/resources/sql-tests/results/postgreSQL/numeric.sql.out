@@ -4694,11 +4694,13 @@ SELECT '' AS to_number_1,  to_number('-34,338,492', '99G999G999')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERNAL_ERROR",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2278",
   "messageParameters" : {
-    "message" : "Undefined error message parameter for error class: '_LEGACY_ERROR_TEMP_2278'. Parameters: Map(input -> -34,338,492, format -> 99G999G999)"
+    "format" : "99G999G999",
+    "input" : "-34,338,492",
+    "valueType" : "string"
   }
 }
 
@@ -4766,11 +4768,13 @@ SELECT '' AS to_number_16, to_number('123456','999G999')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INTERNAL_ERROR",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2278",
   "messageParameters" : {
-    "message" : "Undefined error message parameter for error class: '_LEGACY_ERROR_TEMP_2278'. Parameters: Map(input -> 123456, format -> 999G999)"
+    "format" : "999G999",
+    "input" : "123456",
+    "valueType" : "string"
   }
 }
 
