@@ -207,7 +207,7 @@ class RateStreamProviderSuite extends StreamTest {
 
     checkError(
       exception = e,
-      errorClass = "INCORRECT_RUMP_UP_RATE",
+      errorClass = "INCORRECT_RAMP_UP_RATE",
       parameters = Map(
         "rowsPerSecond" -> Long.MaxValue.toString,
         "maxSeconds" -> "1",

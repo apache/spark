@@ -453,7 +453,7 @@
       "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but it's <endSeconds> now."
     ]
   },
-  "INCORRECT_RUMP_UP_RATE" : {
+  "INCORRECT_RAMP_UP_RATE" : {
     "message" : [
       "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but 'rampUpTimeSeconds' is <rampUpTimeSeconds>."
     ]

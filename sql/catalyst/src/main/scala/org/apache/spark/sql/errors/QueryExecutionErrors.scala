@@ -2391,7 +2391,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       maxSeconds: Long,
       rampUpTimeSeconds: Long): Throwable = {
     new SparkRuntimeException(
-      errorClass = "INCORRECT_RUMP_UP_RATE",
+      errorClass = "INCORRECT_RAMP_UP_RATE",
       messageParameters = Map(
         "rowsPerSecond" -> rowsPerSecond.toString,
         "maxSeconds" -> maxSeconds.toString,
