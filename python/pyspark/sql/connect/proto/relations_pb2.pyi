@@ -478,7 +478,11 @@ class Join(google.protobuf.message.Message):
     @property
     def using_columns(
         self,
-    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """Optional. using_columns provides a list of columns that should present on both sides of
+        the join inputs that this Join will join on. For example A JOIN B USING col_name is
+        equivalent to A JOIN B on A.col_name = B.col_name.
+        """
     def __init__(
         self,
         *,

@@ -220,6 +220,20 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(res.nodeName == "Join")
     assert(res != null)
 
+    val e = intercept[InvalidPlanInput] {
+      val simpleJoin = proto.Relation.newBuilder
+        .setJoin(
+          proto.Join.newBuilder
+            .setLeft(readRel)
+            .setRight(readRel)
+            .addUsingColumns("test_col")
+            .setJoinCondition(joinCondition))
+        .build()
+      transform(simpleJoin)
+    }
+    assert(
+      e.getMessage.contains(
+        "Using columns or join conditions cannot be set at the same time in Join"))
   }
 
   test("Simple Projection") {

@@ -292,6 +292,10 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   private def transformJoin(rel: proto.Join): LogicalPlan = {
     assert(rel.hasLeft && rel.hasRight, "Both join sides must be present")
+    if (rel.hasJoinCondition && rel.getUsingColumnsCount > 0) {
+      throw InvalidPlanInput(
+        s"Using columns or join conditions cannot be set at the same time in Join")
+    }
     val joinCondition =
       if (rel.hasJoinCondition) Some(transformExpression(rel.getJoinCondition)) else None
     val catalystJointype = transformJoinType(
