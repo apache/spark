@@ -2618,6 +2618,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2278",
       messageParameters = Map(
+        "valueType" -> valueType,
         "input" -> input,
         "format" -> format))
   }
