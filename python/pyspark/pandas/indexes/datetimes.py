@@ -285,7 +285,7 @@ class DatetimeIndex(Index):
         --------
         >>> idx = ps.date_range("2018-02-27", periods=3)
         >>> idx.is_month_start
-        Index([False, False, True], dtype='object')
+        Index([False, False, True], dtype='bool')
         """
         return Index(self.to_series().dt.is_month_start)
 
@@ -308,7 +308,7 @@ class DatetimeIndex(Index):
         --------
         >>> idx = ps.date_range("2018-02-27", periods=3)
         >>> idx.is_month_end
-        Index([False, True, False], dtype='object')
+        Index([False, True, False], dtype='bool')
         """
         return Index(self.to_series().dt.is_month_end)
 
@@ -331,7 +331,7 @@ class DatetimeIndex(Index):
         --------
         >>> idx = ps.date_range('2017-03-30', periods=4)
         >>> idx.is_quarter_start
-        Index([False, False, True, False], dtype='object')
+        Index([False, False, True, False], dtype='bool')
         """
         return Index(self.to_series().dt.is_quarter_start)
 
@@ -354,7 +354,7 @@ class DatetimeIndex(Index):
         --------
         >>> idx = ps.date_range('2017-03-30', periods=4)
         >>> idx.is_quarter_end
-        Index([False, True, False, False], dtype='object')
+        Index([False, True, False, False], dtype='bool')
         """
         return Index(self.to_series().dt.is_quarter_end)
 
@@ -376,7 +376,7 @@ class DatetimeIndex(Index):
         --------
         >>> idx = ps.date_range("2017-12-30", periods=3)
         >>> idx.is_year_start
-        Index([False, False, True], dtype='object')
+        Index([False, False, True], dtype='bool')
         """
         return Index(self.to_series().dt.is_year_start)
 
@@ -398,7 +398,7 @@ class DatetimeIndex(Index):
         --------
         >>> idx = ps.date_range("2017-12-30", periods=3)
         >>> idx.is_year_end
-        Index([False, True, False], dtype='object')
+        Index([False, True, False], dtype='bool')
         """
         return Index(self.to_series().dt.is_year_end)
 
@@ -421,7 +421,7 @@ class DatetimeIndex(Index):
         --------
         >>> idx = ps.date_range("2012-01-01", "2015-01-01", freq="Y")
         >>> idx.is_leap_year
-        Index([True, False, False], dtype='object')
+        Index([True, False, False], dtype='bool')
         """
         return Index(self.to_series().dt.is_leap_year)
 
