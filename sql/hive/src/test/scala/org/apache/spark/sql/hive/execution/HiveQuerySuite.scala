@@ -1437,14 +1437,15 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     var success = false
     val t = new Thread("test") {
       override def run(): Unit = {
-        checkError(
+        checkErrorMatchPVals(
           exception = intercept[AnalysisException] {
             range(1).selectExpr("not_a_udf()")
           },
           errorClass = "_LEGACY_ERROR_TEMP_1242",
+          sqlState = None,
           parameters = Map(
             "rawName" -> "not_a_udf",
-            "fullName" -> "spark_catalog.default.not_a_udf"),
+            "fullName" -> "spark_catalog.[a-z]+.not_a_udf"),
           context = ExpectedContext(
             fragment = "not_a_udf()",
             start = 0,
