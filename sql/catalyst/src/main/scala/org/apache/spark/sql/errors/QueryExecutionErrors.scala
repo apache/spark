@@ -2614,7 +2614,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def multipleBucketTransformsError(): Throwable = {
-    new UnsupportedOperationException("Multiple bucket transforms are not supported.")
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2251",
+      messageParameters = Map.empty)
   }
 
   def unsupportedCreateNamespaceCommentError(): Throwable = {

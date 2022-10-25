@@ -4312,5 +4312,10 @@
     "message" : [
       "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastjoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
     ]
+  },
+  "_LEGACY_ERROR_TEMP_2251" : {
+    "message" : [
+      "Multiple bucket transforms are not supported."
+    ]
   }
 }
