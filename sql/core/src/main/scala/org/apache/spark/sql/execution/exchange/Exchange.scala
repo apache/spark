@@ -91,3 +91,24 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
        |""".stripMargin
   }
 }
+
+/**
+ * A proxy class for [[ReusedExchangeExec]], because [[BroadcastExchangeExec]] doesn't support
+ * `execute`. The proxy class will convert the calling from `execute` to `executeCollect`.
+ */
+case class BroadcastExchangeExecProxy(
+    name: String,
+    index: Int,
+    buildKeys: Seq[Expression],
+    child: ReusedExchangeExec)
+  extends LeafExecNode {
+
+  val broadcastValues = SubqueryBroadcastExec(name, index, buildKeys, child)
+
+  override def output: Seq[Attribute] = child.output
+
+  def doExecute(): RDD[InternalRow] = {
+    val broadcastedValues = broadcastValues.executeCollect()
+    session.sparkContext.parallelize(broadcastedValues, 1)
+  }
+}

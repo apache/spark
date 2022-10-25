@@ -131,6 +131,8 @@ case class AdaptiveSparkPlanExec(
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     PlanAdaptiveDynamicPruningFilters(this),
+    CacheAdaptiveBroadcastExchanges(this),
+    PlanAdaptiveRuntimeFilterFilters(this),
     ReuseAdaptiveSubquery(context.subqueryCache),
     OptimizeSkewInRebalancePartitions,
     CoalesceShufflePartitions(context.session),
@@ -809,6 +811,12 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    */
   val subqueryCache: TrieMap[SparkPlan, BaseSubqueryExec] =
     new TrieMap[SparkPlan, BaseSubqueryExec]()
+
+  /**
+   * The exchange-reuse map shared across the entire query.
+   */
+  val exchangeCache: TrieMap[SparkPlan, Exchange] =
+    new TrieMap[SparkPlan, Exchange]()
 
   /**
    * The exchange-reuse map shared across the entire query, including sub-queries.

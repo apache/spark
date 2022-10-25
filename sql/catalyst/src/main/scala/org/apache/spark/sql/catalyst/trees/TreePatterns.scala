@@ -67,6 +67,7 @@ object TreePattern extends Enumeration  {
   val MULTI_ALIAS: Value = Value
   val NEW_INSTANCE: Value = Value
   val NOT: Value = Value
+  val NON_SCALAR_SUBQUERY: Value = Value
   val NULL_CHECK: Value = Value
   val NULL_LITERAL: Value = Value
   val SERIALIZE_FROM_OBJECT: Value = Value
@@ -81,6 +82,8 @@ object TreePattern extends Enumeration  {
   val RUNTIME_REPLACEABLE: Value = Value
   val SCALAR_SUBQUERY: Value = Value
   val SCALAR_SUBQUERY_REFERENCE: Value = Value
+  val RUNTIME_FILTER_EXPRESSION: Value = Value
+  val RUNTIME_FILTER_SUBQUERY: Value = Value
   val SCALA_UDF: Value = Value
   val SESSION_WINDOW: Value = Value
   val SORT: Value = Value

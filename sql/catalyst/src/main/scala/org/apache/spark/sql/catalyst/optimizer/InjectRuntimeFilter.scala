@@ -48,14 +48,18 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSideExp: Expression,
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideExp: Expression,
-      filterCreationSidePlan: LogicalPlan): LogicalPlan = {
+      filterCreationSidePlan: LogicalPlan,
+      joinKeys: Seq[Expression],
+      canReuseExchange: Boolean): LogicalPlan = {
     require(conf.runtimeFilterBloomFilterEnabled || conf.runtimeFilterSemiJoinReductionEnabled)
     if (conf.runtimeFilterBloomFilterEnabled) {
       injectBloomFilter(
         filterApplicationSideExp,
         filterApplicationSidePlan,
         filterCreationSideExp,
-        filterCreationSidePlan
+        filterCreationSidePlan,
+        joinKeys,
+        canReuseExchange
       )
     } else {
       injectInSubqueryFilter(
@@ -71,7 +75,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSideExp: Expression,
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideExp: Expression,
-      filterCreationSidePlan: LogicalPlan): LogicalPlan = {
+      filterCreationSidePlan: LogicalPlan,
+      joinKeys: Seq[Expression],
+      canReuseExchange: Boolean): LogicalPlan = {
     // Skip if the filter creation side is too big
     if (filterCreationSidePlan.stats.sizeInBytes > conf.runtimeFilterCreationSideThreshold) {
       return filterApplicationSidePlan
@@ -83,11 +89,19 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       } else {
         new BloomFilterAggregate(new XxHash64(Seq(filterCreationSideExp)))
       }
-
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
-    val aggregate =
-      ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan)))
-    val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
+    val bloomFilterSubquery = if (canReuseExchange) {
+      // Try to reuse the results of broadcast exchange.
+      val index = joinKeys.indexOf(filterCreationSideExp)
+      RuntimeFilterSubquery(
+        filterApplicationSideExp,
+        ConstantFolding(Aggregate(Nil, Seq(alias), filterCreationSidePlan)),
+        joinKeys,
+        index)
+    } else {
+      ScalarSubquery(ConstantFolding(ColumnPruning(
+        Aggregate(Nil, Seq(alias), filterCreationSidePlan))), Nil)
+    }
     val filter = BloomFilterMightContain(bloomFilterSubquery,
       new XxHash64(Seq(filterApplicationSideExp)))
     Filter(filter, filterApplicationSidePlan)
@@ -162,7 +176,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   private def isProbablyShuffleJoin(left: LogicalPlan,
       right: LogicalPlan, hint: JoinHint): Boolean = {
     !hintToBroadcastLeft(hint) && !hintToBroadcastRight(hint) &&
-      !canBroadcastBySize(left, conf) && !canBroadcastBySize(right, conf)
+      !canBroadcastBySize(left, conf)
   }
 
   private def probablyHasShuffle(plan: LogicalPlan): Boolean = {
@@ -297,12 +311,16 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             val oldLeft = newLeft
             val oldRight = newRight
             if (canPruneLeft(joinType) && filteringHasBenefit(left, right, l, hint)) {
-              newLeft = injectFilter(l, newLeft, r, right)
+              val canReuseExchange = conf.exchangeReuseEnabled &&
+                (canBroadcastBySize(right, conf) || hintToBroadcastRight(hint))
+              newLeft = injectFilter(l, newLeft, r, right, rightKeys, canReuseExchange)
             }
             // Did we actually inject on the left? If not, try on the right
             if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
               filteringHasBenefit(right, left, r, hint)) {
-              newRight = injectFilter(r, newRight, l, left)
+              val canReuseExchange = conf.exchangeReuseEnabled &&
+                (canBroadcastBySize(left, conf) || hintToBroadcastRight(hint))
+              newRight = injectFilter(r, newRight, l, left, leftKeys, canReuseExchange)
             }
             if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {
               filterCounter = filterCounter + 1
