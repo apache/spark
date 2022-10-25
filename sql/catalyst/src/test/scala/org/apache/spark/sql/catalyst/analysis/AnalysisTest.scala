@@ -223,8 +223,7 @@ trait AnalysisTest extends PlanTest {
     }
   }
 
-  protected def parseException(parser: String => Any)(
-    sqlText: String): ParseException = {
+  protected def parseException(parser: String => Any)(sqlText: String): ParseException = {
     intercept[ParseException](parser(sqlText))
   }
 }

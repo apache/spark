@@ -725,7 +725,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       inputPlan = plan2,
       expectedErrorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
       expectedMessageParameters = Map(
-        "functionName" -> "EqualTo",
+        "functionName" -> "`=`",
         "dataType" -> "\"MAP<STRING, STRING>\"",
         "sqlExpr" -> "\"(b = d)\""
       ),

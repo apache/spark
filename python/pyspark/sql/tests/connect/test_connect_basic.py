@@ -22,6 +22,7 @@ import tempfile
 import pandas
 
 from pyspark.sql import SparkSession, Row
+from pyspark.sql.types import StructType, StructField, LongType, StringType
 from pyspark.sql.connect.client import RemoteSparkSession
 from pyspark.sql.connect.function_builder import udf
 from pyspark.sql.connect.functions import lit
@@ -96,6 +97,15 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         df = self.connect.read.table(self.tbl_name).limit(10)
         result = df.explain()
         self.assertGreater(len(result), 0)
+
+    def test_schema(self):
+        schema = self.connect.read.table(self.tbl_name).schema()
+        self.assertEqual(
+            StructType(
+                [StructField("id", LongType(), True), StructField("name", StringType(), True)]
+            ),
+            schema,
+        )
 
     def test_simple_binary_expressions(self):
         """Test complex expression"""

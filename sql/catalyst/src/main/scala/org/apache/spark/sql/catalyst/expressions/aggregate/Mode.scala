@@ -59,10 +59,10 @@ case class Mode(
   override def update(
       buffer: OpenHashMap[AnyRef, Long],
       input: InternalRow): OpenHashMap[AnyRef, Long] = {
-    val key = child.eval(input).asInstanceOf[AnyRef]
+    val key = child.eval(input)
 
     if (key != null) {
-      buffer.changeValue(key, 1L, _ + 1L)
+      buffer.changeValue(InternalRow.copyValue(key).asInstanceOf[AnyRef], 1L, _ + 1L)
     }
     buffer
   }

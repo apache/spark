@@ -3422,7 +3422,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
     "dataType" : "(\"INTERVAL MONTH\" or \"INTERVAL DAY\")",
-    "functionName" : "function array",
+    "functionName" : "`array`",
     "sqlExpr" : "\"array(INTERVAL '1' MONTH, INTERVAL '20' DAY)\""
   },
   "queryContext" : [ {
@@ -3461,7 +3461,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
     "dataType" : "(\"INTERVAL MONTH\" or \"INTERVAL DAY\")",
-    "functionName" : "function coalesce",
+    "functionName" : "`coalesce`",
     "sqlExpr" : "\"coalesce(INTERVAL '1' MONTH, INTERVAL '20' DAY)\""
   },
   "queryContext" : [ {
