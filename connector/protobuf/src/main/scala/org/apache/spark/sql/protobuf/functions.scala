@@ -73,19 +73,21 @@ object functions {
 
   /**
    * Converts a binary column of Protobuf format into its corresponding catalyst value. The
-   * specified schema must match actual schema of the read data, otherwise the behavior is
-   * undefined: it may fail or return arbitrary result. To deserialize the data with a compatible
-   * and evolved schema, the expected Protobuf schema can be set via the option protoSchema.
+   * specified Protobuf class must match the data, otherwise the behavior is
+   * undefined: it may fail or return arbitrary result. The jar containing Java class should be
+   * shaded. Specifically, `com.google.protobuf.*` should be shaded to
+   * `org.sparkproject.spark-protobuf.protobuf.*`.
    *
    * @param data
    *   the binary column.
-   * @param messageClassName
+   * @param shadedMessageClassName
    *   The Protobuf class name. E.g. <code>org.spark.examples.protobuf.ExampleEvent</code>.
+   *   The jar with these classes needs to be shaded as described above.
    * @since 3.4.0
    */
   @Experimental
-  def from_protobuf(data: Column, messageClassName: String): Column = {
-    new Column(ProtobufDataToCatalyst(data.expr, messageClassName))
+  def from_protobuf(data: Column, shadedMessageClassName: String): Column = {
+    new Column(ProtobufDataToCatalyst(data.expr, shadedMessageClassName))
   }
 
   /**
