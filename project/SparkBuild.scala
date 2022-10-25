@@ -723,10 +723,11 @@ object SparkProtobuf {
 
     dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
 
-    (Test / PB.protoSources) += (Test / sourceDirectory).value / "resources",
-
+    // Protobuf V3 code is generated here. V2 is generated in another settings bellow.
     (Test / PB.targets) := Seq(
-      PB.gens.java -> target.value / "generated-test-sources"
+      PB.gens.java -> target.value / "generated-test-sources",
+      PB.gens.descriptorSet ->
+        target.value / "generated-test-sources/protobuf/descriptor-set.desc",
     ),
 
     (assembly / test) := { },

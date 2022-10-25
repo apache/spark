@@ -113,20 +113,54 @@
         <groupId>com.github.os72</groupId>
         <artifactId>protoc-jar-maven-plugin</artifactId>
         <version>3.11.4</version>
-        <!-- Generates Java classes for tests. TODO(Raghu): Generate descriptor files too. -->
+        <!-- Generates Java classes and descriptor files for the tests -->
         <executions>
           <execution>
             <phase>generate-test-sources</phase>
+            <id>v2-protos</id>
             <goals>
               <goal>run</goal>
             </goals>
             <configuration>
               <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
               <protocVersion>${protobuf.version}</protocVersion>
-              <inputDirectories>
-                <include>src/test/resources/protobuf</include>
-              </inputDirectories>
-              <addSources>test</addSources>
+              <inputDirectories>src/test/protobuf/v2</inputDirectories>
+              <outputTargets>
+                <outputTarget>
+                  <type>java</type>
+                  <addSources>test</addSources>
+                </outputTarget>
+                <outputTarget>
+                  <type>descriptor</type>
+                  <addSources>test</addSources>
+                  <outputDirectory>target/scala-${scala.binary.version}/test-classes</outputDirectory>
+                  <outputDirectorySuffix>descriptor-set-v2</outputDirectorySuffix>
+                </outputTarget>
+              </outputTargets>
+            </configuration>
+          </execution>
+          <execution>
+            <phase>generate-test-sources</phase>
+            <id>v3-protos</id>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
+              <protocVersion>${protobuf.version}</protocVersion>
+              <inputDirectories>src/test/protobuf/v3</inputDirectories>
+              <outputTargets>
+                <outputTarget>
+                  <type>java</type>
+                  <addSources>test</addSources>
+                </outputTarget>
+                <outputTarget>
+                  <type>descriptor</type>
+                  <addSources>test</addSources>
+                  <outputDirectory>target/scala-${scala.binary.version}/test-classes</outputDirectory>
+                  <outputDirectorySuffix>descriptor-set-v3</outputDirectorySuffix>
+                </outputTarget>
+              </outputTargets>
             </configuration>
           </execution>
         </executions>

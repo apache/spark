@@ -24,7 +24,7 @@ import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters, OrderedFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
-import org.apache.spark.sql.protobuf.protos.CatalystTypes.BytesMsg
+import org.apache.spark.sql.protobuf.protos.v3.CatalystTypes.BytesMsg
 import org.apache.spark.sql.protobuf.utils.{ProtobufUtils, SchemaConverters}
 import org.apache.spark.sql.sources.{EqualTo, Not}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -33,34 +33,41 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class ProtobufCatalystDataConversionSuite
     extends SparkFunSuite
+    with ProtobufTestUtils
     with SharedSparkSession
     with ExpressionEvalHelper {
 
-  private val testFileDesc = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
-  private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.CatalystTypes$"
+  private val descPathV2 = descFilePathV2("catalyst_types.desc")
+  private val descPathV3 = descFilePathV3("catalyst_types.desc")
+  private val outerClass = "CatalystTypes"
 
   private def checkResultWithEval(
       data: Literal,
-      descFilePath: String,
       messageName: String,
       expected: Any): Unit = {
 
-    withClue("(Eval check with Java class name)") {
-      val className = s"$javaClassNamePrefix$messageName"
-      checkEvaluation(
-        ProtobufDataToCatalyst(
-          CatalystDataToProtobuf(data, className),
-          className,
-          descFilePath = None),
-        prepareExpectedResult(expected))
-    }
-    withClue("(Eval check with descriptor file)") {
-      checkEvaluation(
-        ProtobufDataToCatalyst(
-          CatalystDataToProtobuf(data, messageName, Some(descFilePath)),
-          messageName,
-          descFilePath = Some(descFilePath)),
-        prepareExpectedResult(expected))
+    // Check all the 16 variations.
+    // 4 variations for how the record is written and 4 variations for how it is read.
+
+    val variations = Seq(
+      (messageName, Some(descPathV2), "V2 descriptor file"),
+      (javaClassFullNameV2(outerClass, messageName), None, "V2 Java class"),
+      (messageName, Some(descPathV3), "V3 descriptor file"),
+      (javaClassFullNameV3(outerClass, messageName), None, "V3 Java class")
+    )
+
+    for ( // 16 permutations of 4 variations above.
+      (writerMessageName, writerDesc, writerClue) <- variations;
+      (readerMessageName, readerDesc, readerClue) <- variations
+    ) {
+      withClue(s"(Eval check with $writerClue for writing $readerClue for reading") {
+        checkEvaluation(
+          ProtobufDataToCatalyst(
+            CatalystDataToProtobuf(data, writerMessageName, writerDesc),
+            readerMessageName,
+            descFilePath = readerDesc),
+          prepareExpectedResult(expected))
+      }
     }
   }
 
@@ -139,7 +146,6 @@ class ProtobufCatalystDataConversionSuite
 
       checkResultWithEval(
         input,
-        testFileDesc,
         messageName,
         input.eval())
     }
@@ -162,7 +168,7 @@ class ProtobufCatalystDataConversionSuite
 
     // Verify Java class deserializer matches with descriptor based serializer.
     val javaDescriptor = ProtobufUtils
-      .buildDescriptorFromJavaClass(s"$javaClassNamePrefix$messageName")
+      .buildDescriptorFromJavaClass(javaClassFullNameV3(outerClass, messageName))
     assert(dataType == SchemaConverters.toSqlType(javaDescriptor).dataType)
     val javaDeserialized = new ProtobufDeserializer(javaDescriptor, dataType, filters)
       .deserialize(DynamicMessage.parseFrom(javaDescriptor, data.toByteArray))
@@ -189,7 +195,7 @@ class ProtobufCatalystDataConversionSuite
       val data = RandomDataGenerator.randomRow(new scala.util.Random(seed), actualSchema)
       val converter = CatalystTypeConverters.createToCatalystConverter(actualSchema)
       val input = Literal.create(converter(data), actualSchema)
-      checkUnsupportedRead(input, testFileDesc, "Actual", "Bad")
+      checkUnsupportedRead(input, descPathV3, "Actual", "Bad")
     }
   }
 
@@ -199,7 +205,7 @@ class ProtobufCatalystDataConversionSuite
       .add("name", "string")
       .add("age", "int")
 
-    val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "Person")
+    val descriptor = ProtobufUtils.buildDescriptor(descPathV3, "Person")
     val dynamicMessage = DynamicMessage
       .newBuilder(descriptor)
       .setField(descriptor.findFieldByName("name"), "Maxim")
@@ -207,16 +213,16 @@ class ProtobufCatalystDataConversionSuite
       .build()
 
     val expectedRow = Some(InternalRow(UTF8String.fromString("Maxim"), 39))
-    checkDeserialization(testFileDesc, "Person", dynamicMessage, expectedRow)
+    checkDeserialization(descPathV3, "Person", dynamicMessage, expectedRow)
     checkDeserialization(
-      testFileDesc,
+      descPathV3,
       "Person",
       dynamicMessage,
       expectedRow,
       new OrderedFilters(Seq(EqualTo("age", 39)), sqlSchema))
 
     checkDeserialization(
-      testFileDesc,
+      descPathV3,
       "Person",
       dynamicMessage,
       None,
@@ -233,15 +239,15 @@ class ProtobufCatalystDataConversionSuite
       .build()
 
     val expected = InternalRow(Array[Byte](97, 48, 53))
-    checkDeserialization(testFileDesc, "BytesMsg", bytesProto, Some(expected))
+    checkDeserialization(descPathV3, "BytesMsg", bytesProto, Some(expected))
   }
 
   test("Full names for message using descriptor file") {
-    val withShortName = ProtobufUtils.buildDescriptor(testFileDesc, "BytesMsg")
+    val withShortName = ProtobufUtils.buildDescriptor(descPathV3, "BytesMsg")
     assert(withShortName.findFieldByName("bytes_type") != null)
 
     val withFullName = ProtobufUtils.buildDescriptor(
-      testFileDesc, "org.apache.spark.sql.protobuf.BytesMsg")
+        descPathV3, "org.apache.spark.sql.protobuf.protos.v3.BytesMsg")
     assert(withFullName.findFieldByName("bytes_type") != null)
   }
 }

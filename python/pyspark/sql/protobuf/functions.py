@@ -101,7 +101,7 @@ def from_protobuf(
     assert sc is not None and sc._jvm is not None
     try:
         jc = sc._jvm.org.apache.spark.sql.protobuf.functions.from_protobuf(
-            _to_java_column(data), messageName, descFilePath, options or {}
+            _to_java_column(data), descFilePath, messageName, options or {}
         )
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":

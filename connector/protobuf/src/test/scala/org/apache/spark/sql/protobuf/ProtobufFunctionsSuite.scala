@@ -25,31 +25,43 @@ import com.google.protobuf.{ByteString, DynamicMessage}
 
 import org.apache.spark.sql.{Column, QueryTest, Row}
 import org.apache.spark.sql.functions.{lit, struct}
-import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated
-import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
+import org.apache.spark.sql.protobuf.protos.v3.SimpleMessageProtos.SimpleMessageRepeated
+import org.apache.spark.sql.protobuf.protos.v3.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, StringType, StructField, StructType, TimestampType}
 
-class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Serializable {
+class ProtobufFunctionsSuite
+    extends QueryTest
+    with ProtobufTestUtils
+    with SharedSparkSession
+    with Serializable {
 
   import testImplicits._
 
-  val testFileDesc = testFile("protobuf/functions_suite.desc").replace("file:/", "/")
-  private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SimpleMessageProtos$"
+  private val descPathV2 = descFilePathV2("functions_suite.desc")
+  private val descPathV3 = descFilePathV3("functions_suite.desc")
+  private val outerClass = "SimpleMessageProtos"
 
   /**
-   * Runs the given closure twice. Once with descriptor file and second time with Java class name.
+   * Runs the given closure 4 times with combination of v2, v3 protos and descriptor files.
    */
   private def checkWithFileAndClassName(messageName: String)(
     fn: (String, Option[String]) => Unit): Unit = {
-      withClue("(With descriptor file)") {
-        fn(messageName, Some(testFileDesc))
+
+    val variations = Seq(
+      (messageName, Some(descPathV2), "V2 descriptor file"),
+      (javaClassFullNameV2(outerClass, messageName), None, "V2 Java class"),
+      (messageName, Some(descPathV3), "V3 descriptor file"),
+      (javaClassFullNameV3(outerClass, messageName), None, "V3 Java class")
+    )
+
+    for ((messageName, descOpt, clue) <- variations) {
+      withClue(s"(With $clue)") {
+        fn(messageName, descOpt)
       }
-      withClue("(With Java class name)") {
-        fn(s"$javaClassNamePrefix$messageName", None)
-      }
+    }
   }
 
   // A wrapper to invoke the right variable of from_protobuf() depending on arguments.
@@ -124,17 +136,17 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       case (name, descFilePathOpt) =>
         val fromProtoDF = df.select(
           from_protobuf_wrapper($"value", name, descFilePathOpt).as("value_from"))
-        val toProtoDF = fromProtoDF.select(
-          to_protobuf_wrapper($"value_from", name, descFilePathOpt).as("value_to"))
-        val toFromProtoDF = toProtoDF.select(
-          from_protobuf_wrapper($"value_to", name, descFilePathOpt).as("value_to_from"))
-        checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+      val toProtoDF = fromProtoDF.select(
+        to_protobuf_wrapper($"value_from", name, descFilePathOpt).as("value_to"))
+      val toFromProtoDF = toProtoDF.select(
+        from_protobuf_wrapper($"value_to", name, descFilePathOpt).as("value_to_from"))
+      checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
     }
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Repeated Message Once") {
-    val repeatedMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "RepeatedMessage")
-    val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
+    val repeatedMessageDesc = ProtobufUtils.buildDescriptor(descPathV3, "RepeatedMessage")
+    val basicMessageDesc = ProtobufUtils.buildDescriptor(descPathV3, "BasicMessage")
 
     val basicMessage = DynamicMessage
       .newBuilder(basicMessageDesc)
@@ -170,8 +182,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Repeated Message Twice") {
-    val repeatedMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "RepeatedMessage")
-    val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
+    val repeatedMessageDesc = ProtobufUtils.buildDescriptor(descPathV2, "RepeatedMessage")
+    val basicMessageDesc = ProtobufUtils.buildDescriptor(descPathV2, "BasicMessage")
 
     val basicMessage1 = DynamicMessage
       .newBuilder(basicMessageDesc)
@@ -221,7 +233,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Map") {
-    val messageMapDesc = ProtobufUtils.buildDescriptor(testFileDesc, "SimpleMessageMap")
+    val messageMapDesc = ProtobufUtils.buildDescriptor(descPathV3, "SimpleMessageMap")
 
     val mapStr1 = DynamicMessage
       .newBuilder(messageMapDesc.findNestedTypeByName("StringMapdataEntry"))
@@ -315,8 +327,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Enum") {
-    val messageEnumDesc = ProtobufUtils.buildDescriptor(testFileDesc, "SimpleMessageEnum")
-    val basicEnumDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicEnumMessage")
+    val messageEnumDesc = ProtobufUtils.buildDescriptor(descPathV2, "SimpleMessageEnum")
+    val basicEnumDesc = ProtobufUtils.buildDescriptor(descPathV2, "BasicEnumMessage")
 
     val dynamicMessage = DynamicMessage
       .newBuilder(messageEnumDesc)
@@ -324,7 +336,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       .setField(messageEnumDesc.findFieldByName("value"), "value")
       .setField(
         messageEnumDesc.findFieldByName("nested_enum"),
-        messageEnumDesc.findEnumTypeByName("NestedEnum").findValueByName("ESTED_NOTHING"))
+        messageEnumDesc.findEnumTypeByName("NestedEnum").findValueByName("NESTED_NOTHING"))
       .setField(
         messageEnumDesc.findFieldByName("nested_enum"),
         messageEnumDesc.findEnumTypeByName("NestedEnum").findValueByName("NESTED_FIRST"))
@@ -351,9 +363,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Multiple Message") {
-    val messageMultiDesc = ProtobufUtils.buildDescriptor(testFileDesc, "MultipleExample")
-    val messageIncludeDesc = ProtobufUtils.buildDescriptor(testFileDesc, "IncludedExample")
-    val messageOtherDesc = ProtobufUtils.buildDescriptor(testFileDesc, "OtherExample")
+    val messageMultiDesc = ProtobufUtils.buildDescriptor(descPathV2, "MultipleExample")
+    val messageIncludeDesc = ProtobufUtils.buildDescriptor(descPathV2, "IncludedExample")
+    val messageOtherDesc = ProtobufUtils.buildDescriptor(descPathV3, "OtherExample")
 
     val otherMessage = DynamicMessage
       .newBuilder(messageOtherDesc)
@@ -386,8 +398,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("Handle recursive fields in Protobuf schema, A->B->A") {
-    val schemaA = ProtobufUtils.buildDescriptor(testFileDesc, "recursiveA")
-    val schemaB = ProtobufUtils.buildDescriptor(testFileDesc, "recursiveB")
+    val schemaA = ProtobufUtils.buildDescriptor(descPathV3, "recursiveA")
+    val schemaB = ProtobufUtils.buildDescriptor(descPathV3, "recursiveB")
 
     val messageBForA = DynamicMessage
       .newBuilder(schemaB)
@@ -422,8 +434,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("Handle recursive fields in Protobuf schema, C->D->Array(C)") {
-    val schemaC = ProtobufUtils.buildDescriptor(testFileDesc, "recursiveC")
-    val schemaD = ProtobufUtils.buildDescriptor(testFileDesc, "recursiveD")
+    val schemaC = ProtobufUtils.buildDescriptor(descPathV2, "recursiveC")
+    val schemaD = ProtobufUtils.buildDescriptor(descPathV2, "recursiveD")
 
     val messageDForC = DynamicMessage
       .newBuilder(schemaD)
@@ -458,7 +470,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("Handle extra fields : oldProducer -> newConsumer") {
-    val testFileDesc = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
+    val testFileDesc = descFilePathV2("catalyst_types.desc")
     val oldProducer = ProtobufUtils.buildDescriptor(testFileDesc, "oldProducer")
     val newConsumer = ProtobufUtils.buildDescriptor(testFileDesc, "newConsumer")
 
@@ -498,7 +510,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("Handle extra fields : newProducer -> oldConsumer") {
-    val testFileDesc = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
+    val testFileDesc = descFilePathV3("catalyst_types.desc")
     val newProducer = ProtobufUtils.buildDescriptor(testFileDesc, "newProducer")
     val oldConsumer = ProtobufUtils.buildDescriptor(testFileDesc, "oldConsumer")
 
@@ -541,35 +553,38 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       schema
     )
 
-    val toProtobuf = inputDf.select(
-      functions.to_protobuf($"requiredMsg", "requiredMsg", testFileDesc)
-        .as("to_proto"))
+    checkWithFileAndClassName("requiredMsg") {
+      case (name, descFilePathOpt) =>
+        val toProtobuf = inputDf.select(
+          to_protobuf_wrapper($"requiredMsg", name, descFilePathOpt)
+            .as("to_proto"))
 
-    val binary = toProtobuf.take(1).toSeq(0).get(0).asInstanceOf[Array[Byte]]
+        val binary = toProtobuf.take(1).toSeq(0).get(0).asInstanceOf[Array[Byte]]
 
-    val messageDescriptor = ProtobufUtils.buildDescriptor(testFileDesc, "requiredMsg")
-    val actualMessage = DynamicMessage.parseFrom(messageDescriptor, binary)
+        val messageDescriptor = ProtobufUtils.buildDescriptor(name, descFilePathOpt)
+        val actualMessage = DynamicMessage.parseFrom(messageDescriptor, binary)
 
-    assert(actualMessage.getField(messageDescriptor.findFieldByName("key"))
-      == inputDf.select("requiredMsg.key").take(1).toSeq(0).get(0))
-    assert(actualMessage.getField(messageDescriptor.findFieldByName("col_2"))
-      == inputDf.select("requiredMsg.col_2").take(1).toSeq(0).get(0))
-    assert(actualMessage.getField(messageDescriptor.findFieldByName("col_1")) == 0)
-    assert(actualMessage.getField(messageDescriptor.findFieldByName("col_3")) == 0)
+        assert(actualMessage.getField(messageDescriptor.findFieldByName("key"))
+          == inputDf.select("requiredMsg.key").take(1).toSeq(0).get(0))
+        assert(actualMessage.getField(messageDescriptor.findFieldByName("col_2"))
+          == inputDf.select("requiredMsg.col_2").take(1).toSeq(0).get(0))
+        assert(actualMessage.getField(messageDescriptor.findFieldByName("col_1")) == 0)
+        assert(actualMessage.getField(messageDescriptor.findFieldByName("col_3")) == 0)
 
-    val fromProtoDf = toProtobuf.select(
-      functions.from_protobuf($"to_proto", "requiredMsg", testFileDesc) as 'from_proto)
+        val fromProtoDf = toProtobuf.select(
+          from_protobuf_wrapper($"to_proto", name, descFilePathOpt) as 'from_proto)
 
-    assert(fromProtoDf.select("from_proto.key").take(1).toSeq(0).get(0)
-      == inputDf.select("requiredMsg.key").take(1).toSeq(0).get(0))
-    assert(fromProtoDf.select("from_proto.col_2").take(1).toSeq(0).get(0)
-      == inputDf.select("requiredMsg.col_2").take(1).toSeq(0).get(0))
-    assert(fromProtoDf.select("from_proto.col_1").take(1).toSeq(0).get(0) == null)
-    assert(fromProtoDf.select("from_proto.col_3").take(1).toSeq(0).get(0) == null)
+        assert(fromProtoDf.select("from_proto.key").take(1).toSeq(0).get(0)
+          == inputDf.select("requiredMsg.key").take(1).toSeq(0).get(0))
+        assert(fromProtoDf.select("from_proto.col_2").take(1).toSeq(0).get(0)
+          == inputDf.select("requiredMsg.col_2").take(1).toSeq(0).get(0))
+        assert(fromProtoDf.select("from_proto.col_1").take(1).toSeq(0).get(0) == null)
+        assert(fromProtoDf.select("from_proto.col_3").take(1).toSeq(0).get(0) == null)
+    }
   }
 
   test("from_protobuf filter to_protobuf") {
-    val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
+    val basicMessageDesc = ProtobufUtils.buildDescriptor(descPathV3, "BasicMessage")
 
     val basicMessage = DynamicMessage
       .newBuilder(basicMessageDesc)
@@ -678,6 +693,66 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
           === inputDf.select("durationMsg.key").take(1).toSeq(0).get(0))
         assert(fromProtoDf.select("durationMsg.duration").take(1).toSeq(0).get(0)
           === inputDf.select("durationMsg.duration").take(1).toSeq(0).get(0))
+    }
+  }
+
+  test("Default and required values in version 2 protobufs") {
+    // Verifies that V2 protobufs with default values have correct values returned.
+
+    // Proto:
+    // message ProtoWithDefaults {
+    //   optional string user_name = 1;
+    //   required int32 id = 2;
+    //   optional int32 api_quota = 3 [default = 100]; // Default 100 qps.
+    //   optional string location = 4 [default = "Unknown"];
+    // }
+
+    Seq( // Only V2 variations. This proto does not exist in V3
+      ("ProtoWithDefaults", Some(descPathV2), "V2 descriptor file"),
+      (javaClassFullNameV2(outerClass, "ProtoWithDefaults"), None, "V2 Java class"),
+    ).foreach {
+      case (name, descFilePathOpt, clue) =>
+        withClue(clue) {
+          val schema = Seq[Array[Byte]]()
+            .toDF("bytes")
+            .select(from_protobuf_wrapper($"bytes", name, descFilePathOpt).as("proto"))
+            .schema
+
+          val inputRows = Seq(
+            Row(Row("user-1", 1, 10, "CA")), // All the fields are set.
+            Row(Row("user-2", 2, null, null)), // Defaults.
+            Row(Row(null, 3, 100, "NY")) // Explicit default for "api_quota".
+          )
+
+          val inputDf = spark.createDataFrame(
+            spark.sparkContext.parallelize(inputRows),
+            schema
+          )
+
+          assert(
+            !schema.head.dataType.asInstanceOf[StructType].fields(1).nullable,
+            "id should not be nullable"
+          )
+
+          val rows = inputDf   // Do a round trip with to_protobuf & from_protobuf
+            .select(
+              to_protobuf_wrapper($"proto", name, descFilePathOpt).as("proto_bytes")
+            )
+            .select(
+              from_protobuf_wrapper($"proto_bytes", name, descFilePathOpt).as("proto")
+            )
+
+          val results = rows.collect().toSeq.sortBy(_.getStruct(0).getInt(1)) // sort by id.
+
+          // First row should be same as input.
+          assert(results(0) == inputRows(0))
+
+          // Second row should have defaults for 'api_quota' and 'location'.
+          assert(results(1) == Row(Row("user-2", 2, 100, "Unknown")))
+
+          // Third row should return null for optional field user_name. So same as input.
+          assert(results(2) == inputRows(2))
+        }
     }
   }
 }

@@ -17,68 +17,68 @@
 // protoc --java_out=connector/protobuf/src/test/resources/protobuf/ connector/protobuf/src/test/resources/protobuf/catalyst_types.proto
 // protoc --descriptor_set_out=connector/protobuf/src/test/resources/protobuf/catalyst_types.desc --java_out=connector/protobuf/src/test/resources/protobuf/org/apache/spark/sql/protobuf/ connector/protobuf/src/test/resources/protobuf/catalyst_types.proto
 
-syntax = "proto3";
+syntax = "proto2";
 
-package org.apache.spark.sql.protobuf.protos;
+package org.apache.spark.sql.protobuf.protos.v2;
 option java_outer_classname = "CatalystTypes";
 
 // TODO: import one or more protobuf files.
 
 message BooleanMsg {
-  bool bool_type = 1;
+  optional bool bool_type = 1;
 }
 message IntegerMsg {
-  int32 int32_type = 1;
+  optional int32 int32_type = 1;
 }
 message DoubleMsg {
-  double double_type = 1;
+  optional double double_type = 1;
 }
 message FloatMsg {
-  float float_type = 1;
+  optional float float_type = 1;
 }
 message BytesMsg {
-  bytes bytes_type = 1;
+  optional bytes bytes_type = 1;
 }
 message StringMsg {
-  string string_type = 1;
+  optional string string_type = 1;
 }
 
 message Person {
-  string name = 1;
-  int32 age = 2;
+  optional string name = 1;
+  optional int32 age = 2;
 }
 
 message Bad {
-  bytes col_0 = 1;
-  double col_1 = 2;
-  string col_2 = 3;
-  float col_3 = 4;
-  int64 col_4 = 5;
+  optional bytes col_0 = 1;
+  optional double col_1 = 2;
+  optional string col_2 = 3;
+  optional float col_3 = 4;
+  optional int64 col_4 = 5;
 }
 
 message Actual {
-  string col_0 = 1;
-  int32 col_1 = 2;
-  float col_2 = 3;
-  bool col_3 = 4;
-  double col_4 = 5;
+  optional string col_0 = 1;
+  optional int32 col_1 = 2;
+  optional float col_2 = 3;
+  optional bool col_3 = 4;
+  optional double col_4 = 5;
 }
 
 message oldConsumer {
-  string key = 1;
+  optional string key = 1;
 }
 
 message newProducer {
-  string key = 1;
-  int32  value = 2;
+  optional string key = 1;
+  optional int32  value = 2;
 }
 
 message newConsumer {
-  string key = 1;
-  int32  value = 2;
-  Actual actual = 3;
+  optional string key = 1;
+  optional int32  value = 2;
+  optional Actual actual = 3;
 }
 
 message oldProducer {
-  string key = 1;
+  optional string key = 1;
 }

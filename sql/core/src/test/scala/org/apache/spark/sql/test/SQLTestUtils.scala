@@ -463,7 +463,10 @@ private[sql] trait SQLTestUtilsBase
    * Returns full path to the given file in the resource folder
    */
   protected def testFile(fileName: String): String = {
-    Thread.currentThread().getContextClassLoader.getResource(fileName).toString
+    Option(Thread.currentThread().getContextClassLoader.getResource(fileName)) match {
+      case Some(path) => path.toString
+      case None => throw new IllegalArgumentException(s"Resource not found: $fileName")
+    }
   }
 
   /**

@@ -18,45 +18,45 @@
 // protoc --java_out=connector/protobuf/src/test/resources/protobuf/ connector/protobuf/src/test/resources/protobuf/functions_suite.proto
 // protoc --descriptor_set_out=connector/protobuf/src/test/resources/protobuf/functions_suite.desc --java_out=connector/protobuf/src/test/resources/protobuf/org/apache/spark/sql/protobuf/ connector/protobuf/src/test/resources/protobuf/functions_suite.proto
 
-syntax = "proto3";
+syntax = "proto2";
 
-package org.apache.spark.sql.protobuf.protos;
+package org.apache.spark.sql.protobuf.protos.v2;
 
 option java_outer_classname = "SimpleMessageProtos";
 
 message SimpleMessageJavaTypes {
-  int64 id = 1;
-  string string_value = 2;
-  int32 int32_value = 3;
-  int64 int64_value = 4;
-  double double_value = 5;
-  float float_value = 6;
-  bool bool_value = 7;
-  bytes bytes_value = 8;
+  optional int64 id = 1;
+  optional string string_value = 2;
+  optional int32 int32_value = 3;
+  optional int64 int64_value = 4;
+  optional double double_value = 5;
+  optional float float_value = 6;
+  optional bool bool_value = 7;
+  optional bytes bytes_value = 8;
 }
 
 message SimpleMessage {
-  int64 id = 1;
-  string string_value = 2;
-  int32 int32_value = 3;
-  uint32 uint32_value = 4;
-  sint32 sint32_value = 5;
-  fixed32 fixed32_value = 6;
-  sfixed32 sfixed32_value = 7;
-  int64 int64_value = 8;
-  uint64 uint64_value = 9;
-  sint64 sint64_value = 10;
-  fixed64 fixed64_value = 11;
-  sfixed64 sfixed64_value = 12;
-  double double_value = 13;
-  float float_value = 14;
-  bool bool_value = 15;
-  bytes bytes_value = 16;
+  optional int64 id = 1;
+  optional string string_value = 2;
+  optional int32 int32_value = 3;
+  optional uint32 uint32_value = 4;
+  optional sint32 sint32_value = 5;
+  optional fixed32 fixed32_value = 6;
+  optional sfixed32 sfixed32_value = 7;
+  optional int64 int64_value = 8;
+  optional uint64 uint64_value = 9;
+  optional sint64 sint64_value = 10;
+  optional fixed64 fixed64_value = 11;
+  optional sfixed64 sfixed64_value = 12;
+  optional double double_value = 13;
+  optional float float_value = 14;
+  optional bool bool_value = 15;
+  optional bytes bytes_value = 16;
 }
 
 message SimpleMessageRepeated {
-  string key = 1;
-  string value = 2;
+  optional string key = 1;
+  optional string value = 2;
   enum NestedEnum {
     ESTED_NOTHING = 0;
     NESTED_FIRST = 1;
@@ -73,14 +73,14 @@ message SimpleMessageRepeated {
 }
 
 message BasicMessage {
-  int64 id = 1;
-  string string_value = 2;
-  int32 int32_value = 3;
-  int64 int64_value = 4;
-  double double_value = 5;
-  float float_value = 6;
-  bool bool_value = 7;
-  bytes bytes_value = 8;
+  optional int64 id = 1;
+  optional string string_value = 2;
+  optional int32 int32_value = 3;
+  optional int64 int64_value = 4;
+  optional double double_value = 5;
+  optional float float_value = 6;
+  optional bool bool_value = 7;
+  optional bytes bytes_value = 8;
 }
 
 message RepeatedMessage {
@@ -88,8 +88,8 @@ message RepeatedMessage {
 }
 
 message SimpleMessageMap {
-  string key = 1;
-  string value = 2;
+  optional string key = 1;
+  optional string value = 2;
   map<string, string> string_mapdata = 3;
   map<int32, int32> int32_mapdata = 4;
   map<uint32, uint32> uint32_mapdata = 5;
@@ -116,75 +116,82 @@ message BasicEnumMessage {
 }
 
 message SimpleMessageEnum {
-  string key = 1;
-  string value = 2;
+  optional string key = 1;
+  optional string value = 2;
   enum NestedEnum {
-    ESTED_NOTHING = 0; // TODO: Fix the name.
+    NESTED_NOTHING = 0;
     NESTED_FIRST = 1;
     NESTED_SECOND = 2;
   }
-  BasicEnumMessage.BasicEnum basic_enum = 3;
-  NestedEnum nested_enum = 4;
+  optional BasicEnumMessage.BasicEnum basic_enum = 3;
+  optional NestedEnum nested_enum = 4;
 }
 
 
 message OtherExample {
-  string other = 1;
+  optional string other = 1;
 }
 
 message IncludedExample {
-  string included = 1;
-  OtherExample other = 2;
+  optional string included = 1;
+  optional OtherExample other = 2;
 }
 
 message MultipleExample {
-  IncludedExample included_example = 1;
+  optional IncludedExample included_example = 1;
 }
 
 message recursiveA {
-  string keyA = 1;
-  recursiveB messageB = 2;
+  optional string keyA = 1;
+  optional recursiveB messageB = 2;
 }
 
 message recursiveB {
-  string keyB = 1;
-  recursiveA messageA = 2;
+  optional string keyB = 1;
+  optional recursiveA messageA = 2;
 }
 
 message recursiveC {
-  string keyC = 1;
-  recursiveD messageD = 2;
+  optional string keyC = 1;
+  optional recursiveD messageD = 2;
 }
 
 message recursiveD {
-  string keyD = 1;
+  optional string keyD = 1;
   repeated recursiveC messageC = 2;
 }
 
 message requiredMsg {
-  string key = 1;
-  int32 col_1 = 2;
-  string col_2 = 3;
-  int32 col_3 = 4;
+  optional string key = 1;
+  optional int32 col_1 = 2;
+  optional string col_2 = 3;
+  optional int32 col_3 = 4;
 }
 
 // https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/timestamp.proto
 message Timestamp {
-  int64 seconds = 1;
-  int32 nanos = 2;
+  optional int64 seconds = 1;
+  optional int32 nanos = 2;
 }
 
 message timeStampMsg {
-  string key = 1;
-  Timestamp stmp = 2;
+  optional string key = 1;
+  optional Timestamp stmp = 2;
 }
 // https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/duration.proto
 message Duration {
-  int64 seconds = 1;
-  int32 nanos = 2;
+  optional int64 seconds = 1;
+  optional int32 nanos = 2;
 }
 
 message durationMsg {
-  string key = 1;
-  Duration duration = 2;
+  optional string key = 1;
+  optional Duration duration = 2;
+}
+
+message ProtoWithDefaults {
+  optional string user_name = 1;
+  required int32 id = 2;
+  optional int32 api_quota = 3 [default = 100]; // Default 100 qps.
+  optional string location = 4 [default = "Unknown"];
 }

@@ -30,126 +30,173 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
  * Tests for [[ProtobufSerializer]] and [[ProtobufDeserializer]] with a more specific focus on
  * those classes.
  */
-class ProtobufSerdeSuite extends SharedSparkSession {
+class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestUtils {
 
   import ProtoSerdeSuite._
   import ProtoSerdeSuite.MatchType._
 
-  val testFileDesc = testFile("protobuf/serde_suite.desc").replace("file:/", "/")
-  private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SerdeSuiteProtos$"
+  private val descPathV2 = descFilePathV2("serde_suite.desc")
+  private val descPathV3 = descFilePathV3("serde_suite.desc")
+  private val outerClass = "SerdeSuiteProtos"
+
+  /**
+   * Runs the given closure 4 times with combination of v2, v3 protos and descriptor files.
+   */
+  private def checkWithFileAndClassName(messageName: String)(
+    fn: (String, Option[String]) => Unit): Unit = {
+
+    val variations = Seq(
+      (messageName, Some(descPathV2), "V2 descriptor file"),
+      (javaClassFullNameV2(outerClass, messageName), None, "V2 Java class"),
+      (messageName, Some(descPathV3), "V3 descriptor file"),
+      (javaClassFullNameV3(outerClass, messageName), None, "V3 Java class")
+    )
+
+    for ((messageName, descOpt, clue) <- variations) {
+      withClue(s"(With $clue)") {
+        fn(messageName, descOpt)
+      }
+    }
+  }
+
 
   test("Test basic conversion") {
     withFieldMatchType { fieldMatch =>
-      val (top, nest) = fieldMatch match {
-        case BY_NAME => ("foo", "bar")
+      checkWithFileAndClassName("SerdeBasicMessage") {
+        case (name, descPathOpt) =>
+          val protoFile = ProtobufUtils.buildDescriptor(name, descPathOpt)
+
+          val dynamicMessageFoo = DynamicMessage
+            .newBuilder(protoFile.getFile.findMessageTypeByName("Foo"))
+            .setField(protoFile.getFile.findMessageTypeByName("Foo").findFieldByName("bar"), 10902)
+            .build()
+
+          val dynamicMessage = DynamicMessage
+            .newBuilder(protoFile)
+            .setField(protoFile.findFieldByName("foo"), dynamicMessageFoo)
+            .build()
+
+          val serializer = Serializer.create(CATALYST_STRUCT, protoFile, fieldMatch)
+          val deserializer = Deserializer.create(CATALYST_STRUCT, protoFile, fieldMatch)
+
+          assert(
+            serializer.serialize(deserializer.deserialize(dynamicMessage).get) === dynamicMessage)
       }
-      val protoFile = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
-
-      val dynamicMessageFoo = DynamicMessage
-        .newBuilder(protoFile.getFile.findMessageTypeByName("Foo"))
-        .setField(protoFile.getFile.findMessageTypeByName("Foo").findFieldByName("bar"), 10902)
-        .build()
-
-      val dynamicMessage = DynamicMessage
-        .newBuilder(protoFile)
-        .setField(protoFile.findFieldByName("foo"), dynamicMessageFoo)
-        .build()
-
-      val serializer = Serializer.create(CATALYST_STRUCT, protoFile, fieldMatch)
-      val deserializer = Deserializer.create(CATALYST_STRUCT, protoFile, fieldMatch)
-
-      assert(
-        serializer.serialize(deserializer.deserialize(dynamicMessage).get) === dynamicMessage)
     }
   }
 
   test("Fail to convert with field type mismatch") {
-    val protoFile = ProtobufUtils.buildDescriptor(testFileDesc, "MissMatchTypeInRoot")
-
     withFieldMatchType { fieldMatch =>
-      assertFailedConversionMessage(
-        protoFile,
-        Deserializer,
-        fieldMatch,
-        "Cannot convert Protobuf field 'foo' to SQL field 'foo' because schema is incompatible " +
-          s"(protoType = org.apache.spark.sql.protobuf.MissMatchTypeInRoot.foo " +
-          s"LABEL_OPTIONAL LONG INT64, sqlType = ${CATALYST_STRUCT.head.dataType.sql})".stripMargin)
+      checkWithFileAndClassName("MissMatchTypeInRoot") {
+        case (name, descPathOpt) =>
+          val protoFile = ProtobufUtils.buildDescriptor(name, descPathOpt)
 
-      assertFailedConversionMessage(
-        protoFile,
-        Serializer,
-        fieldMatch,
-        s"Cannot convert SQL field 'foo' to Protobuf field 'foo' because schema is incompatible " +
-          s"""(sqlType = ${CATALYST_STRUCT.head.dataType.sql}, protoType = LONG)""")
+          val version = descPathOpt match { // A bit hacky, but ok for now.
+            case Some(path) => if (path == descPathV2) 2 else 3
+            case None => if (name.contains(".v2.")) 2 else 3
+          }
+
+          assertFailedConversionMessage(
+            protoFile,
+            Deserializer,
+            fieldMatch,
+            "Cannot convert Protobuf field 'foo' to SQL field 'foo' because schema is " +
+              s"incompatible (protoType = " +
+              s"org.apache.spark.sql.protobuf.protos.v$version.MissMatchTypeInRoot.foo " +
+              s"LABEL_OPTIONAL LONG INT64, sqlType = ${CATALYST_STRUCT.head.dataType.sql})")
+
+          assertFailedConversionMessage(
+            protoFile,
+            Serializer,
+            fieldMatch,
+            s"Cannot convert SQL field 'foo' to Protobuf field 'foo' because schema is " +
+              s"incompatible (sqlType = ${CATALYST_STRUCT.head.dataType.sql}, protoType = LONG)")
+      }
     }
   }
 
   test("Fail to convert with missing nested Protobuf fields for serializer") {
-    val protoFile = ProtobufUtils.buildDescriptor(testFileDesc, "FieldMissingInProto")
+    checkWithFileAndClassName("FieldMissingInProto") {
+      case (name, descPathOpt) =>
+        val protoFile = ProtobufUtils.buildDescriptor(name, descPathOpt)
 
-    val nonnullCatalyst = new StructType()
-      .add("foo", new StructType().add("bar", IntegerType, nullable = false))
+        val nonnullCatalyst = new StructType()
+          .add("foo", new StructType().add("bar", IntegerType, nullable = false))
 
-    // serialize fails whether or not 'bar' is nullable
-    val byNameMsg = "Cannot find field 'foo.bar' in Protobuf schema"
-    assertFailedConversionMessage(protoFile, Serializer, BY_NAME, byNameMsg)
-    assertFailedConversionMessage(protoFile, Serializer, BY_NAME, byNameMsg, nonnullCatalyst)
+        // serialize fails whether or not 'bar' is nullable
+        val byNameMsg = "Cannot find field 'foo.bar' in Protobuf schema"
+        assertFailedConversionMessage(protoFile, Serializer, BY_NAME, byNameMsg)
+        assertFailedConversionMessage(protoFile, Serializer, BY_NAME, byNameMsg, nonnullCatalyst)
+    }
   }
 
   test("Fail to convert with deeply nested field type mismatch") {
-    val protoFile = ProtobufUtils.buildDescriptorFromJavaClass(
-      s"${javaClassNamePrefix}MissMatchTypeInDeepNested"
-    )
+
     val catalyst = new StructType().add("top", CATALYST_STRUCT)
 
     withFieldMatchType { fieldMatch =>
-      assertFailedConversionMessage(
-        protoFile,
-        Deserializer,
-        fieldMatch,
-        s"Cannot convert Protobuf field 'top.foo.bar' to SQL field 'top.foo.bar' because schema " +
-          s"is incompatible (protoType = org.apache.spark.sql.protobuf.protos.TypeMiss.bar " +
-          s"LABEL_OPTIONAL LONG INT64, sqlType = INT)",
-        catalyst)
+      checkWithFileAndClassName("MissMatchTypeInDeepNested") {
+        case (name, descPathOpt) =>
+          val protoFile = ProtobufUtils.buildDescriptor(name, descPathOpt)
 
-      assertFailedConversionMessage(
-        protoFile,
-        Serializer,
-        fieldMatch,
-        "Cannot convert SQL field 'top.foo.bar' to Protobuf field 'top.foo.bar' because schema " +
-          """is incompatible (sqlType = INT, protoType = LONG)""",
-        catalyst)
+          val version = descPathOpt match {
+            case Some(path) => if (path == descPathV2) 2 else 3
+            case None => if (name.contains(".v2.")) 2 else 3
+          }
+
+          assertFailedConversionMessage(
+            protoFile,
+            Deserializer,
+            fieldMatch,
+            s"Cannot convert Protobuf field 'top.foo.bar' to SQL field 'top.foo.bar' " +
+              s"because schema is incompatible (protoType = " +
+              s"org.apache.spark.sql.protobuf.protos.v$version.TypeMiss.bar " +
+              s"LABEL_OPTIONAL LONG INT64, sqlType = INT)",
+            catalyst)
+
+          assertFailedConversionMessage(
+            protoFile,
+            Serializer,
+            fieldMatch,
+            "Cannot convert SQL field 'top.foo.bar' to Protobuf field 'top.foo.bar' because " +
+              "schema is incompatible (sqlType = INT, protoType = LONG)",
+            catalyst)
+      }
     }
   }
 
   test("Fail to convert with missing Catalyst fields") {
-    val protoFile = ProtobufUtils.buildDescriptor(testFileDesc, "FieldMissingInSQLRoot")
 
-    // serializing with extra fails if extra field is missing in SQL Schema
-    assertFailedConversionMessage(
-      protoFile,
-      Serializer,
-      BY_NAME,
-      "Found field 'boo' in Protobuf schema but there is no match in the SQL schema")
+    checkWithFileAndClassName("FieldMissingInSQLRoot") {
+      case (name, descPathOpt) =>
+        val protoFile = ProtobufUtils.buildDescriptor(name, descPathOpt)
+        // serializing with extra fails if extra field is missing in SQL Schema
+        assertFailedConversionMessage(
+          protoFile,
+          Serializer,
+          BY_NAME,
+          "Found field 'boo' in Protobuf schema but there is no match in the SQL schema")
 
-    /* deserializing should work regardless of whether the extra field is missing
-     in SQL Schema or not */
-    withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoFile, _))
-    withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoFile, _))
+        // deserializing should work regardless of whether the extra field is missing
+        // in SQL Schema or not */
+        withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoFile, _))
+        withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoFile, _))
 
-    val protoNestedFile = ProtobufUtils.buildDescriptor(testFileDesc, "FieldMissingInSQLNested")
+        val nestedMessageName = name.replace("FieldMissingInSQLRoot", "FieldMissingInSQLNested")
+        val protoNestedFile = ProtobufUtils.buildDescriptor(nestedMessageName, descPathOpt)
 
-    // serializing with extra fails if extra field is missing in SQL Schema
-    assertFailedConversionMessage(
-      protoNestedFile,
-      Serializer,
-      BY_NAME,
-      "Found field 'foo.baz' in Protobuf schema but there is no match in the SQL schema")
+        // serializing with extra fails if extra field is missing in SQL Schema
+        assertFailedConversionMessage(
+          protoNestedFile,
+          Serializer,
+          BY_NAME,
+          "Found field 'foo.baz' in Protobuf schema but there is no match in the SQL schema")
 
-    /* deserializing should work regardless of whether the extra field is missing
+        /* deserializing should work regardless of whether the extra field is missing
       in SQL Schema or not */
-    withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoNestedFile, _))
-    withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoNestedFile, _))
+        withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoNestedFile, _))
+        withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoNestedFile, _))
+    }
   }
 
   /**
