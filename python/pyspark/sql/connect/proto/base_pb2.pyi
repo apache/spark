@@ -35,6 +35,7 @@ limitations under the License.
 """
 import builtins
 import collections.abc
+import google.protobuf.any_pb2
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
@@ -102,17 +103,32 @@ class Request(google.protobuf.message.Message):
 
         USER_ID_FIELD_NUMBER: builtins.int
         USER_NAME_FIELD_NUMBER: builtins.int
+        EXTENSIONS_FIELD_NUMBER: builtins.int
         user_id: builtins.str
         user_name: builtins.str
+        @property
+        def extensions(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            google.protobuf.any_pb2.Any
+        ]:
+            """To extend the existing user context message that is used to identify incoming requests,
+            Spark Connect leverages the Any protobuf type that can be used to inject arbitrary other
+            messages into this message. Extensions are stored as a `repeated` type to be able to
+            handle multiple active extensions.
+            """
         def __init__(
             self,
             *,
             user_id: builtins.str = ...,
             user_name: builtins.str = ...,
+            extensions: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
         ) -> None: ...
         def ClearField(
             self,
-            field_name: typing_extensions.Literal["user_id", b"user_id", "user_name", b"user_name"],
+            field_name: typing_extensions.Literal[
+                "extensions", b"extensions", "user_id", b"user_id", "user_name", b"user_name"
+            ],
         ) -> None: ...
 
     CLIENT_ID_FIELD_NUMBER: builtins.int

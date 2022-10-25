@@ -608,7 +608,7 @@ class HiveDDLSuite
   }
 
   test("SPARK-19129: drop partition with a empty string will drop the whole table") {
-    val df = spark.createDataFrame(Seq((0, "a"), (1, "b"))).toDF("partCol1", "name")
+    val df = spark.createDataFrame(Seq(("0", "a"), ("1", "b"))).toDF("partCol1", "name")
     df.write.mode("overwrite").partitionBy("partCol1").saveAsTable("partitionedTable")
     assertAnalysisError(
       "alter table partitionedTable drop partition(partCol1='')",
