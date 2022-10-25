@@ -264,7 +264,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
   // We can only determine the actual partitions at runtime when a dynamic partition filter is
   // present. This is because such a filter relies on information that is only available at run
   // time (for instance the keys used in the other side of a join).
-  @transient protected lazy val dynamicallySelectedPartitions: Array[PartitionDirectory] = {
+  @transient lazy val dynamicallySelectedPartitions: Array[PartitionDirectory] = {
     val dynamicPartitionFilters = partitionFilters.filter(isDynamicPruningFilter)
 
     if (dynamicPartitionFilters.nonEmpty) {

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.io.FileCommitProtocol
@@ -28,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.util.SchemaUtils
@@ -128,10 +129,12 @@ case class InsertIntoHadoopFsRelationCommand(
             // For dynamic partition overwrite, do not delete partition directories ahead.
             true
           } else {
+            checkWritePathReadFrom(child, hadoopConf, qualifiedOutputPath, customPartitionLocations)
             deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
             true
           }
         case (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
+          checkWritePathReadFrom(child, hadoopConf, qualifiedOutputPath, customPartitionLocations)
           true
         case (SaveMode.Ignore, exists) =>
           !exists
@@ -273,6 +276,62 @@ case class InsertIntoHadoopFsRelationCommand(
         None
       }
     }.toMap
+  }
+
+  private def isSubDir(
+      src: Path,
+      dest: Path,
+      hadoopConf: Configuration): Boolean = {
+    if (src == null) {
+      false
+    } else {
+      val srcFs = src.getFileSystem(hadoopConf)
+      val destFs = dest.getFileSystem(hadoopConf)
+      val fullSrc = srcFs.makeQualified(src).toString + Path.SEPARATOR
+      val fullDest = destFs.makeQualified(dest).toString + Path.SEPARATOR
+      val schemaSrcf = src.toUri.getScheme
+      val schemaDestf = dest.toUri.getScheme
+      if (schemaSrcf != null && schemaDestf != null && !(schemaSrcf == schemaDestf)) {
+        false
+      } else {
+        fullSrc.startsWith(fullDest)
+      }
+    }
+  }
+
+  def checkWritePathReadFrom(
+      child: SparkPlan,
+      hadoopConf: Configuration,
+      qualifiedOutputPath: Path,
+      customPartitionLocations: Map[TablePartitionSpec, String]): Unit = {
+    // For dynamic partition overwrite, we do not delete partition directories ahead.
+    // We write to staging directories and move to final partition directories after writing
+    // job is done. So it is ok to have outputPath try to overwrite inputpath.
+    if (mode == SaveMode.Overwrite && !dynamicPartitionOverwrite) {
+      val inputPaths = child.collect {
+        case scan: FileSourceScanExec =>
+          scan.dynamicallySelectedPartitions.flatMap(_.files.map {
+            case fileStatus if !fileStatus.isDirectory => fileStatus.getPath.getParent
+            case fileStatus => fileStatus.getPath
+          })
+      }.flatten
+      val finalOutputPath =
+        if (staticPartitions.nonEmpty && partitionColumns.length == staticPartitions.size) {
+          val staticPathFragment =
+            PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)
+          if (customPartitionLocations.contains(staticPartitions)) {
+            new Path(customPartitionLocations.getOrElse(staticPartitions, staticPathFragment))
+          } else {
+            new Path(qualifiedOutputPath, staticPathFragment)
+          }
+        } else {
+          outputPath
+        }
+      if (inputPaths.exists(isSubDir(_, finalOutputPath, hadoopConf))) {
+        throw new AnalysisException(
+          s"Cannot overwrite a path that is also being read from.")
+      }
+    }
   }
 
   override protected def withNewChildInternal(
