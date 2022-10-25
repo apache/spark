@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect
 
 import java.util
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkContext
