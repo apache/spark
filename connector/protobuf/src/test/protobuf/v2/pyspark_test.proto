@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-syntax = "proto3";
+syntax = "proto2";
 
 package org.apache.spark.sql.protobuf;
 option java_outer_classname = "SimpleMessageProtos";
 
 message SimpleMessage {
-  int32 age = 1;
-  string name = 2;
-  int64  score = 3;
+  optional int32 age = 1;
+  optional string name = 2;
+  optional int64  score = 3;
 }
