@@ -467,6 +467,7 @@ class Join(google.protobuf.message.Message):
     RIGHT_FIELD_NUMBER: builtins.int
     JOIN_CONDITION_FIELD_NUMBER: builtins.int
     JOIN_TYPE_FIELD_NUMBER: builtins.int
+    USING_COLUMNS_FIELD_NUMBER: builtins.int
     @property
     def left(self) -> global___Relation: ...
     @property
@@ -474,6 +475,16 @@ class Join(google.protobuf.message.Message):
     @property
     def join_condition(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression: ...
     join_type: global___Join.JoinType.ValueType
+    @property
+    def using_columns(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """Optional. using_columns provides a list of columns that should present on both sides of
+        the join inputs that this Join will join on. For example A JOIN B USING col_name is
+        equivalent to A JOIN B on A.col_name = B.col_name.
+
+        This field does not co-exist with join_condition.
+        """
     def __init__(
         self,
         *,
@@ -481,6 +492,7 @@ class Join(google.protobuf.message.Message):
         right: global___Relation | None = ...,
         join_condition: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
         join_type: global___Join.JoinType.ValueType = ...,
+        using_columns: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -499,6 +511,8 @@ class Join(google.protobuf.message.Message):
             b"left",
             "right",
             b"right",
+            "using_columns",
+            b"using_columns",
         ],
     ) -> None: ...
 
