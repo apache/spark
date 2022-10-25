@@ -73,9 +73,9 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   private def assertUnsupportedFeature(
-    body: => Unit,
-    message: String,
-    expectedContext: ExpectedContext): Unit = {
+      body: => Unit,
+      message: String,
+      expectedContext: ExpectedContext): Unit = {
     checkError(
       exception = intercept[ParseException] {
         body
