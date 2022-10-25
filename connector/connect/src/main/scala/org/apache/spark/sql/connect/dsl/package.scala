@@ -26,11 +26,14 @@ import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 
 /**
  * A collection of implicit conversions that create a DSL for constructing connect protos.
+ *
+ * All classes in connect/dsl are considered an internal API to Spark Connect and are subject to
+ * change between minor releases.
  */
 
 package object dsl {
 
-  object expressions { // scalastyle:ignore
+  private[connect] object expressions { // scalastyle:ignore
     implicit class DslString(val s: String) {
       def protoAttr: proto.Expression =
         proto.Expression
@@ -133,7 +136,7 @@ package object dsl {
         .build()
   }
 
-  object commands { // scalastyle:ignore
+  private[connect] object commands { // scalastyle:ignore
     implicit class DslCommands(val logicalPlan: proto.Relation) {
       def write(
           format: Option[String] = None,
@@ -172,7 +175,7 @@ package object dsl {
     }
   }
 
-  object plans { // scalastyle:ignore
+  private[connect] object plans { // scalastyle:ignore
     implicit class DslLogicalPlan(val logicalPlan: proto.Relation) {
       def select(exprs: proto.Expression*): proto.Relation = {
         proto.Relation

@@ -31,7 +31,7 @@ import org.apache.spark.util.Utils
  * added to the GRPC server in order of their position in the list. Once the statically compiled
  * interceptors are added, dynamically configured interceptors are added.
  */
-object SparkConnectInterceptorRegistry {
+private[connect] object SparkConnectInterceptorRegistry {
 
   // Contains the list of configured interceptors.
   private lazy val interceptorChain: Seq[InterceptorBuilder] = Seq(
