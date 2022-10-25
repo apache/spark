@@ -478,13 +478,15 @@ case class Add(
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    // SPARK-40903: Avoid reordering decimal Add for canonicalization, which may change the result
-    //              type and cause error within ComplexTypeMergingExpression.
-    if (left.resolved && left.dataType.isInstanceOf[DecimalType]) {
-      withCanonicalizedChildren
-    } else {
-      // TODO: do not reorder consecutive `Add`s with different `evalMode`
+    // TODO: do not reorder consecutive `Add`s with different `evalMode`
+    val reorderResult =
       orderCommutative({ case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, evalMode))
+    if (resolved && reorderResult.resolved && reorderResult.dataType == dataType) {
+      reorderResult
+    } else {
+      // SPARK-40903: Avoid reordering decimal Add for canonicalization if the result data type is
+      // changed, which may cause data checking error within ComplexTypeMergingExpression.
+      withCanonicalizedChildren
     }
   }
 }
