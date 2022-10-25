@@ -22,6 +22,7 @@ package spark.connect;
 import "google/protobuf/any.proto";
 import "spark/connect/commands.proto";
 import "spark/connect/relations.proto";
+import "spark/connect/types.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -116,11 +117,10 @@ message Response {
 // reason about the performance.
 message AnalyzeResponse {
   string client_id = 1;
-  repeated string column_names = 2;
-  repeated string column_types = 3;
+  DataType schema = 2;
 
   // The extended explain string as produced by Spark.
-  string explain_string = 4;
+  string explain_string = 3;
 }
 
 // Main interface for the SparkConnect service.
