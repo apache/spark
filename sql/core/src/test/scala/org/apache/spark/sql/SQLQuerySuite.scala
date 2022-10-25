@@ -4523,7 +4523,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val tableName = "decimalTable"
     withTable(tableName) {
       sql(s"create table $tableName(a decimal(12, 5), b decimal(12, 6)) using orc")
-      checkAnswer(sql(s"select sum(coalesce(a+b+ 1.75, a)) from $tableName"), Row(null))
+      checkAnswer(sql(s"select sum(coalesce(a + b + 1.75, a)) from $tableName"), Row(null))
     }
   }
 }
