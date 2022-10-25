@@ -480,7 +480,7 @@ case class Add(
   override lazy val canonicalized: Expression = {
     // SPARK-40903: Avoid reordering decimal Add for canonicalization, which may change the result
     //              type and cause error within ComplexTypeMergingExpression.
-    if (resolved && dataType.isInstanceOf[DecimalType]) {
+    if (left.resolved && left.dataType.isInstanceOf[DecimalType]) {
       withCanonicalizedChildren
     } else {
       // TODO: do not reorder consecutive `Add`s with different `evalMode`
