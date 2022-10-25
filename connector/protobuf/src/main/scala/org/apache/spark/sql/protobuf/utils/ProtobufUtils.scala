@@ -158,10 +158,9 @@ private[sql] object ProtobufUtils extends Logging {
     val protobufClass = try {
       Utils.classForName(protobufClassName)
     } catch {
-      case _: ClassNotFoundException =>
+      case e: ClassNotFoundException =>
         val hasDots = protobufClassName.contains(".")
-        throw QueryCompilationErrors.protobufClassLoadError(protobufClassName,
-          if (hasDots) "" else ". Ensure the class name includes package prefix.")
+        throw QueryCompilationErrors.protobufClassLoadError(protobufClassName, hasDots, e)
     }
 
     if (!classOf[Message].isAssignableFrom(protobufClass)) {
@@ -200,7 +199,7 @@ private[sql] object ProtobufUtils extends Logging {
         throw QueryCompilationErrors.cannotFindDescriptorFileError(descFilePath, ex)
     }
     try {
-      val fileDescriptorProtoIndex = createDescriptorProtoIndex(fileDescriptorSet)
+      val fileDescriptorProtoIndex = createDescriptorProtoMap(fileDescriptorSet)
       val fileDescriptor: Descriptors.FileDescriptor =
         buildFileDescriptor(fileDescriptorSet.getFileList.asScala.last, fileDescriptorProtoIndex)
       if (fileDescriptor.getMessageTypes().isEmpty()) {
@@ -216,37 +215,29 @@ private[sql] object ProtobufUtils extends Logging {
   /**
    * Recursively constructs file descriptors for all dependencies for given
    * FileDescriptorProto and return.
-   * @param descriptorProto
-   * @param descriptorProtoIndex
-   * @return Descriptors.FileDescriptor
    */
   private def buildFileDescriptor(
     fileDescriptorProto: FileDescriptorProto,
-    fileDescriptorProtoIndex: Map[String, FileDescriptorProto]): Descriptors.FileDescriptor = {
-    var fileDescriptorList = List[Descriptors.FileDescriptor]()
-    for (dependencyName <- fileDescriptorProto.getDependencyList().asScala) {
-      if (!fileDescriptorProtoIndex.contains(dependencyName)) {
-        throw QueryCompilationErrors.protobufDescriptorDependencyError(dependencyName)
+    fileDescriptorProtoMap: Map[String, FileDescriptorProto]): Descriptors.FileDescriptor = {
+    val fileDescriptorList = fileDescriptorProto.getDependencyList().asScala.map { dependency =>
+      fileDescriptorProtoMap.get(dependency) match {
+        case Some(dependencyProto) =>
+          buildFileDescriptor(dependencyProto, fileDescriptorProtoMap)
+        case None =>
+          throw QueryCompilationErrors.protobufDescriptorDependencyError(dependency)
       }
-      val dependencyProto: FileDescriptorProto = fileDescriptorProtoIndex.get(dependencyName).get
-      fileDescriptorList = fileDescriptorList ++ List(
-        buildFileDescriptor(dependencyProto, fileDescriptorProtoIndex))
     }
     Descriptors.FileDescriptor.buildFrom(fileDescriptorProto, fileDescriptorList.toArray)
   }
 
   /**
    * Returns a map from descriptor proto name as found inside the descriptors to protos.
-   * @param fileDescriptorSet
-   * @return Map[String, FileDescriptorProto]
    */
-  private def createDescriptorProtoIndex(
+  private def createDescriptorProtoMap(
     fileDescriptorSet: FileDescriptorSet): Map[String, FileDescriptorProto] = {
-    var resultBuilder = Map[String, FileDescriptorProto]()
-    for (descriptorProto <- fileDescriptorSet.getFileList().asScala) {
-      resultBuilder = resultBuilder ++ Map(descriptorProto.getName() -> descriptorProto)
-    }
-    resultBuilder
+    fileDescriptorSet.getFileList().asScala.map { descriptorProto =>
+      descriptorProto.getName() -> descriptorProto
+    }.toMap[String, FileDescriptorProto]
   }
 
   /**

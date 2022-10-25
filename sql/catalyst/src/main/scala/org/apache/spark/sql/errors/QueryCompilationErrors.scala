@@ -3213,38 +3213,38 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def cannotConvertProtobufTypeToSqlTypeError(
-    protobufColumn: String,
-    sqlColumn: String,
-    protobufType: String,
-    sqlType: DataType): Throwable = {
+      protobufColumn: String,
+      sqlColumn: String,
+      protobufType: String,
+      sqlType: DataType): Throwable = {
     new AnalysisException(
       errorClass = "PROTOBUF_TYPE_TO_SQL_TYPE_ERROR",
       messageParameters = Map(
         "protobufColumn" -> protobufColumn,
-        "sqlColumn" -> sqlColumn,
+        "sqlColumn" -> toSQLId(sqlColumn),
         "protobufType" -> protobufType,
         "sqlType" -> toSQLType(sqlType)))
   }
 
   def cannotConvertCatalystTypeToProtobufTypeError(
-    sqlColumn: String,
-    protobufColumn: String,
-    sqlType: DataType,
-    protobufType: String): Throwable = {
+      sqlColumn: String,
+      protobufColumn: String,
+      sqlType: DataType,
+      protobufType: String): Throwable = {
     new AnalysisException(
       errorClass = "SQL_TYPE_TO_PROTOBUF_TYPE_ERROR",
       messageParameters = Map(
-        "sqlColumn" -> sqlColumn,
+        "sqlColumn" -> toSQLId(sqlColumn),
         "protobufColumn" -> protobufColumn,
         "sqlType" -> toSQLType(sqlType),
         "protobufType" -> protobufType))
   }
 
   def cannotConvertCatalystTypeToProtobufEnumTypeError(
-    sqlColumn: String,
-    protobufColumn: String,
-    data: String,
-    enumString: String): Throwable = {
+      sqlColumn: String,
+      protobufColumn: String,
+      data: String,
+      enumString: String): Throwable = {
     new AnalysisException(
       errorClass = "CATALYST_TYPE_TO_PROTOBUF_ENUM_TYPE_ERROR",
       messageParameters = Map(
@@ -3255,27 +3255,27 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def cannotConvertProtobufTypeToCatalystTypeError(
-    protobufType: String,
-    sqlType: DataType,
-    e1: Throwable): Throwable = {
+      protobufType: String,
+      sqlType: DataType,
+      cause: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "PROTOBUF_TYPE_TO_CATALYST_TYPE_ERROR",
       messageParameters = Map(
         "protobufType" -> protobufType,
         "toType" -> toSQLType(sqlType)),
-      cause = Some(e1.getCause))
+      cause = Some(cause.getCause))
   }
 
   def cannotConvertSqlTypeToProtobufError(
-    protobufType: String,
-    sqlType: DataType,
-    e1: Throwable): Throwable = {
+      protobufType: String,
+      sqlType: DataType,
+      cause: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_TYPE",
       messageParameters = Map(
         "protobufType" -> protobufType,
         "toType" -> toSQLType(sqlType)),
-      cause = Some(e1.getCause))
+      cause = Some(cause.getCause))
   }
 
   def protobufTypeUnsupportedYetError(protobufType: String): Throwable = {
@@ -3285,8 +3285,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def unknownProtobufMessageTypeError(
-    descriptorName: String,
-    containingType: String): Throwable = {
+      descriptorName: String,
+      containingType: String): Throwable = {
     new AnalysisException(
       errorClass = "UNKNOWN_PROTOBUF_MESSAGE_TYPE",
       messageParameters = Map(
@@ -3306,11 +3306,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("field" -> field))
   }
 
-  def protobufFieldMatchError(
-    field: String,
-    protobufSchema: String,
-    matchSize: String,
-    matches: String): Throwable = {
+  def protobufFieldMatchError(field: String,
+      protobufSchema: String,
+      matchSize: String,
+      matches: String): Throwable = {
     new AnalysisException(
       errorClass = "PROTOBUF_FIELD_MISSING_ERROR",
       messageParameters = Map(
@@ -3326,18 +3325,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("messageName" -> messageName))
   }
 
-  def descrioptorParseError(e1: Throwable): Throwable = {
+  def descrioptorParseError(cause: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "PROTOBUF_DESCRIPTOR_ERROR",
-      messageParameters = Map("errorMessage" -> e1.getMessage()),
-      cause = Some(e1.getCause))
+      messageParameters = Map.empty(),
+      cause = Some(cause.getCause))
   }
 
-  def cannotFindDescriptorFileError(filePath: String, e1: Throwable): Throwable = {
+  def cannotFindDescriptorFileError(filePath: String, cause: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "CANNOT_FIND_PROTOBUF_DESCRIPTOR_FILE_ERROR",
       messageParameters = Map("filePath" -> filePath),
-      cause = Some(e1.getCause))
+      cause = Some(cause.getCause))
   }
 
   def noProtobufMessageTypeReturnError(descriptorName: String): Throwable = {
@@ -3346,11 +3345,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("descriptorName" -> descriptorName))
   }
 
-  def failedParsingDescriptorError(e1: Throwable): Throwable = {
+  def failedParsingDescriptorError(cause: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "PROTOBUF_DESCRIPTOR_PARSING_ERROR",
-      messageParameters = Map("errorMessage" -> e1.getMessage()),
-      cause = Some(e1.getCause))
+      messageParameters = Map.empty(),
+      cause = Some(cause.getCause))
   }
 
   def foundRecursionInProtobufSchema(fieldDescriptor: String): Throwable = {
@@ -3365,12 +3364,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("field" -> field))
   }
 
-  def protobufClassLoadError(protobufClassName: String, errorMessage: String): Throwable = {
+  def protobufClassLoadError(
+      protobufClassName: String,
+      hasDots: Boolean,
+      cause: Throwable): Throwable = {
+    val message = if (hasDots) "" else ". Ensure the class name includes package prefix."
     new AnalysisException(
       errorClass = "PROTOBUF_CLASS_LOAD_ERROR",
-      messageParameters = Map(
-        "protobufClassName" -> protobufClassName,
-        "errorMessage" -> errorMessage))
+      messageParameters = Map("protobufClassName" -> protobufClassName, "message" -> message),
+      cause = Some(cause.getCause))
   }
 
   def protobufMessageTypeError(protobufClassName: String): Throwable = {
@@ -3389,11 +3391,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(errorClass = "INVALID_BYTE_STRING_ERROR", messageParameters = Map.empty)
   }
 
-  def malformedRecordsDetectedInRecordParsingError(e1: Throwable): Throwable = {
+  def malformedRecordsDetectedInRecordParsingError(cause: Throwable): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2177",
-      messageParameters = Map(
-        "failFastMode" -> FailFastMode.name),
-      cause = e1)
+      messageParameters = Map("failFastMode" -> FailFastMode.name),
+      cause = cause)
   }
 }

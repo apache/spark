@@ -671,7 +671,7 @@
   },
   "PROTOBUF_CLASS_LOAD_ERROR" : {
     "message" : [
-      "Could not load Protobuf class with name <protobufClassName> <errorMessage>"
+      "Could not load Protobuf class with name <protobufClassName><message>"
     ]
   },
   "PROTOBUF_DEPENDENCY_ERROR" : {
@@ -681,12 +681,12 @@
   },
   "PROTOBUF_DESCRIPTOR_ERROR" : {
     "message" : [
-      "Error parsing descriptor byte[] into Descriptor object Error: <errorMessage>"
+      "Error parsing descriptor byte[] into Descriptor object"
     ]
   },
   "PROTOBUF_DESCRIPTOR_PARSING_ERROR" : {
     "message" : [
-      "Error constructing FileDescriptor, Error: <errorMessage>"
+      "Error constructing FileDescriptor"
     ]
   },
   "PROTOBUF_FIELD_MISSING_ERROR" : {
