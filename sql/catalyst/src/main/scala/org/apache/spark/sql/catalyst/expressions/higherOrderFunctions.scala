@@ -1044,7 +1044,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     super.checkArgumentDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess =>
         if (leftKeyType.sameType(rightKeyType)) {
-          TypeUtils.checkForOrderingExpr(leftKeyType, s"function $prettyName")
+          TypeUtils.checkForOrderingExpr(leftKeyType, prettyName)
         } else {
           DataTypeMismatch(
             errorSubClass = "MAP_ZIP_WITH_DIFF_TYPES",

@@ -1012,7 +1012,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"map_concat(map1, map2)\"",
         "dataType" -> "(\"MAP<ARRAY<INT>, INT>\" or \"MAP<STRING, INT>\")",
-        "functionName" -> "function map_concat"),
+        "functionName" -> "`map_concat`"),
       context = ExpectedContext(
         fragment = "map_concat(map1, map2)",
         start = 0,
@@ -1028,7 +1028,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"map_concat(map1, map2)\"",
         "dataType" -> "(\"MAP<ARRAY<INT>, INT>\" or \"MAP<STRING, INT>\")",
-        "functionName" -> "function map_concat")
+        "functionName" -> "`map_concat`")
     )
 
     checkError(
@@ -1040,7 +1040,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"map_concat(map1, 12)\"",
         "dataType" -> "[\"MAP<ARRAY<INT>, INT>\", \"INT\"]",
-        "functionName" -> "function map_concat"),
+        "functionName" -> "`map_concat`"),
       context = ExpectedContext(
         fragment = "map_concat(map1, 12)",
         start = 0,
@@ -1056,7 +1056,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"map_concat(map1, 12)\"",
         "dataType" -> "[\"MAP<ARRAY<INT>, INT>\", \"INT\"]",
-        "functionName" -> "function map_concat")
+        "functionName" -> "`map_concat`")
     )
   }
 
@@ -3688,7 +3688,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"map_zip_with(mmi, mmi, lambdafunction(x, x, y, z))\"",
         "dataType" -> "\"MAP<INT, INT>\"",
-        "functionName" -> "function map_zip_with"),
+        "functionName" -> "`map_zip_with`"),
       context = ExpectedContext(
         fragment = "map_zip_with(mmi, mmi, (x, y, z) -> x)",
         start = 0,
@@ -4256,15 +4256,67 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val funcsMustHaveAtLeastOneArg =
       ("coalesce", (df: DataFrame) => df.select(coalesce())) ::
-      ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) ::
-      ("hash", (df: DataFrame) => df.select(hash())) ::
-      ("hash", (df: DataFrame) => df.selectExpr("hash()")) ::
-      ("xxhash64", (df: DataFrame) => df.select(xxhash64())) ::
-      ("xxhash64", (df: DataFrame) => df.selectExpr("xxhash64()")) :: Nil
+      ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) :: Nil
     funcsMustHaveAtLeastOneArg.foreach { case (name, func) =>
       val errMsg = intercept[AnalysisException] { func(df) }.getMessage
       assert(errMsg.contains(s"input to function $name requires at least one argument"))
     }
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(hash())
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"hash()\"",
+        "functionName" -> "`hash`",
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("hash()")
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"hash()\"",
+        "functionName" -> "`hash`",
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0"),
+      context = ExpectedContext(
+        fragment = "hash()",
+        start = 0,
+        stop = 5))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(xxhash64())
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"xxhash64()\"",
+        "functionName" -> "`xxhash64`",
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("xxhash64()")
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"xxhash64()\"",
+        "functionName" -> "`xxhash64`",
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0"),
+      context = ExpectedContext(
+        fragment = "xxhash64()",
+        start = 0,
+        stop = 9))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -4274,7 +4326,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"greatest()\"",
-        "functionName" -> "greatest",
+        "functionName" -> "`greatest`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0")
     )
@@ -4287,7 +4339,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"greatest()\"",
-        "functionName" -> "greatest",
+        "functionName" -> "`greatest`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0"),
       context = ExpectedContext(
@@ -4304,7 +4356,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"least()\"",
-        "functionName" -> "least",
+        "functionName" -> "`least`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0")
     )
@@ -4317,7 +4369,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"least()\"",
-        "functionName" -> "least",
+        "functionName" -> "`least`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0"),
       context = ExpectedContext(

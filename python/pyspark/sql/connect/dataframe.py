@@ -34,6 +34,7 @@ from pyspark.sql.connect.column import (
     Expression,
     LiteralExpression,
 )
+from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString
@@ -96,7 +97,7 @@ class DataFrame(object):
     of the DataFrame with the changes applied.
     """
 
-    def __init__(self, data: Optional[List[Any]] = None, schema: Optional[List[str]] = None):
+    def __init__(self, data: Optional[List[Any]] = None, schema: Optional[StructType] = None):
         """Creates a new data frame"""
         self._schema = schema
         self._plan: Optional[plan.LogicalPlan] = None
@@ -157,11 +158,44 @@ class DataFrame(object):
     def describe(self, cols: List[ColumnRef]) -> Any:
         ...
 
+    def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
+        """Return a new :class:`DataFrame` with duplicate rows removed,
+        optionally only deduplicating based on certain columns.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        subset : List of column names, optional
+            List of columns to use for duplicate comparison (default All columns).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame without duplicated rows.
+        """
+        if subset is None:
+            return DataFrame.withPlan(
+                plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
+            )
+        else:
+            return DataFrame.withPlan(
+                plan.Deduplicate(child=self._plan, column_names=subset), session=self._session
+            )
+
     def distinct(self) -> "DataFrame":
-        """Returns all distinct rows."""
-        all_cols = self.columns
-        gf = self.groupBy(*all_cols)
-        return gf.agg()
+        """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with distinct rows.
+        """
+        return DataFrame.withPlan(
+            plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
+        )
 
     def drop(self, *cols: "ColumnOrString") -> "DataFrame":
         all_cols = self.columns
@@ -282,11 +316,32 @@ class DataFrame(object):
         query = self._plan.to_proto(self._session)
         return self._session._to_pandas(query)
 
+    def schema(self) -> StructType:
+        """Returns the schema of this :class:`DataFrame` as a :class:`pyspark.sql.types.StructType`.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`StructType`
+        """
+        if self._schema is None:
+            if self._plan is not None:
+                query = self._plan.to_proto(self._session)
+                if self._session is None:
+                    raise Exception("Cannot analyze without RemoteSparkSession.")
+                self._schema = self._session.schema(query)
+                return self._schema
+            else:
+                raise Exception("Empty plan.")
+        else:
+            return self._schema
+
     def explain(self) -> str:
         if self._plan is not None:
             query = self._plan.to_proto(self._session)
             if self._session is None:
                 raise Exception("Cannot analyze without RemoteSparkSession.")
-            return self._session.analyze(query).explain_string
+            return self._session.explain_string(query)
         else:
             return ""
