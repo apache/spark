@@ -136,7 +136,7 @@ case class TimeWindow(
       }
       if (slideDuration > windowDuration) {
         return DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_PARAMETER_CONSTRAINT",
+          errorSubClass = "PARAMETER_CONSTRAINT_VIOLATION",
           messageParameters = Map(
             "leftExprName" -> "slide_duration",
             "leftExprValue" -> toSQLValue(slideDuration, LongType),
@@ -148,7 +148,7 @@ case class TimeWindow(
       }
       if (startTime.abs >= slideDuration) {
         return DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_PARAMETER_CONSTRAINT",
+          errorSubClass = "PARAMETER_CONSTRAINT_VIOLATION",
           messageParameters = Map(
             "leftExprName" -> "start_time",
             "leftExprValue" -> toSQLValue(startTime, LongType),

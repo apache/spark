@@ -215,6 +215,11 @@
           "Null typed values cannot be used as arguments of <functionName>."
         ]
       },
+      "PARAMETER_CONSTRAINT_VIOLATION" : {
+        "message" : [
+          "The <leftExprName>(<leftExprValue>) must be <constraint> the <rightExprName>(<rightExprValue>)"
+        ]
+      },
       "RANGE_FRAME_INVALID_TYPE" : {
         "message" : [
           "The data type <orderSpecType> used in the order specification does not match the data type <valueBoundaryType> which is used in the range frame."
@@ -268,11 +273,6 @@
       "UNEXPECTED_NULL" : {
         "message" : [
           "The <exprName> must not be null"
-        ]
-      },
-      "UNEXPECTED_PARAMETER_CONSTRAINT" : {
-        "message" : [
-          "The <leftExprName>(<leftExprValue>) must be <constraint> the <rightExprName>(<rightExprValue>)"
         ]
       },
       "UNEXPECTED_STATIC_METHOD" : {
