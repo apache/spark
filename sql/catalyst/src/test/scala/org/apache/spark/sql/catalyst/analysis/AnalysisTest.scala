@@ -177,6 +177,10 @@ trait AnalysisTest extends PlanTest {
       caseSensitive: Boolean = true,
       line: Int = -1,
       pos: Int = -1): Unit = {
+
+    def sameMapContents(left: Map[String, String], right: Map[String, String]): Boolean =
+      left.toSeq.sorted == right.toSeq.sorted
+
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer
       val e = intercept[AnalysisException] {
@@ -184,7 +188,7 @@ trait AnalysisTest extends PlanTest {
       }
 
       if (e.getErrorClass != expectedErrorClass ||
-        !e.messageParameters.sameElements(expectedMessageParameters) ||
+        !sameMapContents(e.messageParameters, expectedMessageParameters) ||
         (line >= 0 && e.line.getOrElse(-1) != line) ||
         (pos >= 0) && e.startPosition.getOrElse(-1) != pos) {
         var failMsg = ""
@@ -194,7 +198,7 @@ trait AnalysisTest extends PlanTest {
                |Actual error class: ${e.getErrorClass}
              """.stripMargin
         }
-        if (!e.messageParameters.sameElements(expectedMessageParameters)) {
+        if (!sameMapContents(e.messageParameters, expectedMessageParameters)) {
           failMsg +=
             s"""Message parameters should be: ${expectedMessageParameters.mkString("\n  ")}
                |Actual message parameters: ${e.messageParameters.mkString("\n  ")}
