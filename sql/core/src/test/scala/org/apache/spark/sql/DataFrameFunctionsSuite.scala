@@ -1012,7 +1012,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"map_concat(map1, map2)\"",
         "dataType" -> "(\"MAP<ARRAY<INT>, INT>\" or \"MAP<STRING, INT>\")",
-        "functionName" -> "function map_concat"),
+        "functionName" -> "`map_concat`"),
       context = ExpectedContext(
         fragment = "map_concat(map1, map2)",
         start = 0,
@@ -1028,7 +1028,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"map_concat(map1, map2)\"",
         "dataType" -> "(\"MAP<ARRAY<INT>, INT>\" or \"MAP<STRING, INT>\")",
-        "functionName" -> "function map_concat")
+        "functionName" -> "`map_concat`")
     )
 
     checkError(
@@ -1040,7 +1040,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"map_concat(map1, 12)\"",
         "dataType" -> "[\"MAP<ARRAY<INT>, INT>\", \"INT\"]",
-        "functionName" -> "function map_concat"),
+        "functionName" -> "`map_concat`"),
       context = ExpectedContext(
         fragment = "map_concat(map1, 12)",
         start = 0,
@@ -1056,7 +1056,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"map_concat(map1, 12)\"",
         "dataType" -> "[\"MAP<ARRAY<INT>, INT>\", \"INT\"]",
-        "functionName" -> "function map_concat")
+        "functionName" -> "`map_concat`")
     )
   }
 
@@ -3651,7 +3651,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"map_zip_with(mmi, mmi, lambdafunction(x, x, y, z))\"",
         "dataType" -> "\"MAP<INT, INT>\"",
-        "functionName" -> "function map_zip_with"),
+        "functionName" -> "`map_zip_with`"),
       context = ExpectedContext(
         fragment = "map_zip_with(mmi, mmi, (x, y, z) -> x)",
         start = 0,
@@ -4289,7 +4289,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"greatest()\"",
-        "functionName" -> "greatest",
+        "functionName" -> "`greatest`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0")
     )
@@ -4302,7 +4302,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"greatest()\"",
-        "functionName" -> "greatest",
+        "functionName" -> "`greatest`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0"),
       context = ExpectedContext(
@@ -4319,7 +4319,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"least()\"",
-        "functionName" -> "least",
+        "functionName" -> "`least`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0")
     )
@@ -4332,7 +4332,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"least()\"",
-        "functionName" -> "least",
+        "functionName" -> "`least`",
         "expectedNum" -> "> 1",
         "actualNum" -> "0"),
       context = ExpectedContext(
