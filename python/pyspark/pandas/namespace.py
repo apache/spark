@@ -213,7 +213,7 @@ def range(
 
 
 def read_csv(
-    path: str,
+    path: Union[str, List[str]],
     sep: str = ",",
     header: Union[str, int, None] = "infer",
     names: Optional[Union[str, List[str]]] = None,
@@ -234,8 +234,8 @@ def read_csv(
 
     Parameters
     ----------
-    path : str
-        The path string storing the CSV file to be read.
+    path : str or list
+        path(s) of the CSV file(s) to be read.
     sep : str, default ‘,’
         Delimiter to use. Non empty string.
     header : int, default ‘infer’
