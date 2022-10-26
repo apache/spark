@@ -270,6 +270,11 @@
           "The <exprName> must not be null"
         ]
       },
+      "UNEXPECTED_PARAMETER_CONSTRAINT" : {
+        "message" : [
+          "The <leftExprName>(<leftExprValue>) must be <constraint> the <rightExprName>(<rightExprValue>)"
+        ]
+      },
       "UNEXPECTED_STATIC_METHOD" : {
         "message" : [
           "cannot find a static method <methodName> that matches the argument types in <className>"
