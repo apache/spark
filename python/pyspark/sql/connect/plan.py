@@ -25,6 +25,7 @@ from typing import (
     TYPE_CHECKING,
     Mapping,
 )
+
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.column import (
     ColumnRef,
