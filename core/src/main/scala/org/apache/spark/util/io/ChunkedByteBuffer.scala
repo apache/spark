@@ -100,26 +100,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) extends Ex
     out.writeInt(chunks.length)
     val chunksCopy = getChunks()
     chunksCopy.foreach(buffer => out.writeInt(buffer.limit()))
-    var buffer: Array[Byte] = null
-    val bufferLen = ChunkedByteBuffer.estimateBufferChunkSize(size)
-
-    chunksCopy.foreach { chunk => {
-      if (chunk.hasArray) {
-        // Zero copy if the bytebuffer is backed by bytes array
-        out.write(chunk.array(), chunk.arrayOffset(), chunk.limit())
-      } else {
-        // Fallback to copy approach
-        if (buffer == null) {
-          buffer = new Array[Byte](bufferLen)
-        }
-        var bytesToRead = Math.min(chunk.remaining(), bufferLen)
-        while (bytesToRead > 0) {
-          chunk.get(buffer, 0, bytesToRead)
-          out.write(buffer, 0, bytesToRead)
-          bytesToRead = Math.min(chunk.remaining(), bufferLen)
-        }
-      }
-    }}
+    chunksCopy.foreach(Utils.writeByteBuffer(_, out))
   }
 
   override def readExternal(in: ObjectInput): Unit = {
