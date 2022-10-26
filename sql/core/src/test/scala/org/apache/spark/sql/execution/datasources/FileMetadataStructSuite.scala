@@ -623,7 +623,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(s"[SPARK-40918] Output cols around WSCG.isTooManyFields limit") {
+  test(s"SPARK-40918: Output cols around WSCG.isTooManyFields limit") {
     // The issue was that ParquetFileFormat would not count the _metadata columns towards
     // the WholeStageCodegenExec.isTooManyFields limit, while FileSourceScanExec would,
     // resulting in Parquet reader returning columnar output, while scan expected row.
