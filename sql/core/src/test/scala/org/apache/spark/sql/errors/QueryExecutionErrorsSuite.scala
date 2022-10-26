@@ -19,20 +19,22 @@ package org.apache.spark.sql.errors
 
 import java.io.{File, IOException}
 import java.net.{URI, URL}
-import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
+import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
-import org.mockito.Mockito.{mock, when}
+import org.mockito.Mockito.{mock, spy, when}
 
 import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
+import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
 import org.apache.spark.sql.execution.streaming.state.RenameReturnsFalseFileSystem
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
@@ -657,6 +659,69 @@ class QueryExecutionErrorsSuite
       parameters = Map(
         "sourcePath" -> s"$srcPath"
       ))
+  }
+
+  test("UNSUPPORTED_FEATURE.JDBC_TRANSACTION: the target JDBC server does not support " +
+    "transactions and can only support ALTER TABLE with a single action") {
+    withTempDir { tempDir =>
+      val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
+      Utils.classForName("org.h2.Driver")
+      var conn: java.sql.Connection = null
+      try {
+        conn = DriverManager.getConnection(url, new Properties())
+        conn.prepareStatement("""CREATE SCHEMA "test"""").executeUpdate()
+        conn.prepareStatement(
+          """CREATE TABLE "test"."people" (name TEXT(32) NOT NULL, id INTEGER NOT NULL)""")
+          .executeUpdate()
+        conn.commit()
+      } finally {
+        if (null != conn) {
+          conn.close()
+        }
+      }
+
+      val testH2DialectUnsupportedJdbcTransaction = new JdbcDialect {
+        override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+
+        override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+          val driverClass: String = options.driverClass
+
+          (_: Int) => {
+            DriverRegistry.register(driverClass)
+            val driver: Driver = DriverRegistry.get(driverClass)
+            val connection = ConnectionProvider.create(
+              driver, options.parameters, options.connectionProviderName)
+            val spyConnection = spy(connection)
+            val spyMetaData = spy(connection.getMetaData)
+            when(spyConnection.getMetaData).thenReturn(spyMetaData)
+            when(spyMetaData.supportsTransactions()).thenReturn(false)
+
+            spyConnection
+          }
+        }
+      }
+
+      withSQLConf(
+        "spark.sql.catalog.h2" -> classOf[JDBCTableCatalog].getName,
+        "spark.sql.catalog.h2.url" -> url,
+        "spark.sql.catalog.h2.driver" -> "org.h2.Driver") {
+
+        val existedH2Dialect = JdbcDialects.get(url)
+        JdbcDialects.unregisterDialect(existedH2Dialect)
+        JdbcDialects.registerDialect(testH2DialectUnsupportedJdbcTransaction)
+
+        val e = intercept[AnalysisException] {
+          sql("alter TABLE h2.test.people SET TBLPROPERTIES (xx='xx', yy='yy')")
+        }
+
+        checkError(
+          exception = e.getCause.asInstanceOf[SparkSQLFeatureNotSupportedException],
+          errorClass = "UNSUPPORTED_FEATURE.JDBC_TRANSACTION",
+          parameters = Map.empty)
+
+        JdbcDialects.unregisterDialect(testH2DialectUnsupportedJdbcTransaction)
+      }
+    }
   }
 }
 

@@ -21,16 +21,12 @@ import java.util.Locale
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EvalMode, Expression, GenericInternalRow, GetArrayItem, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, ElementAt, EvalMode}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, QuantileSummaries}
+import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.collection.Utils
 
 object StatFunctions extends Logging {
 
@@ -188,54 +184,23 @@ object StatFunctions extends Logging {
 
   /** Generate a table of frequencies for the elements of two columns. */
   def crossTabulate(df: DataFrame, col1: String, col2: String): DataFrame = {
-    val tableName = s"${col1}_$col2"
-    val counts = df.groupBy(col1, col2).agg(count("*")).take(1e6.toInt)
-    if (counts.length == 1e6.toInt) {
-      logWarning("The maximum limit of 1e6 pairs have been collected, which may not be all of " +
-        "the pairs. Please try reducing the amount of distinct items in your columns.")
-    }
-    def cleanElement(element: Any): String = {
-      if (element == null) "null" else element.toString
-    }
-    // get the distinct sorted values of column 2, so that we can make them the column names
-    val distinctCol2: Map[Any, Int] =
-      Utils.toMapWithIndex(counts.map(e => cleanElement(e.get(1))).distinct.sorted)
-    val columnSize = distinctCol2.size
-    require(columnSize < 1e4, s"The number of distinct values for $col2, can't " +
-      s"exceed 1e4. Currently $columnSize")
-    val table = counts.groupBy(_.get(0)).map { case (col1Item, rows) =>
-      val countsRow = new GenericInternalRow(columnSize + 1)
-      rows.foreach { (row: Row) =>
-        // row.get(0) is column 1
-        // row.get(1) is column 2
-        // row.get(2) is the frequency
-        val columnIndex = distinctCol2(cleanElement(row.get(1)))
-        countsRow.setLong(columnIndex + 1, row.getLong(2))
-      }
-      // the value of col1 is the first value, the rest are the counts
-      countsRow.update(0, UTF8String.fromString(cleanElement(col1Item)))
-      countsRow
-    }.toSeq
-    // Back ticks can't exist in DataFrame column names, therefore drop them. To be able to accept
-    // special keywords and `.`, wrap the column names in ``.
-    def cleanColumnName(name: String): String = {
-      name.replace("`", "")
-    }
-    // In the map, the column names (._1) are not ordered by the index (._2). This was the bug in
-    // SPARK-8681. We need to explicitly sort by the column index and assign the column names.
-    val headerNames = distinctCol2.toSeq.sortBy(_._2).map { r =>
-      StructField(cleanColumnName(r._1.toString), LongType)
-    }
-    val schema = StructType(StructField(tableName, StringType) +: headerNames)
-
-    Dataset.ofRows(df.sparkSession, LocalRelation(schema.toAttributes, table)).na.fill(0.0)
+    df.groupBy(
+      when(isnull(col(col1)), "null")
+        .otherwise(col(col1).cast("string"))
+        .as(s"${col1}_$col2")
+    ).pivot(
+      when(isnull(col(col2)), "null")
+        .otherwise(regexp_replace(col(col2).cast("string"), "`", ""))
+    ).count().na.fill(0L)
   }
 
   /** Calculate selected summary statistics for a dataset */
   def summary(ds: Dataset[_], statistics: Seq[String]): DataFrame = {
-
-    val defaultStatistics = Seq("count", "mean", "stddev", "min", "25%", "50%", "75%", "max")
-    val selectedStatistics = if (statistics.nonEmpty) statistics else defaultStatistics
+    val selectedStatistics = if (statistics.nonEmpty) {
+      statistics.toArray
+    } else {
+      Array("count", "mean", "stddev", "min", "25%", "50%", "75%", "max")
+    }
 
     val percentiles = selectedStatistics.filter(a => a.endsWith("%")).map { p =>
       try {
@@ -247,71 +212,66 @@ object StatFunctions extends Logging {
     }
     require(percentiles.forall(p => p >= 0 && p <= 1), "Percentiles must be in the range [0, 1]")
 
-    def castAsDoubleIfNecessary(e: Expression): Expression = if (e.dataType == StringType) {
-      Cast(e, DoubleType, evalMode = EvalMode.TRY)
-    } else {
-      e
-    }
-    var percentileIndex = 0
-    val statisticFns = selectedStatistics.map { stats =>
-      if (stats.endsWith("%")) {
-        val index = percentileIndex
-        percentileIndex += 1
-        (child: Expression) =>
-          GetArrayItem(
-            new ApproximatePercentile(castAsDoubleIfNecessary(child),
-              Literal(new GenericArrayData(percentiles), ArrayType(DoubleType, false)))
-              .toAggregateExpression(),
-            Literal(index))
-      } else {
-        stats.toLowerCase(Locale.ROOT) match {
-          case "count" => (child: Expression) => Count(child).toAggregateExpression()
-          case "count_distinct" => (child: Expression) =>
-            Count(child).toAggregateExpression(isDistinct = true)
-          case "approx_count_distinct" => (child: Expression) =>
-            HyperLogLogPlusPlus(child).toAggregateExpression()
-          case "mean" => (child: Expression) =>
-            Average(castAsDoubleIfNecessary(child)).toAggregateExpression()
-          case "stddev" => (child: Expression) =>
-            StddevSamp(castAsDoubleIfNecessary(child)).toAggregateExpression()
-          case "min" => (child: Expression) => Min(child).toAggregateExpression()
-          case "max" => (child: Expression) => Max(child).toAggregateExpression()
-          case _ => throw QueryExecutionErrors.statisticNotRecognizedError(stats)
+    var mapColumns = Seq.empty[Column]
+    var columnNames = Seq.empty[String]
+
+    ds.schema.fields.foreach { field =>
+      if (field.dataType.isInstanceOf[NumericType] || field.dataType.isInstanceOf[StringType]) {
+        val column = col(field.name)
+        var casted = column
+        if (field.dataType.isInstanceOf[StringType]) {
+          casted = new Column(Cast(column.expr, DoubleType, evalMode = EvalMode.TRY))
         }
+
+        val percentilesCol = if (percentiles.nonEmpty) {
+          percentile_approx(casted, lit(percentiles),
+            lit(ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY))
+        } else null
+
+        var aggColumns = Seq.empty[Column]
+        var percentileIndex = 0
+        selectedStatistics.foreach { stats =>
+          aggColumns :+= lit(stats)
+
+          stats.toLowerCase(Locale.ROOT) match {
+            case "count" => aggColumns :+= count(column)
+
+            case "count_distinct" => aggColumns :+= count_distinct(column)
+
+            case "approx_count_distinct" => aggColumns :+= approx_count_distinct(column)
+
+            case "mean" => aggColumns :+= avg(casted)
+
+            case "stddev" => aggColumns :+= stddev(casted)
+
+            case "min" => aggColumns :+= min(column)
+
+            case "max" => aggColumns :+= max(column)
+
+            case percentile if percentile.endsWith("%") =>
+              aggColumns :+= get(percentilesCol, lit(percentileIndex))
+              percentileIndex += 1
+
+            case _ => throw QueryExecutionErrors.statisticNotRecognizedError(stats)
+          }
+        }
+
+        // map { "count" -> "1024", "min" -> "1.0", ... }
+        mapColumns :+= map(aggColumns.map(_.cast(StringType)): _*).as(field.name)
+        columnNames :+= field.name
       }
     }
 
-    val selectedCols = ds.logicalPlan.output
-      .filter(a => a.dataType.isInstanceOf[NumericType] || a.dataType.isInstanceOf[StringType])
-
-    val aggExprs = statisticFns.flatMap { func =>
-      selectedCols.map(c => Column(Cast(func(c), StringType)).as(c.name))
-    }
-
-    // If there is no selected columns, we don't need to run this aggregate, so make it a lazy val.
-    lazy val aggResult = ds.select(aggExprs: _*).queryExecution.toRdd.collect().head
-
-    // We will have one row for each selected statistic in the result.
-    val result = Array.fill[InternalRow](selectedStatistics.length) {
-      // each row has the statistic name, and statistic values of each selected column.
-      new GenericInternalRow(selectedCols.length + 1)
-    }
-
-    var rowIndex = 0
-    while (rowIndex < result.length) {
-      val statsName = selectedStatistics(rowIndex)
-      result(rowIndex).update(0, UTF8String.fromString(statsName))
-      for (colIndex <- selectedCols.indices) {
-        val statsValue = aggResult.getUTF8String(rowIndex * selectedCols.length + colIndex)
-        result(rowIndex).update(colIndex + 1, statsValue)
+    if (mapColumns.isEmpty) {
+      ds.sparkSession.createDataFrame(selectedStatistics.map(Tuple1.apply))
+        .withColumnRenamed("_1", "summary")
+    } else {
+      val valueColumns = columnNames.map { columnName =>
+        new Column(ElementAt(col(columnName).expr, col("summary").expr)).as(columnName)
       }
-      rowIndex += 1
+      ds.select(mapColumns: _*)
+        .withColumn("summary", explode(lit(selectedStatistics)))
+        .select(Array(col("summary")) ++ valueColumns: _*)
     }
-
-    // All columns are string type
-    val output = AttributeReference("summary", StringType)() +:
-      selectedCols.map(c => AttributeReference(c.name, StringType)())
-
-    Dataset.ofRows(ds.sparkSession, LocalRelation(output, result))
   }
 }

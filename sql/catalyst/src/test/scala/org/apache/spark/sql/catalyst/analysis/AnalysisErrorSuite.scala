@@ -725,7 +725,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       inputPlan = plan2,
       expectedErrorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
       expectedMessageParameters = Map(
-        "functionName" -> "EqualTo",
+        "functionName" -> "`=`",
         "dataType" -> "\"MAP<STRING, STRING>\"",
         "sqlExpr" -> "\"(b = d)\""
       ),
@@ -917,7 +917,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       (And($"a" === $"c", Cast($"d", IntegerType) === $"c"), "CAST(d#x AS INT) = outer(c#x)"))
     conditions.foreach { case (cond, msg) =>
       val plan = Project(
-        ScalarSubquery(
+        Exists(
           Aggregate(Nil, count(Literal(1)).as("cnt") :: Nil,
             Filter(cond, t1))
         ).as("sub") :: Nil,

@@ -62,7 +62,8 @@ case class FlatMapGroupsInPandasWithStateExec(
     timeoutConf: GroupStateTimeout,
     batchTimestampMs: Option[Long],
     eventTimeWatermark: Option[Long],
-    child: SparkPlan) extends UnaryExecNode with FlatMapGroupsWithStateExecBase {
+    child: SparkPlan)
+  extends UnaryExecNode with PythonSQLMetrics with FlatMapGroupsWithStateExecBase {
 
   // TODO(SPARK-40444): Add the support of initial state.
   override protected val initialStateDeserializer: Expression = null
@@ -166,7 +167,8 @@ case class FlatMapGroupsInPandasWithStateExec(
         stateEncoder.asInstanceOf[ExpressionEncoder[Row]],
         groupingAttributes.toStructType,
         outAttributes.toStructType,
-        stateType)
+        stateType,
+        pythonMetrics)
 
       val context = TaskContext.get()
 

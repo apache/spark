@@ -608,7 +608,7 @@ class HiveDDLSuite
   }
 
   test("SPARK-19129: drop partition with a empty string will drop the whole table") {
-    val df = spark.createDataFrame(Seq((0, "a"), (1, "b"))).toDF("partCol1", "name")
+    val df = spark.createDataFrame(Seq(("0", "a"), ("1", "b"))).toDF("partCol1", "name")
     df.write.mode("overwrite").partitionBy("partCol1").saveAsTable("partitionedTable")
     assertAnalysisError(
       "alter table partitionedTable drop partition(partCol1='')",
@@ -2678,27 +2678,30 @@ class HiveDDLSuite
   }
 
   test("Hive CTAS can't create partitioned table by specifying schema") {
-    val err1 = intercept[ParseException] {
-      spark.sql(
-        s"""
-           |CREATE TABLE t (a int)
-           |PARTITIONED BY (b string)
-           |STORED AS parquet
-           |AS SELECT 1 as a, "a" as b
-                 """.stripMargin)
-    }.getMessage
-    assert(err1.contains("Schema may not be specified in a Create Table As Select"))
+    val sql1 =
+      s"""CREATE TABLE t (a int)
+         |PARTITIONED BY (b string)
+         |STORED AS parquet
+         |AS SELECT 1 as a, "a" as b""".stripMargin
+    checkError(
+      exception = intercept[ParseException](sql(sql1)),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map(
+        "message" -> "Schema may not be specified in a Create Table As Select (CTAS) statement"),
+      context = ExpectedContext(sql1, 0, 92))
 
-    val err2 = intercept[ParseException] {
-      spark.sql(
-        s"""
-           |CREATE TABLE t
-           |PARTITIONED BY (b string)
-           |STORED AS parquet
-           |AS SELECT 1 as a, "a" as b
-                 """.stripMargin)
-    }.getMessage
-    assert(err2.contains("Partition column types may not be specified in Create Table As Select"))
+    val sql2 =
+      s"""CREATE TABLE t
+         |PARTITIONED BY (b string)
+         |STORED AS parquet
+         |AS SELECT 1 as a, "a" as b""".stripMargin
+    checkError(
+      exception = intercept[ParseException](sql(sql2)),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map(
+        "message" ->
+          "Partition column types may not be specified in Create Table As Select (CTAS)"),
+      context = ExpectedContext(sql2, 0, 84))
   }
 
   test("Hive CTAS with dynamic partition") {
