@@ -175,19 +175,26 @@ private[sql] object ProtobufUtils extends Logging {
       .asInstanceOf[Descriptor]
   }
 
+  // TODO: Revisit to ensure that messageName is searched through all imports
   def buildDescriptor(descFilePath: String, messageName: String): Descriptor = {
-    val descriptor = parseFileDescriptor(descFilePath).getMessageTypes.asScala.find { desc =>
-      desc.getName == messageName || desc.getFullName == messageName
+    val descriptorList = parseFileDescriptor(descFilePath).map(fileDescriptor => {
+      fileDescriptor.getMessageTypes.asScala.find { desc =>
+        desc.getName == messageName || desc.getFullName == messageName
+      }
+    }).filter(f => !f.isEmpty)
+
+    if (descriptorList.isEmpty) {
+      throw QueryCompilationErrors.noProtobufMessageTypeReturnError(messageName)
     }
 
-    descriptor match {
+    descriptorList.last match {
       case Some(d) => d
       case None =>
         throw QueryCompilationErrors.unableToLocateProtobufMessageError(messageName)
     }
   }
 
-  private def parseFileDescriptor(descFilePath: String): Descriptors.FileDescriptor = {
+  private def parseFileDescriptor(descFilePath: String): List[Descriptors.FileDescriptor] = {
     var fileDescriptorSet: DescriptorProtos.FileDescriptorSet = null
     try {
       val dscFile = new BufferedInputStream(new FileInputStream(descFilePath))
@@ -200,12 +207,11 @@ private[sql] object ProtobufUtils extends Logging {
     }
     try {
       val fileDescriptorProtoIndex = createDescriptorProtoMap(fileDescriptorSet)
-      val fileDescriptor: Descriptors.FileDescriptor =
-        buildFileDescriptor(fileDescriptorSet.getFileList.asScala.last, fileDescriptorProtoIndex)
-      if (fileDescriptor.getMessageTypes().isEmpty()) {
-        throw QueryCompilationErrors.noProtobufMessageTypeReturnError(fileDescriptor.getName())
-      }
-      fileDescriptor
+      val fileDescriptorList: List[Descriptors.FileDescriptor] =
+        fileDescriptorSet.getFileList.asScala.map( fileDescriptorProto =>
+          buildFileDescriptor(fileDescriptorProto, fileDescriptorProtoIndex)
+        ).toList
+      fileDescriptorList
     } catch {
       case e: Descriptors.DescriptorValidationException =>
         throw QueryCompilationErrors.failedParsingDescriptorError(e)

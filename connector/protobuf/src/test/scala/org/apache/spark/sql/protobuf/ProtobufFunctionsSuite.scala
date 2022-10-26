@@ -134,9 +134,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
   test("roundtrip in from_protobuf and to_protobuf - Repeated Message Once") {
     val repeatedMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "RepeatedMessage")
-    val basicMessageDesc = ProtobufUtils.buildDescriptor(
-      testFile("basicmessage.desc").replace("file:/", "/"),
-      "BasicMessage")
+    val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
 
     val basicMessage = DynamicMessage
       .newBuilder(basicMessageDesc)
@@ -173,9 +171,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
   test("roundtrip in from_protobuf and to_protobuf - Repeated Message Twice") {
     val repeatedMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "RepeatedMessage")
-    val basicMessageDesc = ProtobufUtils.buildDescriptor(
-      testFile("basicmessage.desc").replace("file:/", "/"),
-      "BasicMessage")
+    val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
 
     val basicMessage1 = DynamicMessage
       .newBuilder(basicMessageDesc)
@@ -573,7 +569,6 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("from_protobuf filter to_protobuf") {
-    val testFileDesc = testFile("basicmessage.desc").replace("file:/", "/")
     val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
 
     val basicMessage = DynamicMessage
