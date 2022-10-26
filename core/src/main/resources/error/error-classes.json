@@ -453,7 +453,7 @@
       "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but it's <endSeconds> now."
     ]
   },
-  "INCORRECT_RUMP_UP_RATE" : {
+  "INCORRECT_RAMP_UP_RATE" : {
     "message" : [
       "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but 'rampUpTimeSeconds' is <rampUpTimeSeconds>."
     ]
@@ -4311,6 +4311,41 @@
   "_LEGACY_ERROR_TEMP_2250" : {
     "message" : [
       "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastjoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2276" : {
+    "message" : [
+      "Hive table <tableName> with ANSI intervals is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2277" : {
+    "message" : [
+      "Number of dynamic partitions created is <numWrittenParts>, which is more than <maxDynamicPartitions>. To solve this try to set <maxDynamicPartitionsKey> to at least <numWrittenParts>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2278" : {
+    "message" : [
+      "The input <valueType> '<input>' does not match the given number format: '<format>'"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2279" : {
+    "message" : [
+      "Multiple bucket transforms are not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2280" : {
+    "message" : [
+      "Create namespace comment is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2281" : {
+    "message" : [
+      "Remove namespace comment is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2282" : {
+    "message" : [
+      "Drop namespace restrict is not supported"
     ]
   }
 }
