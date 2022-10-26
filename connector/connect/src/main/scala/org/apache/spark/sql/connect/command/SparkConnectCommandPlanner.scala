@@ -21,7 +21,6 @@ import scala.collection.JavaConverters._
 
 import com.google.common.collect.{Lists, Maps}
 
-import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.WriteOperation
@@ -35,8 +34,6 @@ final case class InvalidCommandInput(
     private val cause: Throwable = null)
     extends Exception(message, cause)
 
-@Unstable
-@Since("3.4.0")
 class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) {
 
   lazy val pythonExec =

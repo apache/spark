@@ -26,7 +26,7 @@ import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, 
 /**
  * This object offers methods to convert to/from connect proto to catalyst types.
  */
-private[connect] object DataTypeProtoConverter {
+object DataTypeProtoConverter {
   def toCatalystType(t: proto.DataType): DataType = {
     t.getKindCase match {
       case proto.DataType.KindCase.I32 => IntegerType
