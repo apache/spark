@@ -2387,11 +2387,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkException("Foreach writer has been aborted due to a task failure")
   }
 
-  def incorrectRumpUpRate(rowsPerSecond: Long,
+  def incorrectRampUpRate(rowsPerSecond: Long,
       maxSeconds: Long,
       rampUpTimeSeconds: Long): Throwable = {
     new SparkRuntimeException(
-      errorClass = "INCORRECT_RUMP_UP_RATE",
+      errorClass = "INCORRECT_RAMP_UP_RATE",
       messageParameters = Map(
         "rowsPerSecond" -> rowsPerSecond.toString,
         "maxSeconds" -> maxSeconds.toString,
@@ -2577,8 +2577,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "expected" -> s"Detail message: $detailMessage"))
   }
 
-  def hiveTableWithAnsiIntervalsError(tableName: String): Throwable = {
-    new UnsupportedOperationException(s"Hive table $tableName with ANSI intervals is not supported")
+  def hiveTableWithAnsiIntervalsError(tableName: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2276",
+      messageParameters = Map("tableName" -> tableName))
   }
 
   def cannotConvertOrcTimestampToTimestampNTZError(): Throwable = {
@@ -2602,15 +2604,23 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       maxDynamicPartitions: Int,
       maxDynamicPartitionsKey: String): Throwable = {
     new SparkException(
-      s"Number of dynamic partitions created is $numWrittenParts" +
-        s", which is more than $maxDynamicPartitions" +
-        s". To solve this try to set $maxDynamicPartitionsKey" +
-        s" to at least $numWrittenParts.")
+      errorClass = "_LEGACY_ERROR_TEMP_2277",
+      messageParameters = Map(
+        "numWrittenParts" -> numWrittenParts.toString(),
+        "maxDynamicPartitionsKey" -> maxDynamicPartitionsKey,
+        "maxDynamicPartitions" -> maxDynamicPartitions.toString(),
+        "numWrittenParts" -> numWrittenParts.toString()),
+      cause = null)
   }
 
-  def invalidNumberFormatError(valueType: String, input: String, format: String): Throwable = {
-    new IllegalArgumentException(
-      s"The input $valueType '$input' does not match the given number format: '$format'")
+  def invalidNumberFormatError(
+      valueType: String, input: String, format: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2278",
+      messageParameters = Map(
+        "valueType" -> valueType,
+        "input" -> input,
+        "format" -> format))
   }
 
   def unsupportedMultipleBucketTransformsError(): Throwable = {
@@ -2619,16 +2629,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def unsupportedCreateNamespaceCommentError(): Throwable = {
-    new SQLFeatureNotSupportedException("Create namespace comment is not supported")
+  def unsupportedCreateNamespaceCommentError(): SparkSQLFeatureNotSupportedException = {
+    new SparkSQLFeatureNotSupportedException(
+      errorClass = "_LEGACY_ERROR_TEMP_2280",
+      messageParameters = Map.empty)
   }
 
-  def unsupportedRemoveNamespaceCommentError(): Throwable = {
-    new SQLFeatureNotSupportedException("Remove namespace comment is not supported")
+  def unsupportedRemoveNamespaceCommentError(): SparkSQLFeatureNotSupportedException = {
+    new SparkSQLFeatureNotSupportedException(
+      errorClass = "_LEGACY_ERROR_TEMP_2281",
+      messageParameters = Map.empty)
   }
 
-  def unsupportedDropNamespaceRestrictError(): Throwable = {
-    new SQLFeatureNotSupportedException("Drop namespace restrict is not supported")
+  def unsupportedDropNamespaceRestrictError(): SparkSQLFeatureNotSupportedException = {
+    new SparkSQLFeatureNotSupportedException(
+      errorClass = "_LEGACY_ERROR_TEMP_2282",
+      messageParameters = Map.empty)
   }
 
   def timestampAddOverflowError(micros: Long, amount: Int, unit: String): ArithmeticException = {
