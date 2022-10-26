@@ -314,7 +314,7 @@ class PlanResolutionSuite extends AnalysisTest {
         exception = intercept[SparkUnsupportedOperationException] {
           parseAndResolve(query)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_2251",
+        errorClass = "UNSUPPORTED_FEATURE.MULTIPLE_BUCKET_TRANSFORM",
         parameters = Map.empty)
     }
   }

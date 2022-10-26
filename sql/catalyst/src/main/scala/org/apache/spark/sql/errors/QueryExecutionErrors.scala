@@ -2613,9 +2613,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       s"The input $valueType '$input' does not match the given number format: '$format'")
   }
 
-  def multipleBucketTransformsError(): Throwable = {
+  def unsupportedMultipleBucketTransformsError(): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2251",
+      errorClass = "UNSUPPORTED_FEATURE.MULTIPLE_BUCKET_TRANSFORM",
       messageParameters = Map.empty)
   }
 
