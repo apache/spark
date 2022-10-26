@@ -41,15 +41,16 @@ jobs:
       with:
         ref: ${{ matrix.branch }}
     - name: Cache Maven local repository
-      uses: actions/cache@c64c572235d810460d0d6876e9c705ad5002b353 # pin@v2
+      uses: actions/cache@v3
       with:
         path: ~/.m2/repository
         key: snapshot-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           snapshot-maven-
     - name: Install Java 8
-      uses: actions/setup-java@d202f5dbf7256730fb690ec59f6381650114feb2 # pin@v1
+      uses: actions/setup-java@v3
       with:
+        distribution: temurin
         java-version: 8
     - name: Publish snapshot
       env:

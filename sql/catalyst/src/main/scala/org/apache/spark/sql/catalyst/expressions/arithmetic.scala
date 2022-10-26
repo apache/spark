@@ -479,7 +479,15 @@ case class Add(
 
   override lazy val canonicalized: Expression = {
     // TODO: do not reorder consecutive `Add`s with different `evalMode`
-    orderCommutative({ case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, evalMode))
+    val reorderResult =
+      orderCommutative({ case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, evalMode))
+    if (resolved && reorderResult.resolved && reorderResult.dataType == dataType) {
+      reorderResult
+    } else {
+      // SPARK-40903: Avoid reordering decimal Add for canonicalization if the result data type is
+      // changed, which may cause data checking error within ComplexTypeMergingExpression.
+      withCanonicalizedChildren
+    }
   }
 }
 
@@ -1203,7 +1211,7 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
       DataTypeMismatch(
         errorSubClass = "WRONG_NUM_PARAMS",
         messageParameters = Map(
-          "functionName" -> prettyName,
+          "functionName" -> toSQLId(prettyName),
           "expectedNum" -> "> 1",
           "actualNum" -> children.length.toString))
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
@@ -1215,7 +1223,7 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
         )
       )
     } else {
-      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(dataType, prettyName)
     }
   }
 
@@ -1294,7 +1302,7 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
       DataTypeMismatch(
         errorSubClass = "WRONG_NUM_PARAMS",
         messageParameters = Map(
-          "functionName" -> prettyName,
+          "functionName" -> toSQLId(prettyName),
           "expectedNum" -> "> 1",
           "actualNum" -> children.length.toString))
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
@@ -1306,7 +1314,7 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
         )
       )
     } else {
-      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(dataType, prettyName)
     }
   }
 

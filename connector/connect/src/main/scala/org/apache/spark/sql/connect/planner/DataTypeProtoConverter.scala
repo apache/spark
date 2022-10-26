@@ -21,7 +21,7 @@ import scala.collection.convert.ImplicitConversions._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructField, StructType}
 
 /**
  * This object offers methods to convert to/from connect proto to catalyst types.
@@ -50,9 +50,26 @@ object DataTypeProtoConverter {
         proto.DataType.newBuilder().setI32(proto.DataType.I32.getDefaultInstance).build()
       case StringType =>
         proto.DataType.newBuilder().setString(proto.DataType.String.getDefaultInstance).build()
+      case LongType =>
+        proto.DataType.newBuilder().setI64(proto.DataType.I64.getDefaultInstance).build()
+      case struct: StructType =>
+        toConnectProtoStructType(struct)
       case _ =>
         throw InvalidPlanInput(s"Does not support convert ${t.typeName} to connect proto types.")
     }
+  }
+
+  def toConnectProtoStructType(schema: StructType): proto.DataType = {
+    val struct = proto.DataType.Struct.newBuilder()
+    for (structField <- schema.fields) {
+      struct.addFields(
+        proto.DataType.StructField
+          .newBuilder()
+          .setName(structField.name)
+          .setType(toConnectProtoType(structField.dataType))
+          .setNullable(structField.nullable))
+    }
+    proto.DataType.newBuilder().setStruct(struct).build()
   }
 
   def toSaveMode(mode: proto.WriteOperation.SaveMode): SaveMode = {

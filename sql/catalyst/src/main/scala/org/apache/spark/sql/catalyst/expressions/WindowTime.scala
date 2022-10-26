@@ -39,7 +39,7 @@ import org.apache.spark.sql.types._
         A2	2021-01-01 00:00:00	2021-01-01 00:05:00	2021-01-01 00:04:59.999999	1
   """,
   group = "datetime_funcs",
-  since = "3.3.0")
+  since = "3.4.0")
 // scalastyle:on line.size.limit line.contains.tab
 case class WindowTime(windowColumn: Expression)
   extends UnaryExpression
