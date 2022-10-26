@@ -1613,10 +1613,10 @@ class TestFileSystem extends org.apache.hadoop.fs.LocalFileSystem {
   // No-op methods
 
   override def copyFromLocalFile(
-                                  delSrc: Boolean,
-                                  overwrite: Boolean,
-                                  src: Path,
-                                  dst: Path): Unit = {}
+    delSrc: Boolean,
+    overwrite: Boolean,
+    src: Path,
+    dst: Path): Unit = {}
 
   override def mkdirs(path: Path): Boolean = true
 }
