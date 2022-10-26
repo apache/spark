@@ -52,7 +52,7 @@ class RateStreamMicroBatchStream(
   private val maxSeconds = Long.MaxValue / rowsPerSecond
 
   if (rampUpTimeSeconds > maxSeconds) {
-    throw QueryExecutionErrors.incorrectRumpUpRate(
+    throw QueryExecutionErrors.incorrectRampUpRate(
       rowsPerSecond, maxSeconds, rampUpTimeSeconds)
   }
 
