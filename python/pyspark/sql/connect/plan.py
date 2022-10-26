@@ -543,11 +543,7 @@ class Join(LogicalPlan):
         super().__init__(left)
         self.left = cast(LogicalPlan, left)
         self.right = right
-        if on is not None and not isinstance(on, list):
-            join_columns_or_conditions = [on]  # type: ignore[assignment]
-        else:
-            join_columns_or_conditions = on
-        self.on = join_columns_or_conditions
+        self.on = on
         if how is None:
             join_type = proto.Join.JoinType.JOIN_TYPE_INNER
         elif how == "inner":
@@ -579,12 +575,19 @@ class Join(LogicalPlan):
         rel = proto.Relation()
         rel.join.left.CopyFrom(self.left.plan(session))
         rel.join.right.CopyFrom(self.right.plan(session))
-        if self.on is not None:
-            if isinstance(self.on[0], str):
-                rel.join.using_columns.extend(self.on)
+        join_columns_or_conditions = self.on
+        if self.on is not None and not isinstance(self.on, list):
+            join_columns_or_conditions = [self.on]  # type: ignore[assignment]
+        if join_columns_or_conditions is not None:
+            if isinstance(cast(List[str], join_columns_or_conditions)[0], str):
+                rel.join.using_columns.extend(cast(List[str], join_columns_or_conditions))
             else:
-                self.on = reduce(lambda x, y: x.__and__(y), cast(List[ColumnRef], self.on))
-                rel.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
+                join_columns_or_conditions = reduce(
+                    lambda x, y: x.__and__(y), cast(List[ColumnRef], join_columns_or_conditions)
+                )
+                rel.join.join_condition.CopyFrom(
+                    self.to_attr_or_expression(join_columns_or_conditions, session)
+                )
         rel.join.join_type = self.how
         return rel
 

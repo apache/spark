@@ -41,7 +41,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         plan2 = left_input.join(other=right_input, on=["col1", "col2"])._plan.to_proto(self.connect)
         self.assertEqual(len(plan2.root.join.using_columns), 2)
 
-    def test_join_using_columns(self):
+    def test_join_condition(self):
         left_input = self.connect.readTable(table_name=self.tbl_name)
         right_input = self.connect.readTable(table_name=self.tbl_name)
         plan = left_input.join(
