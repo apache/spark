@@ -555,8 +555,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     Map(
       "exprName" -> "`slide_duration`",
       "valueRange" -> "(0, 9223372036854775807]",
-      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 0, 0)\"",
-      "currentValue" -> "0L"
+      "currentValue" -> "0L",
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 0, 0)\""
     )
   )
 
