@@ -171,7 +171,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     }
     withSession(extensions) { session =>
       session.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, true)
-      assert(session.sessionState.queryStagePrepRules.contains(MyQueryStagePrepRule()))
+      assert(session.sessionState.adaptiveRulesHolder.queryStagePrepRules
+        .contains(MyQueryStagePrepRule()))
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule())))
       import session.sqlContext.implicits._
