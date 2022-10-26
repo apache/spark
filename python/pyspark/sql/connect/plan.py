@@ -25,7 +25,7 @@ from typing import (
     TYPE_CHECKING,
     Mapping,
 )
-
+from functools import reduce
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.column import (
     ColumnRef,
@@ -537,13 +537,17 @@ class Join(LogicalPlan):
         self,
         left: Optional["LogicalPlan"],
         right: "LogicalPlan",
-        on: "ColumnOrString",
+        on: Optional[Union[str, List[str], ColumnRef, List[ColumnRef]]],
         how: Optional[str],
     ) -> None:
         super().__init__(left)
         self.left = cast(LogicalPlan, left)
         self.right = right
-        self.on = on
+        if on is not None and not isinstance(on, list):
+            join_columns_or_conditions = [on]  # type: ignore[assignment]
+        else:
+            join_columns_or_conditions = on
+        self.on = join_columns_or_conditions
         if how is None:
             join_type = proto.Join.JoinType.JOIN_TYPE_INNER
         elif how == "inner":
@@ -575,7 +579,12 @@ class Join(LogicalPlan):
         rel = proto.Relation()
         rel.join.left.CopyFrom(self.left.plan(session))
         rel.join.right.CopyFrom(self.right.plan(session))
-        rel.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
+        if self.on is not None:
+            if isinstance(self.on[0], str):
+                rel.join.using_columns.extend(self.on)
+            else:
+                self.on = reduce(lambda x, y: x.__and__(y), cast(List[ColumnRef], self.on))
+                rel.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
         rel.join.join_type = self.how
         return rel
 

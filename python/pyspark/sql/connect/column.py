@@ -62,6 +62,7 @@ class Expression(object):
     __rpow__ = _bin_op("pow", reverse=True)
     __ge__ = _bin_op(">=")
     __le__ = _bin_op("<=")
+    __and__ = _bin_op("and")
 
     def __eq__(self, other: Any) -> "Expression":  # type: ignore[override]
         """Returns a binary expression with the current column as the left

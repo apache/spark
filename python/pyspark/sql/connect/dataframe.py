@@ -218,8 +218,12 @@ class DataFrame(object):
         self.limit(n)
         return self.toPandas()
 
-    # TODO(martin.grund) fix mypu
-    def join(self, other: "DataFrame", on: Any, how: Optional[str] = None) -> "DataFrame":
+    def join(
+        self,
+        other: "DataFrame",
+        on: Optional[Union[str, List[str], ColumnRef, List[ColumnRef]]] = None,
+        how: Optional[str] = None,
+    ) -> "DataFrame":
         if self._plan is None:
             raise Exception("Cannot join when self._plan is empty.")
         if other._plan is None:
