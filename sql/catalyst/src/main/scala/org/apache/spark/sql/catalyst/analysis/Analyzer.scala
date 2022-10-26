@@ -1511,7 +1511,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         // implementation and should be resolved based on the table schema.
         o.copy(deleteExpr = resolveExpressionByPlanOutput(o.deleteExpr, o.table))
 
-      case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
+      case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
 
         EliminateSubqueryAliases(targetTable) match {
@@ -1533,7 +1533,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from both target and source tables.
-                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = false))
+                  resolveAssignments(assignments, m, resolveValuesFrom = m))
               case UpdateStarAction(updateCondition) =>
                 val assignments = targetTable.output.map { attr =>
                   Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
@@ -1541,7 +1541,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                 UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
                   // For UPDATE *, the value must from source table.
-                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
+                  resolveAssignments(assignments, m, resolveValuesFrom = sourceTable))
               case o => o
             }
             val newNotMatchedActions = m.notMatchedActions.map {
@@ -1552,7 +1552,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                   resolveExpressionByPlanChildren(_, Project(Nil, m.sourceTable)))
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
+                  resolveAssignments(assignments, m, resolveValuesFrom = sourceTable))
               case InsertStarAction(insertCondition) =>
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
@@ -1563,13 +1563,29 @@ class Analyzer(override val catalogManager: CatalogManager)
                 }
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
+                  resolveAssignments(assignments, m, resolveValuesFrom = sourceTable))
               case o => o
             }
+            val newNotMatchedBySourceActions = m.notMatchedBySourceActions.map {
+              case DeleteAction(deleteCondition) =>
+                val resolvedDeleteCondition = deleteCondition.map(
+                  resolveExpressionByPlanChildren(_, Project(Nil, targetTable)))
+                DeleteAction(resolvedDeleteCondition)
+              case UpdateAction(updateCondition, assignments) =>
+                val resolvedUpdateCondition = updateCondition.map(
+                  resolveExpressionByPlanChildren(_, Project(Nil, targetTable)))
+                UpdateAction(
+                  resolvedUpdateCondition,
+                  // The update value can access columns from the target table only.
+                  resolveAssignments(assignments, m, resolveValuesFrom = targetTable))
+              case o => o
+            }
+
             val resolvedMergeCondition = resolveExpressionByPlanChildren(m.mergeCondition, m)
             m.copy(mergeCondition = resolvedMergeCondition,
               matchedActions = newMatchedActions,
-              notMatchedActions = newNotMatchedActions)
+              notMatchedActions = newNotMatchedActions,
+              notMatchedBySourceActions = newNotMatchedBySourceActions)
         }
 
       // Skip the having clause here, this will be handled in ResolveAggregateFunctions.
@@ -1583,7 +1599,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     def resolveAssignments(
         assignments: Seq[Assignment],
         mergeInto: MergeIntoTable,
-        resolveValuesWithSourceOnly: Boolean): Seq[Assignment] = {
+        resolveValuesFrom: LogicalPlan): Seq[Assignment] = {
       assignments.map { assign =>
         val resolvedKey = assign.key match {
           case c if !c.resolved =>
@@ -1591,13 +1607,12 @@ class Analyzer(override val catalogManager: CatalogManager)
           case o => o
         }
         val resolvedValue = assign.value match {
-          // The update values may contain target and/or source references.
           case c if !c.resolved =>
-            if (resolveValuesWithSourceOnly) {
-              resolveMergeExprOrFail(c, Project(Nil, mergeInto.sourceTable))
-            } else {
-              resolveMergeExprOrFail(c, mergeInto)
+            val resolveFromChildren = resolveValuesFrom match {
+              case m: MergeIntoTable => m
+              case p => Project(Nil, p)
             }
+            resolveMergeExprOrFail(c, resolveFromChildren)
           case o => o
         }
         Assignment(resolvedKey, resolvedValue)
