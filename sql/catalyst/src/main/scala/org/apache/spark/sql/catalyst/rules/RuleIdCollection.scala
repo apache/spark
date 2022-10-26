@@ -88,6 +88,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveJoinStrategyHints" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveInlineTables" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveLambdaVariables" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveStatsFunctions" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTimeZone" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveUnion" ::
       "org.apache.spark.sql.catalyst.analysis.SubstituteUnresolvedOrdinals" ::

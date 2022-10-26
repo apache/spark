@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.Utils
@@ -2100,4 +2100,54 @@ object AsOfJoin {
           Subtract(leftAsOf, rightAsOf), Subtract(rightAsOf, leftAsOf))
     }
   }
+}
+
+
+/**
+ * A logical plan for summary.
+ */
+case class Summary(
+    child: LogicalPlan,
+    statistics: Seq[String]) extends UnaryNode {
+
+  private lazy val supported =
+    Set("count", "count_distinct", "approx_count_distinct", "mean", "stddev", "min", "max")
+
+  {
+    // TODO: throw AnalysisException instead
+    require(statistics.nonEmpty)
+    val percentiles = statistics.filter(p => p.endsWith("%")).map { p =>
+      try {
+        p.stripSuffix("%").toDouble / 100.0
+      } catch {
+        case e: NumberFormatException =>
+          throw QueryExecutionErrors.cannotParseStatisticAsPercentileError(p, e)
+      }
+    }
+    require(percentiles.forall(p => p >= 0 && p <= 1), "Percentiles must be in the range [0, 1]")
+
+    statistics.foreach {
+      case s if supported.contains(s) =>
+      case p if p.endsWith("%") =>
+      case s => throw QueryExecutionErrors.statisticNotRecognizedError(s)
+    }
+  }
+
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(5)
+
+  override lazy val resolved = false // Summary will be replaced after being resolved.
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(SUMMARY)
+
+  override def output: Seq[Attribute] = {
+    AttributeReference("summary", StringType)() +:
+      child.output.flatMap { attr =>
+        if (attr.dataType.isInstanceOf[NumericType] || attr.dataType.isInstanceOf[StringType]) {
+          Some(AttributeReference(attr.name, StringType)())
+        } else None
+      }
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
 }

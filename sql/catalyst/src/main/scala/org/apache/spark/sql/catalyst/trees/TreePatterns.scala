@@ -121,6 +121,9 @@ object TreePattern extends Enumeration  {
   val WINDOW: Value = Value
   val WITH_WINDOW_DEFINITION: Value = Value
 
+  // Stats Function
+  val SUMMARY: Value = Value
+
   // Unresolved expression patterns (Alphabetically ordered)
   val UNRESOLVED_ALIAS: Value = Value
   val UNRESOLVED_ATTRIBUTE: Value = Value

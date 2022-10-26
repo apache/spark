@@ -21,10 +21,9 @@ import java.util.Locale
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
-import org.apache.spark.sql.catalyst.expressions.{Cast, ElementAt, EvalMode}
-import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.Cast
+import org.apache.spark.sql.catalyst.plans.logical.Summary
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -165,81 +164,10 @@ object StatFunctions extends Logging {
   /** Calculate selected summary statistics for a dataset */
   def summary(ds: Dataset[_], statistics: Seq[String]): DataFrame = {
     val selectedStatistics = if (statistics.nonEmpty) {
-      statistics.toArray
+      statistics.map(_.toLowerCase(Locale.ROOT))
     } else {
-      Array("count", "mean", "stddev", "min", "25%", "50%", "75%", "max")
+      Seq("count", "mean", "stddev", "min", "25%", "50%", "75%", "max")
     }
-
-    val percentiles = selectedStatistics.filter(a => a.endsWith("%")).map { p =>
-      try {
-        p.stripSuffix("%").toDouble / 100.0
-      } catch {
-        case e: NumberFormatException =>
-          throw QueryExecutionErrors.cannotParseStatisticAsPercentileError(p, e)
-      }
-    }
-    require(percentiles.forall(p => p >= 0 && p <= 1), "Percentiles must be in the range [0, 1]")
-
-    var mapColumns = Seq.empty[Column]
-    var columnNames = Seq.empty[String]
-
-    ds.schema.fields.foreach { field =>
-      if (field.dataType.isInstanceOf[NumericType] || field.dataType.isInstanceOf[StringType]) {
-        val column = col(field.name)
-        var casted = column
-        if (field.dataType.isInstanceOf[StringType]) {
-          casted = new Column(Cast(column.expr, DoubleType, evalMode = EvalMode.TRY))
-        }
-
-        val percentilesCol = if (percentiles.nonEmpty) {
-          percentile_approx(casted, lit(percentiles),
-            lit(ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY))
-        } else null
-
-        var aggColumns = Seq.empty[Column]
-        var percentileIndex = 0
-        selectedStatistics.foreach { stats =>
-          aggColumns :+= lit(stats)
-
-          stats.toLowerCase(Locale.ROOT) match {
-            case "count" => aggColumns :+= count(column)
-
-            case "count_distinct" => aggColumns :+= count_distinct(column)
-
-            case "approx_count_distinct" => aggColumns :+= approx_count_distinct(column)
-
-            case "mean" => aggColumns :+= avg(casted)
-
-            case "stddev" => aggColumns :+= stddev(casted)
-
-            case "min" => aggColumns :+= min(column)
-
-            case "max" => aggColumns :+= max(column)
-
-            case percentile if percentile.endsWith("%") =>
-              aggColumns :+= get(percentilesCol, lit(percentileIndex))
-              percentileIndex += 1
-
-            case _ => throw QueryExecutionErrors.statisticNotRecognizedError(stats)
-          }
-        }
-
-        // map { "count" -> "1024", "min" -> "1.0", ... }
-        mapColumns :+= map(aggColumns.map(_.cast(StringType)): _*).as(field.name)
-        columnNames :+= field.name
-      }
-    }
-
-    if (mapColumns.isEmpty) {
-      ds.sparkSession.createDataFrame(selectedStatistics.map(Tuple1.apply))
-        .withColumnRenamed("_1", "summary")
-    } else {
-      val valueColumns = columnNames.map { columnName =>
-        new Column(ElementAt(col(columnName).expr, col("summary").expr)).as(columnName)
-      }
-      ds.select(mapColumns: _*)
-        .withColumn("summary", explode(lit(selectedStatistics)))
-        .select(Array(col("summary")) ++ valueColumns: _*)
-    }
+    Dataset.ofRows(ds.sparkSession, Summary(ds.logicalPlan, selectedStatistics))
   }
 }

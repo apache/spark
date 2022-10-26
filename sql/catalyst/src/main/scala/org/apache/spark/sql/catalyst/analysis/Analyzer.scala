@@ -291,6 +291,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveDeserializer ::
       ResolveNewInstance ::
       ResolveUpCast ::
+      ResolveStatsFunctions ::
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveUnpivot ::
