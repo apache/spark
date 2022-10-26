@@ -20,7 +20,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 
 /**
@@ -32,11 +32,13 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   lazy val connectTestRelation = createLocalRelationProto(Seq($"id".int, $"name".string))
 
-  lazy val connectTestRelation2 = createLocalRelationProto(Seq($"key".int, $"value".int))
+  lazy val connectTestRelation2 = createLocalRelationProto(
+    Seq($"key".int, $"value".int, $"name".string))
 
   lazy val sparkTestRelation: LocalRelation = LocalRelation($"id".int, $"name".string)
 
-  lazy val sparkTestRelation2: LocalRelation = LocalRelation($"key".int, $"value".int)
+  lazy val sparkTestRelation2: LocalRelation =
+    LocalRelation($"key".int, $"value".int, $"name".string)
 
   test("Basic select") {
     val connectPlan = {
@@ -117,6 +119,14 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       val sparkPlan3 = sparkTestRelation.join(sparkTestRelation2, y)
       comparePlans(connectPlan3.analyze, sparkPlan3.analyze, false)
     }
+
+    val connectPlan4 = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(
+        connectTestRelation.join(connectTestRelation2, JoinType.JOIN_TYPE_INNER, Seq("name")))
+    }
+    val sparkPlan4 = sparkTestRelation.join(sparkTestRelation2, UsingJoin(Inner, Seq("name")))
+    comparePlans(connectPlan4.analyze, sparkPlan4.analyze, false)
   }
 
   test("Test sample") {

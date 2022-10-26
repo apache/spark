@@ -3788,7 +3788,7 @@ object functions {
    *                     StructType { start: Timestamp, end: Timestamp }
    *
    * @group datetime_funcs
-   * @since 3.3.0
+   * @since 3.4.0
    */
   def window_time(windowColumn: Column): Column = withExpr {
     WindowTime(windowColumn.expr)

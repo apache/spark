@@ -28,6 +28,8 @@ import org.apache.commons.codec.digest.MessageDigestAlgorithms
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
@@ -268,15 +270,17 @@ abstract class HashExpression[E] extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 1) {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName requires at least one argument")
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_PARAMS",
+        messageParameters = Map(
+          "functionName" ->  toSQLId(prettyName),
+          "expectedNum" -> "> 0",
+          "actualNum" -> children.length.toString))
     } else if (children.exists(child => hasMapType(child.dataType)) &&
         !SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_HASH_ON_MAPTYPE)) {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName cannot contain elements of MapType. In Spark, same maps " +
-          "may have different hashcode, thus hash expressions are prohibited on MapType elements." +
-          s" To restore previous behavior set ${SQLConf.LEGACY_ALLOW_HASH_ON_MAPTYPE.key} " +
-          "to true.")
+      DataTypeMismatch(
+        errorSubClass = "HASH_MAP_TYPE",
+        messageParameters = Map("functionName" -> toSQLId(prettyName)))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }

@@ -84,4 +84,23 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(actual, expected)
   }
+
+  test("SPARK-34265: Instrument Python UDF execution using SQL Metrics") {
+
+    val pythonSQLMetrics = List(
+      "data sent to Python workers",
+      "data returned from Python workers",
+      "number of output rows")
+
+    val df = base.groupBy(pythonTestUDF(base("a") + 1))
+      .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)))
+    df.count()
+
+    val statusStore = spark.sharedState.statusStore
+    val lastExecId = statusStore.executionsList.last.executionId
+    val executionMetrics = statusStore.execution(lastExecId).get.metrics.mkString
+    for (metric <- pythonSQLMetrics) {
+      assert(executionMetrics.contains(metric))
+    }
+  }
 }

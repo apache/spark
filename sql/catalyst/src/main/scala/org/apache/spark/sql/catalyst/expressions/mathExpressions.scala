@@ -22,7 +22,8 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{NumberConverter, TypeUtils}
@@ -1481,7 +1482,12 @@ abstract class RoundBase(child: Expression, scale: Expression,
         if (scale.foldable) {
           TypeCheckSuccess
         } else {
-          TypeCheckFailure("Only foldable Expression is allowed for scale arguments")
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> "scala",
+              "inputType" -> toSQLType(scale.dataType),
+              "inputExpr" -> toSQLExpr(scale)))
         }
       case f => f
     }
@@ -1788,7 +1794,7 @@ case class WidthBucket(
             TypeCheckSuccess
           case _ =>
             val types = Seq(value.dataType, minValue.dataType, maxValue.dataType)
-            TypeUtils.checkForSameTypeInputExpr(types, s"function $prettyName")
+            TypeUtils.checkForSameTypeInputExpr(types, prettyName)
         }
       case f => f
     }
