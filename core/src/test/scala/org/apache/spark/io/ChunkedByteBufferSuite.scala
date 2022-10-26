@@ -29,11 +29,15 @@ import org.apache.spark.util.io.ChunkedByteBuffer
 
 class ChunkedByteBufferSuite extends SparkFunSuite with SharedSparkContext {
 
+  /**
+   * compare two [[ChunkedByteBuffer]]:
+   * - chunks nums equal
+   * - each chunk's content
+   */
   def assertBufferEqual(buffer1: ChunkedByteBuffer, buffer2: ChunkedByteBuffer): Unit = {
     assert(buffer1.chunks.length == buffer2.chunks.length)
     assert(buffer1.chunks.zip(buffer2.chunks).forall {
-      case (chunk1, chunk2) =>
-        chunk1.isDirect == chunk2.isDirect && chunk1 == chunk2
+      case (chunk1, chunk2) => chunk1 == chunk2
     })
   }
 
@@ -112,7 +116,6 @@ class ChunkedByteBufferSuite extends SparkFunSuite with SharedSparkContext {
       tmp
     }
 
-    assert(chunkedByteBuffer2.chunks.forall(_.isDirect))
     assertBufferEqual(chunkedByteBuffer, chunkedByteBuffer2)
   }
 
