@@ -1383,15 +1383,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT =
-    buildConf("spark.sql.hive.useDelegateForSymlinkTextInputFormat")
-      .internal()
-      .doc("When true, SymlinkTextInputFormat is replaced with a similar delegate class during " +
-        "table scan in order to fix the issue of empty splits")
-      .version("3.4.0")
-      .booleanConf
-      .createWithDefault(true)
-
   val PARTITION_COLUMN_TYPE_INFERENCE =
     buildConf("spark.sql.sources.partitionColumnTypeInference.enabled")
       .doc("When true, automatically infer the data types for partitioned columns.")
@@ -4286,9 +4277,6 @@ class SQLConf extends Serializable with Logging {
     HiveCaseSensitiveInferenceMode.withName(getConf(HIVE_CASE_SENSITIVE_INFERENCE))
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
-
-  def useDelegateForSymlinkTextInputFormat: Boolean =
-    getConf(USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT)
 
   def optimizerMetadataOnly: Boolean = getConf(OPTIMIZER_METADATA_ONLY)
 

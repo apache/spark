@@ -43,40 +43,53 @@ import org.apache.hadoop.mapred.Reporter;
 public class DelegateSymlinkTextInputFormat extends SymlinkTextInputFormat {
 
   public static class DelegateSymlinkTextInputSplit extends FileSplit {
-    private final SymlinkTextInputSplit split;
+    private Path targetPath; // Path to the actual data file, not the symlink file.
 
+    // Used for deserialisation.
     public DelegateSymlinkTextInputSplit() {
       super((Path) null, 0, 0, (String[]) null);
-      split = new SymlinkTextInputSplit();
+      targetPath = null;
     }
 
-    public DelegateSymlinkTextInputSplit(Path symlinkPath, SymlinkTextInputSplit split) throws IOException {
+    public DelegateSymlinkTextInputSplit(SymlinkTextInputSplit split) throws IOException {
       // It is fine to set start and length to the target file split because
       // SymlinkTextInputFormat maintains 1-1 mapping between SymlinkTextInputSplit and FileSplit.
-      super(symlinkPath,
+      super(split.getPath(),
         split.getTargetSplit().getStart(),
         split.getTargetSplit().getLength(),
         split.getTargetSplit().getLocations());
-      this.split = split;
+      this.targetPath = split.getTargetSplit().getPath();
     }
 
     /**
-     * Returns delegate input split.
+     * Returns target path.
+     * Visible for testing.
      */
-    private SymlinkTextInputSplit getSplit() {
-      return split;
+    public Path getTargetPath() {
+      return targetPath;
+    }
+
+    /**
+     * Reconstructs the delegate input split.
+     */
+    private SymlinkTextInputSplit getSplit() throws IOException {
+      return new SymlinkTextInputSplit(
+        getPath(),
+        new FileSplit(targetPath, getStart(), getLength(), getLocations())
+      );
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
       super.write(out);
-      split.write(out);
+      Text.writeString(out, (this.targetPath != null) ? this.targetPath.toString() : "");
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
       super.readFields(in);
-      split.readFields(in);
+      String target = Text.readString(in);
+      this.targetPath = (!target.isEmpty()) ? new Path(target) : null;
     }
   }
 
@@ -88,12 +101,11 @@ public class DelegateSymlinkTextInputFormat extends SymlinkTextInputFormat {
   }
 
   @Override
-  public InputSplit[] getSplits(JobConf job, int numSplits)
-      throws IOException {
+  public InputSplit[] getSplits(JobConf job, int numSplits) throws IOException {
     InputSplit[] splits = super.getSplits(job, numSplits);
     for (int i = 0; i < splits.length; i++) {
       SymlinkTextInputSplit split = (SymlinkTextInputSplit) splits[i];
-      splits[i] = new DelegateSymlinkTextInputSplit(split.getPath(), split);
+      splits[i] = new DelegateSymlinkTextInputSplit(split);
     }
     return splits;
   }
@@ -104,8 +116,7 @@ public class DelegateSymlinkTextInputFormat extends SymlinkTextInputFormat {
   }
 
   @Override
-  public ContentSummary getContentSummary(Path p, JobConf job)
-      throws IOException {
+  public ContentSummary getContentSummary(Path p, JobConf job) throws IOException {
     return super.getContentSummary(p, job);
   }
 }

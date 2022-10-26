@@ -240,7 +240,7 @@ case class HiveTableScanExec(
       inputFormatClass: Class[_ <: InputFormat[_, _]],
       conf: SQLConf): Class[_ <: InputFormat[_, _]] = {
     if (inputFormatClass == classOf[SymlinkTextInputFormat] &&
-        conf != null && conf.useDelegateForSymlinkTextInputFormat) {
+        conf != null && conf.getConf(HiveUtils.USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT)) {
       classOf[DelegateSymlinkTextInputFormat]
     } else {
       inputFormatClass
