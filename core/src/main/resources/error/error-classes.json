@@ -453,7 +453,7 @@
       "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but it's <endSeconds> now."
     ]
   },
-  "INCORRECT_RUMP_UP_RATE" : {
+  "INCORRECT_RAMP_UP_RATE" : {
     "message" : [
       "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but 'rampUpTimeSeconds' is <rampUpTimeSeconds>."
     ]
@@ -4445,6 +4445,41 @@
   "_LEGACY_ERROR_TEMP_2275" : {
     "message" : [
       "Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2276" : {
+    "message" : [
+      "Hive table <tableName> with ANSI intervals is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2277" : {
+    "message" : [
+      "Number of dynamic partitions created is <numWrittenParts>, which is more than <maxDynamicPartitions>. To solve this try to set <maxDynamicPartitionsKey> to at least <numWrittenParts>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2278" : {
+    "message" : [
+      "The input <valueType> '<input>' does not match the given number format: '<format>'"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2279" : {
+    "message" : [
+      "Multiple bucket transforms are not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2280" : {
+    "message" : [
+      "Create namespace comment is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2281" : {
+    "message" : [
+      "Remove namespace comment is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2282" : {
+    "message" : [
+      "Drop namespace restrict is not supported"
     ]
   }
 }

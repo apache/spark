@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttrib
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, LogicalPlan, Sample, SubqueryAlias}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.QueryExecution
@@ -292,14 +292,23 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   private def transformJoin(rel: proto.Join): LogicalPlan = {
     assert(rel.hasLeft && rel.hasRight, "Both join sides must be present")
+    if (rel.hasJoinCondition && rel.getUsingColumnsCount > 0) {
+      throw InvalidPlanInput(
+        s"Using columns or join conditions cannot be set at the same time in Join")
+    }
     val joinCondition =
       if (rel.hasJoinCondition) Some(transformExpression(rel.getJoinCondition)) else None
-
+    val catalystJointype = transformJoinType(
+      if (rel.getJoinType != null) rel.getJoinType else proto.Join.JoinType.JOIN_TYPE_INNER)
+    val joinType = if (rel.getUsingColumnsCount > 0) {
+      UsingJoin(catalystJointype, rel.getUsingColumnsList.asScala.toSeq)
+    } else {
+      catalystJointype
+    }
     logical.Join(
       left = transformRelation(rel.getLeft),
       right = transformRelation(rel.getRight),
-      joinType = transformJoinType(
-        if (rel.getJoinType != null) rel.getJoinType else proto.Join.JoinType.JOIN_TYPE_INNER),
+      joinType = joinType,
       condition = joinCondition,
       hint = logical.JoinHint.NONE)
   }
