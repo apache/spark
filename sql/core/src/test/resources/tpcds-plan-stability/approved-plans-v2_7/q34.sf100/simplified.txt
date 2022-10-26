@@ -24,6 +24,26 @@ WholeStageCodegen (10)
                                               Project [ss_customer_sk,ss_hdemo_sk,ss_store_sk,ss_ticket_number]
                                                 BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                                   Filter [ss_store_sk,ss_hdemo_sk,ss_customer_sk]
+                                                    Subquery #2
+                                                      ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(s_store_sk, 42), 45, 360, 0, 0),bloomFilter,buf]
+                                                        Exchange #5
+                                                          ObjectHashAggregate [s_store_sk] [buf,buf]
+                                                            WholeStageCodegen (1)
+                                                              Project [s_store_sk]
+                                                                Filter [s_county,s_store_sk]
+                                                                  ColumnarToRow
+                                                                    InputAdapter
+                                                                      Scan parquet spark_catalog.default.store [s_store_sk,s_county]
+                                                    Subquery #3
+                                                      ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(hd_demo_sk, 42), 1760, 14080, 0, 0),bloomFilter,buf]
+                                                        Exchange #6
+                                                          ObjectHashAggregate [hd_demo_sk] [buf,buf]
+                                                            WholeStageCodegen (1)
+                                                              Project [hd_demo_sk]
+                                                                Filter [hd_vehicle_count,hd_buy_potential,hd_dep_count,hd_demo_sk]
+                                                                  ColumnarToRow
+                                                                    InputAdapter
+                                                                      Scan parquet spark_catalog.default.household_demographics [hd_demo_sk,hd_buy_potential,hd_dep_count,hd_vehicle_count]
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet spark_catalog.default.store_sales [ss_customer_sk,ss_hdemo_sk,ss_store_sk,ss_ticket_number,ss_sold_date_sk]
@@ -38,7 +58,7 @@ WholeStageCodegen (10)
                                                   InputAdapter
                                                     ReusedExchange [d_date_sk] #4
                                               InputAdapter
-                                                BroadcastExchange #5
+                                                BroadcastExchange #7
                                                   WholeStageCodegen (2)
                                                     Project [s_store_sk]
                                                       Filter [s_county,s_store_sk]
@@ -46,7 +66,7 @@ WholeStageCodegen (10)
                                                           InputAdapter
                                                             Scan parquet spark_catalog.default.store [s_store_sk,s_county]
                                           InputAdapter
-                                            BroadcastExchange #6
+                                            BroadcastExchange #8
                                               WholeStageCodegen (3)
                                                 Project [hd_demo_sk]
                                                   Filter [hd_vehicle_count,hd_buy_potential,hd_dep_count,hd_demo_sk]
@@ -57,7 +77,7 @@ WholeStageCodegen (10)
                 WholeStageCodegen (8)
                   Sort [c_customer_sk]
                     InputAdapter
-                      Exchange [c_customer_sk] #7
+                      Exchange [c_customer_sk] #9
                         WholeStageCodegen (7)
                           Filter [c_customer_sk]
                             ColumnarToRow

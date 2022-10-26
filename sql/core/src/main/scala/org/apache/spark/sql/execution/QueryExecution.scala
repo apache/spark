@@ -425,6 +425,7 @@ object QueryExecution {
     Seq(
       CoalesceBucketsInJoin,
       PlanDynamicPruningFilters(sparkSession),
+      PlanRuntimeFilterFilters(sparkSession),
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
       EnsureRequirements(),

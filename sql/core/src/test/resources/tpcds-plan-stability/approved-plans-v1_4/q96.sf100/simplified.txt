@@ -12,11 +12,41 @@ WholeStageCodegen (5)
                       BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
                         Project [ss_sold_time_sk,ss_hdemo_sk,ss_store_sk]
                           Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                            Subquery #1
+                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(t_time_sk, 42), 1699, 13592, 0, 0),bloomFilter,buf]
+                                Exchange #2
+                                  ObjectHashAggregate [t_time_sk] [buf,buf]
+                                    WholeStageCodegen (1)
+                                      Project [t_time_sk]
+                                        Filter [t_hour,t_minute,t_time_sk]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet spark_catalog.default.time_dim [t_time_sk,t_hour,t_minute]
+                            Subquery #2
+                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(s_store_sk, 42), 41, 328, 0, 0),bloomFilter,buf]
+                                Exchange #3
+                                  ObjectHashAggregate [s_store_sk] [buf,buf]
+                                    WholeStageCodegen (1)
+                                      Project [s_store_sk]
+                                        Filter [s_store_name,s_store_sk]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet spark_catalog.default.store [s_store_sk,s_store_name]
+                            Subquery #3
+                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(hd_demo_sk, 42), 720, 5760, 0, 0),bloomFilter,buf]
+                                Exchange #4
+                                  ObjectHashAggregate [hd_demo_sk] [buf,buf]
+                                    WholeStageCodegen (1)
+                                      Project [hd_demo_sk]
+                                        Filter [hd_dep_count,hd_demo_sk]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet spark_catalog.default.household_demographics [hd_demo_sk,hd_dep_count]
                             ColumnarToRow
                               InputAdapter
                                 Scan parquet spark_catalog.default.store_sales [ss_sold_time_sk,ss_hdemo_sk,ss_store_sk,ss_sold_date_sk]
                         InputAdapter
-                          BroadcastExchange #2
+                          BroadcastExchange #5
                             WholeStageCodegen (1)
                               Project [t_time_sk]
                                 Filter [t_hour,t_minute,t_time_sk]
@@ -24,7 +54,7 @@ WholeStageCodegen (5)
                                     InputAdapter
                                       Scan parquet spark_catalog.default.time_dim [t_time_sk,t_hour,t_minute]
                     InputAdapter
-                      BroadcastExchange #3
+                      BroadcastExchange #6
                         WholeStageCodegen (2)
                           Project [s_store_sk]
                             Filter [s_store_name,s_store_sk]
@@ -32,7 +62,7 @@ WholeStageCodegen (5)
                                 InputAdapter
                                   Scan parquet spark_catalog.default.store [s_store_sk,s_store_name]
                 InputAdapter
-                  BroadcastExchange #4
+                  BroadcastExchange #7
                     WholeStageCodegen (3)
                       Project [hd_demo_sk]
                         Filter [hd_dep_count,hd_demo_sk]

@@ -170,7 +170,7 @@ case class InSubqueryExec(
     copy(child = newChild)
 }
 
-case class NonScalarSubquery(
+case class SubqueryWrapper(
     plan: BaseSubqueryExec,
     exprId: ExprId)
   extends ExecSubqueryExpression with LeafLike[Expression] {
@@ -178,11 +178,11 @@ case class NonScalarSubquery(
   override def dataType: DataType = plan.schema.fields.head.dataType
   override def nullable: Boolean = true
   override def toString: String = s"${plan.name}"
-  override def withNewPlan(plan: BaseSubqueryExec): NonScalarSubquery = copy(plan = plan)
-  final override def nodePatternsInternal: Seq[TreePattern] = Seq(NON_SCALAR_SUBQUERY)
+  override def withNewPlan(plan: BaseSubqueryExec): SubqueryWrapper = copy(plan = plan)
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(SUBQUERY_WRAPPER)
 
   override lazy val canonicalized: Expression = {
-    NonScalarSubquery(plan.canonicalized.asInstanceOf[BaseSubqueryExec], ExprId(0))
+    SubqueryWrapper(plan.canonicalized.asInstanceOf[BaseSubqueryExec], ExprId(0))
   }
 
   @transient private var result: Array[Any] = null

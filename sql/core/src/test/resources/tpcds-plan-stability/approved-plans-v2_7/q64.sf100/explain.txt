@@ -223,7 +223,7 @@ Input [12]: [ss_item_sk#1, ss_customer_sk#2, ss_cdemo_sk#3, ss_hdemo_sk#4, ss_ad
 
 (3) Filter [codegen id : 1]
 Input [12]: [ss_item_sk#1, ss_customer_sk#2, ss_cdemo_sk#3, ss_hdemo_sk#4, ss_addr_sk#5, ss_store_sk#6, ss_promo_sk#7, ss_ticket_number#8, ss_wholesale_cost#9, ss_list_price#10, ss_coupon_amt#11, ss_sold_date_sk#12]
-Condition : ((((((((isnotnull(ss_item_sk#1) AND isnotnull(ss_ticket_number#8)) AND isnotnull(ss_store_sk#6)) AND isnotnull(ss_customer_sk#2)) AND isnotnull(ss_cdemo_sk#3)) AND isnotnull(ss_promo_sk#7)) AND isnotnull(ss_hdemo_sk#4)) AND isnotnull(ss_addr_sk#5)) AND might_contain(Subquery scalar-subquery#14, [id=#15], xxhash64(ss_item_sk#1, 42)))
+Condition : ((((((((isnotnull(ss_item_sk#1) AND isnotnull(ss_ticket_number#8)) AND isnotnull(ss_store_sk#6)) AND isnotnull(ss_customer_sk#2)) AND isnotnull(ss_cdemo_sk#3)) AND isnotnull(ss_promo_sk#7)) AND isnotnull(ss_hdemo_sk#4)) AND isnotnull(ss_addr_sk#5)) AND might_contain(runtimefilterexpression(Subquery scalar-subquery#14, [id=#15]), xxhash64(ss_item_sk#1, 42)))
 
 (4) Exchange
 Input [12]: [ss_item_sk#1, ss_customer_sk#2, ss_cdemo_sk#3, ss_hdemo_sk#4, ss_addr_sk#5, ss_store_sk#6, ss_promo_sk#7, ss_ticket_number#8, ss_wholesale_cost#9, ss_list_price#10, ss_coupon_amt#11, ss_sold_date_sk#12]
@@ -804,7 +804,7 @@ Input [12]: [ss_item_sk#108, ss_customer_sk#109, ss_cdemo_sk#110, ss_hdemo_sk#11
 
 (131) Filter [codegen id : 44]
 Input [12]: [ss_item_sk#108, ss_customer_sk#109, ss_cdemo_sk#110, ss_hdemo_sk#111, ss_addr_sk#112, ss_store_sk#113, ss_promo_sk#114, ss_ticket_number#115, ss_wholesale_cost#116, ss_list_price#117, ss_coupon_amt#118, ss_sold_date_sk#119]
-Condition : ((((((((isnotnull(ss_item_sk#108) AND isnotnull(ss_ticket_number#115)) AND isnotnull(ss_store_sk#113)) AND isnotnull(ss_customer_sk#109)) AND isnotnull(ss_cdemo_sk#110)) AND isnotnull(ss_promo_sk#114)) AND isnotnull(ss_hdemo_sk#111)) AND isnotnull(ss_addr_sk#112)) AND might_contain(ReusedSubquery Subquery scalar-subquery#14, [id=#15], xxhash64(ss_item_sk#108, 42)))
+Condition : ((((((((isnotnull(ss_item_sk#108) AND isnotnull(ss_ticket_number#115)) AND isnotnull(ss_store_sk#113)) AND isnotnull(ss_customer_sk#109)) AND isnotnull(ss_cdemo_sk#110)) AND isnotnull(ss_promo_sk#114)) AND isnotnull(ss_hdemo_sk#111)) AND isnotnull(ss_addr_sk#112)) AND might_contain(runtimefilterexpression(ReusedSubquery Subquery scalar-subquery#14, [id=#15]), xxhash64(ss_item_sk#108, 42)))
 
 (132) Exchange
 Input [12]: [ss_item_sk#108, ss_customer_sk#109, ss_cdemo_sk#110, ss_hdemo_sk#111, ss_addr_sk#112, ss_store_sk#113, ss_promo_sk#114, ss_ticket_number#115, ss_wholesale_cost#116, ss_list_price#117, ss_coupon_amt#118, ss_sold_date_sk#119]
@@ -1156,25 +1156,25 @@ ObjectHashAggregate (216)
 
 
 (210) Scan parquet spark_catalog.default.item
-Output [3]: [i_item_sk#75, i_current_price#76, i_color#77]
+Output [4]: [i_item_sk#75, i_current_price#76, i_color#77, i_product_name#78]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_current_price), In(i_color, [burlywood           ,floral              ,indian              ,medium              ,purple              ,spring              ]), GreaterThanOrEqual(i_current_price,64.00), LessThanOrEqual(i_current_price,74.00), GreaterThanOrEqual(i_current_price,65.00), LessThanOrEqual(i_current_price,79.00), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_color:string>
+ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_color:string,i_product_name:string>
 
 (211) ColumnarToRow [codegen id : 1]
-Input [3]: [i_item_sk#75, i_current_price#76, i_color#77]
+Input [4]: [i_item_sk#75, i_current_price#76, i_color#77, i_product_name#78]
 
 (212) Filter [codegen id : 1]
-Input [3]: [i_item_sk#75, i_current_price#76, i_color#77]
+Input [4]: [i_item_sk#75, i_current_price#76, i_color#77, i_product_name#78]
 Condition : ((((((isnotnull(i_current_price#76) AND i_color#77 IN (purple              ,burlywood           ,indian              ,spring              ,floral              ,medium              )) AND (i_current_price#76 >= 64.00)) AND (i_current_price#76 <= 74.00)) AND (i_current_price#76 >= 65.00)) AND (i_current_price#76 <= 79.00)) AND isnotnull(i_item_sk#75))
 
 (213) Project [codegen id : 1]
-Output [1]: [i_item_sk#75]
-Input [3]: [i_item_sk#75, i_current_price#76, i_color#77]
+Output [2]: [i_item_sk#75, i_product_name#78]
+Input [4]: [i_item_sk#75, i_current_price#76, i_color#77, i_product_name#78]
 
 (214) ObjectHashAggregate
-Input [1]: [i_item_sk#75]
+Input [2]: [i_item_sk#75, i_product_name#78]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#75, 42), 1250, 30121, 0, 0)]
 Aggregate Attributes [1]: [buf#176]

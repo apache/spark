@@ -25,11 +25,11 @@ TakeOrderedAndProject [w_state,i_item_id,sales_before,sales_after]
                                                 Exchange #4
                                                   ObjectHashAggregate [i_item_sk] [buf,buf]
                                                     WholeStageCodegen (1)
-                                                      Project [i_item_sk]
+                                                      Project [i_item_sk,i_item_id]
                                                         Filter [i_current_price,i_item_sk]
                                                           ColumnarToRow
                                                             InputAdapter
-                                                              Scan parquet spark_catalog.default.item [i_item_sk,i_current_price]
+                                                              Scan parquet spark_catalog.default.item [i_item_sk,i_item_id,i_current_price]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet spark_catalog.default.catalog_sales [cs_warehouse_sk,cs_item_sk,cs_order_number,cs_sales_price,cs_sold_date_sk]

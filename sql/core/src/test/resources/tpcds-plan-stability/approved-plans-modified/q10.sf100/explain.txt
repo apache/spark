@@ -61,7 +61,7 @@ Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
 
 (3) Filter [codegen id : 1]
 Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
-Condition : (((isnotnull(c_customer_sk#1) AND isnotnull(c_current_addr_sk#3)) AND isnotnull(c_current_cdemo_sk#2)) AND might_contain(Subquery scalar-subquery#4, [id=#5], xxhash64(c_current_addr_sk#3, 42)))
+Condition : (((isnotnull(c_customer_sk#1) AND isnotnull(c_current_addr_sk#3)) AND isnotnull(c_current_cdemo_sk#2)) AND might_contain(runtimefilterexpression(Subquery scalar-subquery#4, [id=#5]), xxhash64(c_current_addr_sk#3, 42)))
 
 (4) Exchange
 Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]

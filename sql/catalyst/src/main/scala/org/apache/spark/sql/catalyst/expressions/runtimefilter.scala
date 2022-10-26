@@ -94,7 +94,7 @@ case class RuntimeFilterSubquery(
  * Marker for a planned runtime filter expression.
  * The expression is created during planning, and it defers to its child for evaluation.
  *
- * @param child underlying predicate.
+ * @param child underlying aggregate for runtime filter.
  */
 case class RuntimeFilterExpression(child: Expression)
   extends UnaryExpression {

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPrun
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, IN_SUBQUERY, RUNTIME_FILTER_SUBQUERY, SCALAR_SUBQUERY}
 import org.apache.spark.sql.execution
-import org.apache.spark.sql.execution.{BaseSubqueryExec, InSubqueryExec, NonScalarSubquery, SparkPlan}
+import org.apache.spark.sql.execution.{BaseSubqueryExec, InSubqueryExec, SparkPlan, SubqueryWrapper}
 
 case class PlanAdaptiveSubqueries(
     subqueryMap: Map[Long, BaseSubqueryExec]) extends Rule[SparkPlan] {
@@ -46,7 +46,7 @@ case class PlanAdaptiveSubqueries(
       case expressions.DynamicPruningSubquery(value, _, _, _, _, exprId, _) =>
         DynamicPruningExpression(InSubqueryExec(value, subqueryMap(exprId.id), exprId))
       case expressions.RuntimeFilterSubquery(_, _, _, _, exprId) =>
-        RuntimeFilterExpression(NonScalarSubquery(subqueryMap(exprId.id), exprId))
+        RuntimeFilterExpression(SubqueryWrapper(subqueryMap(exprId.id), exprId))
     }
   }
 }

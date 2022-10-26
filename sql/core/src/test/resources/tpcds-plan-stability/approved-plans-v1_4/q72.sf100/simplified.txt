@@ -40,6 +40,26 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                                                                               Project [cs_ship_date_sk,cs_bill_cdemo_sk,cs_item_sk,cs_promo_sk,cs_order_number,cs_quantity,cs_sold_date_sk]
                                                                                 BroadcastHashJoin [cs_bill_hdemo_sk,hd_demo_sk]
                                                                                   Filter [cs_quantity,cs_item_sk,cs_bill_cdemo_sk,cs_bill_hdemo_sk,cs_ship_date_sk]
+                                                                                    Subquery #2
+                                                                                      ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(hd_demo_sk, 42), 1200, 9600, 0, 0),bloomFilter,buf]
+                                                                                        Exchange #7
+                                                                                          ObjectHashAggregate [hd_demo_sk] [buf,buf]
+                                                                                            WholeStageCodegen (1)
+                                                                                              Project [hd_demo_sk]
+                                                                                                Filter [hd_buy_potential,hd_demo_sk]
+                                                                                                  ColumnarToRow
+                                                                                                    InputAdapter
+                                                                                                      Scan parquet spark_catalog.default.household_demographics [hd_demo_sk,hd_buy_potential]
+                                                                                    Subquery #3
+                                                                                      ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(cd_demo_sk, 42), 384160, 3073280, 0, 0),bloomFilter,buf]
+                                                                                        Exchange #8
+                                                                                          ObjectHashAggregate [cd_demo_sk] [buf,buf]
+                                                                                            WholeStageCodegen (1)
+                                                                                              Project [cd_demo_sk]
+                                                                                                Filter [cd_marital_status,cd_demo_sk]
+                                                                                                  ColumnarToRow
+                                                                                                    InputAdapter
+                                                                                                      Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_marital_status]
                                                                                     ColumnarToRow
                                                                                       InputAdapter
                                                                                         Scan parquet spark_catalog.default.catalog_sales [cs_ship_date_sk,cs_bill_cdemo_sk,cs_bill_hdemo_sk,cs_item_sk,cs_promo_sk,cs_order_number,cs_quantity,cs_sold_date_sk]
@@ -61,7 +81,7 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                                                                                                         InputAdapter
                                                                                                           Scan parquet spark_catalog.default.date_dim [d_date_sk,d_week_seq]
                                                                                   InputAdapter
-                                                                                    BroadcastExchange #7
+                                                                                    BroadcastExchange #9
                                                                                       WholeStageCodegen (1)
                                                                                         Project [hd_demo_sk]
                                                                                           Filter [hd_buy_potential,hd_demo_sk]
@@ -69,7 +89,7 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                                                                                               InputAdapter
                                                                                                 Scan parquet spark_catalog.default.household_demographics [hd_demo_sk,hd_buy_potential]
                                                                               InputAdapter
-                                                                                BroadcastExchange #8
+                                                                                BroadcastExchange #10
                                                                                   WholeStageCodegen (2)
                                                                                     Project [cd_demo_sk]
                                                                                       Filter [cd_marital_status,cd_demo_sk]
@@ -77,7 +97,7 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                                                                                           InputAdapter
                                                                                             Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_marital_status]
                                                                           InputAdapter
-                                                                            BroadcastExchange #9
+                                                                            BroadcastExchange #11
                                                                               WholeStageCodegen (3)
                                                                                 Filter [d_date,d_date_sk]
                                                                                   ColumnarToRow
@@ -87,7 +107,7 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                                                             WholeStageCodegen (7)
                                                               Sort [i_item_sk]
                                                                 InputAdapter
-                                                                  Exchange [i_item_sk] #10
+                                                                  Exchange [i_item_sk] #12
                                                                     WholeStageCodegen (6)
                                                                       Filter [i_item_sk]
                                                                         ColumnarToRow
@@ -99,7 +119,7 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                                         WholeStageCodegen (14)
                                           Sort [inv_item_sk,inv_date_sk]
                                             InputAdapter
-                                              Exchange [inv_item_sk,inv_date_sk] #11
+                                              Exchange [inv_item_sk,inv_date_sk] #13
                                                 WholeStageCodegen (13)
                                                   Project [inv_item_sk,inv_quantity_on_hand,inv_date_sk,w_warehouse_name]
                                                     BroadcastHashJoin [inv_warehouse_sk,w_warehouse_sk]
@@ -108,14 +128,14 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                                                           InputAdapter
                                                             Scan parquet spark_catalog.default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
                                                       InputAdapter
-                                                        BroadcastExchange #12
+                                                        BroadcastExchange #14
                                                           WholeStageCodegen (12)
                                                             Filter [w_warehouse_sk]
                                                               ColumnarToRow
                                                                 InputAdapter
                                                                   Scan parquet spark_catalog.default.warehouse [w_warehouse_sk,w_warehouse_name]
                                   InputAdapter
-                                    BroadcastExchange #13
+                                    BroadcastExchange #15
                                       WholeStageCodegen (15)
                                         Filter [p_promo_sk]
                                           ColumnarToRow
@@ -125,7 +145,7 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                     WholeStageCodegen (19)
                       Sort [cr_item_sk,cr_order_number]
                         InputAdapter
-                          Exchange [cr_item_sk,cr_order_number] #14
+                          Exchange [cr_item_sk,cr_order_number] #16
                             WholeStageCodegen (18)
                               Project [cr_item_sk,cr_order_number]
                                 Filter [cr_item_sk,cr_order_number]
