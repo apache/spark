@@ -419,6 +419,22 @@ class QueryCompilationErrorsSuite
     )
   }
 
+  test("UNRESOLVED_MAP_KEY: proposal columns containing quoted dots") {
+    val query = "select m[a] from (select map('a', 'b') as m, 'aa' as `a.a`)"
+    checkError(
+      exception = intercept[AnalysisException] {sql(query)},
+      errorClass = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`",
+        "proposal" ->
+          "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`a.a`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 9,
+        stop = 9)
+    )
+  }
+
   test("UNRESOLVED_COLUMN: SELECT distinct does not work correctly " +
     "if order by missing attribute") {
     checkAnswer(

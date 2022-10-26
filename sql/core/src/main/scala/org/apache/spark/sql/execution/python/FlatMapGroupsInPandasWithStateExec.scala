@@ -168,7 +168,8 @@ case class FlatMapGroupsInPandasWithStateExec(
         stateEncoder.asInstanceOf[ExpressionEncoder[Row]],
         groupingAttributes.toStructType,
         outAttributes.toStructType,
-        stateType)
+        stateType,
+        pythonMetrics)
 
       val context = TaskContext.get()
 

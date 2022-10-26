@@ -1467,8 +1467,10 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       val e = intercept[AnalysisException] {
         catalog.registerFunction(
           newFunc("temp1", None), overrideIfExists = false, functionBuilder = Some(tempFunc3))
-      }.getMessage
-      assert(e.contains("Function temp1 already exists"))
+      }
+      checkError(e,
+        errorClass = "ROUTINE_ALREADY_EXISTS",
+        parameters = Map("routineName" -> "`temp1`"))
       // Temporary function is overridden
       catalog.registerFunction(
         newFunc("temp1", None), overrideIfExists = true, functionBuilder = Some(tempFunc3))

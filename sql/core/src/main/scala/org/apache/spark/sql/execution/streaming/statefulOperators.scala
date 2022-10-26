@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.python.PythonSQLMetrics
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress}
 import org.apache.spark.sql.types._
@@ -93,7 +94,7 @@ trait StateStoreReader extends StatefulOperator {
 }
 
 /** An operator that writes to a StateStore. */
-trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
+trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: SparkPlan =>
 
   override lazy val metrics = statefulOperatorCustomMetrics ++ Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -109,7 +110,7 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     "numShufflePartitions" -> SQLMetrics.createMetric(sparkContext, "number of shuffle partitions"),
     "numStateStoreInstances" -> SQLMetrics.createMetric(sparkContext,
       "number of state store instances")
-  ) ++ stateStoreCustomMetrics
+  ) ++ stateStoreCustomMetrics ++ pythonMetrics
 
   /**
    * Get the progress made by this stateful operator after execution. This should be called in

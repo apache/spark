@@ -54,7 +54,8 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
     try {
       createPartitions(new InternalRow[]{ident}, new Map[]{properties});
     } catch (PartitionsAlreadyExistException e) {
-      throw new PartitionsAlreadyExistException(e.getMessage());
+      throw new PartitionsAlreadyExistException("PARTITIONS_ALREADY_EXIST",
+              e.messageParameters());
     }
   }
 

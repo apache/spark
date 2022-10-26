@@ -918,7 +918,7 @@ class DataFrameAggregateSuite extends QueryTest
         errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
         sqlState = None,
         parameters = Map(
-          "functionName" -> "function max_by",
+          "functionName" -> "`max_by`",
           "dataType" -> "\"MAP<INT, STRING>\"",
           "sqlExpr" -> "\"max_by(x, y)\""
         ),
@@ -988,7 +988,7 @@ class DataFrameAggregateSuite extends QueryTest
         errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
         sqlState = None,
         parameters = Map(
-          "functionName" -> "function min_by",
+          "functionName" -> "`min_by`",
           "dataType" -> "\"MAP<INT, STRING>\"",
           "sqlExpr" -> "\"min_by(x, y)\""
         ),

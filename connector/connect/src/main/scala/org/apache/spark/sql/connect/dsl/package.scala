@@ -22,7 +22,6 @@ import scala.language.implicitConversions
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 
 /**
@@ -33,16 +32,41 @@ package object dsl {
 
   object expressions { // scalastyle:ignore
     implicit class DslString(val s: String) {
-      val identifier = CatalystSqlParser.parseMultipartIdentifier(s)
-
       def protoAttr: proto.Expression =
         proto.Expression
           .newBuilder()
           .setUnresolvedAttribute(
             proto.Expression.UnresolvedAttribute
               .newBuilder()
-              .addAllParts(identifier.asJava)
-              .build())
+              .setUnparsedIdentifier(s))
+          .build()
+
+      def struct(
+          attrs: proto.Expression.QualifiedAttribute*): proto.Expression.QualifiedAttribute = {
+        val structExpr = proto.DataType.Struct.newBuilder()
+        for (attr <- attrs) {
+          val structField = proto.DataType.StructField.newBuilder()
+          structField.setName(attr.getName)
+          structField.setType(attr.getType)
+          structExpr.addFields(structField)
+        }
+        proto.Expression.QualifiedAttribute
+          .newBuilder()
+          .setName(s)
+          .setType(proto.DataType.newBuilder().setStruct(structExpr))
+          .build()
+      }
+
+      /** Creates a new AttributeReference of type int */
+      def int: proto.Expression.QualifiedAttribute = protoQualifiedAttrWithType(
+        proto.DataType.newBuilder().setI32(proto.DataType.I32.newBuilder()).build())
+
+      private def protoQualifiedAttrWithType(
+          dataType: proto.DataType): proto.Expression.QualifiedAttribute =
+        proto.Expression.QualifiedAttribute
+          .newBuilder()
+          .setName(s)
+          .setType(dataType)
           .build()
     }
 
@@ -62,6 +86,44 @@ package object dsl {
               .addArguments(expr)
               .addArguments(other))
           .build()
+    }
+
+    /**
+     * Create an unresolved function from name parts.
+     *
+     * @param nameParts
+     * @param args
+     * @return
+     *   Expression wrapping the unresolved function.
+     */
+    def callFunction(nameParts: Seq[String], args: Seq[proto.Expression]): proto.Expression = {
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          proto.Expression.UnresolvedFunction
+            .newBuilder()
+            .addAllParts(nameParts.asJava)
+            .addAllArguments(args.asJava))
+        .build()
+    }
+
+    /**
+     * Creates an UnresolvedFunction from a single identifier.
+     *
+     * @param name
+     * @param args
+     * @return
+     *   Expression wrapping the unresolved function.
+     */
+    def callFunction(name: String, args: Seq[proto.Expression]): proto.Expression = {
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          proto.Expression.UnresolvedFunction
+            .newBuilder()
+            .addParts(name)
+            .addAllArguments(args.asJava))
+        .build()
     }
 
     implicit def intToLiteral(i: Int): proto.Expression =
@@ -113,31 +175,106 @@ package object dsl {
   object plans { // scalastyle:ignore
     implicit class DslLogicalPlan(val logicalPlan: proto.Relation) {
       def select(exprs: proto.Expression*): proto.Relation = {
-        proto.Relation.newBuilder().setProject(
-            proto.Project.newBuilder()
+        proto.Relation
+          .newBuilder()
+          .setProject(
+            proto.Project
+              .newBuilder()
               .setInput(logicalPlan)
               .addAllExpressions(exprs.toIterable.asJava)
               .build())
           .build()
       }
 
+      def limit(limit: Int): proto.Relation = {
+        proto.Relation
+          .newBuilder()
+          .setLimit(
+            proto.Limit
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setLimit(limit))
+          .build()
+      }
+
+      def offset(offset: Int): proto.Relation = {
+        proto.Relation
+          .newBuilder()
+          .setOffset(
+            proto.Offset
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setOffset(offset))
+          .build()
+      }
+
       def where(condition: proto.Expression): proto.Relation = {
-        proto.Relation.newBuilder()
-          .setFilter(
-            proto.Filter.newBuilder().setInput(logicalPlan).setCondition(condition)
-          ).build()
+        proto.Relation
+          .newBuilder()
+          .setFilter(proto.Filter.newBuilder().setInput(logicalPlan).setCondition(condition))
+          .build()
+      }
+
+      def deduplicate(colNames: Seq[String]): proto.Relation =
+        proto.Relation
+          .newBuilder()
+          .setDeduplicate(
+            proto.Deduplicate
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllColumnNames(colNames.asJava))
+          .build()
+
+      def distinct(): proto.Relation =
+        proto.Relation
+          .newBuilder()
+          .setDeduplicate(
+            proto.Deduplicate
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setAllColumnsAsKeys(true))
+          .build()
+
+      def join(
+          otherPlan: proto.Relation,
+          joinType: JoinType,
+          condition: Option[proto.Expression]): proto.Relation = {
+        join(otherPlan, joinType, Seq(), condition)
+      }
+
+      def join(otherPlan: proto.Relation, condition: Option[proto.Expression]): proto.Relation = {
+        join(otherPlan, JoinType.JOIN_TYPE_INNER, Seq(), condition)
+      }
+
+      def join(otherPlan: proto.Relation): proto.Relation = {
+        join(otherPlan, JoinType.JOIN_TYPE_INNER, Seq(), None)
+      }
+
+      def join(otherPlan: proto.Relation, joinType: JoinType): proto.Relation = {
+        join(otherPlan, joinType, Seq(), None)
       }
 
       def join(
           otherPlan: proto.Relation,
+          joinType: JoinType,
+          usingColumns: Seq[String]): proto.Relation = {
+        join(otherPlan, joinType, usingColumns, None)
+      }
+
+      private def join(
+          otherPlan: proto.Relation,
           joinType: JoinType = JoinType.JOIN_TYPE_INNER,
-          condition: Option[proto.Expression] = None): proto.Relation = {
+          usingColumns: Seq[String],
+          condition: Option[proto.Expression]): proto.Relation = {
         val relation = proto.Relation.newBuilder()
         val join = proto.Join.newBuilder()
         join
           .setLeft(logicalPlan)
           .setRight(otherPlan)
           .setJoinType(joinType)
+        if (usingColumns.nonEmpty) {
+          join.addAllUsingColumns(usingColumns.asJava)
+        }
         if (condition.isDefined) {
           join.setJoinCondition(condition.get)
         }
@@ -145,13 +282,33 @@ package object dsl {
       }
 
       def as(alias: String): proto.Relation = {
-        proto.Relation.newBuilder(logicalPlan)
+        proto.Relation
+          .newBuilder(logicalPlan)
           .setCommon(proto.RelationCommon.newBuilder().setAlias(alias))
           .build()
       }
 
-      def groupBy(
-          groupingExprs: proto.Expression*)(aggregateExprs: proto.Expression*): proto.Relation = {
+      def sample(
+          lowerBound: Double,
+          upperBound: Double,
+          withReplacement: Boolean,
+          seed: Long): proto.Relation = {
+        proto.Relation
+          .newBuilder()
+          .setSample(
+            proto.Sample
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setUpperBound(upperBound)
+              .setLowerBound(lowerBound)
+              .setWithReplacement(withReplacement)
+              .setSeed(proto.Sample.Seed.newBuilder().setSeed(seed).build())
+              .build())
+          .build()
+      }
+
+      def groupBy(groupingExprs: proto.Expression*)(
+          aggregateExprs: proto.Expression*): proto.Relation = {
         val agg = proto.Aggregate.newBuilder()
         agg.setInput(logicalPlan)
 
