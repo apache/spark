@@ -49,12 +49,6 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         )._plan.to_proto(self.connect)
         self.assertIsNotNone(plan.root.join.join_condition)
 
-        plan2 = left_input.join(
-            other=right_input,
-            on=[left_input.name == right_input.name, left_input.age == right_input.age],
-        )._plan.to_proto(self.connect)
-        self.assertIsNotNone(plan2.root.join.join_condition)
-
     def test_filter(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.filter(df.col_name > 3)._plan.to_proto(self.connect)

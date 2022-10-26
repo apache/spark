@@ -25,7 +25,6 @@ from typing import (
     TYPE_CHECKING,
     Mapping,
 )
-from functools import reduce
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.column import (
     ColumnRef,
@@ -537,7 +536,7 @@ class Join(LogicalPlan):
         self,
         left: Optional["LogicalPlan"],
         right: "LogicalPlan",
-        on: Optional[Union[str, List[str], ColumnRef, List[ColumnRef]]],
+        on: Optional[Union[str, List[str], ColumnRef]],
         how: Optional[str],
     ) -> None:
         super().__init__(left)
@@ -575,19 +574,14 @@ class Join(LogicalPlan):
         rel = proto.Relation()
         rel.join.left.CopyFrom(self.left.plan(session))
         rel.join.right.CopyFrom(self.right.plan(session))
-        join_columns_or_conditions = self.on
-        if self.on is not None and not isinstance(self.on, list):
-            join_columns_or_conditions = [self.on]  # type: ignore[assignment]
-        if join_columns_or_conditions is not None:
-            if isinstance(cast(List[str], join_columns_or_conditions)[0], str):
-                rel.join.using_columns.extend(cast(List[str], join_columns_or_conditions))
+        if self.on is not None:
+            if not isinstance(self.on, list):
+                if isinstance(self.on, str):
+                    rel.join.using_columns.append(self.on)
+                else:
+                    rel.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
             else:
-                join_columns_or_conditions = reduce(
-                    lambda x, y: x.__and__(y), cast(List[ColumnRef], join_columns_or_conditions)
-                )
-                rel.join.join_condition.CopyFrom(
-                    self.to_attr_or_expression(join_columns_or_conditions, session)
-                )
+                rel.join.using_columns.extend(self.on)
         rel.join.join_type = self.how
         return rel
 

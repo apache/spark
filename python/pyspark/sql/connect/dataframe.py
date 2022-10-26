@@ -218,10 +218,11 @@ class DataFrame(object):
         self.limit(n)
         return self.toPandas()
 
+    # TODO: extend `on` to also be type List[ColumnRef].
     def join(
         self,
         other: "DataFrame",
-        on: Optional[Union[str, List[str], ColumnRef, List[ColumnRef]]] = None,
+        on: Optional[Union[str, List[str], ColumnRef]] = None,
         how: Optional[str] = None,
     ) -> "DataFrame":
         if self._plan is None:
