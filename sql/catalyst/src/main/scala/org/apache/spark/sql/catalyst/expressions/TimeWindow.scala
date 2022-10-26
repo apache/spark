@@ -118,7 +118,7 @@ case class TimeWindow(
         return DataTypeMismatch(
           errorSubClass = "VALUE_OUT_OF_RANGE",
           messageParameters = Map(
-            "exprName" -> "window_duration",
+            "exprName" -> toSQLId("window_duration"),
             "valueRange" -> s"(0, ${Long.MaxValue}]",
             "currentValue" -> toSQLValue(windowDuration, LongType)
           )
@@ -128,7 +128,7 @@ case class TimeWindow(
         return DataTypeMismatch(
           errorSubClass = "VALUE_OUT_OF_RANGE",
           messageParameters = Map(
-            "exprName" -> "slide_duration",
+            "exprName" -> toSQLId("slide_duration"),
             "valueRange" -> s"(0, ${Long.MaxValue}]",
             "currentValue" -> toSQLValue(slideDuration, LongType)
           )
@@ -138,10 +138,10 @@ case class TimeWindow(
         return DataTypeMismatch(
           errorSubClass = "PARAMETER_CONSTRAINT_VIOLATION",
           messageParameters = Map(
-            "leftExprName" -> "slide_duration",
+            "leftExprName" -> toSQLId("slide_duration"),
             "leftExprValue" -> toSQLValue(slideDuration, LongType),
             "constraint" -> "<=",
-            "rightExprName" -> "window_duration",
+            "rightExprName" -> toSQLId("window_duration"),
             "rightExprValue" -> toSQLValue(windowDuration, LongType)
           )
         )
@@ -150,10 +150,10 @@ case class TimeWindow(
         return DataTypeMismatch(
           errorSubClass = "PARAMETER_CONSTRAINT_VIOLATION",
           messageParameters = Map(
-            "leftExprName" -> "start_time",
+            "leftExprName" -> toSQLId("start_time"),
             "leftExprValue" -> toSQLValue(startTime, LongType),
             "constraint" -> "<",
-            "rightExprName" -> "slide_duration",
+            "rightExprName" -> toSQLId("slide_duration"),
             "rightExprValue" -> toSQLValue(slideDuration, LongType)
           )
         )
