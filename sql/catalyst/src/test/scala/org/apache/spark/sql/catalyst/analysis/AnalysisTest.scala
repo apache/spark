@@ -184,9 +184,9 @@ trait AnalysisTest extends PlanTest {
       }
 
       if (e.getErrorClass != expectedErrorClass ||
-        e.messageParameters != expectedMessageParameters ||
-        (line >= 0 && e.line.getOrElse(-1) != line) ||
-        (pos >= 0) && e.startPosition.getOrElse(-1) != pos) {
+          e.messageParameters != expectedMessageParameters ||
+          (line >= 0 && e.line.getOrElse(-1) != line) ||
+          (pos >= 0) && e.startPosition.getOrElse(-1) != pos) {
         var failMsg = ""
         if (e.getErrorClass != expectedErrorClass) {
           failMsg +=
