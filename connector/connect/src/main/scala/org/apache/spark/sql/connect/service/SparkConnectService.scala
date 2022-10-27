@@ -27,7 +27,6 @@ import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AnalyzeResponse, Request, Response, SparkConnectServiceGrpc}
 import org.apache.spark.internal.Logging
@@ -44,8 +43,6 @@ import org.apache.spark.sql.execution.ExtendedMode
  * @param debug
  *   delegates debug behavior to the handlers.
  */
-@Unstable
-@Since("3.4.0")
 class SparkConnectService(debug: Boolean)
     extends SparkConnectServiceGrpc.SparkConnectServiceImplBase
     with Logging {
@@ -127,9 +124,7 @@ class SparkConnectService(debug: Boolean)
  * @param userId
  * @param session
  */
-@Unstable
-@Since("3.4.0")
-private[connect] case class SessionHolder(userId: String, session: SparkSession)
+case class SessionHolder(userId: String, session: SparkSession)
 
 /**
  * Static instance of the SparkConnectService.
@@ -137,8 +132,6 @@ private[connect] case class SessionHolder(userId: String, session: SparkSession)
  * Used to start the overall SparkConnect service and provides global state to manage the
  * different SparkSession from different users connecting to the cluster.
  */
-@Unstable
-@Since("3.4.0")
 object SparkConnectService {
 
   private val CACHE_SIZE = 100
@@ -169,7 +162,7 @@ object SparkConnectService {
   /**
    * Based on the `key` find or create a new SparkSession.
    */
-  private[connect] def getOrCreateIsolatedSession(key: SessionCacheKey): SessionHolder = {
+  def getOrCreateIsolatedSession(key: SessionCacheKey): SessionHolder = {
     userSessionMapping.get(
       key,
       () => {

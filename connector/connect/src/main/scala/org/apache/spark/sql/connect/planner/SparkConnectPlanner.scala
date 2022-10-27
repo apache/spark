@@ -19,7 +19,6 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
@@ -38,8 +37,6 @@ final case class InvalidPlanInput(
     private val cause: Throwable = None.orNull)
     extends Exception(message, cause)
 
-@Unstable
-@Since("3.4.0")
 class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   def transform(): LogicalPlan = {
