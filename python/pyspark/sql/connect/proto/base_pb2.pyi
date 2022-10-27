@@ -222,16 +222,26 @@ class Response(google.protobuf.message.Message):
 
         ROW_COUNT_FIELD_NUMBER: builtins.int
         DATA_FIELD_NUMBER: builtins.int
+        SCHEMA_FIELD_NUMBER: builtins.int
         row_count: builtins.int
         data: builtins.bytes
+        @property
+        def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         def __init__(
             self,
             *,
             row_count: builtins.int = ...,
             data: builtins.bytes = ...,
+            schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["schema", b"schema"]
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["data", b"data", "row_count", b"row_count"]
+            self,
+            field_name: typing_extensions.Literal[
+                "data", b"data", "row_count", b"row_count", "schema", b"schema"
+            ],
         ) -> None: ...
 
     class Metrics(google.protobuf.message.Message):

@@ -116,7 +116,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
     def test_relation_alias(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.alias("table_alias")._plan.to_proto(self.connect)
-        self.assertEqual(plan.root.common.alias, "table_alias")
+        self.assertEqual(plan.root.subquery_alias.alias, "table_alias")
 
     def test_datasource_read(self):
         reader = DataFrameReader(self.connect)

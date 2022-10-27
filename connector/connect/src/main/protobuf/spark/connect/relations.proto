@@ -45,6 +45,7 @@ message Relation {
     Offset offset = 13;
     Deduplicate deduplicate = 14;
     Range range = 15;
+    SubqueryAlias subquery_alias = 16;
 
     Unknown unknown = 999;
   }
@@ -56,7 +57,6 @@ message Unknown {}
 // Common metadata of all relations.
 message RelationCommon {
   string source_info = 1;
-  string alias = 2;
 }
 
 // Relation that uses a SQL query to generate the output.
@@ -223,6 +223,7 @@ message Sample {
 message Range {
   // Optional. Default value = 0
   int32 start = 1;
+  // Required.
   int32 end = 2;
   // Optional. Default value = 1
   Step step = 3;
@@ -237,4 +238,14 @@ message Range {
   message NumPartitions {
     int32 num_partitions = 1;
   }
+}
+
+// Relation alias.
+message SubqueryAlias {
+  // Required. The input relation.
+  Relation input = 1;
+  // Required. The alias.
+  string alias = 2;
+  // Optional. Qualifier of the alias.
+  repeated string qualifier = 3;
 }

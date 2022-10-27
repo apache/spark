@@ -121,7 +121,7 @@ class DataFrame(object):
         return self.groupBy().agg(exprs)
 
     def alias(self, alias: str) -> "DataFrame":
-        return DataFrame.withPlan(plan.Project(self._plan).withAlias(alias), session=self._session)
+        return DataFrame.withPlan(plan.SubqueryAlias(self._plan, alias), session=self._session)
 
     def approxQuantile(self, col: ColumnRef, probabilities: Any, relativeError: Any) -> "DataFrame":
         ...
