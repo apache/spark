@@ -55,7 +55,7 @@ class MultiStatefulOperatorsSuite
           $"count".as[Long], $"sum".as[Long])
 
       testStream(stream)(
-        AddData(inputData, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21),
+        AddData(inputData, 10 to 21: _*),
         // op1 W (0, 0)
         // agg: [10, 15) 5, [15, 20) 5, [20, 25) 2
         // output: None
@@ -79,7 +79,7 @@ class MultiStatefulOperatorsSuite
         assertNumStateRows(Seq(0, 1)),
         assertNumRowsDroppedByWatermark(Seq(0, 0)),
 
-        AddData(inputData, 22, 23, 24, 25, 26, 27, 28, 29),
+        AddData(inputData, 22 to 29: _*),
         // op1 W (21, 21)
         // agg: [20, 25) 5, [25, 30) 4
         // output: None
@@ -105,22 +105,22 @@ class MultiStatefulOperatorsSuite
 
         // Move the watermark.
         AddData(inputData, 30, 31),
-        // op1 W (29, 29)
+        // op1 W (29, 31)
         // agg: [25, 30) 5 [30, 35) 2
         // output: None
         // state: [25, 30) 5 [30, 35) 2
-        // op2 W (29, 29)
+        // op2 W (29, 31)
         // agg: None
         // output: None
         // state: [20, 30) (1, 5)
 
         // no-data batch triggered
 
-        // op1 W (29, 31)
+        // op1 W (31, 31)
         // agg: None
         // output: [25, 30) 5
         // state: [30, 35) 2
-        // op2 W (29, 31)
+        // op2 W (31, 31)
         // agg: [20, 30) (2, 10)
         // output: [20, 30) (2, 10)
         // state: None
@@ -158,6 +158,10 @@ class MultiStatefulOperatorsSuite
         // state: [0, 5) 5, [5, 10) 5, [10, 15) 5, [15, 20) 5, [20, 25) 5, [25, 30) 5, [30, 35) 5,
         //   [35, 40) 3
         // op2 W (0, 0)
+        // agg: None
+        // output: None
+        // state: None
+        // op3 W (0, 0)
         // agg: None
         // output: None
         // state: None
