@@ -910,7 +910,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         2     True
         dtype: bool
 
-        >>> ser.rename("a").to_frame().set_index("a").index.isna()
+        >>> ser.rename("a").to_frame().set_index("a").index.isna()  # doctest: +SKIP
         Index([False, False, True], dtype='bool', name='a')
         """
         from pyspark.pandas.indexes import MultiIndex
