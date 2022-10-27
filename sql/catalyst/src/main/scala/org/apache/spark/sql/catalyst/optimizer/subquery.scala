@@ -509,7 +509,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
   /**
    * Split the plan for a scalar subquery into the parts above the innermost query block
    * (first part of returned value), the HAVING clause of the innermost query block
-   * (optional second part) and the parts below the HAVING CLAUSE (third part).
+   * (optional second part) and the Aggregate below the HAVING CLAUSE (optional third part).
+   * When the third part is empty, it means the subquery is a non-aggregated single-row subquery.
    */
   private def splitSubquery(
       plan: LogicalPlan): (Seq[LogicalPlan], Option[Filter], Option[Aggregate]) = {
@@ -566,76 +567,80 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         val origOutput = query.output.head
 
         val resultWithZeroTups = evalSubqueryOnZeroTups(query)
-        lazy val (topPart, havingNode, aggNode) = splitSubquery(query)
-        // SPARK-40862: When the aggregate node is empty, it means the subquery produces
-        // at most one row and it is not subject to the COUNT bug.
-        if (resultWithZeroTups.isEmpty || aggNode.isEmpty) {
+        lazy val planWithoutCountBug = Project(
+          currentChild.output :+ origOutput,
+          Join(currentChild, query, LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
+
+        if (resultWithZeroTups.isEmpty) {
           // CASE 1: Subquery guaranteed not to have the COUNT bug
-          Project(
-            currentChild.output :+ origOutput,
-            Join(currentChild, query, LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
+          planWithoutCountBug
         } else {
-          // Subquery might have the COUNT bug. Add appropriate corrections.
-          assert(aggNode.isDefined)
-          val aggregate = aggNode.get
-
-          // The next two cases add a leading column to the outer join input to make it
-          // possible to distinguish between the case when no tuples join and the case
-          // when the tuple that joins contains null values.
-          // The leading column always has the value TRUE.
-          val alwaysTrueExprId = NamedExpression.newExprId
-          val alwaysTrueExpr = Alias(Literal.TrueLiteral,
-            ALWAYS_TRUE_COLNAME)(exprId = alwaysTrueExprId)
-          val alwaysTrueRef = AttributeReference(ALWAYS_TRUE_COLNAME,
-            BooleanType)(exprId = alwaysTrueExprId)
-
-          val aggValRef = query.output.head
-
-          if (havingNode.isEmpty) {
-            // CASE 2: Subquery with no HAVING clause
-            val subqueryResultExpr =
-              Alias(If(IsNull(alwaysTrueRef),
-                resultWithZeroTups.get,
-                aggValRef), origOutput.name)()
-            subqueryAttrMapping += ((origOutput, subqueryResultExpr.toAttribute))
-            Project(
-              currentChild.output :+ subqueryResultExpr,
-              Join(currentChild,
-                Project(query.output :+ alwaysTrueExpr, query),
-                LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
-
+          val (topPart, havingNode, aggNode) = splitSubquery(query)
+          if (aggNode.isEmpty) {
+            // SPARK-40862: When the aggregate node is empty, it means the subquery produces
+            // at most one row and it is not subject to the COUNT bug.
+            planWithoutCountBug
           } else {
-            // CASE 3: Subquery with HAVING clause. Pull the HAVING clause above the join.
-            // Need to modify any operators below the join to pass through all columns
-            // referenced in the HAVING clause.
-            var subqueryRoot: UnaryNode = aggregate
-            val havingInputs: Seq[NamedExpression] = aggregate.output
+            // Subquery might have the COUNT bug. Add appropriate corrections.
+            val aggregate = aggNode.get
 
-            topPart.reverse.foreach {
-              case Project(projList, _) =>
-                subqueryRoot = Project(projList ++ havingInputs, subqueryRoot)
-              case s @ SubqueryAlias(alias, _) =>
-                subqueryRoot = SubqueryAlias(alias, subqueryRoot)
-              case op => throw QueryExecutionErrors.unexpectedOperatorInCorrelatedSubquery(op)
+            // The next two cases add a leading column to the outer join input to make it
+            // possible to distinguish between the case when no tuples join and the case
+            // when the tuple that joins contains null values.
+            // The leading column always has the value TRUE.
+            val alwaysTrueExprId = NamedExpression.newExprId
+            val alwaysTrueExpr = Alias(Literal.TrueLiteral,
+              ALWAYS_TRUE_COLNAME)(exprId = alwaysTrueExprId)
+            val alwaysTrueRef = AttributeReference(ALWAYS_TRUE_COLNAME,
+              BooleanType)(exprId = alwaysTrueExprId)
+
+            val aggValRef = query.output.head
+
+            if (havingNode.isEmpty) {
+              // CASE 2: Subquery with no HAVING clause
+              val subqueryResultExpr =
+                Alias(If(IsNull(alwaysTrueRef),
+                  resultWithZeroTups.get,
+                  aggValRef), origOutput.name)()
+              subqueryAttrMapping += ((origOutput, subqueryResultExpr.toAttribute))
+              Project(
+                currentChild.output :+ subqueryResultExpr,
+                Join(currentChild,
+                  Project(query.output :+ alwaysTrueExpr, query),
+                  LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
+
+            } else {
+              // CASE 3: Subquery with HAVING clause. Pull the HAVING clause above the join.
+              // Need to modify any operators below the join to pass through all columns
+              // referenced in the HAVING clause.
+              var subqueryRoot: UnaryNode = aggregate
+              val havingInputs: Seq[NamedExpression] = aggregate.output
+
+              topPart.reverse.foreach {
+                case Project(projList, _) =>
+                  subqueryRoot = Project(projList ++ havingInputs, subqueryRoot)
+                case s@SubqueryAlias(alias, _) =>
+                  subqueryRoot = SubqueryAlias(alias, subqueryRoot)
+                case op => throw QueryExecutionErrors.unexpectedOperatorInCorrelatedSubquery(op)
+              }
+
+              // CASE WHEN alwaysTrue IS NULL THEN resultOnZeroTups
+              //      WHEN NOT (original HAVING clause expr) THEN CAST(null AS <type of aggVal>)
+              //      ELSE (aggregate value) END AS (original column name)
+              val caseExpr = Alias(CaseWhen(Seq(
+                (IsNull(alwaysTrueRef), resultWithZeroTups.get),
+                (Not(havingNode.get.condition), Literal.create(null, aggValRef.dataType))),
+                aggValRef),
+                origOutput.name)()
+
+              subqueryAttrMapping += ((origOutput, caseExpr.toAttribute))
+
+              Project(
+                currentChild.output :+ caseExpr,
+                Join(currentChild,
+                  Project(subqueryRoot.output :+ alwaysTrueExpr, subqueryRoot),
+                  LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
             }
-
-            // CASE WHEN alwaysTrue IS NULL THEN resultOnZeroTups
-            //      WHEN NOT (original HAVING clause expr) THEN CAST(null AS <type of aggVal>)
-            //      ELSE (aggregate value) END AS (original column name)
-            val caseExpr = Alias(CaseWhen(Seq(
-              (IsNull(alwaysTrueRef), resultWithZeroTups.get),
-              (Not(havingNode.get.condition), Literal.create(null, aggValRef.dataType))),
-              aggValRef),
-              origOutput.name)()
-
-            subqueryAttrMapping += ((origOutput, caseExpr.toAttribute))
-
-            Project(
-              currentChild.output :+ caseExpr,
-              Join(currentChild,
-                Project(subqueryRoot.output :+ alwaysTrueExpr, subqueryRoot),
-                LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
-
           }
         }
     }
