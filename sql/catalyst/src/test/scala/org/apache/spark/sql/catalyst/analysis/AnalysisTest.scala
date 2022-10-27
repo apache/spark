@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import java.net.URI
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TemporaryViewRelation}
@@ -183,30 +185,28 @@ trait AnalysisTest extends PlanTest {
         analyzer.checkAnalysis(analyzer.execute(inputPlan))
       }
 
-      if (e.getErrorClass != expectedErrorClass ||
-          e.messageParameters != expectedMessageParameters ||
-          (line >= 0 && e.line.getOrElse(-1) != line) ||
-          (pos >= 0) && e.startPosition.getOrElse(-1) != pos) {
-        var failMsg = ""
-        if (e.getErrorClass != expectedErrorClass) {
-          failMsg +=
-            s"""Error class should be: ${expectedErrorClass}
-               |Actual error class: ${e.getErrorClass}
-             """.stripMargin
-        }
-        if (e.messageParameters != expectedMessageParameters) {
-          failMsg +=
-            s"""Message parameters should be: ${expectedMessageParameters.mkString("\n  ")}
-               |Actual message parameters: ${e.messageParameters.mkString("\n  ")}
-             """.stripMargin
-        }
-        if (e.line.getOrElse(-1) != line || e.startPosition.getOrElse(-1) != pos) {
-          failMsg +=
-            s"""Line/position should be: $line, $pos
-               |Actual line/position: ${e.line.getOrElse(-1)}, ${e.startPosition.getOrElse(-1)}
-             """.stripMargin
-        }
-        fail(failMsg)
+      val failMsgBuilder = new mutable.StringBuilder()
+      if (e.getErrorClass != expectedErrorClass) {
+        failMsgBuilder.append(
+          s"""Error class should be: $expectedErrorClass
+             |Actual error class: ${e.getErrorClass}
+             """.stripMargin)
+      }
+      if (e.messageParameters != expectedMessageParameters) {
+        failMsgBuilder.append(
+          s"""Message parameters should be: ${expectedMessageParameters.mkString("\n  ")}
+             |Actual message parameters: ${e.messageParameters.mkString("\n  ")}
+             """.stripMargin)
+      }
+      if ((line >= 0 && e.line.getOrElse(-1) != line) ||
+          (pos >= 0 && e.startPosition.getOrElse(-1) != pos)) {
+        failMsgBuilder.append(
+          s"""Line/position should be: $line, $pos
+             |Actual line/position: ${e.line.getOrElse(-1)}, ${e.startPosition.getOrElse(-1)}
+             """.stripMargin)
+      }
+      if (failMsgBuilder.nonEmpty) {
+        fail(failMsgBuilder.toString())
       }
     }
   }
