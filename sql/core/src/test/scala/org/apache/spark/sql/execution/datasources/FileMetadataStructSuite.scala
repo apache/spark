@@ -623,25 +623,27 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(s"SPARK-40918: Output cols around WSCG.isTooManyFields limit") {
-    // The issue was that ParquetFileFormat would not count the _metadata columns towards
-    // the WholeStageCodegenExec.isTooManyFields limit, while FileSourceScanExec would,
-    // resulting in Parquet reader returning columnar output, while scan expected row.
-    withTempPath { dir =>
-      sql(s"SELECT ${(1 to 100).map(i => s"id+$i as c$i").mkString(", ")} FROM RANGE(100)")
-        .write.format("parquet").save(dir.getAbsolutePath)
-      (98 to 102).foreach { wscgCols =>
-        withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> wscgCols.toString) {
-          // Would fail with
-          // java.lang.ClassCastException: org.apache.spark.sql.vectorized.ColumnarBatch
-          // cannot be cast to org.apache.spark.sql.catalyst.InternalRow
-          sql(
-            s"""
-               |SELECT
-               |  ${(1 to 100).map(i => s"sum(c$i)").mkString(", ")},
-               |  max(_metadata.file_path)
-               |FROM parquet.`$dir`""".stripMargin
-          ).collect()
+  Seq("parquet", "orc").foreach { format =>
+    test(s"SPARK-40918: Output cols around WSCG.isTooManyFields limit in $format") {
+      // The issue was that ParquetFileFormat would not count the _metadata columns towards
+      // the WholeStageCodegenExec.isTooManyFields limit, while FileSourceScanExec would,
+      // resulting in Parquet reader returning columnar output, while scan expected row.
+      withTempPath { dir =>
+        sql(s"SELECT ${(1 to 100).map(i => s"id+$i as c$i").mkString(", ")} FROM RANGE(100)")
+          .write.format(format).save(dir.getAbsolutePath)
+        (98 to 102).foreach { wscgCols =>
+          withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> wscgCols.toString) {
+            // Would fail with
+            // java.lang.ClassCastException: org.apache.spark.sql.vectorized.ColumnarBatch
+            // cannot be cast to org.apache.spark.sql.catalyst.InternalRow
+            sql(
+              s"""
+                 |SELECT
+                 |  ${(1 to 100).map(i => s"sum(c$i)").mkString(", ")},
+                 |  max(_metadata.file_path)
+                 |FROM parquet.`$dir`""".stripMargin
+            ).collect()
+          }
         }
       }
     }
