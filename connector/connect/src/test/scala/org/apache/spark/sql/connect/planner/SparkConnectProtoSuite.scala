@@ -183,6 +183,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
   }
 
+  // This is a function for testing only. This is used when the plan is ready and it only waits
+  // analyzer to analyze attribute references within the plan.
   private def analyzePlan(plan: LogicalPlan): LogicalPlan = {
     val connectAnalyzed = analysis.SimpleAnalyzer.execute(plan)
     analysis.SimpleAnalyzer.checkAnalysis(connectAnalyzed)
