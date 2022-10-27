@@ -26,6 +26,9 @@ import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 
 /**
  * A collection of implicit conversions that create a DSL for constructing connect protos.
+ *
+ * All classes in connect/dsl are considered an internal API to Spark Connect and are subject to
+ * change between minor releases.
  */
 
 package object dsl {
