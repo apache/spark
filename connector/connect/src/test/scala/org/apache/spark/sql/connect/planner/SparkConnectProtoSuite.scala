@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 /**
@@ -122,14 +123,15 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan, sparkPlan)
   }
 
-// TODO: improve aggregate API parity.
-//  test("Aggregate with more than 1 grouping expressions") {
-//    val connectPlan =
-//      connectTestRelation.groupBy("id".protoAttr, "name".protoAttr)()
-//    val sparkPlan =
-//      sparkTestRelation.groupBy(Column("id"), Column("name")).agg(Map.empty[String, String])
-//    comparePlans(connectPlan, sparkPlan)
-//  }
+  test("Aggregate with more than 1 grouping expressions") {
+    withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
+      val connectPlan =
+        connectTestRelation.groupBy("id".protoAttr, "name".protoAttr)()
+      val sparkPlan =
+        sparkTestRelation.groupBy(Column("id"), Column("name")).agg(Map.empty[String, String])
+      comparePlans(connectPlan, sparkPlan)
+    }
+  }
 
   test("Test as(alias: String)") {
     val connectPlan = connectTestRelation.as("target_table")
