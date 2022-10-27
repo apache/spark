@@ -40,16 +40,17 @@ class MultiStatefulOperatorsSuite
   }
 
   test("window agg -> window agg, append mode") {
+    // TODO: SPARK-40940 - Fix the unsupported ops checker to allow chaining of stateful ops.
     withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
       val inputData = MemoryStream[Int]
 
       val stream = inputData.toDF()
         .withColumn("eventTime", timestamp_seconds($"value"))
         .withWatermark("eventTime", "0 seconds")
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
+        .groupBy(window($"eventTime", "5 seconds").as("window"))
+        .agg(count("*").as("count"))
         .groupBy(window($"window", "10 seconds"))
-        .agg(count("*") as 'count, sum("count") as 'sum)
+        .agg(count("*").as("count"), sum("count").as("sum"))
         .select($"window".getField("start").cast("long").as[Long],
           $"count".as[Long], $"sum".as[Long])
 
@@ -74,7 +75,7 @@ class MultiStatefulOperatorsSuite
         // agg: [10, 20) (2, 10)
         // output: [10, 20) (2, 10)
         // state: None
-        CheckNewAnswer((10, 2, 10)), // W (21, 21) [20, 25) 2 ... W (0, 21) None // [10, 20) 2
+        CheckNewAnswer((10, 2, 10)),
         assertNumStateRows(Seq(0, 1)),
         assertNumRowsDroppedByWatermark(Seq(0, 0)),
 
@@ -94,7 +95,7 @@ class MultiStatefulOperatorsSuite
         // agg: None
         // output: [20, 25) 5
         // state: [25, 30) 4
-        // op2 W (20, 25)
+        // op2 W (21, 29)
         // agg: [20, 30) (1, 5)
         // output: None
         // state: [20, 30) (1, 5)
@@ -120,8 +121,8 @@ class MultiStatefulOperatorsSuite
         // output: [25, 30) 5
         // state: [30, 35) 2
         // op2 W (29, 31)
-        // agg: [20, 30) (1, 5)
-        // output: [20, 30) (1, 5)
+        // agg: [20, 30) (2, 10)
+        // output: [20, 30) (2, 10)
         // state: None
         CheckNewAnswer((20, 2, 10)),
         assertNumStateRows(Seq(0, 1)),
@@ -137,12 +138,12 @@ class MultiStatefulOperatorsSuite
       val stream = inputData.toDF()
         .withColumn("eventTime", timestamp_seconds($"value"))
         .withWatermark("eventTime", "0 seconds")
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
+        .groupBy(window($"eventTime", "5 seconds").as("window"))
+        .agg(count("*").as("count"))
         .groupBy(window(window_time($"window"), "10 seconds"))
-        .agg(count("*") as 'count, sum("count") as 'sum)
+        .agg(count("*").as("count"), sum("count").as("sum"))
         .groupBy(window(window_time($"window"), "20 seconds"))
-        .agg(count("*") as 'count, sum("sum") as 'sum)
+        .agg(count("*").as("count"), sum("sum").as("sum"))
         .select(
           $"window".getField("start").cast("long").as[Long],
           $"window".getField("end").cast("long").as[Long],
@@ -163,7 +164,7 @@ class MultiStatefulOperatorsSuite
 
         // no-data batch triggered
 
-        // op1 W (37, 37)
+        // op1 W (0, 37)
         // agg: None
         // output: [0, 5) 5, [5, 10) 5, [10, 15) 5, [15, 20) 5, [20, 25) 5, [25, 30) 5, [30, 35) 5
         // state: [35, 40) 3
@@ -187,20 +188,20 @@ class MultiStatefulOperatorsSuite
         // state: [35, 40) 8, [40, 45) 5, [45, 50) 5, [50, 55) 5, [55, 60) 5, [60, 65) 1
         // op2 W (37, 37)
         // output: None
-        // state: [30, 40) (1, 8)
+        // state: [30, 40) (1, 5)
         // op3 W (37, 37)
         // output: None
         // state: [20, 40) (1, 10)
 
         // no-data batch
-        // op1 W (60, 60)
+        // op1 W (37, 60)
         // output: [35, 40) 8, [40, 45) 5, [45, 50) 5, [50, 55) 5, [55, 60) 5
         // state: [60, 65) 1
-        // op2 W (60, 60)
+        // op2 W (37, 60)
         // agg: [30, 40) (2, 13), [40, 50) (2, 10), [50, 60), (2, 10)
         // output: [30, 40) (2, 13), [40, 50) (2, 10), [50, 60), (2, 10)
         // state: None
-        // op3 W (60, 60)
+        // op3 W (37, 60)
         // agg: [20, 40) (2, 23), [40, 60) (2, 20)
         // output: [20, 40) (2, 23), [40, 60) (2, 20)
         // state: None
@@ -222,8 +223,8 @@ class MultiStatefulOperatorsSuite
         .dropDuplicates("value", "eventTime")
 
       val windowedAggregation = deduplication
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count, sum("value") as 'sum)
+        .groupBy(window($"eventTime", "5 seconds").as("window"))
+        .agg(count("*").as("count"), sum("value").as("sum"))
         .select($"window".getField("start").cast("long").as[Long],
           $"count".as[Long])
 
@@ -244,7 +245,7 @@ class MultiStatefulOperatorsSuite
 
         // no-data batch triggered
 
-        // op1 W (5, 5)
+        // op1 W (0, 5)
         // agg: None
         // output: None
         // state: 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
@@ -274,8 +275,8 @@ class MultiStatefulOperatorsSuite
         .withWatermark("eventTime2", "0 seconds")
 
       val stream = inputDF1.join(inputDF2, expr("eventTime1 = eventTime2"), "inner")
-        .groupBy(window($"eventTime1", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
+        .groupBy(window($"eventTime1", "5 seconds").as("window"))
+        .agg(count("*").as("count"))
         .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
       testStream(stream)(
@@ -295,7 +296,7 @@ class MultiStatefulOperatorsSuite
         // op1 W (0, 4)
         // join output: None
         // state: (4, 4)
-        // agg: [0, 5) 4
+        // agg: None
         // output: None
         // state: [0, 5) 4
         CheckNewAnswer(),
@@ -336,8 +337,8 @@ class MultiStatefulOperatorsSuite
       val aggStream = inputData.toDF()
         .withColumn("eventTime", timestamp_seconds($"value"))
         .withWatermark("eventTime", "0 seconds")
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
+        .groupBy(window($"eventTime", "5 seconds").as("window"))
+        .agg(count("*").as("count"))
         .withColumn("windowEnd", expr("window.end"))
 
       // dropDuplicates from aggStream without event time column for dropDuplicates - the
@@ -384,7 +385,7 @@ class MultiStatefulOperatorsSuite
   }
 
   private def assertNumRowsDroppedByWatermark(
-    numRowsDroppedByWatermark: Seq[Long]): AssertOnQuery = AssertOnQuery { q =>
+      numRowsDroppedByWatermark: Seq[Long]): AssertOnQuery = AssertOnQuery { q =>
     q.processAllAvailable()
     val progressWithData = q.recentProgress.filterNot { p =>
       // filter out batches which are falling into one of types:
