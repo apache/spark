@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect.planner
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
-import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
@@ -44,15 +44,15 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     createLocalRelationProto(
       Seq(AttributeReference("id", IntegerType)(), AttributeReference("name", StringType)()))
 
-  lazy val sparkTestRelation: LocalRelation =
-    LocalRelation(
-      AttributeReference("id", IntegerType)(),
-      AttributeReference("name", StringType)())
+  lazy val sparkTestRelation: DataFrame =
+    spark.createDataFrame(
+      new java.util.ArrayList[Row](),
+      StructType(Seq(StructField("id", IntegerType), StructField("name", StringType))))
 
-  lazy val sparkTestRelation2: LocalRelation =
-    LocalRelation(
-      AttributeReference("id", IntegerType)(),
-      AttributeReference("name", StringType)())
+  lazy val sparkTestRelation2: DataFrame =
+    spark.createDataFrame(
+      new java.util.ArrayList[Row](),
+      StructType(Seq(StructField("id", IntegerType), StructField("name", StringType))))
 
   test("Basic select") {
     val connectPlan = connectTestRelation.select("id".protoAttr)
