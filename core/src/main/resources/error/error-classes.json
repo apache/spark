@@ -81,6 +81,11 @@
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
     ]
   },
+  "CREATE_TABLE_COLUMN_OPTION_DUPLICATE" : {
+    "message" : [
+      "CREATE TABLE column <columnName> specifies option \"<optionName>\" more than once, which is invalid"
+    ]
+  },
   "DATATYPE_MISMATCH" : {
     "message" : [
       "Cannot resolve <sqlExpr> due to data type mismatch:"
