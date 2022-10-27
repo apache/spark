@@ -212,17 +212,19 @@ trait WatermarkSupport extends SparkPlan {
   /** The keys that may have a watermark attribute. */
   def keyExpressions: Seq[Attribute]
 
-  /** The watermark value for filtering late events/records. This should be the previous
+  /**
+   * The watermark value for filtering late events/records. This should be the previous
    * batch state eviction watermark.
-   * */
+   */
   def eventTimeWatermarkForLateEvents: Option[Long]
-  /** The watermark value for closing aggregates and evicting state.
+  /**
+   * The watermark value for closing aggregates and evicting state.
    * It is different from the late events filtering watermark (consider chained aggregators
    * agg1 -> agg2: agg1 evicts state which will be effectively late against the eviction watermark
    * but should not be late for agg2 input late record filtering watermark. Thus agg1 and agg2 use
    * the current batch watermark for state eviction but the previous batch watermark for late
    * record filtering.
-   * */
+   */
   def eventTimeWatermarkForEviction: Option[Long]
 
   /** Generate an expression that matches data older than late event filtering watermark */
@@ -247,7 +249,7 @@ trait WatermarkSupport extends SparkPlan {
     watermarkPredicateForKeys(watermarkExpressionForEviction)
 
   private def watermarkPredicateForKeys(
-    watermarkExpression: Option[Expression]): Option[BasePredicate] = {
+      watermarkExpression: Option[Expression]): Option[BasePredicate] = {
     watermarkExpression.flatMap { e =>
       if (keyExpressions.exists(_.metadata.contains(EventTimeWatermark.delayKey))) {
         Some(Predicate.create(e, keyExpressions))

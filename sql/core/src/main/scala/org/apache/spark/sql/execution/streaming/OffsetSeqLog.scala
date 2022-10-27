@@ -104,7 +104,7 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
   }
 
   def offsetSeqMetadataForBatchId(batchId: Long): Option[OffsetSeqMetadata] = {
-    if (batchId < 0) None else get(batchId).flatMap(_.metadata).headOption
+    if (batchId < 0) None else get(batchId).flatMap(_.metadata)
   }
 }
 
