@@ -70,7 +70,7 @@ private[protobuf] case class ProtobufDataToCatalyst(
   @transient private lazy val parseMode: ParseMode = {
     val mode = protobufOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
-      throw QueryCompilationErrors.parseModeUnsupportedError("from_protobuf", mode)
+      throw QueryCompilationErrors.parseModeUnsupportedError(prettyName, mode)
     }
     mode
   }
@@ -94,7 +94,7 @@ private[protobuf] case class ProtobufDataToCatalyst(
       case FailFastMode =>
         throw QueryCompilationErrors.malformedRecordsDetectedInRecordParsingError(e)
       case _ =>
-        throw QueryCompilationErrors.parseModeUnsupportedError("from_protobuf", parseMode)
+        throw QueryCompilationErrors.parseModeUnsupportedError(prettyName, parseMode)
     }
   }
 
