@@ -514,10 +514,10 @@ class AnalysisErrorSuite extends AnalysisTest {
       TimeWindow(Literal("2016-01-01 01:01:01"), "-1 second", "1 second", "0 second").as("window")),
       "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
     Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, -1000000, 1000000, 0)\"",
       "exprName" -> "`window_duration`",
       "valueRange" -> s"(0, 9223372036854775807]",
-      "currentValue" -> "-1000000L",
-      "sqlExpr" -> "\"window(2016-01-01 01:01:01, -1000000, 1000000, 0)\""
+      "currentValue" -> "-1000000L"
     )
   )
 
@@ -527,10 +527,10 @@ class AnalysisErrorSuite extends AnalysisTest {
       TimeWindow(Literal("2016-01-01 01:01:01"), "0 second", "1 second", "0 second").as("window")),
     "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
     Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 0, 1000000, 0)\"",
       "exprName" -> "`window_duration`",
       "valueRange" -> "(0, 9223372036854775807]",
-      "currentValue" -> "0L",
-      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 0, 1000000, 0)\""
+      "currentValue" -> "0L"
     )
   )
 
@@ -540,10 +540,10 @@ class AnalysisErrorSuite extends AnalysisTest {
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "-1 second", "0 second").as("window")),
     "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
     Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, -1000000, 0)\"",
       "exprName" -> "`slide_duration`",
       "valueRange" -> "(0, 9223372036854775807]",
-      "currentValue" -> "-1000000L",
-      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, -1000000, 0)\""
+      "currentValue" -> "-1000000L"
     )
   )
 
@@ -553,10 +553,10 @@ class AnalysisErrorSuite extends AnalysisTest {
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "0 second", "0 second").as("window")),
     "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
     Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 0, 0)\"",
       "exprName" -> "`slide_duration`",
       "valueRange" -> "(0, 9223372036854775807]",
-      "currentValue" -> "0L",
-      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 0, 0)\""
+      "currentValue" -> "0L"
     )
   )
 
