@@ -802,7 +802,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.2-4</version>
+        <version>1.5.2-5</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
