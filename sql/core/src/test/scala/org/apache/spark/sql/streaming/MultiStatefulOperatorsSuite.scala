@@ -105,22 +105,22 @@ class MultiStatefulOperatorsSuite
 
         // Move the watermark.
         AddData(inputData, 30, 31),
-        // op1 W (29, 31)
+        // op1 W (29, 29)
         // agg: [25, 30) 5 [30, 35) 2
         // output: None
         // state: [25, 30) 5 [30, 35) 2
-        // op2 W (29, 31)
+        // op2 W (29, 29)
         // agg: None
         // output: None
         // state: [20, 30) (1, 5)
 
         // no-data batch triggered
 
-        // op1 W (31, 31)
+        // op1 W (29, 31)
         // agg: None
         // output: [25, 30) 5
         // state: [30, 35) 2
-        // op2 W (31, 31)
+        // op2 W (29, 31)
         // agg: [20, 30) (2, 10)
         // output: [20, 30) (2, 10)
         // state: None
@@ -295,7 +295,8 @@ class MultiStatefulOperatorsSuite
 
         // op1 W (0, 4)
         // join output: None
-        // state: (4, 4)
+        // state: None
+        // op2 W (0, 4)
         // agg: None
         // output: None
         // state: [0, 5) 4
@@ -306,21 +307,22 @@ class MultiStatefulOperatorsSuite
         // Move the watermark
         MultiAddData(input1, 5)(input2, 5),
 
-        // op1 W (4, 5)
+        // op1 W (4, 4)
         // join output: (5, 5)
         // state: (5, 5)
-        // op2 W (4, 5)
+        // op2 W (4, 4)
         // agg: [5, 10) 1
-        // output: (0, 5) 4
-        // state: [5, 10) 1
+        // output: None
+        // state: [0, 5) 4, [5, 10) 1
 
         // no-data batch triggered
 
-        // op1 W (5, 5)
+        // op1 W (4, 5)
         // join output: None
-        // state: (5, 5)
+        // state: None
+        // op2 W (4, 5)
         // agg: None
-        // output: None
+        // output: [0, 5) 4
         // state: [5, 10) 1
         CheckNewAnswer((0, 4)),
         assertNumStateRows(Seq(1, 0)),
