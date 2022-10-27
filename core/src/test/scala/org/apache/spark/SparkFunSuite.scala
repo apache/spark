@@ -373,6 +373,12 @@ abstract class SparkFunSuite
   protected def checkErrorMatchPVals(
       exception: SparkThrowable,
       errorClass: String,
+      parameters: Map[String, String]): Unit =
+    checkError(exception, errorClass, None, parameters, matchPVals = true)
+
+  protected def checkErrorMatchPVals(
+      exception: SparkThrowable,
+      errorClass: String,
       sqlState: Option[String],
       parameters: Map[String, String],
       context: QueryContext): Unit =

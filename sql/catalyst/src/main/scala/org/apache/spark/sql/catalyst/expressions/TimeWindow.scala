@@ -18,13 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TIME_WINDOW, TreePattern}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.IntervalUtils
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit line.contains.tab
@@ -71,7 +71,8 @@ case class TimeWindow(
     startTime: Long) extends UnaryExpression
   with ImplicitCastInputTypes
   with Unevaluable
-  with NonSQLExpression {
+  with NonSQLExpression
+  with QueryErrorsBase {
 
   //////////////////////////
   // SQL Constructors
@@ -114,18 +115,48 @@ case class TimeWindow(
     val dataTypeCheck = super.checkInputDataTypes()
     if (dataTypeCheck.isSuccess) {
       if (windowDuration <= 0) {
-        return TypeCheckFailure(s"The window duration ($windowDuration) must be greater than 0.")
+        return DataTypeMismatch(
+          errorSubClass = "VALUE_OUT_OF_RANGE",
+          messageParameters = Map(
+            "exprName" -> toSQLId("window_duration"),
+            "valueRange" -> s"(0, ${Long.MaxValue}]",
+            "currentValue" -> toSQLValue(windowDuration, LongType)
+          )
+        )
       }
       if (slideDuration <= 0) {
-        return TypeCheckFailure(s"The slide duration ($slideDuration) must be greater than 0.")
+        return DataTypeMismatch(
+          errorSubClass = "VALUE_OUT_OF_RANGE",
+          messageParameters = Map(
+            "exprName" -> toSQLId("slide_duration"),
+            "valueRange" -> s"(0, ${Long.MaxValue}]",
+            "currentValue" -> toSQLValue(slideDuration, LongType)
+          )
+        )
       }
       if (slideDuration > windowDuration) {
-        return TypeCheckFailure(s"The slide duration ($slideDuration) must be less than or equal" +
-          s" to the windowDuration ($windowDuration).")
+        return DataTypeMismatch(
+          errorSubClass = "PARAMETER_CONSTRAINT_VIOLATION",
+          messageParameters = Map(
+            "leftExprName" -> toSQLId("slide_duration"),
+            "leftExprValue" -> toSQLValue(slideDuration, LongType),
+            "constraint" -> "<=",
+            "rightExprName" -> toSQLId("window_duration"),
+            "rightExprValue" -> toSQLValue(windowDuration, LongType)
+          )
+        )
       }
       if (startTime.abs >= slideDuration) {
-        return TypeCheckFailure(s"The absolute value of start time ($startTime) must be less " +
-          s"than the slideDuration ($slideDuration).")
+        return DataTypeMismatch(
+          errorSubClass = "PARAMETER_CONSTRAINT_VIOLATION",
+          messageParameters = Map(
+            "leftExprName" -> toSQLId("abs(start_time)"),
+            "leftExprValue" -> toSQLValue(startTime.abs, LongType),
+            "constraint" -> "<",
+            "rightExprName" -> toSQLId("slide_duration"),
+            "rightExprValue" -> toSQLValue(slideDuration, LongType)
+          )
+        )
       }
     }
     dataTypeCheck
