@@ -86,7 +86,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-34265: Instrument Python UDF execution using SQL Metrics") {
-
+    assume(shouldTestPythonUDFs)
     val pythonSQLMetrics = List(
       "data sent to Python workers",
       "data returned from Python workers",
