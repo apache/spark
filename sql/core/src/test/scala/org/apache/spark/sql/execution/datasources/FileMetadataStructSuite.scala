@@ -641,7 +641,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
                  |SELECT
                  |  ${(1 to 100).map(i => s"sum(c$i)").mkString(", ")},
                  |  max(_metadata.file_path)
-                 |FROM parquet.`$dir`""".stripMargin
+                 |FROM $format.`$dir`""".stripMargin
             ).collect()
           }
         }
