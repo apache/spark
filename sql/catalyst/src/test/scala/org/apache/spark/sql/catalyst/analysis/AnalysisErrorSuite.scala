@@ -433,67 +433,131 @@ class AnalysisErrorSuite extends AnalysisTest {
     "UNRESOLVED_COLUMN.WITH_SUGGESTION",
     Map("objectName" -> "`bad_column`", "proposal" -> "`a`, `b`, `c`, `d`, `e`"))
 
-  errorTest(
+  errorClassTest(
     "slide duration greater than window in time window",
     testRelation2.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "2 second", "0 second").as("window")),
-      s"The slide duration " :: " must be less than or equal to the windowDuration " :: Nil
+    "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 2000000, 0)\"",
+      "leftExprName" -> "`slide_duration`",
+      "leftExprValue" -> "2000000L",
+      "constraint" -> "<=",
+      "rightExprName" -> "`window_duration`",
+      "rightExprValue" -> "1000000L"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "start time greater than slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "1 minute").as("window")),
-      "The absolute value of start time " :: " must be less than the slideDuration " :: Nil
+    "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 1000000, 60000000)\"",
+      "leftExprName" -> "`abs(start_time)`",
+      "leftExprValue" -> "60000000L",
+      "constraint" -> "<",
+      "rightExprName" -> "`slide_duration`",
+      "rightExprValue" -> "1000000L"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "start time equal to slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "1 second").as("window")),
-      "The absolute value of start time " :: " must be less than the slideDuration " :: Nil
+    "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 1000000, 1000000)\"",
+      "leftExprName" -> "`abs(start_time)`",
+      "leftExprValue" -> "1000000L",
+      "constraint" -> "<",
+      "rightExprName" -> "`slide_duration`",
+      "rightExprValue" -> "1000000L"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "SPARK-21590: absolute value of start time greater than slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "-1 minute").as("window")),
-    "The absolute value of start time " :: " must be less than the slideDuration " :: Nil
+    "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 1000000, -60000000)\"",
+      "leftExprName" -> "`abs(start_time)`",
+      "leftExprValue" -> "60000000L",
+      "constraint" -> "<",
+      "rightExprName" -> "`slide_duration`",
+      "rightExprValue" -> "1000000L"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "SPARK-21590: absolute value of start time equal to slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "-1 second").as("window")),
-    "The absolute value of start time " :: " must be less than the slideDuration " :: Nil
+    "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 1000000, -1000000)\"",
+      "leftExprName" -> "`abs(start_time)`",
+      "leftExprValue" -> "1000000L",
+      "constraint" -> "<",
+      "rightExprName" -> "`slide_duration`",
+      "rightExprValue" -> "1000000L"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "negative window duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "-1 second", "1 second", "0 second").as("window")),
-      "The window duration " :: " must be greater than 0." :: Nil
+      "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, -1000000, 1000000, 0)\"",
+      "exprName" -> "`window_duration`",
+      "valueRange" -> s"(0, 9223372036854775807]",
+      "currentValue" -> "-1000000L"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "zero window duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "0 second", "1 second", "0 second").as("window")),
-      "The window duration " :: " must be greater than 0." :: Nil
+    "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 0, 1000000, 0)\"",
+      "exprName" -> "`window_duration`",
+      "valueRange" -> "(0, 9223372036854775807]",
+      "currentValue" -> "0L"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "negative slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "-1 second", "0 second").as("window")),
-      "The slide duration " :: " must be greater than 0." :: Nil
+    "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, -1000000, 0)\"",
+      "exprName" -> "`slide_duration`",
+      "valueRange" -> "(0, 9223372036854775807]",
+      "currentValue" -> "-1000000L"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "zero slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "0 second", "0 second").as("window")),
-      "The slide duration" :: " must be greater than 0." :: Nil
+    "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+    Map(
+      "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 0, 0)\"",
+      "exprName" -> "`slide_duration`",
+      "valueRange" -> "(0, 9223372036854775807]",
+      "currentValue" -> "0L"
+    )
   )
 
   errorTest(
