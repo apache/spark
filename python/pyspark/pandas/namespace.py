@@ -235,7 +235,7 @@ def read_csv(
     Parameters
     ----------
     path : str or list
-        path(s) of the CSV file(s) to be read.
+        Path(s) of the CSV file(s) to be read.
     sep : str, default ‘,’
         Delimiter to use. Non empty string.
     header : int, default ‘infer’
@@ -296,6 +296,10 @@ def read_csv(
     Examples
     --------
     >>> ps.read_csv('data.csv')  # doctest: +SKIP
+
+    Load multiple CSV files as a single DataFrame:
+
+    >>> ps.read_csv(['data-01.csv', 'data-02.csv'])  # doctest: +SKIP
     """
     # For latin-1 encoding is same as iso-8859-1, that's why its mapped to iso-8859-1.
     encoding_mapping = {"latin-1": "iso-8859-1"}
