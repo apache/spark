@@ -352,6 +352,25 @@ class MultiStatefulOperatorsSuite
 
       testStream(dedupNoEventTime)(
         AddData(inputData, 1, 5, 10, 15),
+
+        // op1 W (0, 0)
+        // agg: [0, 5) 1, [5, 10) 1, [10, 15) 1, [15, 20) 1
+        // output: None
+        // state: [0, 5) 1, [5, 10) 1, [10, 15) 1, [15, 20) 1
+        // op2 W (0, 0)
+        // output: None
+        // state: None
+
+        // no-data batch triggered
+
+        // op1 W (0, 15)
+        // agg: None
+        // output: [0, 5) 1, [5, 10) 1, [10, 15) 1
+        // state: [15, 20) 1
+        // op2 W (0, 15)
+        // output: (5, 1), (10, 1), (15, 1)
+        // state: (5, 1), (10, 1), (15, 1)
+
         CheckNewAnswer((5, 1), (10, 1), (15, 1)),
         assertNumStateRows(Seq(3, 1)),
         assertNumRowsDroppedByWatermark(Seq(0, 0))
@@ -369,6 +388,25 @@ class MultiStatefulOperatorsSuite
 
       testStream(dedupWithEventTime)(
         AddData(inputData, 1, 5, 10, 15),
+
+        // op1 W (0, 0)
+        // agg: [0, 5) 1, [5, 10) 1, [10, 15) 1, [15, 20) 1
+        // output: None
+        // state: [0, 5) 1, [5, 10) 1, [10, 15) 1, [15, 20) 1
+        // op2 W (0, 0)
+        // output: None
+        // state: None
+
+        // no-data batch triggered
+
+        // op1 W (0, 15)
+        // agg: None
+        // output: [0, 5) 1, [5, 10) 1, [10, 15) 1
+        // state: [15, 20) 1
+        // op2 W (0, 15)
+        // output: (5, 4999999, 1), (10, 9999999, 1), (15, 14999999, 1)
+        // state: None - trimmed by watermark
+
         CheckNewAnswer((5, 4999999, 1), (10, 9999999, 1), (15, 14999999, 1)),
         assertNumStateRows(Seq(0, 1)),
         assertNumRowsDroppedByWatermark(Seq(0, 0))
