@@ -202,7 +202,7 @@
       },
       "MAP_ZIP_WITH_DIFF_TYPES" : {
         "message" : [
-          "Input to <functionName> should have been two maps with compatible key types, but it's [<leftType>, <rightType>]."
+          "Input to the <functionName> should have been two maps with compatible key types, but it's [<leftType>, <rightType>]."
         ]
       },
       "NON_FOLDABLE_INPUT" : {
@@ -277,7 +277,7 @@
       },
       "UNEXPECTED_RETURN_TYPE" : {
         "message" : [
-          "The <exprName> requires return <expectedType> type, but the actual is <actualType> type."
+          "The <functionName> requires return <expectedType> type, but the actual is <actualType> type."
         ]
       },
       "UNEXPECTED_STATIC_METHOD" : {

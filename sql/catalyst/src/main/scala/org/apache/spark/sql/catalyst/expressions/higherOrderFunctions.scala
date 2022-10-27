@@ -23,8 +23,8 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, QuaternaryLike, TernaryLike}
@@ -405,7 +405,7 @@ case class ArraySort(
               DataTypeMismatch(
                 errorSubClass = "UNEXPECTED_RETURN_TYPE",
                 messageParameters = Map(
-                  "exprName" -> toSQLExpr(function),
+                  "functionName" -> toSQLId(function.prettyName),
                   "expectedType" -> toSQLType(IntegerType),
                   "actualType" -> toSQLType(function.dataType)
                 )
@@ -421,7 +421,6 @@ case class ArraySort(
                 "inputType" -> toSQLType(argument.dataType)
               )
             )
-
         }
       case failure => failure
     }
@@ -1049,7 +1048,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
           DataTypeMismatch(
             errorSubClass = "MAP_ZIP_WITH_DIFF_TYPES",
             messageParameters = Map(
-              "functionName" -> prettyName,
+              "functionName" -> toSQLId(prettyName),
               "leftType" -> toSQLType(leftKeyType),
               "rightType" -> toSQLType(rightKeyType)
             )

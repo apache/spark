@@ -533,6 +533,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("The given function only supports array input") {
+    val df = Seq(1, 2, 3).toDF("a")
+    checkErrorMatchPVals(
+      exception = intercept[AnalysisException] {
+        df.select(array_sort(col("a"), (x, y) => x - y))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> """"array_sort\(a, lambdafunction\(\(x_\d+ - y_\d+\), x_\d+, y_\d+\)\)"""",
+        "paramIndex" -> "1",
+        "requiredType" -> "\"ARRAY\"",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"INT\""
+      ))
+  }
+
   test("sort_array/array_sort functions") {
     val df = Seq(
       (Array[Int](2, 1, 3), Array("b", "c", "a")),
@@ -3597,7 +3613,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
       parameters = Map(
         "sqlExpr" -> "\"map_zip_with(mis, mmi, lambdafunction(concat(x, y, z), x, y, z))\"",
-        "functionName" -> "map_zip_with",
+        "functionName" -> "`map_zip_with`",
         "leftType" -> "\"INT\"",
         "rightType" -> "\"MAP<INT, INT>\""),
       context = ExpectedContext(
@@ -3614,7 +3630,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       matchPVals = true,
       parameters = Map(
         "sqlExpr" -> """"map_zip_with\(mis, mmi, lambdafunction\(concat\(x_\d+, y_\d+, z_\d+\), x_\d+, y_\d+, z_\d+\)\)"""",
-        "functionName" -> "map_zip_with",
+        "functionName" -> "`map_zip_with`",
         "leftType" -> "\"INT\"",
         "rightType" -> "\"MAP<INT, INT>\""))
     // scalastyle:on line.size.limit
