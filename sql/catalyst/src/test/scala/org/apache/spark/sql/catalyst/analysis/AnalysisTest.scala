@@ -174,21 +174,9 @@ trait AnalysisTest extends PlanTest {
       inputPlan: LogicalPlan,
       expectedErrorClass: String,
       expectedMessageParameters: Map[String, String],
-      caseSensitive: Boolean = true): Unit = {
-    assertAnalysisErrorClass(
-      inputPlan,
-      expectedErrorClass,
-      null,
-      expectedMessageParameters,
-      caseSensitive)
-  }
-
-  protected def assertAnalysisErrorClass(
-      inputPlan: LogicalPlan,
-      expectedErrorClass: String,
-      expectedErrorSubClass: String,
-      expectedMessageParameters: Map[String, String],
-      caseSensitive: Boolean): Unit = {
+      caseSensitive: Boolean = true,
+      line: Int = -1,
+      pos: Int = -1): Unit = {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer
       val e = intercept[AnalysisException] {
@@ -196,8 +184,9 @@ trait AnalysisTest extends PlanTest {
       }
 
       if (e.getErrorClass != expectedErrorClass ||
-        !e.messageParameters.sameElements(expectedMessageParameters) ||
-        e.getErrorSubClass != expectedErrorSubClass) {
+          e.messageParameters != expectedMessageParameters ||
+          (line >= 0 && e.line.getOrElse(-1) != line) ||
+          (pos >= 0) && e.startPosition.getOrElse(-1) != pos) {
         var failMsg = ""
         if (e.getErrorClass != expectedErrorClass) {
           failMsg +=
@@ -205,16 +194,16 @@ trait AnalysisTest extends PlanTest {
                |Actual error class: ${e.getErrorClass}
              """.stripMargin
         }
-        if (e.getErrorSubClass != expectedErrorSubClass) {
-          failMsg +=
-            s"""Error sub class should be: $expectedErrorSubClass
-               |Actual error sub class: ${e.getErrorSubClass}
-             """.stripMargin
-        }
-        if (!e.messageParameters.sameElements(expectedMessageParameters)) {
+        if (e.messageParameters != expectedMessageParameters) {
           failMsg +=
             s"""Message parameters should be: ${expectedMessageParameters.mkString("\n  ")}
                |Actual message parameters: ${e.messageParameters.mkString("\n  ")}
+             """.stripMargin
+        }
+        if (e.line.getOrElse(-1) != line || e.startPosition.getOrElse(-1) != pos) {
+          failMsg +=
+            s"""Line/position should be: $line, $pos
+               |Actual line/position: ${e.line.getOrElse(-1)}, ${e.startPosition.getOrElse(-1)}
              """.stripMargin
         }
         fail(failMsg)
@@ -225,12 +214,16 @@ trait AnalysisTest extends PlanTest {
   protected def interceptParseException(parser: String => Any)(
     sqlCommand: String, messages: String*)(
     errorClass: Option[String] = None): Unit = {
-    val e = intercept[ParseException](parser(sqlCommand))
+    val e = parseException(parser)(sqlCommand)
     messages.foreach { message =>
       assert(e.message.contains(message))
     }
     if (errorClass.isDefined) {
       assert(e.getErrorClass == errorClass.get)
     }
+  }
+
+  protected def parseException(parser: String => Any)(sqlText: String): ParseException = {
+    intercept[ParseException](parser(sqlText))
   }
 }

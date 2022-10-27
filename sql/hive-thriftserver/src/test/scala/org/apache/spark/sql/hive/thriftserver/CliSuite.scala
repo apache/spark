@@ -388,7 +388,7 @@ class CliSuite extends SparkFunSuite {
   test("SPARK-11188 Analysis error reporting") {
     runCliWithin(timeout = 2.minute,
       errorResponses = Seq("AnalysisException"))(
-      "select * from nonexistent_table;" -> "Table or view not found: nonexistent_table;"
+      "select * from nonexistent_table;" -> "nonexistent_table"
     )
   }
 

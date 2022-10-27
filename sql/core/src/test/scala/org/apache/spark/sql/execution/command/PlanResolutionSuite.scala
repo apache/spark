@@ -154,7 +154,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "defaultvalues" => defaultValues
         case "defaultvalues2" => defaultValues2
         case "tablewithcolumnnameddefault" => tableWithColumnNamedDefault
-        case name => throw new NoSuchTableException(name)
+        case name => throw new NoSuchTableException(Seq(name))
       }
     })
     when(newCatalog.name()).thenReturn("testcat")
@@ -172,7 +172,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "v2Table1" => table1
         case "v2TableWithAcceptAnySchemaCapability" => tableWithAcceptAnySchemaCapability
         case "view" => createV1TableMock(ident, tableType = CatalogTableType.VIEW)
-        case name => throw new NoSuchTableException(name)
+        case name => throw new NoSuchTableException(Seq(name))
       }
     })
     when(newCatalog.name()).thenReturn(CatalogManager.SESSION_CATALOG_NAME)
@@ -1262,8 +1262,7 @@ class PlanResolutionSuite extends AnalysisTest {
           }
           checkError(
             exception = e2,
-            errorClass = "UNSUPPORTED_FEATURE",
-            errorSubClass = "TABLE_OPERATION",
+            errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
             sqlState = "0A000",
             parameters = Map("tableName" -> "`spark_catalog`.`default`.`v1Table`",
               "operation" -> "ALTER COLUMN with qualified column"))

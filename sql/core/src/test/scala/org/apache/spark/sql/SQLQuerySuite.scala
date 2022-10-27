@@ -1616,12 +1616,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     var e = intercept[AnalysisException] {
       sql("select * from in_valid_table")
     }
-    assert(e.message.contains("Table or view not found"))
+    checkErrorTableNotFound(e, "`in_valid_table`",
+      ExpectedContext("in_valid_table", 14, 13 + "in_valid_table".length))
 
     e = intercept[AnalysisException] {
       sql("select * from no_db.no_table").show()
     }
-    assert(e.message.contains("Table or view not found"))
+    checkErrorTableNotFound(e, "`no_db`.`no_table`",
+      ExpectedContext("no_db.no_table", 14, 13 + "no_db.no_table".length))
 
     e = intercept[AnalysisException] {
       sql("select * from json.invalid_file")
@@ -1636,8 +1638,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
     }
-    assert(e.message.contains("Table or view not found: " +
-      "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.file_path"))
+    checkErrorTableNotFound(e,
+      "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`",
+    ExpectedContext("`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`", 15,
+      14 + "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`".length))
 
     e = intercept[AnalysisException] {
       sql(s"select id from `Jdbc`.`file_path`")
@@ -1829,7 +1833,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           sql("select a.* from testData2")
         },
         errorClass = "_LEGACY_ERROR_TEMP_1050",
-        errorSubClass = None,
         sqlState = None,
         parameters = Map("attributes" -> "(ArrayBuffer|List)\\(a\\)"),
         matchPVals = true,
@@ -2675,7 +2678,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val m2 = intercept[AnalysisException] {
         sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
       }.message
-      assert(m2.contains("Except can only be performed on tables with the compatible column types"))
+      assert(m2.contains("Except can only be performed on tables with compatible column types"))
 
       withTable("t", "S") {
         sql("CREATE TABLE t(c struct<f:int>) USING parquet")
@@ -2686,8 +2689,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           exception = intercept[AnalysisException] {
             sql(query)
           },
-          errorClass = "DATATYPE_MISMATCH",
-          errorSubClass = "BINARY_OP_DIFF_TYPES",
+          errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
           sqlState = None,
           parameters = Map(
             "sqlExpr" -> "\"(c = C)\"",
@@ -4514,6 +4516,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }.getCause.getMessage
         assert(msg.contains("[CAST_OVERFLOW]"))
       }
+    }
+  }
+
+  test("SPARK-40903: Don't reorder Add for canonicalize if it is decimal type") {
+    val tableName = "decimalTable"
+    withTable(tableName) {
+      sql(s"create table $tableName(a decimal(12, 5), b decimal(12, 6)) using orc")
+      checkAnswer(sql(s"select sum(coalesce(a + b + 1.75, a)) from $tableName"), Row(null))
     }
   }
 }

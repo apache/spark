@@ -355,7 +355,9 @@ case class GetJsonObject(json: Expression, path: Expression)
   since = "1.6.0")
 // scalastyle:on line.size.limit line.contains.tab
 case class JsonTuple(children: Seq[Expression])
-  extends Generator with CodegenFallback {
+  extends Generator
+  with CodegenFallback
+  with QueryErrorsBase {
 
   import SharedFactory._
 
@@ -395,13 +397,16 @@ case class JsonTuple(children: Seq[Expression])
     if (children.length < 2) {
       DataTypeMismatch(
         errorSubClass = "WRONG_NUM_PARAMS",
-        messageParameters = Map("actualNum" -> children.length.toString))
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "expectedNum" -> "> 1",
+          "actualNum" -> children.length.toString))
     } else if (children.forall(child => StringType.acceptsType(child.dataType))) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(
         errorSubClass = "NON_STRING_TYPE",
-        messageParameters = Map("funcName" -> prettyName))
+        messageParameters = Map("funcName" -> toSQLId(prettyName)))
     }
   }
 
@@ -794,10 +799,17 @@ case class SchemaOfJson(
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.foldable && json != null) {
       super.checkInputDataTypes()
-    } else {
+    } else if (!child.foldable) {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map("inputExpr" -> toSQLExpr(child)))
+        messageParameters = Map(
+          "inputName" -> "json",
+          "inputType" -> toSQLType(child.dataType),
+          "inputExpr" -> toSQLExpr(child)))
+    } else {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "json"))
     }
   }
 

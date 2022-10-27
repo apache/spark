@@ -132,9 +132,9 @@ class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
   @transient private[this] lazy val xxHashFactory: XXHashFactory = XXHashFactory.fastestInstance()
 
   private[this] val defaultSeed: Int = 0x9747b28c // LZ4BlockOutputStream.DEFAULT_SEED
+  private[this] val blockSize = conf.get(IO_COMPRESSION_LZ4_BLOCKSIZE).toInt
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
-    val blockSize = conf.get(IO_COMPRESSION_LZ4_BLOCKSIZE).toInt
     val syncFlush = false
     new LZ4BlockOutputStream(
       s,
@@ -191,9 +191,9 @@ class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
   } catch {
     case e: Error => throw new IllegalArgumentException(e)
   }
+  private[this] val blockSize = conf.get(IO_COMPRESSION_SNAPPY_BLOCKSIZE).toInt
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
-    val blockSize = conf.get(IO_COMPRESSION_SNAPPY_BLOCKSIZE).toInt
     new SnappyOutputStream(s, blockSize)
   }
 

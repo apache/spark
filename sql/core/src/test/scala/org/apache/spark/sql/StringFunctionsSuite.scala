@@ -639,8 +639,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         sql("select regexp_replace(collect_list(1), '1', '2')")
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"regexp_replace(collect_list(1), 1, 2, 1)\"",

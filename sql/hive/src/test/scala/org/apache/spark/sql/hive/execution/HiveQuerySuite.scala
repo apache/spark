@@ -21,7 +21,6 @@ import java.io.File
 import java.net.URI
 import java.nio.file.Files
 import java.sql.Timestamp
-import java.util.Locale
 
 import scala.util.Try
 
@@ -73,9 +72,17 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     }
   }
 
-  private def assertUnsupportedFeature(body: => Unit): Unit = {
-    val e = intercept[ParseException] { body }
-    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
+  private def assertUnsupportedFeature(
+      body: => Unit,
+      message: String,
+      expectedContext: ExpectedContext): Unit = {
+    checkError(
+      exception = intercept[ParseException] {
+        body
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> message),
+      context = expectedContext)
   }
 
   // Testing the Broadcast based join for cartesian join (cross join)
@@ -155,13 +162,25 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     """.stripMargin)
 
   test("multiple generators in projection") {
-    intercept[AnalysisException] {
-      sql("SELECT explode(array(key, key)), explode(array(key, key)) FROM src").collect()
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT explode(array(key, key)), explode(array(key, key)) FROM src").collect()
+      },
+      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
+      parameters = Map(
+        "clause" -> "SELECT",
+        "num" -> "2",
+        "generators" -> "\"explode(array(key, key))\", \"explode(array(key, key))\""))
 
-    intercept[AnalysisException] {
-      sql("SELECT explode(array(key, key)) as k1, explode(array(key, key)) FROM src").collect()
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT explode(array(key, key)) as k1, explode(array(key, key)) FROM src").collect()
+      },
+      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
+      parameters = Map(
+        "clause" -> "SELECT",
+        "num" -> "2",
+        "generators" -> "\"explode(array(key, key))\", \"explode(array(key, key))\""))
   }
 
   createQueryTest("! operator",
@@ -686,9 +705,12 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   // TODO: adopt this test when Spark SQL has the functionality / framework to report errors.
   // See https://github.com/apache/spark/pull/1055#issuecomment-45820167 for a discussion.
   ignore("non-boolean conditions in a CaseWhen are illegal") {
-    intercept[Exception] {
-      sql("SELECT (CASE WHEN key > 2 THEN 3 WHEN 1 THEN 2 ELSE 0 END) FROM src").collect()
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT (CASE WHEN key > 2 THEN 3 WHEN 1 THEN 2 ELSE 0 END) FROM src").collect()
+      },
+      errorClass = null,
+      parameters = Map.empty)
   }
 
   createQueryTest("case sensitivity when query Hive table",
@@ -807,14 +829,15 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("ADD JAR command") {
-    val testJar = TestHive.getHiveFile("data/files/TestSerDe.jar").getCanonicalPath
     sql("CREATE TABLE alter1(a INT, b INT)")
-    intercept[Exception] {
-      sql(
-        """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
-          |WITH serdeproperties('s1'='9')
-        """.stripMargin)
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
+            |WITH serdeproperties('s1'='9')""".stripMargin)
+      },
+      errorClass = null,
+      parameters = Map.empty)
     sql("DROP TABLE alter1")
   }
 
@@ -1229,22 +1252,30 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     sql("SET hive.exec.dynamic.partition.mode=strict")
 
     // Should throw when using strict dynamic partition mode without any static partition
-    intercept[AnalysisException] {
-      sql(
-        """INSERT INTO TABLE dp_test PARTITION(dp)
-          |SELECT key, value, key % 5 FROM src
-        """.stripMargin)
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          """INSERT INTO TABLE dp_test PARTITION(dp)
+            |SELECT key, value, key % 5 FROM src""".stripMargin)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1168",
+      parameters = Map(
+        "tableName" -> "`spark_catalog`.`default`.`dp_test`",
+        "targetColumns" -> "4",
+        "insertedColumns" -> "3",
+        "staticPartCols" -> "0"))
 
     sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 
     // Should throw when a static partition appears after a dynamic partition
-    intercept[AnalysisException] {
-      sql(
-        """INSERT INTO TABLE dp_test PARTITION(dp, sp = 1)
-          |SELECT key, value, key % 5 FROM src
-        """.stripMargin)
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          """INSERT INTO TABLE dp_test PARTITION(dp, sp = 1)
+            |SELECT key, value, key % 5 FROM src""".stripMargin)
+      },
+      errorClass = null,
+      parameters = Map.empty)
   }
 
   test("SPARK-3414 regression: should store analyzed logical plan when creating a temporary view") {
@@ -1338,15 +1369,30 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       s2.sql("create table test_b(key INT, value STRING)")
 
       sql("select * from test_a")
-      intercept[AnalysisException] {
-        sql("select * from test_b")
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select * from test_b")
+        },
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`test_b`"),
+        context = ExpectedContext(
+          fragment = "test_b",
+          start = 14,
+          stop = 19))
+
       sql("select * from b.test_b")
 
       s2.sql("select * from test_b")
-      intercept[AnalysisException] {
-        s2.sql("select * from test_a")
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          s2.sql("select * from test_a")
+        },
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`test_a`"),
+        context = ExpectedContext(
+          fragment = "test_a",
+          start = 14,
+          stop = 19))
       s2.sql("select * from a.test_a")
     } finally {
       sql("DROP TABLE IF EXISTS test_a")
@@ -1362,28 +1408,48 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     sql("USE hive_test_db")
     assert("hive_test_db" == sql("select current_database()").first().getString(0))
 
-    intercept[AnalysisException] {
-      sql("USE not_existing_db")
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("USE not_existing_db")
+      },
+      errorClass = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> "`not_existing_db`"))
 
     sql(s"USE $currentDatabase")
     assert(currentDatabase == sql("select current_database()").first().getString(0))
   }
 
   test("lookup hive UDF in another thread") {
-    val e = intercept[AnalysisException] {
-      range(1).selectExpr("not_a_udf()")
-    }
-    assert(e.getMessage.contains("Undefined function"))
-    assert(e.getMessage.contains("not_a_udf"))
+    checkErrorMatchPVals(
+      exception = intercept[AnalysisException] {
+        range(1).selectExpr("not_a_udf()")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1242",
+      sqlState = None,
+      parameters = Map(
+        "rawName" -> "not_a_udf",
+        "fullName" -> "spark_catalog.[a-z]+.not_a_udf"),
+      context = ExpectedContext(
+        fragment = "not_a_udf()",
+        start = 0,
+        stop = 10))
+
     var success = false
     val t = new Thread("test") {
       override def run(): Unit = {
-        val e = intercept[AnalysisException] {
-          range(1).selectExpr("not_a_udf()")
-        }
-        assert(e.getMessage.contains("Undefined function"))
-        assert(e.getMessage.contains("not_a_udf"))
+        checkErrorMatchPVals(
+          exception = intercept[AnalysisException] {
+            range(1).selectExpr("not_a_udf()")
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1242",
+          sqlState = None,
+          parameters = Map(
+            "rawName" -> "not_a_udf",
+            "fullName" -> "spark_catalog.[a-z]+.not_a_udf"),
+          context = ExpectedContext(
+            fragment = "not_a_udf()",
+            start = 0,
+            stop = 10))
         success = true
       }
     }
@@ -1399,50 +1465,129 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   // since they modify /clear stuff.
 
   test("role management commands are not supported") {
-    assertUnsupportedFeature { sql("CREATE ROLE my_role") }
-    assertUnsupportedFeature { sql("DROP ROLE my_role") }
-    assertUnsupportedFeature { sql("SHOW CURRENT ROLES") }
-    assertUnsupportedFeature { sql("SHOW ROLES") }
-    assertUnsupportedFeature { sql("SHOW GRANT") }
-    assertUnsupportedFeature { sql("SHOW ROLE GRANT USER my_principal") }
-    assertUnsupportedFeature { sql("SHOW PRINCIPALS my_role") }
-    assertUnsupportedFeature { sql("SET ROLE my_role") }
-    assertUnsupportedFeature { sql("GRANT my_role TO USER my_user") }
-    assertUnsupportedFeature { sql("GRANT ALL ON my_table TO USER my_user") }
-    assertUnsupportedFeature { sql("REVOKE my_role FROM USER my_user") }
-    assertUnsupportedFeature { sql("REVOKE ALL ON my_table FROM USER my_user") }
+    assertUnsupportedFeature(
+      sql("CREATE ROLE my_role"),
+      "CREATE ROLE",
+      ExpectedContext(fragment = "CREATE ROLE my_role", start = 0, stop = 18))
+    assertUnsupportedFeature(
+      sql("DROP ROLE my_role"),
+      "DROP ROLE",
+      ExpectedContext(fragment = "DROP ROLE my_role", start = 0, stop = 16))
+    assertUnsupportedFeature(
+      sql("SHOW CURRENT ROLES"),
+      "SHOW CURRENT ROLES",
+      ExpectedContext(fragment = "SHOW CURRENT ROLES", start = 0, stop = 17))
+    assertUnsupportedFeature(
+      sql("SHOW ROLES"),
+      "SHOW ROLES",
+      ExpectedContext(fragment = "SHOW ROLES", start = 0, stop = 9))
+    assertUnsupportedFeature(
+      sql("SHOW GRANT"),
+      "SHOW GRANT",
+      ExpectedContext(fragment = "SHOW GRANT", start = 0, stop = 9))
+    assertUnsupportedFeature(
+      sql("SHOW ROLE GRANT USER my_principal"),
+      "SHOW ROLE GRANT",
+      ExpectedContext(fragment = "SHOW ROLE GRANT USER my_principal", start = 0, stop = 32))
+    assertUnsupportedFeature(
+      sql("SHOW PRINCIPALS my_role"),
+      "SHOW PRINCIPALS",
+      ExpectedContext(fragment = "SHOW PRINCIPALS my_role", start = 0, stop = 22))
+    assertUnsupportedFeature(
+      sql("SET ROLE my_role"),
+      "SET ROLE",
+      ExpectedContext(fragment = "SET ROLE my_role", start = 0, stop = 15))
+    assertUnsupportedFeature(
+      sql("GRANT my_role TO USER my_user"),
+      "GRANT",
+      ExpectedContext(fragment = "GRANT my_role TO USER my_user", start = 0, stop = 28))
+    assertUnsupportedFeature(
+      sql("GRANT ALL ON my_table TO USER my_user"),
+      "GRANT",
+      ExpectedContext(fragment = "GRANT ALL ON my_table TO USER my_user", start = 0, stop = 36))
+    assertUnsupportedFeature(
+      sql("REVOKE my_role FROM USER my_user"),
+      "REVOKE",
+      ExpectedContext(fragment = "REVOKE my_role FROM USER my_user", start = 0, stop = 31))
+    assertUnsupportedFeature(
+      sql("REVOKE ALL ON my_table FROM USER my_user"),
+      "REVOKE",
+      ExpectedContext(fragment = "REVOKE ALL ON my_table FROM USER my_user", start = 0, stop = 39))
   }
 
   test("import/export commands are not supported") {
-    assertUnsupportedFeature { sql("IMPORT TABLE my_table FROM 'my_path'") }
-    assertUnsupportedFeature { sql("EXPORT TABLE my_table TO 'my_path'") }
+    assertUnsupportedFeature(
+      sql("IMPORT TABLE my_table FROM 'my_path'"),
+      "IMPORT TABLE",
+      ExpectedContext(fragment = "IMPORT TABLE my_table FROM 'my_path'", start = 0, stop = 35))
+    assertUnsupportedFeature(
+      sql("EXPORT TABLE my_table TO 'my_path'"),
+      "EXPORT TABLE",
+      ExpectedContext(fragment = "EXPORT TABLE my_table TO 'my_path'", start = 0, stop = 33))
   }
 
   test("some show commands are not supported") {
-    assertUnsupportedFeature { sql("SHOW COMPACTIONS") }
-    assertUnsupportedFeature { sql("SHOW TRANSACTIONS") }
-    assertUnsupportedFeature { sql("SHOW INDEXES ON my_table") }
-    assertUnsupportedFeature { sql("SHOW LOCKS my_table") }
+    assertUnsupportedFeature(
+      sql("SHOW COMPACTIONS"),
+      "SHOW COMPACTIONS",
+      ExpectedContext(fragment = "SHOW COMPACTIONS", start = 0, stop = 15))
+    assertUnsupportedFeature(
+      sql("SHOW TRANSACTIONS"),
+      "SHOW TRANSACTIONS",
+      ExpectedContext(fragment = "SHOW TRANSACTIONS", start = 0, stop = 16))
+    assertUnsupportedFeature(
+      sql("SHOW INDEXES ON my_table"),
+      "SHOW INDEXES",
+      ExpectedContext(fragment = "SHOW INDEXES ON my_table", start = 0, stop = 23))
+    assertUnsupportedFeature(
+      sql("SHOW LOCKS my_table"),
+      "SHOW LOCKS",
+      ExpectedContext(fragment = "SHOW LOCKS my_table", start = 0, stop = 18))
   }
 
   test("lock/unlock table and database commands are not supported") {
-    assertUnsupportedFeature { sql("LOCK TABLE my_table SHARED") }
-    assertUnsupportedFeature { sql("UNLOCK TABLE my_table") }
-    assertUnsupportedFeature { sql("LOCK DATABASE my_db SHARED") }
-    assertUnsupportedFeature { sql("UNLOCK DATABASE my_db") }
+    assertUnsupportedFeature(
+      sql("LOCK TABLE my_table SHARED"),
+      "LOCK TABLE",
+      ExpectedContext(fragment = "LOCK TABLE my_table SHARED", start = 0, stop = 25))
+    assertUnsupportedFeature(
+      sql("UNLOCK TABLE my_table"),
+      "UNLOCK TABLE",
+      ExpectedContext(fragment = "UNLOCK TABLE my_table", start = 0, stop = 20))
+    assertUnsupportedFeature(
+      sql("LOCK DATABASE my_db SHARED"),
+      "LOCK DATABASE",
+      ExpectedContext(fragment = "LOCK DATABASE my_db SHARED", start = 0, stop = 25))
+    assertUnsupportedFeature(
+      sql("UNLOCK DATABASE my_db"),
+      "UNLOCK DATABASE",
+      ExpectedContext(fragment = "UNLOCK DATABASE my_db", start = 0, stop = 20))
   }
 
   test("alter index command is not supported") {
-    assertUnsupportedFeature { sql("ALTER INDEX my_index ON my_table REBUILD")}
-    assertUnsupportedFeature {
-      sql("ALTER INDEX my_index ON my_table set IDXPROPERTIES (\"prop1\"=\"val1_new\")")}
+    val sql1 = "ALTER INDEX my_index ON my_table REBUILD"
+    assertUnsupportedFeature(
+      sql(sql1),
+      "ALTER INDEX",
+      ExpectedContext(fragment = sql1, start = 0, stop = 39))
+    val sql2 = "ALTER INDEX my_index ON my_table set IDXPROPERTIES (\"prop1\"=\"val1_new\")"
+    assertUnsupportedFeature(
+      sql(sql2),
+      "ALTER INDEX",
+      ExpectedContext(fragment = sql2, start = 0, stop = 70))
   }
 
   test("create/drop macro commands are not supported") {
-    assertUnsupportedFeature {
-      sql("CREATE TEMPORARY MACRO SIGMOID (x DOUBLE) 1.0 / (1.0 + EXP(-x))")
-    }
-    assertUnsupportedFeature { sql("DROP TEMPORARY MACRO SIGMOID") }
+    val sql1 = "CREATE TEMPORARY MACRO SIGMOID (x DOUBLE) 1.0 / (1.0 + EXP(-x))"
+    assertUnsupportedFeature(
+      sql(sql1),
+      "CREATE TEMPORARY MACRO",
+      ExpectedContext(fragment = sql1, start = 0, stop = 62))
+    val sql2 = "DROP TEMPORARY MACRO SIGMOID"
+    assertUnsupportedFeature(
+      sql(sql2),
+      "DROP TEMPORARY MACRO",
+      ExpectedContext(fragment = sql2, start = 0, stop = 27))
   }
 
   test("dynamic partitioning is allowed when hive.exec.dynamic.partition.mode is nonstrict") {

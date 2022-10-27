@@ -101,6 +101,7 @@
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
     <module>connector/connect</module>
+    <module>connector/protobuf</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -135,7 +136,7 @@
     <parquet.version>1.12.3</parquet.version>
     <orc.version>1.8.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>9.4.48.v20220622</jetty.version>
+    <jetty.version>9.4.49.v20220914</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
     <ivy.version>2.5.0</ivy.version>
@@ -144,7 +145,7 @@
     If you changes codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.10</codahale.metrics.version>
+    <codahale.metrics.version>4.2.12</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.11.1</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
@@ -171,9 +172,11 @@
     <scala-maven-plugin.version>4.7.1</scala-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
+    <scalafmt.validateOnly>true</scalafmt.validateOnly>
+    <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.13.4</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.13.4</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.databind.version>2.13.4.2</fasterxml.jackson.databind.version>
     <snappy.version>1.1.8.4</snappy.version>
     <netlib.ludovic.dev.version>3.0.2</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
@@ -189,16 +192,16 @@
     <guava.version>14.0.1</guava.version>
     <janino.version>3.1.7</janino.version>
     <jersey.version>2.36</jersey.version>
-    <joda.version>2.11.2</joda.version>
+    <joda.version>2.12.0</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
     <!-- Please don't upgrade the version to 4.10+, it depends on JDK 11 -->
     <antlr4.version>4.9.3</antlr4.version>
     <jpam.version>1.1</jpam.version>
-    <selenium.version>4.2.2</selenium.version>
-    <htmlunit-driver.version>3.62.0</htmlunit-driver.version>
-    <htmlunit.version>2.62.0</htmlunit.version>
+    <selenium.version>4.4.0</selenium.version>
+    <htmlunit-driver.version>3.64.0</htmlunit-driver.version>
+    <htmlunit.version>2.64.0</htmlunit.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.5.0</commons-cli.version>
@@ -207,7 +210,7 @@
     <!-- When upgrading `netty.version`, need to check whether
          the version of `netty-tcnative-classes.version` also needs to be upgraded
     -->
-    <netty.version>4.1.80.Final</netty.version>
+    <netty.version>4.1.84.Final</netty.version>
     <netty-tcnative-classes.version>2.0.54.Final</netty-tcnative-classes.version>
     <!--
     If you are changing Arrow version specification, please check
@@ -216,7 +219,7 @@
     <arrow.version>9.0.0</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.1.1</kubernetes-client.version>
+    <kubernetes-client.version>6.2.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -312,6 +315,7 @@
       --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
       --add-opens=java.base/sun.security.action=ALL-UNNAMED
       --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
+      -Djdk.reflect.useDirectMethodHandle=false
     </extraJavaTestArgs>
   </properties>
   <repositories>
@@ -400,7 +404,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>scalacheck-1-16_${scala.binary.version}</artifactId>
+      <artifactId>scalacheck-1-17_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -410,7 +414,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>selenium-4-2_${scala.binary.version}</artifactId>
+      <artifactId>selenium-4-4_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -472,7 +476,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm9-shaded</artifactId>
-        <version>4.21</version>
+        <version>4.22</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -602,7 +606,7 @@
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-text</artifactId>
-        <version>1.9</version>
+        <version>1.10.0</version>
       </dependency>
       <dependency>
         <groupId>commons-lang</groupId>
@@ -678,7 +682,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>7.6.0</version>
+        <version>7.7.3</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -845,14 +849,6 @@
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
-            <artifactId>netty-codec-http</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-codec-http2</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
             <artifactId>netty-codec-memcache</artifactId>
           </exclusion>
           <exclusion>
@@ -869,19 +865,11 @@
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
-            <artifactId>netty-codec-socks</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
             <artifactId>netty-codec-stomp</artifactId>
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
             <artifactId>netty-codec-xml</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-handler-proxy</artifactId>
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -1002,18 +990,10 @@
         <artifactId>jackson-datatype-jsr310</artifactId>
         <version>${fasterxml.jackson.version}</version>
       </dependency>
-      <!-- Guava is excluded because of SPARK-6149.  The Guava version referenced in this module is
-           15.0, which causes runtime incompatibility issues. -->
       <dependency>
         <groupId>com.fasterxml.jackson.module</groupId>
         <artifactId>jackson-module-scala_${scala.binary.version}</artifactId>
         <version>${fasterxml.jackson.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson.module</groupId>
@@ -1151,25 +1131,25 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.13</version>
+        <version>3.2.14</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>scalacheck-1-16_${scala.binary.version}</artifactId>
-        <version>3.2.13.0</version>
+        <artifactId>scalacheck-1-17_${scala.binary.version}</artifactId>
+        <version>3.2.14.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>mockito-4-6_${scala.binary.version}</artifactId>
-        <version>3.2.13.0</version>
+        <version>3.2.14.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>selenium-4-2_${scala.binary.version}</artifactId>
-        <version>3.2.13.0</version>
+        <artifactId>selenium-4-4_${scala.binary.version}</artifactId>
+        <version>3.2.14.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -3100,6 +3080,9 @@
               <fileset>
                 <directory>spark-warehouse</directory>
               </fileset>
+              <fileset>
+                <directory>dist</directory>
+              </fileset>
             </filesets>
           </configuration>
         </plugin>
@@ -3167,12 +3150,12 @@
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm</artifactId>
-              <version>9.3</version>
+              <version>9.4</version>
             </dependency>
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm-commons</artifactId>
-              <version>9.3</version>
+              <version>9.4</version>
             </dependency>
           </dependencies>
         </plugin>
@@ -3423,11 +3406,11 @@
         <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
         <version>1.1.1640084764.9f463a9</version>
         <configuration>
-          <validateOnly>${scalafmt.skip}</validateOnly> <!-- (Optional) skip formatting -->
+          <validateOnly>${scalafmt.validateOnly}</validateOnly> <!-- (Optional) skip formatting -->
           <skipSources>${scalafmt.skip}</skipSources>
           <skipTestSources>${scalafmt.skip}</skipTestSources>
           <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config location -->
-          <onlyChangedFiles>true</onlyChangedFiles>
+          <onlyChangedFiles>${scalafmt.changedOnly}</onlyChangedFiles>
         </configuration>
         <executions>
           <execution>

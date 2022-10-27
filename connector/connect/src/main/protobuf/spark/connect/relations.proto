@@ -37,9 +37,13 @@ message Relation {
     Join join = 5;
     Union union = 6;
     Sort sort = 7;
-    Fetch fetch = 8;
+    Limit limit = 8;
     Aggregate aggregate = 9;
     SQL sql = 10;
+    LocalRelation local_relation = 11;
+    Sample sample = 12;
+    Offset offset = 13;
+    Deduplicate deduplicate = 14;
 
     Unknown unknown = 999;
   }
@@ -64,10 +68,20 @@ message SQL {
 message Read {
   oneof read_type {
     NamedTable named_table = 1;
+    DataSource data_source = 2;
   }
 
   message NamedTable {
-    repeated string parts = 1;
+    string unparsed_identifier = 1;
+  }
+
+  message DataSource {
+    // Required. Supported formats include: parquet, orc, text, json, parquet, csv, avro.
+    string format = 1;
+    // Optional. If not set, Spark will infer the schema.
+    string schema = 2;
+    // The key is case insensitive.
+    map<string, string> options = 3;
   }
 }
 
@@ -93,16 +107,23 @@ message Filter {
 message Join {
   Relation left = 1;
   Relation right = 2;
-  Expression on = 3;
-  JoinType how = 4;
+  Expression join_condition = 3;
+  JoinType join_type = 4;
+  // Optional. using_columns provides a list of columns that should present on both sides of
+  // the join inputs that this Join will join on. For example A JOIN B USING col_name is
+  // equivalent to A JOIN B on A.col_name = B.col_name.
+  //
+  // This field does not co-exist with join_condition.
+  repeated string using_columns = 5;
 
   enum JoinType {
     JOIN_TYPE_UNSPECIFIED = 0;
     JOIN_TYPE_INNER = 1;
-    JOIN_TYPE_OUTER = 2;
+    JOIN_TYPE_FULL_OUTER = 2;
     JOIN_TYPE_LEFT_OUTER = 3;
     JOIN_TYPE_RIGHT_OUTER = 4;
-    JOIN_TYPE_ANTI = 5;
+    JOIN_TYPE_LEFT_ANTI = 5;
+    JOIN_TYPE_LEFT_SEMI = 6;
   }
 }
 
@@ -118,32 +139,24 @@ message Union {
   }
 }
 
-// Relation of type [[Fetch]] that is used to read `limit` / `offset` rows from the input relation.
-message Fetch {
+// Relation of type [[Limit]] that is used to `limit` rows from the input relation.
+message Limit {
   Relation input = 1;
   int32 limit = 2;
-  int32 offset = 3;
+}
+
+// Relation of type [[Offset]] that is used to read rows staring from the `offset` on
+// the input relation.
+message Offset {
+  Relation input = 1;
+  int32 offset = 2;
 }
 
 // Relation of type [[Aggregate]].
 message Aggregate {
   Relation input = 1;
-
-  // Grouping sets are used in rollups
-  repeated GroupingSet grouping_sets = 2;
-
-  // Measures
-  repeated Measure measures = 3;
-
-  message GroupingSet {
-    repeated Expression aggregate_expressions = 1;
-  }
-
-  message Measure {
-    AggregateFunction function = 1;
-    // Conditional filter for SUM(x FILTER WHERE x < 10)
-    Expression filter = 2;
-  }
+  repeated Expression grouping_expressions = 2;
+  repeated AggregateFunction result_expressions = 3;
 
   message AggregateFunction {
     string name = 1;
@@ -172,5 +185,31 @@ message Sort {
     SORT_NULLS_UNSPECIFIED = 0;
     SORT_NULLS_FIRST = 1;
     SORT_NULLS_LAST = 2;
+  }
+}
+
+// Relation of type [[Deduplicate]] which have duplicate rows removed, could consider either only
+// the subset of columns or all the columns.
+message Deduplicate {
+  Relation input = 1;
+  repeated string column_names = 2;
+  bool all_columns_as_keys = 3;
+}
+
+message LocalRelation {
+  repeated Expression.QualifiedAttribute attributes = 1;
+  // TODO: support local data.
+}
+
+// Relation of type [[Sample]] that samples a fraction of the dataset.
+message Sample {
+  Relation input = 1;
+  double lower_bound = 2;
+  double upper_bound = 3;
+  bool with_replacement = 4;
+  Seed seed = 5;
+
+  message Seed {
+    int64 seed = 1;
   }
 }

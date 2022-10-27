@@ -63,3 +63,8 @@ if [ -z "$SPARK_SCALA_VERSION" ]; then
     export SPARK_SCALA_VERSION=${SCALA_VERSION_2}
   fi
 fi
+
+# Append jline option to enable the Beeline process to run in background.
+if [[ ( ! $(ps -o stat= -p $$) =~ "+" ) && ! ( -p /dev/stdin ) ]]; then
+  export SPARK_BEELINE_OPTS="$SPARK_BEELINE_OPTS -Djline.terminal=jline.UnsupportedTerminal"
+fi

@@ -9,21 +9,33 @@ of Spark. To enable it, you only need to activate the driver plugin for Spark Co
 
 ## Build
 
-1. Build Spark as usual per the documentation.
+```bash
+./build/mvn -Phive clean package
+```
 
-2. Build and package the Spark Connect package
+or
 
-   ```bash
-   ./build/mvn -Phive package
-   ```
-
-   or
-
-   ```bash
-   ./build/sbt -Phive package
-   ```
+```bash
+./build/sbt -Phive clean package
+```
    
 ## Run Spark Shell
+
+To run Spark Connect you locally built:
+
+```bash
+# Scala shell
+./bin/spark-shell \
+  --jars `ls connector/connect/target/**/spark-connect*SNAPSHOT.jar | paste -sd ',' -` \
+  --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
+
+# PySpark shell
+./bin/pyspark \
+  --jars `ls connector/connect/target/**/spark-connect*SNAPSHOT.jar | paste -sd ',' -` \
+  --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
+```
+
+To use the release version of Spark Connect:
 
 ```bash
 ./bin/spark-shell \
@@ -34,6 +46,11 @@ of Spark. To enable it, you only need to activate the driver plugin for Spark Co
 ## Run Tests
 
 ```bash
-./run-tests --testnames 'pyspark.sql.tests.connect.test_spark_connect'
+./python/run-tests --testnames 'pyspark.sql.tests.connect.test_connect_basic'
 ```
 
+## Generate proto generated files for the Python client
+1. Install `buf version 1.8.0`: https://docs.buf.build/installation
+2. Run `pip install grpcio==1.48.1 protobuf==4.21.6 mypy-protobuf==3.3.0`
+3. Run `./connector/connect/dev/generate_protos.sh`
+4. Optional Check `./dev/check-codegen-python.py`

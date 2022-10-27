@@ -23,6 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.UnresolvedStar
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
@@ -30,8 +31,11 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * test cases.
  */
 trait SparkConnectPlanTest {
+
+  def getSession(): SparkSession = None.orNull
+
   def transform(rel: proto.Relation): LogicalPlan = {
-    new SparkConnectPlanner(rel, None.orNull).transform()
+    new SparkConnectPlanner(rel, getSession()).transform()
   }
 
   def readRel: proto.Relation =
@@ -40,14 +44,28 @@ trait SparkConnectPlanTest {
       .setRead(
         proto.Read
           .newBuilder()
-          .setNamedTable(proto.Read.NamedTable.newBuilder().addParts("table"))
+          .setNamedTable(proto.Read.NamedTable.newBuilder().setUnparsedIdentifier("table"))
           .build())
       .build()
-}
 
-trait SparkConnectSessionTest {
-  protected var spark: SparkSession
-
+  /**
+   * Creates a local relation for testing purposes. The local relation is mapped to it's
+   * equivalent in Catalyst and can be easily used for planner testing.
+   *
+   * @param attrs
+   * @return
+   */
+  def createLocalRelationProto(attrs: Seq[AttributeReference]): proto.Relation = {
+    val localRelationBuilder = proto.LocalRelation.newBuilder()
+    for (attr <- attrs) {
+      localRelationBuilder.addAttributes(
+        proto.Expression.QualifiedAttribute
+          .newBuilder()
+          .setName(attr.name)
+          .setType(DataTypeProtoConverter.toConnectProtoType(attr.dataType)))
+    }
+    proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
+  }
 }
 
 /**
@@ -57,12 +75,12 @@ trait SparkConnectSessionTest {
  */
 class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
-  protected var spark: SparkSession = null
-
   test("Simple Limit") {
     assertThrows[IndexOutOfBoundsException] {
       new SparkConnectPlanner(
-        proto.Relation.newBuilder.setFetch(proto.Fetch.newBuilder.setLimit(10).build()).build(),
+        proto.Relation.newBuilder
+          .setLimit(proto.Limit.newBuilder.setLimit(10))
+          .build(),
         None.orNull)
         .transform()
     }
@@ -85,7 +103,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     // Invalid read without Table name.
     intercept[InvalidPlanInput](transform(proto.Relation.newBuilder.setRead(read).build()))
     val readWithTable = read.toBuilder
-      .setNamedTable(proto.Read.NamedTable.newBuilder.addParts("name").build())
+      .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name").build())
       .build()
     val res = transform(proto.Relation.newBuilder.setRead(readWithTable).build())
     assert(res !== null)
@@ -93,16 +111,20 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Simple Project") {
-    val readWithTable = proto.Read.newBuilder()
-      .setNamedTable(proto.Read.NamedTable.newBuilder.addParts("name").build())
+    val readWithTable = proto.Read
+      .newBuilder()
+      .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name").build())
       .build()
     val project =
-      proto.Project.newBuilder()
+      proto.Project
+        .newBuilder()
         .setInput(proto.Relation.newBuilder().setRead(readWithTable).build())
         .addExpressions(
-          proto.Expression.newBuilder()
-            .setUnresolvedStar(UnresolvedStar.newBuilder().build()).build()
-        ).build()
+          proto.Expression
+            .newBuilder()
+            .setUnresolvedStar(UnresolvedStar.newBuilder().build())
+            .build())
+        .build()
     val res = transform(proto.Relation.newBuilder.setProject(project).build())
     assert(res !== null)
     assert(res.nodeName == "Project")
@@ -120,10 +142,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .newBuilder()
       .setNulls(proto.Sort.SortNulls.SORT_NULLS_LAST)
       .setDirection(proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING)
-      .setExpression(proto.Expression.newBuilder
-        .setUnresolvedAttribute(
-          proto.Expression.UnresolvedAttribute.newBuilder.addAllParts(Seq("col").asJava).build())
-        .build())
+      .setExpression(
+        proto.Expression.newBuilder
+          .setUnresolvedAttribute(
+            proto.Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier("col").build())
+          .build())
       .build()
 
     val res = transform(
@@ -161,7 +184,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proto.Relation.newBuilder.setJoin(proto.Join.newBuilder.setLeft(readRel)).build()
     intercept[AssertionError](transform(incompleteJoin))
 
-    // Cartesian Product not supported.
+    // Join type JOIN_TYPE_UNSPECIFIED is not supported.
     intercept[InvalidPlanInput] {
       val simpleJoin = proto.Relation.newBuilder
         .setJoin(proto.Join.newBuilder.setLeft(readRel).setRight(readRel))
@@ -173,25 +196,44 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val unresolvedAttribute = proto.Expression
       .newBuilder()
       .setUnresolvedAttribute(
-        proto.Expression.UnresolvedAttribute.newBuilder().addAllParts(Seq("left").asJava).build())
+        proto.Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier("left").build())
       .build()
 
     val joinCondition = proto.Expression.newBuilder.setUnresolvedFunction(
       proto.Expression.UnresolvedFunction.newBuilder
-        .addAllParts(Seq("eq").asJava)
+        .addAllParts(Seq("==").asJava)
         .addArguments(unresolvedAttribute)
         .addArguments(unresolvedAttribute)
         .build())
 
     val simpleJoin = proto.Relation.newBuilder
       .setJoin(
-        proto.Join.newBuilder.setLeft(readRel).setRight(readRel).setOn(joinCondition).build())
+        proto.Join.newBuilder
+          .setLeft(readRel)
+          .setRight(readRel)
+          .setJoinType(proto.Join.JoinType.JOIN_TYPE_INNER)
+          .setJoinCondition(joinCondition)
+          .build())
       .build()
 
     val res = transform(simpleJoin)
     assert(res.nodeName == "Join")
     assert(res != null)
 
+    val e = intercept[InvalidPlanInput] {
+      val simpleJoin = proto.Relation.newBuilder
+        .setJoin(
+          proto.Join.newBuilder
+            .setLeft(readRel)
+            .setRight(readRel)
+            .addUsingColumns("test_col")
+            .setJoinCondition(joinCondition))
+        .build()
+      transform(simpleJoin)
+    }
+    assert(
+      e.getMessage.contains(
+        "Using columns or join conditions cannot be set at the same time in Join"))
   }
 
   test("Simple Projection") {
@@ -212,25 +254,53 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val unresolvedAttribute = proto.Expression
       .newBuilder()
       .setUnresolvedAttribute(
-        proto.Expression.UnresolvedAttribute.newBuilder().addAllParts(Seq("left").asJava).build())
+        proto.Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier("left").build())
       .build()
 
     val agg = proto.Aggregate.newBuilder
       .setInput(readRel)
-      .addAllMeasures(
-        Seq(
-          proto.Aggregate.Measure.newBuilder
-            .setFunction(proto.Aggregate.AggregateFunction.newBuilder
-              .setName("sum")
-              .addArguments(unresolvedAttribute))
-            .build()).asJava)
-      .addGroupingSets(proto.Aggregate.GroupingSet.newBuilder
-        .addAggregateExpressions(unresolvedAttribute)
-        .build())
+      .addResultExpressions(
+        proto.Aggregate.AggregateFunction.newBuilder
+          .setName("sum")
+          .addArguments(unresolvedAttribute))
+      .addGroupingExpressions(unresolvedAttribute)
       .build()
 
     val res = transform(proto.Relation.newBuilder.setAggregate(agg).build())
     assert(res.nodeName == "Aggregate")
   }
 
+  test("Invalid DataSource") {
+    val dataSource = proto.Read.DataSource.newBuilder()
+
+    val e = intercept[InvalidPlanInput](
+      transform(
+        proto.Relation
+          .newBuilder()
+          .setRead(proto.Read.newBuilder().setDataSource(dataSource))
+          .build()))
+    assert(e.getMessage.contains("DataSource requires a format"))
+  }
+
+  test("Test invalid deduplicate") {
+    val deduplicate = proto.Deduplicate
+      .newBuilder()
+      .setInput(readRel)
+      .setAllColumnsAsKeys(true)
+      .addColumnNames("test")
+
+    val e = intercept[InvalidPlanInput] {
+      transform(proto.Relation.newBuilder.setDeduplicate(deduplicate).build())
+    }
+    assert(
+      e.getMessage.contains("Cannot deduplicate on both all columns and a subset of columns"))
+
+    val deduplicate2 = proto.Deduplicate
+      .newBuilder()
+      .setInput(readRel)
+    val e2 = intercept[InvalidPlanInput] {
+      transform(proto.Relation.newBuilder.setDeduplicate(deduplicate2).build())
+    }
+    assert(e2.getMessage.contains("either deduplicate on all columns or a subset of columns"))
+  }
 }

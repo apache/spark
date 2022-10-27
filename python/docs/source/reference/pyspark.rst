@@ -262,10 +262,12 @@ Management
     StorageLevel.DISK_ONLY_3
     StorageLevel.MEMORY_AND_DISK
     StorageLevel.MEMORY_AND_DISK_2
+    StorageLevel.MEMORY_AND_DISK_DESER
     StorageLevel.MEMORY_ONLY
     StorageLevel.MEMORY_ONLY_2
     StorageLevel.OFF_HEAP
     TaskContext.attemptNumber
+    TaskContext.cpus
     TaskContext.get
     TaskContext.getLocalProperty
     TaskContext.partitionId
@@ -277,6 +279,7 @@ Management
     BarrierTaskContext.allGather
     BarrierTaskContext.attemptNumber
     BarrierTaskContext.barrier
+    BarrierTaskContext.cpus
     BarrierTaskContext.get
     BarrierTaskContext.getLocalProperty
     BarrierTaskContext.getTaskInfos
