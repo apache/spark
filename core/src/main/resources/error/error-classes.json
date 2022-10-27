@@ -949,9 +949,9 @@
           "Literal for '<value>' of <type>."
         ]
       },
-      "MULTIPLE_BUCKET_TRANSFORM" : {
+      "MULTIPLE_BUCKET_TRANSFORMS" : {
         "message" : [
-          "TRANSFORM on multiple bucket."
+          "Multiple bucket TRANSFORMs."
         ]
       },
       "NATURAL_CROSS_JOIN" : {
