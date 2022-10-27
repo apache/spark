@@ -20,10 +20,8 @@ package org.apache.spark.sql.connect.planner
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
-
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.UnresolvedStar
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.test.SharedSparkSession
@@ -33,8 +31,6 @@ import org.apache.spark.sql.test.SharedSparkSession
  * test cases.
  */
 trait SparkConnectPlanTest extends SharedSparkSession {
-
-  def getSession(): SparkSession = None.orNull
 
   def transform(rel: proto.Relation): LogicalPlan = {
     new SparkConnectPlanner(rel, spark).transform()

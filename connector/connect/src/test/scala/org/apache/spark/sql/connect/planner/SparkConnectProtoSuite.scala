@@ -17,33 +17,17 @@
 package org.apache.spark.sql.connect.planner
 
 import org.apache.spark.connect.proto
-<<<<<<< HEAD
 import org.apache.spark.connect.proto.Join.JoinType
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter, UsingJoin}
-=======
-import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.plans.UsingJoin
-// import org.apache.spark.sql.execution.streaming.state.Struct
- import org.apache.spark.connect.proto.Join.JoinType
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Column, DataFrame}
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-<<<<<<< HEAD
-import org.apache.spark.sql.catalyst.plans.PlanTest
-// import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
->>>>>>> 9ec54755db (update)
-=======
-// import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
->>>>>>> 922b994805 (update)
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 /**
  * This suite is based on connect DSL and test that given same dataframe operations, whether
@@ -56,18 +40,9 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     createLocalRelationProto(
       Seq(AttributeReference("id", IntegerType)(), AttributeReference("name", StringType)()))
 
-<<<<<<< HEAD
-  lazy val connectTestRelation2 = createLocalRelationProto(
-    Seq($"key".int, $"value".int, $"name".string))
-=======
   lazy val connectTestRelation2 =
     createLocalRelationProto(
-<<<<<<< HEAD
-      Seq(AttributeReference("key", IntegerType)(), AttributeReference("value", StringType)()))
->>>>>>> 9ec54755db (update)
-=======
       Seq(AttributeReference("id", IntegerType)(), AttributeReference("name", StringType)()))
->>>>>>> 922b994805 (update)
 
   lazy val sparkTestRelation: LocalRelation =
     LocalRelation(
@@ -75,18 +50,9 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       AttributeReference("name", StringType)())
 
   lazy val sparkTestRelation2: LocalRelation =
-<<<<<<< HEAD
-    LocalRelation($"key".int, $"value".int, $"name".string)
-=======
     LocalRelation(
-<<<<<<< HEAD
-      AttributeReference("key", IntegerType)(),
-      AttributeReference("value", StringType)())
->>>>>>> 9ec54755db (update)
-=======
       AttributeReference("id", IntegerType)(),
       AttributeReference("name", StringType)())
->>>>>>> 922b994805 (update)
 
   test("Basic select") {
     val connectPlan = connectTestRelation.select("id".protoAttr)
@@ -117,29 +83,13 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("Basic joins with different join types") {
-    val connectPlan = {
-      import org.apache.spark.sql.connect.dsl.plans._
-      transform(connectTestRelation.join(connectTestRelation2))
-    }
-    val sparkPlan = sparkTestRelation.join(sparkTestRelation2)
-    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
-
-    val connectPlan2 = {
-      import org.apache.spark.sql.connect.dsl.plans._
-      transform(connectTestRelation.join(connectTestRelation2, condition = None))
-    }
-    val sparkPlan2 = sparkTestRelation.join(sparkTestRelation2, condition = None)
-    comparePlans(connectPlan2.analyze, sparkPlan2.analyze, false)
-
-  test("Basic joins with different join types") {
-    val connectPlan = connectTestRelation.join(connectTestRelation2, Inner)
+    val connectPlan = connectTestRelation.join(connectTestRelation2)
     val sparkPlan = sparkTestRelation.join(sparkTestRelation2)
     comparePlans(connectPlan, sparkPlan)
 
-    val connectPlan2 = connectTestRelation.join(connectTestRelation2, Inner, condition = None)
+    val connectPlan2 = connectTestRelation.join(connectTestRelation2)
     val sparkPlan2 = sparkTestRelation.join(sparkTestRelation2)
     comparePlans(connectPlan2, sparkPlan2)
-
 
     for ((t, y) <- Seq(
         (JoinType.JOIN_TYPE_LEFT_OUTER, LeftOuter),
@@ -149,54 +99,16 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         (JoinType.JOIN_TYPE_LEFT_SEMI, LeftSemi),
         (JoinType.JOIN_TYPE_INNER, Inner))) {
 
-      val connectPlan3 = {
-        import org.apache.spark.sql.connect.dsl.plans._
-        transform(connectTestRelation.join(connectTestRelation2, t))
-      }
-      val sparkPlan3 = sparkTestRelation.join(sparkTestRelation2, y)
-      comparePlans(connectPlan3.analyze, sparkPlan3.analyze, false)
-    }
-
-    val connectPlan4 = {
-      import org.apache.spark.sql.connect.dsl.plans._
-      transform(
-        connectTestRelation.join(connectTestRelation2, JoinType.JOIN_TYPE_INNER, Seq("name")))
-    }
-    val sparkPlan4 = sparkTestRelation.join(sparkTestRelation2, UsingJoin(Inner, Seq("name")))
-    comparePlans(connectPlan4.analyze, sparkPlan4.analyze, false)
-  }
-
-//  test("Basic joins with different join types") {
-//    val connectPlan = connectTestRelation.join(connectTestRelation2)
-//    val sparkPlan = sparkTestRelation.join(sparkTestRelation2)
-//    comparePlans(connectPlan, sparkPlan)
-//
-//    val connectPlan2 = connectTestRelation.join(connectTestRelation2, condition = None)
-//    val sparkPlan2 = sparkTestRelation.join(sparkTestRelation2)
-//    comparePlans(connectPlan2, sparkPlan2)
-//
-//    for ((t, y) <- Seq(
-//        (JoinType.JOIN_TYPE_LEFT_OUTER, LeftOuter),
-//        (JoinType.JOIN_TYPE_RIGHT_OUTER, RightOuter),
-//        (JoinType.JOIN_TYPE_FULL_OUTER, FullOuter),
-//        (JoinType.JOIN_TYPE_LEFT_ANTI, LeftAnti),
-//        (JoinType.JOIN_TYPE_LEFT_SEMI, LeftSemi),
-//        (JoinType.JOIN_TYPE_INNER, Inner))) {
-//      val connectPlan3 = connectTestRelation.join(connectTestRelation2, t)
-//      val sparkPlan3 =
-//        sparkTestRelation.join(sparkTestRelation2, JoinType = y.toString)
-//      comparePlans(connectPlan3, sparkPlan3)
-//    }
-//  }
-
-      val connectPlan3 = connectTestRelation.join(
-        connectTestRelation2, UsingJoin(t, Seq("id")))
-      val sparkPlan3 =
-        sparkTestRelation.join(sparkTestRelation2, Seq("id"), y.toString)
+      val connectPlan3 = connectTestRelation.join(connectTestRelation2, t, Seq("id"))
+      val sparkPlan3 = sparkTestRelation.join(sparkTestRelation2, Seq("id"), y.toString)
       comparePlans(connectPlan3, sparkPlan3)
     }
-  }
 
+    val connectPlan4 =
+      connectTestRelation.join(connectTestRelation2, JoinType.JOIN_TYPE_INNER, Seq("name"))
+    val sparkPlan4 = sparkTestRelation.join(sparkTestRelation2, Seq("name"), Inner.toString)
+    comparePlans(connectPlan4, sparkPlan4)
+  }
 
   test("Test sample") {
     val connectPlan = connectTestRelation.sample(0, 0.2, false, 1)
@@ -210,25 +122,27 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan, sparkPlan)
   }
 
+// TODO: improve aggregate API parity.
 //  test("Aggregate with more than 1 grouping expressions") {
 //    val connectPlan =
 //      connectTestRelation.groupBy("id".protoAttr, "name".protoAttr)()
-//    val sparkPlan = sparkTestRelation.groupBy(Column("id"), Column("name"))
-//      .agg(Column("id"), Column("name"))
+//    val sparkPlan =
+//      sparkTestRelation.groupBy(Column("id"), Column("name")).agg(Map.empty[String, String])
 //    comparePlans(connectPlan, sparkPlan)
 //  }
 
-//  test("Test as(alias: String)") {
-//    val connectPlan = connectTestRelation.as("target_table")
-//    val sparkPlan = sparkTestRelation.as("target_table")
-//    comparePlans(connectPlan, sparkPlan)
-//  }
+  test("Test as(alias: String)") {
+    val connectPlan = connectTestRelation.as("target_table")
+    val sparkPlan = sparkTestRelation.as("target_table")
+    comparePlans(connectPlan, sparkPlan)
+  }
 
-//  test("Test StructType in LocalRelation") {
-//    val connectPlan = createLocalRelationProtoByQualifiedAttributes(Seq("a".struct("id".int)))
-//    val sparkPlan = LocalRelation(Struct(Column("a").as("id")))
-//    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
-//  }
+  test("Test StructType in LocalRelation") {
+    val connectPlan = createLocalRelationProtoByQualifiedAttributes(Seq("a".struct("id".int)))
+    val sparkPlan =
+      LocalRelation(AttributeReference("a", StructType(Seq(StructField("id", IntegerType))))())
+    comparePlans(connectPlan, sparkPlan)
+  }
 
   test("Test limit offset") {
     val connectPlan = connectTestRelation.limit(10)
@@ -246,6 +160,16 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val connectPlan4 = connectTestRelation.offset(2).limit(10)
     val sparkPlan4 = sparkTestRelation.offset(2).limit(10)
     comparePlans(connectPlan4, sparkPlan4)
+  }
+
+  test("Test basic deduplicate") {
+    val connectPlan = connectTestRelation.distinct()
+    val sparkPlan = sparkTestRelation.distinct()
+    comparePlans(connectPlan, sparkPlan)
+
+    val connectPlan2 = connectTestRelation.deduplicate(Seq("id", "name"))
+    val sparkPlan2 = sparkTestRelation.dropDuplicates(Seq("id", "name"))
+    comparePlans(connectPlan2, sparkPlan2)
   }
 
   private def createLocalRelationProtoByQualifiedAttributes(

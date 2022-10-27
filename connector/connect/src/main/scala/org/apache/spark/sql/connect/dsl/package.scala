@@ -22,7 +22,8 @@ import scala.language.implicitConversions
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, RightOuter}
+// import org.apache.spark.sql.catalyst.plans.{FullOuter,
+// Inner, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 
 /**
@@ -280,23 +281,6 @@ package object dsl {
           join.setJoinCondition(condition.get)
         }
         relation.setJoin(join).build()
-      }
-
-      def join(
-        otherPlan: proto.Relation,
-        joinType: org.apache.spark.sql.catalyst.plans.JoinType = Inner,
-        columnNames: Seq[String] = Seq(),
-        condition: Option[proto.Expression] = None): proto.Relation = {
-        val protoJoinType = joinType match {
-          case Inner => JoinType.JOIN_TYPE_INNER
-          case FullOuter => JoinType.JOIN_TYPE_FULL_OUTER
-          case LeftOuter => JoinType.JOIN_TYPE_LEFT_OUTER
-          case RightOuter => JoinType.JOIN_TYPE_RIGHT_OUTER
-          case LeftSemi => JoinType.JOIN_TYPE_LEFT_SEMI
-          case LeftAnti => JoinType.JOIN_TYPE_LEFT_ANTI
-          case _ => JoinType.JOIN_TYPE_INNER
-        }
-        join(otherPlan, protoJoinType, condition)
       }
 
       def as(alias: String): proto.Relation = {
