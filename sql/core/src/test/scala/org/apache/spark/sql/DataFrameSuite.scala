@@ -147,7 +147,7 @@ class DataFrameSuite extends QueryTest
   test("Star Expansion - CreateStruct and CreateArray") {
     val structDf = testData2.select("a", "b").as("record")
     // CreateStruct and CreateArray in aggregateExpressions
-    assert(structDf.groupBy($"a").agg(min((struct)($"record.*"))).
+    assert(structDf.groupBy($"a").agg(min(struct($"record.*"))).
       sort("a").first() == Row(1, Row(1, 1)))
     assert(structDf.groupBy($"a").agg(min(array($"record.*"))).
       sort("a").first() == Row(1, Seq(1, 1)))

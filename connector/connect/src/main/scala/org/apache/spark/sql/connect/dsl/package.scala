@@ -22,8 +22,6 @@ import scala.language.implicitConversions
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.SaveMode
-// import org.apache.spark.sql.catalyst.plans.{FullOuter,
-// Inner, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 
 /**
