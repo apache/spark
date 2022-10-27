@@ -21,7 +21,6 @@ import scala.collection.JavaConverters._
 
 import com.google.common.collect.{Lists, Maps}
 
-import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.WriteOperation
@@ -35,8 +34,6 @@ final case class InvalidCommandInput(
     private val cause: Throwable = null)
     extends Exception(message, cause)
 
-@Unstable
-@Since("3.4.0")
 class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) {
 
   lazy val pythonExec =
@@ -55,10 +52,10 @@ class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) 
   /**
    * This is a helper function that registers a new Python function in the SparkSession.
    *
-   * Right now this function is very rudimentary and bare-bones just to showcase how it
-   * is possible to remotely serialize a Python function and execute it on the Spark cluster.
-   * If the Python version on the client and server diverge, the execution of the function that
-   * is serialized will most likely fail.
+   * Right now this function is very rudimentary and bare-bones just to showcase how it is
+   * possible to remotely serialize a Python function and execute it on the Spark cluster. If the
+   * Python version on the client and server diverge, the execution of the function that is
+   * serialized will most likely fail.
    *
    * @param cf
    */

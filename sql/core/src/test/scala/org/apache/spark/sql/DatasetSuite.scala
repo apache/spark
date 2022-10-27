@@ -1146,7 +1146,9 @@ class DatasetSuite extends QueryTest
     val e = intercept[AnalysisException](
       dataset.createTempView("tempView"))
     intercept[AnalysisException](dataset.createTempView("tempView"))
-    assert(e.message.contains("already exists"))
+    checkError(e,
+      errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+      parameters = Map("relationName" -> "`tempView`"))
     dataset.sparkSession.catalog.dropTempView("tempView")
   }
 
@@ -1990,6 +1992,51 @@ class DatasetSuite extends QueryTest
         assert(errorMsg.getMessage.contains(s"did you mean to quote the `$colName` column?"))
       }
     }
+  }
+
+  test("SPARK-39783: Fix error messages for columns with dots/periods") {
+    forAll(dotColumnTestModes) { (caseSensitive, colName) =>
+      val ds = Seq(SpecialCharClass("1", "2")).toDS
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        checkError(
+          exception = intercept[AnalysisException] {
+            // Note: ds(colName) "SPARK-25153: Improve error messages for columns with dots/periods"
+            // has different semantics than ds.select(colName)
+            ds.select(colName)
+          },
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          sqlState = None,
+          parameters = Map(
+            "objectName" -> s"`${colName.replace(".", "`.`")}`",
+            "proposal" -> "`field.1`, `field 2`"))
+      }
+    }
+  }
+
+  test("SPARK-39783: backticks in error message for candidate column with dots") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(0).toDF("the.id").select("the.id")
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map(
+        "objectName" -> "`the`.`id`",
+        "proposal" -> "`the.id`"))
+  }
+
+  test("SPARK-39783: backticks in error message for map candidate key with dots") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(1)
+          .select(map(lit("key"), lit(1)).as("map"), lit(2).as("other.column"))
+          .select($"`map`"($"nonexisting")).show()
+      },
+      errorClass = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map(
+        "objectName" -> "`nonexisting`",
+        "proposal" -> "`map`, `other.column`"))
   }
 
   test("groupBy.as") {

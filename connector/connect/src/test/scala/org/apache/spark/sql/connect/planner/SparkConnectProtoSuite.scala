@@ -16,10 +16,11 @@
  */
 package org.apache.spark.sql.connect.planner
 
+import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 
 /**
@@ -31,11 +32,13 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   lazy val connectTestRelation = createLocalRelationProto(Seq($"id".int, $"name".string))
 
-  lazy val connectTestRelation2 = createLocalRelationProto(Seq($"key".int, $"value".int))
+  lazy val connectTestRelation2 = createLocalRelationProto(
+    Seq($"key".int, $"value".int, $"name".string))
 
   lazy val sparkTestRelation: LocalRelation = LocalRelation($"id".int, $"name".string)
 
-  lazy val sparkTestRelation2: LocalRelation = LocalRelation($"key".int, $"value".int)
+  lazy val sparkTestRelation2: LocalRelation =
+    LocalRelation($"key".int, $"value".int, $"name".string)
 
   test("Basic select") {
     val connectPlan = {
@@ -47,6 +50,34 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
     val sparkPlan = sparkTestRelation.select($"id")
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
+  test("UnresolvedFunction resolution.") {
+    {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      assertThrows[IllegalArgumentException] {
+        transform(connectTestRelation.select(callFunction("default.hex", Seq("id".protoAttr))))
+      }
+    }
+
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(
+        connectTestRelation.select(callFunction(Seq("default", "hex"), Seq("id".protoAttr))))
+    }
+
+    assertThrows[UnsupportedOperationException] {
+      connectPlan.analyze
+    }
+
+    val validPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.select(callFunction(Seq("hex"), Seq("id".protoAttr))))
+    }
+    assert(validPlan.analyze != null)
   }
 
   test("Basic filter") {
@@ -88,6 +119,23 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       val sparkPlan3 = sparkTestRelation.join(sparkTestRelation2, y)
       comparePlans(connectPlan3.analyze, sparkPlan3.analyze, false)
     }
+
+    val connectPlan4 = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(
+        connectTestRelation.join(connectTestRelation2, JoinType.JOIN_TYPE_INNER, Seq("name")))
+    }
+    val sparkPlan4 = sparkTestRelation.join(sparkTestRelation2, UsingJoin(Inner, Seq("name")))
+    comparePlans(connectPlan4.analyze, sparkPlan4.analyze, false)
+  }
+
+  test("Test sample") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.sample(0, 0.2, false, 1))
+    }
+    val sparkPlan = sparkTestRelation.sample(0, 0.2, false, 1)
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
   test("column alias") {
@@ -97,6 +145,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       transform(connectTestRelation.select("id".protoAttr.as("id2")))
     }
     val sparkPlan = sparkTestRelation.select($"id".as("id2"))
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
   }
 
   test("Aggregate with more than 1 grouping expressions") {
@@ -114,7 +163,56 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       import org.apache.spark.sql.connect.dsl.plans._
       transform(connectTestRelation.as("target_table"))
     }
+
     val sparkPlan = sparkTestRelation.as("target_table")
     comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
+  test("Test StructType in LocalRelation") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.expressions._
+      transform(createLocalRelationProtoByQualifiedAttributes(Seq("a".struct("id".int))))
+    }
+    val sparkPlan = LocalRelation($"a".struct($"id".int))
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+  }
+
+  test("Test limit offset") {
+    val connectPlan = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.limit(10))
+    }
+    val sparkPlan = sparkTestRelation.limit(10)
+    comparePlans(connectPlan.analyze, sparkPlan.analyze, false)
+
+    val connectPlan2 = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.offset(2))
+    }
+    val sparkPlan2 = sparkTestRelation.offset(2)
+    comparePlans(connectPlan2.analyze, sparkPlan2.analyze, false)
+
+    val connectPlan3 = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.limit(10).offset(2))
+    }
+    val sparkPlan3 = sparkTestRelation.limit(10).offset(2)
+    comparePlans(connectPlan3.analyze, sparkPlan3.analyze, false)
+
+    val connectPlan4 = {
+      import org.apache.spark.sql.connect.dsl.plans._
+      transform(connectTestRelation.offset(2).limit(10))
+    }
+    val sparkPlan4 = sparkTestRelation.offset(2).limit(10)
+    comparePlans(connectPlan4.analyze, sparkPlan4.analyze, false)
+  }
+
+  private def createLocalRelationProtoByQualifiedAttributes(
+      attrs: Seq[proto.Expression.QualifiedAttribute]): proto.Relation = {
+    val localRelationBuilder = proto.LocalRelation.newBuilder()
+    for (attr <- attrs) {
+      localRelationBuilder.addAttributes(attr)
+    }
+    proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
   }
 }

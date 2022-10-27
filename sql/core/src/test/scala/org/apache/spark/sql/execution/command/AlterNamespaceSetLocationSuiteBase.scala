@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 
@@ -45,19 +46,24 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
     val ns = s"$catalog.$namespace"
     withNamespace(ns) {
       sql(s"CREATE NAMESPACE $ns")
-      val message = intercept[IllegalArgumentException] {
-        sql(s"ALTER NAMESPACE $ns SET LOCATION ''")
-      }.getMessage
-      assert(message.contains("Can not create a Path from an empty string"))
+      val sqlText = s"ALTER NAMESPACE $ns SET LOCATION ''"
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          sql(sqlText)
+        },
+        errorClass = "UNSUPPORTED_EMPTY_LOCATION",
+        parameters = Map.empty)
     }
   }
 
   test("Namespace does not exist") {
     val ns = "not_exist"
-    val message = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql(s"ALTER DATABASE $catalog.$ns SET LOCATION 'loc'")
-    }.getMessage
-    assert(message.contains(s"$notFoundMsgPrefix '$ns' not found"))
+    }
+    checkError(e,
+      errorClass = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> "`not_exist`"))
   }
 
   // Hive catalog does not support "ALTER NAMESPACE ... SET LOCATION", thus

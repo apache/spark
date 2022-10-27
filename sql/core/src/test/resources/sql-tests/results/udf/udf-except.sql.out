@@ -97,19 +97,6 @@ WHERE  udf(t1.v) >= (SELECT   min(udf(t2.v))
                 FROM     t2
                 WHERE    t2.k = t1.k)
 -- !query schema
-struct<>
+struct<k:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-  "messageParameters" : {
-    "treeNode" : "(cast(udf(cast(k#x as string)) as string) = cast(udf(cast(outer(k#x) as string)) as string))\nFilter (cast(udf(cast(k#x as string)) as string) = cast(udf(cast(outer(k#x) as string)) as string))\n+- SubqueryAlias t2\n   +- View (`t2`, [k#x,v#x])\n      +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]\n         +- Project [k#x, v#x]\n            +- SubqueryAlias t2\n               +- LocalRelation [k#x, v#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 39,
-    "stopIndex" : 141,
-    "fragment" : "SELECT   udf(max(udf(t2.v)))\n                FROM     t2\n                WHERE    udf(t2.k) = udf(t1.k)"
-  } ]
-}
+two

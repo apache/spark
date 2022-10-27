@@ -17,14 +17,34 @@
 from pyspark.testing.connectutils import PlanOnlyTestFixture
 from pyspark.sql.connect import DataFrame
 from pyspark.sql.connect.functions import col
-from pyspark.sql.connect.plan import Read, InputValidationError
+from pyspark.sql.connect.plan import Read
+import pyspark.sql.connect.proto as proto
 
 
-class SparkConnectSelectOpsSuite(PlanOnlyTestFixture):
-    def test_select_with_literal(self):
+class SparkConnectToProtoSuite(PlanOnlyTestFixture):
+    def test_select_with_columns_and_strings(self):
         df = DataFrame.withPlan(Read("table"))
-        self.assertIsNotNone(df.select(col("name"))._plan.collect())
-        self.assertRaises(InputValidationError, df.select, "name")
+        self.assertIsNotNone(df.select(col("name"))._plan.to_proto())
+        self.assertIsNotNone(df.select("name"))
+        self.assertIsNotNone(df.select("name", "name2"))
+        self.assertIsNotNone(df.select(col("name"), col("name2")))
+        self.assertIsNotNone(df.select(col("name"), "name2"))
+        self.assertIsNotNone(df.select("*"))
+
+    def test_join_with_join_type(self):
+        df_left = DataFrame.withPlan(Read("table"))
+        df_right = DataFrame.withPlan(Read("table"))
+        for (join_type_str, join_type) in [
+            (None, proto.Join.JoinType.JOIN_TYPE_INNER),
+            ("inner", proto.Join.JoinType.JOIN_TYPE_INNER),
+            ("outer", proto.Join.JoinType.JOIN_TYPE_FULL_OUTER),
+            ("leftouter", proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER),
+            ("rightouter", proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER),
+            ("leftanti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
+            ("leftsemi", proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI),
+        ]:
+            joined_df = df_left.join(df_right, on=col("name"), how=join_type_str)._plan.to_proto()
+            self.assertEqual(joined_df.root.join.join_type, join_type)
 
 
 if __name__ == "__main__":

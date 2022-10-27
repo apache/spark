@@ -137,21 +137,19 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           "[BUG] logical plan should not have output of char/varchar type: " + leaf)
 
       case u: UnresolvedNamespace =>
-        u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
+        u.schemaNotFound(u.multipartIdentifier)
 
       case u: UnresolvedTable =>
-        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+        u.tableNotFound(u.multipartIdentifier)
 
       case u: UnresolvedView =>
-        u.failAnalysis(s"View not found: ${u.multipartIdentifier.quoted}")
+        u.tableNotFound(u.multipartIdentifier)
 
       case u: UnresolvedTableOrView =>
-        val viewStr = if (u.allowTempView) "view" else "permanent view"
-        u.failAnalysis(
-          s"Table or $viewStr not found: ${u.multipartIdentifier.quoted}")
+        u.tableNotFound(u.multipartIdentifier)
 
       case u: UnresolvedRelation =>
-        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+        u.tableNotFound(u.multipartIdentifier)
 
       case u: UnresolvedFunc =>
         throw QueryCompilationErrors.noSuchFunctionError(
@@ -161,12 +159,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         u.failAnalysis(s"Hint not found: ${u.name}")
 
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
-        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+        u.tableNotFound(u.multipartIdentifier)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
-        write.table.failAnalysis(s"Table or view not found: ${tblName.quoted}")
+        write.table.tableNotFound(tblName)
 
       case command: V2PartitionCommand =>
         command.table match {
@@ -1068,7 +1066,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     //      1     | 2 | 4
     // and the plan after rewrite will give the original query incorrect results.
     def failOnUnsupportedCorrelatedPredicate(predicates: Seq[Expression], p: LogicalPlan): Unit = {
-      if (predicates.nonEmpty) {
+      // Correlated non-equality predicates are only supported with the decorrelate
+      // inner query framework. Currently we only use this new framework for scalar
+      // and lateral subqueries.
+      val allowNonEqualityPredicates =
+        SQLConf.get.decorrelateInnerQueryEnabled && (isScalar || isLateral)
+      if (!allowNonEqualityPredicates && predicates.nonEmpty) {
         // Report a non-supported case as an exception
         p.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
