@@ -233,9 +233,6 @@ class MultiStatefulOperatorsSuite
           $"count".as[Long])
 
       testStream(windowedAggregation)(
-        // FIXME: we should revisit our watermark condition... we don't allow watermark to be
-        //  set to negative and ensure it's at least 0, but then the inputs with timestamp 0
-        //  as event time can be dropped.
         AddData(inputData, 1 to 15: _*),
         // op1 W (0, 0)
         // input: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
@@ -284,8 +281,7 @@ class MultiStatefulOperatorsSuite
         .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
       testStream(stream)(
-        AddData(input1, 1, 2, 3, 4),
-        AddData(input2, 1, 2, 3, 4),
+        MultiAddData(input1, 1 to 4: _*)(input2, 1 to 4: _*),
 
         // op1 W (0, 0)
         // join output: (1, 1), (2, 2), (3, 3), (4, 4)
@@ -308,8 +304,7 @@ class MultiStatefulOperatorsSuite
         assertNumRowsDroppedByWatermark(Seq(0, 0)),
 
         // Move the watermark
-        AddData(input1, 5),
-        AddData(input2, 5),
+        MultiAddData(input1, 5)(input2, 5),
 
         // op1 W (4, 5)
         // join output: (5, 5)
