@@ -2087,7 +2087,7 @@ class DDLParserSuite extends AnalysisTest {
       ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithDefaultColumn,
         Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
           Map.empty[String, String], None, None, None, false), false))
-    // THese ALTER TABLE statements should parse successfully.
+    // These ALTER TABLE statements should parse successfully.
     comparePlans(
       parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
       AddColumns(UnresolvedTable(Seq("t1"), "ALTER TABLE ... ADD COLUMN", None),
@@ -2174,5 +2174,40 @@ class DDLParserSuite extends AnalysisTest {
         Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
           Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
             Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("DEFAULT")))))))
+  }
+
+  test("SPARK-40944: Relax ordering constraint for CREATE TABLE column options") {
+    // These are negative test cases exercising error cases. Note that positive test cases
+    // exercising flexible column option ordering exist elsewhere in this suite.
+    checkError(
+      exception = intercept[ParseException](
+        parsePlan(
+          "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\" NOT NULL)")),
+      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      parameters = Map(
+        "columnName" -> "b",
+        "optionName" -> "NOT NULL"),
+      context = ExpectedContext(
+        fragment = "b STRING NOT NULL DEFAULT \"abc\" NOT NULL", start = 27, stop = 66))
+    checkError(
+      exception = intercept[ParseException](
+        parsePlan(
+          "CREATE TABLE my_tab(a INT, b STRING DEFAULT \"123\" NOT NULL DEFAULT \"abc\")")),
+      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      parameters = Map(
+        "columnName" -> "b",
+        "optionName" -> "DEFAULT"),
+      context = ExpectedContext(
+        fragment = "b STRING DEFAULT \"123\" NOT NULL DEFAULT \"abc\"", start = 27, stop = 71))
+    checkError(
+      exception = intercept[ParseException](
+        parsePlan(
+          "CREATE TABLE my_tab(a INT, b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\")")),
+      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      parameters = Map(
+        "columnName" -> "b",
+        "optionName" -> "COMMENT"),
+      context = ExpectedContext(
+        fragment = "b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\"", start = 27, stop = 71))
   }
 }
