@@ -184,9 +184,9 @@ trait AnalysisTest extends PlanTest {
       }
 
       if (e.getErrorClass != expectedErrorClass ||
-        !e.messageParameters.sameElements(expectedMessageParameters) ||
-        (line >= 0 && e.line.getOrElse(-1) != line) ||
-        (pos >= 0) && e.startPosition.getOrElse(-1) != pos) {
+          e.messageParameters != expectedMessageParameters ||
+          (line >= 0 && e.line.getOrElse(-1) != line) ||
+          (pos >= 0) && e.startPosition.getOrElse(-1) != pos) {
         var failMsg = ""
         if (e.getErrorClass != expectedErrorClass) {
           failMsg +=
@@ -194,7 +194,7 @@ trait AnalysisTest extends PlanTest {
                |Actual error class: ${e.getErrorClass}
              """.stripMargin
         }
-        if (!e.messageParameters.sameElements(expectedMessageParameters)) {
+        if (e.messageParameters != expectedMessageParameters) {
           failMsg +=
             s"""Message parameters should be: ${expectedMessageParameters.mkString("\n  ")}
                |Actual message parameters: ${e.messageParameters.mkString("\n  ")}
