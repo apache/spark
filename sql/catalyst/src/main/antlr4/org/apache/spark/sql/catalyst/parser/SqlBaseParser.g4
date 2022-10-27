@@ -946,9 +946,9 @@ createOrReplaceTableColType
     ;
 
 colDefinitionOption
-    : NOT NULL |
-      defaultExpression |
-      commentSpec
+    : NOT NULL
+    | defaultExpression
+    | commentSpec
     ;
 
 complexColTypeList
