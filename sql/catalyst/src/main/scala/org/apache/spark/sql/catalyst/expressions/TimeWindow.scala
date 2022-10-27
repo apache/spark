@@ -150,8 +150,8 @@ case class TimeWindow(
         return DataTypeMismatch(
           errorSubClass = "PARAMETER_CONSTRAINT_VIOLATION",
           messageParameters = Map(
-            "leftExprName" -> toSQLId("start_time"),
-            "leftExprValue" -> toSQLValue(startTime, LongType),
+            "leftExprName" -> toSQLId("abs(start_time)"),
+            "leftExprValue" -> toSQLValue(startTime.abs, LongType),
             "constraint" -> "<",
             "rightExprName" -> toSQLId("slide_duration"),
             "rightExprValue" -> toSQLValue(slideDuration, LongType)

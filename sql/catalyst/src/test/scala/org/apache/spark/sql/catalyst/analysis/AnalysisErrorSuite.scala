@@ -455,7 +455,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
     Map(
       "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 1000000, 60000000)\"",
-      "leftExprName" -> "`start_time`",
+      "leftExprName" -> "`abs(start_time)`",
       "leftExprValue" -> "60000000L",
       "constraint" -> "<",
       "rightExprName" -> "`slide_duration`",
@@ -470,7 +470,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
     Map(
       "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 1000000, 1000000)\"",
-      "leftExprName" -> "`start_time`",
+      "leftExprName" -> "`abs(start_time)`",
       "leftExprValue" -> "1000000L",
       "constraint" -> "<",
       "rightExprName" -> "`slide_duration`",
@@ -485,8 +485,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
     Map(
       "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 1000000, -60000000)\"",
-      "leftExprName" -> "`start_time`",
-      "leftExprValue" -> "-60000000L",
+      "leftExprName" -> "`abs(start_time)`",
+      "leftExprValue" -> "60000000L",
       "constraint" -> "<",
       "rightExprName" -> "`slide_duration`",
       "rightExprValue" -> "1000000L"
@@ -500,8 +500,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     "DATATYPE_MISMATCH.PARAMETER_CONSTRAINT_VIOLATION",
     Map(
       "sqlExpr" -> "\"window(2016-01-01 01:01:01, 1000000, 1000000, -1000000)\"",
-      "leftExprName" -> "`start_time`",
-      "leftExprValue" -> "-1000000L",
+      "leftExprName" -> "`abs(start_time)`",
+      "leftExprValue" -> "1000000L",
       "constraint" -> "<",
       "rightExprName" -> "`slide_duration`",
       "rightExprValue" -> "1000000L"
