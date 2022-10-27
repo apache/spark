@@ -284,7 +284,7 @@ class DatetimeIndex(Index):
         Examples
         --------
         >>> idx = ps.date_range("2018-02-27", periods=3)
-        >>> idx.is_month_start
+        >>> idx.is_month_start  # doctest: +SKIP
         Index([False, False, True], dtype='bool')
         """
         return Index(self.to_series().dt.is_month_start)
