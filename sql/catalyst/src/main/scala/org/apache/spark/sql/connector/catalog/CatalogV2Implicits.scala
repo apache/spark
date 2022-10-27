@@ -60,7 +60,9 @@ private[sql] object CatalogV2Implicits {
           identityCols += col
 
         case BucketTransform(numBuckets, col, sortCol) =>
-          if (bucketSpec.nonEmpty) throw QueryExecutionErrors.multipleBucketTransformsError
+          if (bucketSpec.nonEmpty) {
+            throw QueryExecutionErrors.unsupportedMultipleBucketTransformsError
+          }
           if (sortCol.isEmpty) {
             bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")), Nil))
           } else {

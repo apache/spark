@@ -200,6 +200,11 @@
           "The <functionName> accepts only arrays of pair structs, but <childExpr> is of <childType>."
         ]
       },
+      "MAP_ZIP_WITH_DIFF_TYPES" : {
+        "message" : [
+          "Input to the <functionName> should have been two maps with compatible key types, but it's [<leftType>, <rightType>]."
+        ]
+      },
       "NON_FOLDABLE_INPUT" : {
         "message" : [
           "the input <inputName> should be a foldable <inputType> expression; however, got <inputExpr>."
@@ -213,6 +218,11 @@
       "NULL_TYPE" : {
         "message" : [
           "Null typed values cannot be used as arguments of <functionName>."
+        ]
+      },
+      "PARAMETER_CONSTRAINT_VIOLATION" : {
+        "message" : [
+          "The <leftExprName>(<leftExprValue>) must be <constraint> the <rightExprName>(<rightExprValue>)"
         ]
       },
       "RANGE_FRAME_INVALID_TYPE" : {
@@ -268,6 +278,11 @@
       "UNEXPECTED_NULL" : {
         "message" : [
           "The <exprName> must not be null"
+        ]
+      },
+      "UNEXPECTED_RETURN_TYPE" : {
+        "message" : [
+          "The <functionName> requires return <expectedType> type, but the actual is <actualType> type."
         ]
       },
       "UNEXPECTED_STATIC_METHOD" : {
@@ -947,6 +962,11 @@
       "LITERAL_TYPE" : {
         "message" : [
           "Literal for '<value>' of <type>."
+        ]
+      },
+      "MULTIPLE_BUCKET_TRANSFORMS" : {
+        "message" : [
+          "Multiple bucket TRANSFORMs."
         ]
       },
       "NATURAL_CROSS_JOIN" : {

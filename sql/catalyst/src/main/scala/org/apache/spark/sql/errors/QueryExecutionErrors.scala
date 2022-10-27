@@ -2623,9 +2623,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "format" -> format))
   }
 
-  def multipleBucketTransformsError(): SparkUnsupportedOperationException = {
+  def unsupportedMultipleBucketTransformsError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2279",
+      errorClass = "UNSUPPORTED_FEATURE.MULTIPLE_BUCKET_TRANSFORMS",
       messageParameters = Map.empty)
   }
 
