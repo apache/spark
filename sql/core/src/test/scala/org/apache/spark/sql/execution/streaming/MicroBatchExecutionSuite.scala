@@ -159,7 +159,7 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
     )
   }
 
-  test("SPARK-38033: SS cannot be started because the commitId and offsetId are inconsistent") {
+  test("test gaps in offset log") {
     val inputData = MemoryStream[Int]
     val streamEvent = inputData.toDF().select("value")
 
@@ -171,12 +171,14 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
 
-    testStream(streamEvent) (
-      AddData(inputData, 1, 2, 3, 4, 5, 6),
+    testStream(streamEvent)(
+      AddData(inputData, 0),
+      AddData(inputData, 1),
+      AddData(inputData, 2),
+      AddData(inputData, 3),
+      AddData(inputData, 4),
       StartStream(Trigger.AvailableNow(), checkpointLocation = checkpointDir.getAbsolutePath),
-      ExpectFailure[IllegalStateException] { e =>
-        assert(e.getMessage.contains("batch 3 doesn't exist"))
-      }
+      CheckAnswer(3, 4)
     )
   }
 
