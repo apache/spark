@@ -116,7 +116,6 @@ object StatFunctions extends Logging {
         "Currently correlation calculation for columns with dataType " +
           s"${data.dataType.catalogString} not supported.")
     }
-    df.queryExecution.toRdd.map(_.getDouble(1))
     val Seq(col1, col2) = cols.map(c =>
       when(isnull(col(c)), lit(0.0)).otherwise(col(c).cast("double")))
     val row = df.select(corr(col1, col2)).head
