@@ -14,13 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from typing import cast
+import unittest
+
 from pyspark.testing.connectutils import PlanOnlyTestFixture
-from pyspark.sql.connect import DataFrame
-from pyspark.sql.connect.functions import col
-from pyspark.sql.connect.plan import Read
-import pyspark.sql.connect.proto as proto
+from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
+
+if have_pandas:
+    from pyspark.sql.connect import DataFrame
+    from pyspark.sql.connect.functions import col
+    from pyspark.sql.connect.plan import Read
+    import pyspark.sql.connect.proto as proto
 
 
+@unittest.skipIf(not have_pandas, cast(str, pandas_requirement_message))
 class SparkConnectToProtoSuite(PlanOnlyTestFixture):
     def test_select_with_columns_and_strings(self):
         df = DataFrame.withPlan(Read("table"))
