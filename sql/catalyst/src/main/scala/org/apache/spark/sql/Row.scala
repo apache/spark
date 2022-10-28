@@ -584,6 +584,8 @@ trait Row extends Serializable {
       case (i: CalendarInterval, _) => JString(i.toString)
       case (a: Array[_], ArrayType(elementType, _)) =>
         iteratorToJsonArray(a.iterator, elementType)
+      case (a: mutable.ArraySeq[_], ArrayType(elementType, _)) =>
+        iteratorToJsonArray(a.iterator, elementType)
       case (s: Seq[_], ArrayType(elementType, _)) =>
         iteratorToJsonArray(s.iterator, elementType)
       case (m: Map[String @unchecked, _], MapType(StringType, valueType, _)) =>

@@ -44,6 +44,9 @@ SELECT * FROM t1, LATERAL (SELECT c2 FROM t2 WHERE t1.c1 = t2.c1);
 -- lateral join with correlated non-equality predicates
 SELECT * FROM t1, LATERAL (SELECT c2 FROM t2 WHERE t1.c2 < t2.c2);
 
+-- SPARK-36114: lateral join with aggregation and correlated non-equality predicates
+SELECT * FROM t1, LATERAL (SELECT max(c2) AS m FROM t2 WHERE t1.c2 < t2.c2);
+
 -- lateral join can reference preceding FROM clause items
 SELECT * FROM t1 JOIN t2 JOIN LATERAL (SELECT t1.c2 + t2.c2);
 -- expect error: cannot resolve `t2.c1`

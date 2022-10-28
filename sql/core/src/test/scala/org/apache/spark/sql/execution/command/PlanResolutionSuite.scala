@@ -24,6 +24,7 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedFieldName, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
@@ -154,7 +155,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "defaultvalues" => defaultValues
         case "defaultvalues2" => defaultValues2
         case "tablewithcolumnnameddefault" => tableWithColumnNamedDefault
-        case name => throw new NoSuchTableException(name)
+        case name => throw new NoSuchTableException(Seq(name))
       }
     })
     when(newCatalog.name()).thenReturn("testcat")
@@ -172,7 +173,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "v2Table1" => table1
         case "v2TableWithAcceptAnySchemaCapability" => tableWithAcceptAnySchemaCapability
         case "view" => createV1TableMock(ident, tableType = CatalogTableType.VIEW)
-        case name => throw new NoSuchTableException(name)
+        case name => throw new NoSuchTableException(Seq(name))
       }
     })
     when(newCatalog.name()).thenReturn(CatalogManager.SESSION_CATALOG_NAME)
@@ -292,13 +293,12 @@ class PlanResolutionSuite extends AnalysisTest {
            |CREATE TABLE my_tab(a INT, b STRING) USING parquet
            |PARTITIONED BY ($transform)
            """.stripMargin
-
-      val ae = intercept[UnsupportedOperationException] {
-        parseAndResolve(query)
-      }
-
-      assert(ae.getMessage
-        .contains(s"Unsupported partition transform: $transform"))
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          parseAndResolve(query)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_2067",
+        parameters = Map("transform" -> transform))
     }
   }
 
@@ -310,13 +310,12 @@ class PlanResolutionSuite extends AnalysisTest {
            |CREATE TABLE my_tab(a INT, b STRING, c String) USING parquet
            |PARTITIONED BY ($transform)
            """.stripMargin
-
-      val ae = intercept[UnsupportedOperationException] {
-        parseAndResolve(query)
-      }
-
-      assert(ae.getMessage
-        .contains("Multiple bucket transforms are not supported."))
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          parseAndResolve(query)
+        },
+        errorClass = "UNSUPPORTED_FEATURE.MULTIPLE_BUCKET_TRANSFORMS",
+        parameters = Map.empty)
     }
   }
 
@@ -1262,8 +1261,7 @@ class PlanResolutionSuite extends AnalysisTest {
           }
           checkError(
             exception = e2,
-            errorClass = "UNSUPPORTED_FEATURE",
-            errorSubClass = "TABLE_OPERATION",
+            errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
             sqlState = "0A000",
             parameters = Map("tableName" -> "`spark_catalog`.`default`.`v1Table`",
               "operation" -> "ALTER COLUMN with qualified column"))

@@ -120,8 +120,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
 
       assertAnalysisErrorClass(
         s"DESCRIBE $t invalid_col",
-        "UNRESOLVED_COLUMN",
-        "WITH_SUGGESTION",
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         Map(
           "objectName" -> "`invalid_col`",
           "proposal" -> "`testcat`.`tbl`.`id`, `testcat`.`tbl`.`data`"))
@@ -997,8 +996,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
 
       assertAnalysisErrorClass(
         s"SELECT ns1.ns2.ns3.tbl.id from $t",
-        "UNRESOLVED_COLUMN",
-        "WITH_SUGGESTION",
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         Map(
           "objectName" -> "`ns1`.`ns2`.`ns3`.`tbl`.`id`",
           "proposal" -> "`testcat`.`ns1`.`ns2`.`tbl`.`id`, `testcat`.`ns1`.`ns2`.`tbl`.`point`"))
@@ -1206,7 +1204,9 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     val exception = intercept[NoSuchDatabaseException] {
       sql("USE ns1")
     }
-    assert(exception.getMessage.contains("Database 'ns1' not found"))
+    checkError(exception,
+      errorClass = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> "`ns1`"))
   }
 
   test("SPARK-31100: Use: v2 catalog that implements SupportsNamespaces is used " +
@@ -1215,7 +1215,9 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     val exception = intercept[NoSuchNamespaceException] {
       sql("USE testcat.ns1.ns2")
     }
-    assert(exception.getMessage.contains("Namespace 'ns1.ns2' not found"))
+    checkError(exception,
+      errorClass = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> "`ns1`.`ns2`"))
   }
 
   test("SPARK-31100: Use: v2 catalog that does not implement SupportsNameSpaces is used " +
@@ -1539,8 +1541,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     }
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "TABLE_OPERATION",
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       sqlState = "0A000",
       parameters = Map("tableName" -> "`spark_catalog`.`default`.`tbl`",
         "operation" -> "REPLACE TABLE"))
@@ -1571,23 +1572,22 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
          """.stripMargin)
 
       // UPDATE non-existing table
-      assertAnalysisError(
+      assertAnalysisErrorClass(
         "UPDATE dummy SET name='abc'",
-        "Table or view not found")
+        expectedErrorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        expectedErrorMessageParameters = Map("relationName" -> "`dummy`"))
 
       // UPDATE non-existing column
       assertAnalysisErrorClass(
         s"UPDATE $t SET dummy='abc'",
-        "UNRESOLVED_COLUMN",
-        "WITH_SUGGESTION",
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         Map(
           "objectName" -> "`dummy`",
           "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
             "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")))
       assertAnalysisErrorClass(
         s"UPDATE $t SET name='abc' WHERE dummy=1",
-        "UNRESOLVED_COLUMN",
-        "WITH_SUGGESTION",
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         Map(
           "objectName" -> "`dummy`",
           "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, " +
@@ -1620,7 +1620,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
          """.stripMargin)
 
       // MERGE INTO non-existing table
-      assertAnalysisError(
+      assertAnalysisErrorClass(
         s"""
            |MERGE INTO testcat.ns1.ns2.dummy AS target
            |USING testcat.ns1.ns2.source AS source
@@ -1630,10 +1630,11 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
            |WHEN NOT MATCHED AND (target.col2='insert')
            |THEN INSERT *
          """.stripMargin,
-        "Table or view not found")
+        expectedErrorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        expectedErrorMessageParameters = Map("relationName" -> "`testcat`.`ns1`.`ns2`.`dummy`"))
 
       // USING non-existing table
-      assertAnalysisError(
+      assertAnalysisErrorClass(
         s"""
            |MERGE INTO testcat.ns1.ns2.target AS target
            |USING testcat.ns1.ns2.dummy AS source
@@ -1643,7 +1644,9 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
            |WHEN NOT MATCHED AND (target.col2='insert')
            |THEN INSERT *
          """.stripMargin,
-        "Table or view not found")
+        expectedErrorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        expectedErrorMessageParameters = Map("relationName" -> "`testcat`.`ns1`.`ns2`.`dummy`"))
+
 
       // UPDATE non-existing column
       assertAnalysisError(
@@ -1704,8 +1707,8 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     val e = intercept[AnalysisException] {
       sql(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
     }
-    assert(e.getMessage.contains(
-      "Table or view not found: testcat.ns.tbl"))
+    checkErrorTableNotFound(e, "`testcat`.`ns`.`tbl`",
+      ExpectedContext("testcat.ns.tbl", 11, 10 + "testcat.ns.tbl".length))
   }
 
   test("ANALYZE TABLE") {
@@ -1762,7 +1765,8 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     val e = intercept[AnalysisException] {
       sql(s"UNCACHE TABLE $t")
     }
-    assert(e.message.contains("Table or view not found: testcat.ns1.ns2.tbl"))
+    checkErrorTableNotFound(e, "`testcat`.`ns1`.`ns2`.`tbl`",
+      ExpectedContext(t, 14, 13 + t.length))
 
     // If "IF EXISTS" is set, UNCACHE TABLE will not throw an exception.
     sql(s"UNCACHE TABLE IF EXISTS $t")
@@ -2347,8 +2351,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       exception = intercept[AnalysisException] {
         sql("SELECT * FROM t TIMESTAMP AS OF abs(true)").collect()
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"abs(true)\"",
@@ -2383,7 +2386,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         )
         assert(e2.getMessage.contains(errMsg))
       }
-      checkSubqueryError("SELECT 1 FROM non_exist", "Table or view not found: non_exist")
+      checkSubqueryError("SELECT 1 FROM non_exist", "TABLE_OR_VIEW_NOT_FOUND")
       checkSubqueryError("SELECT col", "UNRESOLVED_COLUMN")
       checkSubqueryError("SELECT 1, 2", "Scalar subquery must return only one column")
       checkSubqueryError("SELECT * FROM VALUES (1), (2)", "MULTI_VALUE_SUBQUERY_ERROR")
@@ -2434,13 +2437,11 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
   private def assertAnalysisErrorClass(
       sqlStatement: String,
       expectedErrorClass: String,
-      expectedErrorSubClass: String,
       expectedErrorMessageParameters: Map[String, String]): Unit = {
     val ex = intercept[AnalysisException] {
       sql(sqlStatement)
     }
     assert(ex.getErrorClass == expectedErrorClass)
-    assert(ex.getErrorSubClass == expectedErrorSubClass)
     assert(ex.messageParameters.sameElements(expectedErrorMessageParameters))
   }
 

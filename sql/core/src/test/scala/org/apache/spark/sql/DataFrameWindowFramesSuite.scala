@@ -154,8 +154,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("key").over(window.rangeBetween(Window.unboundedPreceding, 1)))
       ),
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("RANGE_FRAME_MULTI_ORDER"),
+      errorClass = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
       parameters = Map(
         "orderSpec" -> """key#\d+ ASC NULLS FIRST,value#\d+ ASC NULLS FIRST""",
         "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
@@ -169,8 +168,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("key").over(window.rangeBetween(-1, Window.unboundedFollowing)))
       ),
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("RANGE_FRAME_MULTI_ORDER"),
+      errorClass = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
       parameters = Map(
         "orderSpec" -> """key#\d+ ASC NULLS FIRST,value#\d+ ASC NULLS FIRST""",
         "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
@@ -184,8 +182,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("key").over(window.rangeBetween(-1, 1)))
       ),
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("RANGE_FRAME_MULTI_ORDER"),
+      errorClass = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
       parameters = Map(
         "orderSpec" -> """key#\d+ ASC NULLS FIRST,value#\d+ ASC NULLS FIRST""",
         "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
@@ -212,8 +209,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("value").over(window.rangeBetween(Window.unboundedPreceding, 1)))
       ),
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
       parameters = Map(
         "location" -> "upper",
         "exprType" -> "\"STRING\"",
@@ -228,8 +224,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("value").over(window.rangeBetween(-1, Window.unboundedFollowing)))
       ),
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
       parameters = Map(
         "location" -> "lower",
         "exprType" -> "\"STRING\"",
@@ -244,8 +239,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         df.select(
           min("value").over(window.rangeBetween(-1, 1)))
       ),
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
       parameters = Map(
         "location" -> "lower",
         "exprType" -> "\"STRING\"",

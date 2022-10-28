@@ -62,7 +62,6 @@ from pyspark.sql.types import (
     StructField,
     StructType,
     StringType,
-    IntegralType,
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
@@ -405,16 +404,22 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         return self._reduce_for_stat_function(F.count)
 
-    # TODO: We should fix See Also when Series implementation is finished.
-    def first(self, numeric_only: Optional[bool] = False) -> FrameLike:
+    def first(self, numeric_only: Optional[bool] = False, min_count: int = -1) -> FrameLike:
         """
         Compute first of group values.
+
+        .. versionadded:: 3.3.0
 
         Parameters
         ----------
         numeric_only : bool, default False
             Include only float, int, boolean columns. If None, will attempt to use
             everything, then use only numeric data.
+
+            .. versionadded:: 3.4.0
+        min_count : int, default -1
+            The required number of valid values to perform the operation. If fewer
+            than ``min_count`` non-NA values are present the result will be NA.
 
             .. versionadded:: 3.4.0
 
@@ -426,12 +431,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Examples
         --------
         >>> df = ps.DataFrame({"A": [1, 2, 1, 2], "B": [True, False, False, True],
-        ...                    "C": [3, 3, 4, 4], "D": ["a", "b", "b", "a"]})
+        ...                    "C": [3, 3, 4, 4], "D": ["a", "b", "a", "a"]})
         >>> df
            A      B  C  D
         0  1   True  3  a
         1  2  False  3  b
-        2  1  False  4  b
+        2  1  False  4  a
         3  2   True  4  a
 
         >>> df.groupby("A").first().sort_index()
@@ -447,21 +452,44 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         A
         1   True  3
         2  False  3
+
+        >>> df.groupby("D").first().sort_index()
+           A      B  C
+        D
+        a  1   True  3
+        b  2  False  3
+
+        >>> df.groupby("D").first(min_count=3).sort_index()
+             A     B    C
+        D
+        a  1.0  True  3.0
+        b  NaN  None  NaN
         """
+        if not isinstance(min_count, int):
+            raise TypeError("min_count must be integer")
+
         return self._reduce_for_stat_function(
             lambda col: F.first(col, ignorenulls=True),
             accepted_spark_types=(NumericType, BooleanType) if numeric_only else None,
+            min_count=min_count,
         )
 
-    def last(self, numeric_only: Optional[bool] = False) -> FrameLike:
+    def last(self, numeric_only: Optional[bool] = False, min_count: int = -1) -> FrameLike:
         """
         Compute last of group values.
+
+        .. versionadded:: 3.3.0
 
         Parameters
         ----------
         numeric_only : bool, default False
             Include only float, int, boolean columns. If None, will attempt to use
             everything, then use only numeric data.
+
+            .. versionadded:: 3.4.0
+        min_count : int, default -1
+            The required number of valid values to perform the operation. If fewer
+            than ``min_count`` non-NA values are present the result will be NA.
 
             .. versionadded:: 3.4.0
 
@@ -473,11 +501,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Examples
         --------
         >>> df = ps.DataFrame({"A": [1, 2, 1, 2], "B": [True, False, False, True],
-        ...                    "C": [3, 3, 4, 4], "D": ["a", "b", "b", "a"]})
+        ...                    "C": [3, 3, 4, 4], "D": ["a", "a", "b", "a"]})
         >>> df
            A      B  C  D
         0  1   True  3  a
-        1  2  False  3  b
+        1  2  False  3  a
         2  1  False  4  b
         3  2   True  4  a
 
@@ -494,21 +522,44 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         A
         1  False  4
         2   True  4
+
+        >>> df.groupby("D").last().sort_index()
+           A      B  C
+        D
+        a  2   True  4
+        b  1  False  4
+
+        >>> df.groupby("D").last(min_count=3).sort_index()
+             A     B    C
+        D
+        a  2.0  True  4.0
+        b  NaN  None  NaN
         """
+        if not isinstance(min_count, int):
+            raise TypeError("min_count must be integer")
+
         return self._reduce_for_stat_function(
             lambda col: F.last(col, ignorenulls=True),
             accepted_spark_types=(NumericType, BooleanType) if numeric_only else None,
+            min_count=min_count,
         )
 
-    def max(self, numeric_only: Optional[bool] = False) -> FrameLike:
+    def max(self, numeric_only: Optional[bool] = False, min_count: int = -1) -> FrameLike:
         """
         Compute max of group values.
+
+        .. versionadded:: 3.3.0
 
         Parameters
         ----------
         numeric_only : bool, default False
             Include only float, int, boolean columns. If None, will attempt to use
             everything, then use only numeric data.
+
+            .. versionadded:: 3.4.0
+        min_count : bool, default -1
+            The required number of valid values to perform the operation. If fewer
+            than min_count non-NA values are present the result will be NA.
 
             .. versionadded:: 3.4.0
 
@@ -520,13 +571,13 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Examples
         --------
         >>> df = ps.DataFrame({"A": [1, 2, 1, 2], "B": [True, False, False, True],
-        ...                    "C": [3, 4, 3, 4], "D": ["a", "b", "b", "a"]})
+        ...                    "C": [3, 4, 3, 4], "D": ["a", "a", "b", "a"]})
 
         >>> df.groupby("A").max().sort_index()
               B  C  D
         A
         1  True  3  b
-        2  True  4  b
+        2  True  4  a
 
         Include only float, int, boolean columns when set numeric_only True.
 
@@ -535,9 +586,26 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         A
         1  True  3
         2  True  4
+
+        >>> df.groupby("D").max().sort_index()
+           A      B  C
+        D
+        a  2   True  4
+        b  1  False  3
+
+        >>> df.groupby("D").max(min_count=3).sort_index()
+             A     B    C
+        D
+        a  2.0  True  4.0
+        b  NaN  None  NaN
         """
+        if not isinstance(min_count, int):
+            raise TypeError("min_count must be integer")
+
         return self._reduce_for_stat_function(
-            F.max, accepted_spark_types=(NumericType, BooleanType) if numeric_only else None
+            F.max,
+            accepted_spark_types=(NumericType, BooleanType) if numeric_only else None,
+            min_count=min_count,
         )
 
     def mean(self, numeric_only: Optional[bool] = True) -> FrameLike:
@@ -702,20 +770,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if not isinstance(min_count, int):
             raise TypeError("min_count must be integer")
 
-        if min_count > 0:
-
-            def min(col: Column) -> Column:
-                return F.when(
-                    F.count(F.when(~F.isnull(col), F.lit(0))) < min_count, F.lit(None)
-                ).otherwise(F.min(col))
-
-        else:
-
-            def min(col: Column) -> Column:
-                return F.min(col)
-
         return self._reduce_for_stat_function(
-            min, accepted_spark_types=(NumericType, BooleanType) if numeric_only else None
+            F.min,
+            accepted_spark_types=(NumericType, BooleanType) if numeric_only else None,
+            min_count=min_count,
         )
 
     # TODO: sync the doc.
@@ -772,28 +830,83 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             bool_to_numeric=True,
         )
 
-    def sum(self) -> FrameLike:
+    def sum(self, numeric_only: Optional[bool] = True, min_count: int = 0) -> FrameLike:
         """
         Compute sum of group values
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        numeric_only : bool, default False
+            Include only float, int, boolean columns. If None, will attempt to use
+            everything, then use only numeric data.
+            It takes no effect since only numeric columns can be support here.
+
+            .. versionadded:: 3.4.0
+        min_count : int, default 0
+            The required number of valid values to perform the operation.
+            If fewer than min_count non-NA values are present the result will be NA.
+
+            .. versionadded:: 3.4.0
 
         Examples
         --------
         >>> df = ps.DataFrame({"A": [1, 2, 1, 2], "B": [True, False, False, True],
-        ...                    "C": [3, 4, 3, 4], "D": ["a", "b", "b", "a"]})
+        ...                    "C": [3, 4, 3, 4], "D": ["a", "a", "b", "a"]})
 
-        >>> df.groupby("A").sum()
+        >>> df.groupby("A").sum().sort_index()
            B  C
         A
         1  1  6
         2  1  8
+
+        >>> df.groupby("D").sum().sort_index()
+           A  B   C
+        D
+        a  5  2  11
+        b  1  0   3
+
+        >>> df.groupby("D").sum(min_count=3).sort_index()
+             A    B     C
+        D
+        a  5.0  2.0  11.0
+        b  NaN  NaN   NaN
+
+        Notes
+        -----
+        There is a behavior difference between pandas-on-Spark and pandas:
+
+        * when there is a non-numeric aggregation column, it will be ignored
+            even if `numeric_only` is False.
 
         See Also
         --------
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
+        if numeric_only is not None and not isinstance(numeric_only, bool):
+            raise TypeError("numeric_only must be None or bool")
+        if not isinstance(min_count, int):
+            raise TypeError("min_count must be integer")
+
+        if numeric_only is not None and not numeric_only:
+            unsupported = [
+                col.name
+                for col in self._agg_columns
+                if not isinstance(col.spark.data_type, (NumericType, BooleanType))
+            ]
+            if len(unsupported) > 0:
+                log_advice(
+                    "GroupBy.sum() can only support numeric and bool columns even if"
+                    f"numeric_only=False, skip unsupported columns: {unsupported}"
+                )
+
         return self._reduce_for_stat_function(
-            F.sum, accepted_spark_types=(NumericType,), bool_to_numeric=True
+            F.sum,
+            accepted_spark_types=(NumericType, BooleanType),
+            bool_to_numeric=True,
+            min_count=min_count,
         )
 
     # TODO: sync the doc.
@@ -1114,7 +1227,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             Include only float, int, boolean columns. If None, will attempt to use
             everything, then use only numeric data.
 
-        min_count: int, default 0
+        min_count : int, default 0
             The required number of valid values to perform the operation.
             If fewer than min_count non-NA values are present the result will be NA.
 
@@ -1155,52 +1268,17 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1  NaN  2.0  0.0
         2  NaN NaN  NaN
         """
+        if not isinstance(min_count, int):
+            raise TypeError("min_count must be integer")
 
         self._validate_agg_columns(numeric_only=numeric_only, function_name="prod")
 
-        groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
-        internal, agg_columns, sdf = self._prepare_reduce(
-            groupkey_names=groupkey_names,
+        return self._reduce_for_stat_function(
+            lambda col: SF.product(col, True),
             accepted_spark_types=(NumericType, BooleanType),
             bool_to_numeric=True,
+            min_count=min_count,
         )
-
-        psdf: DataFrame = DataFrame(internal)
-        if len(psdf._internal.column_labels) > 0:
-
-            stat_exprs = []
-            for label in psdf._internal.column_labels:
-                psser = psdf._psser_for(label)
-                column = psser._dtype_op.nan_to_null(psser).spark.column
-                data_type = psser.spark.data_type
-                aggregating = (
-                    F.product(column).cast("long")
-                    if isinstance(data_type, IntegralType)
-                    else F.product(column)
-                )
-
-                if min_count > 0:
-                    prod_scol = F.when(
-                        F.count(F.when(~F.isnull(column), F.lit(0))) < min_count, F.lit(None)
-                    ).otherwise(aggregating)
-                else:
-                    prod_scol = aggregating
-
-                stat_exprs.append(prod_scol.alias(psser._internal.data_spark_column_names[0]))
-
-            sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
-
-        else:
-            sdf = sdf.select(*groupkey_names).distinct()
-
-        internal = internal.copy(
-            spark_frame=sdf,
-            index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
-            data_spark_columns=[scol_for(sdf, col) for col in internal.data_spark_column_names],
-            data_fields=None,
-        )
-
-        return self._prepare_return(DataFrame(internal))
 
     def all(self, skipna: bool = True) -> FrameLike:
         """
@@ -3456,6 +3534,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         sfun: Callable[[Column], Column],
         accepted_spark_types: Optional[Tuple[Type[DataType], ...]] = None,
         bool_to_numeric: bool = False,
+        **kwargs: Any,
     ) -> FrameLike:
         """Apply an aggregate function `sfun` per column and reduce to a FrameLike.
 
@@ -3475,14 +3554,19 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         psdf: DataFrame = DataFrame(internal)
 
         if len(psdf._internal.column_labels) > 0:
+            min_count = kwargs.get("min_count", 0)
             stat_exprs = []
             for label in psdf._internal.column_labels:
                 psser = psdf._psser_for(label)
-                stat_exprs.append(
-                    sfun(psser._dtype_op.nan_to_null(psser).spark.column).alias(
-                        psser._internal.data_spark_column_names[0]
+                input_scol = psser._dtype_op.nan_to_null(psser).spark.column
+                output_scol = sfun(input_scol)
+
+                if min_count > 0:
+                    output_scol = F.when(
+                        F.count(F.when(~F.isnull(input_scol), F.lit(0))) >= min_count, output_scol
                     )
-                )
+
+                stat_exprs.append(output_scol.alias(psser._internal.data_spark_column_names[0]))
             sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
         else:
             sdf = sdf.select(*groupkey_names).distinct()

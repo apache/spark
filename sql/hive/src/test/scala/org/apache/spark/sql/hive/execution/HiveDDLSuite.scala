@@ -608,7 +608,7 @@ class HiveDDLSuite
   }
 
   test("SPARK-19129: drop partition with a empty string will drop the whole table") {
-    val df = spark.createDataFrame(Seq((0, "a"), (1, "b"))).toDF("partCol1", "name")
+    val df = spark.createDataFrame(Seq(("0", "a"), ("1", "b"))).toDF("partCol1", "name")
     df.write.mode("overwrite").partitionBy("partCol1").saveAsTable("partitionedTable")
     assertAnalysisError(
       "alter table partitionedTable drop partition(partCol1='')",
@@ -774,6 +774,13 @@ class HiveDDLSuite
   private def assertAnalysisError(sqlText: String, message: String): Unit = {
     val e = intercept[AnalysisException](sql(sqlText))
     assert(e.message.contains(message))
+  }
+
+  private def assertAnalysisErrorClass(sqlText: String, errorClass: String,
+                                  parameters: Map[String, String]): Unit = {
+    val e = intercept[AnalysisException](sql(sqlText))
+    checkError(e,
+      errorClass = errorClass, parameters = parameters)
   }
 
   private def assertErrorForAlterTableOnView(sqlText: String): Unit = {
@@ -1212,9 +1219,10 @@ class HiveDDLSuite
     sql(s"USE default")
     val sqlDropDatabase = s"DROP DATABASE $dbName ${if (cascade) "CASCADE" else "RESTRICT"}"
     if (tableExists && !cascade) {
-      assertAnalysisError(
+      assertAnalysisErrorClass(
         sqlDropDatabase,
-        s"Cannot drop a non-empty database: $dbName.")
+        "SCHEMA_NOT_EMPTY",
+        Map("schemaName" -> s"`$dbName`"))
       // the database directory was not removed
       assert(fs.exists(new Path(expectedDBLocation)))
     } else {
@@ -2670,27 +2678,30 @@ class HiveDDLSuite
   }
 
   test("Hive CTAS can't create partitioned table by specifying schema") {
-    val err1 = intercept[ParseException] {
-      spark.sql(
-        s"""
-           |CREATE TABLE t (a int)
-           |PARTITIONED BY (b string)
-           |STORED AS parquet
-           |AS SELECT 1 as a, "a" as b
-                 """.stripMargin)
-    }.getMessage
-    assert(err1.contains("Schema may not be specified in a Create Table As Select"))
+    val sql1 =
+      s"""CREATE TABLE t (a int)
+         |PARTITIONED BY (b string)
+         |STORED AS parquet
+         |AS SELECT 1 as a, "a" as b""".stripMargin
+    checkError(
+      exception = intercept[ParseException](sql(sql1)),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map(
+        "message" -> "Schema may not be specified in a Create Table As Select (CTAS) statement"),
+      context = ExpectedContext(sql1, 0, 92))
 
-    val err2 = intercept[ParseException] {
-      spark.sql(
-        s"""
-           |CREATE TABLE t
-           |PARTITIONED BY (b string)
-           |STORED AS parquet
-           |AS SELECT 1 as a, "a" as b
-                 """.stripMargin)
-    }.getMessage
-    assert(err2.contains("Partition column types may not be specified in Create Table As Select"))
+    val sql2 =
+      s"""CREATE TABLE t
+         |PARTITIONED BY (b string)
+         |STORED AS parquet
+         |AS SELECT 1 as a, "a" as b""".stripMargin
+    checkError(
+      exception = intercept[ParseException](sql(sql2)),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map(
+        "message" ->
+          "Partition column types may not be specified in Create Table As Select (CTAS)"),
+      context = ExpectedContext(sql2, 0, 84))
   }
 
   test("Hive CTAS with dynamic partition") {
@@ -2721,6 +2732,24 @@ class HiveDDLSuite
         val expectedSerde = HiveSerDe.sourceToSerDe(tableType)
         withTable("t") {
           sql(s"CREATE TABLE t LIKE s STORED AS $tableType")
+          val table = catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.provider == Some("hive"))
+          assert(table.storage.serde == expectedSerde.get.serde)
+          assert(table.storage.inputFormat == expectedSerde.get.inputFormat)
+          assert(table.storage.outputFormat == expectedSerde.get.outputFormat)
+        }
+      }
+    }
+  }
+
+  test("Create Table LIKE VIEW STORED AS Hive Format") {
+    val catalog = spark.sessionState.catalog
+    withView("v") {
+      sql("CREATE TEMPORARY VIEW v AS SELECT 1 AS A, 1 AS B;")
+      hiveFormats.foreach { tableType =>
+        val expectedSerde = HiveSerDe.sourceToSerDe(tableType)
+        withTable("t") {
+          sql(s"CREATE TABLE t LIKE v STORED AS $tableType")
           val table = catalog.getTableMetadata(TableIdentifier("t"))
           assert(table.provider == Some("hive"))
           assert(table.storage.serde == expectedSerde.get.serde)
@@ -2956,11 +2985,13 @@ class HiveDDLSuite
       spark.sparkContext.addedJars.keys.find(_.contains(jarName))
         .foreach(spark.sparkContext.addedJars.remove)
       assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
-      val msg = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         sql("CREATE TEMPORARY FUNCTION f1 AS " +
           s"'org.apache.hadoop.hive.ql.udf.UDFUUID' USING JAR '$jar'")
-      }.getMessage
-      assert(msg.contains("Function f1 already exists"))
+      }
+      checkError(e,
+        errorClass = "ROUTINE_ALREADY_EXISTS",
+        parameters = Map("routineName" -> "`f1`"))
       assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
 
       sql("CREATE OR REPLACE TEMPORARY FUNCTION f1 AS " +

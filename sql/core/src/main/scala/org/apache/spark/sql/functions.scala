@@ -3778,6 +3778,23 @@ object functions {
   }
 
   /**
+   * Extracts the event time from the window column.
+   *
+   * The window column is of StructType { start: Timestamp, end: Timestamp } where start is
+   * inclusive and end is exclusive. Since event time can support microsecond precision,
+   * window_time(window) = window.end - 1 microsecond.
+   *
+   * @param windowColumn The window column (typically produced by window aggregation) of type
+   *                     StructType { start: Timestamp, end: Timestamp }
+   *
+   * @group datetime_funcs
+   * @since 3.4.0
+   */
+  def window_time(windowColumn: Column): Column = withExpr {
+    WindowTime(windowColumn.expr)
+  }
+
+  /**
    * Generates session window given a timestamp specifying column.
    *
    * Session window is one of dynamic windows, which means the length of window is varying
@@ -4344,6 +4361,23 @@ object functions {
    * @since 2.2.0
    */
   def posexplode_outer(e: Column): Column = withExpr { GeneratorOuter(PosExplode(e.expr)) }
+
+   /**
+   * Creates a new row for each element in the given array of structs.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def inline(e: Column): Column = withExpr { Inline(e.expr) }
+
+  /**
+   * Creates a new row for each element in the given array of structs.
+   * Unlike inline, if the array is null or empty then null is produced for each nested column.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def inline_outer(e: Column): Column = withExpr { GeneratorOuter(Inline(e.expr)) }
 
   /**
    * Extracts json object from a json string based on json path specified, and returns json string
