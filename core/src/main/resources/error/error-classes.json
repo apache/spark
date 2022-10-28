@@ -295,11 +295,6 @@
           "Cannot use an UnspecifiedFrame. This should have been converted during analysis."
         ]
       },
-      "UNSUPPORTED_INPUT_TYPE" : {
-        "message" : [
-          "The <functionName> don't support <inputType> type."
-        ]
-      },
       "VALUE_OUT_OF_RANGE" : {
         "message" : [
           "The <exprName> must be between <valueRange> (current value = <currentValue>)"

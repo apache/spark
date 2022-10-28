@@ -90,9 +90,9 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val sortOrderExpression = SortOrder(m, Ascending)
     assert(sortOrderExpression.checkInputDataTypes() ==
       DataTypeMismatch(
-        errorSubClass = "UNSUPPORTED_INPUT_TYPE",
+        errorSubClass = "INVALID_ORDERING_TYPE",
         messageParameters = Map(
           "functionName" -> "`sortorder`",
-          "inputType" -> "\"MAP<STRING, STRING>\"")))
+          "dataType" -> "\"MAP<STRING, STRING>\"")))
   }
 }
