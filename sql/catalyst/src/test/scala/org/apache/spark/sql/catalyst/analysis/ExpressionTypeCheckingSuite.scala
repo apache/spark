@@ -90,7 +90,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(expr)
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       parameters = messageParameters)
   }
 
@@ -447,7 +447,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(murmur3Hash)
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       parameters = Map(
         "sqlExpr" -> "\"hash()\"",
         "functionName" -> toSQLId(murmur3Hash.prettyName),
@@ -459,7 +459,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(xxHash64)
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       parameters = Map(
         "sqlExpr" -> "\"xxhash64()\"",
         "functionName" -> toSQLId(xxHash64.prettyName),
