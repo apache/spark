@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-ARG java_image_tag=11-jre-focal
+ARG java_image_tag=17-jre
 
 FROM eclipse-temurin:${java_image_tag}
 

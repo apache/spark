@@ -64,7 +64,7 @@ case class Coalesce(children: Seq[Expression])
           "expectedNum" -> "> 0",
           "actualNum" -> children.length.toString))
     } else {
-      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
+      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), prettyName)
     }
   }
 

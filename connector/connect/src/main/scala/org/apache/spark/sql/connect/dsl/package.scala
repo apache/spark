@@ -26,6 +26,9 @@ import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 
 /**
  * A collection of implicit conversions that create a DSL for constructing connect protos.
+ *
+ * All classes in connect/dsl are considered an internal API to Spark Connect and are subject to
+ * change between minor releases.
  */
 
 package object dsl {
@@ -237,14 +240,44 @@ package object dsl {
 
       def join(
           otherPlan: proto.Relation,
+          joinType: JoinType,
+          condition: Option[proto.Expression]): proto.Relation = {
+        join(otherPlan, joinType, Seq(), condition)
+      }
+
+      def join(otherPlan: proto.Relation, condition: Option[proto.Expression]): proto.Relation = {
+        join(otherPlan, JoinType.JOIN_TYPE_INNER, Seq(), condition)
+      }
+
+      def join(otherPlan: proto.Relation): proto.Relation = {
+        join(otherPlan, JoinType.JOIN_TYPE_INNER, Seq(), None)
+      }
+
+      def join(otherPlan: proto.Relation, joinType: JoinType): proto.Relation = {
+        join(otherPlan, joinType, Seq(), None)
+      }
+
+      def join(
+          otherPlan: proto.Relation,
+          joinType: JoinType,
+          usingColumns: Seq[String]): proto.Relation = {
+        join(otherPlan, joinType, usingColumns, None)
+      }
+
+      private def join(
+          otherPlan: proto.Relation,
           joinType: JoinType = JoinType.JOIN_TYPE_INNER,
-          condition: Option[proto.Expression] = None): proto.Relation = {
+          usingColumns: Seq[String],
+          condition: Option[proto.Expression]): proto.Relation = {
         val relation = proto.Relation.newBuilder()
         val join = proto.Join.newBuilder()
         join
           .setLeft(logicalPlan)
           .setRight(otherPlan)
           .setJoinType(joinType)
+        if (usingColumns.nonEmpty) {
+          join.addAllUsingColumns(usingColumns.asJava)
+        }
         if (condition.isDefined) {
           join.setJoinCondition(condition.get)
         }
