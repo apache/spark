@@ -4272,11 +4272,6 @@
       "Invalid catalog name: <name>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2213" : {
-    "message" : [
-      "Catalog '<name>' plugin class not found: spark.sql.catalog.<name> is not defined"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2214" : {
     "message" : [
       "Plugin class for catalog '<name>' does not implement CatalogPlugin: <pluginClassName>"
