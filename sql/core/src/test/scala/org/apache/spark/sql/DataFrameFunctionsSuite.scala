@@ -4282,7 +4282,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(hash())
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"hash()\"",
@@ -4294,7 +4294,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("hash()")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"hash()\"",
@@ -4310,7 +4310,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(xxhash64())
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"xxhash64()\"",
@@ -4322,7 +4322,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("xxhash64()")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"xxhash64()\"",
@@ -4338,7 +4338,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(greatest())
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"greatest()\"",
@@ -4351,7 +4351,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("greatest()")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"greatest()\"",
@@ -4368,7 +4368,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(least())
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"least()\"",
@@ -4381,7 +4381,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("least()")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"least()\"",
