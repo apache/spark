@@ -866,8 +866,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         5    False
         Name: animal, dtype: bool
 
-        >>> s.rename("a").to_frame().set_index("a").index.isin(['lama'])
-        Index([True, False, True, False, True, False], dtype='object', name='a')
+        >>> s.rename("a").to_frame().set_index("a").index.isin(['lama'])  # doctest: +SKIP
+        Index([True, False, True, False, True, False], dtype='bool', name='a')
         """
         if not is_list_like(values):
             raise TypeError(
@@ -910,8 +910,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         2     True
         dtype: bool
 
-        >>> ser.rename("a").to_frame().set_index("a").index.isna()
-        Index([False, False, True], dtype='object', name='a')
+        >>> ser.rename("a").to_frame().set_index("a").index.isna()  # doctest: +SKIP
+        Index([False, False, True], dtype='bool', name='a')
         """
         from pyspark.pandas.indexes import MultiIndex
 
@@ -953,8 +953,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         2    False
         dtype: bool
 
-        >>> ser.rename("a").to_frame().set_index("a").index.notna()
-        Index([True, True, False], dtype='object', name='a')
+        >>> ser.rename("a").to_frame().set_index("a").index.notna()  # doctest: +SKIP
+        Index([True, True, False], dtype='bool', name='a')
         """
         from pyspark.pandas.indexes import MultiIndex
 
