@@ -16,6 +16,7 @@
 #
 from pyspark.testing.connectutils import PlanOnlyTestFixture
 from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
+
 if have_pandas:
     from pyspark.sql.connect import DataFrame
     from pyspark.sql.connect.functions import col

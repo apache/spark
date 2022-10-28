@@ -25,6 +25,7 @@ if have_pandas:
 
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.types import StructType, StructField, LongType, StringType
+
 if have_pandas:
     from pyspark.sql.connect.client import RemoteSparkSession
     from pyspark.sql.connect.function_builder import udf

@@ -18,6 +18,7 @@
 import unittest
 from pyspark.testing.connectutils import PlanOnlyTestFixture
 from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
+
 if have_pandas:
     from pyspark.sql.connect.proto import Expression as ProtoExpression
     import pyspark.sql.connect as c
