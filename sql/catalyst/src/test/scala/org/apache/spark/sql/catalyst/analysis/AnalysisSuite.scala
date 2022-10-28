@@ -104,10 +104,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Project(Seq(UnresolvedAttribute("tBl.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      Map("objectName" -> "`tBl`.`a`", "proposal" -> "`TbL`.`a`"),
-      caseSensitive = true,
-      line = -1,
-      pos = -1)
+      Map("objectName" -> "`tBl`.`a`", "proposal" -> "`TbL`.`a`")
+    )
 
     checkAnalysisWithoutViewWrapper(
       Project(Seq(UnresolvedAttribute("TbL.a")),
@@ -716,9 +714,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisErrorClass(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       Map("objectName" -> "`y`", "proposal" -> "`t`.`x`"),
-      caseSensitive = true,
-      line = -1,
-      pos = -1)
+      Array(ExpectedContext("y", 46, 46))
+    )
   }
 
   test("CTE with non-matching column alias") {
@@ -729,7 +726,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-28251: Insert into non-existing table error message is user friendly") {
     assertAnalysisErrorClass(parsePlan("INSERT INTO test VALUES (1)"),
-      "TABLE_OR_VIEW_NOT_FOUND", Map("relationName" -> "`test`"))
+      "TABLE_OR_VIEW_NOT_FOUND", Map("relationName" -> "`test`"),
+      Array(ExpectedContext("test", 12, 15)))
   }
 
   test("check CollectMetrics resolved") {
@@ -1157,9 +1155,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |""".stripMargin),
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       Map("objectName" -> "`c`.`y`", "proposal" -> "`x`"),
-      caseSensitive = true,
-      line = -1,
-      pos = -1)
+      Array(ExpectedContext("c.y", 123, 125))
+    )
   }
 
   test("SPARK-38118: Func(wrong_type) in the HAVING clause should throw data mismatch error") {
@@ -1178,7 +1175,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""),
-      caseSensitive = false)
+      queryContext = Array(ExpectedContext("mean(t.c)", 65, 73)),
+      caseSensitive = false
+    )
 
     assertAnalysisErrorClass(
       inputPlan = parsePlan(
@@ -1195,6 +1194,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""),
+      queryContext = Array(ExpectedContext("mean(c)", 91, 97)),
       caseSensitive = false)
 
     assertAnalysisErrorClass(
@@ -1213,9 +1213,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" ->
           "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")"),
-      caseSensitive = false,
-      line = -1,
-      pos = -1)
+      queryContext = Array(ExpectedContext("abs(t.c)", 65, 72)),
+      caseSensitive = false
+    )
 
     assertAnalysisErrorClass(
       inputPlan = parsePlan(
@@ -1233,9 +1233,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" ->
           "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")"),
-      caseSensitive = false,
-      line = -1,
-      pos = -1)
+      queryContext = Array(ExpectedContext("abs(c)", 91, 96)),
+      caseSensitive = false
+    )
   }
 
   test("SPARK-39354: should be [TABLE_OR_VIEW_NOT_FOUND]") {
@@ -1246,7 +1246,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
          |FROM t1
          |JOIN t2 ON t1.user_id = t2.user_id
          |WHERE t1.dt >= DATE_SUB('2020-12-27', 90)""".stripMargin),
-      "TABLE_OR_VIEW_NOT_FOUND", Map("relationName" -> "`t2`"))
+      "TABLE_OR_VIEW_NOT_FOUND", Map("relationName" -> "`t2`"),
+      Array(ExpectedContext("t2", 84, 85)))
   }
 
   test("SPARK-39144: nested subquery expressions deduplicate relations should be done bottom up") {
