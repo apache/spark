@@ -13,6 +13,7 @@ matplotlib<3.3.0
 
 # PySpark test dependencies
 unittest-xml-reporting
+openpyxl
 
 # PySpark test dependencies (optional)
 coverage
