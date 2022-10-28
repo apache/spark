@@ -1110,8 +1110,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       // up to the operator producing the correlated values.
       plan match {
         // Category 1:
-        // ResolvedHint, LeafNode, Repartition, and SubqueryAlias
-        case p @ (_: ResolvedHint | _: LeafNode | _: Repartition | _: SubqueryAlias) =>
+        // ResolvedHint, LeafNode, Repartition, SubqueryAlias, Intersect, Except, Union
+        case p @ (_: ResolvedHint | _: LeafNode | _: Repartition | _: SubqueryAlias |
+                  _: SetOperation | _: Union) =>
           p.children.foreach(child => checkPlan(child, aggregated, canContainOuter))
 
         // Category 2:

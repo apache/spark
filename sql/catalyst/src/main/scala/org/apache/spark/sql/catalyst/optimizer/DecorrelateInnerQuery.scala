@@ -667,6 +667,26 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val newJoin = j.copy(left = newLeft, right = newRight, condition = newCondition)
             (newJoin, newJoinCond, newOuterReferenceMap)
 
+          case u: Union =>
+            val outerReferences = parentOuterReferences
+            val childDecorrelateResults =
+              u.children.map(child => decorrelate(child, outerReferences, aggregated))
+            val newChildren = childDecorrelateResults.map(_._1)
+            val newJoinCond = childDecorrelateResults.flatMap(_._2)
+            val newOuterReferenceMap = AttributeMap(childDecorrelateResults.flatMap(_._3))
+            (u.withNewChildren(newChildren), newJoinCond, newOuterReferenceMap)
+
+          case s @ SetOperation(left, right) =>
+            val outerReferences = parentOuterReferences
+            val (newLeft, leftJoinCond, leftOuterReferenceMap) =
+              decorrelate(left, outerReferences, aggregated)
+            val (newRight, rightJoinCond, rightOuterReferenceMap) =
+              decorrelate(right, outerReferences, aggregated)
+            val newOuterReferenceMap = leftOuterReferenceMap ++ rightOuterReferenceMap
+            val newJoinCond = leftJoinCond ++ rightJoinCond
+            val newSetOp = s.withNewChildren(Seq(newLeft, newRight))
+            (newSetOp, newJoinCond, newOuterReferenceMap)
+
           case u: UnaryNode =>
             val outerReferences = collectOuterReferences(u.expressions)
             assert(outerReferences.isEmpty, s"Correlated column is not allowed in $u")

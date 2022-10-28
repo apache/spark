@@ -283,6 +283,82 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     check(innerPlan, outerPlan, correctAnswer, Seq(y <=> y, x === a, y === z))
   }
 
+  test("intersect in correlation path") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Intersect(
+        Filter(And(OuterReference(x) === a, b === 3),
+          testRelation),
+        Filter(And(OuterReference(x) === a, b === 6),
+          testRelation),
+        isAll = false).analyze
+    val correctAnswer =
+      Intersect(
+        Filter(b === 3,
+          testRelation),
+        Filter(b === 6,
+          testRelation),
+        isAll = false).analyze
+    check(innerPlan, outerPlan, correctAnswer, Seq(x === a, x === a))
+  }
+
+  test("except in correlation path") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Except(
+        Filter(And(OuterReference(x) === a, b === 3),
+          testRelation),
+        Filter(And(OuterReference(x) === a, b === 6),
+          testRelation),
+        isAll = false).analyze
+    val correctAnswer =
+      Except(
+        Filter(b === 3,
+          testRelation),
+        Filter(b === 6,
+          testRelation),
+        isAll = false).analyze
+    check(innerPlan, outerPlan, correctAnswer, Seq(x === a, x === a))
+  }
+
+  test("union in correlation path") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Union(
+        Filter(And(OuterReference(x) === a, b === 3),
+          testRelation),
+        Filter(And(OuterReference(x) === a, b === 6),
+          testRelation)).analyze
+    val correctAnswer =
+      Union(
+        Filter(b === 3,
+          testRelation),
+        Filter(b === 6,
+          testRelation)).analyze
+    check(innerPlan, outerPlan, correctAnswer, Seq(x === a, x === a))
+  }
+
+  test("another union in correlation path") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Union(Seq(
+        Filter(And(OuterReference(x) === a, a > 2),
+          testRelation),
+        Filter(And(OuterReference(x) === b, b > 3),
+          testRelation),
+        Filter(And(OuterReference(x) === c, c > 4),
+          testRelation))).analyze
+    val correctAnswer =
+      Union(Seq(
+        Filter(a > 2,
+          testRelation),
+        Filter(b > 3,
+          testRelation),
+        Filter(c > 4,
+          testRelation))).analyze
+    check(innerPlan, outerPlan, correctAnswer, Seq(x === a, x === b, x === c))
+  }
+
   test("SPARK-38155: distinct with non-equality correlated predicates") {
     val outerPlan = testRelation2
     val innerPlan =
