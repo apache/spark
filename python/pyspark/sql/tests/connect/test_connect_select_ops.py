@@ -15,10 +15,12 @@
 # limitations under the License.
 #
 from pyspark.testing.connectutils import PlanOnlyTestFixture
-from pyspark.sql.connect import DataFrame
-from pyspark.sql.connect.functions import col
-from pyspark.sql.connect.plan import Read
-import pyspark.sql.connect.proto as proto
+from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
+if have_pandas:
+    from pyspark.sql.connect import DataFrame
+    from pyspark.sql.connect.functions import col
+    from pyspark.sql.connect.plan import Read
+    import pyspark.sql.connect.proto as proto
 
 
 class SparkConnectToProtoSuite(PlanOnlyTestFixture):
