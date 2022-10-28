@@ -111,17 +111,19 @@ object StatFunctions extends Logging {
   def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
     require(cols.length == 2,
       "Currently correlation calculation is supported between two columns.")
-    cols.map(df.resolve).foreach { data =>
-      require(data.dataType.isInstanceOf[NumericType],
+    val Seq(col1, col2) = cols.map { c =>
+      val dataType = df.resolve(c).dataType
+      require(dataType.isInstanceOf[NumericType],
         "Currently correlation calculation for columns with dataType " +
-          s"${data.dataType.catalogString} not supported.")
-    }
-    val Seq(col1, col2) = cols.map(c =>
+          s"${dataType.catalogString} not supported.")
       when(isnull(col(c)), lit(0.0))
         .otherwise(col(c).cast(DoubleType))
-    )
-    df.select(corr(col1, col2))
-      .na.fill(Double.NaN).head.getDouble(0)
+    }
+    val correlation = corr(col1, col2)
+    df.select(
+      when(isnull(correlation), lit(Double.NaN))
+        .otherwise(correlation)
+    ).head.getDouble(0)
   }
 
   /**
@@ -133,17 +135,19 @@ object StatFunctions extends Logging {
   def calculateCov(df: DataFrame, cols: Seq[String]): Double = {
     require(cols.length == 2,
       "Currently covariance calculation is supported between two columns.")
-    cols.map(df.resolve).foreach { data =>
-      require(data.dataType.isInstanceOf[NumericType],
+    val Seq(col1, col2) = cols.map { c =>
+      val dataType = df.resolve(c).dataType
+      require(dataType.isInstanceOf[NumericType],
         "Currently covariance calculation for columns with dataType " +
-          s"${data.dataType.catalogString} not supported.")
-    }
-    val Seq(col1, col2) = cols.map(c =>
+          s"${dataType.catalogString} not supported.")
       when(isnull(col(c)), lit(0.0))
         .otherwise(col(c).cast(DoubleType))
-    )
-    df.select(covar_samp(col1, col2))
-      .na.fill(0.0).head.getDouble(0)
+    }
+    val covariance = covar_samp(col1, col2)
+    df.select(
+      when(isnull(covariance), lit(0.0))
+        .otherwise(covariance)
+    ).head.getDouble(0)
   }
 
   /** Generate a table of frequencies for the elements of two columns. */
