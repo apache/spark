@@ -440,7 +440,16 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       )
     )
 
-    assertError(Coalesce(Nil), "function coalesce requires at least one argument")
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(Coalesce(Nil))
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      parameters = Map(
+        "sqlExpr" -> "\"coalesce()\"",
+        "functionName" -> "`coalesce`",
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0"))
 
     val murmur3Hash = new Murmur3Hash(Nil)
     checkError(
