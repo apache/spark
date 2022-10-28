@@ -17,16 +17,26 @@
     ],
     "sqlState" : "22005"
   },
+  "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR" : {
+    "message" : [
+      "Error constructing FileDescriptor for <descFilePath>"
+    ]
+  },
+  "CANNOT_CONVERT_PROTOBUF_MESSAGE_TYPE_TO_SQL_TYPE" : {
+    "message" : [
+      "Unable to convert <protobufType> of Protobuf to SQL type <toType>."
+    ]
+  },
+  "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_FIELD_TYPE" : {
+    "message" : [
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
+    ]
+  },
   "CANNOT_DECODE_URL" : {
     "message" : [
       "Cannot decode url : <url>."
     ],
     "sqlState" : "42000"
-  },
-  "CANNOT_FIND_PROTOBUF_DESCRIPTOR_FILE_ERROR" : {
-    "message" : [
-      "Error reading Protobuf descriptor file at path: <filePath>"
-    ]
   },
   "CANNOT_INFER_DATE" : {
     "message" : [
@@ -34,11 +44,21 @@
     ],
     "sqlState" : "22007"
   },
+  "CANNOT_LOAD_PROTOBUF_CLASS" : {
+    "message" : [
+      "Could not load Protobuf class with name <protobufClassName><message>"
+    ]
+  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
       "Cannot parse decimal"
     ],
     "sqlState" : "42000"
+  },
+  "CANNOT_PARSE_PROTOBUF_DESCRIPTOR" : {
+    "message" : [
+      "Error parsing file <descFilePath> descriptor byte[] into Descriptor object"
+    ]
   },
   "CANNOT_PARSE_TIMESTAMP" : {
     "message" : [
@@ -69,11 +89,6 @@
       "Fail to insert a value of <sourceType> type into the <targetType> type column <columnName> due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead."
     ],
     "sqlState" : "22005"
-  },
-  "CATALYST_TYPE_TO_PROTOBUF_ENUM_TYPE_ERROR" : {
-    "message" : [
-      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> cannot be written since it's not defined in ENUM <enumString>"
-    ]
   },
   "COLUMN_NOT_IN_GROUP_BY_CLAUSE" : {
     "message" : [
@@ -527,9 +542,9 @@
       "Invalid bucket file: <path>"
     ]
   },
-  "INVALID_BYTE_STRING_ERROR" : {
+  "INVALID_BYTE_STRING" : {
     "message" : [
-      "Invalid ByteString format"
+      "The expected format is ByteString, but was <unsupported> (<class>)."
     ]
   },
   "INVALID_COLUMN_OR_FIELD_DATA_TYPE" : {
@@ -576,6 +591,11 @@
       "<value> is an invalid property value, please use quotes, e.g. SET <key>=<value>"
     ]
   },
+  "INVALID_PROTOBUF_MESSAGE_TYPE" : {
+    "message" : [
+      "<protobufClassName> is not a Protobuf message type"
+    ]
+  },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
       "Invalid SQL syntax: <inputString>"
@@ -594,7 +614,7 @@
       }
     }
   },
-  "MALFORMED_PROTOBUF_MESSAGE_ERROR" : {
+  "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [
       "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
     ]
@@ -649,22 +669,22 @@
     ],
     "sqlState" : "42000"
   },
-  "NO_CATALYST_TYPE_IN_PROTOBUF_SCHEMA" : {
-    "message" : [
-      "Cannot find <catalystFieldPath> in Protobuf schema"
-    ]
-  },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
     ]
   },
-  "NO_PROTOBUF_MESSAGE_TYPE_ERROR" : {
+  "NO_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "No MessageTypes returned, <descriptorName>"
     ]
   },
-  "NO_UDF_INTERFACE_ERROR" : {
+  "NO_SQL_TYPE_IN_PROTOBUF_SCHEMA" : {
+    "message" : [
+      "Cannot find <catalystFieldPath> in Protobuf schema"
+    ]
+  },
+  "NO_UDF_INTERFACE" : {
     "message" : [
       "UDF class <className> doesn't implement any UDF interface"
     ]
@@ -736,32 +756,22 @@
     ],
     "sqlState" : "42000"
   },
-  "PROTOBUF_CLASS_LOAD_ERROR" : {
-    "message" : [
-      "Could not load Protobuf class with name <protobufClassName><message>"
-    ]
-  },
-  "PROTOBUF_DEPENDENCY_ERROR" : {
+  "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
     "message" : [
       "Could not find dependency: <dependencyName>"
     ]
   },
-  "PROTOBUF_DESCRIPTOR_ERROR" : {
+  "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND" : {
     "message" : [
-      "Error parsing descriptor byte[] into Descriptor object"
+      "Error reading Protobuf descriptor file at path: <filePath>"
     ]
   },
-  "PROTOBUF_DESCRIPTOR_PARSING_ERROR" : {
-    "message" : [
-      "Error constructing FileDescriptor"
-    ]
-  },
-  "PROTOBUF_FIELD_MISSING_ERROR" : {
+  "PROTOBUF_FIELD_MISSING" : {
     "message" : [
       "Searching for <field> in Protobuf schema at <protobufSchema> gave <matchSize> matches. Candidates: <matches>"
     ]
   },
-  "PROTOBUF_FIELD_MISSING_IN_CATALYST_SCHEMA" : {
+  "PROTOBUF_FIELD_MISSING_IN_SQL_SCHEMA" : {
     "message" : [
       "Found <field> in Protobuf schema but there is no match in the SQL schema"
     ]
@@ -771,29 +781,24 @@
       "Type mismatch encountered for field: <field>"
     ]
   },
-  "PROTOBUF_MESSAGE_TYPE_ERROR" : {
+  "PROTOBUF_FIELD_TYPE_TO_SQL_TYPE_ERROR" : {
     "message" : [
-      "<protobufClassName> is not a Protobuf message type"
+      "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
     ]
   },
-  "PROTOBUF_RECURSION_ERROR" : {
+  "PROTOBUF_MESSAGE_NOT_FOUND" : {
     "message" : [
-      "Found recursive reference in Protobuf schema, which can not be processed by Spark: <fieldDescriptor>"
+      "Unable to locate Message <messageName> in Descriptor"
     ]
   },
-  "PROTOBUF_TYPE_NOT_SUPPORT_ERROR" : {
+  "PROTOBUF_TYPE_NOT_SUPPORT" : {
     "message" : [
       "Protobuf type not yet supported: <protobufType>."
     ]
   },
-  "PROTOBUF_TYPE_TO_CATALYST_TYPE_ERROR" : {
+  "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
-      "Unable to convert <protobufType> of Protobuf to SQL type <toType>."
-    ]
-  },
-  "PROTOBUF_TYPE_TO_SQL_TYPE_ERROR" : {
-    "message" : [
-      "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
+      "Found recursive reference in Protobuf schema, which can not be processed by Spark: <fieldDescriptor>"
     ]
   },
   "RENAME_SRC_PATH_NOT_FOUND" : {
@@ -850,9 +855,9 @@
     ],
     "sqlState" : "22023"
   },
-  "SQL_TYPE_TO_PROTOBUF_TYPE_ERROR" : {
+  "SQL_TYPE_TO_PROTOBUF_ENUM_TYPE_ERROR" : {
     "message" : [
-      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> cannot be written since it's not defined in ENUM <enumString>"
     ]
   },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
@@ -887,14 +892,9 @@
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"
     ]
   },
-  "UNABLE_TO_CONVERT_TO_PROTOBUF_TYPE" : {
+  "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
-    ]
-  },
-  "UNABLE_TO_LOCATE_PROTOBUF_MESSAGE_ERROR" : {
-    "message" : [
-      "Unable to locate Message <messageName> in Descriptor"
     ]
   },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {

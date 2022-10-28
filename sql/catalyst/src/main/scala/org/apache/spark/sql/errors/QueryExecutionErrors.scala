@@ -2707,7 +2707,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def malformedProtobufMessageDetectedInMessageParsingError(e: Throwable): Throwable = {
     new SparkException(
-      errorClass = "MALFORMED_PROTOBUF_MESSAGE_ERROR",
+      errorClass = "MALFORMED_PROTOBUF_MESSAGE",
       messageParameters = Map(
         "failFastMode" -> FailFastMode.name),
       cause = e)

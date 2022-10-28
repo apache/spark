@@ -71,7 +71,7 @@ class ProtobufSerdeSuite extends SharedSparkSession {
         protoFile,
         Deserializer,
         fieldMatch,
-        errorClass = "PROTOBUF_TYPE_TO_CATALYST_TYPE_ERROR",
+        errorClass = "CANNOT_CONVERT_PROTOBUF_MESSAGE_TYPE_TO_SQL_TYPE",
         params = Map(
           "protobufType" -> "MissMatchTypeInRoot",
           "toType" -> toSQLType(CATALYST_STRUCT)))
@@ -80,7 +80,7 @@ class ProtobufSerdeSuite extends SharedSparkSession {
         protoFile,
         Serializer,
         fieldMatch,
-        errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_TYPE",
+        errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
         params = Map(
           "protobufType" -> "MissMatchTypeInRoot",
           "toType" -> toSQLType(CATALYST_STRUCT)))
@@ -98,7 +98,7 @@ class ProtobufSerdeSuite extends SharedSparkSession {
       protoFile,
       Serializer,
       BY_NAME,
-      errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_TYPE",
+      errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
       params = Map(
         "protobufType" -> "FieldMissingInProto",
         "toType" -> toSQLType(CATALYST_STRUCT)))
@@ -106,7 +106,7 @@ class ProtobufSerdeSuite extends SharedSparkSession {
     assertFailedConversionMessage(protoFile,
       Serializer,
       BY_NAME,
-      errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_TYPE",
+      errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
       params = Map(
         "protobufType" -> "FieldMissingInProto",
         "toType" -> toSQLType(nonnullCatalyst)))
@@ -124,7 +124,7 @@ class ProtobufSerdeSuite extends SharedSparkSession {
         Deserializer,
         fieldMatch,
         catalyst,
-        errorClass = "PROTOBUF_TYPE_TO_CATALYST_TYPE_ERROR",
+        errorClass = "CANNOT_CONVERT_PROTOBUF_MESSAGE_TYPE_TO_SQL_TYPE",
         params = Map(
           "protobufType" -> "MissMatchTypeInDeepNested",
           "toType" -> toSQLType(catalyst)))
@@ -134,7 +134,7 @@ class ProtobufSerdeSuite extends SharedSparkSession {
         Serializer,
         fieldMatch,
         catalyst,
-        errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_TYPE",
+        errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
         params = Map(
           "protobufType" -> "MissMatchTypeInDeepNested",
           "toType" -> toSQLType(catalyst)))
@@ -149,7 +149,7 @@ class ProtobufSerdeSuite extends SharedSparkSession {
       protoFile,
       Serializer,
       BY_NAME,
-      errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_TYPE",
+      errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
       params = Map(
         "protobufType" -> "FieldMissingInSQLRoot",
         "toType" -> toSQLType(CATALYST_STRUCT)))
@@ -166,7 +166,7 @@ class ProtobufSerdeSuite extends SharedSparkSession {
       protoNestedFile,
       Serializer,
       BY_NAME,
-      errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_TYPE",
+      errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
       params = Map(
         "protobufType" -> "FieldMissingInSQLNested",
         "toType" -> toSQLType(CATALYST_STRUCT)))
@@ -196,10 +196,10 @@ class ProtobufSerdeSuite extends SharedSparkSession {
 
     val expectMsg = serdeFactory match {
       case Deserializer =>
-        s"[PROTOBUF_TYPE_TO_CATALYST_TYPE_ERROR] Unable to convert" +
+        s"[CANNOT_CONVERT_PROTOBUF_MESSAGE_TYPE_TO_SQL_TYPE] Unable to convert" +
           s" ${protoSchema.getName} of Protobuf to SQL type ${toSQLType(catalystSchema)}."
       case Serializer =>
-        s"[UNABLE_TO_CONVERT_TO_PROTOBUF_TYPE] Unable to convert SQL type" +
+        s"[UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE] Unable to convert SQL type" +
           s" ${toSQLType(catalystSchema)} to Protobuf type ${protoSchema.getName}."
     }
 

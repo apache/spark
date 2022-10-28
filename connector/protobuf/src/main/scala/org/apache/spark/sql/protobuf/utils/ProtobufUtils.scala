@@ -201,7 +201,7 @@ private[sql] object ProtobufUtils extends Logging {
       fileDescriptorSet = DescriptorProtos.FileDescriptorSet.parseFrom(dscFile)
     } catch {
       case ex: InvalidProtocolBufferException =>
-        throw QueryCompilationErrors.descrioptorParseError(ex)
+        throw QueryCompilationErrors.descrioptorParseError(descFilePath, ex)
       case ex: IOException =>
         throw QueryCompilationErrors.cannotFindDescriptorFileError(descFilePath, ex)
     }
@@ -214,7 +214,7 @@ private[sql] object ProtobufUtils extends Logging {
       fileDescriptorList
     } catch {
       case e: Descriptors.DescriptorValidationException =>
-        throw QueryCompilationErrors.failedParsingDescriptorError(e)
+        throw QueryCompilationErrors.failedParsingDescriptorError(descFilePath, e)
     }
   }
 

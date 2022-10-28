@@ -195,7 +195,8 @@ private[sql] class ProtobufDeserializer(
         (updater, ordinal, value) =>
           val byte_array = value match {
             case s: ByteString => s.toByteArray
-            case _ => throw QueryCompilationErrors.invalidByteStringFormatError()
+            case unsupported =>
+              throw QueryCompilationErrors.invalidByteStringFormatError(unsupported)
           }
           updater.set(ordinal, byte_array)
 
