@@ -33,6 +33,16 @@ private[spark] trait ShuffleReadMetricsReporter {
   private[spark] def incLocalBytesRead(v: Long): Unit
   private[spark] def incFetchWaitTime(v: Long): Unit
   private[spark] def incRecordsRead(v: Long): Unit
+  private[spark] def incCorruptMergedBlockChunks(v: Long): Unit
+  private[spark] def incFallbackCount(v: Long): Unit
+  private[spark] def incRemoteMergedBlocksFetched(v: Long): Unit
+  private[spark] def incLocalMergedBlocksFetched(v: Long): Unit
+  private[spark] def incRemoteMergedChunksFetched(v: Long): Unit
+  private[spark] def incLocalMergedChunksFetched(v: Long): Unit
+  private[spark] def incRemoteMergedBlocksBytesRead(v: Long): Unit
+  private[spark] def incLocalMergedBlocksBytesRead(v: Long): Unit
+  private[spark] def incRemoteReqsDuration(v: Long): Unit
+  private[spark] def incRemoteMergedReqsDuration(v: Long): Unit
 }
 
 

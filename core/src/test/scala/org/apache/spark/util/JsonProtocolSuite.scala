@@ -1313,6 +1313,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
       sr.incRemoteBlocksFetched(f)
       sr.incRecordsRead(if (hasRecords) (b + d) / 100 else -1)
       sr.incLocalBytesRead(a + f)
+      sr.incCorruptMergedBlockChunks(if (f > e) f - e else e - f)
+      sr.incFallbackCount(if (f > e) f - e else e - f)
+      sr.incRemoteReqsDuration(a + d)
+      sr.incRemoteMergedReqsDuration(a + d)
       t.mergeShuffleReadMetrics()
     }
     if (hasOutput) {
@@ -1366,7 +1370,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Count Failed Values": false
       |      }
       |    ],
-      |    "Resource Profile Id" : 0
+      |    "Resource Profile Id" : 0,
+      |    "Push Based Shuffle Enabled" : false,
+      |    "Shuffle Push Mergers Count" : 0
       |  },
       |  "Properties": {
       |    "France": "Paris",
@@ -1407,7 +1413,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Count Failed Values": false
       |      }
       |    ],
-      |    "Resource Profile Id" : 0
+      |    "Resource Profile Id" : 0,
+      |    "Push Based Shuffle Enabled" : false,
+      |    "Shuffle Push Mergers Count" : 0
       |  }
       |}
     """.stripMargin
@@ -1462,7 +1470,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Count Failed Values": false
       |      }
       |    ],
-      |    "Resource Profile Id" : 0
+      |    "Resource Profile Id" : 0,
+      |    "Push Based Shuffle Enabled" : false,
+      |    "Shuffle Push Mergers Count" : 0
       |  }
       |}
     """.stripMargin
@@ -1657,7 +1667,19 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Remote Bytes Read": 1000,
       |      "Remote Bytes Read To Disk": 400,
       |      "Local Bytes Read": 1100,
-      |      "Total Records Read": 10
+      |      "Total Records Read": 10,
+      |      "Remote Requests Duration": 900,
+      |      "Push Based": {
+      |         "Corrupt Merged Block Chunks" : 100,
+      |         "Fallback Count" : 100,
+      |         "Merged Remote Blocks Fetched" : 0,
+      |         "Merged Local Blocks Fetched" : 0,
+      |         "Merged Remote Chunks Fetched" : 0,
+      |         "Merged Local Chunks Fetched" : 0,
+      |         "Merged Remote Bytes Read" : 0,
+      |         "Merged Local Bytes Read" : 0,
+      |         "Merged Remote Requests Duration": 900
+      |      }
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
@@ -1784,7 +1806,19 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Remote Bytes Read" : 0,
       |      "Remote Bytes Read To Disk" : 0,
       |      "Local Bytes Read" : 0,
-      |      "Total Records Read" : 0
+      |      "Total Records Read" : 0,
+      |      "Remote Requests Duration": 0,
+      |      "Push Based": {
+      |         "Corrupt Merged Block Chunks" : 0,
+      |         "Fallback Count" : 0,
+      |         "Merged Remote Blocks Fetched" : 0,
+      |         "Merged Local Blocks Fetched" : 0,
+      |         "Merged Remote Chunks Fetched" : 0,
+      |         "Merged Local Chunks Fetched" : 0,
+      |         "Merged Remote Bytes Read" : 0,
+      |         "Merged Local Bytes Read" : 0,
+      |         "Merged Remote Requests Duration": 0
+      |      }
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
@@ -1911,7 +1945,19 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Remote Bytes Read" : 0,
       |      "Remote Bytes Read To Disk" : 0,
       |      "Local Bytes Read" : 0,
-      |      "Total Records Read" : 0
+      |      "Total Records Read" : 0,
+      |      "Remote Requests Duration": 0,
+      |      "Push Based": {
+      |         "Corrupt Merged Block Chunks" : 0,
+      |         "Fallback Count" : 0,
+      |         "Merged Remote Blocks Fetched" : 0,
+      |         "Merged Local Blocks Fetched" : 0,
+      |         "Merged Remote Chunks Fetched" : 0,
+      |         "Merged Local Chunks Fetched" : 0,
+      |         "Merged Remote Bytes Read" : 0,
+      |         "Merged Local Bytes Read" : 0,
+      |         "Merged Remote Requests Duration": 0
+      |      }
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written" : 0,
@@ -1999,7 +2045,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Count Failed Values": false
       |        }
       |      ],
-      |      "Resource Profile Id" : 0
+      |      "Resource Profile Id" : 0,
+      |      "Push Based Shuffle Enabled" : false,
+      |      "Shuffle Push Mergers Count" : 0
       |    },
       |    {
       |      "Stage ID": 2,
@@ -2066,7 +2114,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Count Failed Values": false
       |        }
       |      ],
-      |      "Resource Profile Id" : 0
+      |      "Resource Profile Id" : 0,
+      |      "Push Based Shuffle Enabled" : false,
+      |      "Shuffle Push Mergers Count" : 0
       |    },
       |    {
       |      "Stage ID": 3,
@@ -2152,7 +2202,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Count Failed Values": false
       |        }
       |      ],
-      |      "Resource Profile Id" : 0
+      |      "Resource Profile Id" : 0,
+      |      "Push Based Shuffle Enabled" : false,
+      |      "Shuffle Push Mergers Count" : 0
       |    },
       |    {
       |      "Stage ID": 4,
@@ -2257,7 +2309,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Count Failed Values": false
       |        }
       |      ],
-      |      "Resource Profile Id" : 0
+      |      "Resource Profile Id" : 0,
+      |      "Push Based Shuffle Enabled" : false,
+      |      "Shuffle Push Mergers Count" : 0
       |    }
       |  ],
       |  "Stage IDs": [
@@ -2620,55 +2674,125 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        },
       |        {
       |          "ID": 18,
-      |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
+      |          "Name": "${shuffleRead.CORRUPT_MERGED_BLOCK_CHUNKS}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 19,
+      |          "Name": "${shuffleRead.FALLBACK_COUNT}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID" : 20,
+      |          "Name" : "${shuffleRead.REMOTE_MERGED_BLOCKS_FETCHED}",
+      |          "Update" : 0,
+      |          "Internal" : true,
+      |          "Count Failed Values" : true
+      |        },
+      |        {
+      |          "ID" : 21,
+      |          "Name" : "${shuffleRead.LOCAL_MERGED_BLOCKS_FETCHED}",
+      |          "Update" : 0,
+      |          "Internal" : true,
+      |          "Count Failed Values" : true
+      |        },
+      |        {
+      |          "ID" : 22,
+      |          "Name" : "${shuffleRead.REMOTE_MERGED_CHUNKS_FETCHED}",
+      |          "Update" : 0,
+      |          "Internal" : true,
+      |          "Count Failed Values" : true
+      |        },
+      |        {
+      |          "ID" : 23,
+      |          "Name" : "${shuffleRead.LOCAL_MERGED_CHUNKS_FETCHED}",
+      |          "Update" : 0,
+      |          "Internal" : true,
+      |          "Count Failed Values" : true
+      |        },
+      |        {
+      |          "ID" : 24,
+      |          "Name" : "${shuffleRead.REMOTE_MERGED_BYTES_READ}",
+      |          "Update" : 0,
+      |          "Internal" : true,
+      |          "Count Failed Values" : true
+      |        },
+      |        {
+      |          "ID" : 25,
+      |          "Name" : "${shuffleRead.LOCAL_MERGED_BYTES_READ}",
+      |          "Update" : 0,
+      |          "Internal" : true,
+      |          "Count Failed Values" : true
+      |        },
+      |        {
+      |          "ID" : 26,
+      |          "Name" : "${shuffleRead.REMOTE_REQS_DURATION}",
+      |          "Update" : 0,
+      |          "Internal" : true,
+      |          "Count Failed Values" : true
+      |        },
+      |        {
+      |          "ID" : 27,
+      |          "Name" : "${shuffleRead.REMOTE_MERGED_REQS_DURATION}",
+      |          "Update" : 0,
+      |          "Internal" : true,
+      |          "Count Failed Values" : true
+      |        },
+      |        {
+      |          "ID": 28,
+      |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 29,
       |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 20,
+      |          "ID": 30,
       |          "Name": "${shuffleWrite.WRITE_TIME}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 21,
+      |          "ID": 31,
       |          "Name": "${input.BYTES_READ}",
       |          "Update": 2100,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 22,
+      |          "ID": 32,
       |          "Name": "${input.RECORDS_READ}",
       |          "Update": 21,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 23,
+      |          "ID": 33,
       |          "Name": "${output.BYTES_WRITTEN}",
       |          "Update": 1200,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 24,
+      |          "ID": 34,
       |          "Name": "${output.RECORDS_WRITTEN}",
       |          "Update": 12,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 25,
+      |          "ID": 35,
       |          "Name": "$TEST_ACCUM",
       |          "Update": 0,
       |          "Internal": true,

@@ -33,6 +33,16 @@
   "shuffleLocalBytesRead" : 0,
   "shuffleReadBytes" : 0,
   "shuffleReadRecords" : 0,
+  "shuffleCorruptMergedBlockChunks" : 160,
+  "shuffleFallbackCount" : 32,
+  "shuffleMergedRemoteBlocksFetched" : 160,
+  "shuffleMergedLocalBlocksFetched" : 240,
+  "shuffleMergedRemoteChunksFetched" : 192,
+  "shuffleMergedLocalChunksFetched" : 160,
+  "shuffleMergedRemoteBytesRead" : 1600,
+  "shuffleMergedLocalBytesRead" : 1600,
+  "shuffleRemoteReqsDuration" : 0,
+  "shuffleMergedRemoteReqsDuration" : 192,
   "shuffleWriteBytes" : 0,
   "shuffleWriteTime" : 0,
   "shuffleWriteRecords" : 0,
@@ -65,7 +75,9 @@
     "MajorGCCount" : 4,
     "MajorGCTime" : 339,
     "TotalGCTime" : 0
-  }
+  },
+  "isPushBasedShuffleEnabled" : false,
+  "shuffleMergersCount" : 0
 }, {
   "status" : "COMPLETE",
   "stageId" : 1,
@@ -101,6 +113,16 @@
   "shuffleLocalBytesRead" : 0,
   "shuffleReadBytes" : 0,
   "shuffleReadRecords" : 0,
+  "shuffleCorruptMergedBlockChunks" : 160,
+  "shuffleFallbackCount" : 32,
+  "shuffleMergedRemoteBlocksFetched" : 160,
+  "shuffleMergedLocalBlocksFetched" : 240,
+  "shuffleMergedRemoteChunksFetched" : 192,
+  "shuffleMergedLocalChunksFetched" : 160,
+  "shuffleMergedRemoteBytesRead" : 1600,
+  "shuffleMergedLocalBytesRead" : 1600,
+  "shuffleRemoteReqsDuration" : 0,
+  "shuffleMergedRemoteReqsDuration" : 192,
   "shuffleWriteBytes" : 0,
   "shuffleWriteTime" : 0,
   "shuffleWriteRecords" : 0,
@@ -134,7 +156,9 @@
     "MajorGCCount" : 0,
     "MajorGCTime" : 0,
     "TotalGCTime" : 0
-  }
+  },
+  "isPushBasedShuffleEnabled" : false,
+  "shuffleMergersCount" : 0
 }, {
   "status" : "COMPLETE",
   "stageId" : 0,
@@ -170,6 +194,16 @@
   "shuffleLocalBytesRead" : 0,
   "shuffleReadBytes" : 0,
   "shuffleReadRecords" : 0,
+  "shuffleCorruptMergedBlockChunks" : 160,
+  "shuffleFallbackCount" : 32,
+  "shuffleMergedRemoteBlocksFetched" : 160,
+  "shuffleMergedLocalBlocksFetched" : 240,
+  "shuffleMergedRemoteChunksFetched" : 192,
+  "shuffleMergedLocalChunksFetched" : 160,
+  "shuffleMergedRemoteBytesRead" : 1600,
+  "shuffleMergedLocalBytesRead" : 1600,
+  "shuffleRemoteReqsDuration" : 0,
+  "shuffleMergedRemoteReqsDuration" : 192,
   "shuffleWriteBytes" : 0,
   "shuffleWriteTime" : 0,
   "shuffleWriteRecords" : 0,
@@ -203,5 +237,7 @@
     "MajorGCCount" : 3,
     "MajorGCTime" : 110,
     "TotalGCTime" : 0
-  }
+  },
+  "isPushBasedShuffleEnabled" : false,
+  "shuffleMergersCount" : 0
 } ]

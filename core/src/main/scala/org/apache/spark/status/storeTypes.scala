@@ -138,6 +138,16 @@ private[spark] object TaskIndexNames {
   final val SHUFFLE_WRITE_RECORDS = "swr"
   final val SHUFFLE_WRITE_SIZE = "sws"
   final val SHUFFLE_WRITE_TIME = "swt"
+  final val PUSH_BASED_SHUFFLE_CORRUPT_MERGED_BLOCK_CHUNKS = "pbscmbc"
+  final val PUSH_BASED_SHUFFLE_FALLBACK_COUNT = "pbsfc"
+  final val PUSH_BASED_SHUFFLE_MERGED_REMOTE_BLOCKS = "pbsmrb"
+  final val PUSH_BASED_SHUFFLE_MERGED_LOCAL_BLOCKS = "pbsmlb"
+  final val PUSH_BASED_SHUFFLE_MERGED_REMOTE_CHUNKS = "pbsmrc"
+  final val PUSH_BASED_SHUFFLE_MERGED_LOCAL_CHUNKS = "pbsmlc"
+  final val PUSH_BASED_SHUFFLE_MERGED_REMOTE_READS = "pbsmrr"
+  final val PUSH_BASED_SHUFFLE_MERGED_LOCAL_READS = "pbsmlr"
+  final val PUSH_BASED_SHUFFLE_REMOTE_REQS_DURATION = "pbsrrd"
+  final val PUSH_BASED_SHUFFLE_MERGED_REMOTE_REQS_DURATION = "pbsmrrd"
   final val STAGE = "stage"
   final val STATUS = "sta"
   final val TASK_INDEX = "idx"
@@ -233,6 +243,38 @@ private[spark] class TaskDataWrapper(
     val shuffleLocalBytesRead: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_READ_RECORDS, parent = TaskIndexNames.STAGE)
     val shuffleRecordsRead: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.PUSH_BASED_SHUFFLE_CORRUPT_MERGED_BLOCK_CHUNKS,
+      parent = TaskIndexNames.STAGE)
+    val shuffleCorruptMergedBlockChunks: Long,
+    @KVIndexParam(value = TaskIndexNames.PUSH_BASED_SHUFFLE_FALLBACK_COUNT,
+      parent = TaskIndexNames.STAGE)
+    val shuffleFallbackCount: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_REMOTE_BLOCKS, parent = TaskIndexNames.STAGE)
+    val shuffleMergedRemoteBlocksFetched: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_LOCAL_BLOCKS, parent = TaskIndexNames.STAGE)
+    val shuffleMergedLocalBlocksFetched: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_REMOTE_CHUNKS, parent = TaskIndexNames.STAGE)
+    val shuffleMergedRemoteChunksFetched: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_LOCAL_CHUNKS, parent = TaskIndexNames.STAGE)
+    val shuffleMergedLocalChunksFetched: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_REMOTE_READS, parent = TaskIndexNames.STAGE)
+    val shuffleMergedRemoteBlocksBytesRead: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_LOCAL_READS, parent = TaskIndexNames.STAGE)
+    val shuffleMergedLocalBlocksBytesRead: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.PUSH_BASED_SHUFFLE_REMOTE_REQS_DURATION, parent = TaskIndexNames.STAGE)
+    val shuffleRemoteReqsDuration: Long,
+    @KVIndexParam(
+      value = TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_REMOTE_REQS_DURATION,
+      parent = TaskIndexNames.STAGE)
+    val shuffleMergedRemoteReqDuration: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_WRITE_SIZE, parent = TaskIndexNames.STAGE)
     val shuffleBytesWritten: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_WRITE_TIME, parent = TaskIndexNames.STAGE)
@@ -278,7 +320,18 @@ private[spark] class TaskDataWrapper(
           getMetricValue(shuffleRemoteBytesRead),
           getMetricValue(shuffleRemoteBytesReadToDisk),
           getMetricValue(shuffleLocalBytesRead),
-          getMetricValue(shuffleRecordsRead)),
+          getMetricValue(shuffleRecordsRead),
+          getMetricValue(shuffleRemoteReqsDuration),
+          new ShufflePushReadMetrics(
+            getMetricValue(shuffleCorruptMergedBlockChunks),
+            getMetricValue(shuffleFallbackCount),
+            getMetricValue(shuffleMergedRemoteBlocksFetched),
+            getMetricValue(shuffleMergedLocalBlocksFetched),
+            getMetricValue(shuffleMergedRemoteChunksFetched),
+            getMetricValue(shuffleMergedLocalChunksFetched),
+            getMetricValue(shuffleMergedRemoteBlocksBytesRead),
+            getMetricValue(shuffleMergedLocalBlocksBytesRead),
+            getMetricValue(shuffleMergedRemoteReqDuration))),
         new ShuffleWriteMetrics(
           getMetricValue(shuffleBytesWritten),
           getMetricValue(shuffleWriteTime),
@@ -521,6 +574,16 @@ private[spark] class CachedQuantile(
     val shuffleRemoteBytesRead: Double,
     val shuffleRemoteBytesReadToDisk: Double,
     val shuffleTotalBlocksFetched: Double,
+    val shuffleCorruptMergedBlockChunks: Double,
+    val shuffleFallbackCount: Double,
+    val shuffleMergedRemoteBlocksFetched: Double,
+    val shuffleMergedLocalBlocksFetched: Double,
+    val shuffleMergedRemoteChunksFetched: Double,
+    val shuffleMergedLocalChunksFetched: Double,
+    val shuffleMergedRemoteBlocksBytesRead: Double,
+    val shuffleMergedLocalBlocksBytesRead: Double,
+    val shuffleRemoteReqsDuration: Double,
+    val shuffleMergedRemoteReqsDuration: Double,
 
     val shuffleWriteBytes: Double,
     val shuffleWriteRecords: Double,
