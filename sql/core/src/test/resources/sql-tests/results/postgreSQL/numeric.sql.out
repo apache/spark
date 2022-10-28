@@ -4694,8 +4694,15 @@ SELECT '' AS to_number_1,  to_number('-34,338,492', '99G999G999')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-The input string '-34,338,492' does not match the given number format: '99G999G999'
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2278",
+  "messageParameters" : {
+    "format" : "99G999G999",
+    "input" : "-34,338,492",
+    "valueType" : "string"
+  }
+}
 
 
 -- !query
@@ -4761,8 +4768,15 @@ SELECT '' AS to_number_16, to_number('123456','999G999')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-The input string '123456' does not match the given number format: '999G999'
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2278",
+  "messageParameters" : {
+    "format" : "999G999",
+    "input" : "123456",
+    "valueType" : "string"
+  }
+}
 
 
 -- !query
