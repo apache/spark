@@ -117,9 +117,11 @@ object StatFunctions extends Logging {
           s"${data.dataType.catalogString} not supported.")
     }
     val Seq(col1, col2) = cols.map(c =>
-      when(isnull(col(c)), lit(0.0)).otherwise(col(c).cast("double")))
-    val row = df.select(corr(col1, col2)).head
-    if (row.isNullAt(0)) Double.NaN else row.getDouble(0)
+      when(isnull(col(c)), lit(0.0))
+        .otherwise(col(c).cast(DoubleType))
+    )
+    df.select(corr(col1, col2))
+      .na.fill(Double.NaN).head.getDouble(0)
   }
 
   /**
@@ -137,9 +139,11 @@ object StatFunctions extends Logging {
           s"${data.dataType.catalogString} not supported.")
     }
     val Seq(col1, col2) = cols.map(c =>
-      when(isnull(col(c)), lit(0.0)).otherwise(col(c).cast("double")))
-    val row = df.select(covar_samp(col1, col2)).head
-    if (row.isNullAt(0)) 0.0 else row.getDouble(0)
+      when(isnull(col(c)), lit(0.0))
+        .otherwise(col(c).cast(DoubleType))
+    )
+    df.select(covar_samp(col1, col2))
+      .na.fill(0.0).head.getDouble(0)
   }
 
   /** Generate a table of frequencies for the elements of two columns. */
