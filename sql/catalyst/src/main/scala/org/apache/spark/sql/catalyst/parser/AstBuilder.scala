@@ -2814,16 +2814,16 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     import ctx._
 
     // Check that no duplicates exist among any CREATE TABLE column options specified.
-    var isNotNull: Option[Boolean] = None
+    var nullable = true
     var defaultExpression: Option[DefaultExpressionContext] = None
     var commentSpec: Option[CommentSpecContext] = None
     ctx.colDefinitionOption().asScala.foreach { option =>
       if (option.NULL != null) {
-        if (isNotNull.isDefined) {
+        if (!nullable) {
           throw QueryParsingErrors.duplicateCreateTableColumnOption(
             option, colName.getText, "NOT NULL")
         }
-        isNotNull = Some(true)
+        nullable = false
       }
       Option(option.defaultExpression()).foreach { expr =>
         if (defaultExpression.isDefined) {
@@ -2862,7 +2862,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     StructField(
       name = name,
       dataType = typedVisit[DataType](ctx.dataType),
-      nullable = !isNotNull.getOrElse(false),
+      nullable = nullable,
       metadata = builder.build())
   }
 
