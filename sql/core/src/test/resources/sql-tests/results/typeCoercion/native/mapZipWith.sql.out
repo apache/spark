@@ -82,8 +82,22 @@ FROM various_maps
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'map_zip_with(various_maps.decimal_map1, various_maps.decimal_map2, lambdafunction(struct(k, v1, v2), k, v1, v2))' due to argument data type mismatch: The input to function map_zip_with should have been two maps with compatible key types, but the key types are [decimal(36,0), decimal(36,35)].; line 1 pos 7
-
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"DECIMAL(36,0)\"",
+    "rightType" : "\"DECIMAL(36,35)\"",
+    "sqlExpr" : "\"map_zip_with(decimal_map1, decimal_map2, lambdafunction(struct(k, v1, v2), k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 81,
+    "fragment" : "map_zip_with(decimal_map1, decimal_map2, (k, v1, v2) -> struct(k, v1, v2))"
+  } ]
+}
 
 -- !query
 SELECT map_zip_with(decimal_map1, int_map, (k, v1, v2) -> struct(k, v1, v2)) m
@@ -110,7 +124,22 @@ FROM various_maps
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'map_zip_with(various_maps.decimal_map2, various_maps.int_map, lambdafunction(struct(k, v1, v2), k, v1, v2))' due to argument data type mismatch: The input to function map_zip_with should have been two maps with compatible key types, but the key types are [decimal(36,35), int].; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"DECIMAL(36,35)\"",
+    "rightType" : "\"INT\"",
+    "sqlExpr" : "\"map_zip_with(decimal_map2, int_map, lambdafunction(struct(k, v1, v2), k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 76,
+    "fragment" : "map_zip_with(decimal_map2, int_map, (k, v1, v2) -> struct(k, v1, v2))"
+  } ]
+}
 
 
 -- !query

@@ -61,6 +61,11 @@ trait FileFormat {
 
   /**
    * Returns whether this format supports returning columnar batch or not.
+   * If columnar batch output is requested, users shall supply
+   * FileFormat.OPTION_RETURNING_BATCH -> true
+   * in relation options when calling buildReaderWithPartitionValues.
+   * This should only be passed as true if it can actually be supported.
+   * For ParquetFileFormat and OrcFileFormat, passing this option is required.
    *
    * TODO: we should just have different traits for the different formats.
    */
@@ -190,6 +195,14 @@ object FileFormat {
   val ROW_INDEX_TEMPORARY_COLUMN_NAME = s"_tmp_metadata_$ROW_INDEX"
 
   val METADATA_NAME = "_metadata"
+
+  /**
+   * Option to pass to buildReaderWithPartitionValues to return columnar batch output or not.
+   * For ParquetFileFormat and OrcFileFormat, passing this option is required.
+   * This should only be passed as true if it can actually be supported, which can be checked
+   * by calling supportBatch.
+   */
+  val OPTION_RETURNING_BATCH = "returning_batch"
 
   /** Schema of metadata struct that can be produced by every file format. */
   val BASE_METADATA_STRUCT: StructType = new StructType()

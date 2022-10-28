@@ -1395,7 +1395,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def failToRecognizePatternError(pattern: String, e: Throwable): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2130",
-      messageParameters = Map("pattern" -> pattern),
+      messageParameters = Map("pattern" -> toSQLValue(pattern, StringType)),
       cause = e)
   }
 
@@ -2623,9 +2623,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "format" -> format))
   }
 
-  def multipleBucketTransformsError(): SparkUnsupportedOperationException = {
+  def unsupportedMultipleBucketTransformsError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2279",
+      errorClass = "UNSUPPORTED_FEATURE.MULTIPLE_BUCKET_TRANSFORMS",
       messageParameters = Map.empty)
   }
 
@@ -2686,7 +2686,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "parameter" -> "regexp",
         "functionName" -> toSQLId(funcName),
-        "expected" -> pattern))
+        "expected" -> toSQLValue(pattern, StringType)))
   }
 
   def tooManyArrayElementsError(

@@ -19,7 +19,6 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
@@ -38,8 +37,6 @@ final case class InvalidPlanInput(
     private val cause: Throwable = None.orNull)
     extends Exception(message, cause)
 
-@Unstable
-@Since("3.4.0")
 class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   def transform(): LogicalPlan = {
@@ -67,7 +64,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.AGGREGATE => transformAggregate(rel.getAggregate)
       case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
       case proto.Relation.RelTypeCase.LOCAL_RELATION =>
-        transformLocalRelation(rel.getLocalRelation)
+        transformLocalRelation(rel.getLocalRelation, common)
       case proto.Relation.RelTypeCase.SAMPLE => transformSample(rel.getSample)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
@@ -125,9 +122,16 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     }
   }
 
-  private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
+  private def transformLocalRelation(
+      rel: proto.LocalRelation,
+      common: Option[proto.RelationCommon]): LogicalPlan = {
     val attributes = rel.getAttributesList.asScala.map(transformAttribute(_)).toSeq
-    new org.apache.spark.sql.catalyst.plans.logical.LocalRelation(attributes)
+    val relation = new org.apache.spark.sql.catalyst.plans.logical.LocalRelation(attributes)
+    if (common.nonEmpty && common.get.getAlias.nonEmpty) {
+      logical.SubqueryAlias(identifier = common.get.getAlias, child = relation)
+    } else {
+      relation
+    }
   }
 
   private def transformAttribute(exp: proto.Expression.QualifiedAttribute): Attribute = {

@@ -2491,4 +2491,21 @@ class SubquerySuite extends QueryTest
         Row("a"))
     }
   }
+
+  test("SPARK-40862: correlated one-row subquery with non-deterministic expressions") {
+    import org.apache.spark.sql.functions.udf
+    withTempView("t1") {
+      sql("CREATE TEMP VIEW t1 AS SELECT ARRAY('a', 'b') a")
+      val func = udf(() => "a")
+      spark.udf.register("func", func.asNondeterministic())
+      checkAnswer(sql(
+        """
+          |SELECT (
+          |  SELECT array_sort(a, (i, j) -> rank[i] - rank[j])[0] || str AS sorted
+          |  FROM (SELECT MAP('a', 1, 'b', 2) rank, func() AS str)
+          |) FROM t1
+          |""".stripMargin),
+        Row("aa"))
+    }
+  }
 }

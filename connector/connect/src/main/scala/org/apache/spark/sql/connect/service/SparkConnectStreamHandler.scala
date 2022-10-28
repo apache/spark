@@ -23,7 +23,6 @@ import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{Request, Response}
 import org.apache.spark.internal.Logging
@@ -34,8 +33,6 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
 import org.apache.spark.sql.internal.SQLConf
 
-@Unstable
-@Since("3.4.0")
 class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) extends Logging {
 
   // The maximum batch size in bytes for a single batch of data to be returned via proto.
@@ -60,7 +57,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
     processRows(request.getClientId, rows)
   }
 
-  private[connect] def processRows(clientId: String, rows: DataFrame): Unit = {
+  def processRows(clientId: String, rows: DataFrame): Unit = {
     val timeZoneId = SQLConf.get.sessionLocalTimeZone
 
     // Only process up to 10MB of data.
