@@ -79,11 +79,11 @@ class MultiStatefulOperatorsSuite
         assertNumStateRows(Seq(0, 1)),
         assertNumRowsDroppedByWatermark(Seq(0, 0)),
 
-        AddData(inputData, 22 to 29: _*),
+        AddData(inputData, 10 to 29: _*),
         // op1 W (21, 21)
-        // agg: [20, 25) 5, [25, 30) 4
+        // agg: [10, 15) 5 - late, [15, 20) 5 - late, [20, 25) 5, [25, 30) 5
         // output: None
-        // state: [20, 25) 5, [25, 30) 4
+        // state: [20, 25) 7, [25, 30) 5
         // op2 W (21, 21)
         // agg: None
         // output: None
@@ -93,26 +93,26 @@ class MultiStatefulOperatorsSuite
 
         // op1 W (21, 29)
         // agg: None
-        // output: [20, 25) 5
-        // state: [25, 30) 4
+        // output: [20, 25) 7
+        // state: [25, 30) 5
         // op2 W (21, 29)
-        // agg: [20, 30) (1, 5)
+        // agg: [20, 30) (1, 7)
         // output: None
-        // state: [20, 30) (1, 5)
+        // state: [20, 30) (1, 7)
         CheckNewAnswer(),
         assertNumStateRows(Seq(1, 1)),
-        assertNumRowsDroppedByWatermark(Seq(0, 0)),
+        assertNumRowsDroppedByWatermark(Seq(0, 2)),
 
         // Move the watermark.
         AddData(inputData, 30, 31),
         // op1 W (29, 29)
-        // agg: [25, 30) 5 [30, 35) 2
+        // agg: [30, 35) 2
         // output: None
         // state: [25, 30) 5 [30, 35) 2
         // op2 W (29, 29)
         // agg: None
         // output: None
-        // state: [20, 30) (1, 5)
+        // state: [20, 30) (1, 7)
 
         // no-data batch triggered
 
@@ -121,10 +121,10 @@ class MultiStatefulOperatorsSuite
         // output: [25, 30) 5
         // state: [30, 35) 2
         // op2 W (29, 31)
-        // agg: [20, 30) (2, 10)
-        // output: [20, 30) (2, 10)
+        // agg: [20, 30) (2, 12)
+        // output: [20, 30) (2, 12)
         // state: None
-        CheckNewAnswer((20, 2, 10)),
+        CheckNewAnswer((20, 2, 12)),
         assertNumStateRows(Seq(0, 1)),
         assertNumRowsDroppedByWatermark(Seq(0, 0))
       )
