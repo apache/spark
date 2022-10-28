@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from typing import cast
 import unittest
 from pyspark.testing.connectutils import PlanOnlyTestFixture
 from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
@@ -27,7 +28,7 @@ if have_pandas:
     import pyspark.sql.connect.functions as fun
 
 
-@unittest.skipIf(not have_pandas, pandas_requirement_message)
+@unittest.skipIf(not have_pandas, cast(str, pandas_requirement_message))
 class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
     def test_simple_column_expressions(self):
         df = c.DataFrame.withPlan(p.Read("table"))

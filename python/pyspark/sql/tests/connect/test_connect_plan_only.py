@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from typing import cast
 import unittest
 
 from pyspark.testing.connectutils import PlanOnlyTestFixture
@@ -26,7 +27,7 @@ if have_pandas:
     from pyspark.sql.types import StringType
 
 
-@unittest.skipIf(not have_pandas, pandas_requirement_message)
+@unittest.skipIf(not have_pandas, cast(str, pandas_requirement_message))
 class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
