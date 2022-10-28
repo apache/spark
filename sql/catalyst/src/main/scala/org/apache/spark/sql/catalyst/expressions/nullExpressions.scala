@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COALESCE, NULL_CHECK, TreePattern}
@@ -60,7 +61,7 @@ case class Coalesce(children: Seq[Expression])
       DataTypeMismatch(
         errorSubClass = "WRONG_NUM_PARAMS",
         messageParameters = Map(
-          "functionName" -> prettyName,
+          "functionName" -> toSQLId(prettyName),
           "expectedNum" -> "> 0",
           "actualNum" -> children.length.toString))
     } else {

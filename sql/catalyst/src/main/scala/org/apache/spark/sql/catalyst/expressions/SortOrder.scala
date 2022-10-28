@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
@@ -77,7 +77,7 @@ case class SortOrder(
       DataTypeMismatch(
         errorSubClass = "UNSUPPORTED_INPUT_TYPE",
         messageParameters = Map(
-          "functionName" -> prettyName,
+          "functionName" -> toSQLId(prettyName),
           "inputType" -> toSQLType(dataType)))
     }
   }

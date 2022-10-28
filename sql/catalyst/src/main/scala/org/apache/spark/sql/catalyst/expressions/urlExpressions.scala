@@ -23,6 +23,7 @@ import java.util.regex.Pattern
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.UnaryLike
@@ -186,8 +187,8 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
       DataTypeMismatch(
         errorSubClass = "WRONG_NUM_PARAMS",
         messageParameters = Map(
-          "functionName" -> "",
-          "expectedNum" -> ">= 2 & <= 3",
+          "functionName" -> toSQLId(prettyName),
+          "expectedNum" -> "[2, 3]",
           "actualNum" -> children.length.toString))
     } else {
       super[ExpectsInputTypes].checkInputDataTypes()
