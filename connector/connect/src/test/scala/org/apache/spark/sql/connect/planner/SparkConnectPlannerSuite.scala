@@ -22,20 +22,18 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.UnresolvedStar
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Testing trait for SparkConnect tests with some helper methods to make it easier to create new
  * test cases.
  */
-trait SparkConnectPlanTest {
-
-  def getSession(): SparkSession = None.orNull
+trait SparkConnectPlanTest extends SharedSparkSession {
 
   def transform(rel: proto.Relation): LogicalPlan = {
-    new SparkConnectPlanner(rel, getSession()).transform()
+    new SparkConnectPlanner(rel, spark).transform()
   }
 
   def readRel: proto.Relation =
