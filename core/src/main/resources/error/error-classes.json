@@ -589,28 +589,6 @@
       "More than one row returned by a subquery used as an expression."
     ]
   },
-  "NAMESPACE_ALREADY_EXISTS" : {
-    "message" : [
-      "Cannot create namespace <nameSpaceName> because it already exists.",
-      "Choose a different name, drop the existing namespace, or add the IF NOT EXISTS clause to tolerate pre-existing namespace."
-    ],
-    "sqlState" : "42000"
-  },
-  "NAMESPACE_NOT_EMPTY" : {
-    "message" : [
-      "Cannot drop a namespace <nameSpaceNameName> because it contains objects.",
-      "Use DROP NAMESPACE ... CASCADE to drop the namespace and all its objects."
-    ],
-    "sqlState" : "42000"
-  },
-  "NAMESPACE_NOT_FOUND" : {
-    "message" : [
-      "The namespace <nameSpaceName> cannot be found. Verify the spelling and correctness of the namespace.",
-      "If you did not qualify the name with, verify the current_schema() output, or qualify the name with the correctly.",
-      "To tolerate the error on drop use DROP NAMESPACE IF EXISTS."
-    ],
-    "sqlState" : "42000"
-  },
   "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
     "message" : [
       "When there are more than one MATCHED clauses in a MERGE statement, only the last MATCHED clause can omit the condition."
