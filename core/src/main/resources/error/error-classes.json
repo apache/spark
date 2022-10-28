@@ -98,6 +98,11 @@
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
     ]
   },
+  "DATA_PATH_NOT_EXIST" : {
+    "message" : [
+      "Path does not exist: <path>."
+    ]
+  },
   "DATATYPE_MISMATCH" : {
     "message" : [
       "Cannot resolve <sqlExpr> due to data type mismatch:"
@@ -2070,11 +2075,6 @@
   "_LEGACY_ERROR_TEMP_1129" : {
     "message" : [
       "Unable to infer schema for <format>. It must be specified manually."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1130" : {
-    "message" : [
-      "Path does not exist: <path>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1131" : {
