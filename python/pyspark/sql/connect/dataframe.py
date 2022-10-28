@@ -242,7 +242,15 @@ class DataFrame(object):
 
     def sort(self, *cols: "ColumnOrString") -> "DataFrame":
         """Sort by a specific column"""
-        return DataFrame.withPlan(plan.Sort(self._plan, *cols), session=self._session)
+        return DataFrame.withPlan(
+            plan.Sort(self._plan, columns=list(cols), is_global=True), session=self._session
+        )
+
+    def sortWithinPartitions(self, *cols: "ColumnOrString") -> "DataFrame":
+        """Sort within each partition by a specific column"""
+        return DataFrame.withPlan(
+            plan.Sort(self._plan, columns=list(cols), is_global=False), session=self._session
+        )
 
     def sample(
         self,

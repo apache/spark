@@ -801,6 +801,7 @@ class Sort(google.protobuf.message.Message):
 
     INPUT_FIELD_NUMBER: builtins.int
     SORT_FIELDS_FIELD_NUMBER: builtins.int
+    IS_GLOBAL_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation: ...
     @property
@@ -809,18 +810,22 @@ class Sort(google.protobuf.message.Message):
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         global___Sort.SortField
     ]: ...
+    is_global: builtins.bool
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
         sort_fields: collections.abc.Iterable[global___Sort.SortField] | None = ...,
+        is_global: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal["input", b"input", "sort_fields", b"sort_fields"],
+        field_name: typing_extensions.Literal[
+            "input", b"input", "is_global", b"is_global", "sort_fields", b"sort_fields"
+        ],
     ) -> None: ...
 
 global___Sort = Sort

@@ -331,8 +331,48 @@ package object dsl {
           .build()
       }
 
-      def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*): Relation = {
-        val agg = Aggregate.newBuilder()
+
+      def createDefaultSortField(col: String): proto.Sort.SortField = {
+        proto.Sort.SortField
+          .newBuilder()
+          .setNulls(proto.Sort.SortNulls.SORT_NULLS_FIRST)
+          .setDirection(proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING)
+          .setExpression(proto.Expression.newBuilder
+            .setUnresolvedAttribute(
+              proto.Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier(col).build())
+            .build())
+          .build()
+      }
+
+      def sort(columns: String*): proto.Relation = {
+        proto.Relation
+          .newBuilder()
+          .setSort(
+            proto.Sort
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllSortFields(columns.map(createDefaultSortField).asJava)
+              .setIsGlobal(true)
+              .build())
+          .build()
+      }
+
+      def sortWithinPartitions(columns: String*): proto.Relation = {
+        proto.Relation
+          .newBuilder()
+          .setSort(
+            proto.Sort
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllSortFields(columns.map(createDefaultSortField).asJava)
+              .setIsGlobal(false)
+              .build())
+          .build()
+      }
+
+      def groupBy(groupingExprs: proto.Expression*)(
+          aggregateExprs: proto.Expression*): proto.Relation = {
+        val agg = proto.Aggregate.newBuilder()
         agg.setInput(logicalPlan)
 
         for (groupingExpr <- groupingExprs) {
