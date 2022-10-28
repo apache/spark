@@ -187,7 +187,7 @@ class ParquetFileFormat
       options.get(FileFormat.OPTION_RETURNING_BATCH)
         .getOrElse {
           throw new IllegalArgumentException(
-            "OPTION_RETURNING_BATCH should always be set for ParquetFileFormat." +
+            "OPTION_RETURNING_BATCH should always be set for ParquetFileFormat. " +
               "To workaround this issue, set spark.sql.parquet.enableVectorizedReader=false.")
         }
         .equals("true")

@@ -144,7 +144,7 @@ class OrcFileFormat
       options.get(FileFormat.OPTION_RETURNING_BATCH)
         .getOrElse {
           throw new IllegalArgumentException(
-            "OPTION_RETURNING_BATCH should always be set for OrcFileFormat." +
+            "OPTION_RETURNING_BATCH should always be set for OrcFileFormat. " +
               "To workaround this issue, set spark.sql.orc.enableVectorizedReader=false.")
         }
         .equals("true")
