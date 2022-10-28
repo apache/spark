@@ -47,7 +47,7 @@ abstract class MaxMinBy extends DeclarativeAggregate with BinaryLike[Expression]
   override def dataType: DataType = valueExpr.dataType
 
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForOrderingExpr(orderingExpr.dataType, s"function $prettyName")
+    TypeUtils.checkForOrderingExpr(orderingExpr.dataType, prettyName)
 
   // The attributes used to keep extremum (max or min) and associated aggregated values.
   private lazy val extremumOrdering =

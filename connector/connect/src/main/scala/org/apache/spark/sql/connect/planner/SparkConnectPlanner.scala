@@ -19,25 +19,24 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sample, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, LogicalPlan, Sample, SubqueryAlias}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 final case class InvalidPlanInput(
     private val message: String = "",
     private val cause: Throwable = None.orNull)
     extends Exception(message, cause)
 
-@Unstable
-@Since("3.4.0")
 class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   def transform(): LogicalPlan = {
@@ -60,6 +59,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.OFFSET => transformOffset(rel.getOffset)
       case proto.Relation.RelTypeCase.JOIN => transformJoin(rel.getJoin)
       case proto.Relation.RelTypeCase.UNION => transformUnion(rel.getUnion)
+      case proto.Relation.RelTypeCase.DEDUPLICATE => transformDeduplicate(rel.getDeduplicate)
       case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
       case proto.Relation.RelTypeCase.AGGREGATE => transformAggregate(rel.getAggregate)
       case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
@@ -78,7 +78,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   /**
    * All fields of [[proto.Sample]] are optional. However, given those are proto primitive types,
-   * we cannot differentiate if the fied is not or set when the field's value equals to the type
+   * we cannot differentiate if the field is not or set when the field's value equals to the type
    * default value. In the future if this ever become a problem, one solution could be that to
    * wrap such fields into proto messages.
    */
@@ -87,8 +87,39 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       rel.getLowerBound,
       rel.getUpperBound,
       rel.getWithReplacement,
-      rel.getSeed,
+      if (rel.hasSeed) rel.getSeed.getSeed else Utils.random.nextLong,
       transformRelation(rel.getInput))
+  }
+
+  private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
+    if (!rel.hasInput) {
+      throw InvalidPlanInput("Deduplicate needs a plan input")
+    }
+    if (rel.getAllColumnsAsKeys && rel.getColumnNamesCount > 0) {
+      throw InvalidPlanInput("Cannot deduplicate on both all columns and a subset of columns")
+    }
+    if (!rel.getAllColumnsAsKeys && rel.getColumnNamesCount == 0) {
+      throw InvalidPlanInput(
+        "Deduplicate requires to either deduplicate on all columns or a subset of columns")
+    }
+    val queryExecution = new QueryExecution(session, transformRelation(rel.getInput))
+    val resolver = session.sessionState.analyzer.resolver
+    val allColumns = queryExecution.analyzed.output
+    if (rel.getAllColumnsAsKeys) {
+      Deduplicate(allColumns, queryExecution.analyzed)
+    } else {
+      val toGroupColumnNames = rel.getColumnNamesList.asScala.toSeq
+      val groupCols = toGroupColumnNames.flatMap { (colName: String) =>
+        // It is possibly there are more than one columns with the same name,
+        // so we call filter instead of find.
+        val cols = allColumns.filter(col => resolver(col.name, colName))
+        if (cols.isEmpty) {
+          throw InvalidPlanInput(s"Invalid deduplicate column ${colName}")
+        }
+        cols
+      }
+      Deduplicate(groupCols, queryExecution.analyzed)
+    }
   }
 
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
@@ -258,14 +289,23 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   private def transformJoin(rel: proto.Join): LogicalPlan = {
     assert(rel.hasLeft && rel.hasRight, "Both join sides must be present")
+    if (rel.hasJoinCondition && rel.getUsingColumnsCount > 0) {
+      throw InvalidPlanInput(
+        s"Using columns or join conditions cannot be set at the same time in Join")
+    }
     val joinCondition =
       if (rel.hasJoinCondition) Some(transformExpression(rel.getJoinCondition)) else None
-
+    val catalystJointype = transformJoinType(
+      if (rel.getJoinType != null) rel.getJoinType else proto.Join.JoinType.JOIN_TYPE_INNER)
+    val joinType = if (rel.getUsingColumnsCount > 0) {
+      UsingJoin(catalystJointype, rel.getUsingColumnsList.asScala.toSeq)
+    } else {
+      catalystJointype
+    }
     logical.Join(
       left = transformRelation(rel.getLeft),
       right = transformRelation(rel.getRight),
-      joinType = transformJoinType(
-        if (rel.getJoinType != null) rel.getJoinType else proto.Join.JoinType.JOIN_TYPE_INNER),
+      joinType = joinType,
       condition = joinCondition,
       hint = logical.JoinHint.NONE)
   }

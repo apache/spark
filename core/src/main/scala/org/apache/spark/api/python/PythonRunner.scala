@@ -403,6 +403,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           // the decrypted data to python
           val idsAndFiles = broadcastVars.flatMap { broadcast =>
             if (!oldBids.contains(broadcast.id)) {
+              oldBids.add(broadcast.id)
               Some((broadcast.id, broadcast.value.path))
             } else {
               None
@@ -416,7 +417,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           idsAndFiles.foreach { case (id, _) =>
             // send new broadcast
             dataOut.writeLong(id)
-            oldBids.add(id)
           }
           dataOut.flush()
           logTrace("waiting for python to read decrypted broadcast data from server")

@@ -44,6 +44,53 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.filter.condition.unresolved_function.parts, [">"])
         self.assertEqual(len(plan.root.filter.condition.unresolved_function.arguments), 2)
 
+    def test_limit(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        limit_plan = df.limit(10)._plan.to_proto(self.connect)
+        self.assertEqual(limit_plan.root.limit.limit, 10)
+
+    def test_offset(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        offset_plan = df.offset(10)._plan.to_proto(self.connect)
+        self.assertEqual(offset_plan.root.offset.offset, 10)
+
+    def test_sample(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.filter(df.col_name > 3).sample(fraction=0.3)._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.sample.lower_bound, 0.0)
+        self.assertEqual(plan.root.sample.upper_bound, 0.3)
+        self.assertEqual(plan.root.sample.with_replacement, False)
+        self.assertEqual(plan.root.sample.HasField("seed"), False)
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .sample(withReplacement=True, fraction=0.4, seed=-1)
+            ._plan.to_proto(self.connect)
+        )
+        self.assertEqual(plan.root.sample.lower_bound, 0.0)
+        self.assertEqual(plan.root.sample.upper_bound, 0.4)
+        self.assertEqual(plan.root.sample.with_replacement, True)
+        self.assertEqual(plan.root.sample.seed.seed, -1)
+
+    def test_deduplicate(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        distinct_plan = df.distinct()._plan.to_proto(self.connect)
+        self.assertEqual(distinct_plan.root.deduplicate.all_columns_as_keys, True)
+        self.assertEqual(len(distinct_plan.root.deduplicate.column_names), 0)
+
+        deduplicate_on_all_columns_plan = df.dropDuplicates()._plan.to_proto(self.connect)
+        self.assertEqual(deduplicate_on_all_columns_plan.root.deduplicate.all_columns_as_keys, True)
+        self.assertEqual(len(deduplicate_on_all_columns_plan.root.deduplicate.column_names), 0)
+
+        deduplicate_on_subset_columns_plan = df.dropDuplicates(["name", "height"])._plan.to_proto(
+            self.connect
+        )
+        self.assertEqual(
+            deduplicate_on_subset_columns_plan.root.deduplicate.all_columns_as_keys, False
+        )
+        self.assertEqual(len(deduplicate_on_subset_columns_plan.root.deduplicate.column_names), 2)
+
     def test_relation_alias(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.alias("table_alias")._plan.to_proto(self.connect)

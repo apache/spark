@@ -484,6 +484,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.pandas.test_pandas_udf_typehints",
         "pyspark.sql.tests.pandas.test_pandas_udf_typehints_with_future_annotations",
         "pyspark.sql.tests.pandas.test_pandas_udf_window",
+        "pyspark.sql.tests.test_pandas_sqlmetrics",
         "pyspark.sql.tests.test_readwriter",
         "pyspark.sql.tests.test_serde",
         "pyspark.sql.tests.test_session",

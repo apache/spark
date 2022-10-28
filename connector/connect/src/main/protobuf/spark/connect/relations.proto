@@ -43,6 +43,7 @@ message Relation {
     LocalRelation local_relation = 11;
     Sample sample = 12;
     Offset offset = 13;
+    Deduplicate deduplicate = 14;
 
     Unknown unknown = 999;
   }
@@ -108,6 +109,12 @@ message Join {
   Relation right = 2;
   Expression join_condition = 3;
   JoinType join_type = 4;
+  // Optional. using_columns provides a list of columns that should present on both sides of
+  // the join inputs that this Join will join on. For example A JOIN B USING col_name is
+  // equivalent to A JOIN B on A.col_name = B.col_name.
+  //
+  // This field does not co-exist with join_condition.
+  repeated string using_columns = 5;
 
   enum JoinType {
     JOIN_TYPE_UNSPECIFIED = 0;
@@ -181,6 +188,14 @@ message Sort {
   }
 }
 
+// Relation of type [[Deduplicate]] which have duplicate rows removed, could consider either only
+// the subset of columns or all the columns.
+message Deduplicate {
+  Relation input = 1;
+  repeated string column_names = 2;
+  bool all_columns_as_keys = 3;
+}
+
 message LocalRelation {
   repeated Expression.QualifiedAttribute attributes = 1;
   // TODO: support local data.
@@ -192,5 +207,9 @@ message Sample {
   double lower_bound = 2;
   double upper_bound = 3;
   bool with_replacement = 4;
-  int64 seed = 5;
+  Seed seed = 5;
+
+  message Seed {
+    int64 seed = 1;
+  }
 }

@@ -1744,17 +1744,21 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("SPARK-14981: DESC not supported for sorting columns") {
     withTable("t") {
-      val cause = intercept[ParseException] {
-        sql(
-          """CREATE TABLE t USING PARQUET
-            |OPTIONS (PATH '/path/to/file')
-            |CLUSTERED BY (a) SORTED BY (b DESC) INTO 2 BUCKETS
-            |AS SELECT 1 AS a, 2 AS b
-          """.stripMargin
-        )
-      }
-
-      assert(cause.getMessage.contains("Column ordering must be ASC, was 'DESC'"))
+      checkError(
+        exception = intercept[ParseException] {
+          sql(
+            """CREATE TABLE t USING PARQUET
+              |OPTIONS (PATH '/path/to/file')
+              |CLUSTERED BY (a) SORTED BY (b DESC) INTO 2 BUCKETS
+              |AS SELECT 1 AS a, 2 AS b
+            """.stripMargin)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_0035",
+        parameters = Map("message" -> "Column ordering must be ASC, was 'DESC'"),
+        context = ExpectedContext(
+          fragment = "CLUSTERED BY (a) SORTED BY (b DESC) INTO 2 BUCKETS",
+          start = 60,
+          stop = 109))
     }
   }
 

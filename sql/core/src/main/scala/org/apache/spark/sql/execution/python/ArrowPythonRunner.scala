@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -32,7 +33,8 @@ class ArrowPythonRunner(
     argOffsets: Array[Array[Int]],
     protected override val schema: StructType,
     protected override val timeZoneId: String,
-    protected override val workerConf: Map[String, String])
+    protected override val workerConf: Map[String, String],
+    val pythonMetrics: Map[String, SQLMetric])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](funcs, evalType, argOffsets)
   with BasicPythonArrowInput
   with BasicPythonArrowOutput {
