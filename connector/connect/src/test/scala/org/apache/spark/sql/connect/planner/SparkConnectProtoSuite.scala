@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.planner
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -68,7 +69,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         connectTestRelation.select(callFunction(Seq("default", "hex"), Seq("id".protoAttr))))
     }
 
-    assertThrows[UnsupportedOperationException] {
+    assertThrows[SparkException] {
       connectPlan.analyze
     }
 
