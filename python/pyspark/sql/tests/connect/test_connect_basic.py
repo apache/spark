@@ -18,7 +18,7 @@ from typing import Any
 import unittest
 import shutil
 import tempfile
-from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
+from pyspark.testing.sqlutils import have_pandas
 
 if have_pandas:
     import pandas

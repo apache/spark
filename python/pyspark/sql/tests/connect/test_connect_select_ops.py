@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import unittest
+
 from pyspark.testing.connectutils import PlanOnlyTestFixture
 from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
 
@@ -24,6 +26,7 @@ if have_pandas:
     import pyspark.sql.connect.proto as proto
 
 
+@unittest.skipIf(not have_pandas, pandas_requirement_message)
 class SparkConnectToProtoSuite(PlanOnlyTestFixture):
     def test_select_with_columns_and_strings(self):
         df = DataFrame.withPlan(Read("table"))

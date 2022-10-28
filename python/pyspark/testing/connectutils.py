@@ -18,7 +18,7 @@ import os
 from typing import Any, Dict
 import functools
 import unittest
-from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
+from pyspark.testing.sqlutils import have_pandas
 
 if have_pandas:
     from pyspark.sql.connect import DataFrame
