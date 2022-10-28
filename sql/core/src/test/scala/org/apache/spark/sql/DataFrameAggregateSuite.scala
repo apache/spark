@@ -913,8 +913,17 @@ class DataFrameAggregateSuite extends QueryTest
       val error = intercept[AnalysisException] {
         sql("SELECT max_by(x, y) FROM tempView").show
       }
-      assert(
-        error.message.contains("function max_by does not support ordering on type map<int,string>"))
+      checkError(
+        exception = error,
+        errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+        sqlState = None,
+        parameters = Map(
+          "functionName" -> "`max_by`",
+          "dataType" -> "\"MAP<INT, STRING>\"",
+          "sqlExpr" -> "\"max_by(x, y)\""
+        ),
+        context = ExpectedContext(fragment = "max_by(x, y)", start = 7, stop = 18)
+      )
     }
   }
 
@@ -974,8 +983,17 @@ class DataFrameAggregateSuite extends QueryTest
       val error = intercept[AnalysisException] {
         sql("SELECT min_by(x, y) FROM tempView").show
       }
-      assert(
-        error.message.contains("function min_by does not support ordering on type map<int,string>"))
+      checkError(
+        exception = error,
+        errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+        sqlState = None,
+        parameters = Map(
+          "functionName" -> "`min_by`",
+          "dataType" -> "\"MAP<INT, STRING>\"",
+          "sqlExpr" -> "\"min_by(x, y)\""
+        ),
+        context = ExpectedContext(fragment = "min_by(x, y)", start = 7, stop = 18)
+      )
     }
   }
 
@@ -1019,8 +1037,7 @@ class DataFrameAggregateSuite extends QueryTest
           exception = intercept[AnalysisException] {
             sql("SELECT COUNT_IF(x) FROM tempView")
           },
-          errorClass = "DATATYPE_MISMATCH",
-          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
           sqlState = None,
           parameters = Map(
             "sqlExpr" -> "\"count_if(x)\"",
@@ -1146,8 +1163,7 @@ class DataFrameAggregateSuite extends QueryTest
       exception = intercept[AnalysisException] {
         Seq(Tuple1(Seq(1))).toDF("col").groupBy(struct($"col.a")).count()
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("UNEXPECTED_INPUT_TYPE"),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"col[a]\"",
         "paramIndex" -> "2",
@@ -1468,6 +1484,40 @@ class DataFrameAggregateSuite extends QueryTest
   test("SPARK-38221: group by stream of complex expressions should not fail") {
     val df = Seq(1).toDF("id").groupBy(Stream($"id" + 1, $"id" + 2): _*).sum("id")
     checkAnswer(df, Row(2, 3, 1))
+  }
+
+  test("SPARK-40382: Distinct aggregation expression grouping by semantic equivalence") {
+   Seq(
+      (1, 1, 3),
+      (1, 2, 3),
+      (1, 2, 3),
+      (2, 1, 1),
+      (2, 2, 5)
+    ).toDF("k", "c1", "c2").createOrReplaceTempView("df")
+
+    // all distinct aggregation children are semantically equivalent
+    val res1 = sql(
+      """select k, sum(distinct c1 + 1), avg(distinct 1 + c1), count(distinct 1 + C1)
+        |from df
+        |group by k
+        |""".stripMargin)
+    checkAnswer(res1, Row(1, 5, 2.5, 2) :: Row(2, 5, 2.5, 2) :: Nil)
+
+    // some distinct aggregation children are semantically equivalent
+    val res2 = sql(
+      """select k, sum(distinct c1 + 2), avg(distinct 2 + c1), count(distinct c2)
+        |from df
+        |group by k
+        |""".stripMargin)
+    checkAnswer(res2, Row(1, 7, 3.5, 1) :: Row(2, 7, 3.5, 2) :: Nil)
+
+    // no distinct aggregation children are semantically equivalent
+    val res3 = sql(
+      """select k, sum(distinct c1 + 2), avg(distinct 3 + c1), count(distinct c2)
+        |from df
+        |group by k
+        |""".stripMargin)
+    checkAnswer(res3, Row(1, 7, 4.5, 1) :: Row(2, 7, 4.5, 2) :: Nil)
   }
 }
 

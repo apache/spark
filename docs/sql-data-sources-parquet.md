@@ -455,6 +455,28 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   <td>1.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.sql.parquet.int96TimestampConversion</code></td>
+  <td>false</td>
+  <td>
+    This controls whether timestamp adjustments should be applied to INT96 data when 
+    converting to timestamps, for data written by Impala.  This is necessary because Impala 
+    stores INT96 data with a different timezone offset than Hive & Spark.
+  </td>
+  <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.outputTimestampType</code></td>
+  <td>INT96</td>
+  <td>
+    Sets which Parquet timestamp type to use when Spark writes data to Parquet files. 
+    INT96 is a non-standard but commonly used timestamp type in Parquet. TIMESTAMP_MICROS 
+    is a standard timestamp type in Parquet, which stores number of microseconds from the 
+    Unix epoch. TIMESTAMP_MILLIS is also standard, but with millisecond precision, which 
+    means Spark has to truncate the microsecond portion of its timestamp value.
+  </td>
+  <td>2.3.0</td>
+</tr>
+<tr>
   <td><code>spark.sql.parquet.compression.codec</code></td>
   <td>snappy</td>
   <td>
@@ -472,6 +494,17 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   <td>true</td>
   <td>Enables Parquet filter push-down optimization when set to true.</td>
   <td>1.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.aggregatePushdown</code></td>
+  <td>false</td>
+  <td>
+    If true, aggregates will be pushed down to Parquet for optimization. Support MIN, MAX 
+    and COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date 
+    type. For COUNT, support all data types. If statistics is missing from any Parquet file 
+    footer, exception would be thrown.
+  </td>
+  <td>3.3.0</td>
 </tr>
 <tr>
   <td><code>spark.sql.hive.convertMetastoreParquet</code></td>
@@ -494,6 +527,17 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   <td>1.5.0</td>
 </tr>
 <tr>
+  <td><code>spark.sql.parquet.respectSummaryFiles</code></td>
+  <td>false</td>
+  <td>
+    When true, we make assumption that all part-files of Parquet are consistent with 
+    summary files and we will ignore them when merging schema. Otherwise, if this is 
+    false, which is the default, we will merge all part-files. This should be considered 
+    as expert-only option, and shouldn't be enabled before knowing what it means exactly.
+  </td>
+  <td>1.5.0</td>
+</tr>
+<tr>
   <td><code>spark.sql.parquet.writeLegacyFormat</code></td>
   <td>false</td>
   <td>
@@ -504,6 +548,84 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     with systems that do not support this newer format, set to true.
   </td>
   <td>1.6.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.enableVectorizedReader</code></td>
+  <td>true</td>
+  <td>
+    Enables vectorized parquet decoding.
+  </td>
+  <td>2.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.enableNestedColumnVectorizedReader</code></td>
+  <td>true</td>
+  <td>
+    Enables vectorized Parquet decoding for nested columns (e.g., struct, list, map). 
+    Requires <code>spark.sql.parquet.enableVectorizedReader</code> to be enabled.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.recordLevelFilter.enabled</code></td>
+  <td>false</td>
+  <td>
+    If true, enables Parquet's native record-level filtering using the pushed down filters. 
+    This configuration only has an effect when <code>spark.sql.parquet.filterPushdown</code> 
+    is enabled and the vectorized reader is not used. You can ensure the vectorized reader 
+    is not used by setting <code>spark.sql.parquet.enableVectorizedReader</code> to false.
+  </td>
+  <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.columnarReaderBatchSize</code></td>
+  <td>4096</td>
+  <td>
+    The number of rows to include in a parquet vectorized reader batch. The number should 
+    be carefully chosen to minimize overhead and avoid OOMs in reading data.
+  </td>
+  <td>2.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.fieldId.write.enabled</code></td>
+  <td>true</td>
+  <td>
+    Field ID is a native field of the Parquet schema spec. When enabled, 
+    Parquet writers will populate the field Id metadata (if present) in the Spark schema to the Parquet schema.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.fieldId.read.enabled</code></td>
+  <td>false</td>
+  <td>
+    Field ID is a native field of the Parquet schema spec. When enabled, Parquet readers 
+    will use field IDs (if present) in the requested Spark schema to look up Parquet 
+    fields instead of using column names.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.fieldId.read.ignoreMissing</code></td>
+  <td>false</td>
+  <td>
+    When the Parquet file doesn't have any field IDs but the 
+    Spark read schema is using field IDs to read, we will silently return nulls 
+    when this flag is enabled, or error otherwise.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.timestampNTZ.enabled</code></td>
+  <td>true</td>
+  <td>
+    Enables <code>TIMESTAMP_NTZ</code> support for Parquet reads and writes. 
+    When enabled, <code>TIMESTAMP_NTZ</code> values are written as Parquet timestamp 
+    columns with annotation isAdjustedToUTC = false and are inferred in a similar way. 
+    When disabled, such values are read as <code>TIMESTAMP_LTZ</code> and have to be 
+    converted to <code>TIMESTAMP_LTZ</code> for writes.
+  </td>
+  <td>3.4.0</td>
 </tr>
 <tr>
 <td>spark.sql.parquet.datetimeRebaseModeInRead</td>

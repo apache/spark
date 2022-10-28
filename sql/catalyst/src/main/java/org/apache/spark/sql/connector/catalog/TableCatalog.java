@@ -113,7 +113,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchTableException If the table doesn't exist or is a view
    */
   default Table loadTable(Identifier ident, String version) throws NoSuchTableException {
-    throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident);
+    throw QueryCompilationErrors.noSuchTableError(ident);
   }
 
   /**
@@ -128,7 +128,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchTableException If the table doesn't exist or is a view
    */
   default Table loadTable(Identifier ident, long timestamp) throws NoSuchTableException {
-    throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident);
+    throw QueryCompilationErrors.noSuchTableError(ident);
   }
 
   /**

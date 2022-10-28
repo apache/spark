@@ -324,7 +324,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
            """.stripMargin)
 
         // Create the table again should trigger a AnalysisException.
-        val message = intercept[AnalysisException] {
+        val e = intercept[AnalysisException] {
           sql(
             s"""CREATE TABLE ctasJsonTable
                |USING org.apache.spark.sql.json.DefaultSource
@@ -333,11 +333,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
                |) AS
                |SELECT * FROM jsonTable
              """.stripMargin)
-        }.getMessage
+        }
 
-        assert(
-          message.contains(s"Table $SESSION_CATALOG_NAME.default.ctasJsonTable already exists."),
-          "We should complain that ctasJsonTable already exists")
+        checkErrorTableAlreadyExists(e, s"`$SESSION_CATALOG_NAME`.`default`.`ctasJsonTable`")
 
         // The following statement should be fine if it has IF NOT EXISTS.
         // It tries to create a table ctasJsonTable with a new schema.
@@ -522,11 +520,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           assert(table("createdJsonTable").schema === df.schema)
           checkAnswer(sql("SELECT * FROM createdJsonTable"), df)
 
-          assert(
-            intercept[AnalysisException] {
+          val e = intercept[AnalysisException] {
               sparkSession.catalog.createTable("createdJsonTable", jsonFilePath.toString)
-            }.getMessage.contains(
-              s"Table $SESSION_CATALOG_NAME.default.createdJsonTable already exists."))
+            }
+          checkErrorTableAlreadyExists(e, s"`$SESSION_CATALOG_NAME`.`default`.`createdJsonTable`")
         }
 
         // Data should not be deleted.
@@ -1251,14 +1248,15 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
       var e = intercept[AnalysisException] {
         table(tableName).write.mode(SaveMode.Overwrite).saveAsTable(tableName)
-      }.getMessage
-      assert(e.contains(s"Cannot overwrite table $SESSION_CATALOG_NAME.default.$tableName " +
+      }
+      assert(e.getMessage.contains(
+        s"Cannot overwrite table $SESSION_CATALOG_NAME.default.$tableName " +
         "that is also being read from"))
 
       e = intercept[AnalysisException] {
         table(tableName).write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
-      }.getMessage
-      assert(e.contains(s"Table `$SESSION_CATALOG_NAME`.`default`.`$tableName` already exists"))
+      }
+      checkErrorTableAlreadyExists(e, s"`$SESSION_CATALOG_NAME`.`default`.`$tableName`")
     }
   }
 

@@ -404,7 +404,7 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
            |Right side:
            |[${query.childOutputs.map(_.dataType.catalogString).mkString(", ")}].""".stripMargin)
     } else {
-      TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(value.dataType, prettyName)
     }
   }
 
@@ -453,7 +453,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
       TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
         s"${value.dataType.catalogString} != ${mismatchOpt.get.dataType.catalogString}")
     } else {
-      TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(value.dataType, prettyName)
     }
   }
 
@@ -934,7 +934,7 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>
-      TypeUtils.checkForOrderingExpr(left.dataType, this.getClass.getSimpleName)
+      TypeUtils.checkForOrderingExpr(left.dataType, symbol)
     case failure => failure
   }
 

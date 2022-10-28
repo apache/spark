@@ -21,6 +21,7 @@ import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.read.Scan;
 import org.apache.spark.sql.connector.read.ScanBuilder;
+import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
@@ -68,6 +69,19 @@ public interface RowLevelOperation {
    * be returned by the scan, even if a filter can narrow the set of changes to a single file
    * in the partition. Similarly, a data source that can swap individual files must produce all
    * rows from files where at least one record must be changed, not just rows that must be changed.
+   * <p>
+   * Data sources that replace groups of data (e.g. files, partitions) may prune entire groups
+   * using provided data source filters when building a scan for this row-level operation.
+   * However, such data skipping is limited as not all expressions can be converted into data source
+   * filters and some can only be evaluated by Spark (e.g. subqueries). Since rewriting groups is
+   * expensive, Spark allows group-based data sources to filter groups at runtime. The runtime
+   * filtering enables data sources to narrow down the scope of rewriting to only groups that must
+   * be rewritten. If the row-level operation scan implements {@link SupportsRuntimeV2Filtering},
+   * Spark will execute a query at runtime to find which records match the row-level condition.
+   * The runtime group filter subquery will leverage a regular batch scan, which isn't required to
+   * produce all rows in a group if any are returned. The information about matching records will
+   * be passed back into the row-level operation scan, allowing data sources to discard groups
+   * that don't have to be rewritten.
    */
   ScanBuilder newScanBuilder(CaseInsensitiveStringMap options);
 

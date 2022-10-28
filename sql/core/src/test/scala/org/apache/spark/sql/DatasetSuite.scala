@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import org.apache.hadoop.fs.{Path, PathFilter}
 import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
@@ -326,8 +327,7 @@ class DatasetSuite extends QueryTest
         exception = intercept[AnalysisException] {
           ds.select(expr("`(_1)?+.+`").as[Int])
         },
-        errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = "WITH_SUGGESTION",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = None,
         parameters = Map(
           "objectName" -> "`(_1)?+.+`",
@@ -341,8 +341,7 @@ class DatasetSuite extends QueryTest
         exception = intercept[AnalysisException] {
           ds.select(expr("`(_1|_2)`").as[Int])
         },
-        errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = "WITH_SUGGESTION",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = None,
         parameters = Map(
           "objectName" -> "`(_1|_2)`",
@@ -906,8 +905,7 @@ class DatasetSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df.as[KryoData]
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("CAST_WITHOUT_SUGGESTION"),
+      errorClass = "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
       parameters = Map(
         "sqlExpr" -> "\"a\"",
         "srcType" -> "\"DOUBLE\"",
@@ -959,8 +957,7 @@ class DatasetSuite extends QueryTest
     val ds = Seq(ClassData("a", 1)).toDS()
     checkError(
       exception = intercept[AnalysisException] (ds.as[ClassData2]),
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`c`",
         "proposal" -> "`a`, `b`"))
@@ -1149,7 +1146,9 @@ class DatasetSuite extends QueryTest
     val e = intercept[AnalysisException](
       dataset.createTempView("tempView"))
     intercept[AnalysisException](dataset.createTempView("tempView"))
-    assert(e.message.contains("already exists"))
+    checkError(e,
+      errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+      parameters = Map("relationName" -> "`tempView`"))
     dataset.sparkSession.catalog.dropTempView("tempView")
   }
 
@@ -1995,6 +1994,51 @@ class DatasetSuite extends QueryTest
     }
   }
 
+  test("SPARK-39783: Fix error messages for columns with dots/periods") {
+    forAll(dotColumnTestModes) { (caseSensitive, colName) =>
+      val ds = Seq(SpecialCharClass("1", "2")).toDS
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        checkError(
+          exception = intercept[AnalysisException] {
+            // Note: ds(colName) "SPARK-25153: Improve error messages for columns with dots/periods"
+            // has different semantics than ds.select(colName)
+            ds.select(colName)
+          },
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          sqlState = None,
+          parameters = Map(
+            "objectName" -> s"`${colName.replace(".", "`.`")}`",
+            "proposal" -> "`field.1`, `field 2`"))
+      }
+    }
+  }
+
+  test("SPARK-39783: backticks in error message for candidate column with dots") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(0).toDF("the.id").select("the.id")
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map(
+        "objectName" -> "`the`.`id`",
+        "proposal" -> "`the.id`"))
+  }
+
+  test("SPARK-39783: backticks in error message for map candidate key with dots") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(1)
+          .select(map(lit("key"), lit(1)).as("map"), lit(2).as("other.column"))
+          .select($"`map`"($"nonexisting")).show()
+      },
+      errorClass = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map(
+        "objectName" -> "`nonexisting`",
+        "proposal" -> "`map`, `other.column`"))
+  }
+
   test("groupBy.as") {
     val df1 = Seq(DoubleData(1, "one"), DoubleData(2, "two"), DoubleData(3, "three")).toDS()
       .repartition($"id").sortWithinPartitions("id")
@@ -2169,7 +2213,18 @@ class DatasetSuite extends QueryTest
   test("SPARK-40407: repartition should not result in severe data skew") {
     val df = spark.range(0, 100, 1, 50).repartition(4)
     val result = df.mapPartitions(iter => Iterator.single(iter.length)).collect()
-    assert(result.sorted.toSeq === Seq(19, 25, 25, 31))
+    assert(result.sorted.toSeq === Seq(23, 25, 25, 27))
+  }
+
+  test("SPARK-40660: Switch to XORShiftRandom to distribute elements") {
+    withTempDir { dir =>
+      spark.range(10).repartition(10).write.mode(SaveMode.Overwrite).parquet(dir.getCanonicalPath)
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(spark.sessionState.newHadoopConf())
+      val parquetFiles = fs.listStatus(new Path(dir.getAbsolutePath), new PathFilter {
+        override def accept(path: Path): Boolean = path.getName.endsWith("parquet")
+      })
+      assert(parquetFiles.size === 10)
+    }
   }
 }
 

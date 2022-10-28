@@ -21,22 +21,103 @@ import java.io.File
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
+import org.scalatest.matchers.should._
+import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
-import org.apache.spark.sql.streaming.{StreamTest, Trigger}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest, Trigger}
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.util.Utils
 
-class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
+class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Matchers {
 
   import testImplicits._
 
   after {
     sqlContext.streams.active.foreach(_.stop())
+  }
+
+  def getListOfFiles(dir: String): List[File] = {
+    val d = new File(dir)
+    if (d.exists && d.isDirectory) {
+      d.listFiles.filter(_.isFile).toList
+    } else {
+      List[File]()
+    }
+  }
+
+  test("async log purging") {
+    withSQLConf(SQLConf.MIN_BATCHES_TO_RETAIN.key -> "2", SQLConf.ASYNC_LOG_PURGE.key -> "true") {
+      withTempDir { checkpointLocation =>
+        val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
+        val ds = inputData.toDS()
+        testStream(ds)(
+          StartStream(checkpointLocation = checkpointLocation.getCanonicalPath),
+          AddData(inputData, 0),
+          CheckNewAnswer(0),
+          AddData(inputData, 1),
+          CheckNewAnswer(1),
+          Execute { q =>
+            getListOfFiles(checkpointLocation + "/offsets")
+              .filter(file => !file.isHidden)
+              .map(file => file.getName.toInt)
+              .sorted should equal(Array(0, 1))
+            getListOfFiles(checkpointLocation + "/commits")
+              .filter(file => !file.isHidden)
+              .map(file => file.getName.toInt)
+              .sorted should equal(Array(0, 1))
+          },
+          AddData(inputData, 2),
+          CheckNewAnswer(2),
+          AddData(inputData, 3),
+          CheckNewAnswer(3),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+
+            getListOfFiles(checkpointLocation + "/offsets")
+              .filter(file => !file.isHidden)
+              .map(file => file.getName.toInt)
+              .sorted should equal(Array(1, 2, 3))
+            getListOfFiles(checkpointLocation + "/commits")
+              .filter(file => !file.isHidden)
+              .map(file => file.getName.toInt)
+              .sorted should equal(Array(1, 2, 3))
+          },
+          StopStream
+        )
+      }
+    }
+  }
+
+  test("error notifier test") {
+    withSQLConf(SQLConf.MIN_BATCHES_TO_RETAIN.key -> "2", SQLConf.ASYNC_LOG_PURGE.key -> "true") {
+      withTempDir { checkpointLocation =>
+        val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
+        val ds = inputData.toDS()
+        val e = intercept[StreamingQueryException] {
+
+          testStream(ds)(
+            StartStream(checkpointLocation = checkpointLocation.getCanonicalPath),
+            AddData(inputData, 0),
+            CheckNewAnswer(0),
+            AddData(inputData, 1),
+            CheckNewAnswer(1),
+            Execute { q =>
+              q.asInstanceOf[MicroBatchExecution].errorNotifier.markError(new Exception("test"))
+            },
+            AddData(inputData, 2),
+            CheckNewAnswer(2))
+        }
+        e.getCause.getMessage should include("test")
+      }
+    }
   }
 
   test("SPARK-24156: do not plan a no-data batch again after it has already been planned") {

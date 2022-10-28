@@ -71,11 +71,11 @@ trait NamedExpression extends Expression {
   def exprId: ExprId
 
   /**
-   * Returns a dot separated fully qualified name for this attribute.  Given that there can be
-   * multiple qualifiers, it is possible that there are other possible way to refer to this
-   * attribute.
+   * Returns a dot separated fully qualified name for this attribute.  If the name or any qualifier
+   * contains `dots`, it is quoted to avoid confusion.  Given that there can be multiple qualifiers,
+   * it is possible that there are other possible way to refer to this attribute.
    */
-  def qualifiedName: String = (qualifier :+ name).mkString(".")
+  def qualifiedName: String = (qualifier :+ name).map(quoteIfNeeded).mkString(".")
 
   /**
    * Optional qualifier for the expression.

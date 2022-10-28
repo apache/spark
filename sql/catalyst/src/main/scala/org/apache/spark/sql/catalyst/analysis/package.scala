@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.quoteNameParts
 import org.apache.spark.sql.errors.QueryErrorsBase
 
 /**
@@ -61,26 +62,24 @@ package object analysis {
         origin = t.origin)
     }
 
-    /**
-     * Fails the analysis at the point where a specific tree node was parsed using a provided
-     * error class and subclass and message parameters.
-     */
-    def failAnalysis(
-        errorClass: String,
-        errorSubClass: String,
-        messageParameters: Map[String, String] = Map.empty[String, String]): Nothing = {
+    def dataTypeMismatch(expr: Expression, mismatch: DataTypeMismatch): Nothing = {
       throw new AnalysisException(
-        errorClass = errorClass,
-        errorSubClass = errorSubClass,
-        messageParameters = messageParameters,
+        errorClass = s"DATATYPE_MISMATCH.${mismatch.errorSubClass}",
+        messageParameters = mismatch.messageParameters + ("sqlExpr" -> toSQLExpr(expr)),
         origin = t.origin)
     }
 
-    def dataTypeMismatch(expr: Expression, mismatch: DataTypeMismatch): Nothing = {
+    def tableNotFound(name: Seq[String]): Nothing = {
       throw new AnalysisException(
-        errorClass = "DATATYPE_MISMATCH",
-        errorSubClass = mismatch.errorSubClass,
-        messageParameters = mismatch.messageParameters + ("sqlExpr" -> toSQLExpr(expr)),
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        messageParameters = Map("relationName" ->  quoteNameParts(name)),
+        origin = t.origin)
+    }
+
+    def schemaNotFound(name: Seq[String]): Nothing = {
+      throw new AnalysisException(
+        errorClass = "SCHEMA_NOT_FOUND",
+        messageParameters = Map("schemaName" -> quoteNameParts(name)),
         origin = t.origin)
     }
   }

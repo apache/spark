@@ -60,7 +60,7 @@ case class Coalesce(children: Seq[Expression])
       TypeCheckResult.TypeCheckFailure(
         s"input to function $prettyName requires at least one argument")
     } else {
-      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
+      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), prettyName)
     }
   }
 

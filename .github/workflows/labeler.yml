@@ -30,6 +30,9 @@ jobs:
   label:
     name: Label pull requests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
     # In order to get back the negated matches like in the old config,
     # we need the actinons/labeler concept of `all` and `any` which matches

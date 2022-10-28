@@ -68,7 +68,7 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
   override def stringArgs: Iterator[Any] = super.stringArgs.take(1)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
+    TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), prettyName)
   }
 
   private val defaultElementType: DataType = {
