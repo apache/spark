@@ -54,7 +54,7 @@ case class Average(
     Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType))
 
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForAnsiIntervalOrNumericType(child.dataType, "average")
+    TypeUtils.checkForAnsiIntervalOrNumericType(child)
 
   override def nullable: Boolean = true
 

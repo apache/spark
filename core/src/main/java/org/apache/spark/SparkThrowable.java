@@ -39,10 +39,6 @@ public interface SparkThrowable {
   // If null, error class is not set
   String getErrorClass();
 
-  default String getErrorSubClass() {
-    return null;
-  }
-
   // Portable error identifier across SQL engines
   // If null, error class or SQLSTATE is not set
   default String getSqlState() {
@@ -55,7 +51,7 @@ public interface SparkThrowable {
   }
 
   default Map<String, String> getMessageParameters() {
-    return new HashMap();
+    return new HashMap<>();
   }
 
   default QueryContext[] getQueryContext() { return new QueryContext[0]; }

@@ -242,7 +242,13 @@ abstract class Expression extends TreeNode[Expression] {
    * This means that the lazy `cannonicalized` is called and computed only on the root of the
    * adjacent expressions.
    */
-  lazy val canonicalized: Expression = {
+  lazy val canonicalized: Expression = withCanonicalizedChildren
+
+  /**
+   * The default process of canonicalization. It is a one pass, bottum-up expression tree
+   * computation based oncanonicalizing children before canonicalizing the current node.
+   */
+  final protected def withCanonicalizedChildren: Expression = {
     val canonicalizedChildren = children.map(_.canonicalized)
     withNewChildren(canonicalizedChildren)
   }

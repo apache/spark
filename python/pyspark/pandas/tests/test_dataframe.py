@@ -6044,6 +6044,19 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         with self.assertRaises(ValueError):
             psdf.mode(axis=2)
 
+        def f(index, iterator):
+            return ["3", "3", "3", "3", "4"] if index == 3 else ["0", "1", "2", "3", "4"]
+
+        rdd = self.spark.sparkContext.parallelize(
+            [
+                1,
+            ],
+            4,
+        ).mapPartitionsWithIndex(f)
+        df = self.spark.createDataFrame(rdd, schema="string")
+        psdf = df.pandas_api()
+        self.assert_eq(psdf.mode(), psdf._to_pandas().mode())
+
     def test_abs(self):
         pdf = pd.DataFrame({"a": [-2, -1, 0, 1]})
         psdf = ps.from_pandas(pdf)

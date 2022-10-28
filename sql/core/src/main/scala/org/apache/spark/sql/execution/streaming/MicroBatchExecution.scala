@@ -46,7 +46,9 @@ class MicroBatchExecution(
     plan: WriteToStream)
   extends StreamExecution(
     sparkSession, plan.name, plan.resolvedCheckpointLocation, plan.inputQuery, plan.sink, trigger,
-    triggerClock, plan.outputMode, plan.deleteCheckpointOnStop) {
+    triggerClock, plan.outputMode, plan.deleteCheckpointOnStop) with AsyncLogPurge {
+
+  protected[sql] val errorNotifier = new ErrorNotifier()
 
   @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
 
@@ -210,6 +212,14 @@ class MicroBatchExecution(
     logInfo(s"Query $prettyIdString was stopped")
   }
 
+  override def cleanup(): Unit = {
+    super.cleanup()
+
+    // shutdown and cleanup required for async log purge mechanism
+    asyncLogPurgeShutdown()
+    logInfo(s"Async log purge executor pool for query ${prettyIdString} has been shutdown")
+  }
+
   /** Begins recording statistics about query progress for a given trigger. */
   override protected def startTrigger(): Unit = {
     super.startTrigger()
@@ -226,6 +236,10 @@ class MicroBatchExecution(
 
     triggerExecutor.execute(() => {
       if (isActive) {
+
+        // check if there are any previous errors and bubble up any existing async operations
+        errorNotifier.throwErrorIfExists
+
         var currentBatchHasNewData = false // Whether the current batch had new data
 
         startTrigger()
@@ -536,7 +550,11 @@ class MicroBatchExecution(
         // It is now safe to discard the metadata beyond the minimum number to retain.
         // Note that purge is exclusive, i.e. it purges everything before the target ID.
         if (minLogEntriesToMaintain < currentBatchId) {
-          purge(currentBatchId - minLogEntriesToMaintain)
+          if (useAsyncPurge) {
+            purgeAsync()
+          } else {
+            purge(currentBatchId - minLogEntriesToMaintain)
+          }
         }
       }
       noNewData = false

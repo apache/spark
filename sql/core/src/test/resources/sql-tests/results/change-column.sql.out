@@ -55,8 +55,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE",
-  "errorSubClass" : "TABLE_OPERATION",
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "RENAME COLUMN",
@@ -109,8 +108,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE",
-  "errorSubClass" : "TABLE_OPERATION",
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "ALTER COLUMN ... FIRST | ALTER",
@@ -126,8 +124,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE",
-  "errorSubClass" : "TABLE_OPERATION",
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "ALTER COLUMN ... FIRST | ALTER",
@@ -212,12 +209,21 @@ ALTER TABLE test_change CHANGE invalid_col TYPE INT
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Missing field invalid_col in table spark_catalog.default.test_change with schema:
-root
- |-- a: integer (nullable = true)
- |-- b: string (nullable = true)
- |-- c: integer (nullable = true)
-; line 1 pos 0
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1331",
+  "messageParameters" : {
+    "fieldName" : "invalid_col",
+    "schema" : "root\n |-- a: integer (nullable = true)\n |-- b: string (nullable = true)\n |-- c: integer (nullable = true)\n",
+    "table" : "spark_catalog.default.test_change"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 51,
+    "fragment" : "ALTER TABLE test_change CHANGE invalid_col TYPE INT"
+  } ]
+}
 
 
 -- !query

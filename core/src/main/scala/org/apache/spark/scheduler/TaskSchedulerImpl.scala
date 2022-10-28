@@ -641,7 +641,7 @@ private[spark] class TaskSchedulerImpl(
                     if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
                       logInfo("Notifying ExecutorAllocationManager to allocate more executors to" +
                         " schedule the unschedulable task before aborting" +
-                        " stage ${taskSet.stageId}.")
+                        s" stage ${taskSet.stageId}.")
                       dagScheduler.unschedulableTaskSetAdded(taskSet.taskSet.stageId,
                         taskSet.taskSet.stageAttemptId)
                       updateUnschedulableTaskSetTimeoutAndStartAbortTimer(taskSet, taskIndex)
@@ -972,15 +972,23 @@ private[spark] class TaskSchedulerImpl(
   }
 
   override def stop(): Unit = {
-    speculationScheduler.shutdown()
+    Utils.tryLogNonFatalError {
+      speculationScheduler.shutdown()
+    }
     if (backend != null) {
-      backend.stop()
+      Utils.tryLogNonFatalError {
+        backend.stop()
+      }
     }
     if (taskResultGetter != null) {
-      taskResultGetter.stop()
+      Utils.tryLogNonFatalError {
+        taskResultGetter.stop()
+      }
     }
     if (barrierCoordinator != null) {
-      barrierCoordinator.stop()
+      Utils.tryLogNonFatalError {
+        barrierCoordinator.stop()
+      }
     }
     starvationTimer.cancel()
     abortTimer.cancel()

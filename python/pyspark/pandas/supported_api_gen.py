@@ -98,7 +98,7 @@ def generate_supported_api(output_rst_file_path: str) -> None:
 
     Write supported APIs documentation.
     """
-    pandas_latest_version = "1.4.4"
+    pandas_latest_version = "1.5.0"
     if LooseVersion(pd.__version__) != LooseVersion(pandas_latest_version):
         msg = (
             "Warning: Latest version of pandas (%s) is required to generate the documentation; "

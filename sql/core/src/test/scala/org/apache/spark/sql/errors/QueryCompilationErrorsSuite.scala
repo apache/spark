@@ -172,8 +172,7 @@ class QueryCompilationErrorsSuite
 
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("PYTHON_UDF_IN_ON_CLAUSE"),
+      errorClass = "UNSUPPORTED_FEATURE.PYTHON_UDF_IN_ON_CLAUSE",
       parameters = Map("joinType" -> "LEFT OUTER"),
       sqlState = Some("0A000"))
   }
@@ -195,8 +194,7 @@ class QueryCompilationErrorsSuite
 
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "PANDAS_UDAF_IN_PIVOT",
+      errorClass = "UNSUPPORTED_FEATURE.PANDAS_UDAF_IN_PIVOT",
       parameters = Map[String, String](),
       sqlState = "0A000")
   }
@@ -267,8 +265,7 @@ class QueryCompilationErrorsSuite
     )
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS",
+      errorClass = "UNSUPPORTED_FEATURE.TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS",
       parameters = Map("num" -> "24"),
       sqlState = "0A000")
   }
@@ -410,12 +407,27 @@ class QueryCompilationErrorsSuite
     val query = "select m[a] from (select map('a', 'b') as m, 'aa' as aa)"
     checkError(
       exception = intercept[AnalysisException] {sql(query)},
-      errorClass = "UNRESOLVED_MAP_KEY",
-      errorSubClass = "WITH_SUGGESTION",
+      errorClass = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map("objectName" -> "`a`",
         "proposal" ->
           "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`aa`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 9,
+        stop = 9)
+    )
+  }
+
+  test("UNRESOLVED_MAP_KEY: proposal columns containing quoted dots") {
+    val query = "select m[a] from (select map('a', 'b') as m, 'aa' as `a.a`)"
+    checkError(
+      exception = intercept[AnalysisException] {sql(query)},
+      errorClass = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`",
+        "proposal" ->
+          "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`a.a`"),
       context = ExpectedContext(
         fragment = "a",
         start = 9,
@@ -446,8 +458,7 @@ class QueryCompilationErrorsSuite
             |order by struct.a, struct.b
             |""".stripMargin)
       },
-      errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = "WITH_SUGGESTION",
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map(
         "objectName" -> "`struct`.`a`",
@@ -468,8 +479,7 @@ class QueryCompilationErrorsSuite
       val query = "SELECT v.i from (SELECT i FROM v)"
       checkError(
         exception = intercept[AnalysisException](sql(query)),
-        errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = "WITH_SUGGESTION",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = None,
         parameters = Map(
           "objectName" -> "`v`.`i`",
@@ -565,8 +575,7 @@ class QueryCompilationErrorsSuite
     }
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_DESERIALIZER",
-      errorSubClass = Some("DATA_TYPE_MISMATCH"),
+      errorClass = "UNSUPPORTED_DESERIALIZER.DATA_TYPE_MISMATCH",
       parameters = Map("desiredType" -> "\"ARRAY\"", "dataType" -> "\"INT\""))
   }
 
@@ -579,8 +588,7 @@ class QueryCompilationErrorsSuite
     }
     checkError(
       exception = e1,
-      errorClass = "UNSUPPORTED_DESERIALIZER",
-      errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
+      errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
       parameters = Map(
         "schema" -> "\"STRUCT<a: STRING, b: INT>\"",
         "ordinal" -> "3"))
@@ -590,8 +598,7 @@ class QueryCompilationErrorsSuite
     }
     checkError(
       exception = e2,
-      errorClass = "UNSUPPORTED_DESERIALIZER",
-      errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
+      errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
       parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT>\"",
         "ordinal" -> "1"))
   }
@@ -604,8 +611,7 @@ class QueryCompilationErrorsSuite
 
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_GENERATOR",
-      errorSubClass = Some("NESTED_IN_EXPRESSIONS"),
+      errorClass = "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
       parameters = Map("expression" -> "\"(explode(array(1, 2, 3)) + 1)\""))
   }
 
@@ -616,8 +622,7 @@ class QueryCompilationErrorsSuite
 
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_GENERATOR",
-      errorSubClass = Some("MULTI_GENERATOR"),
+      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
       parameters = Map("clause" -> "SELECT", "num" -> "2",
         "generators" -> "\"explode(array(1, 2, 3))\", \"explode(array(1, 2, 3))\""))
   }
@@ -629,8 +634,7 @@ class QueryCompilationErrorsSuite
 
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_GENERATOR",
-      errorSubClass = Some("OUTSIDE_SELECT"),
+      errorClass = "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
       parameters = Map("plan" -> "'Sort [explode(array(1, 2, 3)) ASC NULLS FIRST], true"))
   }
 
@@ -645,8 +649,7 @@ class QueryCompilationErrorsSuite
 
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_GENERATOR",
-      errorSubClass = "NOT_GENERATOR",
+      errorClass = "UNSUPPORTED_GENERATOR.NOT_GENERATOR",
       sqlState = None,
       parameters = Map(
         "functionName" -> "`array_contains`",
@@ -661,8 +664,7 @@ class QueryCompilationErrorsSuite
       exception = intercept[AnalysisException] {
         Seq("""{"a":1}""").toDF("a").select(from_json($"a", IntegerType)).collect()
       },
-      errorClass = "DATATYPE_MISMATCH",
-      errorSubClass = Some("INVALID_JSON_SCHEMA"),
+      errorClass = "DATATYPE_MISMATCH.INVALID_JSON_SCHEMA",
       parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
   }
 }
