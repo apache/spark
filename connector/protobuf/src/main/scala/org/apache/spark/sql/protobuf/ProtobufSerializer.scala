@@ -104,7 +104,7 @@ private[sql] class ProtobufSerializer(
           val data = getter.getUTF8String(ordinal).toString
           if (!enumSymbols.contains(data)) {
             throw QueryCompilationErrors.cannotConvertCatalystTypeToProtobufEnumTypeError(
-              toFieldStr(catalystPath),
+              catalystPath,
               toFieldStr(protoPath),
               data,
               enumSymbols.mkString("\"", "\", \"", "\""))
@@ -218,7 +218,7 @@ private[sql] class ProtobufSerializer(
 
       case _ =>
         throw QueryCompilationErrors.cannotConvertCatalystTypeToProtobufTypeError(
-          toFieldStr(catalystPath),
+          catalystPath,
           toFieldStr(protoPath),
           catalystType,
           s"${fieldDescriptor} ${fieldDescriptor.toProto.getLabel} ${fieldDescriptor.getJavaType}" +

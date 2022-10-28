@@ -243,7 +243,7 @@ private[sql] class ProtobufDeserializer(
       case _ =>
         throw QueryCompilationErrors.cannotConvertProtobufTypeToSqlTypeError(
           toFieldStr(protoPath),
-          toFieldStr(catalystPath),
+          catalystPath,
           s"${protoType} ${protoType.toProto.getLabel} ${protoType.getJavaType}" +
             s" ${protoType.getType}",
           catalystType)

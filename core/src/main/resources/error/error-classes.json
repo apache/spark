@@ -594,6 +594,11 @@
       }
     }
   },
+  "MALFORMED_PROTOBUF_MESSAGE_ERROR" : {
+    "message" : [
+      "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
+    ]
+  },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [
       "Unknown static partition column: <columnName>"

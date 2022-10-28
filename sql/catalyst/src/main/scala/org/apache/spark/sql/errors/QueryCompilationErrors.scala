@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
 import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
@@ -3214,7 +3213,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotConvertProtobufTypeToSqlTypeError(
       protobufColumn: String,
-      sqlColumn: String,
+      sqlColumn: Seq[String],
       protobufType: String,
       sqlType: DataType): Throwable = {
     new AnalysisException(
@@ -3227,7 +3226,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def cannotConvertCatalystTypeToProtobufTypeError(
-      sqlColumn: String,
+      sqlColumn: Seq[String],
       protobufColumn: String,
       sqlType: DataType,
       protobufType: String): Throwable = {
@@ -3241,14 +3240,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def cannotConvertCatalystTypeToProtobufEnumTypeError(
-      sqlColumn: String,
+      sqlColumn: Seq[String],
       protobufColumn: String,
       data: String,
       enumString: String): Throwable = {
     new AnalysisException(
       errorClass = "CATALYST_TYPE_TO_PROTOBUF_ENUM_TYPE_ERROR",
       messageParameters = Map(
-        "sqlColumn" -> sqlColumn,
+        "sqlColumn" -> toSQLId(sqlColumn),
         "protobufColumn" -> protobufColumn,
         "data" -> data,
         "enumString" -> enumString))
@@ -3263,7 +3262,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "protobufType" -> protobufType,
         "toType" -> toSQLType(sqlType)),
-      cause = Some(cause.getCause))
+      cause = Option(cause.getCause))
   }
 
   def cannotConvertSqlTypeToProtobufError(
@@ -3275,7 +3274,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "protobufType" -> protobufType,
         "toType" -> toSQLType(sqlType)),
-      cause = Some(cause.getCause))
+      cause = Option(cause.getCause))
   }
 
   def protobufTypeUnsupportedYetError(protobufType: String): Throwable = {
@@ -3329,14 +3328,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "PROTOBUF_DESCRIPTOR_ERROR",
       messageParameters = Map.empty(),
-      cause = Some(cause.getCause))
+      cause = Option(cause.getCause))
   }
 
   def cannotFindDescriptorFileError(filePath: String, cause: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "CANNOT_FIND_PROTOBUF_DESCRIPTOR_FILE_ERROR",
       messageParameters = Map("filePath" -> filePath),
-      cause = Some(cause.getCause))
+      cause = Option(cause.getCause))
   }
 
   def noProtobufMessageTypeReturnError(descriptorName: String): Throwable = {
@@ -3349,7 +3348,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "PROTOBUF_DESCRIPTOR_PARSING_ERROR",
       messageParameters = Map.empty(),
-      cause = Some(cause.getCause))
+      cause = Option(cause.getCause))
   }
 
   def foundRecursionInProtobufSchema(fieldDescriptor: String): Throwable = {
@@ -3372,7 +3371,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "PROTOBUF_CLASS_LOAD_ERROR",
       messageParameters = Map("protobufClassName" -> protobufClassName, "message" -> message),
-      cause = Some(cause.getCause))
+      cause = Option(cause.getCause))
   }
 
   def protobufMessageTypeError(protobufClassName: String): Throwable = {
@@ -3389,12 +3388,5 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidByteStringFormatError(): Throwable = {
     new AnalysisException(errorClass = "INVALID_BYTE_STRING_ERROR", messageParameters = Map.empty)
-  }
-
-  def malformedRecordsDetectedInRecordParsingError(cause: Throwable): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2177",
-      messageParameters = Map("failFastMode" -> FailFastMode.name),
-      cause = cause)
   }
 }

@@ -24,7 +24,7 @@ import com.google.protobuf.DynamicMessage
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, SpecificInternalRow, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.protobuf.utils.{ProtobufOptions, ProtobufUtils, SchemaConverters}
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, StructType}
 
@@ -92,7 +92,7 @@ private[protobuf] case class ProtobufDataToCatalyst(
       case PermissiveMode =>
         nullResultRow
       case FailFastMode =>
-        throw QueryCompilationErrors.malformedRecordsDetectedInRecordParsingError(e)
+        throw QueryExecutionErrors.malformedProtobufMessageDetectedInMessageParsingError(e)
       case _ =>
         throw QueryCompilationErrors.parseModeUnsupportedError(prettyName, parseMode)
     }
