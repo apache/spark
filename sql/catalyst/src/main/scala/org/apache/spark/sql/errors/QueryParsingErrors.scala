@@ -49,29 +49,9 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0004", ctx.source)
   }
 
-  def unrecognizedMatchedActionError(ctx: MatchedClauseContext): Throwable = {
-    new ParseException(
-      errorClass = "UNRECOGNIZED_MATCHED_ACTION",
-      messageParameters = Map("matchedAction" -> ctx.matchedAction().getText),
-      ctx.matchedAction())
-  }
-
   def insertedValueNumberNotMatchFieldNumberError(ctx: NotMatchedClauseContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0006", ctx.notMatchedAction())
   }
-
-  def unrecognizedNotMatchedActionError(ctx: NotMatchedClauseContext): Throwable = {
-    new ParseException(
-      errorClass = "UNRECOGNIZED_NOT_MATCHED_ACTION",
-      messageParameters = Map("matchedAction" -> ctx.notMatchedAction().getText),
-      ctx.notMatchedAction())
-  }
-
-  def unrecognizedNotMatchedBySourceActionError(ctx: NotMatchedBySourceClauseContext): Throwable = {
-    new ParseException(
-      errorClass = "UNRECOGNIZED_NOT_MATCHED_BY_SOURCE_ACTION",
-      messageParameters = Map("matchedAction" -> ctx.notMatchedBySourceAction().getText),
-      ctx.notMatchedBySourceAction())}
 
   def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0008", ctx)
@@ -82,7 +62,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def nonLastNotMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException(errorClass = "NON_LAST_NOT_MATCHED_CLAUSE_OMIT_CONDITION", ctx)
+    new ParseException(errorClass = "NON_LAST_NOT_MATCHED_BY_TARGET_CLAUSE_OMIT_CONDITION", ctx)
   }
 
   def nonLastNotMatchedBySourceClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {

@@ -29,6 +29,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.apache.commons.codec.DecoderException
 import org.apache.commons.codec.binary.Hex
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
@@ -425,8 +426,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             UpdateAction(condition, withAssignments(clause.matchedAction().assignmentList()))
           }
         } else {
-          // It should not be here.
-          throw QueryParsingErrors.unrecognizedMatchedActionError(clause)
+          throw SparkException.internalError(
+            s"Unrecognized matched action: ${clause.matchedAction().getText}")
         }
       }
     }
@@ -446,8 +447,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             InsertAction(condition, columns.zip(values).map(kv => Assignment(kv._1, kv._2)).toSeq)
           }
         } else {
-          // It should not be here.
-          throw QueryParsingErrors.unrecognizedNotMatchedActionError(clause)
+          throw SparkException.internalError(
+            s"Unrecognized matched action: ${clause.notMatchedAction().getText}")
         }
       }
     }
@@ -461,8 +462,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           UpdateAction(condition,
             withAssignments(clause.notMatchedBySourceAction().assignmentList()))
         } else {
-          // It should not be here.
-          throw QueryParsingErrors.unrecognizedNotMatchedBySourceActionError(clause)
+          throw SparkException.internalError(
+            s"Unrecognized matched action: ${clause.notMatchedBySourceAction().getText}")
         }
       }
     }

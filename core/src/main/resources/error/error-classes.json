@@ -623,7 +623,7 @@
     ],
     "sqlState" : "42000"
   },
-  "NON_LAST_NOT_MATCHED_CLAUSE_OMIT_CONDITION" : {
+  "NON_LAST_NOT_MATCHED_BY_TARGET_CLAUSE_OMIT_CONDITION" : {
     "message" : [
       "When there are more than one NOT MATCHED clauses in a MERGE statement, only the last NOT MATCHED clause can omit the condition."
     ],
@@ -827,21 +827,6 @@
       "All unpivot value columns must have the same size as there are value column names (<names>)"
     ],
     "sqlState" : "42000"
-  },
-  "UNRECOGNIZED_MATCHED_ACTION" : {
-    "message" : [
-      "Unrecognized matched action: <matchedAction>."
-    ]
-  },
-  "UNRECOGNIZED_NOT_MATCHED_ACTION" : {
-    "message" : [
-      "Unrecognized not matched action: <matchedAction>."
-    ]
-  },
-  "UNRECOGNIZED_NOT_MATCHED_BY_SOURCE_ACTION" : {
-    "message" : [
-      "Unrecognized not matched by source action: <matchedAction>."
-    ]
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [

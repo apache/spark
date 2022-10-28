@@ -1999,7 +1999,7 @@ class DDLParserSuite extends AnalysisTest {
         |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "NON_LAST_NOT_MATCHED_CLAUSE_OMIT_CONDITION",
+      errorClass = "NON_LAST_NOT_MATCHED_BY_TARGET_CLAUSE_OMIT_CONDITION",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql,

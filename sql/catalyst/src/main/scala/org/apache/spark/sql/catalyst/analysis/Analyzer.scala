@@ -1549,7 +1549,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
-                  resolveExpressionByPlanChildren(_, Project(Nil, m.sourceTable)))
+                  resolveExpressionByPlanOutput(_, m.sourceTable))
                 InsertAction(
                   resolvedInsertCondition,
                   resolveAssignments(assignments, m, resolveValuesFrom = sourceTable))
@@ -1557,7 +1557,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
-                  resolveExpressionByPlanChildren(_, Project(Nil, m.sourceTable)))
+                  resolveExpressionByPlanOutput(_, m.sourceTable))
                 val assignments = targetTable.output.map { attr =>
                   Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
                 }
@@ -1569,11 +1569,11 @@ class Analyzer(override val catalogManager: CatalogManager)
             val newNotMatchedBySourceActions = m.notMatchedBySourceActions.map {
               case DeleteAction(deleteCondition) =>
                 val resolvedDeleteCondition = deleteCondition.map(
-                  resolveExpressionByPlanChildren(_, Project(Nil, targetTable)))
+                  resolveExpressionByPlanOutput(_, targetTable))
                 DeleteAction(resolvedDeleteCondition)
               case UpdateAction(updateCondition, assignments) =>
                 val resolvedUpdateCondition = updateCondition.map(
-                  resolveExpressionByPlanChildren(_, Project(Nil, targetTable)))
+                  resolveExpressionByPlanOutput(_, targetTable))
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from the target table only.
