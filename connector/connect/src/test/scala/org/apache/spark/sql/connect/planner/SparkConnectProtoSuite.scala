@@ -20,7 +20,6 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -188,7 +187,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   private def analyzePlan(plan: LogicalPlan): LogicalPlan = {
     val connectAnalyzed = analysis.SimpleAnalyzer.execute(plan)
     analysis.SimpleAnalyzer.checkAnalysis(connectAnalyzed)
-    EliminateSubqueryAliases(connectAnalyzed)
     connectAnalyzed
   }
 
