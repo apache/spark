@@ -45,8 +45,8 @@ object ExecutorExitCode {
    */
   val HEARTBEAT_FAILURE = 56
 
-  /** Executor is killed due to out of memory issue */
-  val KILLED_DUE_TO_OOM = 137
+  /** Executor is killed by SIGKILL */
+  val KILLED_DUE_TO_SIGKILL = 137
 
   def explainExitCode(exitCode: Int): String = {
     exitCode match {
@@ -62,8 +62,8 @@ object ExecutorExitCode {
         "ExternalBlockStore failed to create a local temporary directory."
       case HEARTBEAT_FAILURE =>
         "Unable to send heartbeats to driver."
-      case KILLED_DUE_TO_OOM =>
-        "Killed due to out of memory."
+      case KILLED_DUE_TO_SIGKILL =>
+        "Killed due to SIGKILL. It might be caused by oom killer or other external processes."
       case _ =>
         "Unknown executor exit code (" + exitCode + ")" + (
           if (exitCode > 128) {
