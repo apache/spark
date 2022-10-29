@@ -4339,5 +4339,35 @@
     "message" : [
       "Drop namespace restrict is not supported"
     ]
+  },
+  "_LEGACY_ERROR_TEMP_2300" : {
+    "message" : [
+      "The number of lambda function arguments '<namesSize>' does not match the number of arguments expected by the higher order function '<argInfoSize>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2301" : {
+    "message" : [
+      "Lambda function arguments should not have names that are semantically the same."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2302" : {
+    "message" : [
+      "'<name>' does not support more than one sources"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2303" : {
+    "message" : [
+      "incompatible types found in column <name> for inline table"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2304" : {
+    "message" : [
+      "cannot evaluate expression <sqlExpr> in inline table definition"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2305" : {
+    "message" : [
+      "expected <numCols> columns but found <rowSize> columns in row <ri>"
+    ]
   }
 }
