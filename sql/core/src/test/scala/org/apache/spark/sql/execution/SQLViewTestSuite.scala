@@ -337,7 +337,13 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
         checkError(
           exception = intercept[AnalysisException](spark.table(viewName)),
           errorClass = "FIELD_NOT_FOUND",
-          parameters = Map("fieldName" -> "`i`", "fields" -> "`j`"))
+          parameters = Map("fieldName" -> "`i`", "fields" -> "`j`"),
+          context = ExpectedContext(
+            fragment = "s.i",
+            objectName = fullyQualifiedViewName("v"),
+            objectType = "VIEW",
+            startIndex = 7,
+            stopIndex = 9))
 
         // drop invalid view should be fine
         sql(s"DROP VIEW $viewName")
