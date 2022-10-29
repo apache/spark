@@ -440,9 +440,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       )
     )
 
+    val coalesce = Coalesce(Nil)
     checkError(
       exception = intercept[AnalysisException] {
-        assertSuccess(Coalesce(Nil))
+        assertSuccess(coalesce)
       },
       errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
       parameters = Map(
