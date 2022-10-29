@@ -569,7 +569,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   private def pushDownJoinKeys(plan: LogicalPlan, keys: Seq[NamedReference]): Unit = {
     var pushed = false
-    def pushJoinKeys(plan: LogicalPlan) {
+    def pushJoinKeys(plan: LogicalPlan): Unit = {
       plan match {
         case PhysicalOperation(_, _, sHolder: ScanBuilderHolder) =>
           val tableContainsKeys = keys.map(_.describe()).forall(sHolder.output.map(_.name).contains)
