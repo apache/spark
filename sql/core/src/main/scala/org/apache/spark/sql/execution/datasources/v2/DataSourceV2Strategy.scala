@@ -142,6 +142,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case _: DynamicPruning => true
         case _ => false
       }
+      // TODO:
+      // if (!relation.relation.partitionGroupedByClusterKeys)
+      //   spark may need to regroup partitions since partitions returned from datasource
+      //   are not guaranteed to be grouped by cluster keys
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
         relation.keyGroupedPartitioning, relation.ordering, relation.relation.table)
       withProjectAndFilter(project, postScanFilters, batchExec, !batchExec.supportsColumnar) :: Nil
@@ -236,7 +240,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             invalidateCache) :: Nil
       }
 
-    case AppendData(r @ DataSourceV2Relation(v1: SupportsWrite, _, _, _, _), query, _,
+    case AppendData(r @ DataSourceV2Relation(v1: SupportsWrite, _, _, _, _, _), query, _,
         _, Some(write)) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
       write match {
         case v1Write: V1Write =>
@@ -249,7 +253,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case AppendData(r: DataSourceV2Relation, query, _, _, Some(write)) =>
       AppendDataExec(planLater(query), refreshCache(r), write) :: Nil
 
-    case OverwriteByExpression(r @ DataSourceV2Relation(v1: SupportsWrite, _, _, _, _), _, query,
+    case OverwriteByExpression(r @ DataSourceV2Relation(v1: SupportsWrite, _, _, _, _, _), _, query,
         _, _, Some(write)) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
       write match {
         case v1Write: V1Write =>

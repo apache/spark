@@ -37,13 +37,16 @@ import org.apache.spark.util.Utils
  * @param options The options for this table operation. It's used to create fresh
  *                [[org.apache.spark.sql.connector.read.ScanBuilder]] and
  *                [[org.apache.spark.sql.connector.write.WriteBuilder]].
+ * @param partitionGroupedByClusterKeys if the partitions in this relation is grouped
+ *                                      by clustered keys
  */
 case class DataSourceV2Relation(
     table: Table,
     output: Seq[AttributeReference],
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
-    options: CaseInsensitiveStringMap)
+    options: CaseInsensitiveStringMap,
+    var partitionGroupedByClusterKeys: Boolean = false)
   extends LeafNode with MultiInstanceRelation with NamedRelation with ExposesMetadataColumns {
 
   import DataSourceV2Implicits._

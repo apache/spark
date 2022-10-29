@@ -19,10 +19,8 @@ package org.apache.spark.sql.connector
 
 import java.sql.Timestamp
 import java.time.{Duration, LocalDate, Period}
-
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.MICROSECONDS
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
@@ -31,7 +29,11 @@ import org.apache.spark.sql.catalyst.util.{DateTimeUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
+import org.apache.spark.sql.connector.catalog.InMemoryBaseTable
+import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
@@ -43,7 +45,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
-  with DeleteFromTests with DatasourceV2SQLBase {
+  with DeleteFromTests with DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   protected val v2Source = classOf[FakeV2Provider].getName
   override protected val v2Format = v2Source
@@ -2425,6 +2427,67 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       assert(properties.get("prop1") == "1")
       assert(properties.get("prop2") == "2")
     }
+  }
+
+  test("SPARK-40946: add an interface SupportsPushDownClusterKeys") {
+    spark.sql("CREATE TABLE testcat.test1 (id1 bigint NOT NULL, data1 string) USING " +
+      s"$v2Source CLUSTERED BY (id1) INTO 4 BUCKETS")
+    spark.sql("INSERT INTO testcat.test1 values (1, 'test1'), (2, 'test2'), (3, 'test3')")
+
+    spark.sql("CREATE TABLE testcat.test2 (id2 bigint NOT NULL, data2 string) USING " +
+      s"$v2Source CLUSTERED BY (id2) INTO 4 BUCKETS")
+    spark.sql("INSERT INTO testcat.test2 values (4, 'test4'), (2, 'test2'), (5, 'test5')")
+
+    val df = spark.sql(
+      "select * from testcat.test1 join testcat.test2 on " +
+        "id1 = id2 AND data2 = data1 WHERE id1 > 0")
+    val executed = df.queryExecution.executedPlan
+    val joinKeys = collect(executed) {
+      case BatchScanExec(_, scan: InMemoryBaseTable#InMemoryBatchScan, _, _, _, _) =>
+        scan.joinKeys
+    }
+
+    assert(joinKeys.size == 2)
+    assert(joinKeys(0)(0) == FieldReference.apply("id1"))
+    assert(joinKeys(0)(1) == FieldReference.apply("data1"))
+    assert(joinKeys(1)(0) == FieldReference.apply("id2"))
+    assert(joinKeys(1)(1) == FieldReference.apply("data2"))
+  }
+
+  test("SPARK-40946: add an interface SupportsPushDownClusterKeys multiple joins") {
+    spark.sql("CREATE TABLE testcat.test1 (id1 bigint NOT NULL, data1 string) USING " +
+      s"$v2Source CLUSTERED BY (id1) INTO 4 BUCKETS")
+    spark.sql("INSERT INTO testcat.test1 values (1, 'test1'), (2, 'test2'), (3, 'test3')")
+
+    spark.sql("CREATE TABLE testcat.test2 (id2 bigint NOT NULL, data2 string) USING " +
+      s"$v2Source CLUSTERED BY (id2) INTO 4 BUCKETS")
+    spark.sql("INSERT INTO testcat.test2 values (4, 'test4'), (2, 'test2'), (5, 'test5')")
+
+    spark.sql("CREATE TABLE testcat.test3 (id3 bigint NOT NULL, data3 string) USING " +
+      s"$v2Source CLUSTERED BY (id3) INTO 4 BUCKETS")
+    spark.sql("INSERT INTO testcat.test3 values (5, 'test5'), (2, 'test2'), (6, 'test6')")
+
+    spark.sql("CREATE TABLE testcat.test4 (id4 bigint NOT NULL, data4 string) USING " +
+      s"$v2Source CLUSTERED BY (id4) INTO 4 BUCKETS")
+    spark.sql("INSERT INTO testcat.test4 values (7, 'test7'), (2, 'test2'), (8, 'test8')")
+
+    val df = spark.sql(
+      "select * from testcat.test2 join testcat.test3 on " +
+        "data2 = data3 join testcat.test1 on id1 = id2 join testcat.test4 on " +
+        "data3 = data4")
+
+    val executed = df.queryExecution.executedPlan
+    val joinKeys = collect(executed) {
+      case BatchScanExec(_, scan: InMemoryBaseTable#InMemoryBatchScan, _, _, _, _) =>
+        scan.joinKeys
+    }
+
+    assert(joinKeys.size == 4)
+    assert(joinKeys(0)(0) == FieldReference.apply("id2"))
+    assert(joinKeys(0)(1) == FieldReference.apply("data2"))
+    assert(joinKeys(1)(0) == FieldReference.apply("data3"))
+    assert(joinKeys(2)(0) == FieldReference.apply("id1"))
+    assert(joinKeys(3)(0) == FieldReference.apply("data4"))
   }
 
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {

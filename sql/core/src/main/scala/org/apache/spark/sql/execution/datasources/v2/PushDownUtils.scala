@@ -21,9 +21,9 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, SchemaPruning}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.expressions.SortOrder
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, SortOrder}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownClusterKeys, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
@@ -113,6 +113,15 @@ object PushDownUtils {
         s.pushTableSample(
           sample.lowerBound, sample.upperBound, sample.withReplacement, sample.seed)
       case _ => false
+    }
+  }
+
+  def pushClusterKeys(scanBuilder: ScanBuilder, keys: Seq[V2Expression]): Boolean = {
+    scanBuilder match {
+      case s: SupportsPushDownClusterKeys =>
+        s.pushClusterKeys(keys.toArray)
+      case _ =>
+        false
     }
   }
 

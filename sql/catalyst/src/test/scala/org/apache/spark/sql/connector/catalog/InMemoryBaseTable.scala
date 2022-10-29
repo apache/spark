@@ -257,19 +257,44 @@ abstract class InMemoryBaseTable(
     TableCapability.TRUNCATE)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    new InMemoryScanBuilder(schema)
+    new InMemoryScanBuilder(schema, Some(partitioning))
   }
 
-  class InMemoryScanBuilder(tableSchema: StructType) extends ScanBuilder
-      with SupportsPushDownRequiredColumns {
+  class InMemoryScanBuilder(
+      tableSchema: StructType,
+      partitioning: Option[Array[Transform]] = None) extends ScanBuilder
+      with SupportsPushDownRequiredColumns
+      with SupportsPushDownClusterKeys {
     private var schema: StructType = tableSchema
+    private var joinKeys: Array[Expression] = Array.empty[Expression]
+    private val partition: Option[Array[Transform]] = partitioning
 
-    override def build: Scan =
-      InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema)
+    override def build: Scan = {
+      InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema, joinKeys)
+    }
 
     override def pruneColumns(requiredSchema: StructType): Unit = {
       val schemaNames = metadataColumnNames ++ tableSchema.map(_.name)
       schema = StructType(requiredSchema.filter(f => schemaNames.contains(f.name)))
+    }
+
+    override def pushClusterKeys(expressions: Array[Expression]): Boolean = {
+      joinKeys = (joinKeys ++ expressions).distinct
+      joinKeys.map(_.asInstanceOf[NamedReference]).foreach(key =>
+        if (getPartitionColumns.contains(key)) {
+          return true
+        }
+      )
+      false
+    }
+
+    private def getPartitionColumns(): Array[NamedReference] = {
+      partition.get.map {
+        case BucketTransform(_, cols, _) =>
+          return cols.toArray
+        case _ =>
+          return Array.empty[NamedReference]
+      }
     }
   }
 
@@ -319,7 +344,8 @@ abstract class InMemoryBaseTable(
   case class InMemoryBatchScan(
       var _data: Seq[InputPartition],
       readSchema: StructType,
-      tableSchema: StructType)
+      tableSchema: StructType,
+      joinKeys: Array[Expression] = Array.empty[Expression])
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
 
     override def filterAttributes(): Array[NamedReference] = {

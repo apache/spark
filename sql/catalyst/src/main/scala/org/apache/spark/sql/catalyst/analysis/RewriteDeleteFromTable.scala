@@ -39,15 +39,15 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case d @ DeleteFromTable(aliasedTable, cond) if d.resolved =>
       EliminateSubqueryAliases(aliasedTable) match {
-        case DataSourceV2Relation(_: TruncatableTable, _, _, _, _) if cond == TrueLiteral =>
+        case DataSourceV2Relation(_: TruncatableTable, _, _, _, _, _) if cond == TrueLiteral =>
           // don't rewrite as the table supports truncation
           d
 
-        case r @ DataSourceV2Relation(t: SupportsRowLevelOperations, _, _, _, _) =>
+        case r @ DataSourceV2Relation(t: SupportsRowLevelOperations, _, _, _, _, _) =>
           val table = buildOperationTable(t, DELETE, CaseInsensitiveStringMap.empty())
           buildReplaceDataPlan(r, table, cond)
 
-        case DataSourceV2Relation(_: SupportsDeleteV2, _, _, _, _) =>
+        case DataSourceV2Relation(_: SupportsDeleteV2, _, _, _, _, _) =>
           // don't rewrite as the table supports deletes only with filters
           d
 
