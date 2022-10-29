@@ -334,7 +334,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"map ASC NULLS FIRST\"",
-      "functionName" -> "`sortorder`" ,
+      "functionName" -> "`sortorder`",
       "dataType" -> "\"MAP<INT, INT>\""))
 
   errorClassTest(
