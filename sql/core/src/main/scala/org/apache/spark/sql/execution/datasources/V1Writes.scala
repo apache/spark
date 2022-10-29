@@ -166,8 +166,8 @@ object V1WritesUtils {
       numStaticPartitionCols: Int = 0): Seq[SortOrder] = {
     require(partitionColumns.size >= numStaticPartitionCols)
 
-    val originSortSet = AttributeSet(originSortColumns)
     val partitionSet = AttributeSet(partitionColumns)
+    val originSortSet = outputColumns.filter(AttributeSet(originSortColumns).contains)
     val dataColumns = outputColumns.filterNot(partitionSet.contains)
     val writerBucketSpec = V1WritesUtils.getWriterBucketSpec(bucketSpec, dataColumns, options)
     val sortColumns = V1WritesUtils.getBucketSortColumns(bucketSpec, dataColumns)
