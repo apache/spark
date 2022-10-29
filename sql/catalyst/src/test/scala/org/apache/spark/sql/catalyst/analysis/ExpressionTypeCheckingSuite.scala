@@ -445,10 +445,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       exception = intercept[AnalysisException] {
         assertSuccess(coalesce)
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       parameters = Map(
         "sqlExpr" -> "\"coalesce()\"",
-        "functionName" -> "`coalesce`",
+        "functionName" -> toSQLId(coalesce.prettyName),
         "expectedNum" -> "> 0",
         "actualNum" -> "0"))
 

@@ -185,7 +185,7 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size > 3 || children.size < 2) {
       DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_PARAMS",
+        errorSubClass = "WRONG_NUM_ARGS",
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName),
           "expectedNum" -> "[2, 3]",

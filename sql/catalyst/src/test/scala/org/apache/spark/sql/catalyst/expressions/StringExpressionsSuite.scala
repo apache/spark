@@ -1498,7 +1498,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // arguments checking
     assert(ParseUrl(Seq(Literal("1"))).checkInputDataTypes() == DataTypeMismatch(
-      errorSubClass = "WRONG_NUM_PARAMS",
+      errorSubClass = "WRONG_NUM_ARGS",
       messageParameters = Map(
         "functionName" -> "`parse_url`",
         "expectedNum" -> "[2, 3]",
@@ -1506,7 +1506,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     ))
     assert(ParseUrl(Seq(Literal("1"), Literal("2"), Literal("3"),
       Literal("4"))).checkInputDataTypes() == DataTypeMismatch(
-      errorSubClass = "WRONG_NUM_PARAMS",
+      errorSubClass = "WRONG_NUM_ARGS",
       messageParameters = Map(
         "functionName" -> "`parse_url`",
         "expectedNum" -> "[2, 3]",

@@ -4274,7 +4274,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(coalesce())
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"coalesce()\"",
@@ -4286,7 +4286,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("coalesce()")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_PARAMS",
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"coalesce()\"",
