@@ -34,6 +34,8 @@ import org.apache.spark.sql.types.StructType
 
 trait AnalysisTest extends PlanTest {
 
+  import org.apache.spark.QueryContext
+
   protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = Nil
 
   protected def createTempView(
@@ -174,40 +176,19 @@ trait AnalysisTest extends PlanTest {
       inputPlan: LogicalPlan,
       expectedErrorClass: String,
       expectedMessageParameters: Map[String, String],
-      caseSensitive: Boolean = true,
-      line: Int = -1,
-      pos: Int = -1): Unit = {
+      queryContext: Array[QueryContext] = Array.empty,
+      caseSensitive: Boolean = true): Unit = {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer
       val e = intercept[AnalysisException] {
         analyzer.checkAnalysis(analyzer.execute(inputPlan))
       }
-
-      if (e.getErrorClass != expectedErrorClass ||
-          e.messageParameters != expectedMessageParameters ||
-          (line >= 0 && e.line.getOrElse(-1) != line) ||
-          (pos >= 0) && e.startPosition.getOrElse(-1) != pos) {
-        var failMsg = ""
-        if (e.getErrorClass != expectedErrorClass) {
-          failMsg +=
-            s"""Error class should be: ${expectedErrorClass}
-               |Actual error class: ${e.getErrorClass}
-             """.stripMargin
-        }
-        if (e.messageParameters != expectedMessageParameters) {
-          failMsg +=
-            s"""Message parameters should be: ${expectedMessageParameters.mkString("\n  ")}
-               |Actual message parameters: ${e.messageParameters.mkString("\n  ")}
-             """.stripMargin
-        }
-        if (e.line.getOrElse(-1) != line || e.startPosition.getOrElse(-1) != pos) {
-          failMsg +=
-            s"""Line/position should be: $line, $pos
-               |Actual line/position: ${e.line.getOrElse(-1)}, ${e.startPosition.getOrElse(-1)}
-             """.stripMargin
-        }
-        fail(failMsg)
-      }
+      checkError(
+        exception = e,
+        errorClass = expectedErrorClass,
+        parameters = expectedMessageParameters,
+        queryContext = queryContext
+      )
     }
   }
 

@@ -119,8 +119,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       messageParameters: Map[String, String],
       caseSensitive: Boolean = true): Unit = {
     test(name) {
-      assertAnalysisErrorClass(plan, errorClass, messageParameters,
-        caseSensitive = true, line = -1, pos = -1)
+      assertAnalysisErrorClass(plan, errorClass, messageParameters, caseSensitive = caseSensitive)
     }
   }
 
@@ -903,9 +902,8 @@ class AnalysisErrorSuite extends AnalysisTest {
           "inputSql" -> inputSql,
           "inputType" -> inputType,
           "requiredType" -> "(\"INT\" or \"BIGINT\")"),
-        caseSensitive = false,
-        line = -1,
-        pos = -1)
+        caseSensitive = false
+      )
     }
   }
 
