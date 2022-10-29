@@ -182,7 +182,12 @@ object V1WritesUtils {
       // columns.
       val sortOrder = (dynamicPartitionColumns ++
         writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns)
-      val residualSort = originSortSet.filterNot(sortOrder.contains)
+      val exprIdSet = sortOrder.flatMap({
+        case a: Attribute => Some(a.exprId)
+        case _ => None
+      }).toSet
+      val residualSort = originSortSet.filterNot(s => (sortOrder.contains()
+        || exprIdSet.contains(s.exprId)))
       (sortOrder ++ residualSort)
         .map(SortOrder(_, Ascending))
     }
