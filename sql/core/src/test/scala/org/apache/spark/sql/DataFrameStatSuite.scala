@@ -23,7 +23,7 @@ import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.functions.{col, lit, struct}
+import org.apache.spark.sql.functions.{col, lit, struct, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, DoubleType, StringType, StructField, StructType}
@@ -150,6 +150,18 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     intercept[AnalysisException] {
       dfx.stat.corr("num", "num")
     }
+  }
+
+  test("SPARK-40933 test cov & corr with null values and empty dataset") {
+    val df1 = spark.range(0, 10)
+      .withColumn("value", when(col("id") % 3 === 0, col("id")))
+    assert(math.abs(df1.stat.cov("id", "value") - 5.0) < 1e-12)
+    assert(math.abs(df1.stat.corr("id", "value") - 0.5120915564991891) < 1e-12)
+
+    // empty dataframe
+    val df2 = df1.where(col("id") < 0)
+    assert(df2.stat.cov("id", "value") === 0)
+    assert(df2.stat.corr("id", "value").isNaN)
   }
 
   test("covariance") {
