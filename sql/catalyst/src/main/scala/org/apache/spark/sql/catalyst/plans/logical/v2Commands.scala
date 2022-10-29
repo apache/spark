@@ -211,7 +211,7 @@ case class ReplaceData(
 
   lazy val operation: RowLevelOperation = {
     EliminateSubqueryAliases(table) match {
-      case DataSourceV2Relation(RowLevelOperationTable(_, operation), _, _, _, _) =>
+      case DataSourceV2Relation(RowLevelOperationTable(_, operation), _, _, _, _, _) =>
         operation
       case _ =>
         throw new AnalysisException(s"Cannot retrieve row-level operation from $table")

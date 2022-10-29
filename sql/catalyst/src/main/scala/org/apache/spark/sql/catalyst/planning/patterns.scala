@@ -387,7 +387,7 @@ object GroupBasedRowLevelOperation {
   type ReturnType = (ReplaceData, Expression, LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case rd @ ReplaceData(DataSourceV2Relation(table, _, _, _, _), cond, query, _, _) =>
+    case rd @ ReplaceData(DataSourceV2Relation(table, _, _, _, _, _), cond, query, _, _) =>
       val readRelation = findReadRelation(table, query)
       readRelation.map((rd, cond, _))
 

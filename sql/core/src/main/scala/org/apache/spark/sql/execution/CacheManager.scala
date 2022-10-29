@@ -181,7 +181,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         isSameName(ident.qualifier :+ ident.name) &&
           isSameName(v1Ident.catalog.toSeq ++ v1Ident.database :+ v1Ident.table)
 
-      case SubqueryAlias(ident, DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _)) =>
+      case SubqueryAlias(ident, DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, _)) =>
         isSameName(ident.qualifier :+ ident.name) &&
           isSameName(catalog.name() +: v2Ident.namespace() :+ v2Ident.name())
 
@@ -345,7 +345,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         case _ => false
       }
 
-      case DataSourceV2Relation(fileTable: FileTable, _, _, _, _) =>
+      case DataSourceV2Relation(fileTable: FileTable, _, _, _, _, _) =>
         refreshFileIndexIfNecessary(fileTable.fileIndex, fs, qualifiedPath)
 
       case _ => false
