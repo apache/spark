@@ -271,7 +271,7 @@ abstract class HashExpression[E] extends Expression {
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 1) {
       DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_PARAMS",
+        errorSubClass = "WRONG_NUM_ARGS",
         messageParameters = Map(
           "functionName" ->  toSQLId(prettyName),
           "expectedNum" -> "> 0",

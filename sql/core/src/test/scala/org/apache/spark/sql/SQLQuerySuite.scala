@@ -3709,7 +3709,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         },
         errorClass = "_LEGACY_ERROR_TEMP_1216",
         parameters = Map(
-          "pattern" -> "m%@ca",
+          "pattern" -> "'m%@ca'",
           "message" -> "the escape character is not allowed to precede '@'"))
 
       checkAnswer(sql("SELECT s LIKE 'm@@ca' ESCAPE '@' FROM df"), Row(true))

@@ -14,15 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from typing import cast
 import unittest
 
 from pyspark.testing.connectutils import PlanOnlyTestFixture
-import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect.readwriter import DataFrameReader
-from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
-from pyspark.sql.types import StringType
+from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
+
+if have_pandas:
+    import pyspark.sql.connect.proto as proto
+    from pyspark.sql.connect.readwriter import DataFrameReader
+    from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
+    from pyspark.sql.types import StringType
 
 
+@unittest.skipIf(not have_pandas, cast(str, pandas_requirement_message))
 class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
