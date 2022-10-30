@@ -122,10 +122,14 @@ class FileMetadataStructRowIndexSuite extends QueryTest with SharedSparkSession 
 
   test("unsupported file format - read _metadata.row_index") {
     withReadDataFrame("orc") { df =>
-      val ex = intercept[AnalysisException] {
-        df.select("*", s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX}")
-      }
-      assert(ex.getMessage.contains("No such struct field row_index"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.select("*", s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX}")
+        },
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map(
+          "fieldName" -> "`row_index`",
+          "fields" -> "`file_path`, `file_name`, `file_size`, `file_modification_time`"))
     }
   }
 
