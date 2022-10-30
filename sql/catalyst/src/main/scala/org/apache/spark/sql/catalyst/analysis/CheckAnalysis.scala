@@ -1293,7 +1293,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               messageParameters = Map(
                 "table" -> table.name,
                 "fieldName" -> fieldName,
-                "oldTYpe" -> field.dataType.simpleString,
+                "oldType" -> field.dataType.simpleString,
                 "newType" -> newDataType.simpleString))
           }
         }
