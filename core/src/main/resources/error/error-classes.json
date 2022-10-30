@@ -200,6 +200,11 @@
           "The <functionName> accepts only arrays of pair structs, but <childExpr> is of <childType>."
         ]
       },
+      "MAP_ZIP_WITH_DIFF_TYPES" : {
+        "message" : [
+          "Input to the <functionName> should have been two maps with compatible key types, but it's [<leftType>, <rightType>]."
+        ]
+      },
       "NON_FOLDABLE_INPUT" : {
         "message" : [
           "the input <inputName> should be a foldable <inputType> expression; however, got <inputExpr>."
@@ -213,6 +218,11 @@
       "NULL_TYPE" : {
         "message" : [
           "Null typed values cannot be used as arguments of <functionName>."
+        ]
+      },
+      "PARAMETER_CONSTRAINT_VIOLATION" : {
+        "message" : [
+          "The <leftExprName>(<leftExprValue>) must be <constraint> the <rightExprName>(<rightExprValue>)"
         ]
       },
       "RANGE_FRAME_INVALID_TYPE" : {
@@ -270,6 +280,11 @@
           "The <exprName> must not be null"
         ]
       },
+      "UNEXPECTED_RETURN_TYPE" : {
+        "message" : [
+          "The <functionName> requires return <expectedType> type, but the actual is <actualType> type."
+        ]
+      },
       "UNEXPECTED_STATIC_METHOD" : {
         "message" : [
           "cannot find a static method <methodName> that matches the argument types in <className>"
@@ -285,14 +300,14 @@
           "The <exprName> must be between <valueRange> (current value = <currentValue>)"
         ]
       },
+      "WRONG_NUM_ARGS" : {
+        "message" : [
+          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
+        ]
+      },
       "WRONG_NUM_ENDPOINTS" : {
         "message" : [
           "The number of endpoints must be >= 2 to construct intervals but the actual number is <actualNumber>."
-        ]
-      },
-      "WRONG_NUM_PARAMS" : {
-        "message" : [
-          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
         ]
       }
     }
@@ -405,12 +420,6 @@
         "message" : [
           "Spark >= 3.0:",
           "Fail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"
-        ]
-      },
-      "FORMAT_DATETIME_BY_NEW_PARSER" : {
-        "message" : [
-          "Spark >= 3.0:",
-          "Fail to format it to <resultCandidate> in the new formatter. You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0, or set to \"CORRECTED\" and treat it as an invalid datetime string."
         ]
       },
       "PARSE_DATETIME_BY_NEW_PARSER" : {
@@ -579,28 +588,6 @@
     "message" : [
       "More than one row returned by a subquery used as an expression."
     ]
-  },
-  "NAMESPACE_ALREADY_EXISTS" : {
-    "message" : [
-      "Cannot create namespace <nameSpaceName> because it already exists.",
-      "Choose a different name, drop the existing namespace, or add the IF NOT EXISTS clause to tolerate pre-existing namespace."
-    ],
-    "sqlState" : "42000"
-  },
-  "NAMESPACE_NOT_EMPTY" : {
-    "message" : [
-      "Cannot drop a namespace <nameSpaceNameName> because it contains objects.",
-      "Use DROP NAMESPACE ... CASCADE to drop the namespace and all its objects."
-    ],
-    "sqlState" : "42000"
-  },
-  "NAMESPACE_NOT_FOUND" : {
-    "message" : [
-      "The namespace <nameSpaceName> cannot be found. Verify the spelling and correctness of the namespace.",
-      "If you did not qualify the name with, verify the current_schema() output, or qualify the name with the correctly.",
-      "To tolerate the error on drop use DROP NAMESPACE IF EXISTS."
-    ],
-    "sqlState" : "42000"
   },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [
@@ -947,6 +934,11 @@
       "LITERAL_TYPE" : {
         "message" : [
           "Literal for '<value>' of <type>."
+        ]
+      },
+      "MULTIPLE_BUCKET_TRANSFORMS" : {
+        "message" : [
+          "Multiple bucket TRANSFORMs."
         ]
       },
       "NATURAL_CROSS_JOIN" : {
