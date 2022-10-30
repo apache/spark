@@ -113,15 +113,21 @@ t1a IN (SELECT t2a, t2b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(t1.t1a IN (listquery(t1.t1a)))' due to data type mismatch: 
-The number of columns in the left hand side of an IN subquery does not match the
-number of columns in the output of subquery.
-#columns in left hand side: 1.
-#columns in right hand side: 2.
-Left side columns:
-[t1.t1a].
-Right side columns:
-[t2.t2a, t2.t2b].; line 3 pos 4
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "messageParameters" : {
+    "hint" : "",
+    "msg" : "\nThe number of columns in the left hand side of an IN subquery does not match the\nnumber of columns in the output of subquery.\n#columns in left hand side: 1.\n#columns in right hand side: 2.\nLeft side columns:\n[t1.t1a].\nRight side columns:\n[t2.t2a, t2.t2b].",
+    "sqlExpr" : "(t1.t1a IN (listquery(t1.t1a)))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 88,
+    "fragment" : "IN (SELECT t2a, t2b \n        FROM t2\n        WHERE t1a = t2a)"
+  } ]
+}
 
 
 -- !query
@@ -134,15 +140,21 @@ WHERE
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(named_struct('t1a', t1.t1a, 't1b', t1.t1b) IN (listquery(t1.t1a)))' due to data type mismatch: 
-The number of columns in the left hand side of an IN subquery does not match the
-number of columns in the output of subquery.
-#columns in left hand side: 2.
-#columns in right hand side: 1.
-Left side columns:
-[t1.t1a, t1.t1b].
-Right side columns:
-[t2.t2a].; line 3 pos 11
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "messageParameters" : {
+    "hint" : "",
+    "msg" : "\nThe number of columns in the left hand side of an IN subquery does not match the\nnumber of columns in the output of subquery.\n#columns in left hand side: 2.\n#columns in right hand side: 1.\nLeft side columns:\n[t1.t1a, t1.t1b].\nRight side columns:\n[t2.t2a].",
+    "sqlExpr" : "(named_struct('t1a', t1.t1a, 't1b', t1.t1b) IN (listquery(t1.t1a)))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 104,
+    "fragment" : "IN (SELECT t2a\n               FROM t2\n               WHERE t1a = t2a)"
+  } ]
+}
 
 
 -- !query
@@ -156,12 +168,18 @@ WHERE
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(named_struct('t4a', t4.t4a, 't4b', t4.t4b, 't4c', t4.t4c) IN (listquery()))' due to data type mismatch: 
-The data type of one or more elements in the left hand side of an IN subquery
-is not compatible with the data type of the output of the subquery
-Mismatched columns:
-[(t4.t4a:double, t5.t5a:timestamp), (t4.t4c:string, t5.t5c:bigint)]
-Left side:
-[double, string, string].
-Right side:
-[timestamp, string, bigint].; line 3 pos 16
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "messageParameters" : {
+    "hint" : "",
+    "msg" : "\nThe data type of one or more elements in the left hand side of an IN subquery\nis not compatible with the data type of the output of the subquery\nMismatched columns:\n[(t4.t4a:double, t5.t5a:timestamp), (t4.t4c:string, t5.t5c:bigint)]\nLeft side:\n[double, string, string].\nRight side:\n[timestamp, string, bigint].",
+    "sqlExpr" : "(named_struct('t4a', t4.t4a, 't4b', t4.t4b, 't4c', t4.t4c) IN (listquery()))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 40,
+    "stopIndex" : 146,
+    "fragment" : "IN (SELECT t5a,\n                           t5b,\n                           t5c\n                    FROM t5)"
+  } ]
+}

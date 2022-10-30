@@ -128,7 +128,21 @@ select sort_array(array('b', 'd'), '1')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'sort_array(array('b', 'd'), '1')' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "messageParameters" : {
+    "hint" : "",
+    "msg" : "Sort order in second argument requires a boolean literal.",
+    "sqlExpr" : "sort_array(array('b', 'd'), '1')"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 39,
+    "fragment" : "sort_array(array('b', 'd'), '1')"
+  } ]
+}
 
 
 -- !query
@@ -137,7 +151,21 @@ select sort_array(array('b', 'd'), cast(NULL as boolean))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'sort_array(array('b', 'd'), CAST(NULL AS BOOLEAN))' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "messageParameters" : {
+    "hint" : "",
+    "msg" : "Sort order in second argument requires a boolean literal.",
+    "sqlExpr" : "sort_array(array('b', 'd'), CAST(NULL AS BOOLEAN))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 57,
+    "fragment" : "sort_array(array('b', 'd'), cast(NULL as boolean))"
+  } ]
+}
 
 
 -- !query

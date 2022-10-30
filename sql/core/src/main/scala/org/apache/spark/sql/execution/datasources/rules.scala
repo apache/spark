@@ -77,7 +77,10 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         case _: ClassNotFoundException => u
         case e: Exception =>
           // the provider is valid, but failed to create a logical plan
-          u.failAnalysis(e.getMessage, e)
+          u.failAnalysis(
+            errorClass = "_LEGACY_ERROR_TEMP_2332",
+            messageParameters = Map("msg" -> e.getMessage),
+            cause = e)
       }
   }
 }
