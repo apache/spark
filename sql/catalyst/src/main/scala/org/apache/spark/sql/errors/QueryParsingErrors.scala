@@ -609,7 +609,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def unclosedBracketedCommentError(command: String, position: Origin): Throwable = {
     new ParseException(Some(command), "Unclosed bracketed comment", position, position,
-      Some("_LEGACY_ERROR_TEMP_0055"))
+      Some("UNCLOSED_BRACKETED_COMMENT"))
   }
 
   def invalidTimeTravelSpec(reason: String, ctx: ParserRuleContext): Throwable = {

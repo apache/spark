@@ -133,7 +133,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0055"
+  "errorClass" : "UNCLOSED_BRACKETED_COMMENT"
 }
 
 
@@ -153,5 +153,5 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0055"
+  "errorClass" : "UNCLOSED_BRACKETED_COMMENT"
 }

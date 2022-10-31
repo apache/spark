@@ -1418,7 +1418,7 @@
       "It is not allowed to add database prefix `<database>` for the TEMPORARY view name."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0055" : {
+  "UNCLOSED_BRACKETED_COMMENT" : {
     "message" : [
       "Unclosed bracketed comment"
     ]

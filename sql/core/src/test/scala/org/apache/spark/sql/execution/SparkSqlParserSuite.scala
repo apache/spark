@@ -82,12 +82,12 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
 
     checkError(
       exception = parseException("SET k=`v` /*"),
-      errorClass = "_LEGACY_ERROR_TEMP_0055",
+      errorClass = "UNCLOSED_BRACKETED_COMMENT",
       parameters = Map.empty)
 
     checkError(
       exception = parseException("SET `k`=`v` /*"),
-      errorClass = "_LEGACY_ERROR_TEMP_0055",
+      errorClass = "UNCLOSED_BRACKETED_COMMENT",
       parameters = Map.empty)
   }
 

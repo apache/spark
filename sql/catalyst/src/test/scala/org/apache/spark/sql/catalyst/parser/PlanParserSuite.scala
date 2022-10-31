@@ -193,7 +193,7 @@ class PlanParserSuite extends AnalysisTest {
                   |""".stripMargin
     checkError(
       exception = parseException(query),
-      errorClass = "_LEGACY_ERROR_TEMP_0055",
+      errorClass = "UNCLOSED_BRACKETED_COMMENT",
       parameters = Map.empty)
   }
 
@@ -211,7 +211,7 @@ class PlanParserSuite extends AnalysisTest {
                   |""".stripMargin
     checkError(
       exception = parseException(query),
-      errorClass = "_LEGACY_ERROR_TEMP_0055",
+      errorClass = "UNCLOSED_BRACKETED_COMMENT",
       parameters = Map.empty)
   }
 
