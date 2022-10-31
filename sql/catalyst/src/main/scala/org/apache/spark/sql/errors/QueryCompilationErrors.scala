@@ -2080,10 +2080,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def noSuchStructFieldInGivenFieldsError(
       fieldName: String, fields: Array[StructField]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1208",
+      errorClass = "FIELD_NOT_FOUND",
       messageParameters = Map(
-        "fieldName" -> fieldName,
-        "fields" -> fields.map(_.name).mkString(", ")))
+        "fieldName" -> toSQLId(fieldName),
+        "fields" -> fields.map(f => toSQLId(f.name)).mkString(", ")))
   }
 
   def ambiguousReferenceToFieldsError(fields: String): Throwable = {

@@ -96,8 +96,26 @@ case class TimeWindow(
     this(timeColumn, windowDuration, windowDuration)
   }
 
+  private def inputTypeOnTimeColumn: AbstractDataType = {
+    TypeCollection(
+      AnyTimestampType,
+      // Below two types cover both time window & session window, since they produce the same type
+      // of output as window column.
+      new StructType()
+        .add(StructField("start", TimestampType))
+        .add(StructField("end", TimestampType)),
+      new StructType()
+        .add(StructField("start", TimestampNTZType))
+        .add(StructField("end", TimestampNTZType))
+    )
+  }
+
+  // NOTE: if the window column is given as a time column, we resolve it to the point of time,
+  // which resolves to either TimestampType or TimestampNTZType. That means, timeColumn may not
+  // be "resolved", so it is safe to not rely on the data type of timeColumn directly.
+
   override def child: Expression = timeColumn
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(inputTypeOnTimeColumn)
   override def dataType: DataType = new StructType()
     .add(StructField("start", child.dataType))
     .add(StructField("end", child.dataType))

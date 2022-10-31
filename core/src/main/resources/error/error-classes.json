@@ -356,6 +356,11 @@
     ],
     "sqlState" : "22023"
   },
+  "FIELD_NOT_FOUND" : {
+    "message" : [
+      "No such struct field <fieldName> in <fields>."
+    ]
+  },
   "FORBIDDEN_OPERATION" : {
     "message" : [
       "The operation <statement> is not allowed on the <objectType>: <objectName>"
@@ -2477,11 +2482,6 @@
   "_LEGACY_ERROR_TEMP_1207" : {
     "message" : [
       "The duration and time inputs to window must be an integer, long or string literal."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1208" : {
-    "message" : [
-      "No such struct field <fieldName> in <fields>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1209" : {
