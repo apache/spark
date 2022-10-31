@@ -3995,16 +3995,16 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
                      "file:/__w/spark/spark/arbitrary_path."))
   expect_error(read.json("arbitrary_path"),
                paste("Error in json : analysis error - [PATH_NOT_FOUND] Path does not exist: ",
-                     "file:/__w/spark/spark/arbitrary_path.")
+                     "file:/__w/spark/spark/arbitrary_path."))
   expect_error(read.text("arbitrary_path"),
                paste("Error in text : analysis error - [PATH_NOT_FOUND] Path does not exist: ",
-                     "file:/__w/spark/spark/arbitrary_path.")
+                     "file:/__w/spark/spark/arbitrary_path."))
   expect_error(read.orc("arbitrary_path"),
                paste("Error in orc : analysis error - [PATH_NOT_FOUND] Path does not exist: ",
-                     "file:/__w/spark/spark/arbitrary_path.")
+                     "file:/__w/spark/spark/arbitrary_path."))
   expect_error(read.parquet("arbitrary_path"),
                paste("Error in parquet : analysis error - [PATH_NOT_FOUND] Path does not exist: ",
-                     "file:/__w/spark/spark/arbitrary_path.")
+                     "file:/__w/spark/spark/arbitrary_path."))
 
   # Arguments checking in R side.
   expect_error(read.df(path = c(3)),
