@@ -603,7 +603,7 @@
   },
   "NON_LAST_NOT_MATCHED_BY_TARGET_CLAUSE_OMIT_CONDITION" : {
     "message" : [
-      "When there are more than one NOT MATCHED clauses in a MERGE statement, only the last NOT MATCHED clause can omit the condition."
+      "When there are more than one NOT MATCHED [BY TARGET] clauses in a MERGE statement, only the last NOT MATCHED [BY TARGET] clause can omit the condition."
     ],
     "sqlState" : "42000"
   },

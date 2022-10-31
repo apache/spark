@@ -1533,15 +1533,15 @@ class Analyzer(override val catalogManager: CatalogManager)
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from both target and source tables.
-                  resolveAssignments(assignments, m, resolveValuesFrom = m))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.BOTH))
               case UpdateStarAction(updateCondition) =>
                 val assignments = targetTable.output.map { attr =>
                   Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
                 }
                 UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
-                  // For UPDATE *, the value must from source table.
-                  resolveAssignments(assignments, m, resolveValuesFrom = sourceTable))
+                  // For UPDATE *, the value must be from source table.
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
               case o => o
             }
             val newNotMatchedActions = m.notMatchedActions.map {
@@ -1552,7 +1552,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                   resolveExpressionByPlanOutput(_, m.sourceTable))
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, resolveValuesFrom = sourceTable))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
               case InsertStarAction(insertCondition) =>
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
@@ -1563,7 +1563,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                 }
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, resolveValuesFrom = sourceTable))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
               case o => o
             }
             val newNotMatchedBySourceActions = m.notMatchedBySourceActions.map {
@@ -1577,7 +1577,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from the target table only.
-                  resolveAssignments(assignments, m, resolveValuesFrom = targetTable))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.TARGET))
               case o => o
             }
 
@@ -1596,10 +1596,14 @@ class Analyzer(override val catalogManager: CatalogManager)
         q.mapExpressions(resolveExpressionByPlanChildren(_, q))
     }
 
+    private object MergeResolvePolicy extends Enumeration {
+      val BOTH, SOURCE, TARGET = Value
+    }
+
     def resolveAssignments(
         assignments: Seq[Assignment],
         mergeInto: MergeIntoTable,
-        resolveValuesFrom: LogicalPlan): Seq[Assignment] = {
+        resolvePolicy: MergeResolvePolicy.Value): Seq[Assignment] = {
       assignments.map { assign =>
         val resolvedKey = assign.key match {
           case c if !c.resolved =>
@@ -1608,11 +1612,12 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
         val resolvedValue = assign.value match {
           case c if !c.resolved =>
-            val resolveFromChildren = resolveValuesFrom match {
-              case m: MergeIntoTable => m
-              case p => Project(Nil, p)
+            val resolvePlan = resolvePolicy match {
+              case MergeResolvePolicy.BOTH => mergeInto
+              case MergeResolvePolicy.SOURCE => Project(Nil, mergeInto.sourceTable)
+              case MergeResolvePolicy.TARGET => Project(Nil, mergeInto.targetTable)
             }
-            resolveMergeExprOrFail(c, resolveFromChildren)
+            resolveMergeExprOrFail(c, resolvePlan)
           case o => o
         }
         Assignment(resolvedKey, resolvedValue)
