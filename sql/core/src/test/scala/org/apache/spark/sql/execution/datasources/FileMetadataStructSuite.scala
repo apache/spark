@@ -223,10 +223,12 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     )
 
     // select metadata will fail when analysis
-    val ex = intercept[AnalysisException] {
-      df.select("name", METADATA_FILE_NAME).collect()
-    }
-    assert(ex.getMessage.contains("No such struct field file_name in id, university"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select("name", METADATA_FILE_NAME).collect()
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"))
   }
 
   metadataColumnsTest("select only metadata", schema) { (df, f0, f1) =>
@@ -379,15 +381,19 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
           )
 
           // select metadata will fail when analysis - metadata cannot overwrite user data
-          val ex = intercept[AnalysisException] {
-            df.select("name", "_metadata.file_name").collect()
-          }
-          assert(ex.getMessage.contains("No such struct field file_name in id, university"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              df.select("name", "_metadata.file_name").collect()
+            },
+            errorClass = "FIELD_NOT_FOUND",
+            parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"))
 
-          val ex1 = intercept[AnalysisException] {
-            df.select("name", "_METADATA.file_NAME").collect()
-          }
-          assert(ex1.getMessage.contains("No such struct field file_NAME in id, university"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              df.select("name", "_METADATA.file_NAME").collect()
+            },
+            errorClass = "FIELD_NOT_FOUND",
+            parameters = Map("fieldName" -> "`file_NAME`", "fields" -> "`id`, `university`"))
         }
       }
     }

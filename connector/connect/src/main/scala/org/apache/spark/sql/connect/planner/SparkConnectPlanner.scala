@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.planner
 
+import scala.annotation.elidable.byName
 import scala.collection.JavaConverters._
 
 import org.apache.spark.connect.proto
@@ -24,9 +25,10 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, LogicalPlan, Sample, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LogicalPlan, Sample, SubqueryAlias, Union}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types._
@@ -58,8 +60,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.LIMIT => transformLimit(rel.getLimit)
       case proto.Relation.RelTypeCase.OFFSET => transformOffset(rel.getOffset)
       case proto.Relation.RelTypeCase.JOIN => transformJoin(rel.getJoin)
-      case proto.Relation.RelTypeCase.UNION => transformUnion(rel.getUnion)
       case proto.Relation.RelTypeCase.DEDUPLICATE => transformDeduplicate(rel.getDeduplicate)
+      case proto.Relation.RelTypeCase.SET_OP => transformSetOperation(rel.getSetOp)
       case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
       case proto.Relation.RelTypeCase.AGGREGATE => transformAggregate(rel.getAggregate)
       case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
@@ -282,15 +284,35 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     Alias(transformExpression(alias.getExpr), alias.getName)()
   }
 
-  private def transformUnion(u: proto.Union): LogicalPlan = {
-    assert(u.getInputsCount == 2, "Union must have 2 inputs")
-    val plan = logical.Union(transformRelation(u.getInputs(0)), transformRelation(u.getInputs(1)))
+  private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {
+    assert(u.hasLeftInput && u.hasRightInput, "Union must have 2 inputs")
 
-    u.getUnionType match {
-      case proto.Union.UnionType.UNION_TYPE_DISTINCT => logical.Distinct(plan)
-      case proto.Union.UnionType.UNION_TYPE_ALL => plan
+    u.getSetOpType match {
+      case proto.SetOperation.SetOpType.SET_OP_TYPE_EXCEPT =>
+        if (u.getByName) {
+          throw InvalidPlanInput("Except does not support union_by_name")
+        }
+        Except(transformRelation(u.getLeftInput), transformRelation(u.getRightInput), u.getIsAll)
+      case proto.SetOperation.SetOpType.SET_OP_TYPE_INTERSECT =>
+        if (u.getByName) {
+          throw InvalidPlanInput("Intersect does not support union_by_name")
+        }
+        Intersect(
+          transformRelation(u.getLeftInput),
+          transformRelation(u.getRightInput),
+          u.getIsAll)
+      case proto.SetOperation.SetOpType.SET_OP_TYPE_UNION =>
+        val combinedUnion = CombineUnions(
+          Union(
+            Seq(transformRelation(u.getLeftInput), transformRelation(u.getRightInput)),
+            byName = u.getByName))
+        if (u.getIsAll) {
+          combinedUnion
+        } else {
+          logical.Deduplicate(combinedUnion.output, combinedUnion)
+        }
       case _ =>
-        throw InvalidPlanInput(s"Unsupported set operation ${u.getUnionTypeValue}")
+        throw InvalidPlanInput(s"Unsupported set operation ${u.getSetOpTypeValue}")
     }
   }
 

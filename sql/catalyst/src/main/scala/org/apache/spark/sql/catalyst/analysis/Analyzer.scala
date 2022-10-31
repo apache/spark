@@ -1617,7 +1617,11 @@ class Analyzer(override val catalogManager: CatalogManager)
         // Note: This will throw error only on unresolved attribute issues,
         // not other resolution errors like mismatched data types.
         val cols = p.inputSet.toSeq.map(_.sql).mkString(", ")
-        a.failAnalysis(s"cannot resolve ${a.sql} in MERGE command given columns [$cols]")
+        a.failAnalysis(
+          errorClass = "_LEGACY_ERROR_TEMP_2309",
+          messageParameters = Map(
+            "sqlExpr" -> a.sql,
+            "cols" -> cols))
       }
       resolved
     }
@@ -2172,7 +2176,9 @@ class Analyzer(override val catalogManager: CatalogManager)
             }
           } catch {
             case _: NoSuchFunctionException =>
-              u.failAnalysis(s"could not resolve `${u.name.quoted}` to a table-valued function")
+              u.failAnalysis(
+                errorClass = "_LEGACY_ERROR_TEMP_2308",
+                messageParameters = Map("name" -> u.name.quoted))
           }
           // If alias names assigned, add `Project` with the aliases
           if (u.outputNames.nonEmpty) {
@@ -2180,9 +2186,11 @@ class Analyzer(override val catalogManager: CatalogManager)
             // Checks if the number of the aliases is equal to expected one
             if (u.outputNames.size != outputAttrs.size) {
               u.failAnalysis(
-                s"Number of given aliases does not match number of output columns. " +
-                  s"Function name: ${u.name.quoted}; number of aliases: " +
-                  s"${u.outputNames.size}; number of output columns: ${outputAttrs.size}.")
+                errorClass = "_LEGACY_ERROR_TEMP_2307",
+                messageParameters = Map(
+                  "funcName" -> u.name.quoted,
+                  "aliasesNum" -> u.outputNames.size.toString,
+                  "outColsNum" -> outputAttrs.size.toString))
             }
             val aliases = outputAttrs.zip(u.outputNames).map {
               case (attr, name) => Alias(attr, name)()
@@ -2201,9 +2209,9 @@ class Analyzer(override val catalogManager: CatalogManager)
             resolveBuiltinOrTempFunction(nameParts, arguments, Some(u)).map {
               case func: HigherOrderFunction => func
               case other => other.failAnalysis(
-                "A lambda function should only be used in a higher order function. However, " +
-                  s"its class is ${other.getClass.getCanonicalName}, which is not a " +
-                  s"higher order function.")
+                errorClass = "_LEGACY_ERROR_TEMP_2306",
+                messageParameters = Map(
+                  "class" -> other.getClass.getCanonicalName))
               // We don't support persistent high-order functions yet.
             }.getOrElse(throw QueryCompilationErrors.noSuchFunctionError(nameParts, u))
           }
@@ -2910,7 +2918,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                   generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
                   child)
 
-                (Some(g), res._2 ++ g.generatorOutput)
+                (Some(g), res._2 ++ g.nullableOutput)
               case other =>
                 (res._1, res._2 :+ other)
             }

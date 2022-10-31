@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
+import org.apache.spark.connect.proto.SetOperation.SetOpType
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 
@@ -321,6 +322,52 @@ package object dsl {
         // TODO: support aggregateExprs, which is blocked by supporting any builtin function
         // resolution only by name in the analyzer.
         proto.Relation.newBuilder().setAggregate(agg.build()).build()
+      }
+
+      def except(otherPlan: proto.Relation, isAll: Boolean): proto.Relation = {
+        proto.Relation
+          .newBuilder()
+          .setSetOp(
+            createSetOperation(logicalPlan, otherPlan, SetOpType.SET_OP_TYPE_EXCEPT, isAll))
+          .build()
+      }
+
+      def intersect(otherPlan: proto.Relation, isAll: Boolean): proto.Relation =
+        proto.Relation
+          .newBuilder()
+          .setSetOp(
+            createSetOperation(logicalPlan, otherPlan, SetOpType.SET_OP_TYPE_INTERSECT, isAll))
+          .build()
+
+      def union(
+          otherPlan: proto.Relation,
+          isAll: Boolean = true,
+          byName: Boolean = false): proto.Relation =
+        proto.Relation
+          .newBuilder()
+          .setSetOp(
+            createSetOperation(
+              logicalPlan,
+              otherPlan,
+              SetOpType.SET_OP_TYPE_UNION,
+              isAll,
+              byName))
+          .build()
+
+      private def createSetOperation(
+          left: proto.Relation,
+          right: proto.Relation,
+          t: SetOpType,
+          isAll: Boolean = true,
+          byName: Boolean = false): proto.SetOperation.Builder = {
+        val setOp = proto.SetOperation
+          .newBuilder()
+          .setLeftInput(left)
+          .setRightInput(right)
+          .setSetOpType(t)
+          .setIsAll(isAll)
+          .setByName(byName)
+        setOp
       }
     }
   }

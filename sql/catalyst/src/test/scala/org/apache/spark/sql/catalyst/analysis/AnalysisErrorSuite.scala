@@ -327,10 +327,14 @@ class AnalysisErrorSuite extends AnalysisTest {
     testRelation2.groupBy($"a")(sum(UnresolvedStar(None))),
     "Invalid usage of '*' in expression 'sum'." :: Nil)
 
-  errorTest(
+  errorClassTest(
     "sorting by unsupported column types",
     mapRelation.orderBy($"map".asc),
-    "sort" :: "type" :: "map<int,int>" :: Nil)
+    errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+    messageParameters = Map(
+      "sqlExpr" -> "\"map ASC NULLS FIRST\"",
+      "functionName" -> "`sortorder`",
+      "dataType" -> "\"MAP<INT, INT>\""))
 
   errorClassTest(
     "sorting by attributes are not from grouping expressions",
@@ -366,10 +370,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     "Ambiguous reference to fields" :: "differentCase" :: "differentcase" :: Nil,
     caseSensitive = false)
 
-  errorTest(
+  errorClassTest(
     "missing field",
     nestedRelation2.select($"top.c"),
-    "No such struct field" :: "aField" :: "bField" :: "cField" :: Nil,
+    "FIELD_NOT_FOUND",
+    Map("fieldName" -> "`c`", "fields" -> "`aField`, `bField`, `cField`"),
     caseSensitive = false)
 
   errorTest(
