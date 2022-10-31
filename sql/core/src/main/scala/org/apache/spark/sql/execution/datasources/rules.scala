@@ -77,7 +77,10 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         case _: ClassNotFoundException => u
         case e: Exception =>
           // the provider is valid, but failed to create a logical plan
-          u.failAnalysis(e.getMessage, e)
+          u.failAnalysis(
+            errorClass = "_LEGACY_ERROR_TEMP_2332",
+            messageParameters = Map("msg" -> e.getMessage),
+            cause = e)
       }
   }
 }
@@ -476,7 +479,9 @@ object PreReadCheck extends (LogicalPlan => Unit) {
       case o =>
         val numInputFileBlockSources = o.children.map(checkNumInputFileBlockSources(e, _)).sum
         if (numInputFileBlockSources > 1) {
-          e.failAnalysis(s"'${e.prettyName}' does not support more than one sources")
+          e.failAnalysis(
+            errorClass = "_LEGACY_ERROR_TEMP_2302",
+            messageParameters = Map("name" -> e.prettyName))
         } else {
           numInputFileBlockSources
         }

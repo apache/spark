@@ -137,7 +137,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       condition: Option[Expression],
-      eventTimeWatermark: Option[Long]): JoinStateWatermarkPredicates = {
+      eventTimeWatermarkForEviction: Option[Long]): JoinStateWatermarkPredicates = {
 
 
     // Join keys of both sides generate rows of the same fields, that is, same sequence of data
@@ -172,7 +172,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           joinKeyOrdinalForWatermark.get,
           oneSideJoinKeys(joinKeyOrdinalForWatermark.get).dataType,
           oneSideJoinKeys(joinKeyOrdinalForWatermark.get).nullable)
-        val expr = watermarkExpression(Some(keyExprWithWatermark), eventTimeWatermark)
+        val expr = watermarkExpression(Some(keyExprWithWatermark), eventTimeWatermarkForEviction)
         expr.map(JoinStateKeyWatermarkPredicate.apply _)
 
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
@@ -180,7 +180,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
           attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
           condition,
-          eventTimeWatermark)
+          eventTimeWatermarkForEviction)
         val inputAttributeWithWatermark = oneSideInputAttributes.find(_.metadata.contains(delayKey))
         val expr = watermarkExpression(inputAttributeWithWatermark, stateValueWatermark)
         expr.map(JoinStateValueWatermarkPredicate.apply _)

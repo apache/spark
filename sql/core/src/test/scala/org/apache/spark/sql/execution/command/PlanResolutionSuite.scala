@@ -1956,29 +1956,27 @@ class PlanResolutionSuite extends AnalysisTest {
 
     // UPDATE * with incompatible schema between source and target tables.
     val sql2 =
-      """
-         |MERGE INTO testcat.tab
+      """MERGE INTO testcat.tab
          |USING testcat.tab2
          |ON 1 = 1
-         |WHEN MATCHED THEN UPDATE SET *
-         |""".stripMargin
+         |WHEN MATCHED THEN UPDATE SET *""".stripMargin
     checkError(
       exception = intercept[AnalysisException](parseAndResolve(sql2)),
-      errorClass = null,
-      parameters = Map.empty)
+      errorClass = "_LEGACY_ERROR_TEMP_2309",
+      parameters = Map("sqlExpr" -> "s", "cols" -> "testcat.tab2.i, testcat.tab2.x"),
+      context = ExpectedContext(fragment = sql2, start = 0, stop = 80))
 
     // INSERT * with incompatible schema between source and target tables.
     val sql3 =
-      """
-        |MERGE INTO testcat.tab
+      """MERGE INTO testcat.tab
         |USING testcat.tab2
         |ON 1 = 1
-        |WHEN NOT MATCHED THEN INSERT *
-        |""".stripMargin
+        |WHEN NOT MATCHED THEN INSERT *""".stripMargin
     checkError(
       exception = intercept[AnalysisException](parseAndResolve(sql3)),
-      errorClass = null,
-      parameters = Map.empty)
+      errorClass = "_LEGACY_ERROR_TEMP_2309",
+      parameters = Map("sqlExpr" -> "s", "cols" -> "testcat.tab2.i, testcat.tab2.x"),
+      context = ExpectedContext(fragment = sql3, start = 0, stop = 80))
 
     val sql4 =
       """

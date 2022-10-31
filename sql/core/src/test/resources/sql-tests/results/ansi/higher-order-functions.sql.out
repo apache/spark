@@ -17,7 +17,19 @@ select upper(x -> x) as v
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-A lambda function should only be used in a higher order function. However, its class is org.apache.spark.sql.catalyst.expressions.Upper, which is not a higher order function.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2306",
+  "messageParameters" : {
+    "class" : "org.apache.spark.sql.catalyst.expressions.Upper"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "upper(x -> x)"
+  } ]
+}
 
 
 -- !query
