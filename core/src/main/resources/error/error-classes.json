@@ -769,6 +769,11 @@
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"
     ]
   },
+  "UNCLOSED_BRACKETED_COMMENT" : {
+    "message" : [
+      "Unclosed bracketed comment"
+    ]
+  },
   "UNPIVOT_REQUIRES_ATTRIBUTES" : {
     "message" : [
       "UNPIVOT requires all given <given> expressions to be columns when no <empty> expressions are given. These are not columns: [<expressions>]."
@@ -1416,11 +1421,6 @@
   "_LEGACY_ERROR_TEMP_0054" : {
     "message" : [
       "It is not allowed to add database prefix `<database>` for the TEMPORARY view name."
-    ]
-  },
-  "UNCLOSED_BRACKETED_COMMENT" : {
-    "message" : [
-      "Unclosed bracketed comment"
     ]
   },
   "_LEGACY_ERROR_TEMP_0056" : {
