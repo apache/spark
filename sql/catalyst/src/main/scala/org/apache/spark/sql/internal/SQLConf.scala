@@ -3101,7 +3101,7 @@ object SQLConf {
     buildConf("spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline")
       .internal()
       .doc(s"When true, the optimizer will always inline single row subqueries even if it " +
-        s"causes extra duplication. It only takes effect when " +
+        "causes extra duplication. It only takes effect when " +
         s"${OPTIMIZE_ONE_ROW_RELATION_SUBQUERY.key} is set to true.")
       .version("3.4.0")
       .booleanConf
