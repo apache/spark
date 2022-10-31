@@ -2004,7 +2004,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
 
     // executor1 is eventually lost
     scheduler.executorLost("executor1", ExecutorExited(0, false, "normal"))
-    assert(scheduler.executorsPendingDecommission.isEmpty)
+    // [SPARK-40481] after executor lost, decommission state still be kept
+    assert(scheduler.getExecutorDecommissionState("executor1").isDefined)
     // So now both the tasks are no longer running
     assert(manager.copiesRunning.take(2) === Array(0, 0))
     clock.advance(2000)
