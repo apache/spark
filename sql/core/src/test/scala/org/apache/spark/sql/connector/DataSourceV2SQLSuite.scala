@@ -63,17 +63,8 @@ abstract class DataSourceV2SQLSuite
     checkAnswer(spark.table(tableName), expected)
   }
 
-  protected def assertAnalysisError(
-      sqlStatement: String,
-      errorClass: String,
-      parameters: Map[String, String]): Unit = {
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(sqlStatement)
-      },
-      errorClass = errorClass,
-      parameters = parameters
-    )
+  protected def analysisException(sqlText: String): AnalysisException = {
+    intercept[AnalysisException](sql(sqlText))
   }
 }
 
@@ -124,16 +115,17 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         Row("data_type", "string"),
         Row("comment", "hello")))
 
-      assertAnalysisErrorClass(
-        s"DESCRIBE $t invalid_col",
-        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        Map(
+      checkError(
+        exception = analysisException(s"DESCRIBE $t invalid_col"),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map(
           "objectName" -> "`invalid_col`",
           "proposal" -> "`testcat`.`tbl`.`id`, `testcat`.`tbl`.`data`"),
-        ExpectedContext(
+        context = ExpectedContext(
           fragment = "DESCRIBE testcat.tbl invalid_col",
           start = 0,
-          stop = 31))
+          stop = 31)
+      )
     }
   }
 
@@ -157,10 +149,13 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     val t = "testcat.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (d struct<a: INT, b: INT>) USING foo")
-      assertAnalysisErrorClass(
-        s"describe $t d.a",
-        "_LEGACY_ERROR_TEMP_1060",
-        Map("command" -> "DESC TABLE COLUMN", "column" -> "d.a"))
+      checkError(
+        exception = analysisException(s"describe $t d.a"),
+        errorClass = "_LEGACY_ERROR_TEMP_1060",
+        parameters = Map(
+          "command" -> "DESC TABLE COLUMN",
+          "column" -> "d.a")
+      )
     }
   }
 
@@ -1029,16 +1024,17 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       sql("USE testcat.ns1.ns2")
       check("tbl")
 
-      assertAnalysisErrorClass(
-        s"SELECT ns1.ns2.ns3.tbl.id from $t",
-        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        Map(
+      checkError(
+        exception = analysisException(s"SELECT ns1.ns2.ns3.tbl.id from $t"),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map(
           "objectName" -> "`ns1`.`ns2`.`ns3`.`tbl`.`id`",
           "proposal" -> "`testcat`.`ns1`.`ns2`.`tbl`.`id`, `testcat`.`ns1`.`ns2`.`tbl`.`point`"),
-        ExpectedContext(
+        context = ExpectedContext(
           fragment = "ns1.ns2.ns3.tbl.id",
           start = 7,
-          stop = 24))
+          stop = 24)
+      )
     }
   }
 
@@ -1400,30 +1396,41 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     val errorMsg = "Found duplicate column(s) in the table definition of"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        assertAnalysisErrorClass(
-          s"CREATE TABLE t ($c0 INT, $c1 INT) USING $v2Source",
-          "_LEGACY_ERROR_TEMP_1233",
-          Map(
+        checkError(
+          exception = analysisException(s"CREATE TABLE t ($c0 INT, $c1 INT) USING $v2Source"),
+          errorClass = "_LEGACY_ERROR_TEMP_1233",
+          parameters = Map(
             "colType" -> "in the table definition of default.t",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
-        assertAnalysisErrorClass(
-          s"CREATE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source",
-          "_LEGACY_ERROR_TEMP_1233",
-          Map(
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"
+          )
+        )
+        checkError(
+          exception = analysisException(
+            s"CREATE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source"),
+          errorClass = "_LEGACY_ERROR_TEMP_1233",
+          parameters = Map(
             "colType" -> "in the table definition of t",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
-        assertAnalysisErrorClass(
-          s"CREATE OR REPLACE TABLE t ($c0 INT, $c1 INT) USING $v2Source",
-          "_LEGACY_ERROR_TEMP_1233",
-          Map(
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"
+          )
+        )
+        checkError(
+          exception = analysisException(
+            s"CREATE OR REPLACE TABLE t ($c0 INT, $c1 INT) USING $v2Source"),
+          errorClass = "_LEGACY_ERROR_TEMP_1233",
+          parameters = Map(
             "colType" -> "in the table definition of default.t",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
-        assertAnalysisErrorClass(
-          s"CREATE OR REPLACE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source",
-          "_LEGACY_ERROR_TEMP_1233",
-          Map(
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"
+          )
+        )
+        checkError(
+          exception = analysisException(
+            s"CREATE OR REPLACE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source"),
+          errorClass = "_LEGACY_ERROR_TEMP_1233",
+          parameters = Map(
             "colType" -> "in the table definition of t",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"
+          )
+        )
       }
     }
   }
@@ -1432,57 +1439,67 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     val errorMsg = "Found duplicate column(s) in the table definition of"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        assertAnalysisErrorClass(
-          s"CREATE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
-          "_LEGACY_ERROR_TEMP_1233",
-          Map(
+        checkError(
+          exception = analysisException(
+            s"CREATE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source"),
+          errorClass = "_LEGACY_ERROR_TEMP_1233",
+          parameters = Map(
             "colType" -> "in the table definition of default.t",
-            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"))
-        assertAnalysisErrorClass(
-          s"CREATE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
-          "_LEGACY_ERROR_TEMP_1233",
-          Map(
+            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"
+          )
+        )
+        checkError(
+          exception = analysisException(
+            s"CREATE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source"),
+          errorClass = "_LEGACY_ERROR_TEMP_1233",
+          parameters = Map(
             "colType" -> "in the table definition of t",
-            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"))
-        assertAnalysisErrorClass(
-          s"CREATE OR REPLACE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
-          "_LEGACY_ERROR_TEMP_1233",
-          Map(
+            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"
+          )
+        )
+        checkError(
+          exception = analysisException(
+            s"CREATE OR REPLACE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source"),
+          errorClass = "_LEGACY_ERROR_TEMP_1233",
+          parameters = Map(
             "colType" -> "in the table definition of default.t",
-            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"))
-        assertAnalysisErrorClass(
-          s"CREATE OR REPLACE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
-          "_LEGACY_ERROR_TEMP_1233",
-          Map(
+            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"
+          )
+        )
+        checkError(
+          exception = analysisException(
+            s"CREATE OR REPLACE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source"),
+          errorClass = "_LEGACY_ERROR_TEMP_1233",
+          parameters = Map(
             "colType" -> "in the table definition of t",
-            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"))
+            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"
+          )
+        )
       }
     }
   }
 
   test("tableCreation: bucket column names not in table definition") {
-    val errorMsg = "Couldn't find column c in"
-    assertAnalysisError(
-      s"CREATE TABLE tbl (a int, b string) USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS",
-      null,
-      Map.empty)
-    assertAnalysisError(
-      s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS",
-      null,
-      Map.empty
-    )
-    assertAnalysisError(
-      s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Source " +
-        "CLUSTERED BY (c) INTO 4 BUCKETS",
-      null,
-      Map.empty
-    )
-    assertAnalysisError(
-      s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Source " +
-        "CLUSTERED BY (c) INTO 4 BUCKETS",
-      null,
-      Map.empty
-    )
+    checkError(
+      exception = analysisException(
+        s"CREATE TABLE tbl (a int, b string) USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS"),
+      errorClass = null,
+      parameters = Map.empty)
+    checkError(
+      exception = analysisException(s"CREATE TABLE testcat.tbl (a int, b string) " +
+        s"USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS"),
+      errorClass = null,
+      parameters = Map.empty)
+    checkError(
+      exception = analysisException(s"CREATE OR REPLACE TABLE tbl (a int, b string) " +
+        s"USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS"),
+      errorClass = null,
+      parameters = Map.empty)
+    checkError(
+      exception = analysisException(s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) " +
+        s"USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS"),
+      errorClass = null,
+      parameters = Map.empty)
   }
 
   test("tableCreation: bucket column name containing dot") {
@@ -1504,29 +1521,28 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
   }
 
   test("tableCreation: column repeated in partition columns") {
-    val errorMsg = "Found duplicate column(s) in the partitioning"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        assertAnalysisError(
-          s"CREATE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
-          null,
-          Map.empty
-        )
-        assertAnalysisError(
-          s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
-          null,
-          Map.empty
-        )
-        assertAnalysisError(
-          s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
-          null,
-          Map.empty
-        )
-        assertAnalysisError(
-          s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
-          null,
-          Map.empty
-        )
+        checkError(
+          exception = analysisException(
+            s"CREATE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)"),
+          errorClass = null,
+          parameters = Map.empty)
+        checkError(
+          exception = analysisException(
+            s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)"),
+          errorClass = null,
+          parameters = Map.empty)
+        checkError(
+          exception = analysisException(
+            s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)"),
+          errorClass = null,
+          parameters = Map.empty)
+        checkError(
+          exception = analysisException(s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) " +
+            s"USING $v2Source PARTITIONED BY ($c0, $c1)"),
+          errorClass = null,
+          parameters = Map.empty)
       }
     }
   }
@@ -1535,37 +1551,45 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     val errorMsg = "Found duplicate column(s) in the bucket definition"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        assertAnalysisError(
-          s"CREATE TABLE t ($c0 INT) USING $v2Source " +
-            s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
-          "_LEGACY_ERROR_TEMP_1233",
-          Map(
+        checkError(
+          exception = analysisException(
+            s"CREATE TABLE t ($c0 INT) USING $v2Source " +
+              s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS"),
+          errorClass = "_LEGACY_ERROR_TEMP_1233",
+          parameters = Map(
             "colType" -> "in the bucket definition",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`")
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"
+          )
         )
-        assertAnalysisError(
-          s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source " +
-            s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
-          "_LEGACY_ERROR_TEMP_1233",
-          Map(
+        checkError(
+          exception = analysisException(
+            s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source " +
+              s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS"),
+          errorClass = "_LEGACY_ERROR_TEMP_1233",
+          parameters = Map(
             "colType" -> "in the bucket definition",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`")
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"
+          )
         )
-        assertAnalysisError(
-          s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source " +
-            s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
-          "_LEGACY_ERROR_TEMP_1233",
-          Map(
+        checkError(
+          exception = analysisException(
+            s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source " +
+              s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS"),
+          errorClass = "_LEGACY_ERROR_TEMP_1233",
+          parameters = Map(
             "colType" -> "in the bucket definition",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`")
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"
+          )
         )
-        assertAnalysisError(
-          s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Source " +
-            s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
-          "_LEGACY_ERROR_TEMP_1233",
-          Map(
+        checkError(
+          exception = analysisException(
+            s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Source " +
+              s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS"),
+          errorClass = "_LEGACY_ERROR_TEMP_1233",
+          parameters = Map(
             "colType" -> "in the bucket definition",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`")
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"
+          )
         )
       }
     }
@@ -1703,39 +1727,47 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
          """.stripMargin)
 
       // UPDATE non-existing table
-      assertAnalysisErrorClass(
-        "UPDATE dummy SET name='abc'",
-        expectedErrorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        expectedErrorMessageParameters = Map("relationName" -> "`dummy`"),
-        ExpectedContext(
+      checkError(
+        exception = analysisException("UPDATE dummy SET name='abc'"),
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`dummy`"),
+        context = ExpectedContext(
           fragment = "dummy",
           start = 7,
-          stop = 11))
+          stop = 11
+        )
+      )
 
       // UPDATE non-existing column
-      assertAnalysisErrorClass(
-        s"UPDATE $t SET dummy='abc'",
-        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        Map(
+      checkError(
+        exception = analysisException(s"UPDATE $t SET dummy='abc'"),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map(
           "objectName" -> "`dummy`",
           "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
-            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")),
-        ExpectedContext(
+            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")
+        ),
+        context = ExpectedContext(
           fragment = "dummy='abc'",
           start = 31,
-          stop = 41))
-      assertAnalysisErrorClass(
-        s"UPDATE $t SET name='abc' WHERE dummy=1",
-        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        Map(
+          stop = 41
+        )
+      )
+      checkError(
+        exception = analysisException(s"UPDATE $t SET name='abc' WHERE dummy=1"),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map(
           "objectName" -> "`dummy`",
           "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, " +
             "`testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
-            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")),
-        ExpectedContext(
+            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")
+        ),
+        context = ExpectedContext(
           fragment = "dummy",
           start = 48,
-          stop = 52))
+          stop = 52
+        )
+      )
 
       // UPDATE is not implemented yet.
       checkError(
@@ -1766,65 +1798,72 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
          """.stripMargin)
 
       // MERGE INTO non-existing table
-      assertAnalysisErrorClass(
-        s"""
-           |MERGE INTO testcat.ns1.ns2.dummy AS target
-           |USING testcat.ns1.ns2.source AS source
-           |ON target.id = source.id
-           |WHEN MATCHED AND (target.age < 10) THEN DELETE
-           |WHEN MATCHED AND (target.age > 10) THEN UPDATE SET *
-           |WHEN NOT MATCHED AND (target.col2='insert')
-           |THEN INSERT *
-         """.stripMargin,
-        expectedErrorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        expectedErrorMessageParameters = Map("relationName" -> "`testcat`.`ns1`.`ns2`.`dummy`"),
-        ExpectedContext(
+      checkError(
+        exception = analysisException(
+          s"""
+             |MERGE INTO testcat.ns1.ns2.dummy AS target
+             |USING testcat.ns1.ns2.source AS source
+             |ON target.id = source.id
+             |WHEN MATCHED AND (target.age < 10) THEN DELETE
+             |WHEN MATCHED AND (target.age > 10) THEN UPDATE SET *
+             |WHEN NOT MATCHED AND (target.col2='insert')
+             |THEN INSERT *
+           """.stripMargin),
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`testcat`.`ns1`.`ns2`.`dummy`"),
+        context = ExpectedContext(
           fragment = "testcat.ns1.ns2.dummy",
           start = 12,
-          stop = 32))
+          stop = 32)
+      )
 
       // USING non-existing table
-      assertAnalysisErrorClass(
-        s"""
-           |MERGE INTO testcat.ns1.ns2.target AS target
-           |USING testcat.ns1.ns2.dummy AS source
-           |ON target.id = source.id
-           |WHEN MATCHED AND (target.age < 10) THEN DELETE
-           |WHEN MATCHED AND (target.age > 10) THEN UPDATE SET *
-           |WHEN NOT MATCHED AND (target.col2='insert')
-           |THEN INSERT *
-         """.stripMargin,
-        expectedErrorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        expectedErrorMessageParameters = Map("relationName" -> "`testcat`.`ns1`.`ns2`.`dummy`"),
-        ExpectedContext(
+      checkError(
+        exception = analysisException(
+          s"""
+             |MERGE INTO testcat.ns1.ns2.target AS target
+             |USING testcat.ns1.ns2.dummy AS source
+             |ON target.id = source.id
+             |WHEN MATCHED AND (target.age < 10) THEN DELETE
+             |WHEN MATCHED AND (target.age > 10) THEN UPDATE SET *
+             |WHEN NOT MATCHED AND (target.col2='insert')
+             |THEN INSERT *
+           """.stripMargin),
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`testcat`.`ns1`.`ns2`.`dummy`"),
+        context = ExpectedContext(
           fragment = "testcat.ns1.ns2.dummy",
           start = 51,
-          stop = 71))
+          stop = 71)
+      )
 
       // UPDATE non-existing column
-      assertAnalysisError(
-        s"""MERGE INTO testcat.ns1.ns2.target AS target
-           |USING testcat.ns1.ns2.source AS source
-           |ON target.id = source.id
-           |WHEN MATCHED AND (target.age < 10) THEN DELETE
-           |WHEN MATCHED AND (target.age > 10) THEN UPDATE SET target.dummy = source.age
-           |WHEN NOT MATCHED AND (target.col2='insert')
-           |THEN INSERT *""".stripMargin,
-        null,
-        Map.empty
+      checkError(
+        exception = analysisException(
+          s"""MERGE INTO testcat.ns1.ns2.target AS target
+             |USING testcat.ns1.ns2.source AS source
+             |ON target.id = source.id
+             |WHEN MATCHED AND (target.age < 10) THEN DELETE
+             |WHEN MATCHED AND (target.age > 10) THEN UPDATE SET target.dummy = source.age
+             |WHEN NOT MATCHED AND (target.col2='insert')
+             |THEN INSERT *""".stripMargin,
+        ),
+        errorClass = null,
+        parameters = Map.empty
       )
 
       // UPDATE using non-existing column
-      assertAnalysisError(
-        s"""MERGE INTO testcat.ns1.ns2.target AS target
-           |USING testcat.ns1.ns2.source AS source
-           |ON target.id = source.id
-           |WHEN MATCHED AND (target.age < 10) THEN DELETE
-           |WHEN MATCHED AND (target.age > 10) THEN UPDATE SET target.age = source.dummy
-           |WHEN NOT MATCHED AND (target.col2='insert')
-           |THEN INSERT *""".stripMargin,
-        null,
-        Map.empty)
+      checkError(
+        exception = analysisException(
+          s"""MERGE INTO testcat.ns1.ns2.target AS target
+             |USING testcat.ns1.ns2.source AS source
+             |ON target.id = source.id
+             |WHEN MATCHED AND (target.age < 10) THEN DELETE
+             |WHEN MATCHED AND (target.age > 10) THEN UPDATE SET target.age = source.dummy
+             |WHEN NOT MATCHED AND (target.col2='insert')
+             |THEN INSERT *""".stripMargin),
+        errorClass = null,
+        parameters = Map.empty)
 
       // MERGE INTO is not implemented yet.
       checkError(
@@ -2725,31 +2764,6 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       },
       errorClass = "_LEGACY_ERROR_TEMP_1124",
       parameters = Map("cmd" -> sqlCommand))
-  }
-
-  private def assertAnalysisErrorClass(
-      sqlStatement: String,
-      expectedErrorClass: String,
-      expectedErrorMessageParameters: Map[String, String],
-      expectedContext: ExpectedContext = null): Unit = {
-    if (expectedContext == null) {
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(sqlStatement)
-        },
-        errorClass = expectedErrorClass,
-        parameters = expectedErrorMessageParameters
-      )
-    } else {
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(sqlStatement)
-        },
-        errorClass = expectedErrorClass,
-        parameters = expectedErrorMessageParameters,
-        context = expectedContext
-      )
-    }
   }
 }
 
