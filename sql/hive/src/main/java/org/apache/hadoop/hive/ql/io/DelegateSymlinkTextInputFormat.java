@@ -35,11 +35,10 @@ import org.apache.hadoop.mapred.Reporter;
  * Delegate for SymlinkTextInputFormat, created to address SPARK-40815.
  * Fixes an issue where SymlinkTextInputFormat returns empty splits which could result in
  * the correctness issue when "spark.hadoopRDD.ignoreEmptySplits" is enabled.
- *
+ * <p>
  * In this class, we update the split start and length to match the target file input thus fixing
  * the issue.
  */
-@SuppressWarnings("deprecation")
 public class DelegateSymlinkTextInputFormat extends SymlinkTextInputFormat {
 
   public static class DelegateSymlinkTextInputSplit extends FileSplit {
