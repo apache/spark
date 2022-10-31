@@ -28,7 +28,7 @@ If the table is cached, the command clears cached data of the table and all its 
 ### Syntax
 
 ```sql
-MSCK REPAIR TABLE table_identifier [{ADD|DROP|SYNC} PARTITIONS]
+[MSCK] REPAIR TABLE table_identifier [{ADD|DROP|SYNC} PARTITIONS]
 ```
 
 ### Parameters
