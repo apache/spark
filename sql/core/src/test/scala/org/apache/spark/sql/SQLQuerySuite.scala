@@ -2994,13 +2994,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-26402: accessing nested fields with different cases in case insensitive mode") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val msg = intercept[AnalysisException] {
-        withTable("t") {
-          sql("create table t (s struct<i: Int>) using json")
-          checkAnswer(sql("select s.I from t group by s.i"), Nil)
-        }
-      }.message
-      assert(msg.contains("No such struct field I in i"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          withTable("t") {
+            sql("create table t (s struct<i: Int>) using json")
+            checkAnswer(sql("select s.I from t group by s.i"), Nil)
+          }
+        },
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`I`", "fields" -> "`i`"),
+        context = ExpectedContext(
+          fragment = "s.I",
+          start = 7,
+          stop = 9))
     }
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {

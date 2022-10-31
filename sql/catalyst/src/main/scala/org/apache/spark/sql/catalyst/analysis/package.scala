@@ -41,16 +41,6 @@ package object analysis {
   val caseSensitiveResolution = (a: String, b: String) => a == b
 
   implicit class AnalysisErrorAt(t: TreeNode[_]) extends QueryErrorsBase {
-    /** Fails the analysis at the point where a specific tree node was parsed. */
-    def failAnalysis(msg: String): Nothing = {
-      throw new AnalysisException(msg, t.origin.line, t.origin.startPosition)
-    }
-
-    /** Fails the analysis at the point where a specific tree node was parsed with a given cause. */
-    def failAnalysis(msg: String, cause: Throwable): Nothing = {
-      throw new AnalysisException(msg, t.origin.line, t.origin.startPosition, cause = Some(cause))
-    }
-
     /**
      * Fails the analysis at the point where a specific tree node was parsed using a provided
      * error class and message parameters.
@@ -60,6 +50,20 @@ package object analysis {
         errorClass = errorClass,
         messageParameters = messageParameters,
         origin = t.origin)
+    }
+
+    /**
+     * Fails the analysis at the point where a specific tree node was parsed using a provided
+     * error class, message parameters and a given cause. */
+    def failAnalysis(
+        errorClass: String,
+        messageParameters: Map[String, String],
+        cause: Throwable): Nothing = {
+      throw new AnalysisException(
+        errorClass = errorClass,
+        messageParameters = messageParameters,
+        origin = t.origin,
+        cause = Option(cause))
     }
 
     def dataTypeMismatch(expr: Expression, mismatch: DataTypeMismatch): Nothing = {

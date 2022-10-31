@@ -215,8 +215,7 @@ class DataFrame(object):
         return GroupingFrame(self, *cols)
 
     def head(self, n: int) -> Optional["pandas.DataFrame"]:
-        self.limit(n)
-        return self.toPandas()
+        return self.limit(n).toPandas()
 
     # TODO(martin.grund) fix mypu
     def join(self, other: "DataFrame", on: Any, how: Optional[str] = None) -> "DataFrame":

@@ -173,6 +173,42 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan2, sparkPlan2)
   }
 
+  test("Test union, except, intersect") {
+    val connectPlan1 = connectTestRelation.except(connectTestRelation, isAll = false)
+    val sparkPlan1 = sparkTestRelation.except(sparkTestRelation)
+    comparePlans(connectPlan1, sparkPlan1)
+
+    val connectPlan2 = connectTestRelation.except(connectTestRelation, isAll = true)
+    val sparkPlan2 = sparkTestRelation.exceptAll(sparkTestRelation)
+    comparePlans(connectPlan2, sparkPlan2)
+
+    val connectPlan3 = connectTestRelation.intersect(connectTestRelation, isAll = false)
+    val sparkPlan3 = sparkTestRelation.intersect(sparkTestRelation)
+    comparePlans(connectPlan3, sparkPlan3)
+
+    val connectPlan4 = connectTestRelation.intersect(connectTestRelation, isAll = true)
+    val sparkPlan4 = sparkTestRelation.intersectAll(sparkTestRelation)
+    comparePlans(connectPlan4, sparkPlan4)
+
+    val connectPlan5 = connectTestRelation.union(connectTestRelation, isAll = true)
+    val sparkPlan5 = sparkTestRelation.union(sparkTestRelation)
+    comparePlans(connectPlan5, sparkPlan5)
+
+    val connectPlan6 = connectTestRelation.union(connectTestRelation, isAll = false)
+    val sparkPlan6 = sparkTestRelation.union(sparkTestRelation).distinct()
+    comparePlans(connectPlan6, sparkPlan6)
+
+    val connectPlan7 =
+      connectTestRelation.union(connectTestRelation2, isAll = true, byName = true)
+    val sparkPlan7 = sparkTestRelation.unionByName(sparkTestRelation2)
+    comparePlans(connectPlan7, sparkPlan7)
+
+    val connectPlan8 =
+      connectTestRelation.union(connectTestRelation2, isAll = false, byName = true)
+    val sparkPlan8 = sparkTestRelation.unionByName(sparkTestRelation2).distinct()
+    comparePlans(connectPlan8, sparkPlan8)
+  }
+
   private def createLocalRelationProtoByQualifiedAttributes(
       attrs: Seq[proto.Expression.QualifiedAttribute]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()

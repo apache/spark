@@ -99,6 +99,7 @@ org.apache.spark.sql.AnalysisException
   } ]
 }
 
+
 -- !query
 SELECT map_zip_with(decimal_map1, int_map, (k, v1, v2) -> struct(k, v1, v2)) m
 FROM various_maps
