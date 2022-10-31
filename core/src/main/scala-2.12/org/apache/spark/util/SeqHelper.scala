@@ -21,9 +21,7 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 object SeqHelper {
 
-  def toSeq[T](buffer: ArrayBuffer[T])(implicit tag: ClassTag[T]): Seq[T] =
-    buffer
+  def toSeq[T](buffer: ArrayBuffer[T]): Seq[T] = buffer
 
-  def toSeq[T](buffer: ListBuffer[T])(implicit tag: ClassTag[T]): Seq[T] =
-    buffer.toIndexedSeq
+  def toSeq[T](buffer: ListBuffer[T]): Seq[T] = buffer
 }
