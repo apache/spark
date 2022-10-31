@@ -322,10 +322,13 @@ SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-
-The query operator `Join` contains one or more unsupported
-expression types Aggregate, Window or Generate.
-Invalid expressions: [row_number() OVER (ORDER BY spark_catalog.default.empsalary.salary ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)]
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2441",
+  "messageParameters" : {
+    "invalidExprSqls" : "row_number() OVER (ORDER BY spark_catalog.default.empsalary.salary ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)",
+    "operator" : "Join"
+  }
+}
 
 
 -- !query
@@ -334,10 +337,13 @@ SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-
-The query operator `Aggregate` contains one or more unsupported
-expression types Aggregate, Window or Generate.
-Invalid expressions: [RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)]
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2441",
+  "messageParameters" : {
+    "invalidExprSqls" : "RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)",
+    "operator" : "Aggregate"
+  }
+}
 
 
 -- !query

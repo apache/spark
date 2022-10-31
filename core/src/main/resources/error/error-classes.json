@@ -4339,5 +4339,249 @@
     "message" : [
       "Drop namespace restrict is not supported"
     ]
+  },
+  "_LEGACY_ERROR_TEMP_2400" : {
+    "message" : [
+      "The <name> expression must evaluate to a constant value, but got <limitExpr>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2401" : {
+    "message" : [
+      "The <name> expression must be integer type, but got <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2402" : {
+    "message" : [
+      "The evaluated <name> expression must not be null, but got <limitExpr>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2403" : {
+    "message" : [
+      "The <name> expression must be equal to or greater than 0, but got <v>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2404" : {
+    "message" : [
+      "Table <name> is not partitioned."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2405" : {
+    "message" : [
+      "Table <name> does not support partition management."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2406" : {
+    "message" : [
+      "invalid cast from <srcType> to <targetType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2406" : {
+    "message" : [
+      "grouping() can only be used with GroupingSets/Cube/Rollup"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2407" : {
+    "message" : [
+      "grouping_id() can only be used with GroupingSets/Cube/Rollup"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2408" : {
+    "message" : [
+      "Window function <w> requires an OVER clause."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2409" : {
+    "message" : [
+      "Distinct window functions are not supported: <w>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2410" : {
+    "message" : [
+      "<wf> function can only be evaluated in an ordered row-based window frame with a single offset: <w>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2411" : {
+    "message" : [
+      "Cannot specify order by or frame for '<aggFunc>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2412" : {
+    "message" : [
+      "Expression '<sqlExpr>' not supported within a window function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2413" : {
+    "message" : [
+      "Input argument to <argName> must be a constant."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2414" : {
+    "message" : [
+      "Event time must be defined on a window or a timestamp, but <evName> is of type <evType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2415" : {
+    "message" : [
+      "filter expression '<filter>' of type <type> is not a boolean."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2416" : {
+    "message" : [
+      "join condition '<join>' of type <type> is not a boolean."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2417" : {
+    "message" : [
+      "join condition '<condition>' of type <dataType> is not a boolean."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2418" : {
+    "message" : [
+      "Input argument tolerance must be a constant."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2419" : {
+    "message" : [
+      "Input argument tolerance must be non-negative."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2420" : {
+    "message" : [
+      "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2421" : {
+    "message" : [
+      "nondeterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2422" : {
+    "message" : [
+      "grouping expressions sequence is empty, and '<sqlExpr>' is not an aggregate function. Wrap '<aggExprs>' in windowing function(s) or wrap '<sqlExpr>' in first() (or first_value) if you don't care which value you get."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2423" : {
+    "message" : [
+      "Correlated scalar subquery '<sqlExpr>' is neither present in the group by, nor in an aggregate function. Add it to group by using ordinal position or wrap it in first() (or first_value) if you don't care which value you get."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2424" : {
+    "message" : [
+      "aggregate functions are not allowed in GROUP BY, but found <sqlExpr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2425" : {
+    "message" : [
+      "expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2426" : {
+    "message" : [
+      "nondeterministic expression <sqlExpr> should not appear in grouping expression."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2427" : {
+    "message" : [
+      "sorting is not supported for columns of type <type>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2428" : {
+    "message" : [
+      "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2429" : {
+    "message" : [
+      "<operator> can only be performed on tables with the same number of columns, but the first table has <firstColNum> columns and the <nTab> table has <nColNum> columns."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2430" : {
+    "message" : [
+      "<operator> can only be performed on tables with compatible column types. The <ci> column of the <ti> table is <dt1> type which is not compatible with <dt2> at the same column of the first table.<hint>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2431" : {
+    "message" : [
+      "Invalid partitioning: <cols> is missing or is in a map or array"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2432" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2433" : {
+    "message" : [
+      "Only a single table generating function is allowed in a SELECT clause, found:",
+      "<sqlExprs>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2434" : {
+    "message" : [
+      "Failure when resolving conflicting references in Join:",
+      "<plan>",
+      "Conflicting attributes: <conflictingAttributes>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2435" : {
+    "message" : [
+      "Failure when resolving conflicting references in Intersect:",
+      "<plan>",
+      "Conflicting attributes: <conflictingAttributes>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2436" : {
+    "message" : [
+      "Failure when resolving conflicting references in Except:",
+      "<plan>",
+      "Conflicting attributes: <conflictingAttributes>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2437" : {
+    "message" : [
+      "Failure when resolving conflicting references in AsOfJoin:",
+      "<plan>",
+      "Conflicting attributes: <conflictingAttributes>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2438" : {
+    "message" : [
+      "Cannot have map type columns in DataFrame which calls set operations(intersect, except, etc.), but the type of column <colName> is <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2439" : {
+    "message" : [
+      "nondeterministic expressions are only allowed in Project, Filter, Aggregate or Window, found:",
+      "<sqlExprs>",
+      "in operator <operator>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2440" : {
+    "message" : [
+      "Aggregate/Window/Generate expressions are not valid in where clause of the query.",
+      "Expression in where clause: [<condition>]",
+      "Invalid expressions: [<invalidExprSqls>]"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2441" : {
+    "message" : [
+      "The query operator `<operator>` contains one or more unsupported expression types Aggregate, Window or Generate.",
+      "Invalid expressions: [<invalidExprSqls>]"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2442" : {
+    "message" : [
+      "unresolved operator <operator>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2443" : {
+    "message" : [
+      "Multiple definitions of observed metrics named '<name>': <plan>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2444" : {
+    "message" : [
+      "Function '<funcName>' does not implement ScalarFunction or AggregateFunction"
+    ]
   }
 }

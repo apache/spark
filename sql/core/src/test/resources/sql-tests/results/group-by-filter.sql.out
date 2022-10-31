@@ -48,7 +48,13 @@ SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping expressions sequence is empty, and 'testdata.a' is not an aggregate function. Wrap '(count(testdata.b) FILTER (WHERE (testdata.a >= 2)) AS `count(b) FILTER (WHERE (a >= 2))`)' in windowing function(s) or wrap 'testdata.a' in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
+  "messageParameters" : {
+    "aggExprs" : "(count(testdata.b) FILTER (WHERE (testdata.a >= 2)) AS `count(b) FILTER (WHERE (a >= 2))`)",
+    "sqlExpr" : "testdata.a"
+  }
+}
 
 
 -- !query
