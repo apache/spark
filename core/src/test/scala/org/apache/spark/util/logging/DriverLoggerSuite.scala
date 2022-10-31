@@ -45,6 +45,7 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
 
   test("driver logs are persisted locally and synced to dfs") {
     val sc = getSparkContext()
+
     val app_id = sc.applicationId
     // Run a simple spark application
     sc.parallelize(1 to 1000).count()
@@ -65,7 +66,8 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
     assert(dfsFile.length() > 0)
   }
 
-  test("driver logs are persisted locally and synced to dfs when log dir is absolute URI") {
+  test("SPARK-40901: driver logs are persisted locally and synced to dfs when log " +
+    "dir is absolute URI") {
     val sparkConf = new SparkConf()
     sparkConf.set(DRIVER_LOG_DFS_DIR, "file://" + rootDfsDir.getAbsolutePath())
     val sc = getSparkContext(sparkConf)
