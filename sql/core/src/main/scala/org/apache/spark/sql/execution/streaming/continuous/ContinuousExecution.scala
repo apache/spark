@@ -218,6 +218,7 @@ class ContinuousExecution(
         id,
         runId,
         currentBatchId,
+        None,
         offsetSeqMetadata)
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
