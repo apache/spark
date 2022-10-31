@@ -486,6 +486,17 @@ object QueryExecution {
       plan: LogicalPlan,
       context: AdaptiveExecutionContext): SparkPlan = {
     val sparkPlan = createSparkPlan(session, session.sessionState.planner, plan.clone())
+    prepareExecutedPlan(session, sparkPlan, context)
+  }
+
+  /**
+   * Prepare the [[SparkPlan]] for execution using exists adaptive execution context.
+   * This method is only called by [[PlanAdaptiveDynamicPruningFilters]].
+   */
+  def prepareExecutedPlan(
+      session: SparkSession,
+      sparkPlan: SparkPlan,
+      context: AdaptiveExecutionContext): SparkPlan = {
     val preparationRules = preparations(session, Option(InsertAdaptiveSparkPlan(context)), true)
     prepareForExecution(preparationRules, sparkPlan.clone())
   }

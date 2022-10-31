@@ -659,6 +659,8 @@ object Murmur3HashFunction extends InterpretedHashFunction {
 case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpression[Long] {
   def this(arguments: Seq[Expression]) = this(arguments, 42L)
 
+  def this(argument: Expression) = this(Seq(argument))
+
   override def dataType: DataType = LongType
 
   override def prettyName: String = "xxhash64"

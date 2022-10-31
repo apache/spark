@@ -17,24 +17,21 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, BindReferences, BloomFilterMightContain, DynamicPruningExpression, Literal, XxHash64}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
+import org.apache.spark.sql.catalyst.expressions.{BindReferences, BloomFilterMightContain, DynamicPruningExpression, Literal, XxHash64}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.{ScalarSubquery => ScalarSubqueryExec}
-import org.apache.spark.sql.execution.aggregate.AggUtils
+import org.apache.spark.sql.execution.dynamicpruning.DynamicPruningHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, HashedRelationBroadcastMode, HashJoin}
 
 /**
  * A rule to insert dynamic pruning predicates in order to reuse the results of broadcast.
  */
-case class PlanAdaptiveDynamicPruningFilters(
-    rootPlan: AdaptiveSparkPlanExec) extends Rule[SparkPlan] with AdaptiveSparkPlanHelper {
+case class PlanAdaptiveDynamicPruningFilters(rootPlan: AdaptiveSparkPlanExec)
+  extends Rule[SparkPlan] with AdaptiveSparkPlanHelper with DynamicPruningHelper {
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.dynamicPartitionPruningEnabled && !conf.runtimeRowLevelOperationGroupFilterEnabled) {
       return plan
@@ -67,7 +64,7 @@ case class PlanAdaptiveDynamicPruningFilters(
           val broadcastValues = SubqueryBroadcastExec(
             name, index, buildKeys, newAdaptivePlan)
           DynamicPruningExpression(InSubqueryExec(value, broadcastValues, exprId))
-        } else if (onlyInBroadcast) {
+        } else if (onlyInBroadcast || !conf.exchangeReuseEnabled) {
           DynamicPruningExpression(Literal.TrueLiteral)
         } else {
           val childPlan = adaptivePlan.executedPlan
@@ -75,38 +72,16 @@ case class PlanAdaptiveDynamicPruningFilters(
             case s: ShuffleExchangeExec if s.child.sameResult(childPlan) => s
           }
 
-          val rowCount = buildPlan.stats.rowCount
-          val bloomFilterAgg = if (rowCount.exists(_.longValue() > 0L)) {
-            new BloomFilterAggregate(new XxHash64(buildKeys(index)),
-              Literal(rowCount.get.longValue))
-          } else {
-            new BloomFilterAggregate(new XxHash64(buildKeys(index)))
-          }
-
-          val bfLogicalPlan = Aggregate(Nil,
-            Seq(Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()),
-            RepartitionByExpression(buildKeys, buildPlan, Some(conf.numShufflePartitions)))
-
-          val physicalAggregation = PhysicalAggregation.unapply(bfLogicalPlan)
-          if (reusedShuffleExchange.nonEmpty && physicalAggregation.nonEmpty) {
-
-            val (groupingExps, aggExps, resultExps, _) = physicalAggregation.get
-            val bfPhysicalPlan = AggUtils.planAggregateWithoutDistinct(
-              groupingExps,
-              aggExps.map(_.asInstanceOf[AggregateExpression]),
-              resultExps,
-              reusedShuffleExchange.get).head
-
-            bfPhysicalPlan.setLogicalLink(bfLogicalPlan)
-
-            val executedPlan = QueryExecution.prepareExecutedPlan(
-              adaptivePlan.context.session, bfPhysicalPlan, adaptivePlan.context)
-            val scalarSubquery = ScalarSubqueryExec(SubqueryExec.createForScalarSubquery(
-              s"scalar-subquery#${exprId.id}", executedPlan), exprId)
-            DynamicPruningExpression(BloomFilterMightContain(scalarSubquery, new XxHash64(value)))
-          } else {
-            DynamicPruningExpression(Literal.TrueLiteral)
-          }
+          val bfLogicalPlan = planBloomFilterLogicalPlan(buildPlan, buildKeys, index)
+          val bfPhysicalPlan =
+            planBloomFilterPhysicalPlan(bfLogicalPlan, reusedShuffleExchange).map { plan =>
+              val executedPlan = QueryExecution.prepareExecutedPlan(
+                adaptivePlan.context.session, plan, adaptivePlan.context)
+              val scalarSubquery = ScalarSubqueryExec(SubqueryExec.createForScalarSubquery(
+                s"scalar-subquery#${exprId.id}", executedPlan), exprId)
+              BloomFilterMightContain(scalarSubquery, new XxHash64(value))
+            }.getOrElse(Literal.TrueLiteral)
+          DynamicPruningExpression(bfPhysicalPlan)
         }
     }
   }
