@@ -18,14 +18,12 @@
 package org.apache.spark.util
 
 import scala.collection.immutable.ArraySeq
-import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import scala.collection.mutable
 import scala.reflect.ClassTag
 
 object SeqHelper {
 
-  def toSeq[T](buffer: ArrayBuffer[T])(implicit tag: ClassTag[T]): Seq[T] =
+  def toSeq[T](buffer: mutable.Buffer[T])(implicit tag: ClassTag[T]): Seq[T] =
     ArraySeq.unsafeWrapArray[T](buffer.toArray[T])
 
-  def toSeq[T](buffer: ListBuffer[T])(implicit tag: ClassTag[T]): Seq[T] =
-    ArraySeq.unsafeWrapArray[T](buffer.toArray[T])
 }
