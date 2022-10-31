@@ -128,6 +128,12 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         pd2 = df.offset(98).limit(10).toPandas()
         self.assertEqual(2, len(pd2.index))
 
+    def test_head(self):
+        df = self.connect.read.table(self.tbl_name)
+        pd = df.head(10)
+        self.assertIsNotNone(pd)
+        self.assertEqual(10, len(pd.index))
+
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text
         tmpPath = tempfile.mkdtemp()
