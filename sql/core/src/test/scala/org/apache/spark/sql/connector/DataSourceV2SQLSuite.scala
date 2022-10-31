@@ -124,8 +124,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         context = ExpectedContext(
           fragment = "DESCRIBE testcat.tbl invalid_col",
           start = 0,
-          stop = 31)
-      )
+          stop = 31))
     }
   }
 
@@ -154,8 +153,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         errorClass = "_LEGACY_ERROR_TEMP_1060",
         parameters = Map(
           "command" -> "DESC TABLE COLUMN",
-          "column" -> "d.a")
-      )
+          "column" -> "d.a"))
     }
   }
 
@@ -1033,8 +1031,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         context = ExpectedContext(
           fragment = "ns1.ns2.ns3.tbl.id",
           start = 7,
-          stop = 24)
-      )
+          stop = 24))
     }
   }
 
@@ -1401,36 +1398,28 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
           errorClass = "_LEGACY_ERROR_TEMP_1233",
           parameters = Map(
             "colType" -> "in the table definition of default.t",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"
-          )
-        )
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         checkError(
           exception = analysisException(
             s"CREATE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source"),
           errorClass = "_LEGACY_ERROR_TEMP_1233",
           parameters = Map(
             "colType" -> "in the table definition of t",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"
-          )
-        )
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         checkError(
           exception = analysisException(
             s"CREATE OR REPLACE TABLE t ($c0 INT, $c1 INT) USING $v2Source"),
           errorClass = "_LEGACY_ERROR_TEMP_1233",
           parameters = Map(
             "colType" -> "in the table definition of default.t",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"
-          )
-        )
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         checkError(
           exception = analysisException(
             s"CREATE OR REPLACE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source"),
           errorClass = "_LEGACY_ERROR_TEMP_1233",
           parameters = Map(
             "colType" -> "in the table definition of t",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"
-          )
-        )
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -1454,27 +1443,21 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
           errorClass = "_LEGACY_ERROR_TEMP_1233",
           parameters = Map(
             "colType" -> "in the table definition of t",
-            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"
-          )
-        )
+            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"))
         checkError(
           exception = analysisException(
             s"CREATE OR REPLACE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source"),
           errorClass = "_LEGACY_ERROR_TEMP_1233",
           parameters = Map(
             "colType" -> "in the table definition of default.t",
-            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"
-          )
-        )
+            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"))
         checkError(
           exception = analysisException(
             s"CREATE OR REPLACE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source"),
           errorClass = "_LEGACY_ERROR_TEMP_1233",
           parameters = Map(
             "colType" -> "in the table definition of t",
-            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"
-          )
-        )
+            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -1558,9 +1541,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
           errorClass = "_LEGACY_ERROR_TEMP_1233",
           parameters = Map(
             "colType" -> "in the bucket definition",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"
-          )
-        )
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         checkError(
           exception = analysisException(
             s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source " +
@@ -1568,9 +1549,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
           errorClass = "_LEGACY_ERROR_TEMP_1233",
           parameters = Map(
             "colType" -> "in the bucket definition",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"
-          )
-        )
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         checkError(
           exception = analysisException(
             s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source " +
@@ -1578,9 +1557,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
           errorClass = "_LEGACY_ERROR_TEMP_1233",
           parameters = Map(
             "colType" -> "in the bucket definition",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"
-          )
-        )
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         checkError(
           exception = analysisException(
             s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Source " +
@@ -1588,9 +1565,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
           errorClass = "_LEGACY_ERROR_TEMP_1233",
           parameters = Map(
             "colType" -> "in the bucket definition",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"
-          )
-        )
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -1734,9 +1709,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         context = ExpectedContext(
           fragment = "dummy",
           start = 7,
-          stop = 11
-        )
-      )
+          stop = 11))
 
       // UPDATE non-existing column
       checkError(
@@ -1750,24 +1723,19 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         context = ExpectedContext(
           fragment = "dummy='abc'",
           start = 31,
-          stop = 41
-        )
-      )
+          stop = 41))
       checkError(
         exception = analysisException(s"UPDATE $t SET name='abc' WHERE dummy=1"),
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
           "objectName" -> "`dummy`",
-          "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, " +
-            "`testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
+          "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
             "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")
         ),
         context = ExpectedContext(
           fragment = "dummy",
           start = 48,
-          stop = 52
-        )
-      )
+          stop = 52))
 
       // UPDATE is not implemented yet.
       checkError(
@@ -1834,8 +1802,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         context = ExpectedContext(
           fragment = "testcat.ns1.ns2.dummy",
           start = 51,
-          stop = 71)
-      )
+          stop = 71))
 
       // UPDATE non-existing column
       checkError(
@@ -1846,11 +1813,9 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
              |WHEN MATCHED AND (target.age < 10) THEN DELETE
              |WHEN MATCHED AND (target.age > 10) THEN UPDATE SET target.dummy = source.age
              |WHEN NOT MATCHED AND (target.col2='insert')
-             |THEN INSERT *""".stripMargin,
-        ),
+             |THEN INSERT *""".stripMargin),
         errorClass = null,
-        parameters = Map.empty
-      )
+        parameters = Map.empty)
 
       // UPDATE using non-existing column
       checkError(
@@ -1877,8 +1842,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
                |WHEN NOT MATCHED THEN INSERT *""".stripMargin)
         },
         errorClass = "_LEGACY_ERROR_TEMP_2096",
-        parameters = Map("ddl" -> "MERGE INTO TABLE")
-      )
+        parameters = Map("ddl" -> "MERGE INTO TABLE"))
     }
   }
 
