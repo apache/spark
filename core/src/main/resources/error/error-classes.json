@@ -300,14 +300,14 @@
           "The <exprName> must be between <valueRange> (current value = <currentValue>)"
         ]
       },
+      "WRONG_NUM_ARGS" : {
+        "message" : [
+          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
+        ]
+      },
       "WRONG_NUM_ENDPOINTS" : {
         "message" : [
           "The number of endpoints must be >= 2 to construct intervals but the actual number is <actualNumber>."
-        ]
-      },
-      "WRONG_NUM_PARAMS" : {
-        "message" : [
-          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
         ]
       }
     }
@@ -355,6 +355,11 @@
       "Failed to rename <sourcePath> to <targetPath> as destination already exists"
     ],
     "sqlState" : "22023"
+  },
+  "FIELD_NOT_FOUND" : {
+    "message" : [
+      "No such struct field <fieldName> in <fields>."
+    ]
   },
   "FORBIDDEN_OPERATION" : {
     "message" : [
@@ -420,12 +425,6 @@
         "message" : [
           "Spark >= 3.0:",
           "Fail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"
-        ]
-      },
-      "FORMAT_DATETIME_BY_NEW_PARSER" : {
-        "message" : [
-          "Spark >= 3.0:",
-          "Fail to format it to <resultCandidate> in the new formatter. You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0, or set to \"CORRECTED\" and treat it as an invalid datetime string."
         ]
       },
       "PARSE_DATETIME_BY_NEW_PARSER" : {
@@ -594,28 +593,6 @@
     "message" : [
       "More than one row returned by a subquery used as an expression."
     ]
-  },
-  "NAMESPACE_ALREADY_EXISTS" : {
-    "message" : [
-      "Cannot create namespace <nameSpaceName> because it already exists.",
-      "Choose a different name, drop the existing namespace, or add the IF NOT EXISTS clause to tolerate pre-existing namespace."
-    ],
-    "sqlState" : "42000"
-  },
-  "NAMESPACE_NOT_EMPTY" : {
-    "message" : [
-      "Cannot drop a namespace <nameSpaceNameName> because it contains objects.",
-      "Use DROP NAMESPACE ... CASCADE to drop the namespace and all its objects."
-    ],
-    "sqlState" : "42000"
-  },
-  "NAMESPACE_NOT_FOUND" : {
-    "message" : [
-      "The namespace <nameSpaceName> cannot be found. Verify the spelling and correctness of the namespace.",
-      "If you did not qualify the name with, verify the current_schema() output, or qualify the name with the correctly.",
-      "To tolerate the error on drop use DROP NAMESPACE IF EXISTS."
-    ],
-    "sqlState" : "42000"
   },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [
@@ -2505,11 +2482,6 @@
   "_LEGACY_ERROR_TEMP_1207" : {
     "message" : [
       "The duration and time inputs to window must be an integer, long or string literal."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1208" : {
-    "message" : [
-      "No such struct field <fieldName> in <fields>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1209" : {

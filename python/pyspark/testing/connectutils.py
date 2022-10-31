@@ -18,13 +18,18 @@ import os
 from typing import Any, Dict
 import functools
 import unittest
+from pyspark.testing.sqlutils import have_pandas
 
-from pyspark.sql.connect import DataFrame
-from pyspark.sql.connect.plan import Read
-from pyspark.testing.utils import search_jar
+if have_pandas:
+    from pyspark.sql.connect import DataFrame
+    from pyspark.sql.connect.plan import Read
+    from pyspark.testing.utils import search_jar
+
+    connect_jar = search_jar("connector/connect", "spark-connect-assembly-", "spark-connect")
+else:
+    connect_jar = None
 
 
-connect_jar = search_jar("connector/connect", "spark-connect-assembly-", "spark-connect")
 if connect_jar is None:
     connect_requirement_message = (
         "Skipping all Spark Connect Python tests as the optional Spark Connect project was "
@@ -38,7 +43,7 @@ else:
     os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, plugin_args, existing_args])
     connect_requirement_message = None  # type: ignore
 
-should_test_connect = connect_requirement_message is None
+should_test_connect = connect_requirement_message is None and have_pandas
 
 
 class MockRemoteSession:

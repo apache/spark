@@ -95,13 +95,13 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
   }
 
   private def verifyPosition(sql: String, table: String): Unit = {
-    val expectedPos = sql.indexOf(table)
-    assert(expectedPos != -1)
+    val startPos = sql.indexOf(table)
+    assert(startPos != -1)
     assertAnalysisErrorClass(
       parsePlan(sql),
       "TABLE_OR_VIEW_NOT_FOUND",
       Map("relationName" -> s"`$table`"),
-      line = 1,
-      pos = expectedPos)
+      Array(ExpectedContext(table, startPos, startPos + table.length - 1))
+    )
   }
 }

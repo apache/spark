@@ -978,7 +978,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def corruptedViewReferredTempFunctionsInCatalogError(e: Exception): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1088",
       messageParameters = Map.empty,
       cause = Some(e))
@@ -1309,19 +1309,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tableIsNotRowLevelOperationTableError(table: Table): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1122",
       messageParameters = Map("table" -> table.name()))
   }
 
   def cannotRenameTableWithAlterViewError(): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1123",
       messageParameters = Map.empty)
   }
 
   private def notSupportedForV2TablesError(cmd: String): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1124",
       messageParameters = Map("cmd" -> cmd))
   }
@@ -1355,25 +1355,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def databaseFromV1SessionCatalogNotSpecifiedError(): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1125",
       messageParameters = Map.empty)
   }
 
   def nestedDatabaseUnsupportedByV1SessionCatalogError(catalog: String): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1126",
       messageParameters = Map("catalog" -> catalog))
   }
 
   def invalidRepartitionExpressionsError(sortOrders: Seq[Any]): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1127",
       messageParameters = Map("sortOrders" -> sortOrders.toString()))
   }
 
   def partitionColumnNotSpecifiedError(format: String, partitionColumn: String): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1128",
       messageParameters = Map(
         "format" -> format,
@@ -2080,10 +2080,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def noSuchStructFieldInGivenFieldsError(
       fieldName: String, fields: Array[StructField]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1208",
+      errorClass = "FIELD_NOT_FOUND",
       messageParameters = Map(
-        "fieldName" -> fieldName,
-        "fields" -> fields.map(_.name).mkString(", ")))
+        "fieldName" -> toSQLId(fieldName),
+        "fields" -> fields.map(f => toSQLId(f.name)).mkString(", ")))
   }
 
   def ambiguousReferenceToFieldsError(fields: String): Throwable = {
@@ -2145,7 +2145,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def invalidPatternError(pattern: String, message: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1216",
-      messageParameters = Map("pattern" -> pattern, "message" -> message))
+      messageParameters = Map(
+        "pattern" -> toSQLValue(pattern, StringType),
+        "message" -> message))
   }
 
   def tableIdentifierExistsError(tableIdentifier: TableIdentifier): Throwable = {
@@ -2305,7 +2307,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def analyzeTableNotSupportedOnViewsError(): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1236",
       messageParameters = Map.empty)
   }
