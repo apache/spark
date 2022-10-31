@@ -1660,7 +1660,8 @@ private[spark] object MapOutputTracker extends Logging {
       }
     }
 
-    MapSizesByExecutorId(splitsByAddress.mapValues(SeqHelper.toSeq).iterator, enableBatchFetch)
+    MapSizesByExecutorId(
+      splitsByAddress.mapValues(SeqHelper.toSeq[(BlockId, Long, Int)]).iterator, enableBatchFetch)
   }
 
   /**
@@ -1695,7 +1696,7 @@ private[spark] object MapOutputTracker extends Logging {
             status.getSizeForBlock(partitionId), mapIndex))
       }
     }
-    splitsByAddress.mapValues(SeqHelper.toSeq).iterator
+    splitsByAddress.mapValues(SeqHelper.toSeq[(BlockId, Long, Int)]).iterator
   }
 
   def validateStatus(status: ShuffleOutputStatus, shuffleId: Int, partition: Int) : Unit = {

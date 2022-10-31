@@ -41,7 +41,7 @@ import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.checksum.{Cause, ShuffleChecksumHelper}
 import org.apache.spark.network.util.{NettyUtils, TransportConf}
 import org.apache.spark.shuffle.ShuffleReadMetricsReporter
-import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
+import org.apache.spark.util.{CompletionIterator, SeqHelper, TaskCompletionListener, Utils}
 
 /**
  * An iterator that fetches multiple blocks. For local blocks, it fetches from the local block
@@ -272,11 +272,12 @@ final class ShuffleBlockFetcherIterator(
 
     @inline def enqueueDeferredFetchRequestIfNecessary(): Unit = {
       if (remainingBlocks.isEmpty && deferredBlocks.nonEmpty) {
+        import org.apache.spark.util.SeqHelper
         val blocks = deferredBlocks.map { blockId =>
           val (size, mapIndex) = infoMap(blockId)
           FetchBlockInfo(BlockId(blockId), size, mapIndex)
         }
-        results.put(DeferFetchRequestResult(FetchRequest(address, blocks.toSeq)))
+        results.put(DeferFetchRequestResult(FetchRequest(address, SeqHelper.toSeq(blocks))))
         deferredBlocks.clear()
       }
     }
@@ -502,20 +503,20 @@ final class ShuffleBlockFetcherIterator(
         case ShuffleBlockChunkId(_, _, _, _) =>
           if (curRequestSize >= targetRemoteRequestSize ||
             curBlocks.size >= maxBlocksInFlightPerAddress) {
-            curBlocks = createFetchRequests(curBlocks.toSeq, address, isLast = false,
+            curBlocks = createFetchRequests(SeqHelper.toSeq(curBlocks), address, isLast = false,
               collectedRemoteRequests, enableBatchFetch = false)
             curRequestSize = curBlocks.map(_.size).sum
           }
         case ShuffleMergedBlockId(_, _, _) =>
           if (curBlocks.size >= maxBlocksInFlightPerAddress) {
-            curBlocks = createFetchRequests(curBlocks.toSeq, address, isLast = false,
+            curBlocks = createFetchRequests(SeqHelper.toSeq(curBlocks), address, isLast = false,
               collectedRemoteRequests, enableBatchFetch = false, forMergedMetas = true)
           }
         case _ =>
           // For batch fetch, the actual block in flight should count for merged block.
           val mayExceedsMaxBlocks = !doBatchFetch && curBlocks.size >= maxBlocksInFlightPerAddress
           if (curRequestSize >= targetRemoteRequestSize || mayExceedsMaxBlocks) {
-            curBlocks = createFetchRequests(curBlocks.toSeq, address, isLast = false,
+            curBlocks = createFetchRequests(SeqHelper.toSeq(curBlocks), address, isLast = false,
               collectedRemoteRequests, doBatchFetch)
             curRequestSize = curBlocks.map(_.size).sum
           }
@@ -1434,11 +1435,11 @@ object ShuffleBlockFetcherIterator {
       if (curBlocks.nonEmpty) {
         mergedBlockInfo += mergeFetchBlockInfo(curBlocks)
       }
-      mergedBlockInfo
+      SeqHelper.toSeq(mergedBlockInfo)
     } else {
       blocks
     }
-    result.toSeq
+    result
   }
 
   /**
