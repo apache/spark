@@ -165,16 +165,6 @@
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
         ]
       },
-      "IN_SUBQUERY_LENGTH_MISMATCH" : {
-        "message" : [
-          "The number of columns in the left hand side of an IN subquery does not match the number of columns in the output of subquery. Left hand side columns(length: <leftLength>): [<leftColumns>], right hand side columns(length: <rightLength>): [<rightColumns>]."
-        ]
-      },
-      "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
-        "message" : [
-          "The data type of one or more elements in the left hand side of an IN subquery is not compatible with the data type of the output of the subquery. Mismatched columns: [<mismatchedColumns>], left side: [<leftType>], right side: [<rightType>]."
-        ]
-      },
       "INVALID_JSON_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."
@@ -193,6 +183,16 @@
       "INVALID_ORDERING_TYPE" : {
         "message" : [
           "The <functionName> does not support ordering on type <dataType>."
+        ]
+      },
+      "IN_SUBQUERY_LENGTH_MISMATCH" : {
+        "message" : [
+          "The number of columns in the left hand side of an IN subquery does not match the number of columns in the output of subquery. Left hand side columns(length: <leftLength>): [<leftColumns>], right hand side columns(length: <rightLength>): [<rightColumns>]."
+        ]
+      },
+      "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
+        "message" : [
+          "The data type of one or more elements in the left hand side of an IN subquery is not compatible with the data type of the output of the subquery. Mismatched columns: [<mismatchedColumns>], left side: [<leftType>], right side: [<rightType>]."
         ]
       },
       "MAP_CONCAT_DIFF_TYPES" : {

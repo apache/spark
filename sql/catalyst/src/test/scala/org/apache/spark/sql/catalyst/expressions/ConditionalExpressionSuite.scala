@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.types._
@@ -238,16 +238,19 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
 
     val checkResult1 = CaseWhen(Seq((Literal.FalseLiteral, caseVal1),
       (Literal.FalseLiteral, caseVal2))).checkInputDataTypes()
-    assert(checkResult1.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-    assert(checkResult1.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("CASE WHEN ... THEN struct<x:int> WHEN ... THEN struct<y:int> END"))
+    assert(checkResult1 == DataTypeMismatch(
+      errorSubClass = "DATA_DIFF_TYPES",
+      messageParameters = Map(
+        "functionName" -> "`casewhen`",
+        "dataType" -> "[\"STRUCT<x: INT>\", \"STRUCT<y: INT>\"]")))
 
     val checkResult2 = CaseWhen(Seq((Literal.FalseLiteral, caseVal1),
       (Literal.FalseLiteral, caseVal2)), Some(elseVal)).checkInputDataTypes()
-    assert(checkResult2.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-    assert(checkResult2.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("CASE WHEN ... THEN struct<x:int> WHEN ... THEN struct<y:int> " +
-        "ELSE struct<z:int> END"))
+    assert(checkResult2 == DataTypeMismatch(
+      errorSubClass = "DATA_DIFF_TYPES",
+      messageParameters = Map(
+        "functionName" -> "`casewhen`",
+        "dataType" -> "[\"STRUCT<x: INT>\", \"STRUCT<y: INT>\", \"STRUCT<z: INT>\"]")))
   }
 
   test("SPARK-27917 test semantic equals of CaseWhen") {

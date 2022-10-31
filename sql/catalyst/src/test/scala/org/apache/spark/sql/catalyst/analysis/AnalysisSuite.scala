@@ -329,7 +329,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val plan = Project(Alias(In(Literal(null), Seq(Literal(true), Literal(1))), "a")() :: Nil,
       LocalRelation()
     )
-    assertAnalysisError(plan, Seq("data type mismatch: Arguments must be same type"))
+    assertAnalysisErrorClass(
+      plan,
+      "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      Map(
+        "functionName" -> "`in`",
+        "dataType" -> "[\"VOID\", \"BOOLEAN\", \"INT\"]",
+        "sqlExpr" -> "\"(NULL IN (true, 1))\""))
   }
 
   test("SPARK-11725: correctly handle null inputs for ScalaUDF") {

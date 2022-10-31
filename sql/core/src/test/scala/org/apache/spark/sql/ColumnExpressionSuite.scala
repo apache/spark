@@ -450,14 +450,16 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
 
     val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
-
-    val e = intercept[AnalysisException] {
-      df2.filter($"a".isin($"b"))
-    }
-    Seq("cannot resolve", "due to data type mismatch: Arguments must be same type but were")
-      .foreach { s =>
-        assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
-      }
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.filter($"a".isin($"b"))
+      },
+      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      parameters = Map(
+        "functionName" -> "`in`",
+        "dataType" -> "[\"INT\", \"ARRAY<INT>\"]",
+        "sqlExpr" -> "\"(a IN (b))\"")
+    )
   }
 
   test("IN/INSET with bytes, shorts, ints, dates") {
@@ -515,14 +517,16 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
 
           val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
-
-          val e = intercept[AnalysisException] {
-            df2.filter($"a".isInCollection(Seq($"b")))
-          }
-          Seq("cannot resolve", "due to data type mismatch: Arguments must be same type but were")
-            .foreach { s =>
-              assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
-            }
+          checkError(
+            exception = intercept[AnalysisException] {
+              df2.filter($"a".isInCollection(Seq($"b")))
+            },
+            errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+            parameters = Map(
+              "functionName" -> "`in`",
+              "dataType" -> "[\"INT\", \"ARRAY<INT>\"]",
+              "sqlExpr" -> "\"(a IN (b))\"")
+          )
         }
       }
     }

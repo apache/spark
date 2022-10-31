@@ -81,10 +81,13 @@ public class JavaColumnExpressionSuite {
     Dataset<Row> df = spark.createDataFrame(rows, schema);
     Exception e = Assert.assertThrows(Exception.class,
       () -> df.filter(df.col("a").isInCollection(Arrays.asList(new Column("b")))));
-    Arrays.asList("cannot resolve",
-      "due to data type mismatch: Arguments must be same type but were")
-        .forEach(s ->
-          Assert.assertTrue(e.getMessage().toLowerCase(Locale.ROOT)
-            .contains(s.toLowerCase(Locale.ROOT))));
+    System.out.println(e.getMessage().toLowerCase(Locale.ROOT));
+    Arrays.asList(
+      "datatype_mismatch.data_diff_types",
+      "cannot resolve \"(a in (b))\"",
+      "due to data type mismatch: input to `in` should all be the same type, " +
+        "but it's [\"int\", \"array<int>\"].").forEach(s ->
+      Assert.assertTrue(e.getMessage().toLowerCase(Locale.ROOT)
+        .contains(s.toLowerCase(Locale.ROOT))));
   }
 }
