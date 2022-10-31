@@ -2930,13 +2930,41 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       ctx: CreateOrReplaceTableColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
 
+    // Check that no duplicates exist among any CREATE TABLE column options specified.
+    var nullable = true
+    var defaultExpression: Option[DefaultExpressionContext] = None
+    var commentSpec: Option[CommentSpecContext] = None
+    ctx.colDefinitionOption().asScala.foreach { option =>
+      if (option.NULL != null) {
+        if (!nullable) {
+          throw QueryParsingErrors.duplicateCreateTableColumnOption(
+            option, colName.getText, "NOT NULL")
+        }
+        nullable = false
+      }
+      Option(option.defaultExpression()).foreach { expr =>
+        if (defaultExpression.isDefined) {
+          throw QueryParsingErrors.duplicateCreateTableColumnOption(
+            option, colName.getText, "DEFAULT")
+        }
+        defaultExpression = Some(expr)
+      }
+      Option(option.commentSpec()).foreach { spec =>
+        if (commentSpec.isDefined) {
+          throw QueryParsingErrors.duplicateCreateTableColumnOption(
+            option, colName.getText, "COMMENT")
+        }
+        commentSpec = Some(spec)
+      }
+    }
+
     val builder = new MetadataBuilder
     // Add comment to metadata
-    Option(commentSpec()).map(visitCommentSpec).foreach {
+    commentSpec.map(visitCommentSpec).foreach {
       builder.putString("comment", _)
     }
     // Add the 'DEFAULT expression' clause in the column definition, if any, to the column metadata.
-    Option(ctx.defaultExpression()).map(visitDefaultExpression).foreach { field =>
+    defaultExpression.map(visitDefaultExpression).foreach { field =>
       if (conf.getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)) {
         // Add default to metadata
         builder.putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, field)
@@ -2951,7 +2979,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     StructField(
       name = name,
       dataType = typedVisit[DataType](ctx.dataType),
-      nullable = NULL == null,
+      nullable = nullable,
       metadata = builder.build())
   }
 
