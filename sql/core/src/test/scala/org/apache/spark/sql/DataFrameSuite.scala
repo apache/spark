@@ -2330,7 +2330,7 @@ class DataFrameSuite extends QueryTest
           new File(uuid, "file3").getAbsolutePath,
           uuid).rdd
       }
-      assert(e.getMessage.startsWith("Path does not exist"))
+      assert(e.getMessage.startsWith("[PATH_NOT_FOUND] Path does not exist"))
     } finally {
 
     }
@@ -2344,7 +2344,7 @@ class DataFrameSuite extends QueryTest
     val e = intercept[AnalysisException] {
       spark.read.format("text").load(s"$nonExistentBasePath/*")
     }
-    assert(e.getMessage.startsWith("Path does not exist"))
+    assert(e.getMessage.startsWith("[PATH_NOT_FOUND] Path does not exist"))
 
     // Existent initial path component, but no matching files:
     val baseDir = Utils.createTempDir()
@@ -2354,7 +2354,7 @@ class DataFrameSuite extends QueryTest
       val e1 = intercept[AnalysisException] {
         spark.read.json(s"${baseDir.getAbsolutePath}/*/*-xyz.json").rdd
       }
-      assert(e1.getMessage.startsWith("Path does not exist"))
+      assert(e1.getMessage.startsWith("[PATH_NOT_FOUND] Path does not exist"))
     } finally {
       Utils.deleteRecursively(baseDir)
     }
