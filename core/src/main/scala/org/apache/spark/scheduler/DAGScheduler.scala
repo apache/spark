@@ -2193,9 +2193,8 @@ private[spark] class DAGScheduler(
    * Return true when:
    *  1. Waiting for decommission start
    *  2. Under decommission process
-   * Return false when:
-   *  1. Stopped or terminated after finishing decommission
-   *  2. Under decommission process, then removed by driver with other reasons
+   *  3. Stopped or terminated after finishing decommission
+   *  4. Under decommission process, then removed by driver with other reasons
    */
   private[scheduler] def isExecutorDecommissioningOrDecommissioned(
       taskScheduler: TaskScheduler, bmAddress: BlockManagerId): Boolean = {

@@ -1117,7 +1117,8 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
-    executorsPendingDecommission.remove(executorId)
+    // Intentionally not remove executor from executorsPendingDecommission
+    // as info about removed executors due to decommission is needed
 
     if (reason != LossReasonPending) {
       executorIdToHost -= executorId
