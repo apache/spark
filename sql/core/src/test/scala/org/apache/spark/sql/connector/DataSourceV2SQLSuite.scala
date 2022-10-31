@@ -1405,25 +1405,25 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
           "_LEGACY_ERROR_TEMP_1233",
           Map(
             "colType" -> "in the table definition of default.t",
-            "duplicateCol" -> s"`${c0.toLowerCase}`"))
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         assertAnalysisErrorClass(
           s"CREATE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source",
           "_LEGACY_ERROR_TEMP_1233",
           Map(
             "colType" -> "in the table definition of t",
-            "duplicateCol" -> s"`${c0.toLowerCase}`"))
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         assertAnalysisErrorClass(
           s"CREATE OR REPLACE TABLE t ($c0 INT, $c1 INT) USING $v2Source",
           "_LEGACY_ERROR_TEMP_1233",
           Map(
             "colType" -> "in the table definition of default.t",
-            "duplicateCol" -> s"`${c0.toLowerCase}`"))
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         assertAnalysisErrorClass(
           s"CREATE OR REPLACE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source",
           "_LEGACY_ERROR_TEMP_1233",
           Map(
             "colType" -> "in the table definition of t",
-            "duplicateCol" -> s"`${c0.toLowerCase}`"))
+            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -1437,25 +1437,25 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
           "_LEGACY_ERROR_TEMP_1233",
           Map(
             "colType" -> "in the table definition of default.t",
-            "duplicateCol" -> s"`d.${c0.toLowerCase}`"))
+            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"))
         assertAnalysisErrorClass(
           s"CREATE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           "_LEGACY_ERROR_TEMP_1233",
           Map(
             "colType" -> "in the table definition of t",
-            "duplicateCol" -> s"`d.${c0.toLowerCase}`"))
+            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"))
         assertAnalysisErrorClass(
           s"CREATE OR REPLACE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           "_LEGACY_ERROR_TEMP_1233",
           Map(
             "colType" -> "in the table definition of default.t",
-            "duplicateCol" -> s"`d.${c0.toLowerCase}`"))
+            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"))
         assertAnalysisErrorClass(
           s"CREATE OR REPLACE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           "_LEGACY_ERROR_TEMP_1233",
           Map(
             "colType" -> "in the table definition of t",
-            "duplicateCol" -> s"`d.${c0.toLowerCase}`"))
+            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -1894,7 +1894,8 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       testNotSupportedV2Command("LOAD DATA", s"INPATH 'filepath' INTO TABLE $t")
       testNotSupportedV2Command("LOAD DATA", s"LOCAL INPATH 'filepath' INTO TABLE $t")
       testNotSupportedV2Command("LOAD DATA", s"LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t")
-      testNotSupportedV2Command("LOAD DATA", s"LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t PARTITION(id=1)")
+      testNotSupportedV2Command("LOAD DATA",
+        s"LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t PARTITION(id=1)")
     }
   }
 
