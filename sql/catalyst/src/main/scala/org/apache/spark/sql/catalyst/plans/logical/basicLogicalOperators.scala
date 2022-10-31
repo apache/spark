@@ -2106,7 +2106,7 @@ object AsOfJoin {
 /**
  * A logical plan for summary.
  */
-case class Summary(
+case class UnresolvedSummary(
     child: LogicalPlan,
     statistics: Seq[String]) extends UnaryNode {
 

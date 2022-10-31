@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
-import org.apache.spark.sql.catalyst.plans.logical.Summary
+import org.apache.spark.sql.catalyst.plans.logical.UnresolvedSummary
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -168,6 +168,6 @@ object StatFunctions extends Logging {
     } else {
       Seq("count", "mean", "stddev", "min", "25%", "50%", "75%", "max")
     }
-    Dataset.ofRows(ds.sparkSession, Summary(ds.logicalPlan, selectedStatistics))
+    Dataset.ofRows(ds.sparkSession, UnresolvedSummary(ds.logicalPlan, selectedStatistics))
   }
 }

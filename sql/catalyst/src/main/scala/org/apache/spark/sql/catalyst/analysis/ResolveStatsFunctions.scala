@@ -31,7 +31,7 @@ object ResolveStatsFunctions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(SUMMARY), ruleId) {
 
-    case s @ Summary(child, statistics) if s.childrenResolved =>
+    case s @ UnresolvedSummary(child, statistics) if s.childrenResolved =>
       val percentiles = statistics.filter(p => p.endsWith("%"))
         .map(p => p.stripSuffix("%").toDouble / 100.0)
 
