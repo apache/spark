@@ -113,7 +113,9 @@ private[spark] object Utils extends Logging {
 
   private val COPY_BUFFER_LEN = 1024
 
-  private val copyBuffer = new ThreadLocal[Array[Byte]]
+  private val copyBuffer = ThreadLocal.withInitial[Array[Byte]](() => {
+    new Array[Byte](COPY_BUFFER_LEN)
+  })
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -249,9 +251,6 @@ private[spark] object Utils extends Logging {
       // Fallback to copy approach
       val buffer = {
         // reuse the copy buffer from thread local
-        if (copyBuffer.get() == null) {
-          copyBuffer.set(new Array[Byte](COPY_BUFFER_LEN))
-        }
         copyBuffer.get()
       }
       val originalPosition = bb.position()
