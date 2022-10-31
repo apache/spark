@@ -128,7 +128,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         pd2 = df.offset(98).limit(10).toPandas()
         self.assertEqual(2, len(pd2.index))
 
-    def test_limit_offset(self):
+    def test_head(self):
         df = self.connect.read.table(self.tbl_name)
         pd = df.head(10)
         self.assertIsNotNone(pd)
