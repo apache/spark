@@ -1086,12 +1086,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
     val df7 = spark.table("h2.test.employee").filter(not($"is_manager") === true)
     checkFiltersRemoved(df7)
-    checkPushedInfo(df7, "PushedFilters: [IS_MANAGER IS NOT NULL, NOT (IS_MANAGER = true) = TRUE]")
+    checkPushedInfo(df7, "PushedFilters: [IS_MANAGER IS NOT NULL, NOT (IS_MANAGER = true)]")
     checkAnswer(df7, Seq(Row(1, "cathy", 9000, 1200, false), Row(2, "alex", 12000, 1200, false)))
 
     val df8 = spark.table("h2.test.employee").filter($"is_manager" === true)
     checkFiltersRemoved(df8)
-    checkPushedInfo(df8, "PushedFilters: [IS_MANAGER IS NOT NULL, IS_MANAGER = TRUE]")
+    checkPushedInfo(df8, "PushedFilters: [IS_MANAGER IS NOT NULL, IS_MANAGER = true]")
     checkAnswer(df8, Seq(Row(1, "amy", 10000, 1000, true),
       Row(2, "david", 10000, 1300, true), Row(6, "jen", 12000, 1200, true)))
 
