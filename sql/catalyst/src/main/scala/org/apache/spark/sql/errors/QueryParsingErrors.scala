@@ -234,10 +234,14 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def literalValueTypeUnsupportedError(
-      valueType: String, ctx: TypeConstructorContext): Throwable = {
+      unsupportedType: String,
+      supportedTypes: Seq[String],
+      ctx: TypeConstructorContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0021",
-      messageParameters = Map("valueType" -> valueType),
+      errorClass = "UNSUPPORTED_TYPED_LITERAL",
+      messageParameters = Map(
+        "unsupportedType" -> toSQLType(unsupportedType),
+        "supportedTypes" -> supportedTypes.map(toSQLType).mkString(", ")),
       ctx)
   }
 
