@@ -17,39 +17,23 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.types.{DataType, UserDefinedType}
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
+import org.apache.spark.sql.types.BooleanType
 
-/**
- * Unwrap UDT data type column into its underlying type.
- */
-case class UnwrapUDT(child: Expression) extends UnaryExpression with NonSQLExpression {
+class UnwrapUDTExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.genCode(ctx)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.dataType.isInstanceOf[UserDefinedType[_]]) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
+  test("Input type should be UserDefinedType") {
+    val b1 = Literal.create(false, BooleanType)
+    val unwrapUDTExpression = UnwrapUDT(b1)
+    assert(unwrapUDTExpression.checkInputDataTypes() ==
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
           "paramIndex" -> "1",
           "requiredType" -> toSQLType("UserDefinedType"),
-          "inputSql" -> toSQLExpr(child),
-          "inputType" -> toSQLType(child.dataType)))
-    }
-  }
-  override def dataType: DataType = child.dataType.asInstanceOf[UserDefinedType[_]].sqlType
-
-  override def nullSafeEval(input: Any): Any = input
-
-  override def prettyName: String = "unwrap_udt"
-
-  override protected def withNewChildInternal(newChild: Expression): UnwrapUDT = {
-    copy(child = newChild)
+          "inputSql" -> "\"false\"",
+          "inputType" -> "\"BOOLEAN\"")))
   }
 }

@@ -134,10 +134,8 @@ class ResolveSubquerySuite extends AnalysisTest {
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b", $"c"))),
       "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      Map("objectName" -> "`a`"),
-      caseSensitive = true,
-      line = -1,
-      pos = -1)
+      Map("objectName" -> "`a`")
+    )
   }
 
   test("lateral subquery with unresolvable attributes") {
@@ -145,34 +143,26 @@ class ResolveSubquerySuite extends AnalysisTest {
     assertAnalysisErrorClass(
       lateralJoin(t1, t0.select($"a", $"c")),
       "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      Map("objectName" -> "`c`"),
-      caseSensitive = true,
-      line = -1,
-      pos = -1)
+      Map("objectName" -> "`c`")
+    )
     // SELECT * FROM t1, LATERAL (SELECT a, b, c, d FROM t2)
     assertAnalysisErrorClass(
       lateralJoin(t1, t2.select($"a", $"b", $"c", $"d")),
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      Map("objectName" -> "`d`", "proposal" -> "`b`, `c`"),
-      caseSensitive = true,
-      line = -1,
-      pos = -1)
+      Map("objectName" -> "`d`", "proposal" -> "`b`, `c`")
+    )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.a))
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"t1.a"))),
       "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      Map("objectName" -> "`t1`.`a`"),
-      caseSensitive = true,
-      line = -1,
-      pos = -1)
+      Map("objectName" -> "`t1`.`a`")
+    )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b))
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b"))),
       "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      Map("objectName" -> "`a`"),
-      caseSensitive = true,
-      line = -1,
-      pos = -1)
+      Map("objectName" -> "`a`")
+    )
   }
 
   test("lateral subquery with struct type") {
@@ -183,10 +173,10 @@ class ResolveSubquerySuite extends AnalysisTest {
       LateralJoin(t4, LateralSubquery(Project(Seq(xa, ya), t0), Seq(x, y)), Inner, None)
     )
     // Analyzer will try to resolve struct first before subquery alias.
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       lateralJoin(t1.as("x"), t4.select($"x.a", $"x.b")),
-      Seq("No such struct field b in a")
-    )
+      "FIELD_NOT_FOUND",
+      Map("fieldName" -> "`b`", "fields" -> "`a`"))
   }
 
   test("lateral join with unsupported expressions") {

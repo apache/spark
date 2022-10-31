@@ -4270,13 +4270,33 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-21281 fails if functions have no argument") {
     val df = Seq(1).toDF("a")
 
-    val funcsMustHaveAtLeastOneArg =
-      ("coalesce", (df: DataFrame) => df.select(coalesce())) ::
-      ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) :: Nil
-    funcsMustHaveAtLeastOneArg.foreach { case (name, func) =>
-      val errMsg = intercept[AnalysisException] { func(df) }.getMessage
-      assert(errMsg.contains(s"input to function $name requires at least one argument"))
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(coalesce())
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"coalesce()\"",
+        "functionName" -> "`coalesce`",
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("coalesce()")
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"coalesce()\"",
+        "functionName" -> "`coalesce`",
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0"),
+      context = ExpectedContext(
+        fragment = "coalesce()",
+        start = 0,
+        stop = 9))
 
     checkError(
       exception = intercept[AnalysisException] {

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import java.net.URI
-import java.util.{Collections, Locale}
+import java.util.Collections
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, when}
@@ -39,7 +39,6 @@ import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -251,14 +250,18 @@ class PlanResolutionSuite extends AnalysisTest {
     }.head
   }
 
-  private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
-    val e = intercept[ParseException] {
-      parsePlan(sql)
-    }
-    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
-    containsThesePhrases.foreach { p =>
-      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(p.toLowerCase(Locale.ROOT)))
-    }
+  private def assertUnsupported(
+      sql: String,
+      parameters: Map[String, String],
+      context: ExpectedContext): Unit = {
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(sql)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = parameters,
+      context = context
+    )
   }
 
   test("create table - with partitioned by") {
@@ -400,16 +403,20 @@ class PlanResolutionSuite extends AnalysisTest {
     }
 
     val v2 =
-      """
-        |CREATE TABLE my_tab(a INT, b STRING)
+      """CREATE TABLE my_tab(a INT, b STRING)
         |USING parquet
         |OPTIONS (path '/tmp/file')
-        |LOCATION '/tmp/file'
-      """.stripMargin
-    val e = intercept[AnalysisException] {
-      parseAndResolve(v2)
-    }
-    assert(e.message.contains("you can only specify one of them."))
+        |LOCATION '/tmp/file'""".stripMargin
+    checkError(
+      exception = intercept[AnalysisException] {
+        parseAndResolve(v2)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0032",
+      parameters = Map("pathOne" -> "/tmp/file", "pathTwo" -> "/tmp/file"),
+      context = ExpectedContext(
+        fragment = v2,
+        start = 0,
+        stop = 97))
   }
 
   test("create table - byte length literal table name") {
@@ -1137,10 +1144,12 @@ class PlanResolutionSuite extends AnalysisTest {
         case _ => fail("Expect UpdateTable, but got:\n" + parsed7.treeString)
       }
 
-      assert(intercept[AnalysisException] {
-        parseAndResolve(sql8)
-      }.getMessage.contains(
-        QueryCompilationErrors.defaultReferencesNotAllowedInUpdateWhereClause().getMessage))
+      checkError(
+        exception = intercept[AnalysisException] {
+          parseAndResolve(sql8)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1341",
+        parameters = Map.empty)
 
       parsed9 match {
         case UpdateTable(
@@ -1250,10 +1259,23 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed2, expected2)
 
           val sql3 = s"ALTER TABLE $tblName ALTER COLUMN j COMMENT 'new comment'"
-          val e1 = intercept[AnalysisException] {
-            parseAndResolve(sql3)
-          }
-          assert(e1.getMessage.contains("Missing field j in table spark_catalog.default.v1Table"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              parseAndResolve(sql3)
+            },
+            errorClass = "_LEGACY_ERROR_TEMP_1331",
+            parameters = Map(
+              "fieldName" -> "j",
+              "table" -> "spark_catalog.default.v1Table",
+              "schema" ->
+                """root
+                  | |-- i: integer (nullable = true)
+                  | |-- s: string (nullable = true)
+                  | |-- point: struct (nullable = true)
+                  | |    |-- x: integer (nullable = true)
+                  | |    |-- y: integer (nullable = true)
+                  |""".stripMargin),
+            context = ExpectedContext(fragment = sql3, start = 0, stop = 55))
 
           val sql4 = s"ALTER TABLE $tblName ALTER COLUMN point.x TYPE bigint"
           val e2 = intercept[AnalysisException] {
@@ -1304,11 +1326,15 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("alter table: alter column action is not specified") {
-    val e = intercept[AnalysisException] {
-      parseAndResolve("ALTER TABLE v1Table ALTER COLUMN i")
-    }
-    assert(e.getMessage.contains(
-      "ALTER TABLE table ALTER COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER"))
+    val sql = "ALTER TABLE v1Table ALTER COLUMN i"
+    checkError(
+      exception = intercept[AnalysisException] {
+        parseAndResolve(sql)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" ->
+        "ALTER TABLE table ALTER COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER"),
+      context = ExpectedContext(fragment = sql, start = 0, stop = 33))
   }
 
   test("alter table: alter column case sensitivity for v1 table") {
@@ -1317,10 +1343,23 @@ class PlanResolutionSuite extends AnalysisTest {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val sql = s"ALTER TABLE $tblName ALTER COLUMN I COMMENT 'new comment'"
         if (caseSensitive) {
-          val e = intercept[AnalysisException] {
-            parseAndResolve(sql)
-          }
-          assert(e.getMessage.contains("Missing field I in table spark_catalog.default.v1Table"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              parseAndResolve(sql)
+            },
+            errorClass = "_LEGACY_ERROR_TEMP_1331",
+            parameters = Map(
+              "fieldName" -> "I",
+              "table" -> "spark_catalog.default.v1Table",
+              "schema" ->
+                """root
+                  | |-- i: integer (nullable = true)
+                  | |-- s: string (nullable = true)
+                  | |-- point: struct (nullable = true)
+                  | |    |-- x: integer (nullable = true)
+                  | |    |-- y: integer (nullable = true)
+                  |""".stripMargin),
+            context = ExpectedContext(fragment = sql, start = 0, stop = 55))
         } else {
           val actual = parseAndResolve(sql)
           val expected = AlterTableChangeColumnCommand(
@@ -1669,40 +1708,39 @@ class PlanResolutionSuite extends AnalysisTest {
         // This MERGE INTO command includes an ON clause with a DEFAULT column reference. This is
         // invalid and returns an error message.
         val mergeWithDefaultReferenceInMergeCondition =
-          s"""
-             |MERGE INTO testcat.tab AS target
+          s"""MERGE INTO testcat.tab AS target
              |USING testcat.tab1 AS source
              |ON target.i = DEFAULT
              |WHEN MATCHED AND (target.s = 31) THEN DELETE
              |WHEN MATCHED AND (target.s = 31)
              |  THEN UPDATE SET target.s = DEFAULT
              |WHEN NOT MATCHED AND (source.s='insert')
-             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
-             """.stripMargin
-        assert(intercept[AnalysisException] {
-          parseAndResolve(mergeWithDefaultReferenceInMergeCondition)
-        }.getMessage.contains(
-          QueryCompilationErrors.defaultReferencesNotAllowedInMergeCondition().getMessage))
+             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)""".stripMargin
+        checkError(
+          exception = intercept[AnalysisException] {
+            parseAndResolve(mergeWithDefaultReferenceInMergeCondition)
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1342",
+          parameters = Map.empty)
 
         // DEFAULT column reference within a complex expression:
         // This MERGE INTO command includes a WHEN MATCHED clause with a DEFAULT column reference as
         // of a complex expression (DEFAULT + 1). This is invalid and returns an error message.
         val mergeWithDefaultReferenceAsPartOfComplexExpression =
-          s"""
-             |MERGE INTO testcat.tab AS target
+          s"""MERGE INTO testcat.tab AS target
              |USING testcat.tab1 AS source
              |ON target.i = source.i
              |WHEN MATCHED AND (target.s = 31) THEN DELETE
              |WHEN MATCHED AND (target.s = 31)
              |  THEN UPDATE SET target.s = DEFAULT + 1
              |WHEN NOT MATCHED AND (source.s='insert')
-             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
-             """.stripMargin
-        assert(intercept[AnalysisException] {
-          parseAndResolve(mergeWithDefaultReferenceAsPartOfComplexExpression)
-        }.getMessage.contains(
-          QueryCompilationErrors
-            .defaultReferencesNotAllowedInComplexExpressionsInMergeInsertsOrUpdates().getMessage))
+             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)""".stripMargin
+        checkError(
+          exception = intercept[AnalysisException] {
+            parseAndResolve(mergeWithDefaultReferenceAsPartOfComplexExpression)
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1343",
+          parameters = Map.empty)
 
         // Ambiguous DEFAULT column reference when the table itself contains a column named
         // "DEFAULT".
@@ -1835,52 +1873,68 @@ class PlanResolutionSuite extends AnalysisTest {
       }
 
       val sql2 =
-        s"""
-           |MERGE INTO $target
+        s"""MERGE INTO $target
            |USING $source
            |ON i = 1
-           |WHEN MATCHED THEN DELETE
-         """.stripMargin
+           |WHEN MATCHED THEN DELETE""".stripMargin
       // merge condition is resolved with both target and source tables, and we can't
       // resolve column `i` as it's ambiguous.
-      val e2 = intercept[AnalysisException](parseAndResolve(sql2))
-      assert(e2.message.contains("Reference 'i' is ambiguous"))
+      checkError(
+        exception = intercept[AnalysisException](parseAndResolve(sql2)),
+        errorClass = null,
+        parameters = Map.empty,
+        context = ExpectedContext(
+          fragment = "i",
+          start = 22 + target.length + source.length,
+          stop = 22 + target.length + source.length))
 
       val sql3 =
-        s"""
-           |MERGE INTO $target
+        s"""MERGE INTO $target
            |USING $source
            |ON 1 = 1
-           |WHEN MATCHED AND (s='delete') THEN DELETE
-         """.stripMargin
+           |WHEN MATCHED AND (s='delete') THEN DELETE""".stripMargin
       // delete condition is resolved with both target and source tables, and we can't
       // resolve column `s` as it's ambiguous.
-      val e3 = intercept[AnalysisException](parseAndResolve(sql3))
-      assert(e3.message.contains("Reference 's' is ambiguous"))
+      checkError(
+        exception = intercept[AnalysisException](parseAndResolve(sql3)),
+        errorClass = null,
+        parameters = Map.empty,
+        context = ExpectedContext(
+          fragment = "s",
+          start = 46 + target.length + source.length,
+          stop = 46 + target.length + source.length))
 
       val sql4 =
-        s"""
-           |MERGE INTO $target
+        s"""MERGE INTO $target
            |USING $source
            |ON 1 = 1
-           |WHEN MATCHED AND (s = 'a') THEN UPDATE SET i = 1
-         """.stripMargin
+           |WHEN MATCHED AND (s = 'a') THEN UPDATE SET i = 1""".stripMargin
       // update condition is resolved with both target and source tables, and we can't
       // resolve column `s` as it's ambiguous.
-      val e4 = intercept[AnalysisException](parseAndResolve(sql4))
-      assert(e4.message.contains("Reference 's' is ambiguous"))
+      checkError(
+        exception = intercept[AnalysisException](parseAndResolve(sql4)),
+        errorClass = null,
+        parameters = Map.empty,
+        context = ExpectedContext(
+          fragment = "s",
+          start = 46 + target.length + source.length,
+          stop = 46 + target.length + source.length))
 
       val sql5 =
-        s"""
-           |MERGE INTO $target
+        s"""MERGE INTO $target
            |USING $source
            |ON 1 = 1
-           |WHEN MATCHED THEN UPDATE SET s = s
-         """.stripMargin
+           |WHEN MATCHED THEN UPDATE SET s = s""".stripMargin
       // update value is resolved with both target and source tables, and we can't
       // resolve column `s` as it's ambiguous.
-      val e5 = intercept[AnalysisException](parseAndResolve(sql5))
-      assert(e5.message.contains("Reference 's' is ambiguous"))
+      checkError(
+        exception = intercept[AnalysisException](parseAndResolve(sql5)),
+        errorClass = null,
+        parameters = Map.empty,
+        context = ExpectedContext(
+          fragment = "s",
+          start = 61 + target.length + source.length,
+          stop = 61 + target.length + source.length))
     }
 
     val sql1 =
@@ -1902,27 +1956,27 @@ class PlanResolutionSuite extends AnalysisTest {
 
     // UPDATE * with incompatible schema between source and target tables.
     val sql2 =
-      """
-         |MERGE INTO testcat.tab
+      """MERGE INTO testcat.tab
          |USING testcat.tab2
          |ON 1 = 1
-         |WHEN MATCHED THEN UPDATE SET *
-         |""".stripMargin
-    val e2 = intercept[AnalysisException](parseAndResolve(sql2))
-    assert(e2.message.contains(
-      "cannot resolve s in MERGE command given columns [testcat.tab2.i, testcat.tab2.x]"))
+         |WHEN MATCHED THEN UPDATE SET *""".stripMargin
+    checkError(
+      exception = intercept[AnalysisException](parseAndResolve(sql2)),
+      errorClass = "_LEGACY_ERROR_TEMP_2309",
+      parameters = Map("sqlExpr" -> "s", "cols" -> "testcat.tab2.i, testcat.tab2.x"),
+      context = ExpectedContext(fragment = sql2, start = 0, stop = 80))
 
     // INSERT * with incompatible schema between source and target tables.
     val sql3 =
-      """
-        |MERGE INTO testcat.tab
+      """MERGE INTO testcat.tab
         |USING testcat.tab2
         |ON 1 = 1
-        |WHEN NOT MATCHED THEN INSERT *
-        |""".stripMargin
-    val e3 = intercept[AnalysisException](parseAndResolve(sql3))
-    assert(e3.message.contains(
-      "cannot resolve s in MERGE command given columns [testcat.tab2.i, testcat.tab2.x]"))
+        |WHEN NOT MATCHED THEN INSERT *""".stripMargin
+    checkError(
+      exception = intercept[AnalysisException](parseAndResolve(sql3)),
+      errorClass = "_LEGACY_ERROR_TEMP_2309",
+      parameters = Map("sqlExpr" -> "s", "cols" -> "testcat.tab2.i, testcat.tab2.x"),
+      context = ExpectedContext(fragment = sql3, start = 0, stop = 80))
 
     val sql4 =
       """
@@ -2108,9 +2162,11 @@ class PlanResolutionSuite extends AnalysisTest {
       )
     )
 
-    interceptParseException(parsePlan)(
-      "CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING)",
-      "Syntax error at or near ':': extra input ':'")()
+    val sql = "CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING)"
+    checkError(
+      exception = parseException(parsePlan)(sql),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "':'", "hint" -> ": extra input ':'"))
   }
 
   test("create hive table - table file format") {
@@ -2170,7 +2226,11 @@ class PlanResolutionSuite extends AnalysisTest {
             assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
         }
       } else {
-        assertUnsupported(query, Seq("row format serde", "incompatible", s))
+        assertUnsupported(
+          query,
+          Map("message" -> (s"ROW FORMAT SERDE is incompatible with format '$s', " +
+            "which also specifies a serde")),
+          ExpectedContext(fragment = query, start = 0, stop = 57 + s.length))
       }
     }
   }
@@ -2192,7 +2252,11 @@ class PlanResolutionSuite extends AnalysisTest {
             assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
         }
       } else {
-        assertUnsupported(query, Seq("row format delimited", "only compatible with 'textfile'", s))
+        assertUnsupported(
+          query,
+          Map("message" -> ("ROW FORMAT DELIMITED is only compatible with 'textfile', " +
+            s"not '$s'")),
+          ExpectedContext(fragment = query, start = 0, stop = 75 + s.length))
       }
     }
   }
@@ -2214,14 +2278,23 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("create hive table - property values must be set") {
+    val sql1 = "CREATE TABLE my_tab STORED AS parquet " +
+      "TBLPROPERTIES('key_without_value', 'key_with_value'='x')"
     assertUnsupported(
-      sql = "CREATE TABLE my_tab STORED AS parquet " +
-          "TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
-      containsThesePhrases = Seq("key_without_value"))
+      sql1,
+      Map("message" -> "Values must be specified for key(s): [key_without_value]"),
+      ExpectedContext(fragment = sql1, start = 0, stop = 93))
+
+    val sql2 = "CREATE TABLE my_tab ROW FORMAT SERDE 'serde' " +
+      "WITH SERDEPROPERTIES('key_without_value', 'key_with_value'='x')"
     assertUnsupported(
-      sql = "CREATE TABLE my_tab ROW FORMAT SERDE 'serde' " +
-          "WITH SERDEPROPERTIES('key_without_value', 'key_with_value'='x')",
-      containsThesePhrases = Seq("key_without_value"))
+      sql2,
+      Map("message" -> "Values must be specified for key(s): [key_without_value]"),
+      ExpectedContext(
+        fragment = "ROW FORMAT SERDE 'serde' WITH SERDEPROPERTIES('key_without_value', " +
+          "'key_with_value'='x')",
+        start = 20,
+        stop = 107))
   }
 
   test("create hive table - location implies external") {
@@ -2234,28 +2307,58 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("Duplicate clauses - create hive table") {
-    def intercept(sqlCommand: String, messages: String*): Unit =
-      interceptParseException(parsePlan)(sqlCommand, messages: _*)()
-
     def createTableHeader(duplicateClause: String): String = {
       s"CREATE TABLE my_tab(a INT, b STRING) STORED AS parquet $duplicateClause $duplicateClause"
     }
 
-    intercept(createTableHeader("TBLPROPERTIES('test' = 'test2')"),
-      "Found duplicate clauses: TBLPROPERTIES")
-    intercept(createTableHeader("LOCATION '/tmp/file'"),
-      "Found duplicate clauses: LOCATION")
-    intercept(createTableHeader("COMMENT 'a table'"),
-      "Found duplicate clauses: COMMENT")
-    intercept(createTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS"),
-      "Found duplicate clauses: CLUSTERED BY")
-    intercept(createTableHeader("PARTITIONED BY (k int)"),
-      "Found duplicate clauses: PARTITIONED BY")
-    intercept(createTableHeader("STORED AS parquet"),
-      "Found duplicate clauses: STORED AS/BY")
-    intercept(
-      createTableHeader("ROW FORMAT SERDE 'parquet.hive.serde.ParquetHiveSerDe'"),
-      "Found duplicate clauses: ROW FORMAT")
+    val sql1 = createTableHeader("TBLPROPERTIES('test' = 'test2')")
+    checkError(
+      exception = parseException(parsePlan)(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "TBLPROPERTIES"),
+      context = ExpectedContext(fragment = sql1, start = 0, stop = 117))
+
+    val sql2 = createTableHeader("LOCATION '/tmp/file'")
+    checkError(
+      exception = parseException(parsePlan)(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "LOCATION"),
+      context = ExpectedContext(fragment = sql2, start = 0, stop = 95))
+
+    val sql3 = createTableHeader("COMMENT 'a table'")
+    checkError(
+      exception = parseException(parsePlan)(sql3),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "COMMENT"),
+      context = ExpectedContext(fragment = sql3, start = 0, stop = 89))
+
+    val sql4 = createTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS")
+    checkError(
+      exception = parseException(parsePlan)(sql4),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "CLUSTERED BY"),
+      context = ExpectedContext(fragment = sql4, start = 0, stop = 119))
+
+    val sql5 = createTableHeader("PARTITIONED BY (k int)")
+    checkError(
+      exception = parseException(parsePlan)(sql5),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "PARTITIONED BY"),
+      context = ExpectedContext(fragment = sql5, start = 0, stop = 99))
+
+    val sql6 = createTableHeader("STORED AS parquet")
+    checkError(
+      exception = parseException(parsePlan)(sql6),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "STORED AS/BY"),
+      context = ExpectedContext(fragment = sql6, start = 0, stop = 89))
+
+    val sql7 = createTableHeader("ROW FORMAT SERDE 'parquet.hive.serde.ParquetHiveSerDe'")
+    checkError(
+      exception = parseException(parsePlan)(sql7),
+      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      parameters = Map("clauseName" -> "ROW FORMAT"),
+      context = ExpectedContext(fragment = sql7, start = 0, stop = 163))
   }
 
   test("Test CTAS #1") {
@@ -2390,9 +2493,16 @@ class PlanResolutionSuite extends AnalysisTest {
     val s4 =
       """CREATE TABLE page_view
         |STORED BY 'storage.handler.class.name' AS SELECT * FROM src""".stripMargin
-    intercept[AnalysisException] {
-      extractTableDesc(s4)
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        extractTableDesc(s4)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "STORED BY"),
+      context = ExpectedContext(
+        fragment = "STORED BY 'storage.handler.class.name'",
+        start = 23,
+        stop = 60))
   }
 
   test("Test CTAS #5") {
@@ -2423,13 +2533,27 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("CTAS statement with a PARTITIONED BY clause is not allowed") {
-    assertUnsupported(s"CREATE TABLE ctas1 PARTITIONED BY (k int)" +
-        " AS SELECT key, value FROM (SELECT 1 as key, 2 as value) tmp")
+    val sql = s"CREATE TABLE ctas1 PARTITIONED BY (k int)" +
+      " AS SELECT key, value FROM (SELECT 1 as key, 2 as value) tmp"
+    assertUnsupported(
+      sql,
+      Map("message" ->
+        "Partition column types may not be specified in Create Table As Select (CTAS)"),
+      ExpectedContext(fragment = sql, start = 0, stop = 100))
   }
 
   test("CTAS statement with schema") {
-    assertUnsupported(s"CREATE TABLE ctas1 (age INT, name STRING) AS SELECT * FROM src")
-    assertUnsupported(s"CREATE TABLE ctas1 (age INT, name STRING) AS SELECT 1, 'hello'")
+    val sql1 = s"CREATE TABLE ctas1 (age INT, name STRING) AS SELECT * FROM src"
+    assertUnsupported(
+      sql1,
+      Map("message" -> "Schema may not be specified in a Create Table As Select (CTAS) statement"),
+      ExpectedContext(fragment = sql1, start = 0, stop = 61))
+
+    val sql2 = s"CREATE TABLE ctas1 (age INT, name STRING) AS SELECT 1, 'hello'"
+    assertUnsupported(
+      sql2,
+      Map("message" -> "Schema may not be specified in a Create Table As Select (CTAS) statement"),
+      ExpectedContext(fragment = sql2, start = 0, stop = 61))
   }
 
   test("create table - basic") {
@@ -2464,8 +2588,14 @@ class PlanResolutionSuite extends AnalysisTest {
 
   test("create table - temporary") {
     val query = "CREATE TEMPORARY TABLE tab1 (id int, name string)"
-    val e = intercept[ParseException] { parsePlan(query) }
-    assert(e.message.contains("Operation not allowed: CREATE TEMPORARY TABLE"))
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(query)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map(
+        "message" -> "CREATE TEMPORARY TABLE ..., use CREATE TEMPORARY VIEW instead"),
+      context = ExpectedContext(fragment = query, start = 0, stop = 48))
   }
 
   test("create table - external") {
@@ -2528,15 +2658,33 @@ class PlanResolutionSuite extends AnalysisTest {
 
   test("create table(hive) - skewed by") {
     val baseQuery = "CREATE TABLE my_table (id int, name string) SKEWED BY"
+
     val query1 = s"$baseQuery(id) ON (1, 10, 100)"
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(query1)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "CREATE TABLE ... SKEWED BY"),
+      context = ExpectedContext(fragment = query1, start = 0, stop = 72))
+
     val query2 = s"$baseQuery(id, name) ON ((1, 'x'), (2, 'y'), (3, 'z'))"
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(query2)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "CREATE TABLE ... SKEWED BY"),
+      context = ExpectedContext(fragment = query2, start = 0, stop = 96))
+
     val query3 = s"$baseQuery(id, name) ON ((1, 'x'), (2, 'y'), (3, 'z')) STORED AS DIRECTORIES"
-    val e1 = intercept[ParseException] { parsePlan(query1) }
-    val e2 = intercept[ParseException] { parsePlan(query2) }
-    val e3 = intercept[ParseException] { parsePlan(query3) }
-    assert(e1.getMessage.contains("Operation not allowed"))
-    assert(e2.getMessage.contains("Operation not allowed"))
-    assert(e3.getMessage.contains("Operation not allowed"))
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(query3)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "CREATE TABLE ... SKEWED BY"),
+      context = ExpectedContext(fragment = query3, start = 0, stop = 118))
   }
 
   test("create table(hive) - row format") {
@@ -2583,12 +2731,30 @@ class PlanResolutionSuite extends AnalysisTest {
 
   test("create table(hive) - storage handler") {
     val baseQuery = "CREATE TABLE my_table (id int, name string) STORED BY"
+
     val query1 = s"$baseQuery 'org.papachi.StorageHandler'"
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(query1)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "STORED BY"),
+      context = ExpectedContext(
+        fragment = "STORED BY 'org.papachi.StorageHandler'",
+        start = 44,
+        stop = 81))
+
     val query2 = s"$baseQuery 'org.mamachi.StorageHandler' WITH SERDEPROPERTIES ('k1'='v1')"
-    val e1 = intercept[ParseException] { parsePlan(query1) }
-    val e2 = intercept[ParseException] { parsePlan(query2) }
-    assert(e1.getMessage.contains("Operation not allowed"))
-    assert(e2.getMessage.contains("Operation not allowed"))
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(query2)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "STORED BY"),
+      context = ExpectedContext(
+        fragment = "STORED BY 'org.mamachi.StorageHandler' WITH SERDEPROPERTIES ('k1'='v1')",
+        start = 44,
+        stop = 114))
   }
 
   test("create table(hive) - everything!") {
