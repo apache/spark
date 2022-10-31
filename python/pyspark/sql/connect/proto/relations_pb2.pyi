@@ -549,14 +549,14 @@ class SetOperation(google.protobuf.message.Message):
     RIGHT_INPUT_FIELD_NUMBER: builtins.int
     SET_OP_TYPE_FIELD_NUMBER: builtins.int
     IS_ALL_FIELD_NUMBER: builtins.int
-    UNION_BY_NAME_FIELD_NUMBER: builtins.int
+    BY_NAME_FIELD_NUMBER: builtins.int
     @property
     def left_input(self) -> global___Relation: ...
     @property
     def right_input(self) -> global___Relation: ...
     set_op_type: global___SetOperation.SetOpType.ValueType
     is_all: builtins.bool
-    union_by_name: builtins.bool
+    by_name: builtins.bool
     def __init__(
         self,
         *,
@@ -564,7 +564,7 @@ class SetOperation(google.protobuf.message.Message):
         right_input: global___Relation | None = ...,
         set_op_type: global___SetOperation.SetOpType.ValueType = ...,
         is_all: builtins.bool = ...,
-        union_by_name: builtins.bool = ...,
+        by_name: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -575,6 +575,8 @@ class SetOperation(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "by_name",
+            b"by_name",
             "is_all",
             b"is_all",
             "left_input",
@@ -583,8 +585,6 @@ class SetOperation(google.protobuf.message.Message):
             b"right_input",
             "set_op_type",
             b"set_op_type",
-            "union_by_name",
-            b"union_by_name",
         ],
     ) -> None: ...
 

@@ -366,7 +366,7 @@ package object dsl {
           .setRightInput(right)
           .setSetOpType(t)
           .setIsAll(isAll)
-          .setUnionByName(byName)
+          .setByName(byName)
         setOp
       }
     }

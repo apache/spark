@@ -289,12 +289,12 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
     u.getSetOpType match {
       case proto.SetOperation.SetOpType.SET_OP_TYPE_EXCEPT =>
-        if (u.getUnionByName) {
+        if (u.getByName) {
           throw InvalidPlanInput("Except does not support union_by_name")
         }
         Except(transformRelation(u.getLeftInput), transformRelation(u.getRightInput), u.getIsAll)
       case proto.SetOperation.SetOpType.SET_OP_TYPE_INTERSECT =>
-        if (u.getUnionByName) {
+        if (u.getByName) {
           throw InvalidPlanInput("Intersect does not support union_by_name")
         }
         Intersect(
@@ -305,7 +305,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
         val combinedUnion = CombineUnions(
           Union(
             Seq(transformRelation(u.getLeftInput), transformRelation(u.getRightInput)),
-            byName = u.getUnionByName))
+            byName = u.getByName))
         if (u.getIsAll) {
           combinedUnion
         } else {

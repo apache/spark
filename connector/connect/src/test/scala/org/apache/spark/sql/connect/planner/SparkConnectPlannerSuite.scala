@@ -311,7 +311,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .newBuilder()
       .setLeftInput(readRel)
       .setRightInput(readRel)
-      .setUnionByName(true)
+      .setByName(true)
       .setSetOpType(proto.SetOperation.SetOpType.SET_OP_TYPE_EXCEPT)
     val e =
       intercept[InvalidPlanInput](transform(proto.Relation.newBuilder.setSetOp(except).build()))
@@ -322,7 +322,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .newBuilder()
       .setLeftInput(readRel)
       .setRightInput(readRel)
-      .setUnionByName(true)
+      .setByName(true)
       .setSetOpType(proto.SetOperation.SetOpType.SET_OP_TYPE_INTERSECT)
     val e2 = intercept[InvalidPlanInput](
       transform(proto.Relation.newBuilder.setSetOp(intersect).build()))
