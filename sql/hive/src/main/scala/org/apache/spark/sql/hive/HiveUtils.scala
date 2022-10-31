@@ -198,6 +198,15 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(true)
 
+  val USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT =
+    buildConf("spark.sql.hive.useDelegateForSymlinkTextInputFormat")
+      .internal()
+      .doc("When true, SymlinkTextInputFormat is replaced with a similar delegate class during " +
+        "table scan in order to fix the issue of empty splits")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * The version of the hive client that will be used to communicate with the metastore.  Note that
    * this does not necessarily need to be the same version of Hive that is used internally by
