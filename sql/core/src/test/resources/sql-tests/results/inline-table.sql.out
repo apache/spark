@@ -110,7 +110,19 @@ select * from values ("one", rand(5)), ("two", 3.0D) as data(a, b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot evaluate expression rand(5) in inline table definition; line 1 pos 29
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2304",
+  "messageParameters" : {
+    "sqlExpr" : "rand(5)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 30,
+    "stopIndex" : 36,
+    "fragment" : "rand(5)"
+  } ]
+}
 
 
 -- !query
@@ -119,7 +131,21 @@ select * from values ("one", 2.0), ("two") as data(a, b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-expected 2 columns but found 1 columns in row 1; line 1 pos 14
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2305",
+  "messageParameters" : {
+    "numCols" : "2",
+    "ri" : "1",
+    "rowSize" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 56,
+    "fragment" : "values (\"one\", 2.0), (\"two\") as data(a, b)"
+  } ]
+}
 
 
 -- !query
@@ -128,7 +154,19 @@ select * from values ("one", array(0, 1)), ("two", struct(1, 2)) as data(a, b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-incompatible types found in column b for inline table; line 1 pos 14
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2303",
+  "messageParameters" : {
+    "name" : "b"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 78,
+    "fragment" : "values (\"one\", array(0, 1)), (\"two\", struct(1, 2)) as data(a, b)"
+  } ]
+}
 
 
 -- !query
@@ -137,7 +175,21 @@ select * from values ("one"), ("two") as data(a, b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-expected 2 columns but found 1 columns in row 0; line 1 pos 14
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2305",
+  "messageParameters" : {
+    "numCols" : "2",
+    "ri" : "0",
+    "rowSize" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 51,
+    "fragment" : "values (\"one\"), (\"two\") as data(a, b)"
+  } ]
+}
 
 
 -- !query
@@ -168,7 +220,19 @@ select * from values ("one", count(1)), ("two", 2) as data(a, b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot evaluate expression count(1) in inline table definition; line 1 pos 29
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2304",
+  "messageParameters" : {
+    "sqlExpr" : "count(1)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 30,
+    "stopIndex" : 37,
+    "fragment" : "count(1)"
+  } ]
+}
 
 
 -- !query

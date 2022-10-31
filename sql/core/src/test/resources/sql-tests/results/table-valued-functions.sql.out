@@ -5,7 +5,19 @@ select * from dummy(3)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-could not resolve `dummy` to a table-valued function; line 1 pos 14
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2308",
+  "messageParameters" : {
+    "name" : "dummy"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 22,
+    "fragment" : "dummy(3)"
+  } ]
+}
 
 
 -- !query
