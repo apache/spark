@@ -17,12 +17,11 @@
 
 package org.apache.spark.util
 
-import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import scala.collection.mutable
 import scala.reflect.ClassTag
 
 object SeqHelper {
 
-  def toSeq[T](buffer: ArrayBuffer[T])(implicit tag: ClassTag[T]): Seq[T] = buffer
+  def toSeq[T](buffer: mutable.Buffer[T])(implicit tag: ClassTag[T]): Seq[T] = buffer
 
-  def toSeq[T](buffer: ListBuffer[T])(implicit tag: ClassTag[T]): Seq[T] = buffer
 }
