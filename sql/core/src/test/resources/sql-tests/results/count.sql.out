@@ -146,7 +146,21 @@ SELECT count() FROM testData
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'count()' due to data type mismatch: count requires at least one argument. If you have to call the function count without arguments, set the legacy configuration `spark.sql.legacy.allowParameterlessCount` as true; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "messageParameters" : {
+    "hint" : "",
+    "msg" : "count requires at least one argument. If you have to call the function count without arguments, set the legacy configuration `spark.sql.legacy.allowParameterlessCount` as true",
+    "sqlExpr" : "count()"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 14,
+    "fragment" : "count()"
+  } ]
+}
 
 
 -- !query

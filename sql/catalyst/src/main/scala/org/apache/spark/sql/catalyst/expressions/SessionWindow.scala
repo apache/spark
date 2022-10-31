@@ -68,11 +68,29 @@ case class SessionWindow(timeColumn: Expression, gapDuration: Expression) extend
   with Unevaluable
   with NonSQLExpression {
 
+  private def inputTypeOnTimeColumn: AbstractDataType = {
+    TypeCollection(
+      AnyTimestampType,
+      // Below two types cover both time window & session window, since they produce the same type
+      // of output as window column.
+      new StructType()
+        .add(StructField("start", TimestampType))
+        .add(StructField("end", TimestampType)),
+      new StructType()
+        .add(StructField("start", TimestampNTZType))
+        .add(StructField("end", TimestampNTZType))
+    )
+  }
+
+  // NOTE: if the window column is given as a time column, we resolve it to the point of time,
+  // which resolves to either TimestampType or TimestampNTZType. That means, timeColumn may not
+  // be "resolved", so it is safe to not rely on the data type of timeColumn directly.
+
   override def children: Seq[Expression] = Seq(timeColumn, gapDuration)
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType, AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(inputTypeOnTimeColumn, AnyDataType)
   override def dataType: DataType = new StructType()
-    .add(StructField("start", timeColumn.dataType))
-    .add(StructField("end", timeColumn.dataType))
+    .add(StructField("start", children.head.dataType))
+    .add(StructField("end", children.head.dataType))
 
   // This expression is replaced in the analyzer.
   override lazy val resolved = false

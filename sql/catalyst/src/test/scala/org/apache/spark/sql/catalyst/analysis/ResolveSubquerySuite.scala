@@ -173,10 +173,10 @@ class ResolveSubquerySuite extends AnalysisTest {
       LateralJoin(t4, LateralSubquery(Project(Seq(xa, ya), t0), Seq(x, y)), Inner, None)
     )
     // Analyzer will try to resolve struct first before subquery alias.
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       lateralJoin(t1.as("x"), t4.select($"x.a", $"x.b")),
-      Seq("No such struct field b in a")
-    )
+      "FIELD_NOT_FOUND",
+      Map("fieldName" -> "`b`", "fields" -> "`a`"))
   }
 
   test("lateral join with unsupported expressions") {

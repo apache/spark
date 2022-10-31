@@ -370,10 +370,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     "Ambiguous reference to fields" :: "differentCase" :: "differentcase" :: Nil,
     caseSensitive = false)
 
-  errorTest(
+  errorClassTest(
     "missing field",
     nestedRelation2.select($"top.c"),
-    "No such struct field" :: "aField" :: "bField" :: "cField" :: Nil,
+    "FIELD_NOT_FOUND",
+    Map("fieldName" -> "`c`", "fields" -> "`aField`, `bField`, `cField`"),
     caseSensitive = false)
 
   errorTest(

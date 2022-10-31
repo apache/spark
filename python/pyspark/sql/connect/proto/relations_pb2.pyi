@@ -64,7 +64,7 @@ class Relation(google.protobuf.message.Message):
     PROJECT_FIELD_NUMBER: builtins.int
     FILTER_FIELD_NUMBER: builtins.int
     JOIN_FIELD_NUMBER: builtins.int
-    UNION_FIELD_NUMBER: builtins.int
+    SET_OP_FIELD_NUMBER: builtins.int
     SORT_FIELD_NUMBER: builtins.int
     LIMIT_FIELD_NUMBER: builtins.int
     AGGREGATE_FIELD_NUMBER: builtins.int
@@ -85,7 +85,7 @@ class Relation(google.protobuf.message.Message):
     @property
     def join(self) -> global___Join: ...
     @property
-    def union(self) -> global___Union: ...
+    def set_op(self) -> global___SetOperation: ...
     @property
     def sort(self) -> global___Sort: ...
     @property
@@ -112,7 +112,7 @@ class Relation(google.protobuf.message.Message):
         project: global___Project | None = ...,
         filter: global___Filter | None = ...,
         join: global___Join | None = ...,
-        union: global___Union | None = ...,
+        set_op: global___SetOperation | None = ...,
         sort: global___Sort | None = ...,
         limit: global___Limit | None = ...,
         aggregate: global___Aggregate | None = ...,
@@ -150,12 +150,12 @@ class Relation(google.protobuf.message.Message):
             b"rel_type",
             "sample",
             b"sample",
+            "set_op",
+            b"set_op",
             "sort",
             b"sort",
             "sql",
             b"sql",
-            "union",
-            b"union",
             "unknown",
             b"unknown",
         ],
@@ -187,12 +187,12 @@ class Relation(google.protobuf.message.Message):
             b"rel_type",
             "sample",
             b"sample",
+            "set_op",
+            b"set_op",
             "sort",
             b"sort",
             "sql",
             b"sql",
-            "union",
-            b"union",
             "unknown",
             b"unknown",
         ],
@@ -204,7 +204,7 @@ class Relation(google.protobuf.message.Message):
         "project",
         "filter",
         "join",
-        "union",
+        "set_op",
         "sort",
         "limit",
         "aggregate",
@@ -518,48 +518,77 @@ class Join(google.protobuf.message.Message):
 
 global___Join = Join
 
-class Union(google.protobuf.message.Message):
-    """Relation of type [[Union]], at least one input must be set."""
+class SetOperation(google.protobuf.message.Message):
+    """Relation of type [[SetOperation]]"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class _UnionType:
+    class _SetOpType:
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _UnionTypeEnumTypeWrapper(
-        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Union._UnionType.ValueType],
+    class _SetOpTypeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            SetOperation._SetOpType.ValueType
+        ],
         builtins.type,
     ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-        UNION_TYPE_UNSPECIFIED: Union._UnionType.ValueType  # 0
-        UNION_TYPE_DISTINCT: Union._UnionType.ValueType  # 1
-        UNION_TYPE_ALL: Union._UnionType.ValueType  # 2
+        SET_OP_TYPE_UNSPECIFIED: SetOperation._SetOpType.ValueType  # 0
+        SET_OP_TYPE_INTERSECT: SetOperation._SetOpType.ValueType  # 1
+        SET_OP_TYPE_UNION: SetOperation._SetOpType.ValueType  # 2
+        SET_OP_TYPE_EXCEPT: SetOperation._SetOpType.ValueType  # 3
 
-    class UnionType(_UnionType, metaclass=_UnionTypeEnumTypeWrapper): ...
-    UNION_TYPE_UNSPECIFIED: Union.UnionType.ValueType  # 0
-    UNION_TYPE_DISTINCT: Union.UnionType.ValueType  # 1
-    UNION_TYPE_ALL: Union.UnionType.ValueType  # 2
+    class SetOpType(_SetOpType, metaclass=_SetOpTypeEnumTypeWrapper): ...
+    SET_OP_TYPE_UNSPECIFIED: SetOperation.SetOpType.ValueType  # 0
+    SET_OP_TYPE_INTERSECT: SetOperation.SetOpType.ValueType  # 1
+    SET_OP_TYPE_UNION: SetOperation.SetOpType.ValueType  # 2
+    SET_OP_TYPE_EXCEPT: SetOperation.SetOpType.ValueType  # 3
 
-    INPUTS_FIELD_NUMBER: builtins.int
-    UNION_TYPE_FIELD_NUMBER: builtins.int
+    LEFT_INPUT_FIELD_NUMBER: builtins.int
+    RIGHT_INPUT_FIELD_NUMBER: builtins.int
+    SET_OP_TYPE_FIELD_NUMBER: builtins.int
+    IS_ALL_FIELD_NUMBER: builtins.int
+    BY_NAME_FIELD_NUMBER: builtins.int
     @property
-    def inputs(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Relation]: ...
-    union_type: global___Union.UnionType.ValueType
+    def left_input(self) -> global___Relation: ...
+    @property
+    def right_input(self) -> global___Relation: ...
+    set_op_type: global___SetOperation.SetOpType.ValueType
+    is_all: builtins.bool
+    by_name: builtins.bool
     def __init__(
         self,
         *,
-        inputs: collections.abc.Iterable[global___Relation] | None = ...,
-        union_type: global___Union.UnionType.ValueType = ...,
+        left_input: global___Relation | None = ...,
+        right_input: global___Relation | None = ...,
+        set_op_type: global___SetOperation.SetOpType.ValueType = ...,
+        is_all: builtins.bool = ...,
+        by_name: builtins.bool = ...,
     ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "left_input", b"left_input", "right_input", b"right_input"
+        ],
+    ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal["inputs", b"inputs", "union_type", b"union_type"],
+        field_name: typing_extensions.Literal[
+            "by_name",
+            b"by_name",
+            "is_all",
+            b"is_all",
+            "left_input",
+            b"left_input",
+            "right_input",
+            b"right_input",
+            "set_op_type",
+            b"set_op_type",
+        ],
     ) -> None: ...
 
-global___Union = Union
+global___SetOperation = SetOperation
 
 class Limit(google.protobuf.message.Message):
     """Relation of type [[Limit]] that is used to `limit` rows from the input relation."""
