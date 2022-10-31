@@ -608,8 +608,10 @@ class UnionAll(LogicalPlan):
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
         rel = proto.Relation()
-        rel.union.inputs.extend([self._child.plan(session), self.other.plan(session)])
-        rel.union.union_type = proto.Union.UnionType.UNION_TYPE_ALL
+        rel.set_op.left_input.CopyFrom(self._child.plan(session))
+        rel.set_op.right_input.CopyFrom(self.other.plan(session))
+        rel.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_UNION
+        rel.set_op.is_all = True
         return rel
 
     def print(self, indent: int = 0) -> str:
