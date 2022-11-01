@@ -698,3 +698,53 @@ class SQL(LogicalPlan):
            </li>
         </ul>
         """
+
+
+class Range(LogicalPlan):
+    def __init__(
+        self,
+        start: int,
+        end: int,
+        step: Optional[int] = None,
+        num_partitions: Optional[int] = None,
+    ) -> None:
+        super().__init__(None)
+        self._start = start
+        self._end = end
+        self._step = step
+        self._num_partitions = num_partitions
+
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+        rel = proto.Relation()
+        rel.range.start = self._start
+        rel.range.end = self._end
+        if self._step is not None:
+            step_proto = rel.range.Step()
+            step_proto.step = self._step
+            rel.range.step.CopyFrom(step_proto)
+        if self._num_partitions is not None:
+            num_partitions_proto = rel.range.NumPartitions()
+            num_partitions_proto.num_partitions = self._num_partitions
+            rel.range.num_partitions.CopyFrom(num_partitions_proto)
+        return rel
+
+    def print(self, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}"
+            f"<Range start={self._start}, end={self._end}, "
+            f"step={self._step}, num_partitions={self._num_partitions}>"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>Range</b><br />
+                Start: {self._start} <br />
+                End: {self._end} <br />
+                Step: {self._step} <br />
+                NumPartitions: {self._num_partitions} <br />
+                {self._child_repr_()}
+            </li>
+        </uL>
+        """

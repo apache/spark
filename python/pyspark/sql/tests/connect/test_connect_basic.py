@@ -134,6 +134,23 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertIsNotNone(pd)
         self.assertEqual(10, len(pd.index))
 
+    def test_range(self):
+        self.assertTrue(
+            self.connect.range(start=0, end=10)
+            .toPandas()
+            .equals(self.spark.range(start=0, end=10).toPandas())
+        )
+        self.assertTrue(
+            self.connect.range(start=0, end=10, step=3)
+            .toPandas()
+            .equals(self.spark.range(start=0, end=10, step=3).toPandas())
+        )
+        self.assertTrue(
+            self.connect.range(start=0, end=10, step=3, numPartitions=2)
+            .toPandas()
+            .equals(self.spark.range(start=0, end=10, step=3, numPartitions=2).toPandas())
+        )
+
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text
         tmpPath = tempfile.mkdtemp()
