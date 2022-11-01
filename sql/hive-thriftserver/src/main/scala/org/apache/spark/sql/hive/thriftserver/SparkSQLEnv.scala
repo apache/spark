@@ -81,11 +81,11 @@ private[hive] object SparkSQLEnv extends Logging {
   }
 
   /** Cleans up and shuts down the Spark SQL environments. */
-  def stop(): Unit = {
+  def stop(exitCode: Int = 0): Unit = {
     logDebug("Shutting down Spark SQL Environment")
     // Stop the SparkContext
     if (SparkSQLEnv.sparkContext != null) {
-      sparkContext.stop()
+      sparkContext.stop(exitCode)
       sparkContext = null
       sqlContext = null
     }

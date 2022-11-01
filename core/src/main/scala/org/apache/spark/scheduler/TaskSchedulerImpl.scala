@@ -971,13 +971,13 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  override def stop(): Unit = {
+  override def stop(exitCode: Int = 0): Unit = {
     Utils.tryLogNonFatalError {
       speculationScheduler.shutdown()
     }
     if (backend != null) {
       Utils.tryLogNonFatalError {
-        backend.stop()
+        backend.stop(exitCode)
       }
     }
     if (taskResultGetter != null) {

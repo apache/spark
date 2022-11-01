@@ -319,10 +319,10 @@ private[spark] abstract class YarnSchedulerBackend(
       removeExecutorMessage.foreach { message => driverEndpoint.send(message) }
     }
 
-    private[cluster] def handleClientModeDriverStop(): Unit = {
+    private[cluster] def handleClientModeDriverStop(exitCode: Int): Unit = {
       amEndpoint match {
         case Some(am) =>
-          am.send(Shutdown)
+          am.send(Shutdown(exitCode))
         case None =>
           logWarning("Attempted to send shutdown message before the AM has registered!")
       }
