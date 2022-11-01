@@ -3991,19 +3991,19 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
                paste("Error in load : analysis error - Unable to infer schema for JSON.",
                      "It must be specified manually"))
   expect_error(read.df("arbitrary_path"),
-               paste("Error in load : analysis error - [PATH_NOT_FOUND] Path does not exist: ",
+               paste("Error in load : analysis error - [PATH_NOT_FOUND] Path does not exist:  ",
                      "file:/__w/spark/spark/arbitrary_path."))
   expect_error(read.json("arbitrary_path"),
-               paste("Error in json : analysis error - [PATH_NOT_FOUND] Path does not exist: ",
+               paste("Error in json : analysis error - [PATH_NOT_FOUND] Path does not exist:  ",
                      "file:/__w/spark/spark/arbitrary_path."))
   expect_error(read.text("arbitrary_path"),
-               paste("Error in text : analysis error - [PATH_NOT_FOUND] Path does not exist: ",
+               paste("Error in text : analysis error - [PATH_NOT_FOUND] Path does not exist:  ",
                      "file:/__w/spark/spark/arbitrary_path."))
   expect_error(read.orc("arbitrary_path"),
-               paste("Error in orc : analysis error - [PATH_NOT_FOUND] Path does not exist: ",
+               paste("Error in orc : analysis error - [PATH_NOT_FOUND] Path does not exist:  ",
                      "file:/__w/spark/spark/arbitrary_path."))
   expect_error(read.parquet("arbitrary_path"),
-               paste("Error in parquet : analysis error - [PATH_NOT_FOUND] Path does not exist: ",
+               paste("Error in parquet : analysis error - [PATH_NOT_FOUND] Path does not exist:  ",
                      "file:/__w/spark/spark/arbitrary_path."))
 
   # Arguments checking in R side.
