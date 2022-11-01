@@ -2397,7 +2397,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
                 s"contains illegal character for hexBinary: $padding$value");
           }
         case other =>
-          throw QueryParsingErrors.literalValueTypeUnsupportedError(other, ctx)
+          throw QueryParsingErrors.literalValueTypeUnsupportedError(
+            unsupportedType = other,
+            supportedTypes =
+              Seq("DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X"),
+            ctx)
       }
     } catch {
       case e: IllegalArgumentException =>

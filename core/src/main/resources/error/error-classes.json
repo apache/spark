@@ -1145,6 +1145,11 @@
       }
     }
   },
+  "UNSUPPORTED_TYPED_LITERAL" : {
+    "message" : [
+      "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
+    ]
+  },
   "UNTYPED_SCALA_UDF" : {
     "message" : [
       "You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. To get rid of this error, you could:",
@@ -1251,11 +1256,6 @@
   "_LEGACY_ERROR_TEMP_0020" : {
     "message" : [
       "Cannot parse the INTERVAL value: <value>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0021" : {
-    "message" : [
-      "Literals of type '<valueType>' are currently not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_0022" : {
