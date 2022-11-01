@@ -17,6 +17,15 @@
 
 package test.org.apache.spark.sql;
 
+import java.util.*;
+
+import com.google.common.collect.Maps;
+
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
 import org.apache.spark.api.java.function.FilterFunction;
 import org.apache.spark.sql.AnalysisException;
 import org.apache.spark.sql.Column;
@@ -25,12 +34,6 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
-import java.util.*;
 
 import static org.apache.spark.sql.types.DataTypes.*;
 
@@ -82,6 +85,14 @@ public class JavaColumnExpressionSuite {
     Dataset<Row> df = spark.createDataFrame(rows, schema);
     AnalysisException e = Assert.assertThrows(AnalysisException.class,
       () -> df.filter(df.col("a").isInCollection(Arrays.asList(new Column("b")))));
-    Assert.assertTrue(e.message().startsWith("[DATATYPE_MISMATCH.DATA_DIFF_TYPES]"));
+    Assert.assertTrue(e.getErrorClass().equals("DATATYPE_MISMATCH.DATA_DIFF_TYPES"));
+    Map<String, String> messageParameters = new HashMap() {
+      {
+        put("functionName", "`in`");
+        put("dataType", "[\"INT\", \"ARRAY<INT>\"]");
+        put("sqlExpr", "\"(a IN (b))\"");
+      }
+    };
+    Assert.assertTrue(Maps.difference(e.getMessageParameters(), messageParameters).areEqual());
   }
 }
