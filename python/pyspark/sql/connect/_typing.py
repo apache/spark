@@ -15,5 +15,7 @@
 # limitations under the License.
 #
 from typing import Union
+from datetime import date, time, datetime
 
 PrimitiveType = Union[str, int, bool, float]
+LiteralType = Union[PrimitiveType, Union[date, time, datetime]]
