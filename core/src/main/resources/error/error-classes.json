@@ -4184,11 +4184,6 @@
       "Partition column <col> not found in schema <schema>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2202" : {
-    "message" : [
-      "State is either not defined or has already been removed"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2203" : {
     "message" : [
       "Cannot set timeout duration without enabling processing time timeout in [map|flatMap]GroupsWithState"
@@ -4277,11 +4272,6 @@
   "_LEGACY_ERROR_TEMP_2220" : {
     "message" : [
       ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2221" : {
-    "message" : [
-      "<key>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2222" : {

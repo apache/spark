@@ -2007,10 +2007,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def stateNotDefinedOrAlreadyRemovedError(): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2202",
-      messageParameters = Map.empty,
-      cause = null)
+      new NoSuchElementException("State is either not defined or has already been removed")
   }
 
   def cannotSetTimeoutDurationError(): SparkUnsupportedOperationException = {
@@ -2171,11 +2168,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def noSuchElementExceptionError(key: String): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2221",
-      messageParameters = Map(
-        "key" -> key),
-      cause = null)
+    new NoSuchElementException(key)
   }
 
   def cannotMutateReadOnlySQLConfError(): SparkUnsupportedOperationException = {
