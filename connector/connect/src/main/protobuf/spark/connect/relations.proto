@@ -35,7 +35,7 @@ message Relation {
     Project project = 3;
     Filter filter = 4;
     Join join = 5;
-    Union union = 6;
+    SetOperation set_op = 6;
     Sort sort = 7;
     Limit limit = 8;
     Aggregate aggregate = 9;
@@ -127,15 +127,19 @@ message Join {
   }
 }
 
-// Relation of type [[Union]], at least one input must be set.
-message Union {
-  repeated Relation inputs = 1;
-  UnionType union_type = 2;
+// Relation of type [[SetOperation]]
+message SetOperation {
+  Relation left_input = 1;
+  Relation right_input = 2;
+  SetOpType set_op_type = 3;
+  bool is_all = 4;
+  bool by_name = 5;
 
-  enum UnionType {
-    UNION_TYPE_UNSPECIFIED = 0;
-    UNION_TYPE_DISTINCT = 1;
-    UNION_TYPE_ALL = 2;
+  enum SetOpType {
+    SET_OP_TYPE_UNSPECIFIED = 0;
+    SET_OP_TYPE_INTERSECT = 1;
+    SET_OP_TYPE_UNION = 2;
+    SET_OP_TYPE_EXCEPT = 3;
   }
 }
 

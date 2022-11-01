@@ -38,15 +38,21 @@ select 1 from tab_a where (a1, b1) not in (select (a2, b2) from tab_b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(named_struct('a1', tab_a.a1, 'b1', tab_a.b1) IN (listquery()))' due to data type mismatch: 
-The number of columns in the left hand side of an IN subquery does not match the
-number of columns in the output of subquery.
-#columns in left hand side: 2.
-#columns in right hand side: 1.
-Left side columns:
-[tab_a.a1, tab_a.b1].
-Right side columns:
-[`named_struct(a2, a2, b2, b2)`].; line 1 pos 35
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "messageParameters" : {
+    "hint" : "",
+    "msg" : "\nThe number of columns in the left hand side of an IN subquery does not match the\nnumber of columns in the output of subquery.\n#columns in left hand side: 2.\n#columns in right hand side: 1.\nLeft side columns:\n[tab_a.a1, tab_a.b1].\nRight side columns:\n[`named_struct(a2, a2, b2, b2)`].",
+    "sqlExpr" : "(named_struct('a1', tab_a.a1, 'b1', tab_a.b1) IN (listquery()))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 70,
+    "fragment" : "not in (select (a2, b2) from tab_b)"
+  } ]
+}
 
 
 -- !query

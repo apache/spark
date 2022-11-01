@@ -48,6 +48,7 @@ class IncrementalExecution(
     val queryId: UUID,
     val runId: UUID,
     val currentBatchId: Long,
+    val prevOffsetSeqMetadata: Option[OffsetSeqMetadata],
     val offsetSeqMetadata: OffsetSeqMetadata)
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
@@ -112,6 +113,17 @@ class IncrementalExecution(
       numStateStores)
   }
 
+  // Watermarks to use for late record filtering and state eviction in stateful operators.
+  // Using the previous watermark for late record filtering is a Spark behavior change so we allow
+  // this to be disabled.
+  val eventTimeWatermarkForEviction = offsetSeqMetadata.batchWatermarkMs
+  val eventTimeWatermarkForLateEvents =
+    if (sparkSession.conf.get(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)) {
+      prevOffsetSeqMetadata.getOrElse(offsetSeqMetadata).batchWatermarkMs
+    } else {
+      eventTimeWatermarkForEviction
+    }
+
   /** Locates save/restore pairs surrounding aggregation. */
   val state = new Rule[SparkPlan] {
 
@@ -158,7 +170,7 @@ class IncrementalExecution(
       case a: UpdatingSessionsExec if a.isStreaming =>
         a.copy(numShufflePartitions = Some(numStateStores))
 
-      case StateStoreSaveExec(keys, None, None, None, stateFormatVersion,
+      case StateStoreSaveExec(keys, None, None, None, None, stateFormatVersion,
              UnaryExecNode(agg,
                StateStoreRestoreExec(_, None, _, child))) =>
         val aggStateInfo = nextStatefulOperationStateInfo
@@ -166,7 +178,8 @@ class IncrementalExecution(
           keys,
           Some(aggStateInfo),
           Some(outputMode),
-          Some(offsetSeqMetadata.batchWatermarkMs),
+          eventTimeWatermarkForLateEvents = Some(eventTimeWatermarkForLateEvents),
+          eventTimeWatermarkForEviction = Some(eventTimeWatermarkForEviction),
           stateFormatVersion,
           agg.withNewChildren(
             StateStoreRestoreExec(
@@ -175,32 +188,36 @@ class IncrementalExecution(
               stateFormatVersion,
               child) :: Nil))
 
-      case SessionWindowStateStoreSaveExec(keys, session, None, None, None, stateFormatVersion,
+      case SessionWindowStateStoreSaveExec(keys, session, None, None, None, None,
+        stateFormatVersion,
         UnaryExecNode(agg,
-        SessionWindowStateStoreRestoreExec(_, _, None, None, _, child))) =>
+        SessionWindowStateStoreRestoreExec(_, _, None, None, None, _, child))) =>
           val aggStateInfo = nextStatefulOperationStateInfo
           SessionWindowStateStoreSaveExec(
             keys,
             session,
             Some(aggStateInfo),
             Some(outputMode),
-            Some(offsetSeqMetadata.batchWatermarkMs),
+            eventTimeWatermarkForLateEvents = Some(eventTimeWatermarkForLateEvents),
+            eventTimeWatermarkForEviction = Some(eventTimeWatermarkForEviction),
             stateFormatVersion,
             agg.withNewChildren(
               SessionWindowStateStoreRestoreExec(
                 keys,
                 session,
                 Some(aggStateInfo),
-                Some(offsetSeqMetadata.batchWatermarkMs),
+                eventTimeWatermarkForLateEvents = Some(eventTimeWatermarkForLateEvents),
+                eventTimeWatermarkForEviction = Some(eventTimeWatermarkForEviction),
                 stateFormatVersion,
                 child) :: Nil))
 
-      case StreamingDeduplicateExec(keys, child, None, None) =>
+      case StreamingDeduplicateExec(keys, child, None, None, None) =>
         StreamingDeduplicateExec(
           keys,
           child,
           Some(nextStatefulOperationStateInfo),
-          Some(offsetSeqMetadata.batchWatermarkMs))
+          eventTimeWatermarkForLateEvents = Some(eventTimeWatermarkForLateEvents),
+          eventTimeWatermarkForEviction = Some(eventTimeWatermarkForEviction))
 
       case m: FlatMapGroupsWithStateExec =>
         // We set this to true only for the first batch of the streaming query.
@@ -208,7 +225,8 @@ class IncrementalExecution(
         m.copy(
           stateInfo = Some(nextStatefulOperationStateInfo),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
-          eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs),
+          eventTimeWatermarkForLateEvents = Some(eventTimeWatermarkForLateEvents),
+          eventTimeWatermarkForEviction = Some(eventTimeWatermarkForEviction),
           hasInitialState = hasInitialState
         )
 
@@ -216,17 +234,19 @@ class IncrementalExecution(
         m.copy(
           stateInfo = Some(nextStatefulOperationStateInfo),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
-          eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs)
+          eventTimeWatermarkForLateEvents = Some(eventTimeWatermarkForLateEvents),
+          eventTimeWatermarkForEviction = Some(eventTimeWatermarkForEviction)
         )
 
       case j: StreamingSymmetricHashJoinExec =>
         j.copy(
           stateInfo = Some(nextStatefulOperationStateInfo),
-          eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs),
+          eventTimeWatermarkForLateEvents = Some(eventTimeWatermarkForLateEvents),
+          eventTimeWatermarkForEviction = Some(eventTimeWatermarkForLateEvents),
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-              Some(offsetSeqMetadata.batchWatermarkMs)))
+              Some(eventTimeWatermarkForEviction)))
 
       case l: StreamingGlobalLimitExec =>
         l.copy(

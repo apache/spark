@@ -69,11 +69,20 @@ insert into datetimes values
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-failed to evaluate expression CAST('11:00 BST' AS TIMESTAMP): [CAST_INVALID_INPUT] The value '11:00 BST' of the type "STRING" cannot be cast to "TIMESTAMP" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 2, position 24) ==
-(1, timestamp '11:00', cast ('11:00 BST' as timestamp), cast ('1 year' as timestamp), ...
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-; line 1 pos 22
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2331",
+  "messageParameters" : {
+    "msg" : "[CAST_INVALID_INPUT] The value '11:00 BST' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error.\n== SQL(line 2, position 24) ==\n(1, timestamp '11:00', cast ('11:00 BST' as timestamp), cast ('1 year' as timestamp), ...\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+    "sqlExpr" : "CAST('11:00 BST' AS TIMESTAMP)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 23,
+    "stopIndex" : 1698,
+    "fragment" : "values\n(1, timestamp '11:00', cast ('11:00 BST' as timestamp), cast ('1 year' as timestamp), cast ('2000-10-19 10:23:54+01' as timestamp), timestamp '2000-10-19 10:23:54'),\n(2, timestamp '12:00', cast ('12:00 BST' as timestamp), cast ('2 years' as timestamp), cast ('2001-10-19 10:23:54+01' as timestamp), timestamp '2001-10-19 10:23:54'),\n(3, timestamp '13:00', cast ('13:00 BST' as timestamp), cast ('3 years' as timestamp), cast ('2001-10-19 10:23:54+01' as timestamp), timestamp '2001-10-19 10:23:54'),\n(4, timestamp '14:00', cast ('14:00 BST' as timestamp), cast ('4 years' as timestamp), cast ('2002-10-19 10:23:54+01' as timestamp), timestamp '2002-10-19 10:23:54'),\n(5, timestamp '15:00', cast ('15:00 BST' as timestamp), cast ('5 years' as timestamp), cast ('2003-10-19 10:23:54+01' as timestamp), timestamp '2003-10-19 10:23:54'),\n(6, timestamp '15:00', cast ('15:00 BST' as timestamp), cast ('5 years' as timestamp), cast ('2004-10-19 10:23:54+01' as timestamp), timestamp '2004-10-19 10:23:54'),\n(7, timestamp '17:00', cast ('17:00 BST' as timestamp), cast ('7 years' as timestamp), cast ('2005-10-19 10:23:54+01' as timestamp), timestamp '2005-10-19 10:23:54'),\n(8, timestamp '18:00', cast ('18:00 BST' as timestamp), cast ('8 years' as timestamp), cast ('2006-10-19 10:23:54+01' as timestamp), timestamp '2006-10-19 10:23:54'),\n(9, timestamp '19:00', cast ('19:00 BST' as timestamp), cast ('9 years' as timestamp), cast ('2007-10-19 10:23:54+01' as timestamp), timestamp '2007-10-19 10:23:54'),\n(10, timestamp '20:00', cast ('20:00 BST' as timestamp), cast ('10 years' as timestamp), cast ('2008-10-19 10:23:54+01' as timestamp), timestamp '2008-10-19 10:23:54')"
+  } ]
+}
 
 
 -- !query
@@ -428,7 +437,21 @@ SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'ntile(0)' due to data type mismatch: Buckets expression must be positive, but got: 0; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "messageParameters" : {
+    "hint" : "",
+    "msg" : "Buckets expression must be positive, but got: 0",
+    "sqlExpr" : "ntile(0)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "ntile(0) OVER (ORDER BY ten)"
+  } ]
+}
 
 
 -- !query
@@ -437,7 +460,21 @@ SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'nth_value(spark_catalog.default.tenk1.four, 0)' due to data type mismatch: The 'offset' argument of nth_value must be greater than zero but it is 0.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "messageParameters" : {
+    "hint" : "",
+    "msg" : "The 'offset' argument of nth_value must be greater than zero but it is 0.",
+    "sqlExpr" : "nth_value(spark_catalog.default.tenk1.four, 0)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "nth_value(four, 0) OVER (ORDER BY ten)"
+  } ]
+}
 
 
 -- !query
