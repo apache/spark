@@ -357,8 +357,8 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
       Aggregate.supportsObjectHashAggregate(aggregateExpressions))
     supportsHashAggregates.head && supportsHashAggregates.last ||
       supportsHashAggregates.head == supportsHashAggregates.last &&
-        supportsObjectHashAggregates.head && supportsObjectHashAggregates.last ||
-          supportsObjectHashAggregates.head == supportsObjectHashAggregates.last
+        (supportsObjectHashAggregates.head && supportsObjectHashAggregates.last ||
+          supportsObjectHashAggregates.head == supportsObjectHashAggregates.last)
   }
 
   // Second traversal replaces `ScalarSubqueryReference`s to either
