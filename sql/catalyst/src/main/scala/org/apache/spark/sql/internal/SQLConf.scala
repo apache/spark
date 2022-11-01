@@ -3113,6 +3113,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ALWAYS_INLINE_ONE_ROW_RELATION_SUBQUERY =
+    buildConf("spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline")
+      .internal()
+      .doc(s"When true, the optimizer will always inline single row subqueries even if it " +
+        "causes extra duplication. It only takes effect when " +
+        s"${OPTIMIZE_ONE_ROW_RELATION_SUBQUERY.key} is set to true.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
       .doc("In SQL queries with a SORT followed by a LIMIT like " +
