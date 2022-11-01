@@ -608,7 +608,11 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def unclosedBracketedCommentError(command: String, position: Origin): Throwable = {
-    new ParseException(Some(command), null, position, position,
+    new ParseException(
+      Some(command),
+      "Found an unclosed bracketed comment. Please, append */ at the end of the comment.",
+      position,
+      position,
       Some("UNCLOSED_BRACKETED_COMMENT"))
   }
 
