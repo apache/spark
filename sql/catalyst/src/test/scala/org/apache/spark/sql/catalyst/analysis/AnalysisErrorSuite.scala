@@ -275,7 +275,7 @@ class AnalysisErrorSuite extends AnalysisTest {
           SpecifiedWindowFrame(RangeFrame, Literal(1), Literal(2)))).as("window")),
     "Cannot specify window frame for lead function" :: Nil)
 
-  errorTest(
+  errorClassTest(
     "the offset of nth_value window function is negative or zero",
     testRelation2.select(
       WindowExpression(
@@ -284,7 +284,12 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           SpecifiedWindowFrame(RowFrame, Literal(0), Literal(0)))).as("window")),
-    "The 'offset' argument of nth_value must be greater than zero but it is 0." :: Nil)
+    errorClass = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+    messageParameters = Map(
+      "sqlExpr" -> "\"nth_value(b, 0)\"",
+      "exprName" -> "offset",
+      "valueRange" -> "(0, 9223372036854775807]",
+      "currentValue" -> "0L"))
 
   errorClassTest(
     "the offset of nth_value window function is not int literal",
