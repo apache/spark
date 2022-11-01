@@ -24,14 +24,14 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
@@ -807,21 +807,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def renameTempViewToExistingViewError(oldName: String, newName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1062",
-      messageParameters = Map("oldName" -> oldName, "newName" -> newName))
+    new TableAlreadyExistsException(newName)
   }
 
   def cannotDropNonemptyDatabaseError(db: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1063",
-      messageParameters = Map("db" -> db))
+    new AnalysisException(errorClass = "SCHEMA_NOT_EMPTY",
+      Map("schemaName" -> toSQLId(db)))
   }
 
   def cannotDropNonemptyNamespaceError(namespace: Seq[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1064",
-      messageParameters = Map("namespace" -> namespace.quoted))
+    new AnalysisException(errorClass = "SCHEMA_NOT_EMPTY",
+      Map("schemaName" -> namespace.map(part => quoteIdentifier(part)).mkString(".")))
   }
 
   def invalidNameForTableOrDatabaseError(name: String): Throwable = {
@@ -897,11 +893,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotRenameTempViewToExistingTableError(
       oldName: TableIdentifier, newName: TableIdentifier): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1075",
-      messageParameters = Map(
-        "oldName" -> oldName.toString,
-        "newName" -> newName.toString))
+    new TableAlreadyExistsException(newName.nameParts)
   }
 
   def invalidPartitionSpecError(details: String): Throwable = {
@@ -911,9 +903,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def functionAlreadyExistsError(func: FunctionIdentifier): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1077",
-      messageParameters = Map("func" -> func.toString))
+    new FunctionAlreadyExistsException(func.nameParts)
   }
 
   def cannotLoadClassWhenRegisteringFunctionError(
@@ -988,7 +978,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def corruptedViewReferredTempFunctionsInCatalogError(e: Exception): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1088",
       messageParameters = Map.empty,
       cause = Some(e))
@@ -1223,7 +1213,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def noSuchTableError(ident: Identifier): NoSuchTableException = {
-    new NoSuchTableException(ident)
+    new NoSuchTableException(ident.asMultipartIdentifier)
   }
 
   def noSuchTableError(nameParts: Seq[String]): Throwable = {
@@ -1235,7 +1225,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tableAlreadyExistsError(ident: Identifier): Throwable = {
-    new TableAlreadyExistsException(ident)
+    new TableAlreadyExistsException(ident.asMultipartIdentifier)
   }
 
   def requiresSinglePartNamespaceError(ns: Seq[String]): Throwable = {
@@ -1319,19 +1309,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tableIsNotRowLevelOperationTableError(table: Table): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1122",
       messageParameters = Map("table" -> table.name()))
   }
 
   def cannotRenameTableWithAlterViewError(): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1123",
       messageParameters = Map.empty)
   }
 
   private def notSupportedForV2TablesError(cmd: String): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1124",
       messageParameters = Map("cmd" -> cmd))
   }
@@ -1365,25 +1355,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def databaseFromV1SessionCatalogNotSpecifiedError(): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1125",
       messageParameters = Map.empty)
   }
 
   def nestedDatabaseUnsupportedByV1SessionCatalogError(catalog: String): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1126",
       messageParameters = Map("catalog" -> catalog))
   }
 
   def invalidRepartitionExpressionsError(sortOrders: Seq[Any]): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1127",
       messageParameters = Map("sortOrders" -> sortOrders.toString()))
   }
 
   def partitionColumnNotSpecifiedError(format: String, partitionColumn: String): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1128",
       messageParameters = Map(
         "format" -> format,
@@ -1967,6 +1957,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("function" -> funcStr))
   }
 
+  def unsupportedCorrelatedReferenceDataTypeError(
+      expr: Expression,
+      dataType: DataType,
+      origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE",
+      origin = origin,
+      messageParameters = Map("expr" -> expr.sql, "dataType" -> dataType.typeName))
+  }
+
   def functionCannotProcessInputError(
       unbound: UnboundFunction,
       arguments: Seq[Expression],
@@ -2079,10 +2080,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def noSuchStructFieldInGivenFieldsError(
       fieldName: String, fields: Array[StructField]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1208",
+      errorClass = "FIELD_NOT_FOUND",
       messageParameters = Map(
-        "fieldName" -> fieldName,
-        "fields" -> fields.map(_.name).mkString(", ")))
+        "fieldName" -> toSQLId(fieldName),
+        "fields" -> fields.map(f => toSQLId(f.name)).mkString(", ")))
   }
 
   def ambiguousReferenceToFieldsError(fields: String): Throwable = {
@@ -2144,13 +2145,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def invalidPatternError(pattern: String, message: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1216",
-      messageParameters = Map("pattern" -> pattern, "message" -> message))
+      messageParameters = Map(
+        "pattern" -> toSQLValue(pattern, StringType),
+        "message" -> message))
   }
 
   def tableIdentifierExistsError(tableIdentifier: TableIdentifier): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1217",
-      messageParameters = Map("tableIdentifier" -> tableIdentifier.toString))
+    new TableAlreadyExistsException(tableIdentifier.nameParts)
   }
 
   def tableIdentifierNotConvertedToHadoopFsRelationError(
@@ -2306,7 +2307,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def analyzeTableNotSupportedOnViewsError(): Throwable = {
-        new AnalysisException(
+    new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1236",
       messageParameters = Map.empty)
   }
@@ -2342,12 +2343,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "dataType" -> dataType.toString))
   }
 
-  def tableAlreadyExistsError(table: String, guide: String = ""): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1240",
-      messageParameters = Map(
-        "table" -> table,
-        "guide" -> guide))
+  def tableAlreadyExistsError(table: String): Throwable = {
+    new TableAlreadyExistsException(table)
   }
 
   def createTableAsSelectWithNonEmptyDirectoryError(tablePath: String): Throwable = {
@@ -2356,6 +2353,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "tablePath" -> tablePath,
         "config" -> SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key))
+  }
+
+  def tableOrViewNotFoundError(table: String): Throwable = {
+    new NoSuchTableException(table)
   }
 
   def noSuchFunctionError(
@@ -2845,17 +2846,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tableOrViewNotFound(ident: Seq[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1303",
-      messageParameters = Map("ident" -> ident.quoted))
-  }
-
-  def unexpectedTypeOfRelationError(relation: LogicalPlan, tableName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1304",
-      messageParameters = Map(
-        "className" -> relation.getClass.getCanonicalName,
-        "tableName" -> tableName))
+    new NoSuchTableException(ident)
   }
 
   def unsupportedTableChangeInJDBCCatalogError(change: TableChange): Throwable = {
@@ -2917,10 +2908,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tableAlreadyExistsError(tableIdent: TableIdentifier): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1314",
-      messageParameters = Map("tableIdent" -> tableIdent.toString))
-    new AnalysisException(s"Table $tableIdent already exists.")
+    new TableAlreadyExistsException(tableIdent.nameParts)
   }
 
   def cannotOverwriteTableThatIsBeingReadFromError(tableName: String): Throwable = {

@@ -34,6 +34,8 @@ import org.apache.spark.sql.types.StructType
 
 trait AnalysisTest extends PlanTest {
 
+  import org.apache.spark.QueryContext
+
   protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = Nil
 
   protected def createTempView(
@@ -174,42 +176,35 @@ trait AnalysisTest extends PlanTest {
       inputPlan: LogicalPlan,
       expectedErrorClass: String,
       expectedMessageParameters: Map[String, String],
-      caseSensitive: Boolean): Unit = {
+      queryContext: Array[QueryContext] = Array.empty,
+      caseSensitive: Boolean = true): Unit = {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer
       val e = intercept[AnalysisException] {
         analyzer.checkAnalysis(analyzer.execute(inputPlan))
       }
-
-      if (e.getErrorClass != expectedErrorClass ||
-        !e.messageParameters.sameElements(expectedMessageParameters)) {
-        var failMsg = ""
-        if (e.getErrorClass != expectedErrorClass) {
-          failMsg +=
-            s"""Error class should be: ${expectedErrorClass}
-               |Actual error class: ${e.getErrorClass}
-             """.stripMargin
-        }
-        if (!e.messageParameters.sameElements(expectedMessageParameters)) {
-          failMsg +=
-            s"""Message parameters should be: ${expectedMessageParameters.mkString("\n  ")}
-               |Actual message parameters: ${e.messageParameters.mkString("\n  ")}
-             """.stripMargin
-        }
-        fail(failMsg)
-      }
+      checkError(
+        exception = e,
+        errorClass = expectedErrorClass,
+        parameters = expectedMessageParameters,
+        queryContext = queryContext
+      )
     }
   }
 
   protected def interceptParseException(parser: String => Any)(
     sqlCommand: String, messages: String*)(
     errorClass: Option[String] = None): Unit = {
-    val e = intercept[ParseException](parser(sqlCommand))
+    val e = parseException(parser)(sqlCommand)
     messages.foreach { message =>
       assert(e.message.contains(message))
     }
     if (errorClass.isDefined) {
       assert(e.getErrorClass == errorClass.get)
     }
+  }
+
+  protected def parseException(parser: String => Any)(sqlText: String): ParseException = {
+    intercept[ParseException](parser(sqlText))
   }
 }

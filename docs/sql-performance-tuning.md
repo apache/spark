@@ -329,7 +329,7 @@ Data skew can severely downgrade the performance of join queries. This feature d
      </tr>
      <tr>
        <td><code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code></td>
-       <td>5</td>
+       <td>5.0</td>
        <td>
          A partition is considered as skewed if its size is larger than this factor multiplying the median partition size and also larger than <code>spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes</code>.
        </td>

@@ -32,7 +32,8 @@ import pyspark.sql.types
 from pyspark import cloudpickle
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.readwriter import DataFrameReader
-from pyspark.sql.connect.plan import SQL
+from pyspark.sql.connect.plan import SQL, Range
+from pyspark.sql.types import DataType, StructType, StructField, LongType, StringType
 
 from typing import Optional, Any, Union
 
@@ -91,14 +92,13 @@ class PlanMetrics:
 
 
 class AnalyzeResult:
-    def __init__(self, cols: typing.List[str], types: typing.List[str], explain: str):
-        self.cols = cols
-        self.types = types
+    def __init__(self, schema: pb2.DataType, explain: str):
+        self.schema = schema
         self.explain_string = explain
 
     @classmethod
     def fromProto(cls, pb: typing.Any) -> "AnalyzeResult":
-        return AnalyzeResult(pb.column_names, pb.column_types, pb.explain_string)
+        return AnalyzeResult(pb.schema, pb.explain_string)
 
 
 class RemoteSparkSession(object):
@@ -145,13 +145,83 @@ class RemoteSparkSession(object):
     def sql(self, sql_string: str) -> "DataFrame":
         return DataFrame.withPlan(SQL(sql_string), self)
 
+    def range(
+        self,
+        start: int,
+        end: int,
+        step: Optional[int] = None,
+        numPartitions: Optional[int] = None,
+    ) -> DataFrame:
+        """
+        Create a :class:`DataFrame` with column named ``id`` and typed Long,
+        containing elements in a range from ``start`` to ``end`` (exclusive) with
+        step value ``step``.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        start : int
+            the start value
+        end : int
+            the end value (exclusive)
+        step : int, optional
+            the incremental step (default: 1)
+        numPartitions : int, optional
+            the number of partitions of the DataFrame
+
+        Returns
+        -------
+        :class:`DataFrame`
+        """
+        return DataFrame.withPlan(
+            Range(start=start, end=end, step=step, num_partitions=numPartitions), self
+        )
+
     def _to_pandas(self, plan: pb2.Plan) -> Optional[pandas.DataFrame]:
         req = pb2.Request()
         req.user_context.user_id = self._user_id
         req.plan.CopyFrom(plan)
         return self._execute_and_fetch(req)
 
-    def analyze(self, plan: pb2.Plan) -> AnalyzeResult:
+    def _proto_schema_to_pyspark_schema(self, schema: pb2.DataType) -> DataType:
+        if schema.HasField("struct"):
+            structFields = []
+            for proto_field in schema.struct.fields:
+                structFields.append(
+                    StructField(
+                        proto_field.name,
+                        self._proto_schema_to_pyspark_schema(proto_field.type),
+                        proto_field.nullable,
+                    )
+                )
+            return StructType(structFields)
+        elif schema.HasField("i64"):
+            return LongType()
+        elif schema.HasField("string"):
+            return StringType()
+        else:
+            raise Exception("Only support long, string, struct conversion")
+
+    def schema(self, plan: pb2.Plan) -> StructType:
+        proto_schema = self._analyze(plan).schema
+        # Server side should populate the struct field which is the schema.
+        assert proto_schema.HasField("struct")
+        structFields = []
+        for proto_field in proto_schema.struct.fields:
+            structFields.append(
+                StructField(
+                    proto_field.name,
+                    self._proto_schema_to_pyspark_schema(proto_field.type),
+                    proto_field.nullable,
+                )
+            )
+        return StructType(structFields)
+
+    def explain_string(self, plan: pb2.Plan) -> str:
+        return self._analyze(plan).explain_string
+
+    def _analyze(self, plan: pb2.Plan) -> AnalyzeResult:
         req = pb2.Request()
         req.user_context.user_id = self._user_id
         req.plan.CopyFrom(plan)
@@ -163,8 +233,8 @@ class RemoteSparkSession(object):
         if b.batch is not None and len(b.batch.data) > 0:
             with pa.ipc.open_stream(b.batch.data) as rd:
                 return rd.read_pandas()
-        elif b.csv_batch is not None and len(b.csv_batch.data) > 0:
-            return pd.read_csv(io.StringIO(b.csv_batch.data), delimiter="|")
+        elif b.json_batch is not None and len(b.json_batch.data) > 0:
+            return pd.read_json(io.BytesIO(b.json_batch.data), lines=True)
         return None
 
     def _execute_and_fetch(self, req: pb2.Request) -> typing.Optional[pandas.DataFrame]:

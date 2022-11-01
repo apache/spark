@@ -35,12 +35,17 @@ message Relation {
     Project project = 3;
     Filter filter = 4;
     Join join = 5;
-    Union union = 6;
+    SetOperation set_op = 6;
     Sort sort = 7;
-    Fetch fetch = 8;
+    Limit limit = 8;
     Aggregate aggregate = 9;
     SQL sql = 10;
     LocalRelation local_relation = 11;
+    Sample sample = 12;
+    Offset offset = 13;
+    Deduplicate deduplicate = 14;
+    Range range = 15;
+    SubqueryAlias subquery_alias = 16;
 
     Unknown unknown = 999;
   }
@@ -52,7 +57,6 @@ message Unknown {}
 // Common metadata of all relations.
 message RelationCommon {
   string source_info = 1;
-  string alias = 2;
 }
 
 // Relation that uses a SQL query to generate the output.
@@ -65,10 +69,20 @@ message SQL {
 message Read {
   oneof read_type {
     NamedTable named_table = 1;
+    DataSource data_source = 2;
   }
 
   message NamedTable {
-    repeated string parts = 1;
+    string unparsed_identifier = 1;
+  }
+
+  message DataSource {
+    // Required. Supported formats include: parquet, orc, text, json, parquet, csv, avro.
+    string format = 1;
+    // Optional. If not set, Spark will infer the schema.
+    string schema = 2;
+    // The key is case insensitive.
+    map<string, string> options = 3;
   }
 }
 
@@ -94,57 +108,60 @@ message Filter {
 message Join {
   Relation left = 1;
   Relation right = 2;
-  Expression on = 3;
-  JoinType how = 4;
+  Expression join_condition = 3;
+  JoinType join_type = 4;
+  // Optional. using_columns provides a list of columns that should present on both sides of
+  // the join inputs that this Join will join on. For example A JOIN B USING col_name is
+  // equivalent to A JOIN B on A.col_name = B.col_name.
+  //
+  // This field does not co-exist with join_condition.
+  repeated string using_columns = 5;
 
   enum JoinType {
     JOIN_TYPE_UNSPECIFIED = 0;
     JOIN_TYPE_INNER = 1;
-    JOIN_TYPE_OUTER = 2;
+    JOIN_TYPE_FULL_OUTER = 2;
     JOIN_TYPE_LEFT_OUTER = 3;
     JOIN_TYPE_RIGHT_OUTER = 4;
-    JOIN_TYPE_ANTI = 5;
+    JOIN_TYPE_LEFT_ANTI = 5;
+    JOIN_TYPE_LEFT_SEMI = 6;
   }
 }
 
-// Relation of type [[Union]], at least one input must be set.
-message Union {
-  repeated Relation inputs = 1;
-  UnionType union_type = 2;
+// Relation of type [[SetOperation]]
+message SetOperation {
+  Relation left_input = 1;
+  Relation right_input = 2;
+  SetOpType set_op_type = 3;
+  bool is_all = 4;
+  bool by_name = 5;
 
-  enum UnionType {
-    UNION_TYPE_UNSPECIFIED = 0;
-    UNION_TYPE_DISTINCT = 1;
-    UNION_TYPE_ALL = 2;
+  enum SetOpType {
+    SET_OP_TYPE_UNSPECIFIED = 0;
+    SET_OP_TYPE_INTERSECT = 1;
+    SET_OP_TYPE_UNION = 2;
+    SET_OP_TYPE_EXCEPT = 3;
   }
 }
 
-// Relation of type [[Fetch]] that is used to read `limit` / `offset` rows from the input relation.
-message Fetch {
+// Relation of type [[Limit]] that is used to `limit` rows from the input relation.
+message Limit {
   Relation input = 1;
   int32 limit = 2;
-  int32 offset = 3;
+}
+
+// Relation of type [[Offset]] that is used to read rows staring from the `offset` on
+// the input relation.
+message Offset {
+  Relation input = 1;
+  int32 offset = 2;
 }
 
 // Relation of type [[Aggregate]].
 message Aggregate {
   Relation input = 1;
-
-  // Grouping sets are used in rollups
-  repeated GroupingSet grouping_sets = 2;
-
-  // Measures
-  repeated Measure measures = 3;
-
-  message GroupingSet {
-    repeated Expression aggregate_expressions = 1;
-  }
-
-  message Measure {
-    AggregateFunction function = 1;
-    // Conditional filter for SUM(x FILTER WHERE x < 10)
-    Expression filter = 2;
-  }
+  repeated Expression grouping_expressions = 2;
+  repeated AggregateFunction result_expressions = 3;
 
   message AggregateFunction {
     string name = 1;
@@ -156,6 +173,7 @@ message Aggregate {
 message Sort {
   Relation input = 1;
   repeated SortField sort_fields = 2;
+  bool is_global = 3;
 
   message SortField {
     Expression expression = 1;
@@ -176,7 +194,59 @@ message Sort {
   }
 }
 
+// Relation of type [[Deduplicate]] which have duplicate rows removed, could consider either only
+// the subset of columns or all the columns.
+message Deduplicate {
+  Relation input = 1;
+  repeated string column_names = 2;
+  bool all_columns_as_keys = 3;
+}
+
 message LocalRelation {
   repeated Expression.QualifiedAttribute attributes = 1;
   // TODO: support local data.
+}
+
+// Relation of type [[Sample]] that samples a fraction of the dataset.
+message Sample {
+  Relation input = 1;
+  double lower_bound = 2;
+  double upper_bound = 3;
+  bool with_replacement = 4;
+  Seed seed = 5;
+
+  message Seed {
+    int64 seed = 1;
+  }
+}
+
+// Relation of type [[Range]] that generates a sequence of integers.
+message Range {
+  // Optional. Default value = 0
+  int64 start = 1;
+  // Required.
+  int64 end = 2;
+  // Optional. Default value = 1
+  Step step = 3;
+  // Optional. Default value is assigned by 1) SQL conf "spark.sql.leafNodeDefaultParallelism" if
+  // it is set, or 2) spark default parallelism.
+  NumPartitions num_partitions = 4;
+
+  message Step {
+    int64 step = 1;
+  }
+
+  message NumPartitions {
+    int32 num_partitions = 1;
+  }
+}
+
+// Relation alias.
+message SubqueryAlias {
+  // Required. The input relation.
+  Relation input = 1;
+  // Required. The alias.
+  string alias = 2;
+  // Optional. Qualifier of the alias.
+  repeated string qualifier = 3;
 }

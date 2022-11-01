@@ -268,11 +268,13 @@
                 as assembly build.
               -->
               <include>com.google.android:annotations</include>
-              <include>com.google.api.grpc:proto-google-common-proto</include>
+              <include>com.google.api.grpc:proto-google-common-protos</include>
               <include>io.perfmark:perfmark-api</include>
               <include>org.codehaus.mojo:animal-sniffer-annotations</include>
               <include>com.google.errorprone:error_prone_annotations</include>
               <include>com.google.j2objc:j2objc-annotations</include>
+              <include>org.checkerframework:checker-qual</include>
+              <include>com.google.code.gson:gson</include>
             </includes>
           </artifactSet>
           <relocations>
@@ -303,28 +305,66 @@
             </relocation>
 
             <relocation>
-              <pattern>com.google.android</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.android</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>com.google.api.grpc</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.api</shadedPattern>
+              <pattern>android.annotation</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.android_annotation</shadedPattern>
             </relocation>
             <relocation>
               <pattern>io.perfmark</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.perfmark</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.connect.io_perfmark</shadedPattern>
             </relocation>
             <relocation>
-              <pattern>org.codehaus.mojo</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.mojo</shadedPattern>
+              <pattern>org.codehaus.mojo.animal_sniffer</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.animal_sniffer</shadedPattern>
             </relocation>
             <relocation>
-              <pattern>com.google.errorprone</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.errorprone</shadedPattern>
+              <pattern>com.google.j2objc.annotations</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.j2objc_annotations</shadedPattern>
             </relocation>
             <relocation>
-              <pattern>com.com.google.j2objc</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.j2objc</shadedPattern>
+              <pattern>com.google.errorprone.annotations</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.errorprone_annotations</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>org.checkerframework</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.checkerframework</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.gson</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.gson</shadedPattern>
+            </relocation>
+
+            <!--
+              For `com.google.api.grpc:proto-google-common-protos`, do not directly define pattern
+              as `common.google`, otherwise, otherwise, the relocation result may be uncertain due
+              to the change of rule order.
+            -->
+            <relocation>
+              <pattern>com.google.api</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.google_protos.api</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.cloud</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.google_protos.cloud</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.geo</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.google_protos.geo</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.logging</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.google_protos.logging</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.longrunning</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.google_protos.longrunning</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.rpc</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.google_protos.rpc</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.type</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.google_protos.type</shadedPattern>
             </relocation>
           </relocations>
         </configuration>

@@ -49,22 +49,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0004", ctx.source)
   }
 
-  def unrecognizedMatchedActionError(ctx: MatchedClauseContext): Throwable = {
-    new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0005",
-      messageParameters = Map("matchedAction" -> ctx.matchedAction().getText),
-      ctx.matchedAction())
-  }
-
   def insertedValueNumberNotMatchFieldNumberError(ctx: NotMatchedClauseContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0006", ctx.notMatchedAction())
-  }
-
-  def unrecognizedNotMatchedActionError(ctx: NotMatchedClauseContext): Throwable = {
-    new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0007",
-      messageParameters = Map("matchedAction" -> ctx.notMatchedAction().getText),
-      ctx.notMatchedAction())
   }
 
   def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
@@ -72,11 +58,15 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def nonLastMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0009", ctx)
+    new ParseException(errorClass = "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION", ctx)
   }
 
   def nonLastNotMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0010", ctx)
+    new ParseException(errorClass = "NON_LAST_NOT_MATCHED_BY_TARGET_CLAUSE_OMIT_CONDITION", ctx)
+  }
+
+  def nonLastNotMatchedBySourceClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
+    new ParseException(errorClass = "NON_LAST_NOT_MATCHED_BY_SOURCE_CLAUSE_OMIT_CONDITION", ctx)
   }
 
   def emptyPartitionKeyError(key: String, ctx: PartitionSpecContext): Throwable = {
@@ -234,10 +224,14 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def literalValueTypeUnsupportedError(
-      valueType: String, ctx: TypeConstructorContext): Throwable = {
+      unsupportedType: String,
+      supportedTypes: Seq[String],
+      ctx: TypeConstructorContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0021",
-      messageParameters = Map("valueType" -> valueType),
+      errorClass = "UNSUPPORTED_TYPED_LITERAL",
+      messageParameters = Map(
+        "unsupportedType" -> toSQLType(unsupportedType),
+        "supportedTypes" -> supportedTypes.map(toSQLType).mkString(", ")),
       ctx)
   }
 
@@ -639,5 +633,17 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def defaultColumnReferencesNotAllowedInPartitionSpec(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0059", ctx)
+  }
+
+  def duplicateCreateTableColumnOption(
+      ctx: ParserRuleContext,
+      columnName: String,
+      optionName: String): Throwable = {
+    new ParseException(
+      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      messageParameters = Map(
+        "columnName" -> columnName,
+        "optionName" -> optionName),
+      ctx)
   }
 }

@@ -1134,10 +1134,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withTable("t") {
       sql("create table t(i boolean default true, s bigint, q int default 42) " +
         "using parquet partitioned by (i)")
-      assert(intercept[ParseException] {
-        sql("insert into t partition(i=default) values(5, default)")
-      }.getMessage.contains(
-        "References to DEFAULT column values are not allowed within the PARTITION clause"))
+      checkError(
+        exception = intercept[ParseException] {
+          sql("insert into t partition(i=default) values(5, default)")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_0059",
+        parameters = Map.empty,
+        context = ExpectedContext(
+          fragment = "partition(i=default)",
+          start = 14,
+          stop = 33))
     }
     // The configuration option to append missing NULL values to the end of the INSERT INTO
     // statement is not enabled.
@@ -1500,7 +1506,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       val BAD_SUBQUERY = "subquery expressions are not allowed in DEFAULT values"
     }
     val createTable = "create table t(i boolean, s bigint) using parquet"
-    val insertDefaults = "insert into t values (default, default)"
     withTable("t") {
       sql(createTable)
       // The default value fails to analyze.
@@ -1522,9 +1527,17 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }.getMessage.contains("provided a value of incompatible type"))
       // The default value is disabled per configuration.
       withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
-        assert(intercept[ParseException] {
-          sql("alter table t alter column s set default 41 + 1")
-        }.getMessage.contains("Support for DEFAULT column values is not allowed"))
+        val sqlText = "alter table t alter column s set default 41 + 1"
+        checkError(
+          exception = intercept[ParseException] {
+            sql(sqlText)
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_0058",
+          parameters = Map.empty,
+          context = ExpectedContext(
+            fragment = sqlText,
+            start = 0,
+            stop = 46))
       }
     }
     // Attempting to set a default value for a partitioning column is not allowed.
@@ -2061,10 +2074,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-29174 fail LOCAL in INSERT OVERWRITE DIRECT remote path") {
-    val message = intercept[ParseException] {
-      sql("insert overwrite local directory 'hdfs:/abcd' using parquet select 1")
-    }.getMessage
-    assert(message.contains("LOCAL is supported only with file: scheme"))
+    checkError(
+      exception = intercept[ParseException] {
+        sql("insert overwrite local directory 'hdfs:/abcd' using parquet select 1")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0050",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "insert overwrite local directory 'hdfs:/abcd' using parquet",
+        start = 0,
+        stop = 58))
   }
 
   test("SPARK-32508 " +

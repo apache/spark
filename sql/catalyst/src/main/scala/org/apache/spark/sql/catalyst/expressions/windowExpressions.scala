@@ -20,13 +20,13 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_WINDOW_EXPRESSION, WINDOW_EXPRESSION}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.types._
 
 /**
@@ -709,7 +709,7 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction with Le
 // scalastyle:on line.size.limit line.contains.tab
 case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
     extends AggregateWindowFunction with OffsetWindowFunction with ImplicitCastInputTypes
-    with BinaryLike[Expression] {
+    with BinaryLike[Expression] with QueryErrorsBase {
 
   def this(child: Expression, offset: Expression) = this(child, offset, false)
 
@@ -729,10 +729,23 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
     if (check.isFailure) {
       check
     } else if (!offset.foldable) {
-      TypeCheckFailure(s"Offset expression '$offset' must be a literal.")
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "offset",
+          "inputType" -> toSQLType(offset.dataType),
+          "inputExpr" -> toSQLExpr(offset)
+        )
+      )
     } else if (offsetVal <= 0) {
-      TypeCheckFailure(
-        s"The 'offset' argument of nth_value must be greater than zero but it is $offsetVal.")
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "offset",
+          "valueRange" -> s"(0, ${Long.MaxValue}]",
+          "currentValue" -> toSQLValue(offsetVal, LongType)
+        )
+      )
     } else {
       TypeCheckSuccess
     }
@@ -815,7 +828,7 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction
-  with UnaryLike[Expression] {
+  with UnaryLike[Expression] with QueryErrorsBase {
 
   def this() = this(Literal(1))
 
@@ -825,18 +838,39 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
   // for each partition.
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!buckets.foldable) {
-      return TypeCheckFailure(s"Buckets expression must be foldable, but got $buckets")
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "buckets",
+          "inputType" -> toSQLType(buckets.dataType),
+          "inputExpr" -> toSQLExpr(buckets)
+        )
+      )
     }
 
     if (buckets.dataType != IntegerType) {
-      return TypeCheckFailure(s"Buckets expression must be integer type, but got $buckets")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> toSQLType(IntegerType),
+          "inputSql" -> toSQLExpr(buckets),
+          "inputType" -> toSQLType(buckets.dataType))
+      )
     }
 
     val i = buckets.eval().asInstanceOf[Int]
     if (i > 0) {
       TypeCheckSuccess
     } else {
-      TypeCheckFailure(s"Buckets expression must be positive, but got: $i")
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "buckets",
+          "valueRange" -> s"(0, ${Int.MaxValue}]",
+          "currentValue" -> toSQLValue(i, IntegerType)
+        )
+      )
     }
   }
 

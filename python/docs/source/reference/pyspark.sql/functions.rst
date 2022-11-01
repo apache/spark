@@ -142,6 +142,7 @@ Datetime Functions
     window
     session_window
     timestamp_seconds
+    window_time
 
 
 Collection Functions

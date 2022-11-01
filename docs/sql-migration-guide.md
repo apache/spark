@@ -34,6 +34,7 @@ license: |
     - Valid hexadecimal strings should include only allowed symbols (0-9A-Fa-f).
     - Valid values for `fmt` are case-insensitive `hex`, `base64`, `utf-8`, `utf8`.
   - Since Spark 3.4, Spark throws only `PartitionsAlreadyExistException` when it creates partitions but some of them exist already. In Spark 3.3 or earlier, Spark can throw either `PartitionsAlreadyExistException` or `PartitionAlreadyExistsException`.
+  - Since Spark 3.4, Spark will do validation for partition spec in ALTER PARTITION to follow the behavior of `spark.sql.storeAssignmentPolicy` which may cause an exception if type conversion fails, e.g. `ALTER TABLE .. ADD PARTITION(p='a')` if column `p` is int type. To restore the legacy behavior, set `spark.sql.legacy.skipPartitionSpecTypeValidation` to `true`.
 
 ## Upgrading from Spark SQL 3.2 to 3.3
 
