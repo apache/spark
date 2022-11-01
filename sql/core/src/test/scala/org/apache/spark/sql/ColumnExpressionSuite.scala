@@ -1023,9 +1023,18 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         nullable = false))))
 
   test("withField should throw an exception if called on a non-StructType column") {
-    intercept[AnalysisException] {
-      testData.withColumn("key", $"key".withField("a", lit(2)))
-    }.getMessage should include("struct argument should be struct type, got: int")
+    checkError(
+      exception = intercept[AnalysisException] {
+        testData.withColumn("key", $"key".withField("a", lit(2)))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"update_fields(key, WithField(2))\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"key\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRUCT\"")
+    )
   }
 
   test("withField should throw an exception if either fieldName or col argument are null") {
@@ -1059,9 +1068,18 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should throw an exception if intermediate field is not a struct") {
-    intercept[AnalysisException] {
-      structLevel1.withColumn("a", $"a".withField("b.a", lit(2)))
-    }.getMessage should include("struct argument should be struct type, got: int")
+    checkError(
+      exception = intercept[AnalysisException] {
+        structLevel1.withColumn("a", $"a".withField("b.a", lit(2)))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"update_fields(a.b, WithField(2))\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"a.b\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRUCT\"")
+    )
   }
 
   test("withField should throw an exception if intermediate field reference is ambiguous") {
@@ -1788,9 +1806,18 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("dropFields should throw an exception if called on a non-StructType column") {
-    intercept[AnalysisException] {
-      testData.withColumn("key", $"key".dropFields("a"))
-    }.getMessage should include("struct argument should be struct type, got: int")
+    checkError(
+      exception = intercept[AnalysisException] {
+        testData.withColumn("key", $"key".dropFields("a"))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"update_fields(key, dropfield())\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"key\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRUCT\"")
+    )
   }
 
   test("dropFields should throw an exception if fieldName argument is null") {
@@ -1816,9 +1843,18 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("dropFields should throw an exception if intermediate field is not a struct") {
-    intercept[AnalysisException] {
-      structLevel1.withColumn("a", $"a".dropFields("b.a"))
-    }.getMessage should include("struct argument should be struct type, got: int")
+    checkError(
+      exception = intercept[AnalysisException] {
+        structLevel1.withColumn("a", $"a".dropFields("b.a"))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"update_fields(a.b, dropfield())\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"a.b\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRUCT\"")
+    )
   }
 
   test("dropFields should throw an exception if intermediate field reference is ambiguous") {
@@ -1873,9 +1909,13 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("dropFields should throw an exception if no fields will be left in struct") {
-    intercept[AnalysisException] {
-      structLevel1.withColumn("a", $"a".dropFields("a", "b", "c"))
-    }.getMessage should include("cannot drop all fields in struct")
+    checkError(
+      exception = intercept[AnalysisException] {
+        structLevel1.withColumn("a", $"a".dropFields("a", "b", "c"))
+      },
+      errorClass = "DATATYPE_MISMATCH.CANNOT_DROP_ALL_FIELDS",
+      parameters = Map("sqlExpr" -> "\"update_fields(a, dropfield(), dropfield(), dropfield())\"")
+    )
   }
 
   test("dropFields should drop field with no name in struct") {
@@ -2140,10 +2180,14 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         .select($"struct_col".dropFields("b", "c")),
       Row(Row(1)))
 
-    intercept[AnalysisException] {
-      sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
-        .select($"struct_col".dropFields("a", "b"))
-    }.getMessage should include("cannot drop all fields in struct")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+          .select($"struct_col".dropFields("a", "b"))
+      },
+      errorClass = "DATATYPE_MISMATCH.CANNOT_DROP_ALL_FIELDS",
+      parameters = Map("sqlExpr" -> "\"update_fields(struct_col, dropfield(), dropfield())\"")
+    )
 
     checkAnswer(
       sql("SELECT CAST(NULL AS struct<a:int,b:int>) struct_col")
