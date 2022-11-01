@@ -308,8 +308,7 @@ package object dsl {
       def as(alias: String): Relation = {
         Relation
           .newBuilder(logicalPlan)
-          .setSubqueryAlias(
-            SubqueryAlias.newBuilder().setAlias(alias).setInput(logicalPlan))
+          .setSubqueryAlias(SubqueryAlias.newBuilder().setAlias(alias).setInput(logicalPlan))
           .build()
       }
 

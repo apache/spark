@@ -174,13 +174,8 @@ class Relation(google.protobuf.message.Message):
             b"sort",
             "sql",
             b"sql",
-<<<<<<< HEAD
-=======
             "subquery_alias",
             b"subquery_alias",
-            "union",
-            b"union",
->>>>>>> 5f866187da (update)
             "unknown",
             b"unknown",
         ],
@@ -220,13 +215,8 @@ class Relation(google.protobuf.message.Message):
             b"sort",
             "sql",
             b"sql",
-<<<<<<< HEAD
-=======
             "subquery_alias",
             b"subquery_alias",
-            "union",
-            b"union",
->>>>>>> 5f866187da (update)
             "unknown",
             b"unknown",
         ],
