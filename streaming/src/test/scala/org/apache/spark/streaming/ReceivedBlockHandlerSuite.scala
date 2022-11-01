@@ -253,10 +253,10 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
       isBlockManagerBasedBlockHandler: Boolean): Unit = {
     // ByteBufferBlock-MEMORY_ONLY
     testRecordcount(isBlockManagerBasedBlockHandler, StorageLevel.MEMORY_ONLY,
-      ByteBufferBlock(ByteBuffer.wrap(new Array(0))), blockManager, None)
+      ByteBufferBlock(ByteBuffer.wrap(Array.tabulate(100)(i => i.toByte))), blockManager, None)
     // ByteBufferBlock-MEMORY_ONLY_SER
     testRecordcount(isBlockManagerBasedBlockHandler, StorageLevel.MEMORY_ONLY_SER,
-      ByteBufferBlock(ByteBuffer.wrap(new Array(0))), blockManager, None)
+      ByteBufferBlock(ByteBuffer.wrap(Array.tabulate(100)(i => i.toByte))), blockManager, None)
     // ArrayBufferBlock-MEMORY_ONLY
     testRecordcount(isBlockManagerBasedBlockHandler, StorageLevel.MEMORY_ONLY,
       ArrayBufferBlock(ArrayBuffer.fill(25)(0)), blockManager, Some(25))

@@ -341,13 +341,16 @@ class KryoDeserializationStream(
   }
 
   final override def asIterator: Iterator[Any] = new NextIterator[Any] {
-    override protected def getNext() = {
+    override protected def getNext(): Any = {
       if (KryoDeserializationStream.this.hasNext) {
-        readValue[Any]()
-      } else {
-        finished = true
-        null
+        try {
+          return readValue[Any]()
+        } catch {
+          case eof: EOFException =>
+        }
       }
+      finished = true
+      null
     }
 
     override protected def close(): Unit = {
@@ -358,10 +361,10 @@ class KryoDeserializationStream(
   final override def asKeyValueIterator: Iterator[(Any, Any)] = new NextIterator[(Any, Any)] {
     override protected def getNext(): (Any, Any) = {
       if (KryoDeserializationStream.this.hasNext) {
-        val key = readKey[Any]()
-        if (KryoDeserializationStream.this.hasNext) {
-          val value = readValue[Any]()
-          return (key, value)
+        try {
+          return (readKey[Any](), readValue[Any]())
+        } catch {
+          case eof: EOFException =>
         }
       }
       finished = true
