@@ -76,19 +76,20 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
 
     val exprAlias = Alias(filterCreationSideExp, filterCreationSideExp.toString)()
-    val distinct = Distinct(Project(Seq(exprAlias), filterCreationSidePlan))
+    val childAggregate = Aggregate(Seq(exprAlias), Seq(exprAlias), filterCreationSidePlan)
 
     val rowCount = filterCreationSidePlan.stats.rowCount
     val bloomFilterAgg =
       if (rowCount.isDefined && rowCount.get.longValue > 0L) {
-        new BloomFilterAggregate(new XxHash64(Seq(exprAlias)), Literal(rowCount.get.longValue))
+        new BloomFilterAggregate(
+          new XxHash64(childAggregate.output), Literal(rowCount.get.longValue))
       } else {
-        new BloomFilterAggregate(new XxHash64(Seq(exprAlias)))
+        new BloomFilterAggregate(new XxHash64(childAggregate.output))
       }
 
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
     val aggregate =
-      ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), distinct)))
+      ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), childAggregate)))
     val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
     val filter = BloomFilterMightContain(bloomFilterSubquery,
       new XxHash64(Seq(filterApplicationSideExp)))
