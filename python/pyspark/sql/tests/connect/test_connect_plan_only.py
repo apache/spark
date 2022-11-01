@@ -150,13 +150,13 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         )
         self.assertEqual(plan.root.range.start, 10)
         self.assertEqual(plan.root.range.end, 20)
-        self.assertEqual(plan.root.range.step.step, 3)
+        self.assertEqual(plan.root.range.step, 3)
         self.assertEqual(plan.root.range.num_partitions.num_partitions, 4)
 
         plan = self.connect.range(start=10, end=20)._plan.to_proto(self.connect)
         self.assertEqual(plan.root.range.start, 10)
         self.assertEqual(plan.root.range.end, 20)
-        self.assertFalse(plan.root.range.HasField("step"))
+        self.assertEqual(plan.root.range.step, 1)
         self.assertFalse(plan.root.range.HasField("num_partitions"))
 
     def test_datasource_read(self):

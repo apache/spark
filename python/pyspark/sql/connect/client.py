@@ -149,7 +149,7 @@ class RemoteSparkSession(object):
         self,
         start: int,
         end: int,
-        step: Optional[int] = None,
+        step: int = 1,
         numPartitions: Optional[int] = None,
     ) -> DataFrame:
         """
