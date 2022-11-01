@@ -2221,6 +2221,14 @@ package object config {
       .checkValue(_ >= 0, "needs to be a non-negative value")
       .createWithDefault(5)
 
+  private[spark] val STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE =
+    ConfigBuilder("spark.stage.ignoreDecommissionFetchFailure")
+      .doc("Whether ignore stage fetch failure caused by executor decommission when " +
+        "count spark.stage.maxConsecutiveAttempts")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
     ConfigBuilder("spark.shuffle.push.enabled")
       .doc("Set to true to enable push-based shuffle on the client side and this works in " +

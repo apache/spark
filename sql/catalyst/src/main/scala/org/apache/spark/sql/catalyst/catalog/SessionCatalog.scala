@@ -68,7 +68,8 @@ class SessionCatalog(
     functionResourceLoader: FunctionResourceLoader,
     functionExpressionBuilder: FunctionExpressionBuilder,
     cacheSize: Int = SQLConf.get.tableRelationCacheSize,
-    cacheTTL: Long = SQLConf.get.metadataCacheTTL) extends SQLConfHelper with Logging {
+    cacheTTL: Long = SQLConf.get.metadataCacheTTL,
+    defaultDatabase: String = SQLConf.get.defaultDatabase) extends SQLConfHelper with Logging {
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
@@ -88,7 +89,8 @@ class SessionCatalog(
       DummyFunctionResourceLoader,
       DummyFunctionExpressionBuilder,
       conf.tableRelationCacheSize,
-      conf.metadataCacheTTL)
+      conf.metadataCacheTTL,
+      conf.defaultDatabase)
   }
 
   // For testing only.
@@ -129,7 +131,7 @@ class SessionCatalog(
   // check whether the temporary view or function exists, then, if not, operate on
   // the corresponding item in the current database.
   @GuardedBy("this")
-  protected var currentDb: String = format(DEFAULT_DATABASE)
+  protected var currentDb: String = format(defaultDatabase)
 
   private val validNameFormat = "([\\w_]+)".r
 
@@ -1393,7 +1395,7 @@ class SessionCatalog(
     if (!functionExists(qualifiedIdent)) {
       externalCatalog.createFunction(db, newFuncDefinition)
     } else if (!ignoreIfExists) {
-      throw new FunctionAlreadyExistsException(db = db, func = qualifiedIdent.funcName)
+      throw new FunctionAlreadyExistsException(Seq(db, qualifiedIdent.funcName))
     }
   }
 
@@ -1782,11 +1784,11 @@ class SessionCatalog(
   }
 
   /**
-   * List all registered functions in a database with the given pattern.
+   * List all built-in and temporary functions with the given pattern.
    */
-  private def listRegisteredFunctions(db: String, pattern: String): Seq[FunctionIdentifier] = {
+  private def listBuiltinAndTempFunctions(pattern: String): Seq[FunctionIdentifier] = {
     val functions = (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
-      .filter(_.database.forall(_ == db))
+      .filter(_.database.isEmpty)
     StringUtils.filterPattern(functions.map(_.unquotedString), pattern).map { f =>
       // In functionRegistry, function names are stored as an unquoted format.
       Try(parser.parseFunctionIdentifier(f)) match {
@@ -1815,7 +1817,7 @@ class SessionCatalog(
     requireDbExists(dbName)
     val dbFunctions = externalCatalog.listFunctions(dbName, pattern).map { f =>
       FunctionIdentifier(f, Some(dbName)) }
-    val loadedFunctions = listRegisteredFunctions(db, pattern)
+    val loadedFunctions = listBuiltinAndTempFunctions(pattern)
     val functions = dbFunctions ++ loadedFunctions
     // The session catalog caches some persistent functions in the FunctionRegistry
     // so there can be duplicates.

@@ -1512,9 +1512,9 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.dot(psdf), pser.dot(pdf))
 
         psser = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}).b
-        pser = psser.to_pandas()
+        pser = psser._to_pandas()
         psdf = ps.DataFrame({"c": [7, 8, 9]})
-        pdf = psdf.to_pandas()
+        pdf = psdf._to_pandas()
         self.assert_eq(psser.dot(psdf), pser.dot(pdf))
 
         # SPARK-36968: ps.Series.dot raise "matrices are not aligned" if index is not same
@@ -1866,9 +1866,17 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         self._test_corrwith((df1 + 1), df2.B)
         self._test_corrwith((df1 + 1), (df2.B + 2))
 
+        # There was a regression in pandas 1.5.0, and fixed in pandas 1.5.1.
+        # Therefore, we only test the pandas 1.5.0 in different way.
+        # See https://github.com/pandas-dev/pandas/issues/49141 for the reported issue,
+        # and https://github.com/pandas-dev/pandas/pull/46174 for the initial PR that causes.
         df_bool = ps.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
         ser_bool = ps.Series([True, True, False, True])
-        self._test_corrwith(df_bool, ser_bool)
+        if LooseVersion(pd.__version__) == LooseVersion("1.5.0"):
+            expected = ps.Series([0.5773502691896257, 0.5773502691896257], index=["B", "A"])
+            self.assert_eq(df_bool.corrwith(ser_bool), expected, almost=True)
+        else:
+            self._test_corrwith(df_bool, ser_bool)
 
         self._test_corrwith(self.psdf1, self.psdf1)
         self._test_corrwith(self.psdf1, self.psdf2)
@@ -1876,13 +1884,22 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         self._test_corrwith(self.psdf3, self.psdf4)
 
         self._test_corrwith(self.psdf1, self.psdf1.a)
-        self._test_corrwith(self.psdf1, self.psdf2.b)
+        # There was a regression in pandas 1.5.0, and fixed in pandas 1.5.1.
+        # Therefore, we only test the pandas 1.5.0 in different way.
+        # See https://github.com/pandas-dev/pandas/issues/49141 for the reported issue,
+        # and https://github.com/pandas-dev/pandas/pull/46174 for the initial PR that causes.
+        if LooseVersion(pd.__version__) == LooseVersion("1.5.0"):
+            expected = ps.Series([-0.08827348295047496, 0.4413674147523748], index=["b", "a"])
+            self.assert_eq(self.psdf1.corrwith(self.psdf2.b), expected, almost=True)
+        else:
+            self._test_corrwith(self.psdf1, self.psdf2.b)
+
         self._test_corrwith(self.psdf2, self.psdf3.c)
         self._test_corrwith(self.psdf3, self.psdf4.f)
 
     def _test_corrwith(self, psdf, psobj):
-        pdf = psdf.to_pandas()
-        pobj = psobj.to_pandas()
+        pdf = psdf._to_pandas()
+        pobj = psobj._to_pandas()
         for drop in [True, False]:
             p_corr = pdf.corrwith(pobj, drop=drop)
             ps_corr = psdf.corrwith(psobj, drop=drop)

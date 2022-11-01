@@ -1616,12 +1616,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     var e = intercept[AnalysisException] {
       sql("select * from in_valid_table")
     }
-    assert(e.message.contains("Table or view not found"))
+    checkErrorTableNotFound(e, "`in_valid_table`",
+      ExpectedContext("in_valid_table", 14, 13 + "in_valid_table".length))
 
     e = intercept[AnalysisException] {
       sql("select * from no_db.no_table").show()
     }
-    assert(e.message.contains("Table or view not found"))
+    checkErrorTableNotFound(e, "`no_db`.`no_table`",
+      ExpectedContext("no_db.no_table", 14, 13 + "no_db.no_table".length))
 
     e = intercept[AnalysisException] {
       sql("select * from json.invalid_file")
@@ -1636,8 +1638,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
     }
-    assert(e.message.contains("Table or view not found: " +
-      "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.file_path"))
+    checkErrorTableNotFound(e,
+      "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`",
+    ExpectedContext("`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`", 15,
+      14 + "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`".length))
 
     e = intercept[AnalysisException] {
       sql(s"select id from `Jdbc`.`file_path`")
@@ -1789,8 +1793,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           nestedStructData.select($"record.r1.*"))
 
         // Try resolving something not there.
-        assert(intercept[AnalysisException](sql("SELECT abc.* FROM nestedStructTable"))
-          .getMessage.contains("cannot resolve"))
+        checkError(
+          exception = intercept[AnalysisException]{
+            sql("SELECT abc.* FROM nestedStructTable")
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1051",
+          parameters = Map("targetString" -> "abc", "columns" -> "record"),
+          context = ExpectedContext(fragment = "abc.*", start = 7, stop = 11))
       }
 
       // Create paths with unusual characters
@@ -1819,8 +1828,15 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
 
       // Try star expanding a scalar. This should fail.
-      assert(intercept[AnalysisException](sql("select a.* from testData2")).getMessage.contains(
-        "Can only star expand struct data types."))
+      checkError(
+        exception = intercept[AnalysisException]{
+          sql("select a.* from testData2")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1050",
+        sqlState = None,
+        parameters = Map("attributes" -> "(ArrayBuffer|List)\\(a\\)"),
+        matchPVals = true,
+        queryContext = Array(ExpectedContext(fragment = "a.*", start = 7, stop = 9)))
     }
   }
 
@@ -1866,15 +1882,20 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         dfNoCols,
         dfNoCols.select($"*"))
 
-      var e = intercept[AnalysisException] {
-        sql("SELECT a.* FROM temp_table_no_cols a")
-      }.getMessage
-      assert(e.contains("cannot resolve 'a.*' given input columns ''"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT a.* FROM temp_table_no_cols a")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1051",
+        parameters = Map("targetString" -> "a", "columns" -> ""),
+        context = ExpectedContext(fragment = "a.*", start = 7, stop = 9))
 
-      e = intercept[AnalysisException] {
-        dfNoCols.select($"b.*")
-      }.getMessage
-      assert(e.contains("cannot resolve 'b.*' given input columns ''"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          dfNoCols.select($"b.*")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1051",
+        parameters = Map("targetString" -> "b", "columns" -> ""))
     }
   }
 
@@ -2657,7 +2678,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val m2 = intercept[AnalysisException] {
         sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
       }.message
-      assert(m2.contains("Except can only be performed on tables with the compatible column types"))
+      assert(m2.contains("Except can only be performed on tables with compatible column types"))
 
       withTable("t", "S") {
         sql("CREATE TABLE t(c struct<f:int>) USING parquet")
@@ -2668,8 +2689,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           exception = intercept[AnalysisException] {
             sql(query)
           },
-          errorClass = "DATATYPE_MISMATCH",
-          errorSubClass = "BINARY_OP_DIFF_TYPES",
+          errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
           sqlState = None,
           parameters = Map(
             "sqlExpr" -> "\"(c = C)\"",
@@ -2974,13 +2994,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-26402: accessing nested fields with different cases in case insensitive mode") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val msg = intercept[AnalysisException] {
-        withTable("t") {
-          sql("create table t (s struct<i: Int>) using json")
-          checkAnswer(sql("select s.I from t group by s.i"), Nil)
-        }
-      }.message
-      assert(msg.contains("No such struct field I in i"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          withTable("t") {
+            sql("create table t (s struct<i: Int>) using json")
+            checkAnswer(sql("select s.I from t group by s.i"), Nil)
+          }
+        },
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`I`", "fields" -> "`i`"),
+        context = ExpectedContext(
+          fragment = "s.I",
+          start = 7,
+          stop = 9))
     }
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -3683,11 +3709,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTempView("df") {
       Seq("m@ca").toDF("s").createOrReplaceTempView("df")
 
-      val e = intercept[AnalysisException] {
-        sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM df").collect()
-      }
-      assert(e.message.contains("the pattern 'm%@ca' is invalid, " +
-        "the escape character is not allowed to precede '@'"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM df").collect()
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1216",
+        parameters = Map(
+          "pattern" -> "'m%@ca'",
+          "message" -> "the escape character is not allowed to precede '@'"))
 
       checkAnswer(sql("SELECT s LIKE 'm@@ca' ESCAPE '@' FROM df"), Row(true))
     }
@@ -4493,6 +4522,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }.getCause.getMessage
         assert(msg.contains("[CAST_OVERFLOW]"))
       }
+    }
+  }
+
+  test("SPARK-40903: Don't reorder Add for canonicalize if it is decimal type") {
+    val tableName = "decimalTable"
+    withTable(tableName) {
+      sql(s"create table $tableName(a decimal(12, 5), b decimal(12, 6)) using orc")
+      checkAnswer(sql(s"select sum(coalesce(a + b + 1.75, a)) from $tableName"), Row(null))
     }
   }
 }

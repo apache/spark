@@ -15,7 +15,13 @@ SELECT a, COUNT(b) FROM testData
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping expressions sequence is empty, and 'testdata.a' is not an aggregate function. Wrap '(count(testdata.b) AS `count(b)`)' in windowing function(s) or wrap 'testdata.a' in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
+  "messageParameters" : {
+    "aggExprs" : "(count(testdata.b) AS `count(b)`)",
+    "sqlExpr" : "testdata.a"
+  }
+}
 
 
 -- !query
@@ -177,8 +183,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`non_existing`",
@@ -200,7 +205,12 @@ SELECT COUNT(b) AS k FROM testData GROUP BY k
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-aggregate functions are not allowed in GROUP BY, but found count(testdata.b)
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2424",
+  "messageParameters" : {
+    "sqlExpr" : "count(testdata.b)"
+  }
+}
 
 
 -- !query
@@ -242,8 +252,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`k`",
@@ -328,7 +337,13 @@ SELECT id FROM range(10) HAVING id > 0
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping expressions sequence is empty, and 'id' is not an aggregate function. Wrap '()' in windowing function(s) or wrap 'id' in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
+  "messageParameters" : {
+    "aggExprs" : "()",
+    "sqlExpr" : "id"
+  }
+}
 
 
 -- !query
@@ -362,10 +377,13 @@ SELECT 1 FROM range(10) HAVING MAX(id) > 0
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-
-Aggregate/Window/Generate expressions are not valid in where clause of the query.
-Expression in where clause: [(max(id) > CAST(0 AS BIGINT))]
-Invalid expressions: [max(id)]
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "messageParameters" : {
+    "condition" : "(max(id) > CAST(0 AS BIGINT))",
+    "invalidExprSqls" : "max(id)"
+  }
+}
 
 
 -- !query
@@ -496,8 +514,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"INT\"",
@@ -522,8 +539,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"SMALLINT\"",
@@ -548,8 +564,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"BIGINT\"",
@@ -574,8 +589,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
     "inputSql" : "\"true\"",
     "inputType" : "\"STRING\"",
@@ -600,8 +614,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
     "inputType" : "\"DECIMAL(2,1)\"",
@@ -626,8 +639,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH",
-  "errorSubClass" : "UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
     "inputType" : "\"DOUBLE\"",
@@ -762,10 +774,13 @@ SELECT count(*) FROM test_agg WHERE count(*) > 1L
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-
-Aggregate/Window/Generate expressions are not valid in where clause of the query.
-Expression in where clause: [(count(1) > 1L)]
-Invalid expressions: [count(1)]
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "messageParameters" : {
+    "condition" : "(count(1) > 1L)",
+    "invalidExprSqls" : "count(1)"
+  }
+}
 
 
 -- !query
@@ -774,10 +789,13 @@ SELECT count(*) FROM test_agg WHERE count(*) + 1L > 1L
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-
-Aggregate/Window/Generate expressions are not valid in where clause of the query.
-Expression in where clause: [((count(1) + 1L) > 1L)]
-Invalid expressions: [count(1)]
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "messageParameters" : {
+    "condition" : "((count(1) + 1L) > 1L)",
+    "invalidExprSqls" : "count(1)"
+  }
+}
 
 
 -- !query
@@ -786,10 +804,13 @@ SELECT count(*) FROM test_agg WHERE k = 1 or k = 2 or count(*) + 1L > 1L or max(
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-
-Aggregate/Window/Generate expressions are not valid in where clause of the query.
-Expression in where clause: [(((test_agg.k = 1) OR (test_agg.k = 2)) OR (((count(1) + 1L) > 1L) OR (max(test_agg.k) > 1)))]
-Invalid expressions: [count(1), max(test_agg.k)]
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "messageParameters" : {
+    "condition" : "(((test_agg.k = 1) OR (test_agg.k = 2)) OR (((count(1) + 1L) > 1L) OR (max(test_agg.k) > 1)))",
+    "invalidExprSqls" : "count(1), max(test_agg.k)"
+  }
+}
 
 
 -- !query

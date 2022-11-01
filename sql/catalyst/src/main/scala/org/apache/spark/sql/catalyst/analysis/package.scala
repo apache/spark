@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.quoteNameParts
 import org.apache.spark.sql.errors.QueryErrorsBase
 
 /**
@@ -40,16 +41,6 @@ package object analysis {
   val caseSensitiveResolution = (a: String, b: String) => a == b
 
   implicit class AnalysisErrorAt(t: TreeNode[_]) extends QueryErrorsBase {
-    /** Fails the analysis at the point where a specific tree node was parsed. */
-    def failAnalysis(msg: String): Nothing = {
-      throw new AnalysisException(msg, t.origin.line, t.origin.startPosition)
-    }
-
-    /** Fails the analysis at the point where a specific tree node was parsed with a given cause. */
-    def failAnalysis(msg: String, cause: Throwable): Nothing = {
-      throw new AnalysisException(msg, t.origin.line, t.origin.startPosition, cause = Some(cause))
-    }
-
     /**
      * Fails the analysis at the point where a specific tree node was parsed using a provided
      * error class and message parameters.
@@ -63,24 +54,36 @@ package object analysis {
 
     /**
      * Fails the analysis at the point where a specific tree node was parsed using a provided
-     * error class and subclass and message parameters.
-     */
+     * error class, message parameters and a given cause. */
     def failAnalysis(
         errorClass: String,
-        errorSubClass: String,
-        messageParameters: Map[String, String] = Map.empty[String, String]): Nothing = {
+        messageParameters: Map[String, String],
+        cause: Throwable): Nothing = {
       throw new AnalysisException(
         errorClass = errorClass,
-        errorSubClass = errorSubClass,
         messageParameters = messageParameters,
-        origin = t.origin)
+        origin = t.origin,
+        cause = Option(cause))
     }
 
     def dataTypeMismatch(expr: Expression, mismatch: DataTypeMismatch): Nothing = {
       throw new AnalysisException(
-        errorClass = "DATATYPE_MISMATCH",
-        errorSubClass = mismatch.errorSubClass,
+        errorClass = s"DATATYPE_MISMATCH.${mismatch.errorSubClass}",
         messageParameters = mismatch.messageParameters + ("sqlExpr" -> toSQLExpr(expr)),
+        origin = t.origin)
+    }
+
+    def tableNotFound(name: Seq[String]): Nothing = {
+      throw new AnalysisException(
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        messageParameters = Map("relationName" ->  quoteNameParts(name)),
+        origin = t.origin)
+    }
+
+    def schemaNotFound(name: Seq[String]): Nothing = {
+      throw new AnalysisException(
+        errorClass = "SCHEMA_NOT_FOUND",
+        messageParameters = Map("schemaName" -> quoteNameParts(name)),
         origin = t.origin)
     }
   }

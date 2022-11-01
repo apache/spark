@@ -1293,7 +1293,7 @@ abstract class ToTimestamp
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
     val parseErrorBranch: String = if (failOnError) {
-      s"throw QueryExecutionErrors.ansiDateTimeParseError(e);"
+      "throw QueryExecutionErrors.ansiDateTimeParseError(e);"
     } else {
       s"${ev.isNull} = true;"
     }
@@ -3072,9 +3072,9 @@ object SubtractDates {
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_('Europe/Amsterdam', 'America/Los_Angeles', timestamp_ntz'2021-12-06 00:00:00');
+      > SELECT _FUNC_('Europe/Brussels', 'America/Los_Angeles', timestamp_ntz'2021-12-06 00:00:00');
        2021-12-05 15:00:00
-      > SELECT _FUNC_('Europe/Amsterdam', timestamp_ntz'2021-12-05 15:00:00');
+      > SELECT _FUNC_('Europe/Brussels', timestamp_ntz'2021-12-05 15:00:00');
        2021-12-06 00:00:00
   """,
   group = "datetime_funcs",

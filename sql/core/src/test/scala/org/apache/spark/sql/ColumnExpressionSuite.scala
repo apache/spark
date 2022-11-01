@@ -1043,13 +1043,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should throw an exception if any intermediate structs don't exist") {
-    intercept[AnalysisException] {
-      structLevel2.withColumn("a", $"a".withField("x.b", lit(2)))
-    }.getMessage should include("No such struct field x in a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        structLevel2.withColumn("a", $"a".withField("x.b", lit(2)))
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`x`", "fields" -> "`a`"))
 
-    intercept[AnalysisException] {
-      structLevel3.withColumn("a", $"a".withField("a.x.b", lit(2)))
-    }.getMessage should include("No such struct field x in a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        structLevel3.withColumn("a", $"a".withField("a.x.b", lit(2)))
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`x`", "fields" -> "`a`"))
   }
 
   test("withField should throw an exception if intermediate field is not a struct") {
@@ -1465,9 +1471,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             nullable = false))),
           nullable = false))))
 
-    intercept[AnalysisException] {
-      df.withColumn("a", $"a".withField("a.b.e.f", lit(2)))
-    }.getMessage should include("No such struct field a in a.b")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.withColumn("a", $"a".withField("a.b.e.f", lit(2)))
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`a`", "fields" -> "`a`.`b`"))
   }
 
   private lazy val mixedCaseStructLevel1: DataFrame = spark.createDataFrame(
@@ -1574,13 +1583,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("withField should throw an exception because casing is different") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      intercept[AnalysisException] {
-        mixedCaseStructLevel2.withColumn("a", $"a".withField("A.a", lit(2)))
-      }.getMessage should include("No such struct field A in a, B")
+      checkError(
+        exception = intercept[AnalysisException] {
+          mixedCaseStructLevel2.withColumn("a", $"a".withField("A.a", lit(2)))
+        },
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`A`", "fields" -> "`a`, `B`"))
 
-      intercept[AnalysisException] {
-        mixedCaseStructLevel2.withColumn("a", $"a".withField("b.a", lit(2)))
-      }.getMessage should include("No such struct field b in a, B")
+      checkError(
+        exception = intercept[AnalysisException] {
+          mixedCaseStructLevel2.withColumn("a", $"a".withField("b.a", lit(2)))
+        },
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`b`", "fields" -> "`a`, `B`"))
     }
   }
 
@@ -1785,13 +1800,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("dropFields should throw an exception if any intermediate structs don't exist") {
-    intercept[AnalysisException] {
-      structLevel2.withColumn("a", $"a".dropFields("x.b"))
-    }.getMessage should include("No such struct field x in a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        structLevel2.withColumn("a", $"a".dropFields("x.b"))
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`x`", "fields" -> "`a`"))
 
-    intercept[AnalysisException] {
-      structLevel3.withColumn("a", $"a".dropFields("a.x.b"))
-    }.getMessage should include("No such struct field x in a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        structLevel3.withColumn("a", $"a".dropFields("a.x.b"))
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`x`", "fields" -> "`a`"))
   }
 
   test("dropFields should throw an exception if intermediate field is not a struct") {
@@ -2035,13 +2056,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("dropFields should throw an exception because casing is different") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      intercept[AnalysisException] {
-        mixedCaseStructLevel2.withColumn("a", $"a".dropFields("A.a"))
-      }.getMessage should include("No such struct field A in a, B")
+      checkError(
+        exception = intercept[AnalysisException] {
+          mixedCaseStructLevel2.withColumn("a", $"a".dropFields("A.a"))
+        },
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`A`", "fields" -> "`a`, `B`"))
 
-      intercept[AnalysisException] {
-        mixedCaseStructLevel2.withColumn("a", $"a".dropFields("b.a"))
-      }.getMessage should include("No such struct field b in a, B")
+      checkError(
+        exception = intercept[AnalysisException] {
+          mixedCaseStructLevel2.withColumn("a", $"a".dropFields("b.a"))
+        },
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`b`", "fields" -> "`a`, `B`"))
     }
   }
 
@@ -2279,9 +2306,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("should be able to refer to newly added nested column") {
-    intercept[AnalysisException] {
-      structLevel1.select($"a".withField("d", lit(4)).withField("e", $"a.d" + 1).as("a"))
-    }.getMessage should include("No such struct field d in a, b, c")
+    checkError(
+      exception = intercept[AnalysisException] {
+        structLevel1.select($"a".withField("d", lit(4)).withField("e", $"a.d" + 1).as("a"))
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`d`", "fields" -> "`a`, `b`, `c`"))
 
     checkAnswer(
       structLevel1
@@ -2327,11 +2357,14 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
     // we can't access the nested column in subsequent select statement after dropping it in a
     // previous select statement
-    intercept[AnalysisException]{
-      structLevel1
-        .select($"a".dropFields("c").as("a"))
-        .select($"a".withField("z", $"a.c")).as("a")
-    }.getMessage should include("No such struct field c in a, b")
+    checkError(
+      exception = intercept[AnalysisException]{
+        structLevel1
+          .select($"a".dropFields("c").as("a"))
+          .select($"a".withField("z", $"a.c")).as("a")
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"))
   }
 
   test("nestedDf should generate nested DataFrames") {

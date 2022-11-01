@@ -180,7 +180,7 @@ class DatetimeOpsTest(OpsTestBase):
         data = pd.date_range("1994-1-31 10:30:15", periods=3, freq="M")
         pser = pd.Series(data)
         psser = ps.Series(data)
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):

@@ -15,7 +15,13 @@ SELECT a, udaf(b) FROM testData
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping expressions sequence is empty, and 'testdata.a' is not an aggregate function. Wrap '()' in windowing function(s) or wrap 'testdata.a' in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
+  "messageParameters" : {
+    "aggExprs" : "()",
+    "sqlExpr" : "testdata.a"
+  }
+}
 
 
 -- !query
@@ -146,7 +152,20 @@ SELECT udaf(DISTINCT b), udaf(DISTINCT b, c) FROM (SELECT 1 AS a, 2 AS b, 3 AS c
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Function pythonudf does not support DISTINCT; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1023",
+  "messageParameters" : {
+    "prettyName" : "pythonudf",
+    "syntax" : "DISTINCT"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "udaf(DISTINCT b)"
+  } ]
+}
 
 
 -- !query
@@ -176,8 +195,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`non_existing`",
@@ -232,8 +250,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`k`",
@@ -294,8 +311,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`id`",

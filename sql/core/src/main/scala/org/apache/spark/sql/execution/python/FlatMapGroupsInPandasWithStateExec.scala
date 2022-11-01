@@ -48,7 +48,8 @@ import org.apache.spark.util.CompletionIterator
  * @param outputMode the output mode of `functionExpr`
  * @param timeoutConf used to timeout groups that have not received data in a while
  * @param batchTimestampMs processing timestamp of the current batch.
- * @param eventTimeWatermark event time watermark for the current batch
+ * @param eventTimeWatermarkForLateEvents event time watermark for filtering late events
+ * @param eventTimeWatermarkForEviction event time watermark for state eviction
  * @param child logical plan of the underlying data
  */
 case class FlatMapGroupsInPandasWithStateExec(
@@ -61,7 +62,8 @@ case class FlatMapGroupsInPandasWithStateExec(
     outputMode: OutputMode,
     timeoutConf: GroupStateTimeout,
     batchTimestampMs: Option[Long],
-    eventTimeWatermark: Option[Long],
+    eventTimeWatermarkForLateEvents: Option[Long],
+    eventTimeWatermarkForEviction: Option[Long],
     child: SparkPlan) extends UnaryExecNode with FlatMapGroupsWithStateExecBase {
 
   // TODO(SPARK-40444): Add the support of initial state.
@@ -83,7 +85,17 @@ case class FlatMapGroupsInPandasWithStateExec(
   private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
   private lazy val (dedupAttributes, argOffsets) = resolveArgOffsets(
     groupingAttributes ++ child.output, groupingAttributes)
-  private lazy val unsafeProj = UnsafeProjection.create(dedupAttributes, child.output)
+
+  // See processTimedOutState: we create a row which contains the actual values for grouping key,
+  // but all nulls for value side by intention. This technically changes the schema of input to
+  // be "nullable", hence the schema information and the internal projection of row should take
+  // this into consideration. Strictly saying, it's not applied to the part of grouping key, but
+  // it doesn't hurt much even if we apply the same for grouping key as well.
+  private lazy val dedupAttributesWithNull =
+    dedupAttributes.map(_.withNullability(newNullability = true))
+  private lazy val childOutputWithNull = child.output.map(_.withNullability(newNullability = true))
+  private lazy val unsafeProj = UnsafeProjection.create(dedupAttributesWithNull,
+    childOutputWithNull)
 
   override def requiredChildDistribution: Seq[Distribution] =
     StatefulOperatorPartitioning.getCompatibleDistribution(
@@ -121,7 +133,7 @@ case class FlatMapGroupsInPandasWithStateExec(
       if (isTimeoutEnabled) {
         val timeoutThreshold = timeoutConf match {
           case ProcessingTimeTimeout => batchTimestampMs.get
-          case EventTimeTimeout => eventTimeWatermark.get
+          case EventTimeTimeout => eventTimeWatermarkForEviction.get
           case _ =>
             throw new IllegalStateException(
               s"Cannot filter timed out keys for $timeoutConf")
@@ -134,7 +146,7 @@ case class FlatMapGroupsInPandasWithStateExec(
           val joinedKeyRow = unsafeProj(
             new JoinedRow(
               stateData.keyRow,
-              new GenericInternalRow(Array.fill(dedupAttributes.length)(null: Any))))
+              new GenericInternalRow(Array.fill(dedupAttributesWithNull.length)(null: Any))))
 
           (stateData.keyRow, stateData, Iterator.single(joinedKeyRow))
         }
@@ -150,13 +162,14 @@ case class FlatMapGroupsInPandasWithStateExec(
         chainedFunc,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
         Array(argOffsets),
-        StructType.fromAttributes(dedupAttributes),
+        StructType.fromAttributes(dedupAttributesWithNull),
         sessionLocalTimeZone,
         pythonRunnerConf,
         stateEncoder.asInstanceOf[ExpressionEncoder[Row]],
         groupingAttributes.toStructType,
         outAttributes.toStructType,
-        stateType)
+        stateType,
+        pythonMetrics)
 
       val context = TaskContext.get()
 
@@ -164,7 +177,7 @@ case class FlatMapGroupsInPandasWithStateExec(
         val groupedState = GroupStateImpl.createForStreaming(
           Option(stateData.stateObj).map { r => assert(r.isInstanceOf[Row]); r },
           batchTimestampMs.getOrElse(NO_TIMESTAMP),
-          eventTimeWatermark.getOrElse(NO_TIMESTAMP),
+          eventTimeWatermarkForEviction.getOrElse(NO_TIMESTAMP),
           timeoutConf,
           hasTimedOut = hasTimedOut,
           watermarkPresent).asInstanceOf[GroupStateImpl[Row]]

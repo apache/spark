@@ -77,7 +77,8 @@ set +o posix
 CMD=()
 DELIM=$'\n'
 CMD_START_FLAG="false"
-while IFS= read -d "$DELIM" -r ARG; do
+while IFS= read -d "$DELIM" -r _ARG; do
+  ARG=${_ARG//$'\r'}
   if [ "$CMD_START_FLAG" == "true" ]; then
     CMD+=("$ARG")
   else

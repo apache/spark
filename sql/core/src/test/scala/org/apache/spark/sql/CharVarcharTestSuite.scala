@@ -806,13 +806,11 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
   }
 
   test("create table w/ location and fit length values") {
-    Seq("char", "varchar").foreach { typ =>
-      withTempPath { dir =>
-        withTable("t") {
-          sql("SELECT '12' as col").write.format(format).save(dir.toString)
-          sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
-          checkAnswer(sql("select * from t"), Row("12"))
-        }
+    withTempPath { dir =>
+      withTable("t") {
+        sql("SELECT '12' as col1, '12' as col2").write.format(format).save(dir.toString)
+        sql(s"CREATE TABLE t (col1 char(3), col2 varchar(3)) using $format LOCATION '$dir'")
+        checkAnswer(sql("select * from t"), Row("12 ", "12"))
       }
     }
   }
@@ -830,14 +828,12 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
   }
 
   test("alter table set location w/ fit length values") {
-    Seq("char", "varchar").foreach { typ =>
-      withTempPath { dir =>
-        withTable("t") {
-          sql("SELECT '12' as col").write.format(format).save(dir.toString)
-          sql(s"CREATE TABLE t (col $typ(2)) using $format")
-          sql(s"ALTER TABLE t SET LOCATION '$dir'")
-          checkAnswer(spark.table("t"), Row("12"))
-        }
+    withTempPath { dir =>
+      withTable("t") {
+        sql("SELECT '12' as col1, '12' as col2").write.format(format).save(dir.toString)
+        sql(s"CREATE TABLE t (col1 char(3), col2 varchar(3)) using $format")
+        sql(s"ALTER TABLE t SET LOCATION '$dir'")
+        checkAnswer(spark.table("t"), Row("12 ", "12"))
       }
     }
   }

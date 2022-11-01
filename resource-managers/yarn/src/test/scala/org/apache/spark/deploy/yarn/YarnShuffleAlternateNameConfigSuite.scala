@@ -25,7 +25,7 @@ import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
-import org.apache.spark.tags.ExtendedYarnTest
+import org.apache.spark.tags.{ExtendedLevelDBTest, ExtendedYarnTest}
 
 /**
  * SPARK-34828: Integration test for the external shuffle service with an alternate name and
@@ -77,6 +77,7 @@ abstract class YarnShuffleAlternateNameConfigSuite extends YarnShuffleIntegratio
     }
   }
 }
+@ExtendedLevelDBTest
 @ExtendedYarnTest
 class YarnShuffleAlternateNameConfigWithLevelDBBackendSuite
   extends YarnShuffleAlternateNameConfigSuite {

@@ -4884,6 +4884,52 @@ def window(
         return _invoke_function("window", time_col, windowDuration)
 
 
+def window_time(
+    windowColumn: "ColumnOrName",
+) -> Column:
+    """Computes the event time from a window column. The column window values are produced
+    by window aggregating operators and are of type `STRUCT<start: TIMESTAMP, end: TIMESTAMP>`
+    where start is inclusive and end is exclusive. The event time of records produced by window
+    aggregating operators can be computed as ``window_time(window)`` and are
+    ``window.end - lit(1).alias("microsecond")`` (as microsecond is the minimal supported event
+    time precision). The window column must be one produced by a window aggregating operator.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    windowColumn : :class:`~pyspark.sql.Column`
+        The window column of a window aggregate records.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> import datetime
+    >>> df = spark.createDataFrame(
+    ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)],
+    ... ).toDF("date", "val")
+
+    Group the data into 5 second time windows and aggregate as sum.
+
+    >>> w = df.groupBy(window("date", "5 seconds")).agg(sum("val").alias("sum"))
+
+    Extract the window event time using the window_time function.
+
+    >>> w.select(
+    ...     w.window.end.cast("string").alias("end"),
+    ...     window_time(w.window).cast("string").alias("window_time"),
+    ...     "sum"
+    ... ).collect()
+    [Row(end='2016-03-11 09:00:10', window_time='2016-03-11 09:00:09.999999', sum=1)]
+    """
+    window_col = _to_java_column(windowColumn)
+    return _invoke_function("window_time", window_col)
+
+
 def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) -> Column:
     """
     Generates session window given a timestamp specifying column.
@@ -5092,7 +5138,7 @@ def hash(*cols: "ColumnOrName") -> Column:
 
 def xxhash64(*cols: "ColumnOrName") -> Column:
     """Calculates the hash code of given columns using the 64-bit variant of the xxHash algorithm,
-    and returns the result as a long column.
+    and returns the result as a long column. The hash computation uses an initial seed of 42.
 
     .. versionadded:: 3.0.0
 
@@ -6956,6 +7002,41 @@ def posexplode(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("posexplode", col)
 
 
+def inline(col: "ColumnOrName") -> Column:
+    """
+    Explodes an array of structs into a table.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        input column of values to explode.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        generator expression with the inline exploded result.
+
+    See Also
+    --------
+    :meth:`explode`
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), Row(a=3, b=4)])])
+    >>> df.select(inline(df.structlist)).show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    |  1|  2|
+    |  3|  4|
+    +---+---+
+    """
+    return _invoke_function_over_columns("inline", col)
+
+
 def explode_outer(col: "ColumnOrName") -> Column:
     """
     Returns a new row for each element in the given array or map.
@@ -7047,6 +7128,47 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
     +---+----------+----+----+
     """
     return _invoke_function_over_columns("posexplode_outer", col)
+
+
+def inline_outer(col: "ColumnOrName") -> Column:
+    """
+    Explodes an array of structs into a table.
+    Unlike inline, if the array is null or empty then null is produced for each nested column.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        input column of values to explode.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        generator expression with the inline exploded result.
+
+    See Also
+    --------
+    :meth:`explode_outer`
+    :meth:`inline`
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([
+    ...     Row(id=1, structlist=[Row(a=1, b=2), Row(a=3, b=4)]),
+    ...     Row(id=2, structlist=[])
+    ... ])
+    >>> df.select('id', inline_outer(df.structlist)).show()
+    +---+----+----+
+    | id|   a|   b|
+    +---+----+----+
+    |  1|   1|   2|
+    |  1|   3|   4|
+    |  2|null|null|
+    +---+----+----+
+    """
+    return _invoke_function_over_columns("inline_outer", col)
 
 
 def get_json_object(col: "ColumnOrName", path: str) -> Column:

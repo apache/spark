@@ -45,7 +45,6 @@ from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
     BooleanType,
     DoubleType,
-    IntegralType,
     LongType,
     NumericType,
 )
@@ -1421,32 +1420,16 @@ class Frame(object, metaclass=ABCMeta):
         def prod(psser: "Series") -> Column:
             spark_type = psser.spark.data_type
             spark_column = psser.spark.column
-
-            if not skipna:
-                spark_column = F.when(spark_column.isNull(), np.nan).otherwise(spark_column)
-
             if isinstance(spark_type, BooleanType):
-                scol = F.min(F.coalesce(spark_column, F.lit(True))).cast(LongType())
-            elif isinstance(spark_type, NumericType):
-                num_zeros = F.sum(F.when(spark_column == 0, 1).otherwise(0))
-                sign = F.when(
-                    F.sum(F.when(spark_column < 0, 1).otherwise(0)) % 2 == 0, 1
-                ).otherwise(-1)
-
-                scol = F.when(num_zeros > 0, 0).otherwise(
-                    sign * F.exp(F.sum(F.log(F.abs(spark_column))))
-                )
-
-                if isinstance(spark_type, IntegralType):
-                    scol = F.round(scol).cast(LongType())
-            else:
+                spark_column = spark_column.cast(LongType())
+            elif not isinstance(spark_type, NumericType):
                 raise TypeError(
                     "Could not convert {} ({}) to numeric".format(
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
 
-            return F.coalesce(scol, F.lit(1))
+            return SF.product(spark_column, skipna)
 
         return self._reduce_for_stat_function(
             prod,
@@ -2127,6 +2110,8 @@ class Frame(object, metaclass=ABCMeta):
         """
         Return unbiased standard error of the mean over requested axis.
 
+        .. versionadded:: 3.3.0
+
         Parameters
         ----------
         axis : {index (0), columns (1)}
@@ -2139,6 +2124,9 @@ class Frame(object, metaclass=ABCMeta):
         ddof : int, default 1
             Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
             where N represents the number of elements.
+
+            .. versionchanged:: 3.4.0
+               Supported including arbitary integers.
         numeric_only : bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
@@ -2166,6 +2154,11 @@ class Frame(object, metaclass=ABCMeta):
         b    0.471405
         dtype: float64
 
+        >>> psdf.sem(ddof=2)
+        a    0.816497
+        b    0.816497
+        dtype: float64
+
         >>> psdf.sem(axis=1)
         0    1.5
         1    1.5
@@ -2187,7 +2180,8 @@ class Frame(object, metaclass=ABCMeta):
         >>> psser.sem(ddof=0)
         0.47140452079103173
         """
-        assert ddof in (0, 1)
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
 
         axis = validate_axis(axis)
 
@@ -2205,10 +2199,7 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            if ddof == 0:
-                return F.stddev_pop(spark_column)
-            else:
-                return F.stddev_samp(spark_column)
+            return SF.stddev(spark_column, ddof)
 
         def sem(psser: "Series") -> Column:
             return std(psser) / F.sqrt(Frame._count_expr(psser))

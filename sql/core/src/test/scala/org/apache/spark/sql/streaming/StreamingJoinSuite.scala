@@ -618,7 +618,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
         val numPartitions = spark.sqlContext.conf.getConf(SQLConf.SHUFFLE_PARTITIONS)
 
         assert(query.lastExecution.executedPlan.collect {
-          case j @ StreamingSymmetricHashJoinExec(_, _, _, _, _, _, _, _,
+          case j @ StreamingSymmetricHashJoinExec(_, _, _, _, _, _, _, _, _,
             ShuffleExchangeExec(opA: HashPartitioning, _, _),
             ShuffleExchangeExec(opB: HashPartitioning, _, _))
               if partitionExpressionsColumns(opA.expressions) === Seq("a", "b")

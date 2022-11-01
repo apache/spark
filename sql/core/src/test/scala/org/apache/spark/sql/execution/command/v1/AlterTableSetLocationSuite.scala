@@ -111,7 +111,8 @@ trait AlterTableSetLocationSuiteBase extends command.AlterTableSetLocationSuiteB
     val e = intercept[AnalysisException] {
       sql("ALTER TABLE ns.does_not_exist SET LOCATION '/mister/spark'")
     }
-    assert(e.getMessage.contains("Table not found: ns.does_not_exist"))
+    checkErrorTableNotFound(e, "`ns`.`does_not_exist`",
+      ExpectedContext("ns.does_not_exist", 12, 11 + "ns.does_not_exist".length))
   }
 
   test("partition to alter set location does not exist") {
@@ -119,11 +120,15 @@ trait AlterTableSetLocationSuiteBase extends command.AlterTableSetLocationSuiteB
       sql(buildCreateTableSQL(t))
 
       sql(s"INSERT INTO $t PARTITION (a = '1', b = '2') SELECT 1, 'abc'")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t PARTITION (b='2') SET LOCATION '/mister/spark'")
-      }
-      assert(e.getMessage == "Partition spec is invalid. The spec (b) must match the partition " +
-        "spec (a, b) defined in table '`spark_catalog`.`ns`.`tbl`'")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t PARTITION (b='2') SET LOCATION '/mister/spark'")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        parameters = Map(
+          "specKeys" -> "b",
+          "partitionColumnNames" -> "a, b",
+          "tableName" -> "`spark_catalog`.`ns`.`tbl`"))
     }
   }
 }

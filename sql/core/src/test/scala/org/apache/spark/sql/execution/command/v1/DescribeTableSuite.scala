@@ -46,7 +46,10 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       val e = intercept[AnalysisException] {
         sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
       }
-      assert(e.message === "Partition not found in table 'table' database 'ns':\nid -> 1")
+      checkError(e,
+        errorClass = "PARTITIONS_NOT_FOUND",
+        parameters = Map("partitionList" -> "PARTITION (`id` = 1)",
+          "tableName" -> "`ns`.`table`"))
     }
   }
 
@@ -59,7 +62,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       val errMsg = intercept[AnalysisException] {
         sql(s"DESC $tbl key1").collect()
       }.getMessage
-      assert(errMsg === "Column key1 does not exist")
+      assert(errMsg === "Column key1 does not exist.")
     }
   }
 
@@ -79,7 +82,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         val errMsg = intercept[AnalysisException] {
           sql(s"DESC $tbl KEY").collect()
         }.getMessage
-        assert(errMsg === "Column KEY does not exist")
+        assert(errMsg === "Column KEY does not exist.")
       }
     }
   }

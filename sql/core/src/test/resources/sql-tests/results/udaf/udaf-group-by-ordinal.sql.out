@@ -386,7 +386,13 @@ select a, b, udaf(1) from data group by cube(1, 3)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping expressions sequence is empty, and 'data.a' is not an aggregate function. Wrap '()' in windowing function(s) or wrap 'data.a' in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
+  "messageParameters" : {
+    "aggExprs" : "()",
+    "sqlExpr" : "data.a"
+  }
+}
 
 
 -- !query

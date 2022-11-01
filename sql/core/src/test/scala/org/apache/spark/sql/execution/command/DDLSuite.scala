@@ -192,8 +192,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       }
       checkError(
         exception = e,
-        errorClass = "UNSUPPORTED_FEATURE",
-        errorSubClass = "TABLE_OPERATION",
+        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         sqlState = "0A000",
         parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
           "operation" -> "ALTER COLUMN ... FIRST | ALTER"))
@@ -525,19 +524,29 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("create table - partition column names not in table definition") {
-    val e = intercept[AnalysisException] {
-      sql("CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
-    }
-    assert(e.message == "partition column c is not defined in table " +
-      s"$SESSION_CATALOG_NAME.default.tbl, defined table columns are: a, b")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1206",
+      parameters = Map(
+        "colType" -> "partition",
+        "colName" -> "c",
+        "tableName" -> s"$SESSION_CATALOG_NAME.default.tbl",
+        "tableCols" -> "a, b"))
   }
 
   test("create table - bucket column names not in table definition") {
-    val e = intercept[AnalysisException] {
-      sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
-    }
-    assert(e.message == "bucket column c is not defined in table " +
-      s"$SESSION_CATALOG_NAME.default.tbl, defined table columns are: a, b")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1206",
+      parameters = Map(
+        "colType" -> "bucket",
+        "colName" -> "c",
+        "tableName" -> s"$SESSION_CATALOG_NAME.default.tbl",
+        "tableCols" -> "a, b"))
   }
 
   test("create table - column repeated in partition columns") {
@@ -824,8 +833,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       spark.range(10).createOrReplaceTempView("tab1")
       sql("ALTER TABLE tab1 RENAME TO tab2")
       checkAnswer(spark.table("tab2"), spark.range(10).toDF())
-      val e = intercept[AnalysisException](spark.table("tab1")).getMessage
-      assert(e.contains("Table or view not found"))
+      val e = intercept[AnalysisException](spark.table("tab1"))
+      checkErrorTableNotFound(e, "`tab1`")
       sql("ALTER VIEW tab2 RENAME TO tab1")
       checkAnswer(spark.table("tab1"), spark.range(10).toDF())
       intercept[AnalysisException] { spark.table("tab2") }
@@ -859,8 +868,9 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE tab1 RENAME TO tab2")
       }
-      assert(e.getMessage.contains(
-        "RENAME TEMPORARY VIEW from '`tab1`' to '`tab2`': destination table already exists"))
+      checkError(e,
+      "TABLE_OR_VIEW_ALREADY_EXISTS",
+        parameters = Map("relationName" -> "`tab2`"))
 
       val catalog = spark.sessionState.catalog
       assert(catalog.listTables("default") == Seq(TableIdentifier("tab1"), TableIdentifier("tab2")))
@@ -894,8 +904,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE view1 RENAME TO view2")
       }
-      assert(e.getMessage.contains(
-        "RENAME TEMPORARY VIEW from '`view1`' to '`view2`': destination table already exists"))
+      checkErrorTableAlreadyExists(e, "`view2`")
 
       val catalog = spark.sessionState.catalog
       assert(catalog.listTables("default") ==
@@ -1215,8 +1224,10 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       sql("CREATE TEMPORARY VIEW t_temp AS SELECT 1, 2")
       val e = intercept[TempTableAlreadyExistsException] {
         sql("CREATE TEMPORARY TABLE t_temp (c3 int, c4 string) USING JSON")
-      }.getMessage
-      assert(e.contains("Temporary view 't_temp' already exists"))
+      }
+      checkError(e,
+        errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+        parameters = Map("relationName" -> "`t_temp`"))
     }
   }
 
@@ -1225,8 +1236,10 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       sql("CREATE TEMPORARY VIEW t_temp AS SELECT 1, 2")
       val e = intercept[TempTableAlreadyExistsException] {
         sql("CREATE TEMPORARY VIEW t_temp (c3 int, c4 string) USING JSON")
-      }.getMessage
-      assert(e.contains("Temporary view 't_temp' already exists"))
+      }
+      checkError(e,
+        errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+        parameters = Map("relationName" -> "`t_temp`"))
     }
   }
 
