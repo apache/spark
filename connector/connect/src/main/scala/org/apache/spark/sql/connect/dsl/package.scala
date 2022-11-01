@@ -331,24 +331,24 @@ package object dsl {
           .build()
       }
 
-
-      def createDefaultSortField(col: String): proto.Sort.SortField = {
-        proto.Sort.SortField
+      def createDefaultSortField(col: String): Sort.SortField = {
+        Sort.SortField
           .newBuilder()
-          .setNulls(proto.Sort.SortNulls.SORT_NULLS_FIRST)
-          .setDirection(proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING)
-          .setExpression(proto.Expression.newBuilder
-            .setUnresolvedAttribute(
-              proto.Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier(col).build())
-            .build())
+          .setNulls(Sort.SortNulls.SORT_NULLS_FIRST)
+          .setDirection(Sort.SortDirection.SORT_DIRECTION_ASCENDING)
+          .setExpression(
+            Expression.newBuilder
+              .setUnresolvedAttribute(
+                Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier(col).build())
+              .build())
           .build()
       }
 
-      def sort(columns: String*): proto.Relation = {
-        proto.Relation
+      def sort(columns: String*): Relation = {
+        Relation
           .newBuilder()
           .setSort(
-            proto.Sort
+            Sort
               .newBuilder()
               .setInput(logicalPlan)
               .addAllSortFields(columns.map(createDefaultSortField).asJava)
@@ -357,11 +357,11 @@ package object dsl {
           .build()
       }
 
-      def sortWithinPartitions(columns: String*): proto.Relation = {
-        proto.Relation
+      def sortWithinPartitions(columns: String*): Relation = {
+        Relation
           .newBuilder()
           .setSort(
-            proto.Sort
+            Sort
               .newBuilder()
               .setInput(logicalPlan)
               .addAllSortFields(columns.map(createDefaultSortField).asJava)
@@ -370,9 +370,8 @@ package object dsl {
           .build()
       }
 
-      def groupBy(groupingExprs: proto.Expression*)(
-          aggregateExprs: proto.Expression*): proto.Relation = {
-        val agg = proto.Aggregate.newBuilder()
+      def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*): Relation = {
+        val agg = Aggregate.newBuilder()
         agg.setInput(logicalPlan)
 
         for (groupingExpr <- groupingExprs) {
