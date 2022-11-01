@@ -4303,6 +4303,140 @@
       "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastjoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_2251" : {
+    "message" : [
+      "<execName> does not support the execute() code path."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2252" : {
+    "message" : [
+      "Cannot merge <className> with <otherClass>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2253" : {
+    "message" : [
+      "Data source <sourceName> does not support continuous processing."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2254" : {
+    "message" : [
+      "Data read failed"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2255" : {
+    "message" : [
+      "Epoch marker generation failed"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2256" : {
+    "message" : [
+      "Foreach writer has been aborted due to a task failure"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2258" : {
+    "message" : [
+      "Error reading delta file <fileToRead> of <clazz>: key size cannot be <keySize>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2259" : {
+    "message" : [
+      "Error reading snapshot file <fileToRead> of <clazz>: <message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2260" : {
+    "message" : [
+      "Cannot purge as it might break internal state."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2261" : {
+    "message" : [
+      "Clean up source files is not supported when reading from the output directory of FileStreamSink."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2262" : {
+    "message" : [
+      "latestOffset(Offset, ReadLimit) should be called instead of this method"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2263" : {
+    "message" : [
+      "Error: we detected a possible problem with the location of your checkpoint and you",
+      "likely need to move it before restarting this query.",
+      "",
+      "Earlier version of Spark incorrectly escaped paths when writing out checkpoints for",
+      "structured streaming. While this was corrected in Spark 3.0, it appears that your",
+      "query was started using an earlier version that incorrectly handled the checkpoint",
+      "path.",
+      "",
+      "Correct Checkpoint Directory: <checkpointPath>",
+      "Incorrect Checkpoint Directory: <legacyCheckpointDir>",
+      "",
+      "Please move the data from the incorrect directory to the correct one, delete the",
+      "incorrect directory, and then restart this query. If you believe you are receiving",
+      "this message in error, you can disable it with the SQL conf",
+      "<StreamingCheckpointEscapedPathCheckEnabled>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2264" : {
+    "message" : [
+      "Subprocess exited with status <exitCode>. Error: <stderrBuffer>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2265" : {
+    "message" : [
+      "<nodeName> without serde does not support <dt> as output data type"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2266" : {
+    "message" : [
+      "Invalid `startIndex` provided for generating iterator over the array. Total elements: <numRows>, requested `startIndex`: <startIndex>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2267" : {
+    "message" : [
+      "The backing <className> has been modified since the creation of this Iterator"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2268" : {
+    "message" : [
+      "<nodeName> does not implement doExecuteBroadcast"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2269" : {
+    "message" : [
+      "<globalTempDB> is a system preserved database, please rename your existing database to resolve the name conflict, or set a different value for <globalTempDatabase>, and launch your Spark application again."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2270" : {
+    "message" : [
+      "comment on table is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2271" : {
+    "message" : [
+      "UpdateColumnNullability is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2272" : {
+    "message" : [
+      "Rename column is only supported for MySQL version 8.0 and above."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2273" : {
+    "message" : [
+      "<message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2274" : {
+    "message" : [
+      "Nested field <colName> is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2275" : {
+    "message" : [
+      "Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702."
+    ]
+  },
   "_LEGACY_ERROR_TEMP_2276" : {
     "message" : [
       "Hive table <tableName> with ANSI intervals is not supported"

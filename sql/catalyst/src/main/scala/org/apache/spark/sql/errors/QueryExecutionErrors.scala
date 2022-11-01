@@ -20,7 +20,6 @@ package org.apache.spark.sql.errors
 import java.io.{FileNotFoundException, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URISyntaxException, URL}
-import java.sql.{SQLFeatureNotSupportedException}
 import java.time.{DateTimeException, LocalDate}
 import java.time.temporal.ChronoField
 import java.util.ConcurrentModificationException
@@ -48,7 +47,6 @@ import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateT
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Identifier, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.streaming.OutputMode
@@ -2359,30 +2357,49 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = oe).initCause(oe.getCause)
   }
 
-  def executeCodePathUnsupportedError(execName: String): Throwable = {
-    new UnsupportedOperationException(s"$execName does not support the execute() code path.")
+  def executeCodePathUnsupportedError(execName: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2251",
+      messageParameters = Map(
+        "execName" -> execName))
   }
 
-  def cannotMergeClassWithOtherClassError(className: String, otherClass: String): Throwable = {
-    new UnsupportedOperationException(
-      s"Cannot merge $className with $otherClass")
+  def cannotMergeClassWithOtherClassError(
+      className: String, otherClass: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2252",
+      messageParameters = Map(
+        "className" -> className,
+        "otherClass" -> otherClass))
   }
 
-  def continuousProcessingUnsupportedByDataSourceError(sourceName: String): Throwable = {
-    new UnsupportedOperationException(
-      s"Data source $sourceName does not support continuous processing.")
+  def continuousProcessingUnsupportedByDataSourceError(
+      sourceName: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2253",
+      messageParameters = Map(
+        "sourceName" -> sourceName))
   }
 
   def failedToReadDataError(failureReason: Throwable): Throwable = {
-    new SparkException("Data read failed", failureReason)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2254",
+      messageParameters = Map.empty,
+      cause = failureReason)
   }
 
   def failedToGenerateEpochMarkerError(failureReason: Throwable): Throwable = {
-    new SparkException("Epoch marker generation failed", failureReason)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2255",
+      messageParameters = Map.empty,
+      cause = failureReason)
   }
 
   def foreachWriterAbortedDueToTaskFailureError(): Throwable = {
-    new SparkException("Foreach writer has been aborted due to a task failure")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2256",
+      messageParameters = Map.empty,
+      cause = null)
   }
 
   def incorrectRampUpRate(rowsPerSecond: Long,
@@ -2410,76 +2427,99 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def failedToReadDeltaFileError(fileToRead: Path, clazz: String, keySize: Int): Throwable = {
-    new IOException(
-      s"Error reading delta file $fileToRead of $clazz: key size cannot be $keySize")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2258",
+      messageParameters = Map(
+        "fileToRead" -> fileToRead.toString(),
+        "clazz" -> clazz,
+        "keySize" -> keySize.toString()),
+      cause = null)
   }
 
   def failedToReadSnapshotFileError(fileToRead: Path, clazz: String, message: String): Throwable = {
-    new IOException(s"Error reading snapshot file $fileToRead of $clazz: $message")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2259",
+      messageParameters = Map(
+        "fileToRead" -> fileToRead.toString(),
+        "clazz" -> clazz,
+        "message" -> message),
+      cause = null)
   }
 
-  def cannotPurgeAsBreakInternalStateError(): Throwable = {
-    new UnsupportedOperationException("Cannot purge as it might break internal state.")
+  def cannotPurgeAsBreakInternalStateError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2260",
+      messageParameters = Map.empty)
   }
 
-  def cleanUpSourceFilesUnsupportedError(): Throwable = {
-    new UnsupportedOperationException("Clean up source files is not supported when" +
-      " reading from the output directory of FileStreamSink.")
+  def cleanUpSourceFilesUnsupportedError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2261",
+      messageParameters = Map.empty)
   }
 
-  def latestOffsetNotCalledError(): Throwable = {
-    new UnsupportedOperationException(
-      "latestOffset(Offset, ReadLimit) should be called instead of this method")
+  def latestOffsetNotCalledError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2262",
+      messageParameters = Map.empty)
   }
 
   def legacyCheckpointDirectoryExistsError(
       checkpointPath: Path, legacyCheckpointDir: String): Throwable = {
     new SparkException(
-      s"""
-         |Error: we detected a possible problem with the location of your checkpoint and you
-         |likely need to move it before restarting this query.
-         |
-         |Earlier version of Spark incorrectly escaped paths when writing out checkpoints for
-         |structured streaming. While this was corrected in Spark 3.0, it appears that your
-         |query was started using an earlier version that incorrectly handled the checkpoint
-         |path.
-         |
-         |Correct Checkpoint Directory: $checkpointPath
-         |Incorrect Checkpoint Directory: $legacyCheckpointDir
-         |
-         |Please move the data from the incorrect directory to the correct one, delete the
-         |incorrect directory, and then restart this query. If you believe you are receiving
-         |this message in error, you can disable it with the SQL conf
-         |${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}.
-       """.stripMargin)
+      errorClass = "_LEGACY_ERROR_TEMP_2263",
+      messageParameters = Map(
+        "checkpointPath" -> checkpointPath.toString(),
+        "legacyCheckpointDir" -> legacyCheckpointDir,
+        "StreamingCheckpointEscapedPathCheckEnabled"
+          -> SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key),
+      cause = null)
   }
 
   def subprocessExitedError(
       exitCode: Int, stderrBuffer: CircularBuffer, cause: Throwable): Throwable = {
-    new SparkException(s"Subprocess exited with status $exitCode. " +
-      s"Error: ${stderrBuffer.toString}", cause)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2264",
+      messageParameters = Map(
+        "exitCode" -> exitCode.toString(),
+        "stderrBuffer" -> stderrBuffer.toString()),
+      cause = cause)
   }
 
   def outputDataTypeUnsupportedByNodeWithoutSerdeError(
       nodeName: String, dt: DataType): Throwable = {
-    new SparkException(s"$nodeName without serde does not support " +
-      s"${dt.getClass.getSimpleName} as output data type")
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2265",
+      messageParameters = Map(
+        "nodeName" -> nodeName,
+        "dt" -> dt.getClass.getSimpleName),
+      cause = null)
   }
 
-  def invalidStartIndexError(numRows: Int, startIndex: Int): Throwable = {
-    new ArrayIndexOutOfBoundsException(
-      "Invalid `startIndex` provided for generating iterator over the array. " +
-        s"Total elements: $numRows, requested `startIndex`: $startIndex")
+  def invalidStartIndexError(numRows: Int, startIndex: Int): SparkArrayIndexOutOfBoundsException = {
+    new SparkArrayIndexOutOfBoundsException(
+      errorClass = "_LEGACY_ERROR_TEMP_2266",
+      messageParameters = Map(
+        "numRows" -> numRows.toString(),
+        "startIndex" -> startIndex.toString()),
+      context = Array.empty,
+      summary = "")
   }
 
   def concurrentModificationOnExternalAppendOnlyUnsafeRowArrayError(
-      className: String): Throwable = {
-    new ConcurrentModificationException(
-      s"The backing $className has been modified since the creation of this Iterator")
+      className: String): SparkConcurrentModificationException = {
+    new SparkConcurrentModificationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2267",
+      messageParameters = Map(
+        "className" -> className))
   }
 
-  def doExecuteBroadcastNotImplementedError(nodeName: String): Throwable = {
-    new UnsupportedOperationException(s"$nodeName does not implement doExecuteBroadcast")
+  def doExecuteBroadcastNotImplementedError(
+      nodeName: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2268",
+      messageParameters = Map(
+        "nodeName" -> nodeName))
   }
 
   def defaultDatabaseNotExistsError(defaultDatabase: String): Throwable = {
@@ -2492,45 +2532,53 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def databaseNameConflictWithSystemPreservedDatabaseError(globalTempDB: String): Throwable = {
     new SparkException(
-      s"""
-         |$globalTempDB is a system preserved database, please rename your existing database
-         |to resolve the name conflict, or set a different value for
-         |${GLOBAL_TEMP_DATABASE.key}, and launch your Spark application again.
-       """.stripMargin.split("\n").mkString(" "))
+      errorClass = "_LEGACY_ERROR_TEMP_2269",
+      messageParameters = Map(
+        "globalTempDB" -> globalTempDB,
+        "globalTempDatabase" -> GLOBAL_TEMP_DATABASE.key),
+      cause = null)
   }
 
-  def commentOnTableUnsupportedError(): Throwable = {
-    new SQLFeatureNotSupportedException("comment on table is not supported")
+  def commentOnTableUnsupportedError(): SparkSQLFeatureNotSupportedException = {
+    new SparkSQLFeatureNotSupportedException(
+      errorClass = "_LEGACY_ERROR_TEMP_2270",
+      messageParameters = Map.empty)
   }
 
-  def unsupportedUpdateColumnNullabilityError(): Throwable = {
-    new SQLFeatureNotSupportedException("UpdateColumnNullability is not supported")
+  def unsupportedUpdateColumnNullabilityError(): SparkSQLFeatureNotSupportedException = {
+    new SparkSQLFeatureNotSupportedException(
+      errorClass = "_LEGACY_ERROR_TEMP_2271",
+      messageParameters = Map.empty)
   }
 
-  def renameColumnUnsupportedForOlderMySQLError(): Throwable = {
-    new SQLFeatureNotSupportedException(
-      "Rename column is only supported for MySQL version 8.0 and above.")
+  def renameColumnUnsupportedForOlderMySQLError(): SparkSQLFeatureNotSupportedException = {
+    new SparkSQLFeatureNotSupportedException(
+      errorClass = "_LEGACY_ERROR_TEMP_2272",
+      messageParameters = Map.empty)
   }
 
-  def failedToExecuteQueryError(e: Throwable): QueryExecutionException = {
+  def failedToExecuteQueryError(e: Throwable): SparkException = {
     val message = "Hit an error when executing a query" +
       (if (e.getMessage == null) "" else s": ${e.getMessage}")
-    new QueryExecutionException(message, e)
+    new SparkException(
+      errorClass = "_LEGACY_ERROR_TEMP_2273",
+      messageParameters = Map(
+        "message" -> message),
+      cause = e)
   }
 
-  def nestedFieldUnsupportedError(colName: String): Throwable = {
-    new UnsupportedOperationException(s"Nested field $colName is not supported.")
+  def nestedFieldUnsupportedError(colName: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "_LEGACY_ERROR_TEMP_2274",
+      messageParameters = Map(
+        "colName" -> colName))
   }
 
   def transformationsAndActionsNotInvokedByDriverError(): Throwable = {
     new SparkException(
-      """
-        |Dataset transformations and actions can only be invoked by the driver, not inside of
-        |other Dataset transformations; for example, dataset1.map(x => dataset2.values.count()
-        |* x) is invalid because the values transformation and count action cannot be
-        |performed inside of the dataset1.map transformation. For more information,
-        |see SPARK-28702.
-      """.stripMargin.split("\n").mkString(" "))
+      errorClass = "_LEGACY_ERROR_TEMP_2275",
+      messageParameters = Map.empty,
+      cause = null)
   }
 
   def repeatedPivotsUnsupportedError(): Throwable = {
