@@ -175,26 +175,25 @@ private[sql] object ProtobufUtils extends Logging {
       .asInstanceOf[Descriptor]
   }
 
-  // TODO: Revisit to ensure that messageName is searched through all imports
   def buildDescriptor(descFilePath: String, messageName: String): Descriptor = {
-    val descriptorList = parseFileDescriptor(descFilePath).map(fileDescriptor => {
-      fileDescriptor.getMessageTypes.asScala.find { desc =>
+    val fileDescriptor = parseFileDescriptorSet(descFilePath)
+      .find(!_.getMessageTypes.asScala.find(desc =>
         desc.getName == messageName || desc.getFullName == messageName
-      }
-    }).filter(f => !f.isEmpty)
+      ).isEmpty)
 
-    if (descriptorList.isEmpty) {
-      throw QueryCompilationErrors.noProtobufMessageTypeReturnError(messageName)
-    }
-
-    descriptorList.last match {
-      case Some(d) => d
-      case None =>
-        throw QueryCompilationErrors.unableToLocateProtobufMessageError(messageName)
+    fileDescriptor match {
+      case Some(f) =>
+        f.getMessageTypes.asScala.find { desc =>
+          desc.getName == messageName || desc.getFullName == messageName
+        } match {
+          case Some(d) => d
+          case None => throw QueryCompilationErrors.unableToLocateProtobufMessageError(messageName)
+        }
+      case None => throw QueryCompilationErrors.noProtobufMessageTypeReturnError(messageName)
     }
   }
 
-  private def parseFileDescriptor(descFilePath: String): List[Descriptors.FileDescriptor] = {
+  private def parseFileDescriptorSet(descFilePath: String): List[Descriptors.FileDescriptor] = {
     var fileDescriptorSet: DescriptorProtos.FileDescriptorSet = null
     try {
       val dscFile = new BufferedInputStream(new FileInputStream(descFilePath))
