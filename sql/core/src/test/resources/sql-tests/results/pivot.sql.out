@@ -283,7 +283,9 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2420"
+}
 
 
 -- !query

@@ -989,15 +989,17 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     // nested struct, inner struct having different col name
     df1 = Seq((0, UnionClass1a(0, 1L, UnionClass2(1, "2")))).toDF("id", "a")
     df2 = Seq((1, UnionClass1b(1, 2L, UnionClass3(2, 3L)))).toDF("id", "a")
-    var errMsg = intercept[AnalysisException] {
-      df1.unionByName(df2)
-    }.getMessage
-    assert(errMsg.contains("No such struct field c in a, b"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.unionByName(df2)
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"))
 
     // If right side of the nested struct has extra col.
     df1 = Seq((1, 2, UnionClass1d(1, 2, Struct3(1)))).toDF("a", "b", "c")
     df2 = Seq((1, 2, UnionClass1e(1, 2, Struct4(1, 5)))).toDF("a", "b", "c")
-    errMsg = intercept[AnalysisException] {
+    val errMsg = intercept[AnalysisException] {
       df1.unionByName(df2)
     }.getMessage
     assert(errMsg.contains("Union can only be performed on tables with" +

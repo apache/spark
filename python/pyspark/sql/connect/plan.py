@@ -201,10 +201,6 @@ class Project(LogicalPlan):
                     f"Only Expressions or String can be used for projections: '{c}'."
                 )
 
-    def withAlias(self, alias: str) -> LogicalPlan:
-        self.alias = alias
-        return self
-
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
         proj_exprs = []
@@ -217,14 +213,10 @@ class Project(LogicalPlan):
                 proj_exprs.append(exp)
             else:
                 proj_exprs.append(self.unresolved_attr(c))
-        common = proto.RelationCommon()
-        if self.alias is not None:
-            common.alias = self.alias
 
         plan = proto.Relation()
         plan.project.input.CopyFrom(self._child.plan(session))
         plan.project.expressions.extend(proj_exprs)
-        plan.common.CopyFrom(common)
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -368,15 +360,19 @@ class Deduplicate(LogicalPlan):
 
 class Sort(LogicalPlan):
     def __init__(
-        self, child: Optional["LogicalPlan"], *columns: Union[SortOrder, ColumnRef, str]
+        self,
+        child: Optional["LogicalPlan"],
+        columns: List[Union[SortOrder, ColumnRef, str]],
+        is_global: bool,
     ) -> None:
         super().__init__(child)
-        self.columns = list(columns)
+        self.columns = columns
+        self.is_global = is_global
 
     def col_to_sort_field(
         self, col: Union[SortOrder, ColumnRef, str], session: Optional["RemoteSparkSession"]
     ) -> proto.Sort.SortField:
-        if type(col) is SortOrder:
+        if isinstance(col, SortOrder):
             sf = proto.Sort.SortField()
             sf.expression.CopyFrom(col.ref.to_plan(session))
             sf.direction = (
@@ -393,10 +389,10 @@ class Sort(LogicalPlan):
         else:
             sf = proto.Sort.SortField()
             # Check string
-            if type(col) is ColumnRef:
+            if isinstance(col, ColumnRef):
                 sf.expression.CopyFrom(col.to_plan(session))
             else:
-                sf.expression.CopyFrom(self.unresolved_attr(cast(str, col)))
+                sf.expression.CopyFrom(self.unresolved_attr(col))
             sf.direction = proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
             sf.nulls = proto.Sort.SortNulls.SORT_NULLS_LAST
             return sf
@@ -406,11 +402,12 @@ class Sort(LogicalPlan):
         plan = proto.Relation()
         plan.sort.input.CopyFrom(self._child.plan(session))
         plan.sort.sort_fields.extend([self.col_to_sort_field(x, session) for x in self.columns])
+        plan.sort.is_global = self.is_global
         return plan
 
     def print(self, indent: int = 0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{' ' * indent}<Sort columns={self.columns}>\n{c_buf}"
+        return f"{' ' * indent}<Sort columns={self.columns}, global={self.is_global}>\n{c_buf}"
 
     def _repr_html_(self) -> str:
         return f"""
@@ -418,6 +415,7 @@ class Sort(LogicalPlan):
             <li>
                 <b>Sort</b><br />
                 {", ".join([str(c) for c in self.columns])}
+                global: {self.is_global} <br />
                 {self._child_repr_()}
             </li>
         </uL>
@@ -537,7 +535,7 @@ class Join(LogicalPlan):
         self,
         left: Optional["LogicalPlan"],
         right: "LogicalPlan",
-        on: "ColumnOrString",
+        on: Optional[Union[str, List[str], ColumnRef]],
         how: Optional[str],
     ) -> None:
         super().__init__(left)
@@ -575,7 +573,14 @@ class Join(LogicalPlan):
         rel = proto.Relation()
         rel.join.left.CopyFrom(self.left.plan(session))
         rel.join.right.CopyFrom(self.right.plan(session))
-        rel.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
+        if self.on is not None:
+            if not isinstance(self.on, list):
+                if isinstance(self.on, str):
+                    rel.join.using_columns.append(self.on)
+                else:
+                    rel.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
+            else:
+                rel.join.using_columns.extend(self.on)
         rel.join.join_type = self.how
         return rel
 
@@ -608,8 +613,10 @@ class UnionAll(LogicalPlan):
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
         rel = proto.Relation()
-        rel.union.inputs.extend([self._child.plan(session), self.other.plan(session)])
-        rel.union.union_type = proto.Union.UnionType.UNION_TYPE_ALL
+        rel.set_op.left_input.CopyFrom(self._child.plan(session))
+        rel.set_op.right_input.CopyFrom(self.other.plan(session))
+        rel.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_UNION
+        rel.set_op.is_all = True
         return rel
 
     def print(self, indent: int = 0) -> str:
@@ -639,6 +646,34 @@ class UnionAll(LogicalPlan):
         """
 
 
+class SubqueryAlias(LogicalPlan):
+    """Alias for a relation."""
+
+    def __init__(self, child: Optional["LogicalPlan"], alias: str) -> None:
+        super().__init__(child)
+        self._alias = alias
+
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+        rel = proto.Relation()
+        rel.subquery_alias.alias = self._alias
+        return rel
+
+    def print(self, indent: int = 0) -> str:
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return f"{' ' * indent}<SubqueryAlias alias={self._alias}>\n{c_buf}"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>SubqueryAlias</b><br />
+              Child: {self._child_repr_()}
+              Alias: {self._alias}
+           </li>
+        </ul>
+        """
+
+
 class SQL(LogicalPlan):
     def __init__(self, query: str) -> None:
         super().__init__(None)
@@ -662,4 +697,54 @@ class SQL(LogicalPlan):
               Statement: <pre>{self._query}</pre>
            </li>
         </ul>
+        """
+
+
+class Range(LogicalPlan):
+    def __init__(
+        self,
+        start: int,
+        end: int,
+        step: Optional[int] = None,
+        num_partitions: Optional[int] = None,
+    ) -> None:
+        super().__init__(None)
+        self._start = start
+        self._end = end
+        self._step = step
+        self._num_partitions = num_partitions
+
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+        rel = proto.Relation()
+        rel.range.start = self._start
+        rel.range.end = self._end
+        if self._step is not None:
+            step_proto = rel.range.Step()
+            step_proto.step = self._step
+            rel.range.step.CopyFrom(step_proto)
+        if self._num_partitions is not None:
+            num_partitions_proto = rel.range.NumPartitions()
+            num_partitions_proto.num_partitions = self._num_partitions
+            rel.range.num_partitions.CopyFrom(num_partitions_proto)
+        return rel
+
+    def print(self, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}"
+            f"<Range start={self._start}, end={self._end}, "
+            f"step={self._step}, num_partitions={self._num_partitions}>"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>Range</b><br />
+                Start: {self._start} <br />
+                End: {self._end} <br />
+                Step: {self._step} <br />
+                NumPartitions: {self._num_partitions} <br />
+                {self._child_repr_()}
+            </li>
+        </uL>
         """

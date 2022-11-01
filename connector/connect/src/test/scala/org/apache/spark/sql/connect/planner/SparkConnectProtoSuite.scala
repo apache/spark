@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.internal.SQLConf
@@ -35,6 +36,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
  * same as Spark dataframe's generated plan.
  */
 class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
+  lazy val connect = new MockRemoteSession()
 
   lazy val connectTestRelation =
     createLocalRelationProto(
@@ -116,6 +118,16 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan, sparkPlan)
   }
 
+  test("Test sort") {
+    val connectPlan = connectTestRelation.sort("id", "name")
+    val sparkPlan = sparkTestRelation.sort("id", "name")
+    comparePlans(connectPlan, sparkPlan)
+
+    val connectPlan2 = connectTestRelation.sortWithinPartitions("id", "name")
+    val sparkPlan2 = sparkTestRelation.sortWithinPartitions("id", "name")
+    comparePlans(connectPlan2, sparkPlan2)
+  }
+
   test("column alias") {
     val connectPlan = connectTestRelation.select("id".protoAttr.as("id2"))
     val sparkPlan = sparkTestRelation.select(Column("id").alias("id2"))
@@ -173,6 +185,55 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan2, sparkPlan2)
   }
 
+  test("Test union, except, intersect") {
+    val connectPlan1 = connectTestRelation.except(connectTestRelation, isAll = false)
+    val sparkPlan1 = sparkTestRelation.except(sparkTestRelation)
+    comparePlans(connectPlan1, sparkPlan1)
+
+    val connectPlan2 = connectTestRelation.except(connectTestRelation, isAll = true)
+    val sparkPlan2 = sparkTestRelation.exceptAll(sparkTestRelation)
+    comparePlans(connectPlan2, sparkPlan2)
+
+    val connectPlan3 = connectTestRelation.intersect(connectTestRelation, isAll = false)
+    val sparkPlan3 = sparkTestRelation.intersect(sparkTestRelation)
+    comparePlans(connectPlan3, sparkPlan3)
+
+    val connectPlan4 = connectTestRelation.intersect(connectTestRelation, isAll = true)
+    val sparkPlan4 = sparkTestRelation.intersectAll(sparkTestRelation)
+    comparePlans(connectPlan4, sparkPlan4)
+
+    val connectPlan5 = connectTestRelation.union(connectTestRelation, isAll = true)
+    val sparkPlan5 = sparkTestRelation.union(sparkTestRelation)
+    comparePlans(connectPlan5, sparkPlan5)
+
+    val connectPlan6 = connectTestRelation.union(connectTestRelation, isAll = false)
+    val sparkPlan6 = sparkTestRelation.union(sparkTestRelation).distinct()
+    comparePlans(connectPlan6, sparkPlan6)
+
+    val connectPlan7 =
+      connectTestRelation.union(connectTestRelation2, isAll = true, byName = true)
+    val sparkPlan7 = sparkTestRelation.unionByName(sparkTestRelation2)
+    comparePlans(connectPlan7, sparkPlan7)
+
+    val connectPlan8 =
+      connectTestRelation.union(connectTestRelation2, isAll = false, byName = true)
+    val sparkPlan8 = sparkTestRelation.unionByName(sparkTestRelation2).distinct()
+    comparePlans(connectPlan8, sparkPlan8)
+  }
+
+  test("Test Range") {
+    comparePlans(connect.range(None, 10, None, None), spark.range(10).toDF())
+    comparePlans(connect.range(Some(2), 10, None, None), spark.range(2, 10).toDF())
+    comparePlans(connect.range(Some(2), 10, Some(10), None), spark.range(2, 10, 10).toDF())
+    comparePlans(
+      connect.range(Some(2), 10, Some(10), Some(100)),
+      spark.range(2, 10, 10, 100).toDF())
+  }
+
+  test("Test Session.sql") {
+    comparePlans(connect.sql("SELECT 1"), spark.sql("SELECT 1"))
+  }
+
   private def createLocalRelationProtoByQualifiedAttributes(
       attrs: Seq[proto.Expression.QualifiedAttribute]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
@@ -190,6 +251,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     connectAnalyzed
   }
 
+  // Compares proto plan with DataFrame.
   private def comparePlans(connectPlan: proto.Relation, sparkPlan: DataFrame): Unit = {
     val connectAnalyzed = analyzePlan(transform(connectPlan))
     comparePlans(connectAnalyzed, sparkPlan.queryExecution.analyzed, false)

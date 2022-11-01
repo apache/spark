@@ -35,7 +35,7 @@ message Relation {
     Project project = 3;
     Filter filter = 4;
     Join join = 5;
-    Union union = 6;
+    SetOperation set_op = 6;
     Sort sort = 7;
     Limit limit = 8;
     Aggregate aggregate = 9;
@@ -44,6 +44,8 @@ message Relation {
     Sample sample = 12;
     Offset offset = 13;
     Deduplicate deduplicate = 14;
+    Range range = 15;
+    SubqueryAlias subquery_alias = 16;
 
     Unknown unknown = 999;
   }
@@ -55,7 +57,6 @@ message Unknown {}
 // Common metadata of all relations.
 message RelationCommon {
   string source_info = 1;
-  string alias = 2;
 }
 
 // Relation that uses a SQL query to generate the output.
@@ -127,15 +128,19 @@ message Join {
   }
 }
 
-// Relation of type [[Union]], at least one input must be set.
-message Union {
-  repeated Relation inputs = 1;
-  UnionType union_type = 2;
+// Relation of type [[SetOperation]]
+message SetOperation {
+  Relation left_input = 1;
+  Relation right_input = 2;
+  SetOpType set_op_type = 3;
+  bool is_all = 4;
+  bool by_name = 5;
 
-  enum UnionType {
-    UNION_TYPE_UNSPECIFIED = 0;
-    UNION_TYPE_DISTINCT = 1;
-    UNION_TYPE_ALL = 2;
+  enum SetOpType {
+    SET_OP_TYPE_UNSPECIFIED = 0;
+    SET_OP_TYPE_INTERSECT = 1;
+    SET_OP_TYPE_UNION = 2;
+    SET_OP_TYPE_EXCEPT = 3;
   }
 }
 
@@ -168,6 +173,7 @@ message Aggregate {
 message Sort {
   Relation input = 1;
   repeated SortField sort_fields = 2;
+  bool is_global = 3;
 
   message SortField {
     Expression expression = 1;
@@ -212,4 +218,35 @@ message Sample {
   message Seed {
     int64 seed = 1;
   }
+}
+
+// Relation of type [[Range]] that generates a sequence of integers.
+message Range {
+  // Optional. Default value = 0
+  int64 start = 1;
+  // Required.
+  int64 end = 2;
+  // Optional. Default value = 1
+  Step step = 3;
+  // Optional. Default value is assigned by 1) SQL conf "spark.sql.leafNodeDefaultParallelism" if
+  // it is set, or 2) spark default parallelism.
+  NumPartitions num_partitions = 4;
+
+  message Step {
+    int64 step = 1;
+  }
+
+  message NumPartitions {
+    int32 num_partitions = 1;
+  }
+}
+
+// Relation alias.
+message SubqueryAlias {
+  // Required. The input relation.
+  Relation input = 1;
+  // Required. The alias.
+  string alias = 2;
+  // Optional. Qualifier of the alias.
+  repeated string qualifier = 3;
 }

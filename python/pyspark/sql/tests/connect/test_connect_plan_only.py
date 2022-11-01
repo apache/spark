@@ -37,6 +37,23 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertIsNotNone(plan.root, "Root relation must be set")
         self.assertIsNotNone(plan.root.read)
 
+    def test_join_using_columns(self):
+        left_input = self.connect.readTable(table_name=self.tbl_name)
+        right_input = self.connect.readTable(table_name=self.tbl_name)
+        plan = left_input.join(other=right_input, on="join_column")._plan.to_proto(self.connect)
+        self.assertEqual(len(plan.root.join.using_columns), 1)
+
+        plan2 = left_input.join(other=right_input, on=["col1", "col2"])._plan.to_proto(self.connect)
+        self.assertEqual(len(plan2.root.join.using_columns), 2)
+
+    def test_join_condition(self):
+        left_input = self.connect.readTable(table_name=self.tbl_name)
+        right_input = self.connect.readTable(table_name=self.tbl_name)
+        plan = left_input.join(
+            other=right_input, on=left_input.name == right_input.name
+        )._plan.to_proto(self.connect)
+        self.assertIsNotNone(plan.root.join.join_condition)
+
     def test_filter(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.filter(df.col_name > 3)._plan.to_proto(self.connect)
@@ -77,6 +94,32 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.sample.with_replacement, True)
         self.assertEqual(plan.root.sample.seed.seed, -1)
 
+    def test_sort(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.filter(df.col_name > 3).sort("col_a", "col_b")._plan.to_proto(self.connect)
+        self.assertEqual(
+            [
+                f.expression.unresolved_attribute.unparsed_identifier
+                for f in plan.root.sort.sort_fields
+            ],
+            ["col_a", "col_b"],
+        )
+        self.assertEqual(plan.root.sort.is_global, True)
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .sortWithinPartitions("col_a", "col_b")
+            ._plan.to_proto(self.connect)
+        )
+        self.assertEqual(
+            [
+                f.expression.unresolved_attribute.unparsed_identifier
+                for f in plan.root.sort.sort_fields
+            ],
+            ["col_a", "col_b"],
+        )
+        self.assertEqual(plan.root.sort.is_global, False)
+
     def test_deduplicate(self):
         df = self.connect.readTable(table_name=self.tbl_name)
 
@@ -99,7 +142,22 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
     def test_relation_alias(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.alias("table_alias")._plan.to_proto(self.connect)
-        self.assertEqual(plan.root.common.alias, "table_alias")
+        self.assertEqual(plan.root.subquery_alias.alias, "table_alias")
+
+    def test_range(self):
+        plan = self.connect.range(start=10, end=20, step=3, num_partitions=4)._plan.to_proto(
+            self.connect
+        )
+        self.assertEqual(plan.root.range.start, 10)
+        self.assertEqual(plan.root.range.end, 20)
+        self.assertEqual(plan.root.range.step.step, 3)
+        self.assertEqual(plan.root.range.num_partitions.num_partitions, 4)
+
+        plan = self.connect.range(start=10, end=20)._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.range.start, 10)
+        self.assertEqual(plan.root.range.end, 20)
+        self.assertFalse(plan.root.range.HasField("step"))
+        self.assertFalse(plan.root.range.HasField("num_partitions"))
 
     def test_datasource_read(self):
         reader = DataFrameReader(self.connect)

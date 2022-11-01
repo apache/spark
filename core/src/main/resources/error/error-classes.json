@@ -123,6 +123,11 @@
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
     ]
   },
+  "CREATE_TABLE_COLUMN_OPTION_DUPLICATE" : {
+    "message" : [
+      "CREATE TABLE column <columnName> specifies option \"<optionName>\" more than once, which is invalid"
+    ]
+  },
   "DATATYPE_MISMATCH" : {
     "message" : [
       "Cannot resolve <sqlExpr> due to data type mismatch:"
@@ -380,6 +385,11 @@
       "Failed to rename <sourcePath> to <targetPath> as destination already exists"
     ],
     "sqlState" : "22023"
+  },
+  "FIELD_NOT_FOUND" : {
+    "message" : [
+      "No such struct field <fieldName> in <fields>."
+    ]
   },
   "FORBIDDEN_OPERATION" : {
     "message" : [
@@ -1245,6 +1255,11 @@
       }
     }
   },
+  "UNSUPPORTED_TYPED_LITERAL" : {
+    "message" : [
+      "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
+    ]
+  },
   "UNTYPED_SCALA_UDF" : {
     "message" : [
       "You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. To get rid of this error, you could:",
@@ -1351,11 +1366,6 @@
   "_LEGACY_ERROR_TEMP_0020" : {
     "message" : [
       "Cannot parse the INTERVAL value: <value>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0021" : {
-    "message" : [
-      "Literals of type '<valueType>' are currently not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_0022" : {
@@ -2589,11 +2599,6 @@
       "The duration and time inputs to window must be an integer, long or string literal."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1208" : {
-    "message" : [
-      "No such struct field <fieldName> in <fields>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1209" : {
     "message" : [
       "Ambiguous reference to fields <fields>."
@@ -3285,11 +3290,6 @@
   "_LEGACY_ERROR_TEMP_2000" : {
     "message" : [
       "<message>. If necessary set <ansiConfig> to false to bypass this error."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2002" : {
-    "message" : [
-      "<message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2003" : {
@@ -4448,6 +4448,415 @@
   "_LEGACY_ERROR_TEMP_2282" : {
     "message" : [
       "Drop namespace restrict is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2300" : {
+    "message" : [
+      "The number of lambda function arguments '<namesSize>' does not match the number of arguments expected by the higher order function '<argInfoSize>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2301" : {
+    "message" : [
+      "Lambda function arguments should not have names that are semantically the same."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2302" : {
+    "message" : [
+      "'<name>' does not support more than one sources"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2303" : {
+    "message" : [
+      "incompatible types found in column <name> for inline table"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2304" : {
+    "message" : [
+      "cannot evaluate expression <sqlExpr> in inline table definition"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2305" : {
+    "message" : [
+      "expected <numCols> columns but found <rowSize> columns in row <ri>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2306" : {
+    "message" : [
+      "A lambda function should only be used in a higher order function. However, its class is <class>, which is not a higher order function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2307" : {
+    "message" : [
+      "Number of given aliases does not match number of output columns. Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2308" : {
+    "message" : [
+      "could not resolve `<name>` to a table-valued function"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2309" : {
+    "message" : [
+      "cannot resolve <sqlExpr> in MERGE command given columns [<cols>]"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2310" : {
+    "message" : [
+      "'writeStream' can be called only on streaming Dataset/DataFrame"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2311" : {
+    "message" : [
+      "'writeTo' can not be called on streaming Dataset/DataFrame"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2312" : {
+    "message" : [
+      "'write' can not be called on streaming Dataset/DataFrame"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2313" : {
+    "message" : [
+      "Hint not found: <name>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2314" : {
+    "message" : [
+      "cannot resolve '<sqlExpr>' due to argument data type mismatch: <msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2315" : {
+    "message" : [
+      "cannot resolve '<sqlExpr>' due to data type mismatch: <msg><hint>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2316" : {
+    "message" : [
+      "observed metrics should be named: <operator>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2317" : {
+    "message" : [
+      "window expressions are not allowed in observed metrics, but found: <sqlExpr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2318" : {
+    "message" : [
+      "non-deterministic expression <sqlExpr> can only be used as an argument to an aggregate function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2319" : {
+    "message" : [
+      "nested aggregates are not allowed in observed metrics, but found: <sqlExpr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2320" : {
+    "message" : [
+      "distinct aggregates are not allowed in observed metrics, but found: <sqlExpr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2321" : {
+    "message" : [
+      "aggregates with filter predicate are not allowed in observed metrics, but found: <sqlExpr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2322" : {
+    "message" : [
+      "attribute <sqlExpr> can only be used as an argument to an aggregate function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2323" : {
+    "message" : [
+      "Cannot <op> column, because <fieldNames> already exists in <struct>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2324" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> type: update a struct by updating its fields"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2325" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> type: update a map by updating <fieldName>.key or <fieldName>.value"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2326" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> type: update the element by updating <fieldName>.element"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2327" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> type: update a UserDefinedType[<udtSql>] by updating its fields"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2328" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> to interval type"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2329" : {
+    "message" : [
+      "Cannot update <table> field <fieldName>: <oldType> cannot be cast to <newType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2330" : {
+    "message" : [
+      "Cannot change nullable column to non-nullable: <fieldName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2331" : {
+    "message" : [
+      "failed to evaluate expression <sqlExpr>: <msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2332" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2400" : {
+    "message" : [
+      "The <name> expression must evaluate to a constant value, but got <limitExpr>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2401" : {
+    "message" : [
+      "The <name> expression must be integer type, but got <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2402" : {
+    "message" : [
+      "The evaluated <name> expression must not be null, but got <limitExpr>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2403" : {
+    "message" : [
+      "The <name> expression must be equal to or greater than 0, but got <v>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2404" : {
+    "message" : [
+      "Table <name> is not partitioned."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2405" : {
+    "message" : [
+      "Table <name> does not support partition management."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2406" : {
+    "message" : [
+      "invalid cast from <srcType> to <targetType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2407" : {
+    "message" : [
+      "grouping_id() can only be used with GroupingSets/Cube/Rollup"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2408" : {
+    "message" : [
+      "Window function <w> requires an OVER clause."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2409" : {
+    "message" : [
+      "Distinct window functions are not supported: <w>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2410" : {
+    "message" : [
+      "<wf> function can only be evaluated in an ordered row-based window frame with a single offset: <w>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2411" : {
+    "message" : [
+      "Cannot specify order by or frame for '<aggFunc>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2412" : {
+    "message" : [
+      "Expression '<sqlExpr>' not supported within a window function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2413" : {
+    "message" : [
+      "Input argument to <argName> must be a constant."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2414" : {
+    "message" : [
+      "Event time must be defined on a window or a timestamp, but <evName> is of type <evType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2415" : {
+    "message" : [
+      "filter expression '<filter>' of type <type> is not a boolean."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2416" : {
+    "message" : [
+      "join condition '<join>' of type <type> is not a boolean."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2417" : {
+    "message" : [
+      "join condition '<condition>' of type <dataType> is not a boolean."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2418" : {
+    "message" : [
+      "Input argument tolerance must be a constant."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2419" : {
+    "message" : [
+      "Input argument tolerance must be non-negative."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2420" : {
+    "message" : [
+      "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2421" : {
+    "message" : [
+      "nondeterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2422" : {
+    "message" : [
+      "grouping expressions sequence is empty, and '<sqlExpr>' is not an aggregate function. Wrap '<aggExprs>' in windowing function(s) or wrap '<sqlExpr>' in first() (or first_value) if you don't care which value you get."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2423" : {
+    "message" : [
+      "Correlated scalar subquery '<sqlExpr>' is neither present in the group by, nor in an aggregate function. Add it to group by using ordinal position or wrap it in first() (or first_value) if you don't care which value you get."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2424" : {
+    "message" : [
+      "aggregate functions are not allowed in GROUP BY, but found <sqlExpr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2425" : {
+    "message" : [
+      "expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2426" : {
+    "message" : [
+      "nondeterministic expression <sqlExpr> should not appear in grouping expression."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2427" : {
+    "message" : [
+      "sorting is not supported for columns of type <type>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2428" : {
+    "message" : [
+      "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2429" : {
+    "message" : [
+      "<operator> can only be performed on tables with the same number of columns, but the first table has <firstColNum> columns and the <nTab> table has <nColNum> columns."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2430" : {
+    "message" : [
+      "<operator> can only be performed on tables with compatible column types. The <ci> column of the <ti> table is <dt1> type which is not compatible with <dt2> at the same column of the first table.<hint>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2431" : {
+    "message" : [
+      "Invalid partitioning: <cols> is missing or is in a map or array"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2432" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2433" : {
+    "message" : [
+      "Only a single table generating function is allowed in a SELECT clause, found:",
+      "<sqlExprs>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2434" : {
+    "message" : [
+      "Failure when resolving conflicting references in Join:",
+      "<plan>",
+      "Conflicting attributes: <conflictingAttributes>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2435" : {
+    "message" : [
+      "Failure when resolving conflicting references in Intersect:",
+      "<plan>",
+      "Conflicting attributes: <conflictingAttributes>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2436" : {
+    "message" : [
+      "Failure when resolving conflicting references in Except:",
+      "<plan>",
+      "Conflicting attributes: <conflictingAttributes>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2437" : {
+    "message" : [
+      "Failure when resolving conflicting references in AsOfJoin:",
+      "<plan>",
+      "Conflicting attributes: <conflictingAttributes>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2438" : {
+    "message" : [
+      "Cannot have map type columns in DataFrame which calls set operations(intersect, except, etc.), but the type of column <colName> is <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2439" : {
+    "message" : [
+      "nondeterministic expressions are only allowed in Project, Filter, Aggregate or Window, found:",
+      "<sqlExprs>",
+      "in operator <operator>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2440" : {
+    "message" : [
+      "Aggregate/Window/Generate expressions are not valid in where clause of the query.",
+      "Expression in where clause: [<condition>]",
+      "Invalid expressions: [<invalidExprSqls>]"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2441" : {
+    "message" : [
+      "The query operator `<operator>` contains one or more unsupported expression types Aggregate, Window or Generate.",
+      "Invalid expressions: [<invalidExprSqls>]"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2442" : {
+    "message" : [
+      "unresolved operator <operator>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2443" : {
+    "message" : [
+      "Multiple definitions of observed metrics named '<name>': <plan>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2444" : {
+    "message" : [
+      "Function '<funcName>' does not implement ScalarFunction or AggregateFunction"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2445" : {
+    "message" : [
+      "grouping() can only be used with GroupingSets/Cube/Rollup"
     ]
   }
 }

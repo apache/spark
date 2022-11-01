@@ -425,6 +425,25 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       testNullStruct
     }
   }
+
+  test("SPARK-40963: generator output has correct nullability") {
+    // This test does not check nullability directly. Before SPARK-40963,
+    // the below query got wrong results due to incorrect nullability.
+    val df = sql(
+      """select c1, explode(c4) as c5 from (
+        |  select c1, array(c3) as c4 from (
+        |    select c1, explode_outer(c2) as c3
+        |    from values
+        |    (1, array(1, 2)),
+        |    (2, array(2, 3)),
+        |    (3, null)
+        |    as data(c1, c2)
+        |  )
+        |)
+        |""".stripMargin)
+    checkAnswer(df,
+      Row(1, 1) :: Row(1, 2) :: Row(2, 2) :: Row(2, 3) :: Row(3, null) :: Nil)
+  }
 }
 
 case class EmptyGenerator() extends Generator with LeafLike[Expression] {
