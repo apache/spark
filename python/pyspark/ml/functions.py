@@ -122,30 +122,44 @@ def _batched(
 ) -> Iterator[pd.DataFrame]:
     """Generator that splits a pandas dataframe/series into batches."""
     if isinstance(data, pd.DataFrame):
-        for _, batch in data.groupby(np.arange(len(data)) // batch_size):
-            yield batch
+        index = 0
+        data_size = len(data)
+        while index < data_size:
+            yield data.iloc[index : index + batch_size]
+            index += batch_size
     else:
         # convert (tuple of) pd.Series into pd.DataFrame
         if isinstance(data, pd.Series):
             df = pd.concat((data,), axis=1)
         else:  # isinstance(data, Tuple[pd.Series]):
             df = pd.concat(data, axis=1)
-        for _, batch in df.groupby(np.arange(len(df)) // batch_size):
-            yield batch
+
+        index = 0
+        data_size = len(df)
+        while index < data_size:
+            yield df.iloc[index : index + batch_size]
+            index += batch_size
 
 
-def _has_tensor_cols(data: pd.Series | pd.DataFrame | Tuple[pd.Series]) -> bool:
-    """Check if input DataFrame contains any tensor-valued columns"""
+def _is_tensor_col(data: pd.Series | pd.DataFrame) -> bool:
     if isinstance(data, pd.Series):
         return data.dtype == np.object_ and isinstance(data.iloc[0], (np.ndarray, list))
     elif isinstance(data, pd.DataFrame):
         return any(data.dtypes == np.object_) and any(
             [isinstance(d, (np.ndarray, list)) for d in data.iloc[0]]
         )
-    else:  # isinstance(data, Tuple):
-        return any([d.dtype == np.object_ for d in data]) and any(
-            [isinstance(d.iloc[0], (np.ndarray, list)) for d in data]
+    else:
+        raise ValueError(
+            "Unexpected data type: {}, expected pd.Series or pd.DataFrame.".format(type(data))
         )
+
+
+def _has_tensor_cols(data: pd.Series | pd.DataFrame | Tuple[pd.Series]) -> bool:
+    """Check if input Series/DataFrame/Tuple contains any tensor-valued columns"""
+    if isinstance(data, (pd.Series, pd.DataFrame)):
+        return _is_tensor_col(data)
+    else:  # isinstance(data, Tuple):
+        return any(_is_tensor_col(elem) for elem in data)
 
 
 def predict_batch_udf(
@@ -159,7 +173,7 @@ def predict_batch_udf(
     *,
     return_type: DataType,
     batch_size: int,
-    input_tensor_shapes: list[list[int] | None] | Mapping[int, list[int]] | None = None,
+    input_tensor_shapes: List[List[int] | None] | Mapping[int, List[int]] | None = None,
 ) -> UserDefinedFunctionLike:
     """Given a function which loads a model, returns a pandas_udf for inferencing over that model.
 
@@ -463,7 +477,7 @@ def predict_batch_udf(
     batch_size : int
         Batch size to use for inference, note that this is typically a limitation of the model
         and/or the hardware resources and is usually smaller than the Spark partition size.
-    input_tensor_shapes: list[list[int] | None] | Mapping[int, list[int]] | None
+    input_tensor_shapes: List[List[int] | None] | Mapping[int, List[int]] | None
         Optional input tensor shapes for models with tensor inputs.  This can be a list of shapes,
         where each shape is a list of integers or None (for scalar inputs).  Alternatively, this
         can be represented by a "sparse" dictionary, where the keys are the integer indices of the
@@ -496,7 +510,7 @@ def predict_batch_udf(
         num_expected = len(signature.parameters)
 
         # convert sparse input_tensor_shapes to dense if needed
-        input_shapes: list[list[int] | None]
+        input_shapes: List[List[int] | None]
         if isinstance(input_tensor_shapes, Mapping):
             input_shapes = [None] * num_expected
             for index, shape in input_tensor_shapes.items():
@@ -504,16 +518,16 @@ def predict_batch_udf(
         else:
             input_shapes = input_tensor_shapes  # type: ignore
 
-        # iterate over partition, invoking predict_fn with ndarrays
-        for partition in data:
-            has_tuple = isinstance(partition, Tuple)  # type: ignore
-            has_tensors = _has_tensor_cols(partition)
+        # iterate over pandas batch, invoking predict_fn with ndarrays
+        for pandas_batch in data:
+            has_tuple = isinstance(pandas_batch, Tuple)  # type: ignore
+            has_tensors = _has_tensor_cols(pandas_batch)
 
             # require input_tensor_shapes for any tensor columns
             if has_tensors and not input_shapes:
                 raise ValueError("Tensor columns require input_tensor_shapes")
 
-            for batch in _batched(partition, batch_size):
+            for batch in _batched(pandas_batch, batch_size):
                 num_actual = len(batch.columns)
                 if num_actual == num_expected and num_expected > 1:
                     # input column per expected input, convert each column into param
@@ -526,6 +540,8 @@ def predict_batch_udf(
                                 else v
                                 for i, v in enumerate(multi_inputs)
                             ]
+                            if not all([len(x) == len(batch) for x in multi_inputs]):
+                                raise ValueError("input data does not match expected shape.")
                         else:
                             raise ValueError("input_tensor_shapes must match columns")
 
@@ -563,6 +579,8 @@ def predict_batch_udf(
                             single_input = single_input.reshape(
                                 [-1] + input_shapes[0]  # type: ignore
                             )
+                            if len(single_input) != len(batch):
+                                raise ValueError("input data does not match expected shape.")
                         else:
                             raise ValueError(
                                 "Multiple input_tensor_shapes found, but model expected one input"
