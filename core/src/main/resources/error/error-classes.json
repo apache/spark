@@ -771,7 +771,7 @@
   },
   "UNCLOSED_BRACKETED_COMMENT" : {
     "message" : [
-      "Unclosed bracketed comment"
+      "Found an unclosed bracketed comment. Please, append */ at the end of the comment."
     ]
   },
   "UNPIVOT_REQUIRES_ATTRIBUTES" : {

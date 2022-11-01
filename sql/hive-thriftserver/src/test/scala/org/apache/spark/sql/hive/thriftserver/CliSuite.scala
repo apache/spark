@@ -632,7 +632,7 @@ class CliSuite extends SparkFunSuite {
       // Unclosed nested bracketed comment.
       "/* SELECT /*+ HINT() 4; */ SELECT 1;".stripMargin -> "1",
       // Unclosed comment with query.
-      "/* Here is a unclosed bracketed comment SELECT 1;"-> "Unclosed bracketed comment",
+      "/* Here is a unclosed bracketed comment SELECT 1;"-> "Found an unclosed bracketed comment.",
       // Whole comment.
       "/* SELECT /*+ HINT() */ 4; */;".stripMargin -> ""
     )
