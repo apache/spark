@@ -1728,14 +1728,6 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     }
   }
 
-  test("REPAIR TABLE omit MSCK") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      testNotSupportedV2Command("REPAIR TABLE", t)
-    }
-  }
-
   test("LOAD DATA INTO TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
