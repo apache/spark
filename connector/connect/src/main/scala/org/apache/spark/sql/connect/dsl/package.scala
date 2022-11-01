@@ -198,6 +198,12 @@ package object dsl {
         }
         Relation.newBuilder().setRange(range).build()
       }
+
+      def sql(sqlText: String): Relation = {
+        Relation.newBuilder().setSql(
+          SQL.newBuilder().setQuery(sqlText)
+        ).build()
+      }
     }
 
     implicit class DslLogicalPlan(val logicalPlan: Relation) {
