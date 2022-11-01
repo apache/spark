@@ -73,11 +73,8 @@ class Relation(google.protobuf.message.Message):
     SAMPLE_FIELD_NUMBER: builtins.int
     OFFSET_FIELD_NUMBER: builtins.int
     DEDUPLICATE_FIELD_NUMBER: builtins.int
-<<<<<<< HEAD
     RANGE_FIELD_NUMBER: builtins.int
-=======
     SUBQUERY_ALIAS_FIELD_NUMBER: builtins.int
->>>>>>> a64a5e70e5 ([SPARK-40938][CONNECT] Support Alias for every Relation.)
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -108,11 +105,9 @@ class Relation(google.protobuf.message.Message):
     @property
     def deduplicate(self) -> global___Deduplicate: ...
     @property
-<<<<<<< HEAD
     def range(self) -> global___Range: ...
-=======
+    @property
     def subquery_alias(self) -> global___SubqueryAlias: ...
->>>>>>> a64a5e70e5 ([SPARK-40938][CONNECT] Support Alias for every Relation.)
     @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
@@ -132,11 +127,8 @@ class Relation(google.protobuf.message.Message):
         sample: global___Sample | None = ...,
         offset: global___Offset | None = ...,
         deduplicate: global___Deduplicate | None = ...,
-<<<<<<< HEAD
         range: global___Range | None = ...,
-=======
         subquery_alias: global___SubqueryAlias | None = ...,
->>>>>>> a64a5e70e5 ([SPARK-40938][CONNECT] Support Alias for every Relation.)
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -237,11 +229,8 @@ class Relation(google.protobuf.message.Message):
         "sample",
         "offset",
         "deduplicate",
-<<<<<<< HEAD
         "range",
-=======
         "subquery_alias",
->>>>>>> a64a5e70e5 ([SPARK-40938][CONNECT] Support Alias for every Relation.)
         "unknown",
     ] | None: ...
 
@@ -961,7 +950,6 @@ class Sample(google.protobuf.message.Message):
 
 global___Sample = Sample
 
-<<<<<<< HEAD
 class Range(google.protobuf.message.Message):
     """Relation of type [[Range]] that generates a sequence of integers."""
 
@@ -1000,6 +988,7 @@ class Range(google.protobuf.message.Message):
     start: builtins.int
     """Optional. Default value = 0"""
     end: builtins.int
+    """Required."""
     @property
     def step(self) -> global___Range.Step:
         """Optional. Default value = 1"""
@@ -1019,7 +1008,16 @@ class Range(google.protobuf.message.Message):
     def HasField(
         self,
         field_name: typing_extensions.Literal["num_partitions", b"num_partitions", "step", b"step"],
-=======
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "end", b"end", "num_partitions", b"num_partitions", "start", b"start", "step", b"step"
+        ],
+    ) -> None: ...
+
+global___Range = Range
+
 class SubqueryAlias(google.protobuf.message.Message):
     """Relation alias."""
 
@@ -1047,21 +1045,12 @@ class SubqueryAlias(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
->>>>>>> a64a5e70e5 ([SPARK-40938][CONNECT] Support Alias for every Relation.)
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-<<<<<<< HEAD
-            "end", b"end", "num_partitions", b"num_partitions", "start", b"start", "step", b"step"
-        ],
-    ) -> None: ...
-
-global___Range = Range
-=======
             "alias", b"alias", "input", b"input", "qualifier", b"qualifier"
         ],
     ) -> None: ...
 
 global___SubqueryAlias = SubqueryAlias
->>>>>>> a64a5e70e5 ([SPARK-40938][CONNECT] Support Alias for every Relation.)
