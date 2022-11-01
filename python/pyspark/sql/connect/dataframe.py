@@ -323,7 +323,7 @@ class DataFrame(object):
     def collect(self) -> List[Row]:
         pdf = self.toPandas()
         if pdf is not None:
-            return list(pdf.apply(lambda fun: Row(*fun), axis=1))
+            return list(pdf.apply(lambda row: Row(**row), axis=1))
         else:
             return []
 

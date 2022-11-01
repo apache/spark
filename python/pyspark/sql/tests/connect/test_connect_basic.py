@@ -92,8 +92,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
     def test_collect(self):
         df = self.connect.read.table(self.tbl_name)
         data = df.limit(10).collect()
-        # Check that the limit is applied
         self.assertEqual(len(data), 10)
+        # Check Row has schema column names.
+        self.assertTrue("name" in data[0])
+        self.assertTrue("id" in data[0])
 
     def test_simple_udf(self):
         def conv_udf(x) -> str:
