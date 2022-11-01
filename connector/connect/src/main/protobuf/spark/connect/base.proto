@@ -92,7 +92,6 @@ message Response {
   message JSONBatch {
     int64 row_count = 1;
     bytes data = 2;
-    DataType schema = 3;
   }
 
   message Metrics {
