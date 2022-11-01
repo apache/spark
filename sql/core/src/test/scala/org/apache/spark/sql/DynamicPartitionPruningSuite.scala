@@ -188,6 +188,7 @@ abstract class DynamicPartitionPruningSuiteBase
     val plan = df.queryExecution.executedPlan
     val dpExprs = collectDynamicPruningExpressions(plan)
     val hasSubquery = dpExprs.exists {
+      case InSubqueryExec(_, _: SubqueryExec, _, _, _, _) => true
       case _: BloomFilterMightContain => true
       case _ => false
     }
@@ -285,28 +286,17 @@ abstract class DynamicPartitionPruningSuiteBase
    */
   test("simple inner join triggers DPP with mock-up tables") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
-      Seq(true, false).foreach { reuseExchange =>
-        Seq(-1, SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.defaultValue.get).foreach { threshold =>
-          withSQLConf(
-            SQLConf.EXCHANGE_REUSE_ENABLED.key -> reuseExchange.toString,
-            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
-             val df = sql(
-              """
-                |SELECT f.date_id, f.store_id FROM fact_sk f
-                |JOIN dim_store s ON f.store_id = s.store_id AND s.country = 'NL'
-              """.stripMargin)
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      val df = sql(
+        """
+          |SELECT f.date_id, f.store_id FROM fact_sk f
+          |JOIN dim_store s ON f.store_id = s.store_id AND s.country = 'NL'
+        """.stripMargin)
 
-            (reuseExchange, threshold) match {
-              case (true, -1) => checkPartitionPruningPredicate(df, true, false)
-              case (true, _) => checkPartitionPruningPredicate(df, false, true)
-              case (false, _) => checkPartitionPruningPredicate(df, false, false)
-            }
+      checkPartitionPruningPredicate(df, true, false)
 
-            checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
-          }
-        }
-      }
+      checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
     }
   }
 
@@ -410,8 +400,7 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("left-semi join with partition column on the left side")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
         val df = sql(
           """
             |SELECT * FROM fact_sk f
@@ -424,8 +413,7 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("left-semi join with partition column on the right side")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
         val df = sql(
           """
             |SELECT * FROM dim_store s
@@ -450,8 +438,7 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("right outer join with partition column on the left side")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
         val df = sql(
           """
             |SELECT * FROM fact_sk f RIGHT OUTER JOIN dim_store s
@@ -473,9 +460,7 @@ abstract class DynamicPartitionPruningSuiteBase
       SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName) {
       Given("no stats and selective predicate")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_sk f
@@ -520,9 +505,7 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("no stats and selective predicate with the size of dim too large but cached")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         withTable("fact_aux") {
           withTempView("cached_dim_store") {
             sql(
@@ -558,9 +541,7 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("no stats and selective predicate with the size of dim small")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_sk f
@@ -588,9 +569,7 @@ abstract class DynamicPartitionPruningSuiteBase
       SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
       Given("disabling the use of stats in the DPP heuristic")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
@@ -617,9 +596,7 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("filtering ratio with stats enables pruning")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
@@ -639,9 +616,7 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("join condition more complex than fact.attr = dim.attr")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
@@ -808,8 +783,7 @@ abstract class DynamicPartitionPruningSuiteBase
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0.5",
-      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
       val df = sql(
         """
           |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
@@ -1360,8 +1334,7 @@ abstract class DynamicPartitionPruningSuiteBase
     DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
       withTable("df1", "df2") {
         spark.range(100)
           .select(col("id"), col("id").as("k"))
@@ -1397,13 +1370,10 @@ abstract class DynamicPartitionPruningSuiteBase
           case rs: ReusedSubqueryExec => rs.child.id
         }
 
-        val reusedExchangeIds = plan.collectWithSubqueries {
-          case re: ReusedExchangeExec => re.child.id
-        }
-
         assert(subqueryIds.size == 2, "Whole plan subquery reusing not working correctly")
-        assert(reusedSubqueryIds.isEmpty && reusedExchangeIds.size == 1,
-          "Whole plan subquery reusing not working correctly")
+        assert(reusedSubqueryIds.size == 1, "Whole plan subquery reusing not working correctly")
+        assert(reusedSubqueryIds.forall(subqueryIds.contains(_)),
+          "ReusedSubqueryExec should reuse an existing subquery")
       }
     }
   }
@@ -1647,6 +1617,46 @@ abstract class DynamicPartitionPruningSuiteBase
       assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
     }
   }
+
+  test("SPARK-32628: Use bloom filter if build side can not broadcast by size") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+      Seq(true, false).foreach { reuseExchange =>
+        Seq(-1, SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.defaultValue.get).foreach { threshold =>
+          withSQLConf(
+            SQLConf.EXCHANGE_REUSE_ENABLED.key -> reuseExchange.toString,
+            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
+            val df = sql(
+              """
+                |SELECT f.date_id, f.store_id FROM fact_sk f
+                |JOIN dim_store s ON f.store_id = s.store_id AND s.country = 'NL'
+              """.stripMargin)
+
+            (reuseExchange, threshold) match {
+              case (true, -1) =>
+                checkPartitionPruningPredicate(df, true, false)
+                assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).exists {
+                  case _: BloomFilterMightContain => true
+                  case _ => false
+                })
+              case (true, _) =>
+                checkPartitionPruningPredicate(df, false, true)
+              case (false, -1) =>
+                checkPartitionPruningPredicate(df, false, false)
+              case (false, _) =>
+                checkPartitionPruningPredicate(df, true, false)
+                assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).exists {
+                  case InSubqueryExec(_, _: SubqueryExec, _, _, _, _) => true
+                  case _ => false
+                })
+            }
+
+            checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
+          }
+        }
+      }
+    }
+  }
 }
 
 abstract class DynamicPartitionPruningDataSourceSuiteBase
@@ -1702,7 +1712,7 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
     DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true") {
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
       withTable("fact", "dim") {
         val numPartitions = 10
 
@@ -1807,9 +1817,8 @@ class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
   test("SPARK-37995: PlanAdaptiveDynamicPruningFilters should use prepareExecutedPlan " +
     "rather than createSparkPlan to re-plan subquery") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
       val df = sql(
         """
           |SELECT f.date_id, f.store_id FROM fact_sk f

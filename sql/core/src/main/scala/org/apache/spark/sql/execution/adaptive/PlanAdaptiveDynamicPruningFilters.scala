@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.expressions.{BindReferences, BloomFilterMightContain, DynamicPruningExpression, Literal, XxHash64}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.expressions.{Alias, BindReferences, BloomFilterMightContain, DynamicPruningExpression, Literal, XxHash64}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper}
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
@@ -31,7 +32,10 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, HashedRelati
  * A rule to insert dynamic pruning predicates in order to reuse the results of broadcast.
  */
 case class PlanAdaptiveDynamicPruningFilters(rootPlan: AdaptiveSparkPlanExec)
-  extends Rule[SparkPlan] with AdaptiveSparkPlanHelper with DynamicPruningHelper {
+  extends Rule[SparkPlan]
+    with AdaptiveSparkPlanHelper
+    with JoinSelectionHelper
+    with DynamicPruningHelper {
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.dynamicPartitionPruningEnabled && !conf.runtimeRowLevelOperationGroupFilterEnabled) {
       return plan
@@ -64,7 +68,21 @@ case class PlanAdaptiveDynamicPruningFilters(rootPlan: AdaptiveSparkPlanExec)
           val broadcastValues = SubqueryBroadcastExec(
             name, index, buildKeys, newAdaptivePlan)
           DynamicPruningExpression(InSubqueryExec(value, broadcastValues, exprId))
-        } else if (onlyInBroadcast || !conf.exchangeReuseEnabled) {
+        } else if (onlyInBroadcast) {
+          DynamicPruningExpression(Literal.TrueLiteral)
+        } else if (canBroadcastBySize(buildPlan, conf)) {
+          // we need to apply an aggregate on the buildPlan in order to be column pruned
+          val alias = Alias(buildKeys(index), buildKeys(index).toString)()
+          val aggregate = Aggregate(Seq(alias), Seq(alias), buildPlan)
+
+          val session = adaptivePlan.context.session
+          val sparkPlan = QueryExecution.prepareExecutedPlan(
+            session, aggregate, adaptivePlan.context)
+          assert(sparkPlan.isInstanceOf[AdaptiveSparkPlanExec])
+          val newAdaptivePlan = sparkPlan.asInstanceOf[AdaptiveSparkPlanExec]
+          val values = SubqueryExec(name, newAdaptivePlan)
+          DynamicPruningExpression(InSubqueryExec(value, values, exprId))
+        } else if (!conf.exchangeReuseEnabled) {
           DynamicPruningExpression(Literal.TrueLiteral)
         } else {
           val childPlan = adaptivePlan.executedPlan

@@ -275,8 +275,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     withTable("df1", "df2") {
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
           spark.range(1000).select(col("id"), col("id").as("k"))
             .write
             .partitionBy("k")
@@ -299,10 +298,10 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
               |""".stripMargin
 
           val expected_pattern1 =
-            "Subquery:1 Hosting operator id = 1 Hosting Expression = Subquery scalar-subquery#x"
+            "Subquery:1 Hosting operator id = 1 Hosting Expression = k#xL IN subquery#x"
           val expected_pattern2 =
-            "PartitionFilters: \\[isnotnull\\(k#xL\\), dynamicpruningexpression\\(might_contain" +
-              "\\(Subquery scalar-subquery#x, \\[id=#x\\], xxhash64\\(k#xL, 42\\)\\)\\)\\]"
+            "PartitionFilters: \\[isnotnull\\(k#xL\\), dynamicpruningexpression\\(k#xL " +
+              "IN subquery#x\\)\\]"
           val expected_pattern3 =
             "Location: InMemoryFileIndex \\[\\S*org.apache.spark.sql.ExplainSuite" +
               "/df2/\\S*, ... 99 entries\\]"
@@ -312,7 +311,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
           withNormalizedExplain(sqlText) { normalizedOutput =>
             assert(expected_pattern1.r.findAllMatchIn(normalizedOutput).length == 1)
             assert(expected_pattern2.r.findAllMatchIn(normalizedOutput).length == 1)
-            assert(expected_pattern3.r.findAllMatchIn(normalizedOutput).length == 1)
+            assert(expected_pattern3.r.findAllMatchIn(normalizedOutput).length == 2)
             assert(expected_pattern4.r.findAllMatchIn(normalizedOutput).length == 1)
           }
         }

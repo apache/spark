@@ -434,14 +434,8 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
           s"(3, 19.5, cast('2020-02-01' as timestamp))")
 
       // number of unique partitions changed after dynamic filtering - should throw exception
-      var df = sql(
-        s"""
-          |SELECT /*+ BROADCAST(i) */ Sum(p.price)
-          |FROM   testcat.ns.$items i,
-          |       testcat.ns.$purchases p
-          |WHERE  i.id = p.item_id
-          |       AND i.price > 40.0
-        """.stripMargin)
+      var df = sql(s"SELECT sum(p.price) from testcat.ns.$items i, testcat.ns.$purchases p WHERE " +
+          s"i.id = p.item_id AND i.price > 40.0")
       val e = intercept[Exception](df.collect())
       assert(e.getMessage.contains("number of unique partition values"))
 

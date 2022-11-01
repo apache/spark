@@ -31,7 +31,7 @@ trait DynamicPruningHelper {
       buildKeys: Seq[Expression],
       index: Int): Aggregate = {
     val rowCount = buildQuery.stats.rowCount
-    val bloomFilterAgg = if (rowCount.exists(_.longValue() > 0L)) {
+    val bloomFilterAgg = if (rowCount.exists(_.longValue > 0L)) {
       new BloomFilterAggregate(new XxHash64(buildKeys(index)), Literal(rowCount.get.longValue))
     } else {
       new BloomFilterAggregate(new XxHash64(buildKeys(index)))

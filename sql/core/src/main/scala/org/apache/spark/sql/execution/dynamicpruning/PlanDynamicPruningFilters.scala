@@ -18,8 +18,10 @@
 package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, BindReferences, BloomFilterMightContain, DynamicPruningExpression, DynamicPruningSubquery, Expression, Literal, XxHash64}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeSeq, BindReferences, BloomFilterMightContain, DynamicPruningExpression, DynamicPruningSubquery, Expression, ListQuery, Literal, XxHash64}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper}
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.DYNAMIC_PRUNING_SUBQUERY
@@ -33,7 +35,7 @@ import org.apache.spark.sql.execution.joins._
  * the fallback mechanism with subquery duplicate.
 */
 case class PlanDynamicPruningFilters(sparkSession: SparkSession)
-  extends Rule[SparkPlan] with DynamicPruningHelper {
+  extends Rule[SparkPlan] with JoinSelectionHelper with DynamicPruningHelper  {
 
   /**
    * Identify the shape in which keys of a given plan are broadcasted.
@@ -72,8 +74,16 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
           // place the broadcast adaptor for reusing the broadcast results on the probe side
           val broadcastValues = SubqueryBroadcastExec(name, index, buildKeys, exchange)
           DynamicPruningExpression(InSubqueryExec(value, broadcastValues, exprId))
-        } else if (onlyInBroadcast || !conf.exchangeReuseEnabled) {
+        } else if (onlyInBroadcast) {
           // it is not worthwhile to execute the query, so we fall-back to a true literal
+          DynamicPruningExpression(Literal.TrueLiteral)
+        } else if (canBroadcastBySize(buildPlan, conf)) {
+          // we need to apply an aggregate on the buildPlan in order to be column pruned
+          val alias = Alias(buildKeys(index), buildKeys(index).toString)()
+          val aggregate = Aggregate(Seq(alias), Seq(alias), buildPlan)
+          DynamicPruningExpression(expressions.InSubquery(
+            Seq(value), ListQuery(aggregate, childOutputs = aggregate.output)))
+        } else if (!conf.exchangeReuseEnabled) {
           DynamicPruningExpression(Literal.TrueLiteral)
         } else {
           val reusedShuffleExchange = plan.collectFirst {
