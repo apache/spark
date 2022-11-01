@@ -2416,8 +2416,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         case aggFunc: V2AggregateFunction[_, _] =>
           processV2AggregateFunction(aggFunc, arguments, u)
         case _ =>
-          failAnalysis(s"Function '${bound.name()}' does not implement ScalarFunction" +
-            s" or AggregateFunction")
+          failAnalysis(
+            errorClass = "_LEGACY_ERROR_TEMP_2444",
+            messageParameters = Map("funcName" -> bound.name()))
       }
     }
 

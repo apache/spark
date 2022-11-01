@@ -644,13 +644,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     "The offset expression must be equal to or greater than 0, but got -1" :: Nil
   )
 
-  errorTest(
+  errorClassTest(
     "the sum of num_rows in limit clause and num_rows in offset clause less than Int.MaxValue",
     testRelation.offset(Literal(2000000000, IntegerType)).limit(Literal(1000000000, IntegerType)),
-    "The sum of the LIMIT clause and the OFFSET clause must not be greater than" +
-      " the maximum 32-bit integer value (2,147,483,647)," +
-      " but found limit = 1000000000, offset = 2000000000." :: Nil
-  )
+    "_LEGACY_ERROR_TEMP_2428",
+    Map("limit" -> "1000000000", "offset" -> "2000000000"))
 
   errorTest(
     "more than one generators in SELECT",
