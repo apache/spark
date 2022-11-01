@@ -73,6 +73,7 @@ class Relation(google.protobuf.message.Message):
     SAMPLE_FIELD_NUMBER: builtins.int
     OFFSET_FIELD_NUMBER: builtins.int
     DEDUPLICATE_FIELD_NUMBER: builtins.int
+    RANGE_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -103,6 +104,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def deduplicate(self) -> global___Deduplicate: ...
     @property
+    def range(self) -> global___Range: ...
+    @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
         self,
@@ -121,6 +124,7 @@ class Relation(google.protobuf.message.Message):
         sample: global___Sample | None = ...,
         offset: global___Offset | None = ...,
         deduplicate: global___Deduplicate | None = ...,
+        range: global___Range | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -144,6 +148,8 @@ class Relation(google.protobuf.message.Message):
             b"offset",
             "project",
             b"project",
+            "range",
+            b"range",
             "read",
             b"read",
             "rel_type",
@@ -181,6 +187,8 @@ class Relation(google.protobuf.message.Message):
             b"offset",
             "project",
             b"project",
+            "range",
+            b"range",
             "read",
             b"read",
             "rel_type",
@@ -213,6 +221,7 @@ class Relation(google.protobuf.message.Message):
         "sample",
         "offset",
         "deduplicate",
+        "range",
         "unknown",
     ] | None: ...
 
@@ -935,3 +944,70 @@ class Sample(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Sample = Sample
+
+class Range(google.protobuf.message.Message):
+    """Relation of type [[Range]] that generates a sequence of integers."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class Step(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        STEP_FIELD_NUMBER: builtins.int
+        step: builtins.int
+        def __init__(
+            self,
+            *,
+            step: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["step", b"step"]) -> None: ...
+
+    class NumPartitions(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        NUM_PARTITIONS_FIELD_NUMBER: builtins.int
+        num_partitions: builtins.int
+        def __init__(
+            self,
+            *,
+            num_partitions: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["num_partitions", b"num_partitions"]
+        ) -> None: ...
+
+    START_FIELD_NUMBER: builtins.int
+    END_FIELD_NUMBER: builtins.int
+    STEP_FIELD_NUMBER: builtins.int
+    NUM_PARTITIONS_FIELD_NUMBER: builtins.int
+    start: builtins.int
+    """Optional. Default value = 0"""
+    end: builtins.int
+    @property
+    def step(self) -> global___Range.Step:
+        """Optional. Default value = 1"""
+    @property
+    def num_partitions(self) -> global___Range.NumPartitions:
+        """Optional. Default value is assigned by 1) SQL conf "spark.sql.leafNodeDefaultParallelism" if
+        it is set, or 2) spark default parallelism.
+        """
+    def __init__(
+        self,
+        *,
+        start: builtins.int = ...,
+        end: builtins.int = ...,
+        step: global___Range.Step | None = ...,
+        num_partitions: global___Range.NumPartitions | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal["num_partitions", b"num_partitions", "step", b"step"],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "end", b"end", "num_partitions", b"num_partitions", "start", b"start", "step", b"step"
+        ],
+    ) -> None: ...
+
+global___Range = Range

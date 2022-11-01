@@ -44,6 +44,7 @@ message Relation {
     Sample sample = 12;
     Offset offset = 13;
     Deduplicate deduplicate = 14;
+    Range range = 15;
 
     Unknown unknown = 999;
   }
@@ -215,5 +216,25 @@ message Sample {
 
   message Seed {
     int64 seed = 1;
+  }
+}
+
+// Relation of type [[Range]] that generates a sequence of integers.
+message Range {
+  // Optional. Default value = 0
+  int32 start = 1;
+  int32 end = 2;
+  // Optional. Default value = 1
+  Step step = 3;
+  // Optional. Default value is assigned by 1) SQL conf "spark.sql.leafNodeDefaultParallelism" if
+  // it is set, or 2) spark default parallelism.
+  NumPartitions num_partitions = 4;
+
+  message Step {
+    int32 step = 1;
+  }
+
+  message NumPartitions {
+    int32 num_partitions = 1;
   }
 }

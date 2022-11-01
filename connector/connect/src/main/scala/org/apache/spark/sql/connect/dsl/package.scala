@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
+import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto._
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.connect.proto.SetOperation.SetOpType
@@ -33,6 +34,8 @@ import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
  */
 
 package object dsl {
+
+  class MockRemoteSession {}
 
   object expressions { // scalastyle:ignore
     implicit class DslString(val s: String) {
@@ -175,6 +178,28 @@ package object dsl {
   }
 
   object plans { // scalastyle:ignore
+    implicit class DslMockRemoteSession(val session: MockRemoteSession) {
+      def range(
+          start: Option[Int],
+          end: Int,
+          step: Option[Int],
+          numPartitions: Option[Int]): Relation = {
+        val range = proto.Range.newBuilder()
+        if (start.isDefined) {
+          range.setStart(start.get)
+        }
+        range.setEnd(end)
+        if (step.isDefined) {
+          range.setStep(proto.Range.Step.newBuilder().setStep(step.get))
+        }
+        if (numPartitions.isDefined) {
+          range.setNumPartitions(
+            proto.Range.NumPartitions.newBuilder().setNumPartitions(numPartitions.get))
+        }
+        Relation.newBuilder().setRange(range).build()
+      }
+    }
+
     implicit class DslLogicalPlan(val logicalPlan: Relation) {
       def select(exprs: Expression*): Relation = {
         Relation

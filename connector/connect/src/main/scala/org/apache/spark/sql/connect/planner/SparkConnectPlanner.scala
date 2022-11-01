@@ -68,6 +68,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.LOCAL_RELATION =>
         transformLocalRelation(rel.getLocalRelation, common)
       case proto.Relation.RelTypeCase.SAMPLE => transformSample(rel.getSample)
+      case proto.Relation.RelTypeCase.RANGE => transformRange(rel.getRange)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -91,6 +92,22 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       rel.getWithReplacement,
       if (rel.hasSeed) rel.getSeed.getSeed else Utils.random.nextLong,
       transformRelation(rel.getInput))
+  }
+
+  private def transformRange(rel: proto.Range): LogicalPlan = {
+    val start = rel.getStart
+    val end = rel.getEnd
+    val step = if (rel.hasStep) {
+      rel.getStep.getStep
+    } else {
+      1
+    }
+    val numPartitions = if (rel.hasNumPartitions) {
+      rel.getNumPartitions.getNumPartitions
+    } else {
+      session.leafNodeDefaultParallelism
+    }
+    logical.Range(start, end, step, numPartitions)
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
