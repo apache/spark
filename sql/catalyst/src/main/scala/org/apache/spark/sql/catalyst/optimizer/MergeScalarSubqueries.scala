@@ -346,25 +346,19 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
   // Only allow aggregates of the same implementation because merging different implementations
   // could cause performance regression.
   private def supportedAggregateMerge(newPlan: Aggregate, cachedPlan: Aggregate) = {
-    val newPlanAggregateExpressions = newPlan.aggregateExpressions.flatMap(_.collect {
-      case a: AggregateExpression => a
-    })
-    val cachedPlanAggregateExpressions = cachedPlan.aggregateExpressions.flatMap(_.collect {
-      case a: AggregateExpression => a
-    })
-    val newPlanSupportsHashAggregate = Aggregate.supportsHashAggregate(
-      newPlanAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
-    val cachedPlanSupportsHashAggregate = Aggregate.supportsHashAggregate(
-      cachedPlanAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
-    newPlanSupportsHashAggregate && cachedPlanSupportsHashAggregate ||
-      newPlanSupportsHashAggregate == cachedPlanSupportsHashAggregate && {
-        val newPlanSupportsObjectHashAggregate =
-          Aggregate.supportsObjectHashAggregate(newPlanAggregateExpressions)
-        val cachedPlanSupportsObjectHashAggregate =
-          Aggregate.supportsObjectHashAggregate(cachedPlanAggregateExpressions)
-        newPlanSupportsObjectHashAggregate && cachedPlanSupportsObjectHashAggregate ||
-          newPlanSupportsObjectHashAggregate == cachedPlanSupportsObjectHashAggregate
-      }
+    val aggregateExprSeq =
+      Seq(newPlan, cachedPlan).map(plan => plan.aggregateExpressions.flatMap(_.collect {
+        case a: AggregateExpression => a
+      }))
+    val supportsHashAggregates = aggregateExprSeq.map(aggregateExpressions =>
+      Aggregate.supportsHashAggregate(
+        aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)))
+    lazy val supportsObjectHashAggregates = aggregateExprSeq.map(aggregateExpressions =>
+      Aggregate.supportsObjectHashAggregate(aggregateExpressions))
+    supportsHashAggregates.head && supportsHashAggregates.last ||
+      supportsHashAggregates.head == supportsHashAggregates.last &&
+        supportsObjectHashAggregates.head && supportsObjectHashAggregates.last ||
+          supportsObjectHashAggregates.head == supportsObjectHashAggregates.last
   }
 
   // Second traversal replaces `ScalarSubqueryReference`s to either
@@ -395,6 +389,10 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
 
 /**
  * Temporal reference to a subquery.
+ *
+ * @param subqueryIndex A subquery index in the cache.
+ * @param headerIndex A index in the output of merged subquery.
+ * @param dataType The dataType of origin scalar subquery.
  */
 case class ScalarSubqueryReference(
     subqueryIndex: Int,
