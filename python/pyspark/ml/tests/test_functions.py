@@ -76,7 +76,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         # single input model
         def predict_batch_fn():
             def predict(inputs):
-                return inputs
+                return {"a1": inputs[:, 0], "b1": inputs[:, 1]}
 
             return predict
 

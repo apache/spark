@@ -24,7 +24,7 @@ from pyspark import SparkContext
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.column import Column, _to_java_column
 from pyspark.sql.types import ArrayType, DataType, StructType
-from typing import Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union
+from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
@@ -155,11 +155,55 @@ def _is_tensor_col(data: pd.Series | pd.DataFrame) -> bool:
 
 
 def _has_tensor_cols(data: pd.Series | pd.DataFrame | Tuple[pd.Series]) -> bool:
-    """Check if input Series/DataFrame/Tuple contains any tensor-valued columns"""
+    """Check if input Series/DataFrame/Tuple contains any tensor-valued columns."""
     if isinstance(data, (pd.Series, pd.DataFrame)):
         return _is_tensor_col(data)
     else:  # isinstance(data, Tuple):
         return any(_is_tensor_col(elem) for elem in data)
+
+
+def _validate(
+    preds: np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, Any]],
+    num_input_rows: int,
+    return_type: DataType,
+) -> None:
+    """Validate model predictions against the expected pandas_udf return_type."""
+    if isinstance(return_type, StructType):
+        struct_rtype: StructType = return_type
+        fieldNames = struct_rtype.names
+        if isinstance(preds, dict):
+            # dictionary of columns
+            predNames = list(preds.keys())
+            if not all(v.shape == (num_input_rows,) for v in preds.values()):
+                raise ValueError("Prediction results for StructType fields must be scalars.")
+        elif isinstance(preds, list) and isinstance(preds[0], dict):
+            # rows of dictionaries
+            predNames = list(preds[0].keys())
+            if len(preds) != num_input_rows:
+                raise ValueError("Prediction results must have same length as input data.")
+        else:
+            raise ValueError(
+                "Prediction results for StructType must be a dictionary or "
+                "a list of dictionary, got: {}".format(type(preds))
+            )
+
+        # check column names
+        if len(predNames) != len(fieldNames) or not all(
+            [predNames[i] == fieldNames[i] for i in range(len(fieldNames))]
+        ):
+            raise ValueError(
+                "Prediction result columns did not match expected return_type "
+                "columns: expected {}, got: {}".format(fieldNames, predNames)
+            )
+    elif isinstance(return_type, ArrayType):
+        if isinstance(preds, np.ndarray):
+            if len(preds) != num_input_rows:
+                raise ValueError("Prediction results must have same length as input data.")
+        else:
+            raise ValueError("Prediction results for ArrayType must be an ndarray.")
+    else:
+        if len(preds) != num_input_rows:
+            raise ValueError("Prediction results must have same length as input data.")
 
 
 def predict_batch_udf(
@@ -507,12 +551,12 @@ def predict_batch_udf(
 
         # get number of expected parameters for predict function
         signature = inspect.signature(predict_fn)
-        num_expected = len(signature.parameters)
+        num_expected_cols = len(signature.parameters)
 
         # convert sparse input_tensor_shapes to dense if needed
         input_shapes: List[List[int] | None]
         if isinstance(input_tensor_shapes, Mapping):
-            input_shapes = [None] * num_expected
+            input_shapes = [None] * num_expected_cols
             for index, shape in input_tensor_shapes.items():
                 input_shapes[index] = shape
         else:
@@ -528,12 +572,13 @@ def predict_batch_udf(
                 raise ValueError("Tensor columns require input_tensor_shapes")
 
             for batch in _batched(pandas_batch, batch_size):
-                num_actual = len(batch.columns)
-                if num_actual == num_expected and num_expected > 1:
+                num_input_rows = len(batch)
+                num_input_cols = len(batch.columns)
+                if num_input_cols == num_expected_cols and num_expected_cols > 1:
                     # input column per expected input, convert each column into param
                     multi_inputs = [batch[col].to_numpy() for col in batch.columns]
                     if input_shapes:
-                        if len(input_shapes) == num_actual:
+                        if len(input_shapes) == num_input_cols:
                             multi_inputs = [
                                 np.vstack(v).reshape([-1] + input_shapes[i])  # type: ignore
                                 if input_shapes[i]
@@ -547,7 +592,7 @@ def predict_batch_udf(
 
                     # run model prediction function on transformed (numpy) inputs
                     preds = predict_fn(*multi_inputs)
-                elif num_expected == 1:
+                elif num_expected_cols == 1:
                     # multiple input columns for single expected input
                     if has_tensors:
                         # tensor columns
@@ -590,9 +635,10 @@ def predict_batch_udf(
                     preds = predict_fn(single_input)
                 else:
                     msg = "Model expected {} inputs, but received {} columns"
-                    raise ValueError(msg.format(num_expected, num_actual))
+                    raise ValueError(msg.format(num_expected_cols, num_input_cols))
 
                 # return predictions to Spark
+                _validate(preds, num_input_rows, return_type)
                 if isinstance(return_type, StructType):
                     yield pd.DataFrame(preds)
                 elif isinstance(return_type, ArrayType):
