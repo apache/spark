@@ -681,6 +681,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         testRelation,
         cond,
         UpdateAction(Some(cond), Assignment($"a", $"a") :: Nil) :: Nil,
+        Nil,
         Nil
       ),
       "Reference 'a' is ambiguous" :: Nil)

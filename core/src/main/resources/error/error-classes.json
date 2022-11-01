@@ -599,6 +599,24 @@
       "More than one row returned by a subquery used as an expression."
     ]
   },
+  "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
+    "message" : [
+      "When there are more than one MATCHED clauses in a MERGE statement, only the last MATCHED clause can omit the condition."
+    ],
+    "sqlState" : "42000"
+  },
+  "NON_LAST_NOT_MATCHED_BY_SOURCE_CLAUSE_OMIT_CONDITION" : {
+    "message" : [
+      "When there are more than one NOT MATCHED BY SOURCE clauses in a MERGE statement, only the last NOT MATCHED BY SOURCE clause can omit the condition."
+    ],
+    "sqlState" : "42000"
+  },
+  "NON_LAST_NOT_MATCHED_BY_TARGET_CLAUSE_OMIT_CONDITION" : {
+    "message" : [
+      "When there are more than one NOT MATCHED [BY TARGET] clauses in a MERGE statement, only the last NOT MATCHED [BY TARGET] clause can omit the condition."
+    ],
+    "sqlState" : "42000"
+  },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [
       "Literal expressions required for pivot values, found <expression>."
@@ -1178,34 +1196,14 @@
       "Empty source for merge: you should specify a source table/subquery in merge."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0005" : {
-    "message" : [
-      "Unrecognized matched action: <matchedAction>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0006" : {
     "message" : [
       "The number of inserted values cannot match the fields."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0007" : {
-    "message" : [
-      "Unrecognized not matched action: <notMatchedAction>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0008" : {
     "message" : [
       "There must be at least one WHEN clause in a MERGE statement."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0009" : {
-    "message" : [
-      "When there are more than one MATCHED clauses in a MERGE statement, only the last MATCHED clause can omit the condition."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0010" : {
-    "message" : [
-      "When there are more than one NOT MATCHED clauses in a MERGE statement, only the last NOT MATCHED clause can omit the condition."
     ]
   },
   "_LEGACY_ERROR_TEMP_0011" : {

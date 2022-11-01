@@ -480,10 +480,24 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       val notMatchedAssignments = Seq(
         Assignment($"i", $"d")
       )
+      val notMatchedBySourceAssignments = Seq(
+        Assignment($"i", $"i"),
+        Assignment($"b", $"b"),
+        Assignment($"a", $"a"),
+        Assignment($"m", $"m")
+      )
       val matchedActions = UpdateAction(Some(expr), matchedAssignments) ::
         DeleteAction(Some(expr)) :: Nil
       val notMatchedActions = InsertAction(None, notMatchedAssignments) :: Nil
-      MergeIntoTable(target, source, mergeCondition = expr, matchedActions, notMatchedActions)
+      val notMatchedBySourceActions = UpdateAction(Some(expr), matchedAssignments) ::
+        DeleteAction(Some(expr)) :: Nil
+      MergeIntoTable(
+        target,
+        source,
+        mergeCondition = expr,
+        matchedActions,
+        notMatchedActions,
+        notMatchedBySourceActions)
     }
     val originalPlan = func(testRelation, anotherTestRelation, originalCond).analyze
     val optimizedPlan = Optimize.execute(originalPlan)
@@ -499,7 +513,13 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       // However, the source must have all the columns present in target for star resolution.
       val source = LocalRelation($"i".int, $"b".boolean, $"a".array(IntegerType))
       val target = LocalRelation($"a".array(IntegerType))
-      MergeIntoTable(target, source, mergeCondition = expr, matchedActions, notMatchedActions)
+      MergeIntoTable(
+        target,
+        source,
+        mergeCondition = expr,
+        matchedActions,
+        notMatchedActions,
+        Seq.empty)
     }
     val originalPlanWithStar = mergePlanWithStar(originalCond).analyze
     val optimizedPlanWithStar = Optimize.execute(originalPlanWithStar)
