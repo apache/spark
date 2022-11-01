@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The class contains tests for the `ALTER TABLE .. ADD PARTITION` command
@@ -121,6 +122,18 @@ class AlterTableAddPartitionSuite
       sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
         " PARTITION (id=2) LOCATION 'loc1'")
       checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
+    }
+  }
+
+  test("SPARK-40798: Alter partition should verify partition value - legacy") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (c int) $defaultUsing PARTITIONED BY (p int)")
+
+      withSQLConf(SQLConf.SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION.key -> "true") {
+        sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
+        checkPartitions(t, Map("p" -> defaultPartitionName))
+        sql(s"ALTER TABLE $t DROP PARTITION (p=null)")
+      }
     }
   }
 }
