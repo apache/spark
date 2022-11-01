@@ -526,7 +526,7 @@ class ExternalAppendOnlyMap[K, V, C](
     }
 
     override def next(): (K, C) = {
-      if (batchIterator == null) {
+      if (!hasNext) {
         throw new NoSuchElementException
       }
       readNextItem()
