@@ -1497,12 +1497,43 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     // arguments checking
-    assert(ParseUrl(Seq(Literal("1"))).checkInputDataTypes().isFailure)
-    assert(ParseUrl(Seq(Literal("1"), Literal("2"), Literal("3"), Literal("4")))
-      .checkInputDataTypes().isFailure)
-    assert(ParseUrl(Seq(Literal("1"), Literal(2))).checkInputDataTypes().isFailure)
-    assert(ParseUrl(Seq(Literal(1), Literal("2"))).checkInputDataTypes().isFailure)
-    assert(ParseUrl(Seq(Literal("1"), Literal("2"), Literal(3))).checkInputDataTypes().isFailure)
+    assert(ParseUrl(Seq(Literal("1"))).checkInputDataTypes() == DataTypeMismatch(
+      errorSubClass = "WRONG_NUM_ARGS",
+      messageParameters = Map(
+        "functionName" -> "`parse_url`",
+        "expectedNum" -> "[2, 3]",
+        "actualNum" -> "1")
+    ))
+    assert(ParseUrl(Seq(Literal("1"), Literal("2"), Literal("3"),
+      Literal("4"))).checkInputDataTypes() == DataTypeMismatch(
+      errorSubClass = "WRONG_NUM_ARGS",
+      messageParameters = Map(
+        "functionName" -> "`parse_url`",
+        "expectedNum" -> "[2, 3]",
+        "actualNum" -> "4")
+    ))
+    assert(ParseUrl(Seq(Literal("1"), Literal(2))).checkInputDataTypes() == DataTypeMismatch(
+      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      messageParameters = Map(
+        "paramIndex" -> "2",
+        "requiredType" -> "\"STRING\"",
+        "inputSql" -> "\"2\"",
+        "inputType" -> "\"INT\"")))
+    assert(ParseUrl(Seq(Literal(1), Literal("2"))).checkInputDataTypes() == DataTypeMismatch(
+      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      messageParameters = Map(
+        "paramIndex" -> "1",
+        "requiredType" -> "\"STRING\"",
+        "inputSql" -> "\"1\"",
+        "inputType" -> "\"INT\"")))
+    assert(ParseUrl(Seq(Literal("1"), Literal("2"),
+      Literal(3))).checkInputDataTypes() == DataTypeMismatch(
+      errorSubClass = "UNEXPECTED_INPUT_TYPE",
+      messageParameters = Map(
+        "paramIndex" -> "3",
+        "requiredType" -> "\"STRING\"",
+        "inputSql" -> "\"3\"",
+        "inputType" -> "\"INT\"")))
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(ParseUrl(Seq(Literal("\"quote"), Literal("\"quote"))) :: Nil)
@@ -1593,7 +1624,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expr1 = Elt(Seq(indexExpr1))
     assert(expr1.checkInputDataTypes() ==
       DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_PARAMS",
+        errorSubClass = "WRONG_NUM_ARGS",
         messageParameters = Map(
           "functionName" -> "`elt`",
           "expectedNum" -> "> 1",

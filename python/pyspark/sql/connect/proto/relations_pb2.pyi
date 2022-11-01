@@ -64,7 +64,7 @@ class Relation(google.protobuf.message.Message):
     PROJECT_FIELD_NUMBER: builtins.int
     FILTER_FIELD_NUMBER: builtins.int
     JOIN_FIELD_NUMBER: builtins.int
-    UNION_FIELD_NUMBER: builtins.int
+    SET_OP_FIELD_NUMBER: builtins.int
     SORT_FIELD_NUMBER: builtins.int
     LIMIT_FIELD_NUMBER: builtins.int
     AGGREGATE_FIELD_NUMBER: builtins.int
@@ -73,6 +73,8 @@ class Relation(google.protobuf.message.Message):
     SAMPLE_FIELD_NUMBER: builtins.int
     OFFSET_FIELD_NUMBER: builtins.int
     DEDUPLICATE_FIELD_NUMBER: builtins.int
+    RANGE_FIELD_NUMBER: builtins.int
+    SUBQUERY_ALIAS_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -85,7 +87,7 @@ class Relation(google.protobuf.message.Message):
     @property
     def join(self) -> global___Join: ...
     @property
-    def union(self) -> global___Union: ...
+    def set_op(self) -> global___SetOperation: ...
     @property
     def sort(self) -> global___Sort: ...
     @property
@@ -103,6 +105,10 @@ class Relation(google.protobuf.message.Message):
     @property
     def deduplicate(self) -> global___Deduplicate: ...
     @property
+    def range(self) -> global___Range: ...
+    @property
+    def subquery_alias(self) -> global___SubqueryAlias: ...
+    @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
         self,
@@ -112,7 +118,7 @@ class Relation(google.protobuf.message.Message):
         project: global___Project | None = ...,
         filter: global___Filter | None = ...,
         join: global___Join | None = ...,
-        union: global___Union | None = ...,
+        set_op: global___SetOperation | None = ...,
         sort: global___Sort | None = ...,
         limit: global___Limit | None = ...,
         aggregate: global___Aggregate | None = ...,
@@ -121,6 +127,8 @@ class Relation(google.protobuf.message.Message):
         sample: global___Sample | None = ...,
         offset: global___Offset | None = ...,
         deduplicate: global___Deduplicate | None = ...,
+        range: global___Range | None = ...,
+        subquery_alias: global___SubqueryAlias | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -144,18 +152,22 @@ class Relation(google.protobuf.message.Message):
             b"offset",
             "project",
             b"project",
+            "range",
+            b"range",
             "read",
             b"read",
             "rel_type",
             b"rel_type",
             "sample",
             b"sample",
+            "set_op",
+            b"set_op",
             "sort",
             b"sort",
             "sql",
             b"sql",
-            "union",
-            b"union",
+            "subquery_alias",
+            b"subquery_alias",
             "unknown",
             b"unknown",
         ],
@@ -181,18 +193,22 @@ class Relation(google.protobuf.message.Message):
             b"offset",
             "project",
             b"project",
+            "range",
+            b"range",
             "read",
             b"read",
             "rel_type",
             b"rel_type",
             "sample",
             b"sample",
+            "set_op",
+            b"set_op",
             "sort",
             b"sort",
             "sql",
             b"sql",
-            "union",
-            b"union",
+            "subquery_alias",
+            b"subquery_alias",
             "unknown",
             b"unknown",
         ],
@@ -204,7 +220,7 @@ class Relation(google.protobuf.message.Message):
         "project",
         "filter",
         "join",
-        "union",
+        "set_op",
         "sort",
         "limit",
         "aggregate",
@@ -213,6 +229,8 @@ class Relation(google.protobuf.message.Message):
         "sample",
         "offset",
         "deduplicate",
+        "range",
+        "subquery_alias",
         "unknown",
     ] | None: ...
 
@@ -235,18 +253,14 @@ class RelationCommon(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     SOURCE_INFO_FIELD_NUMBER: builtins.int
-    ALIAS_FIELD_NUMBER: builtins.int
     source_info: builtins.str
-    alias: builtins.str
     def __init__(
         self,
         *,
         source_info: builtins.str = ...,
-        alias: builtins.str = ...,
     ) -> None: ...
     def ClearField(
-        self,
-        field_name: typing_extensions.Literal["alias", b"alias", "source_info", b"source_info"],
+        self, field_name: typing_extensions.Literal["source_info", b"source_info"]
     ) -> None: ...
 
 global___RelationCommon = RelationCommon
@@ -518,48 +532,77 @@ class Join(google.protobuf.message.Message):
 
 global___Join = Join
 
-class Union(google.protobuf.message.Message):
-    """Relation of type [[Union]], at least one input must be set."""
+class SetOperation(google.protobuf.message.Message):
+    """Relation of type [[SetOperation]]"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class _UnionType:
+    class _SetOpType:
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _UnionTypeEnumTypeWrapper(
-        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Union._UnionType.ValueType],
+    class _SetOpTypeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            SetOperation._SetOpType.ValueType
+        ],
         builtins.type,
     ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-        UNION_TYPE_UNSPECIFIED: Union._UnionType.ValueType  # 0
-        UNION_TYPE_DISTINCT: Union._UnionType.ValueType  # 1
-        UNION_TYPE_ALL: Union._UnionType.ValueType  # 2
+        SET_OP_TYPE_UNSPECIFIED: SetOperation._SetOpType.ValueType  # 0
+        SET_OP_TYPE_INTERSECT: SetOperation._SetOpType.ValueType  # 1
+        SET_OP_TYPE_UNION: SetOperation._SetOpType.ValueType  # 2
+        SET_OP_TYPE_EXCEPT: SetOperation._SetOpType.ValueType  # 3
 
-    class UnionType(_UnionType, metaclass=_UnionTypeEnumTypeWrapper): ...
-    UNION_TYPE_UNSPECIFIED: Union.UnionType.ValueType  # 0
-    UNION_TYPE_DISTINCT: Union.UnionType.ValueType  # 1
-    UNION_TYPE_ALL: Union.UnionType.ValueType  # 2
+    class SetOpType(_SetOpType, metaclass=_SetOpTypeEnumTypeWrapper): ...
+    SET_OP_TYPE_UNSPECIFIED: SetOperation.SetOpType.ValueType  # 0
+    SET_OP_TYPE_INTERSECT: SetOperation.SetOpType.ValueType  # 1
+    SET_OP_TYPE_UNION: SetOperation.SetOpType.ValueType  # 2
+    SET_OP_TYPE_EXCEPT: SetOperation.SetOpType.ValueType  # 3
 
-    INPUTS_FIELD_NUMBER: builtins.int
-    UNION_TYPE_FIELD_NUMBER: builtins.int
+    LEFT_INPUT_FIELD_NUMBER: builtins.int
+    RIGHT_INPUT_FIELD_NUMBER: builtins.int
+    SET_OP_TYPE_FIELD_NUMBER: builtins.int
+    IS_ALL_FIELD_NUMBER: builtins.int
+    BY_NAME_FIELD_NUMBER: builtins.int
     @property
-    def inputs(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Relation]: ...
-    union_type: global___Union.UnionType.ValueType
+    def left_input(self) -> global___Relation: ...
+    @property
+    def right_input(self) -> global___Relation: ...
+    set_op_type: global___SetOperation.SetOpType.ValueType
+    is_all: builtins.bool
+    by_name: builtins.bool
     def __init__(
         self,
         *,
-        inputs: collections.abc.Iterable[global___Relation] | None = ...,
-        union_type: global___Union.UnionType.ValueType = ...,
+        left_input: global___Relation | None = ...,
+        right_input: global___Relation | None = ...,
+        set_op_type: global___SetOperation.SetOpType.ValueType = ...,
+        is_all: builtins.bool = ...,
+        by_name: builtins.bool = ...,
     ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "left_input", b"left_input", "right_input", b"right_input"
+        ],
+    ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal["inputs", b"inputs", "union_type", b"union_type"],
+        field_name: typing_extensions.Literal[
+            "by_name",
+            b"by_name",
+            "is_all",
+            b"is_all",
+            "left_input",
+            b"left_input",
+            "right_input",
+            b"right_input",
+            "set_op_type",
+            b"set_op_type",
+        ],
     ) -> None: ...
 
-global___Union = Union
+global___SetOperation = SetOperation
 
 class Limit(google.protobuf.message.Message):
     """Relation of type [[Limit]] that is used to `limit` rows from the input relation."""
@@ -758,6 +801,7 @@ class Sort(google.protobuf.message.Message):
 
     INPUT_FIELD_NUMBER: builtins.int
     SORT_FIELDS_FIELD_NUMBER: builtins.int
+    IS_GLOBAL_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation: ...
     @property
@@ -766,18 +810,22 @@ class Sort(google.protobuf.message.Message):
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         global___Sort.SortField
     ]: ...
+    is_global: builtins.bool
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
         sort_fields: collections.abc.Iterable[global___Sort.SortField] | None = ...,
+        is_global: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal["input", b"input", "sort_fields", b"sort_fields"],
+        field_name: typing_extensions.Literal[
+            "input", b"input", "is_global", b"is_global", "sort_fields", b"sort_fields"
+        ],
     ) -> None: ...
 
 global___Sort = Sort
@@ -906,3 +954,108 @@ class Sample(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Sample = Sample
+
+class Range(google.protobuf.message.Message):
+    """Relation of type [[Range]] that generates a sequence of integers."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class Step(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        STEP_FIELD_NUMBER: builtins.int
+        step: builtins.int
+        def __init__(
+            self,
+            *,
+            step: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["step", b"step"]) -> None: ...
+
+    class NumPartitions(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        NUM_PARTITIONS_FIELD_NUMBER: builtins.int
+        num_partitions: builtins.int
+        def __init__(
+            self,
+            *,
+            num_partitions: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["num_partitions", b"num_partitions"]
+        ) -> None: ...
+
+    START_FIELD_NUMBER: builtins.int
+    END_FIELD_NUMBER: builtins.int
+    STEP_FIELD_NUMBER: builtins.int
+    NUM_PARTITIONS_FIELD_NUMBER: builtins.int
+    start: builtins.int
+    """Optional. Default value = 0"""
+    end: builtins.int
+    """Required."""
+    @property
+    def step(self) -> global___Range.Step:
+        """Optional. Default value = 1"""
+    @property
+    def num_partitions(self) -> global___Range.NumPartitions:
+        """Optional. Default value is assigned by 1) SQL conf "spark.sql.leafNodeDefaultParallelism" if
+        it is set, or 2) spark default parallelism.
+        """
+    def __init__(
+        self,
+        *,
+        start: builtins.int = ...,
+        end: builtins.int = ...,
+        step: global___Range.Step | None = ...,
+        num_partitions: global___Range.NumPartitions | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal["num_partitions", b"num_partitions", "step", b"step"],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "end", b"end", "num_partitions", b"num_partitions", "start", b"start", "step", b"step"
+        ],
+    ) -> None: ...
+
+global___Range = Range
+
+class SubqueryAlias(google.protobuf.message.Message):
+    """Relation alias."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    ALIAS_FIELD_NUMBER: builtins.int
+    QUALIFIER_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """Required. The input relation."""
+    alias: builtins.str
+    """Required. The alias."""
+    @property
+    def qualifier(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """Optional. Qualifier of the alias."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        alias: builtins.str = ...,
+        qualifier: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "alias", b"alias", "input", b"input", "qualifier", b"qualifier"
+        ],
+    ) -> None: ...
+
+global___SubqueryAlias = SubqueryAlias

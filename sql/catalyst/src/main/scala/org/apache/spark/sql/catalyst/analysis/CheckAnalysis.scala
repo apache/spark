@@ -156,7 +156,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           u.multipartIdentifier, u, u.possibleQualifiedName)
 
       case u: UnresolvedHint =>
-        u.failAnalysis(s"Hint not found: ${u.name}")
+        u.failAnalysis(
+          errorClass = "_LEGACY_ERROR_TEMP_2313",
+          messageParameters = Map("name" -> u.name))
 
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
         u.tableNotFound(u.multipartIdentifier)
@@ -196,7 +198,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 hof.dataTypeMismatch(hof, checkRes)
               case TypeCheckResult.TypeCheckFailure(message) =>
                 hof.failAnalysis(
-                  s"cannot resolve '${hof.sql}' due to argument data type mismatch: $message")
+                  errorClass = "_LEGACY_ERROR_TEMP_2314",
+                  messageParameters = Map("sqlExpr" -> hof.sql, "msg" -> message))
             }
 
           // If an attribute can't be resolved as a map key of string type, either the key should be
@@ -221,9 +224,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 e.dataTypeMismatch(e, checkRes)
               case TypeCheckResult.TypeCheckFailure(message) =>
                 e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
+                extraHintForAnsiTypeCoercionExpression(operator)
                 e.failAnalysis(
-                  s"cannot resolve '${e.sql}' due to data type mismatch: $message" +
-                    extraHintForAnsiTypeCoercionExpression(operator))
+                  errorClass = "_LEGACY_ERROR_TEMP_2315",
+                  messageParameters = Map(
+                    "sqlExpr" -> e.sql,
+                    "msg" -> message,
+                    "hint" -> extraHintForAnsiTypeCoercionExpression(operator)))
             }
 
           case c: Cast if !c.resolved =>
@@ -389,7 +396,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           case CollectMetrics(name, metrics, _) =>
             if (name == null || name.isEmpty) {
-              operator.failAnalysis(s"observed metrics should be named: $operator")
+              operator.failAnalysis(
+                errorClass = "_LEGACY_ERROR_TEMP_2316",
+                messageParameters = Map("operator" -> operator.toString))
             }
             // Check if an expression is a valid metric. A metric must meet the following criteria:
             // - Is not a window function;
@@ -400,23 +409,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             def checkMetric(s: Expression, e: Expression, seenAggregate: Boolean = false): Unit = {
               e match {
                 case _: WindowExpression =>
-                  e.failAnalysis(
-                    "window expressions are not allowed in observed metrics, but found: " + s.sql)
+                  e.failAnalysis("_LEGACY_ERROR_TEMP_2317", Map("sqlExpr" -> s.sql))
                 case _ if !e.deterministic && !seenAggregate =>
-                  e.failAnalysis(s"non-deterministic expression ${s.sql} can only be used " +
-                    "as an argument to an aggregate function.")
+                  e.failAnalysis("_LEGACY_ERROR_TEMP_2318", Map("sqlExpr" -> s.sql))
                 case a: AggregateExpression if seenAggregate =>
-                  e.failAnalysis(
-                    "nested aggregates are not allowed in observed metrics, but found: " + s.sql)
+                  e.failAnalysis("_LEGACY_ERROR_TEMP_2319", Map("sqlExpr" -> s.sql))
                 case a: AggregateExpression if a.isDistinct =>
-                  e.failAnalysis(
-                    "distinct aggregates are not allowed in observed metrics, but found: " + s.sql)
+                  e.failAnalysis("_LEGACY_ERROR_TEMP_2320", Map("sqlExpr" -> s.sql))
                 case a: AggregateExpression if a.filter.isDefined =>
-                  e.failAnalysis("aggregates with filter predicate are not allowed in " +
-                    "observed metrics, but found: " + s.sql)
+                  e.failAnalysis("_LEGACY_ERROR_TEMP_2321", Map("sqlExpr" -> s.sql))
                 case _: Attribute if !seenAggregate =>
-                  e.failAnalysis (s"attribute ${s.sql} can only be used as an argument to an " +
-                    "aggregate function.")
+                  e.failAnalysis("_LEGACY_ERROR_TEMP_2322", Map("sqlExpr" -> s.sql))
                 case _: AggregateExpression =>
                   e.children.foreach(checkMetric (s, _, seenAggregate = true))
                 case _ =>
@@ -1225,8 +1228,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     def checkColumnNotExists(op: String, fieldNames: Seq[String], struct: StructType): Unit = {
       if (struct.findNestedField(
           fieldNames, includeCollections = true, alter.conf.resolver).isDefined) {
-        alter.failAnalysis(s"Cannot $op column, because ${fieldNames.quoted} " +
-          s"already exists in ${struct.treeString}")
+        alter.failAnalysis(
+          errorClass = "_LEGACY_ERROR_TEMP_2323",
+          messageParameters = Map(
+            "op" -> op,
+            "fieldNames" -> fieldNames.quoted,
+            "struct" -> struct.treeString))
       }
     }
 
@@ -1258,20 +1265,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             .getOrElse(col.field)
           val newDataType = a.dataType.get
           newDataType match {
-            case _: StructType =>
-              alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
-                "update a struct by updating its fields")
-            case _: MapType =>
-              alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
-                s"update a map by updating $fieldName.key or $fieldName.value")
-            case _: ArrayType =>
-              alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
-                s"update the element by updating $fieldName.element")
-            case u: UserDefinedType[_] =>
-              alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
-                s"update a UserDefinedType[${u.sql}] by updating its fields")
-            case _: CalendarIntervalType | _: AnsiIntervalType =>
-              alter.failAnalysis(s"Cannot update ${table.name} field $fieldName to interval type")
+            case _: StructType => alter.failAnalysis(
+              "_LEGACY_ERROR_TEMP_2324", Map("table" -> table.name, "fieldName" -> fieldName))
+            case _: MapType => alter.failAnalysis(
+              "_LEGACY_ERROR_TEMP_2325", Map("table" -> table.name, "fieldName" -> fieldName))
+            case _: ArrayType => alter.failAnalysis(
+              "_LEGACY_ERROR_TEMP_2326", Map("table" -> table.name, "fieldName" -> fieldName))
+            case u: UserDefinedType[_] => alter.failAnalysis(
+              "_LEGACY_ERROR_TEMP_2327",
+              Map("table" -> table.name, "fieldName" -> fieldName, "udtSql" -> u.sql))
+            case _: CalendarIntervalType | _: AnsiIntervalType => alter.failAnalysis(
+              "_LEGACY_ERROR_TEMP_2328", Map("table" -> table.name, "fieldName" -> fieldName))
             case _ => // update is okay
           }
 
@@ -1284,13 +1288,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           }
 
           if (!canAlterColumnType(field.dataType, newDataType)) {
-            alter.failAnalysis(s"Cannot update ${table.name} field $fieldName: " +
-              s"${field.dataType.simpleString} cannot be cast to ${newDataType.simpleString}")
+            alter.failAnalysis(
+              errorClass = "_LEGACY_ERROR_TEMP_2329",
+              messageParameters = Map(
+                "table" -> table.name,
+                "fieldName" -> fieldName,
+                "oldType" -> field.dataType.simpleString,
+                "newType" -> newDataType.simpleString))
           }
         }
         if (a.nullable.isDefined) {
           if (!a.nullable.get && col.field.nullable) {
-            alter.failAnalysis(s"Cannot change nullable column to non-nullable: $fieldName")
+            alter.failAnalysis(
+              errorClass = "_LEGACY_ERROR_TEMP_2330",
+              messageParameters = Map("fieldName" -> fieldName))
           }
         }
       case _ =>

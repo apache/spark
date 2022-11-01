@@ -1048,7 +1048,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
             hasInitialState, sga, sda, se, i, c) =>
           FlatMapGroupsWithStateExec(
             f, k, v, se, g, sga, d, sda, o, None, s, stateFormatVersion, m, t,
-            Some(currentBatchTimestamp), Some(currentBatchWatermark),
+            Some(currentBatchTimestamp), Some(0), Some(currentBatchWatermark),
             RDDScanExec(g, emptyRdd, "rdd"),
             hasInitialState,
             RDDScanExec(g, emptyRdd, "rdd"))

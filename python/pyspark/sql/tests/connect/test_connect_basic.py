@@ -18,14 +18,18 @@ from typing import Any
 import unittest
 import shutil
 import tempfile
+from pyspark.testing.sqlutils import have_pandas
 
-import pandas
+if have_pandas:
+    import pandas
 
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.types import StructType, StructField, LongType, StringType
-from pyspark.sql.connect.client import RemoteSparkSession
-from pyspark.sql.connect.function_builder import udf
-from pyspark.sql.connect.functions import lit
+
+if have_pandas:
+    from pyspark.sql.connect.client import RemoteSparkSession
+    from pyspark.sql.connect.function_builder import udf
+    from pyspark.sql.connect.functions import lit
 from pyspark.sql.dataframe import DataFrame
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import ReusedPySparkTestCase
@@ -36,7 +40,8 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
     """Parent test fixture class for all Spark Connect related
     test cases."""
 
-    connect: RemoteSparkSession
+    if have_pandas:
+        connect: RemoteSparkSession
     tbl_name: str
     df_text: "DataFrame"
 
@@ -122,6 +127,12 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(9, len(pd.index))
         pd2 = df.offset(98).limit(10).toPandas()
         self.assertEqual(2, len(pd2.index))
+
+    def test_head(self):
+        df = self.connect.read.table(self.tbl_name)
+        pd = df.head(10)
+        self.assertIsNotNone(pd)
+        self.assertEqual(10, len(pd.index))
 
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text

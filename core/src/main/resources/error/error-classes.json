@@ -98,6 +98,11 @@
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
     ]
   },
+  "CREATE_TABLE_COLUMN_OPTION_DUPLICATE" : {
+    "message" : [
+      "CREATE TABLE column <columnName> specifies option \"<optionName>\" more than once, which is invalid"
+    ]
+  },
   "DATATYPE_MISMATCH" : {
     "message" : [
       "Cannot resolve <sqlExpr> due to data type mismatch:"
@@ -200,6 +205,11 @@
           "The <functionName> accepts only arrays of pair structs, but <childExpr> is of <childType>."
         ]
       },
+      "MAP_ZIP_WITH_DIFF_TYPES" : {
+        "message" : [
+          "Input to the <functionName> should have been two maps with compatible key types, but it's [<leftType>, <rightType>]."
+        ]
+      },
       "NON_FOLDABLE_INPUT" : {
         "message" : [
           "the input <inputName> should be a foldable <inputType> expression; however, got <inputExpr>."
@@ -213,6 +223,11 @@
       "NULL_TYPE" : {
         "message" : [
           "Null typed values cannot be used as arguments of <functionName>."
+        ]
+      },
+      "PARAMETER_CONSTRAINT_VIOLATION" : {
+        "message" : [
+          "The <leftExprName>(<leftExprValue>) must be <constraint> the <rightExprName>(<rightExprValue>)"
         ]
       },
       "RANGE_FRAME_INVALID_TYPE" : {
@@ -270,6 +285,11 @@
           "The <exprName> must not be null"
         ]
       },
+      "UNEXPECTED_RETURN_TYPE" : {
+        "message" : [
+          "The <functionName> requires return <expectedType> type, but the actual is <actualType> type."
+        ]
+      },
       "UNEXPECTED_STATIC_METHOD" : {
         "message" : [
           "cannot find a static method <methodName> that matches the argument types in <className>"
@@ -285,14 +305,14 @@
           "The <exprName> must be between <valueRange> (current value = <currentValue>)"
         ]
       },
+      "WRONG_NUM_ARGS" : {
+        "message" : [
+          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
+        ]
+      },
       "WRONG_NUM_ENDPOINTS" : {
         "message" : [
           "The number of endpoints must be >= 2 to construct intervals but the actual number is <actualNumber>."
-        ]
-      },
-      "WRONG_NUM_PARAMS" : {
-        "message" : [
-          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
         ]
       }
     }
@@ -340,6 +360,11 @@
       "Failed to rename <sourcePath> to <targetPath> as destination already exists"
     ],
     "sqlState" : "22023"
+  },
+  "FIELD_NOT_FOUND" : {
+    "message" : [
+      "No such struct field <fieldName> in <fields>."
+    ]
   },
   "FORBIDDEN_OPERATION" : {
     "message" : [
@@ -405,12 +430,6 @@
         "message" : [
           "Spark >= 3.0:",
           "Fail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"
-        ]
-      },
-      "FORMAT_DATETIME_BY_NEW_PARSER" : {
-        "message" : [
-          "Spark >= 3.0:",
-          "Fail to format it to <resultCandidate> in the new formatter. You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0, or set to \"CORRECTED\" and treat it as an invalid datetime string."
         ]
       },
       "PARSE_DATETIME_BY_NEW_PARSER" : {
@@ -579,28 +598,6 @@
     "message" : [
       "More than one row returned by a subquery used as an expression."
     ]
-  },
-  "NAMESPACE_ALREADY_EXISTS" : {
-    "message" : [
-      "Cannot create namespace <nameSpaceName> because it already exists.",
-      "Choose a different name, drop the existing namespace, or add the IF NOT EXISTS clause to tolerate pre-existing namespace."
-    ],
-    "sqlState" : "42000"
-  },
-  "NAMESPACE_NOT_EMPTY" : {
-    "message" : [
-      "Cannot drop a namespace <nameSpaceNameName> because it contains objects.",
-      "Use DROP NAMESPACE ... CASCADE to drop the namespace and all its objects."
-    ],
-    "sqlState" : "42000"
-  },
-  "NAMESPACE_NOT_FOUND" : {
-    "message" : [
-      "The namespace <nameSpaceName> cannot be found. Verify the spelling and correctness of the namespace.",
-      "If you did not qualify the name with, verify the current_schema() output, or qualify the name with the correctly.",
-      "To tolerate the error on drop use DROP NAMESPACE IF EXISTS."
-    ],
-    "sqlState" : "42000"
   },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [
@@ -949,6 +946,11 @@
           "Literal for '<value>' of <type>."
         ]
       },
+      "MULTIPLE_BUCKET_TRANSFORMS" : {
+        "message" : [
+          "Multiple bucket TRANSFORMs."
+        ]
+      },
       "NATURAL_CROSS_JOIN" : {
         "message" : [
           "NATURAL CROSS JOIN."
@@ -1143,6 +1145,11 @@
       }
     }
   },
+  "UNSUPPORTED_TYPED_LITERAL" : {
+    "message" : [
+      "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
+    ]
+  },
   "UNTYPED_SCALA_UDF" : {
     "message" : [
       "You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. To get rid of this error, you could:",
@@ -1249,11 +1256,6 @@
   "_LEGACY_ERROR_TEMP_0020" : {
     "message" : [
       "Cannot parse the INTERVAL value: <value>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0021" : {
-    "message" : [
-      "Literals of type '<valueType>' are currently not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_0022" : {
@@ -2487,11 +2489,6 @@
       "The duration and time inputs to window must be an integer, long or string literal."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1208" : {
-    "message" : [
-      "No such struct field <fieldName> in <fields>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1209" : {
     "message" : [
       "Ambiguous reference to fields <fields>."
@@ -3183,11 +3180,6 @@
   "_LEGACY_ERROR_TEMP_2000" : {
     "message" : [
       "<message>. If necessary set <ansiConfig> to false to bypass this error."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2002" : {
-    "message" : [
-      "<message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2003" : {
@@ -4480,6 +4472,171 @@
   "_LEGACY_ERROR_TEMP_2282" : {
     "message" : [
       "Drop namespace restrict is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2300" : {
+    "message" : [
+      "The number of lambda function arguments '<namesSize>' does not match the number of arguments expected by the higher order function '<argInfoSize>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2301" : {
+    "message" : [
+      "Lambda function arguments should not have names that are semantically the same."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2302" : {
+    "message" : [
+      "'<name>' does not support more than one sources"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2303" : {
+    "message" : [
+      "incompatible types found in column <name> for inline table"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2304" : {
+    "message" : [
+      "cannot evaluate expression <sqlExpr> in inline table definition"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2305" : {
+    "message" : [
+      "expected <numCols> columns but found <rowSize> columns in row <ri>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2306" : {
+    "message" : [
+      "A lambda function should only be used in a higher order function. However, its class is <class>, which is not a higher order function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2307" : {
+    "message" : [
+      "Number of given aliases does not match number of output columns. Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2308" : {
+    "message" : [
+      "could not resolve `<name>` to a table-valued function"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2309" : {
+    "message" : [
+      "cannot resolve <sqlExpr> in MERGE command given columns [<cols>]"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2310" : {
+    "message" : [
+      "'writeStream' can be called only on streaming Dataset/DataFrame"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2311" : {
+    "message" : [
+      "'writeTo' can not be called on streaming Dataset/DataFrame"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2312" : {
+    "message" : [
+      "'write' can not be called on streaming Dataset/DataFrame"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2313" : {
+    "message" : [
+      "Hint not found: <name>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2314" : {
+    "message" : [
+      "cannot resolve '<sqlExpr>' due to argument data type mismatch: <msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2315" : {
+    "message" : [
+      "cannot resolve '<sqlExpr>' due to data type mismatch: <msg><hint>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2316" : {
+    "message" : [
+      "observed metrics should be named: <operator>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2317" : {
+    "message" : [
+      "window expressions are not allowed in observed metrics, but found: <sqlExpr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2318" : {
+    "message" : [
+      "non-deterministic expression <sqlExpr> can only be used as an argument to an aggregate function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2319" : {
+    "message" : [
+      "nested aggregates are not allowed in observed metrics, but found: <sqlExpr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2320" : {
+    "message" : [
+      "distinct aggregates are not allowed in observed metrics, but found: <sqlExpr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2321" : {
+    "message" : [
+      "aggregates with filter predicate are not allowed in observed metrics, but found: <sqlExpr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2322" : {
+    "message" : [
+      "attribute <sqlExpr> can only be used as an argument to an aggregate function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2323" : {
+    "message" : [
+      "Cannot <op> column, because <fieldNames> already exists in <struct>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2324" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> type: update a struct by updating its fields"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2325" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> type: update a map by updating <fieldName>.key or <fieldName>.value"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2326" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> type: update the element by updating <fieldName>.element"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2327" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> type: update a UserDefinedType[<udtSql>] by updating its fields"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2328" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> to interval type"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2329" : {
+    "message" : [
+      "Cannot update <table> field <fieldName>: <oldType> cannot be cast to <newType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2330" : {
+    "message" : [
+      "Cannot change nullable column to non-nullable: <fieldName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2331" : {
+    "message" : [
+      "failed to evaluate expression <sqlExpr>: <msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2332" : {
+    "message" : [
+      "<msg>"
     ]
   }
 }

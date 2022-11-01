@@ -658,8 +658,11 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("GEO '(10,-6)'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0021",
-      parameters = Map("valueType" -> "GEO"),
+      errorClass = "UNSUPPORTED_TYPED_LITERAL",
+      parameters = Map(
+        "unsupportedType" -> "\"GEO\"",
+        "supportedTypes" ->
+        """"DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X""""),
       context = ExpectedContext(
         fragment = "GEO '(10,-6)'",
         start = 0,

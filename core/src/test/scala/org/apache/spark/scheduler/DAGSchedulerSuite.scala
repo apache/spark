@@ -176,7 +176,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
     override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
     override def start() = {}
-    override def stop() = {}
+    override def stop(exitCode: Int) = {}
     override def executorHeartbeatReceived(
         execId: String,
         accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
@@ -846,7 +846,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
       override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
       override def start(): Unit = {}
-      override def stop(): Unit = {}
+      override def stop(exitCode: Int): Unit = {}
       override def submitTasks(taskSet: TaskSet): Unit = {
         taskSets += taskSet
       }
