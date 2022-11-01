@@ -28,7 +28,7 @@ import org.apache.spark.connect.proto.{Request, Response}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connect.command.SparkConnectCommandPlanner
-import org.apache.spark.sql.connect.planner.{DataTypeProtoConverter, SparkConnectPlanner}
+import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -112,7 +112,6 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
         .newBuilder()
         .setData(ByteString.copyFromUtf8(sb.toString()))
         .setRowCount(rowCount)
-        .setSchema(DataTypeProtoConverter.toConnectProtoType(rows.schema))
         .build()
       response.setJsonBatch(batch)
       responseObserver.onNext(response.build())
