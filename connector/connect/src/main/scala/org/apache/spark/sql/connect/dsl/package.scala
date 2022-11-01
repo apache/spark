@@ -180,9 +180,9 @@ package object dsl {
   object plans { // scalastyle:ignore
     implicit class DslMockRemoteSession(val session: MockRemoteSession) {
       def range(
-          start: Option[Int],
-          end: Int,
-          step: Option[Int],
+          start: Option[Long],
+          end: Long,
+          step: Option[Long],
           numPartitions: Option[Int]): Relation = {
         val range = proto.Range.newBuilder()
         if (start.isDefined) {
