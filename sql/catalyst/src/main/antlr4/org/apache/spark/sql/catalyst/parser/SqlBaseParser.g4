@@ -1001,7 +1001,13 @@ createOrReplaceTableColTypeList
     ;
 
 createOrReplaceTableColType
-    : colName=errorCapturingIdentifier dataType (NOT NULL)? defaultExpression? commentSpec?
+    : colName=errorCapturingIdentifier dataType colDefinitionOption*
+    ;
+
+colDefinitionOption
+    : NOT NULL
+    | defaultExpression
+    | commentSpec
     ;
 
 complexColTypeList

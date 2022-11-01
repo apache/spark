@@ -640,4 +640,16 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def defaultColumnReferencesNotAllowedInPartitionSpec(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0059", ctx)
   }
+
+  def duplicateCreateTableColumnOption(
+      ctx: ParserRuleContext,
+      columnName: String,
+      optionName: String): Throwable = {
+    new ParseException(
+      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      messageParameters = Map(
+        "columnName" -> columnName,
+        "optionName" -> optionName),
+      ctx)
+  }
 }
