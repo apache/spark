@@ -537,7 +537,7 @@ class Join(LogicalPlan):
         self,
         left: Optional["LogicalPlan"],
         right: "LogicalPlan",
-        on: "ColumnOrString",
+        on: Optional[Union[str, List[str], ColumnRef]],
         how: Optional[str],
     ) -> None:
         super().__init__(left)
@@ -575,7 +575,14 @@ class Join(LogicalPlan):
         rel = proto.Relation()
         rel.join.left.CopyFrom(self.left.plan(session))
         rel.join.right.CopyFrom(self.right.plan(session))
-        rel.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
+        if self.on is not None:
+            if not isinstance(self.on, list):
+                if isinstance(self.on, str):
+                    rel.join.using_columns.append(self.on)
+                else:
+                    rel.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
+            else:
+                rel.join.using_columns.extend(self.on)
         rel.join.join_type = self.how
         return rel
 

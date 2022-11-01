@@ -37,6 +37,23 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertIsNotNone(plan.root, "Root relation must be set")
         self.assertIsNotNone(plan.root.read)
 
+    def test_join_using_columns(self):
+        left_input = self.connect.readTable(table_name=self.tbl_name)
+        right_input = self.connect.readTable(table_name=self.tbl_name)
+        plan = left_input.join(other=right_input, on="join_column")._plan.to_proto(self.connect)
+        self.assertEqual(len(plan.root.join.using_columns), 1)
+
+        plan2 = left_input.join(other=right_input, on=["col1", "col2"])._plan.to_proto(self.connect)
+        self.assertEqual(len(plan2.root.join.using_columns), 2)
+
+    def test_join_condition(self):
+        left_input = self.connect.readTable(table_name=self.tbl_name)
+        right_input = self.connect.readTable(table_name=self.tbl_name)
+        plan = left_input.join(
+            other=right_input, on=left_input.name == right_input.name
+        )._plan.to_proto(self.connect)
+        self.assertIsNotNone(plan.root.join.join_condition)
+
     def test_filter(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.filter(df.col_name > 3)._plan.to_proto(self.connect)
