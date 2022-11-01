@@ -200,9 +200,7 @@ package object dsl {
       }
 
       def sql(sqlText: String): Relation = {
-        Relation.newBuilder().setSql(
-          SQL.newBuilder().setQuery(sqlText)
-        ).build()
+        Relation.newBuilder().setSql(SQL.newBuilder().setQuery(sqlText)).build()
       }
     }
 
