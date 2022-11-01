@@ -121,7 +121,7 @@ class DataFrame(object):
         return self.groupBy().agg(exprs)
 
     def alias(self, alias: str) -> "DataFrame":
-        return DataFrame.withPlan(plan.Project(self._plan).withAlias(alias), session=self._session)
+        return DataFrame.withPlan(plan.SubqueryAlias(self._plan, alias), session=self._session)
 
     def approxQuantile(self, col: ColumnRef, probabilities: Any, relativeError: Any) -> "DataFrame":
         ...
@@ -217,8 +217,13 @@ class DataFrame(object):
     def head(self, n: int) -> Optional["pandas.DataFrame"]:
         return self.limit(n).toPandas()
 
-    # TODO(martin.grund) fix mypu
-    def join(self, other: "DataFrame", on: Any, how: Optional[str] = None) -> "DataFrame":
+    # TODO: extend `on` to also be type List[ColumnRef].
+    def join(
+        self,
+        other: "DataFrame",
+        on: Optional[Union[str, List[str], ColumnRef]] = None,
+        how: Optional[str] = None,
+    ) -> "DataFrame":
         if self._plan is None:
             raise Exception("Cannot join when self._plan is empty.")
         if other._plan is None:
@@ -237,7 +242,15 @@ class DataFrame(object):
 
     def sort(self, *cols: "ColumnOrString") -> "DataFrame":
         """Sort by a specific column"""
-        return DataFrame.withPlan(plan.Sort(self._plan, *cols), session=self._session)
+        return DataFrame.withPlan(
+            plan.Sort(self._plan, columns=list(cols), is_global=True), session=self._session
+        )
+
+    def sortWithinPartitions(self, *cols: "ColumnOrString") -> "DataFrame":
+        """Sort within each partition by a specific column"""
+        return DataFrame.withPlan(
+            plan.Sort(self._plan, columns=list(cols), is_global=False), session=self._session
+        )
 
     def sample(
         self,

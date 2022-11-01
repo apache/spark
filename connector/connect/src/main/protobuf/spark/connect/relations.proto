@@ -44,6 +44,8 @@ message Relation {
     Sample sample = 12;
     Offset offset = 13;
     Deduplicate deduplicate = 14;
+    Range range = 15;
+    SubqueryAlias subquery_alias = 16;
 
     Unknown unknown = 999;
   }
@@ -55,7 +57,6 @@ message Unknown {}
 // Common metadata of all relations.
 message RelationCommon {
   string source_info = 1;
-  string alias = 2;
 }
 
 // Relation that uses a SQL query to generate the output.
@@ -172,6 +173,7 @@ message Aggregate {
 message Sort {
   Relation input = 1;
   repeated SortField sort_fields = 2;
+  bool is_global = 3;
 
   message SortField {
     Expression expression = 1;
@@ -216,4 +218,35 @@ message Sample {
   message Seed {
     int64 seed = 1;
   }
+}
+
+// Relation of type [[Range]] that generates a sequence of integers.
+message Range {
+  // Optional. Default value = 0
+  int32 start = 1;
+  // Required.
+  int32 end = 2;
+  // Optional. Default value = 1
+  Step step = 3;
+  // Optional. Default value is assigned by 1) SQL conf "spark.sql.leafNodeDefaultParallelism" if
+  // it is set, or 2) spark default parallelism.
+  NumPartitions num_partitions = 4;
+
+  message Step {
+    int32 step = 1;
+  }
+
+  message NumPartitions {
+    int32 num_partitions = 1;
+  }
+}
+
+// Relation alias.
+message SubqueryAlias {
+  // Required. The input relation.
+  Relation input = 1;
+  // Required. The alias.
+  string alias = 2;
+  // Optional. Qualifier of the alias.
+  repeated string qualifier = 3;
 }
