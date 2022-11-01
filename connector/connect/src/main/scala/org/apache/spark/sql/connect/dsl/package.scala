@@ -331,6 +331,45 @@ package object dsl {
           .build()
       }
 
+      def createDefaultSortField(col: String): Sort.SortField = {
+        Sort.SortField
+          .newBuilder()
+          .setNulls(Sort.SortNulls.SORT_NULLS_FIRST)
+          .setDirection(Sort.SortDirection.SORT_DIRECTION_ASCENDING)
+          .setExpression(
+            Expression.newBuilder
+              .setUnresolvedAttribute(
+                Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier(col).build())
+              .build())
+          .build()
+      }
+
+      def sort(columns: String*): Relation = {
+        Relation
+          .newBuilder()
+          .setSort(
+            Sort
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllSortFields(columns.map(createDefaultSortField).asJava)
+              .setIsGlobal(true)
+              .build())
+          .build()
+      }
+
+      def sortWithinPartitions(columns: String*): Relation = {
+        Relation
+          .newBuilder()
+          .setSort(
+            Sort
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllSortFields(columns.map(createDefaultSortField).asJava)
+              .setIsGlobal(false)
+              .build())
+          .build()
+      }
+
       def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*): Relation = {
         val agg = Aggregate.newBuilder()
         agg.setInput(logicalPlan)

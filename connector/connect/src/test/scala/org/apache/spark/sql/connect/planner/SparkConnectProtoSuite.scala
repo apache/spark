@@ -118,6 +118,16 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan, sparkPlan)
   }
 
+  test("Test sort") {
+    val connectPlan = connectTestRelation.sort("id", "name")
+    val sparkPlan = sparkTestRelation.sort("id", "name")
+    comparePlans(connectPlan, sparkPlan)
+
+    val connectPlan2 = connectTestRelation.sortWithinPartitions("id", "name")
+    val sparkPlan2 = sparkTestRelation.sortWithinPartitions("id", "name")
+    comparePlans(connectPlan2, sparkPlan2)
+  }
+
   test("column alias") {
     val connectPlan = connectTestRelation.select("id".protoAttr.as("id2"))
     val sparkPlan = sparkTestRelation.select(Column("id").alias("id2"))

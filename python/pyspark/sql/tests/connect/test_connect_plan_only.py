@@ -94,6 +94,32 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.sample.with_replacement, True)
         self.assertEqual(plan.root.sample.seed.seed, -1)
 
+    def test_sort(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.filter(df.col_name > 3).sort("col_a", "col_b")._plan.to_proto(self.connect)
+        self.assertEqual(
+            [
+                f.expression.unresolved_attribute.unparsed_identifier
+                for f in plan.root.sort.sort_fields
+            ],
+            ["col_a", "col_b"],
+        )
+        self.assertEqual(plan.root.sort.is_global, True)
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .sortWithinPartitions("col_a", "col_b")
+            ._plan.to_proto(self.connect)
+        )
+        self.assertEqual(
+            [
+                f.expression.unresolved_attribute.unparsed_identifier
+                for f in plan.root.sort.sort_fields
+            ],
+            ["col_a", "col_b"],
+        )
+        self.assertEqual(plan.root.sort.is_global, False)
+
     def test_deduplicate(self):
         df = self.connect.readTable(table_name=self.tbl_name)
 

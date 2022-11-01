@@ -360,15 +360,19 @@ class Deduplicate(LogicalPlan):
 
 class Sort(LogicalPlan):
     def __init__(
-        self, child: Optional["LogicalPlan"], *columns: Union[SortOrder, ColumnRef, str]
+        self,
+        child: Optional["LogicalPlan"],
+        columns: List[Union[SortOrder, ColumnRef, str]],
+        is_global: bool,
     ) -> None:
         super().__init__(child)
-        self.columns = list(columns)
+        self.columns = columns
+        self.is_global = is_global
 
     def col_to_sort_field(
         self, col: Union[SortOrder, ColumnRef, str], session: Optional["RemoteSparkSession"]
     ) -> proto.Sort.SortField:
-        if type(col) is SortOrder:
+        if isinstance(col, SortOrder):
             sf = proto.Sort.SortField()
             sf.expression.CopyFrom(col.ref.to_plan(session))
             sf.direction = (
@@ -385,10 +389,10 @@ class Sort(LogicalPlan):
         else:
             sf = proto.Sort.SortField()
             # Check string
-            if type(col) is ColumnRef:
+            if isinstance(col, ColumnRef):
                 sf.expression.CopyFrom(col.to_plan(session))
             else:
-                sf.expression.CopyFrom(self.unresolved_attr(cast(str, col)))
+                sf.expression.CopyFrom(self.unresolved_attr(col))
             sf.direction = proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
             sf.nulls = proto.Sort.SortNulls.SORT_NULLS_LAST
             return sf
@@ -398,11 +402,12 @@ class Sort(LogicalPlan):
         plan = proto.Relation()
         plan.sort.input.CopyFrom(self._child.plan(session))
         plan.sort.sort_fields.extend([self.col_to_sort_field(x, session) for x in self.columns])
+        plan.sort.is_global = self.is_global
         return plan
 
     def print(self, indent: int = 0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{' ' * indent}<Sort columns={self.columns}>\n{c_buf}"
+        return f"{' ' * indent}<Sort columns={self.columns}, global={self.is_global}>\n{c_buf}"
 
     def _repr_html_(self) -> str:
         return f"""
@@ -410,6 +415,7 @@ class Sort(LogicalPlan):
             <li>
                 <b>Sort</b><br />
                 {", ".join([str(c) for c in self.columns])}
+                global: {self.is_global} <br />
                 {self._child_repr_()}
             </li>
         </uL>

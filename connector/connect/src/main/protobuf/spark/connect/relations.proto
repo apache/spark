@@ -173,6 +173,7 @@ message Aggregate {
 message Sort {
   Relation input = 1;
   repeated SortField sort_fields = 2;
+  bool is_global = 3;
 
   message SortField {
     Expression expression = 1;

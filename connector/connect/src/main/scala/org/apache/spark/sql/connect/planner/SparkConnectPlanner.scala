@@ -364,7 +364,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     assert(rel.getSortFieldsCount > 0, "'sort_fields' must be present and contain elements.")
     logical.Sort(
       child = transformRelation(rel.getInput),
-      global = true,
+      global = rel.getIsGlobal,
       order = rel.getSortFieldsList.asScala.map(transformSortOrderExpression).toSeq)
   }
 
