@@ -3340,12 +3340,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       cause = Option(cause.getCause))
   }
 
-  def noProtobufMessageTypeReturnError(descriptorName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "NO_PROTOBUF_MESSAGE_TYPE",
-      messageParameters = Map("descriptorName" -> descriptorName))
-  }
-
   def failedParsingDescriptorError(descFilePath: String, cause: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR",

@@ -176,20 +176,17 @@ private[sql] object ProtobufUtils extends Logging {
   }
 
   def buildDescriptor(descFilePath: String, messageName: String): Descriptor = {
-    val fileDescriptor = parseFileDescriptorSet(descFilePath)
-      .find(!_.getMessageTypes.asScala.find(desc =>
-        desc.getName == messageName || desc.getFullName == messageName
-      ).isEmpty)
-
-    fileDescriptor match {
-      case Some(f) =>
-        f.getMessageTypes.asScala.find { desc =>
+    // Find the first message descriptor that matches the name.
+    val descriptorOpt = parseFileDescriptorSet(descFilePath)
+      .flatMap { fileDesc =>
+        fileDesc.getMessageTypes.asScala.find { desc =>
           desc.getName == messageName || desc.getFullName == messageName
-        } match {
-          case Some(d) => d
-          case None => throw QueryCompilationErrors.unableToLocateProtobufMessageError(messageName)
         }
-      case None => throw QueryCompilationErrors.noProtobufMessageTypeReturnError(messageName)
+      }.headOption
+
+    descriptorOpt match {
+      case Some(d) => d
+      case None => throw QueryCompilationErrors.unableToLocateProtobufMessageError(messageName)
     }
   }
 

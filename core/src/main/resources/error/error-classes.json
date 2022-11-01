@@ -656,11 +656,6 @@
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
     ]
   },
-  "NO_PROTOBUF_MESSAGE_TYPE" : {
-    "message" : [
-      "No MessageTypes returned, <descriptorName>"
-    ]
-  },
   "NO_SQL_TYPE_IN_PROTOBUF_SCHEMA" : {
     "message" : [
       "Cannot find <catalystFieldPath> in Protobuf schema"
