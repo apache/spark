@@ -18,6 +18,7 @@
 package test.org.apache.spark.sql;
 
 import org.apache.spark.api.java.function.FilterFunction;
+import org.apache.spark.sql.AnalysisException;
 import org.apache.spark.sql.Column;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
@@ -79,15 +80,8 @@ public class JavaColumnExpressionSuite {
       createStructField("a", IntegerType, false),
       createStructField("b", createArrayType(IntegerType, false), false)));
     Dataset<Row> df = spark.createDataFrame(rows, schema);
-    Exception e = Assert.assertThrows(Exception.class,
+    AnalysisException e = Assert.assertThrows(AnalysisException.class,
       () -> df.filter(df.col("a").isInCollection(Arrays.asList(new Column("b")))));
-    System.out.println(e.getMessage().toLowerCase(Locale.ROOT));
-    Arrays.asList(
-      "datatype_mismatch.data_diff_types",
-      "cannot resolve \"(a in (b))\"",
-      "due to data type mismatch: input to `in` should all be the same type, " +
-        "but it's [\"int\", \"array<int>\"].").forEach(s ->
-      Assert.assertTrue(e.getMessage().toLowerCase(Locale.ROOT)
-        .contains(s.toLowerCase(Locale.ROOT))));
+    Assert.assertTrue(e.message().startsWith("[DATATYPE_MISMATCH.DATA_DIFF_TYPES]"));
   }
 }
