@@ -201,10 +201,6 @@ class Project(LogicalPlan):
                     f"Only Expressions or String can be used for projections: '{c}'."
                 )
 
-    def withAlias(self, alias: str) -> LogicalPlan:
-        self.alias = alias
-        return self
-
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
         proj_exprs = []
@@ -217,14 +213,10 @@ class Project(LogicalPlan):
                 proj_exprs.append(exp)
             else:
                 proj_exprs.append(self.unresolved_attr(c))
-        common = proto.RelationCommon()
-        if self.alias is not None:
-            common.alias = self.alias
 
         plan = proto.Relation()
         plan.project.input.CopyFrom(self._child.plan(session))
         plan.project.expressions.extend(proj_exprs)
-        plan.common.CopyFrom(common)
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -645,6 +637,34 @@ class UnionAll(LogicalPlan):
                 Right: {self.other._repr_html_()}
             </li>
         </uL>
+        """
+
+
+class SubqueryAlias(LogicalPlan):
+    """Alias for a relation."""
+
+    def __init__(self, child: Optional["LogicalPlan"], alias: str) -> None:
+        super().__init__(child)
+        self._alias = alias
+
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+        rel = proto.Relation()
+        rel.subquery_alias.alias = self._alias
+        return rel
+
+    def print(self, indent: int = 0) -> str:
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return f"{' ' * indent}<SubqueryAlias alias={self._alias}>\n{c_buf}"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>SubqueryAlias</b><br />
+              Child: {self._child_repr_()}
+              Alias: {self._alias}
+           </li>
+        </ul>
         """
 
 

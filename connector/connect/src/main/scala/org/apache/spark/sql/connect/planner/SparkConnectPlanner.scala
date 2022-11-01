@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression}
@@ -54,8 +55,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     }
 
     rel.getRelTypeCase match {
-      case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead, common)
-      case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject, common)
+      case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead)
+      case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject)
       case proto.Relation.RelTypeCase.FILTER => transformFilter(rel.getFilter)
       case proto.Relation.RelTypeCase.LIMIT => transformLimit(rel.getLimit)
       case proto.Relation.RelTypeCase.OFFSET => transformOffset(rel.getOffset)
@@ -66,9 +67,11 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.AGGREGATE => transformAggregate(rel.getAggregate)
       case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
       case proto.Relation.RelTypeCase.LOCAL_RELATION =>
-        transformLocalRelation(rel.getLocalRelation, common)
+        transformLocalRelation(rel.getLocalRelation)
       case proto.Relation.RelTypeCase.SAMPLE => transformSample(rel.getSample)
       case proto.Relation.RelTypeCase.RANGE => transformRange(rel.getRange)
+      case proto.Relation.RelTypeCase.SUBQUERY_ALIAS =>
+        transformSubqueryAlias(rel.getSubqueryAlias)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -77,6 +80,16 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
     session.sessionState.sqlParser.parsePlan(sql.getQuery)
+  }
+
+  private def transformSubqueryAlias(alias: proto.SubqueryAlias): LogicalPlan = {
+    val aliasIdentifier =
+      if (alias.getQualifierCount > 0) {
+        AliasIdentifier.apply(alias.getAlias, alias.getQualifierList.asScala.toSeq)
+      } else {
+        AliasIdentifier.apply(alias.getAlias)
+      }
+    SubqueryAlias(aliasIdentifier, transformRelation(alias.getInput))
   }
 
   /**
@@ -141,35 +154,21 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     }
   }
 
-  private def transformLocalRelation(
-      rel: proto.LocalRelation,
-      common: Option[proto.RelationCommon]): LogicalPlan = {
+  private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
     val attributes = rel.getAttributesList.asScala.map(transformAttribute(_)).toSeq
-    val relation = new org.apache.spark.sql.catalyst.plans.logical.LocalRelation(attributes)
-    if (common.nonEmpty && common.get.getAlias.nonEmpty) {
-      logical.SubqueryAlias(identifier = common.get.getAlias, child = relation)
-    } else {
-      relation
-    }
+    new org.apache.spark.sql.catalyst.plans.logical.LocalRelation(attributes)
   }
 
   private def transformAttribute(exp: proto.Expression.QualifiedAttribute): Attribute = {
     AttributeReference(exp.getName, DataTypeProtoConverter.toCatalystType(exp.getType))()
   }
 
-  private def transformReadRel(
-      rel: proto.Read,
-      common: Option[proto.RelationCommon]): LogicalPlan = {
+  private def transformReadRel(rel: proto.Read): LogicalPlan = {
     val baseRelation = rel.getReadTypeCase match {
       case proto.Read.ReadTypeCase.NAMED_TABLE =>
         val multipartIdentifier =
           CatalystSqlParser.parseMultipartIdentifier(rel.getNamedTable.getUnparsedIdentifier)
-        val child = UnresolvedRelation(multipartIdentifier)
-        if (common.nonEmpty && common.get.getAlias.nonEmpty) {
-          SubqueryAlias(identifier = common.get.getAlias, child = child)
-        } else {
-          child
-        }
+        UnresolvedRelation(multipartIdentifier)
       case proto.Read.ReadTypeCase.DATA_SOURCE =>
         if (rel.getDataSource.getFormat == "") {
           throw InvalidPlanInput("DataSource requires a format")
@@ -193,9 +192,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     logical.Filter(condition = transformExpression(rel.getCondition), child = baseRel)
   }
 
-  private def transformProject(
-      rel: proto.Project,
-      common: Option[proto.RelationCommon]): LogicalPlan = {
+  private def transformProject(rel: proto.Project): LogicalPlan = {
     val baseRel = transformRelation(rel.getInput)
     // TODO: support the target field for *.
     val projection =
@@ -204,12 +201,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       } else {
         rel.getExpressionsList.asScala.map(transformExpression).map(UnresolvedAlias(_))
       }
-    val project = logical.Project(projectList = projection.toSeq, child = baseRel)
-    if (common.nonEmpty && common.get.getAlias.nonEmpty) {
-      logical.SubqueryAlias(identifier = common.get.getAlias, child = project)
-    } else {
-      project
-    }
+    logical.Project(projectList = projection.toSeq, child = baseRel)
   }
 
   private def transformUnresolvedExpression(exp: proto.Expression): UnresolvedAttribute = {
