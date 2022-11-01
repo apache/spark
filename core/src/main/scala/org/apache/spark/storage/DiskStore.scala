@@ -128,7 +128,7 @@ private[spark] class DiskStore(
 
   def remove(blockId: BlockId): Boolean = {
     blockSizes.remove(blockId)
-    val file = diskManager.getFile(blockId.name)
+    val file = diskManager.getFile(blockId.name, false)
     if (file.exists()) {
       val ret = file.delete()
       if (!ret) {
