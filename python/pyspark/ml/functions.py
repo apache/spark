@@ -586,7 +586,7 @@ def predict_batch_udf(
                                 for i, v in enumerate(multi_inputs)
                             ]
                             if not all([len(x) == len(batch) for x in multi_inputs]):
-                                raise ValueError("input data does not match expected shape.")
+                                raise ValueError("Input data does not match expected shape.")
                         else:
                             raise ValueError("input_tensor_shapes must match columns")
 
@@ -609,9 +609,13 @@ def predict_batch_udf(
                         if len(batch.columns) == 1:
                             # single scalar column, remove extra dim
                             single_input = np.squeeze(batch.to_numpy())
+                            if input_shapes and input_shapes[0] not in [None, [], [1]]:
+                                raise ValueError("Invalid input_tensor_shape for scalar column.")
                         elif not has_tuple:
                             # columns grouped via struct/array, convert to single tensor
                             single_input = batch.to_numpy()
+                            if input_shapes and input_shapes[0] != [len(batch.columns)]:
+                                raise ValueError("Input data does not match expected shape.")
                         else:
                             raise ValueError(
                                 "Multiple input columns found, but model expected a single "
@@ -625,7 +629,7 @@ def predict_batch_udf(
                                 [-1] + input_shapes[0]  # type: ignore
                             )
                             if len(single_input) != len(batch):
-                                raise ValueError("input data does not match expected shape.")
+                                raise ValueError("Input data does not match expected shape.")
                         else:
                             raise ValueError(
                                 "Multiple input_tensor_shapes found, but model expected one input"

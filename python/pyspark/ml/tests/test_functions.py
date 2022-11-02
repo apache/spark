@@ -250,12 +250,19 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         preds = self.df.withColumn("preds", sum_cols(struct(*columns))).toPandas()
         self.assertTrue(np.array_equal(np.sum(self.data, axis=1), preds["preds"].to_numpy()))
 
+        # muliple scalar columns with wrong tensor_input_shape => ERROR
+        sum_cols = predict_batch_udf(
+            array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[3]]
+        )
+        with self.assertRaisesRegex(Exception, "Input data does not match expected shape."):
+            self.df.withColumn("preds", sum_cols(struct(*columns))).toPandas()
+
         # scalar columns with multiple tensor_input_shapes => ERROR
         sum_cols = predict_batch_udf(
             array_sum_fn,
             return_type=DoubleType(),
             batch_size=5,
-            input_tensor_shapes=[[2], [2]],
+            input_tensor_shapes=[[4], [4]],
         )
         with self.assertRaisesRegex(Exception, "Multiple input_tensor_shapes found"):
             self.df.withColumn("preds", sum_cols(struct(*columns))).toPandas()
