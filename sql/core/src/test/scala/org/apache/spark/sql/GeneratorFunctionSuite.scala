@@ -55,36 +55,101 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       Row(1, 2) :: Row(3, null) :: Row(1, 2) :: Row(3, null) :: Nil)
 
     // The first argument must be a positive constant integer.
-    val m = intercept[AnalysisException] {
-      df.selectExpr("stack(1.1, 1, 2, 3)")
-    }.getMessage
-    assert(m.contains("The number of rows must be a positive constant integer."))
-    val m2 = intercept[AnalysisException] {
-      df.selectExpr("stack(-1, 1, 2, 3)")
-    }.getMessage
-    assert(m2.contains("The number of rows must be a positive constant integer."))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("stack(1.1, 1, 2, 3)")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"stack(1.1, 1, 2, 3)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"1.1\"",
+        "inputType" -> "\"DECIMAL(2,1)\"",
+        "requiredType" -> "\"INT\""),
+      context = ExpectedContext(
+        fragment = "stack(1.1, 1, 2, 3)",
+        start = 0,
+        stop = 18
+      )
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("stack(-1, 1, 2, 3)")
+      },
+      errorClass = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+      parameters = Map(
+        "sqlExpr" -> "\"stack(-1, 1, 2, 3)\"",
+        "exprName" -> "`n`",
+        "valueRange" -> "(0, 2147483647]",
+        "currentValue" -> "-1"),
+      context = ExpectedContext(
+        fragment = "stack(-1, 1, 2, 3)",
+        start = 0,
+        stop = 17
+      )
+    )
 
     // The data for the same column should have the same type.
-    val m3 = intercept[AnalysisException] {
-      df.selectExpr("stack(2, 1, '2.2')")
-    }.getMessage
-    assert(m3.contains("data type mismatch: Argument 1 (int) != Argument 2 (string)"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("stack(2, 1, '2.2')")
+      },
+      errorClass = "DATATYPE_MISMATCH.STACK_COLUMN_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"stack(2, 1, 2.2)\"",
+        "columnIndex" -> "0",
+        "leftParamIndex" -> "2",
+        "leftType" -> "\"STRING\"",
+        "rightParamIndex" -> "2",
+        "rightType" -> "\"INT\""),
+      context = ExpectedContext(
+        fragment = "stack(2, 1, '2.2')",
+        start = 0,
+        stop = 17
+      )
+    )
 
     // stack on column data
     val df2 = Seq((2, 1, 2, 3)).toDF("n", "a", "b", "c")
     checkAnswer(df2.selectExpr("stack(2, a, b, c)"), Row(1, 2) :: Row(3, null) :: Nil)
 
-    val m4 = intercept[AnalysisException] {
-      df2.selectExpr("stack(n, a, b, c)")
-    }.getMessage
-    assert(m4.contains("The number of rows must be a positive constant integer."))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.selectExpr("stack(n, a, b, c)")
+      },
+      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      parameters = Map(
+        "sqlExpr" -> "\"stack(n, a, b, c)\"",
+        "inputName" -> "n",
+        "inputType" -> "\"INT\"",
+        "inputExpr" -> "\"n\""),
+      context = ExpectedContext(
+        fragment = "stack(n, a, b, c)",
+        start = 0,
+        stop = 16
+      )
+    )
 
     val df3 = Seq((2, 1, 2.0)).toDF("n", "a", "b")
-    val m5 = intercept[AnalysisException] {
-      df3.selectExpr("stack(2, a, b)")
-    }.getMessage
-    assert(m5.contains("data type mismatch: Argument 1 (int) != Argument 2 (double)"))
-
+    checkError(
+      exception = intercept[AnalysisException] {
+        df3.selectExpr("stack(2, a, b)")
+      },
+      errorClass = "DATATYPE_MISMATCH.STACK_COLUMN_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"stack(2, a, b)\"",
+        "columnIndex" -> "0",
+        "leftParamIndex" -> "2",
+        "leftType" -> "\"DOUBLE\"",
+        "rightParamIndex" -> "2",
+        "rightType" -> "\"INT\""),
+      context = ExpectedContext(
+        fragment = "stack(2, a, b)",
+        start = 0,
+        stop = 13
+      )
+    )
   }
 
   test("single explode") {

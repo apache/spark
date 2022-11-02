@@ -280,6 +280,11 @@
           "The lower bound of a window frame must be <comparison> to the upper bound."
         ]
       },
+      "STACK_COLUMN_DIFF_TYPES" : {
+        "message" : [
+          "The data type of the column (<columnIndex>) do not have the same type: <leftType> (<leftParamIndex>) <> <rightType> (<rightParamIndex>)."
+        ]
+      },
       "UNEXPECTED_CLASS_TYPE" : {
         "message" : [
           "class <className> not found"
