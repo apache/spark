@@ -68,6 +68,8 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
  * @param exprId: ID of the expression
  * @param joinCond: the join conditions with the outer query. It contains both inner and outer
  *                  query references.
+ * @param hint: An optional hint for this subquery that will be passed to the join formed from
+ *              this subquery.
  */
 abstract class SubqueryExpression(
     plan: LogicalPlan,
