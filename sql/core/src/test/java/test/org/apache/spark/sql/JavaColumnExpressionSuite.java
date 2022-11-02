@@ -86,13 +86,10 @@ public class JavaColumnExpressionSuite {
     AnalysisException e = Assert.assertThrows(AnalysisException.class,
       () -> df.filter(df.col("a").isInCollection(Arrays.asList(new Column("b")))));
     Assert.assertTrue(e.getErrorClass().equals("DATATYPE_MISMATCH.DATA_DIFF_TYPES"));
-    Map<String, String> messageParameters = new HashMap() {
-      {
-        put("functionName", "`in`");
-        put("dataType", "[\"INT\", \"ARRAY<INT>\"]");
-        put("sqlExpr", "\"(a IN (b))\"");
-      }
-    };
+    Map<String, String> messageParameters = new HashMap();
+    messageParameters.put("functionName", "`in`");
+    messageParameters.put("dataType", "[\"INT\", \"ARRAY<INT>\"]");
+    messageParameters.put("sqlExpr", "\"(a IN (b))\"");
     Assert.assertTrue(Maps.difference(e.getMessageParameters(), messageParameters).areEqual());
   }
 }
