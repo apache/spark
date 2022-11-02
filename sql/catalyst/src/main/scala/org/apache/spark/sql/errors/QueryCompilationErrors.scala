@@ -101,15 +101,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "pivotType" -> pivotCol.dataType.catalogString))
   }
 
+  // Wrap `given` in backticks due to it will become a keyword in Scala 3.
   def unpivotRequiresAttributes(
-      given: String,
+      `given`: String,
       empty: String,
       expressions: Seq[NamedExpression]): Throwable = {
     val nonAttributes = expressions.filterNot(_.isInstanceOf[Attribute]).map(toSQLExpr)
     new AnalysisException(
       errorClass = "UNPIVOT_REQUIRES_ATTRIBUTES",
       messageParameters = Map(
-        "given" -> given,
+        "given" -> `given`,
         "empty" -> empty,
         "expressions" -> nonAttributes.mkString(", ")))
   }
