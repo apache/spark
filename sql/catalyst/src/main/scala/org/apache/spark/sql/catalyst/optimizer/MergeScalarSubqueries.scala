@@ -346,19 +346,20 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
   // Only allow aggregates of the same implementation because merging different implementations
   // could cause performance regression.
   private def supportedAggregateMerge(newPlan: Aggregate, cachedPlan: Aggregate) = {
-    val aggregateExprSeq =
+    val aggregateExpressionsSeq =
       Seq(newPlan, cachedPlan).map(plan => plan.aggregateExpressions.flatMap(_.collect {
         case a: AggregateExpression => a
       }))
-    val supportsHashAggregates = aggregateExprSeq.map(aggregateExpressions =>
-      Aggregate.supportsHashAggregate(
+    val Seq(newPlanSupportsHashAggregate, cachedPlanSupportsHashAggregate) =
+      aggregateExpressionsSeq.map(aggregateExpressions => Aggregate.supportsHashAggregate(
         aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)))
-    lazy val supportsObjectHashAggregates = aggregateExprSeq.map(aggregateExpressions =>
-      Aggregate.supportsObjectHashAggregate(aggregateExpressions))
-    supportsHashAggregates.head && supportsHashAggregates.last ||
-      supportsHashAggregates.head == supportsHashAggregates.last &&
-        (supportsObjectHashAggregates.head && supportsObjectHashAggregates.last ||
-          supportsObjectHashAggregates.head == supportsObjectHashAggregates.last)
+    lazy val Seq(newPlanSupportsObjectHashAggregate, cachedPlanSupportsObjectHashAggregate) =
+      aggregateExpressionsSeq.map(aggregateExpressions =>
+        Aggregate.supportsObjectHashAggregate(aggregateExpressions))
+    newPlanSupportsHashAggregate && cachedPlanSupportsHashAggregate ||
+      newPlanSupportsHashAggregate == cachedPlanSupportsHashAggregate &&
+        (newPlanSupportsObjectHashAggregate && cachedPlanSupportsObjectHashAggregate ||
+          newPlanSupportsObjectHashAggregate == cachedPlanSupportsObjectHashAggregate)
   }
 
   // Second traversal replaces `ScalarSubqueryReference`s to either
@@ -388,7 +389,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
 }
 
 /**
- * Temporal reference to a subquery.
+ * Temporal reference to a cached subquery.
  *
  * @param subqueryIndex A subquery index in the cache.
  * @param headerIndex A index in the output of merged subquery.
