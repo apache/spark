@@ -287,6 +287,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
                 assert(bfAgg.estimatedNumItemsExpression.isInstanceOf[Literal])
                 assert(bfAgg.numBitsExpression.isInstanceOf[Literal])
                 1
+              case _ => 0
             }.sum
         }.sum
       }.sum
@@ -597,8 +598,8 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         case rs: ReusedSubqueryExec => rs.child.id
       }
 
-      assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
-      assert(reusedSubqueryIds.size == 1,
+      assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+      assert(reusedSubqueryIds.size == 0,
         "Missing or unexpected reused ReusedSubqueryExec in the plan")
     }
   }
