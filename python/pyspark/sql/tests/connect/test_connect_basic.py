@@ -202,6 +202,11 @@ class ChannelBuilderTests(ReusedPySparkTestCase):
         self.assertEqual(True, chan.secure)
         self.assertEqual("120 21", chan.get("param1"))
 
+    def test_metadata(self):
+        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;param1=120%2021;x-my-header=abcd")
+        md = chan.metadata()
+        self.assertEqual([("param1", "120 21"), ("x-my-header", "abcd")], md)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_basic import *  # noqa: F401

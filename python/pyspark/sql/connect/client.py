@@ -84,12 +84,33 @@ class ChannelBuilder:
             self.host = netloc[0]
             self.port = ChannelBuilder.DEFAULT_PORT
         elif len(netloc) == 2:
-            self.host = netloc[1]
-            self.port = int(netloc[2])
+            self.host = netloc[0]
+            self.port = int(netloc[1])
         else:
             raise AttributeError(
                 f"Target destination {self.url.netloc} does not match '<host>:<port>' pattern"
             )
+
+    def metadata(self) -> typing.Iterable[typing.Tuple[str, str]]:
+        """
+        Builds the GRPC specific metadata list to be injected into the request. All
+        parameters will be converted to metadata except ones that are explicitly used
+        by the channel.
+
+        Returns
+        -------
+        A list of tuples (key, value)
+        """
+        return [
+            (k, self.params[k])
+            for k in self.params
+            if k
+            not in [
+                ChannelBuilder.PARAM_TOKEN,
+                ChannelBuilder.PARAM_USE_SSL,
+                ChannelBuilder.PARAM_USER_ID,
+            ]
+        ]
 
     @property
     def secure(self) -> bool:
@@ -327,7 +348,7 @@ class RemoteSparkSession(object):
         req.user_context.user_id = self._user_id
         req.plan.CopyFrom(plan)
 
-        resp = self._stub.AnalyzePlan(req)
+        resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
         return AnalyzeResult.fromProto(resp)
 
     def _process_batch(self, b: pb2.Response) -> Optional[pandas.DataFrame]:
@@ -342,7 +363,7 @@ class RemoteSparkSession(object):
         m: Optional[pb2.Response.Metrics] = None
         result_dfs = []
 
-        for b in self._stub.ExecutePlan(req):
+        for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
             if b.metrics is not None:
                 m = b.metrics
 
