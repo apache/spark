@@ -70,10 +70,15 @@ sc://hostname:port/?param1=value&param2=value
     <td><pre>use_ssl=true</pre><pre>use_ssl=false</pre></td>
   </tr>
   <tr>
-    <td></td>
-    <td></td>
-    <td></td>
-    <td></td>
+    <td>user_id</td>
+    <td>String</td>
+    <td>User ID to automatically set in the Spark Connect UserContext message.
+    This is necssary for the appropriate Spark Session management. This is an
+    *optional* parameter and depending on the deployment this parameter might
+    be automatically injected using other means.</td>
+    <td>
+    <pre>user_id=Martin</pre>
+    </td>
   </tr>
 </table>
 
