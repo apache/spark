@@ -250,12 +250,17 @@ private[spark] object KubernetesConf {
     s"spark-${UUID.randomUUID().toString.replaceAll("-", "")}"
 
   def getResourceNamePrefix(appName: String): String = {
+    // Most resource types require a name that can be used as a DNS subdomain name, the name must
+    // contain only lowercase alphanumeric characters, '-' or '.', and start with an alphanumeric
+    // character.
+    // https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-subdomain-names
     val id = KubernetesUtils.uniqueID()
     s"$appName-$id"
       .trim
       .toLowerCase(Locale.ROOT)
       .replaceAll("[^a-z0-9\\-]", "-")
       .replaceAll("-+", "-")
+      .stripPrefix("-")
   }
 
   def getAppNameLabel(appName: String): String = {

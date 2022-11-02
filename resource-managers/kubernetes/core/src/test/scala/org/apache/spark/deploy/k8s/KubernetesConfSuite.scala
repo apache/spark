@@ -250,4 +250,11 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(KubernetesConf.getAppNameLabel("a" * 62 + "-aaa") === "a" * 62)
     assert(KubernetesConf.getAppNameLabel("-" + "a" * 63) === "a" * 62)
   }
+
+  test("SPARK-40997: K8s resource name prefix should start w/ alphanumeric") {
+    assert(!KubernetesConf.getResourceNamePrefix("-hello-").startsWith("-"))
+    // scalastyle:off nonascii
+    assert(!KubernetesConf.getResourceNamePrefix("测试").startsWith("-"))
+    // scalastyle:on nonascii
+  }
 }
