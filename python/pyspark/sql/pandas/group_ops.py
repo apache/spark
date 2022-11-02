@@ -354,6 +354,22 @@ class PandasGroupedOpsMixin:
         )
         return DataFrame(jdf, self.session)
 
+    def applyInArrow(
+        self, func: "ArrowMapIterFunction", schema: Union[StructType, str]
+    ) -> "DataFrame":
+        from pyspark.sql import GroupedData
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        assert isinstance(self, GroupedData)
+
+        udf = pandas_udf(
+            func, returnType=schema, functionType=PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
+        )
+        df = self._df
+        udf_column = udf(*[df[col] for col in df.columns])
+        jdf = self._jgd.flatMapGroupsInArrow(udf_column._jc.expr())
+        return DataFrame(jdf, self.session)
+
     def cogroup(self, other: "GroupedData") -> "PandasCogroupedOps":
         """
         Cogroups this group with another group so that we can run cogrouped operations.
@@ -493,6 +509,21 @@ class PandasCogroupedOps:
         all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
         udf_column = udf(*all_cols)
         jdf = self._gd1._jgd.flatMapCoGroupsInPandas(self._gd2._jgd, udf_column._jc.expr())
+        return DataFrame(jdf, self._gd1.session)
+
+    def applyInArrow(
+        self, func: "ArrowCogroupedMapFunction", schema: Union[StructType, str]
+    ) -> "DataFrame":
+        from pyspark.sql.pandas.functions import pandas_udf
+
+        # The usage of the pandas_udf is internal so type checking is disabled.
+        udf = pandas_udf(
+            func, returnType=schema, functionType=PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF
+        )  # type: ignore[call-overload]
+
+        all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
+        udf_column = udf(*all_cols)
+        jdf = self._gd1._jgd.flatMapCoGroupsInArrow(self._gd2._jgd, udf_column._jc.expr())
         return DataFrame(jdf, self._gd1.session)
 
     @staticmethod

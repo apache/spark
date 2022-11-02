@@ -275,6 +275,22 @@ class UserDefinedFunction:
                         "return_type": str(self._returnType_placeholder),
                     },
                 )
+        elif self.evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
+            if isinstance(self._returnType_placeholder, StructType):
+                try:
+                    to_arrow_type(self._returnType_placeholder)
+                except TypeError:
+                    raise NotImplementedError(
+                        "Invalid return type with grouped map Arrow UDFs or "
+                        "at groupby.applyInArrow: %s is not supported"
+                        % str(self._returnType_placeholder)
+                    )
+            else:
+                raise TypeError(
+                    "Invalid return type for grouped map Arrow "
+                    "UDFs or at groupby.applyInArrow: return type must be a "
+                    "StructType."
+                )
         elif self.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             if isinstance(self._returnType_placeholder, StructType):
                 try:
@@ -294,6 +310,20 @@ class UserDefinedFunction:
                         "eval_type": "SQL_COGROUPED_MAP_PANDAS_UDF",
                         "return_type": str(self._returnType_placeholder),
                     },
+                )
+        elif self.evalType == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
+            if isinstance(self._returnType_placeholder, StructType):
+                try:
+                    to_arrow_type(self._returnType_placeholder)
+                except TypeError:
+                    raise NotImplementedError(
+                        "Invalid return type in cogroup.applyInArrow: "
+                        "%s is not supported" % str(self._returnType_placeholder)
+                    )
+            else:
+                raise TypeError(
+                    "Invalid return type in cogroup.applyInArrow: "
+                    "return type must be a StructType."
                 )
         elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
             try:

@@ -633,7 +633,28 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         return "ArrowStreamPandasUDTFSerializer"
 
 
-class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
+class CogroupArrowUDFSerializer(ArrowStreamPandasUDFSerializer):
+    def load_stream(self, stream):
+        """
+        Deserialize Cogrouped ArrowRecordBatches and yield as two `pyarrow.RecordBatch`es.
+        """
+        dataframes_in_group = None
+
+        while dataframes_in_group is None or dataframes_in_group > 0:
+            dataframes_in_group = read_int(stream)
+
+            if dataframes_in_group == 2:
+                batches1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                batches2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                yield batches1, batches2
+
+            elif dataframes_in_group != 0:
+                raise ValueError(
+                    "Invalid number of dataframes in group {0}".format(dataframes_in_group)
+                )
+
+
+class CogroupPandasUDFSerializer(CogroupArrowUDFSerializer):
     def load_stream(self, stream):
         """
         Deserialize Cogrouped ArrowRecordBatches to a tuple of Arrow tables and yield as two
@@ -641,23 +662,11 @@ class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
         """
         import pyarrow as pa
 
-        dataframes_in_group = None
-
-        while dataframes_in_group is None or dataframes_in_group > 0:
-            dataframes_in_group = read_int(stream)
-
-            if dataframes_in_group == 2:
-                batch1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
-                batch2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
-                yield (
-                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch1).itercolumns()],
-                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch2).itercolumns()],
-                )
-
-            elif dataframes_in_group != 0:
-                raise ValueError(
-                    "Invalid number of pandas.DataFrames in group {0}".format(dataframes_in_group)
-                )
+        for batch1, batch2 in super(CogroupPandasUDFSerializer, self).load_stream(stream):
+            yield (
+                [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch1).itercolumns()],
+                [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch2).itercolumns()],
+            )
 
 
 class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):

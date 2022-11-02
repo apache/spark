@@ -413,6 +413,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+        PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+        PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
         None,
     ]:  # None means it should infer the type from type hints.
         raise PySparkTypeError(
@@ -450,6 +452,8 @@ def _create_pandas_udf(f, returnType, evalType):
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+        PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+        PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
     ]:
         # In case of 'SQL_GROUPED_MAP_PANDAS_UDF', deprecation warning is being triggered
@@ -497,6 +501,13 @@ def _create_pandas_udf(f, returnType, evalType):
             },
         )
 
+    if evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF and len(argspec.args) not in (1, 2):
+        raise ValueError(
+            "Invalid function: pandas_udf with function type GROUPED_MAP or "
+            "the function in groupby.applyInArrow "
+            "must take either one argument (data) or two arguments (key, data)."
+        )
+
     if evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF and len(argspec.args) not in (2, 3):
         raise PySparkValueError(
             error_class="INVALID_PANDAS_UDF",
@@ -504,6 +515,13 @@ def _create_pandas_udf(f, returnType, evalType):
                 "detail": "the function in cogroup.applyInPandas must take either two arguments "
                 "(left, right) or three arguments (key, left, right).",
             },
+        )
+
+    if evalType == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF and len(argspec.args) not in (2, 3):
+        raise ValueError(
+            "Invalid function: the function in cogroup.applyInArrow "
+            "must take either two arguments (left, right) "
+            "or three arguments (key, left, right)."
         )
 
     if is_remote():

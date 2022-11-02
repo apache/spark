@@ -53,6 +53,8 @@ PandasMapIterUDFType = Literal[205]
 PandasCogroupedMapUDFType = Literal[206]
 ArrowMapIterUDFType = Literal[207]
 PandasGroupedMapUDFWithStateType = Literal[208]
+ArrowGroupedMapUDFType = Literal[209]
+ArrowCoGroupedMapUDFType = Literal[210]
 
 class PandasVariadicScalarToScalarFunction(Protocol):
     def __call__(self, *_: DataFrameOrSeriesLike_) -> DataFrameOrSeriesLike_: ...
@@ -339,6 +341,10 @@ ArrowMapIterFunction = Callable[[Iterable[pyarrow.RecordBatch]], Iterable[pyarro
 PandasCogroupedMapFunction = Union[
     Callable[[DataFrameLike, DataFrameLike], DataFrameLike],
     Callable[[Any, DataFrameLike, DataFrameLike], DataFrameLike],
+]
+
+ArrowCogroupedMapFunction = Callable[
+    [Iterable[pyarrow.RecordBatch], Iterable[pyarrow.RecordBatch]], Iterable[pyarrow.RecordBatch]
 ]
 
 GroupedMapPandasUserDefinedFunction = NewType("GroupedMapPandasUserDefinedFunction", FunctionType)
