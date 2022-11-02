@@ -18,11 +18,12 @@ Generally, the connection string follows the standard URI definitions. The URI
 scheme is fixed and set to `sc://`. The full URI has to be a 
 [valid URI](http://www.faqs.org/rfcs/rfc2396.html) and must
 be parsed properly by most systems. For example, hostnames have to be valid and
-cannot contain arbitrary characters. In addition, URL parameters must be encoded
-properly. The path component of the URI must be empty. 
+cannot contain arbitrary characters. Configuration parameter are passed in the 
+style of the HTTP URL Path Parameter Syntax. This is similar to the JDBC connection
+strings. The path component must be empty.
 
 ```shell
-sc://hostname:port/?param1=value&param2=value
+sc://hostname:port/;param1=value;param2=value
 ```
 
 <table>
@@ -96,11 +97,11 @@ server_url = "sc://myhost.com/"
 The next example configures the connection to use a different port with SSL.
 
 ```python
-server_url = "sc://myhost.com:443/?use_ssl=true"
+server_url = "sc://myhost.com:443/;use_ssl=true"
 ```
 
 ```python
-server_url = "sc://myhost.com:443/?use_ssl=true&token=ABCDEFG"
+server_url = "sc://myhost.com:443/;use_ssl=true;token=ABCDEFG"
 ```
 
 ### Invalid Examples
@@ -110,6 +111,6 @@ cannot be configured to remain compatible with the GRPC standard and HTTP. For
 example the following examles are invalid.
 
 ```python
-server_url = "sc://myhost.com:443/mypathprefix/?token=AAAAAAA"
+server_url = "sc://myhost.com:443/mypathprefix/;token=AAAAAAA"
 ```
 
