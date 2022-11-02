@@ -3131,6 +3131,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PULL_HINTS_INTO_SUBQUERIES =
+    buildConf("spark.sql.optimizer.pullHintsIntoSubqueries")
+      .internal()
+      .doc("Pull hints into subqueries in EliminateResolvedHint if enabled.")
+      .booleanConf
+      .createWithDefault(true)
+
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
       .doc("In SQL queries with a SORT followed by a LIMIT like " +

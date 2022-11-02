@@ -244,6 +244,19 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     }.asInstanceOf[this.type]
   }
 
+  /**
+   * Returns the result of running [[transformExpressionsUpWithPruning]] on this node
+   * and all its children.
+  */
+  def transformAllExpressionsUpWithPruning(cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
+  : this.type = {
+    transformUpWithPruning(cond, ruleId) {
+      case q: QueryPlan[_] =>
+        q.transformExpressionsUpWithPruning(cond, ruleId)(rule).asInstanceOf[PlanType]
+    }.asInstanceOf[this.type]
+  }
+
   /** Returns all of the expressions present in this query plan operator. */
   final def expressions: Seq[Expression] = {
     // Recursively find all expressions from a traversable.
