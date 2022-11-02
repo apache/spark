@@ -374,14 +374,14 @@ class RemoteSparkSession(object):
         resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
         return AnalyzeResult.fromProto(resp)
 
-    def _process_batch(self, b: pb2.Response) -> Optional[pandas.DataFrame]:
+    def _process_batch(self, b: pb2.Response) -> Optional[tuple[int, pandas.DataFrame]]:
         import pandas as pd
 
-        if b.batch is not None and len(b.batch.data) > 0:
-            with pa.ipc.open_stream(b.batch.data) as rd:
-                return rd.read_pandas()
+        if b.arrow_batch is not None and len(b.arrow_batch.data) > 0:
+            with pa.ipc.open_stream(b.arrow_batch.data) as rd:
+                return (b.arrow_batch.batch_id, rd.read_pandas())
         elif b.json_batch is not None and len(b.json_batch.data) > 0:
-            return pd.read_json(io.BytesIO(b.json_batch.data), lines=True)
+            return (b.json_batch.batch_id, pd.read_json(io.BytesIO(b.json_batch.data), lines=True))
         return None
 
     def _execute_and_fetch(self, req: pb2.Request) -> typing.Optional[pandas.DataFrame]:
@@ -399,7 +399,18 @@ class RemoteSparkSession(object):
                 result_dfs.append(pb)
 
         if len(result_dfs) > 0:
-            df = pd.concat(result_dfs)
+            # sort by batch id
+            result_dfs.sort(key=lambda t: t[0])
+            # concat the pandas dataframes
+            df = pd.concat([t[1] for t in result_dfs])
+            del result_dfs
+
+            # pd.concat generates non-consecutive index like:
+            #   Int64Index([0, 1, 0, 1, 2, 0, 1, 0, 1, 2], dtype='int64')
+            # set it to RangeIndex to be consistent with pyspark
+            n = len(df)
+            df = df.set_index(pd.RangeIndex(start=0, stop=n, step=1))
+
             # Attach the metrics to the DataFrame attributes.
             if m is not None:
                 df.attrs["metrics"] = self._build_metrics(m)
