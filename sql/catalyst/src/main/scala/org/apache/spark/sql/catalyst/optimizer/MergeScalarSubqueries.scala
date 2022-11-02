@@ -392,7 +392,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
  * Temporal reference to a cached subquery.
  *
  * @param subqueryIndex A subquery index in the cache.
- * @param headerIndex A index in the output of merged subquery.
+ * @param headerIndex An index in the output of merged subquery.
  * @param dataType The dataType of origin scalar subquery.
  */
 case class ScalarSubqueryReference(
