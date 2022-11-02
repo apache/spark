@@ -901,7 +901,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     checkOuterReference(plan, expr)
 
     expr match {
-      case ScalarSubquery(query, outerAttrs, _, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           expr.failAnalysis(

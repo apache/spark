@@ -264,10 +264,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       rightKey: Expression): Boolean = {
     (left, right) match {
       case (Filter(InSubquery(Seq(key),
-      ListQuery(Aggregate(Seq(Alias(_, _)), Seq(Alias(_, _)), _), _, _, _, _)), _), _) =>
+      ListQuery(Aggregate(Seq(Alias(_, _)), Seq(Alias(_, _)), _), _, _, _, _, _)), _), _) =>
         key.fastEquals(leftKey) || key.fastEquals(new Murmur3Hash(Seq(leftKey)))
       case (_, Filter(InSubquery(Seq(key),
-      ListQuery(Aggregate(Seq(Alias(_, _)), Seq(Alias(_, _)), _), _, _, _, _)), _)) =>
+      ListQuery(Aggregate(Seq(Alias(_, _)), Seq(Alias(_, _)), _), _, _, _, _, _)), _)) =>
         key.fastEquals(rightKey) || key.fastEquals(new Murmur3Hash(Seq(rightKey)))
       case _ => false
     }
