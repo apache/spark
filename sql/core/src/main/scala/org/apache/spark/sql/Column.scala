@@ -940,7 +940,7 @@ class Column(val expr: Expression) extends Logging {
    *
    *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
    *   df.select($"struct_col".dropFields("a", "b"))
-   *   // result: org.apache.spark.sql.AnalysisException: cannot resolve 'update_fields(update_fields(`struct_col`))' due to data type mismatch: cannot drop all fields in struct
+   *   // result: org.apache.spark.sql.AnalysisException: [DATATYPE_MISMATCH.CANNOT_DROP_ALL_FIELDS] Cannot resolve "update_fields(struct_col, dropfield(), dropfield())" due to data type mismatch: Cannot drop all fields in struct.;
    *
    *   val df = sql("SELECT CAST(NULL AS struct<a:int,b:int>) struct_col")
    *   df.select($"struct_col".dropFields("b"))
