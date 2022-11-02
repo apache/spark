@@ -305,15 +305,15 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
                     expected = (
-                        "ValueError: Exception thrown when converting pandas\\.Series \\(object\\) "
-                        "with name 'k' to Arrow Array \\(double\\)\\."
+                        r"ValueError: Exception thrown when converting pandas.Series \(object\) "
+                        r"with name 'k' to Arrow Array \(double\)."
                     )
                     if safely:
                         expected = expected + (
                             " It can be caused by overflows or other "
-                            "unsafe conversions warned by Arrow\\. Arrow safe type check "
+                            "unsafe conversions warned by Arrow. Arrow safe type check "
                             "can be disabled by using SQL config "
-                            "`spark\\.sql\\.execution\\.pandas\\.convertToArrowArraySafely`\\."
+                            "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
                     self._test_merge_error(
                         fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": ["2.0"]}),
@@ -325,8 +325,8 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
                 # sometimes we see TypeErrors
                 with self.subTest(convert="double to string"):
                     expected = (
-                        "TypeError: Exception thrown when converting pandas\\.Series \\(float64\\) "
-                        "with name 'k' to Arrow Array \\(string\\)\\.\n"
+                        r"TypeError: Exception thrown when converting pandas.Series \(float64\) "
+                        r"with name 'k' to Arrow Array \(string\).\n"
                     )
                     self._test_merge_error(
                         fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": [2.0]}),

@@ -307,7 +307,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
                 PythonException,
-                "Column names of the returned pandas\\.DataFrame do not match specified schema\\.  "
+                "Column names of the returned pandas.DataFrame do not match specified schema.  "
                 "Missing: mean  Unexpected: median, std  Schema: id, mean\n",
             ):
                 self._test_apply_in_pandas(
@@ -359,8 +359,8 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
                 PythonException,
-                "Number of columns of the returned pandas\\.DataFrame doesn't match "
-                "specified schema\\.  Expected: 2  Actual: 3  Schema: id, mean\n",
+                "Number of columns of the returned pandas.DataFrame doesn't match "
+                "specified schema.  Expected: 2  Actual: 3  Schema: id, mean\n",
             ):
                 self._test_apply_in_pandas(
                     lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(), pdf.v.std())])
@@ -408,15 +408,15 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
                     expected = (
-                        "ValueError: Exception thrown when converting pandas\\.Series \\(object\\) "
-                        "with name 'mean' to Arrow Array \\(double\\)\\."
+                        r"ValueError: Exception thrown when converting pandas.Series \(object\) "
+                        r"with name 'mean' to Arrow Array \(double\)."
                     )
                     if safely:
                         expected = expected + (
                             " It can be caused by overflows or other "
-                            "unsafe conversions warned by Arrow\\. Arrow safe type check "
+                            "unsafe conversions warned by Arrow. Arrow safe type check "
                             "can be disabled by using SQL config "
-                            "`spark\\.sql\\.execution\\.pandas\\.convertToArrowArraySafely`\\."
+                            "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
                     with self.assertRaisesRegex(PythonException, expected + "\n"):
                         self._test_apply_in_pandas(
@@ -428,8 +428,8 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                 with self.subTest(convert="double to string"):
                     with self.assertRaisesRegex(
                         PythonException,
-                        "TypeError: Exception thrown when converting pandas\\.Series \\(float64\\) "
-                        "with name 'mean' to Arrow Array \\(string\\)\\.\n",
+                        r"TypeError: Exception thrown when converting pandas.Series \(float64\) "
+                        r"with name 'mean' to Arrow Array \(string\).\n",
                     ):
                         self._test_apply_in_pandas(
                             lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(),)]),
