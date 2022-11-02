@@ -346,20 +346,22 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
   // Only allow aggregates of the same implementation because merging different implementations
   // could cause performance regression.
   private def supportedAggregateMerge(newPlan: Aggregate, cachedPlan: Aggregate) = {
-    val aggregateExpressionsSeq =
-      Seq(newPlan, cachedPlan).map(plan => plan.aggregateExpressions.flatMap(_.collect {
+    val aggregateExpressionsSeq = Seq(newPlan, cachedPlan).map { plan =>
+      plan.aggregateExpressions.flatMap(_.collect {
         case a: AggregateExpression => a
-      }))
+      })
+    }
     val Seq(newPlanSupportsHashAggregate, cachedPlanSupportsHashAggregate) =
       aggregateExpressionsSeq.map(aggregateExpressions => Aggregate.supportsHashAggregate(
         aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)))
-    lazy val Seq(newPlanSupportsObjectHashAggregate, cachedPlanSupportsObjectHashAggregate) =
-      aggregateExpressionsSeq.map(aggregateExpressions =>
-        Aggregate.supportsObjectHashAggregate(aggregateExpressions))
     newPlanSupportsHashAggregate && cachedPlanSupportsHashAggregate ||
-      newPlanSupportsHashAggregate == cachedPlanSupportsHashAggregate &&
-        (newPlanSupportsObjectHashAggregate && cachedPlanSupportsObjectHashAggregate ||
-          newPlanSupportsObjectHashAggregate == cachedPlanSupportsObjectHashAggregate)
+      newPlanSupportsHashAggregate == cachedPlanSupportsHashAggregate && {
+        val Seq(newPlanSupportsObjectHashAggregate, cachedPlanSupportsObjectHashAggregate) =
+          aggregateExpressionsSeq.map(aggregateExpressions =>
+            Aggregate.supportsObjectHashAggregate(aggregateExpressions))
+        newPlanSupportsObjectHashAggregate && cachedPlanSupportsObjectHashAggregate ||
+          newPlanSupportsObjectHashAggregate == cachedPlanSupportsObjectHashAggregate
+      }
   }
 
   // Second traversal replaces `ScalarSubqueryReference`s to either
