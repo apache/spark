@@ -14,8 +14,12 @@ to connect to the Spark Connect endpoint
 
 ## Connection String
 
-Generally, the connection string follows the standard URL definitions. The URL
-scheme is fixed and set to `sc://`.
+Generally, the connection string follows the standard URI definitions. The URI
+scheme is fixed and set to `sc://`. The full URI has to be a 
+[valid URI](http://www.faqs.org/rfcs/rfc2396.html) and must
+be parsed properly by most systems. For example, hostnames have to be valid and
+cannot contain arbitrary characters. In addition, URL parameters must be encoded
+properly. The path component of the URI must be empty. 
 
 ```shell
 sc://hostname:port/?param1=value&param2=value
