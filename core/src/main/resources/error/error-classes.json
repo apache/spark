@@ -190,6 +190,16 @@
           "The <functionName> does not support ordering on type <dataType>."
         ]
       },
+      "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
+        "message" : [
+          "The data type of one or more elements in the left hand side of an IN subquery is not compatible with the data type of the output of the subquery. Mismatched columns: [<mismatchedColumns>], left side: [<leftType>], right side: [<rightType>]."
+        ]
+      },
+      "IN_SUBQUERY_LENGTH_MISMATCH" : {
+        "message" : [
+          "The number of columns in the left hand side of an IN subquery does not match the number of columns in the output of subquery. Left hand side columns(length: <leftLength>): [<leftColumns>], right hand side columns(length: <rightLength>): [<rightColumns>]."
+        ]
+      },
       "MAP_CONCAT_DIFF_TYPES" : {
         "message" : [
           "The <functionName> should all be of type map, but it's <dataType>."

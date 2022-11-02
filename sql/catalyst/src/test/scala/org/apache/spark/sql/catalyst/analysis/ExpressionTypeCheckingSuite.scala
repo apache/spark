@@ -351,23 +351,62 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       )
     )
 
-    assertError(If($"intField", $"stringField", $"stringField"),
-      "type of predicate expression in If should be boolean")
-    assertError(If($"booleanField", $"intField", $"booleanField"),
-      "data type mismatch")
+    assert(If(Literal(1), Literal("a"), Literal("b")).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> toSQLType(BooleanType),
+          "inputSql" -> "\"1\"",
+          "inputType" -> "\"INT\""
+        )
+      )
+    )
 
-    assertError(
-      CaseWhen(Seq(($"booleanField".attr, $"intField".attr),
-        ($"booleanField".attr, $"mapField".attr))),
-      "THEN and ELSE expressions should all be same type or coercible to a common type")
-    assertError(
-      CaseKeyWhen($"intField", Seq($"intField", $"stringField",
-        $"intField", $"mapField")),
-      "THEN and ELSE expressions should all be same type or coercible to a common type")
-    assertError(
-      CaseWhen(Seq(($"booleanField".attr, $"intField".attr),
-        ($"intField".attr, $"intField".attr))),
-      "WHEN expressions in CaseWhen should all be boolean type")
+    assert(If(Literal(true), Literal(1), Literal(false)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`if`",
+          "dataType" -> "[\"INT\", \"BOOLEAN\"]"
+        )
+      )
+    )
+
+    assert(CaseWhen(Seq((Literal(true), Literal(1)),
+      (Literal(true), Literal("a")))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`casewhen`",
+          "dataType" -> "[\"INT\", \"STRING\"]"
+        )
+      )
+    )
+
+    assert(CaseKeyWhen(Literal(1), Seq(Literal(1), Literal("a"),
+      Literal(2), Literal(3))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`casewhen`",
+          "dataType" -> "[\"STRING\", \"INT\"]"
+        )
+      )
+    )
+
+    assert(CaseWhen(Seq((Literal(true), Literal(1)),
+      (Literal(2), Literal(3)))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> "\"BOOLEAN\"",
+          "inputSql" -> "\"2\"",
+          "inputType" -> "\"INT\""
+        )
+      )
+    )
   }
 
   test("check types for aggregates") {

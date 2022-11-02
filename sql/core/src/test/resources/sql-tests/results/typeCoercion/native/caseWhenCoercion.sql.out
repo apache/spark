@@ -78,11 +78,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN tinyint ELSE binary END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST('2' AS BINARY) END"
+    "dataType" : "[\"TINYINT\", \"BINARY\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS BINARY) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -101,11 +101,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN tinyint ELSE boolean END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS BOOLEAN) END"
+    "dataType" : "[\"TINYINT\", \"BOOLEAN\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS BOOLEAN) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -124,11 +124,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN tinyint ELSE timestamp END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) END"
+    "dataType" : "[\"TINYINT\", \"TIMESTAMP\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -147,11 +147,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN tinyint ELSE date END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST('2017-12-11 09:30:00' AS DATE) END"
+    "dataType" : "[\"TINYINT\", \"DATE\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2017-12-11 09:30:00 AS DATE) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -234,11 +234,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN smallint ELSE binary END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST('2' AS BINARY) END"
+    "dataType" : "[\"SMALLINT\", \"BINARY\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS BINARY) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -257,11 +257,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN smallint ELSE boolean END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS BOOLEAN) END"
+    "dataType" : "[\"SMALLINT\", \"BOOLEAN\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS BOOLEAN) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -280,11 +280,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN smallint ELSE timestamp END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) END"
+    "dataType" : "[\"SMALLINT\", \"TIMESTAMP\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -303,11 +303,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN smallint ELSE date END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST('2017-12-11 09:30:00' AS DATE) END"
+    "dataType" : "[\"SMALLINT\", \"DATE\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2017-12-11 09:30:00 AS DATE) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -390,11 +390,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN int ELSE binary END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS INT) ELSE CAST('2' AS BINARY) END"
+    "dataType" : "[\"INT\", \"BINARY\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS BINARY) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -413,11 +413,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN int ELSE boolean END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS BOOLEAN) END"
+    "dataType" : "[\"INT\", \"BOOLEAN\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS BOOLEAN) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -436,11 +436,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN int ELSE timestamp END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS INT) ELSE CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) END"
+    "dataType" : "[\"INT\", \"TIMESTAMP\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -459,11 +459,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN int ELSE date END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS INT) ELSE CAST('2017-12-11 09:30:00' AS DATE) END"
+    "dataType" : "[\"INT\", \"DATE\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2017-12-11 09:30:00 AS DATE) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -546,11 +546,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN bigint ELSE binary END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST('2' AS BINARY) END"
+    "dataType" : "[\"BIGINT\", \"BINARY\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS BINARY) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -569,11 +569,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN bigint ELSE boolean END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS BOOLEAN) END"
+    "dataType" : "[\"BIGINT\", \"BOOLEAN\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS BOOLEAN) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -592,11 +592,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN bigint ELSE timestamp END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) END"
+    "dataType" : "[\"BIGINT\", \"TIMESTAMP\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -615,11 +615,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN bigint ELSE date END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST('2017-12-11 09:30:00' AS DATE) END"
+    "dataType" : "[\"BIGINT\", \"DATE\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2017-12-11 09:30:00 AS DATE) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -702,11 +702,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN float ELSE binary END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST('2' AS BINARY) END"
+    "dataType" : "[\"FLOAT\", \"BINARY\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS BINARY) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -725,11 +725,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN float ELSE boolean END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS BOOLEAN) END"
+    "dataType" : "[\"FLOAT\", \"BOOLEAN\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS BOOLEAN) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -748,11 +748,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN float ELSE timestamp END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) END"
+    "dataType" : "[\"FLOAT\", \"TIMESTAMP\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -771,11 +771,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN float ELSE date END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST('2017-12-11 09:30:00' AS DATE) END"
+    "dataType" : "[\"FLOAT\", \"DATE\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2017-12-11 09:30:00 AS DATE) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -858,11 +858,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN double ELSE binary END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST('2' AS BINARY) END"
+    "dataType" : "[\"DOUBLE\", \"BINARY\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2 AS BINARY) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -881,11 +881,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN double ELSE boolean END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2 AS BOOLEAN) END"
+    "dataType" : "[\"DOUBLE\", \"BOOLEAN\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2 AS BOOLEAN) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -904,11 +904,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN double ELSE timestamp END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) END"
+    "dataType" : "[\"DOUBLE\", \"TIMESTAMP\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -927,11 +927,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN double ELSE date END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST('2017-12-11 09:30:00' AS DATE) END"
+    "dataType" : "[\"DOUBLE\", \"DATE\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2017-12-11 09:30:00 AS DATE) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1014,11 +1014,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN decimal(10,0) ELSE binary END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST('2' AS BINARY) END"
+    "dataType" : "[\"DECIMAL(10,0)\", \"BINARY\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2 AS BINARY) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1037,11 +1037,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN decimal(10,0) ELSE boolean END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2 AS BOOLEAN) END"
+    "dataType" : "[\"DECIMAL(10,0)\", \"BOOLEAN\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2 AS BOOLEAN) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1060,11 +1060,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN decimal(10,0) ELSE timestamp END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) END"
+    "dataType" : "[\"DECIMAL(10,0)\", \"TIMESTAMP\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1083,11 +1083,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN decimal(10,0) ELSE date END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST('2017-12-11 09:30:00' AS DATE) END"
+    "dataType" : "[\"DECIMAL(10,0)\", \"DATE\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2017-12-11 09:30:00 AS DATE) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1170,11 +1170,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN string ELSE binary END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST('2' AS BINARY) END"
+    "dataType" : "[\"STRING\", \"BINARY\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BINARY) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1193,11 +1193,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN string ELSE boolean END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BOOLEAN) END"
+    "dataType" : "[\"STRING\", \"BOOLEAN\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BOOLEAN) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1232,11 +1232,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN binary ELSE tinyint END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('1' AS BINARY) ELSE CAST(2 AS TINYINT) END"
+    "dataType" : "[\"BINARY\", \"TINYINT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BINARY) ELSE CAST(2 AS TINYINT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1255,11 +1255,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN binary ELSE smallint END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('1' AS BINARY) ELSE CAST(2 AS SMALLINT) END"
+    "dataType" : "[\"BINARY\", \"SMALLINT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BINARY) ELSE CAST(2 AS SMALLINT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1278,11 +1278,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN binary ELSE int END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('1' AS BINARY) ELSE CAST(2 AS INT) END"
+    "dataType" : "[\"BINARY\", \"INT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BINARY) ELSE CAST(2 AS INT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1301,11 +1301,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN binary ELSE bigint END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('1' AS BINARY) ELSE CAST(2 AS BIGINT) END"
+    "dataType" : "[\"BINARY\", \"BIGINT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BINARY) ELSE CAST(2 AS BIGINT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1324,11 +1324,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN binary ELSE float END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('1' AS BINARY) ELSE CAST(2 AS FLOAT) END"
+    "dataType" : "[\"BINARY\", \"FLOAT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BINARY) ELSE CAST(2 AS FLOAT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1347,11 +1347,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN binary ELSE double END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('1' AS BINARY) ELSE CAST(2 AS DOUBLE) END"
+    "dataType" : "[\"BINARY\", \"DOUBLE\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BINARY) ELSE CAST(2 AS DOUBLE) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1370,11 +1370,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN binary ELSE decimal(10,0) END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('1' AS BINARY) ELSE CAST(2 AS DECIMAL(10,0)) END"
+    "dataType" : "[\"BINARY\", \"DECIMAL(10,0)\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BINARY) ELSE CAST(2 AS DECIMAL(10,0)) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1393,11 +1393,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN binary ELSE string END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('1' AS BINARY) ELSE CAST(2 AS STRING) END"
+    "dataType" : "[\"BINARY\", \"STRING\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BINARY) ELSE CAST(2 AS STRING) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1424,11 +1424,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN binary ELSE boolean END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('1' AS BINARY) ELSE CAST(2 AS BOOLEAN) END"
+    "dataType" : "[\"BINARY\", \"BOOLEAN\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BINARY) ELSE CAST(2 AS BOOLEAN) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1447,11 +1447,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN binary ELSE timestamp END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('1' AS BINARY) ELSE CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) END"
+    "dataType" : "[\"BINARY\", \"TIMESTAMP\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BINARY) ELSE CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1470,11 +1470,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN binary ELSE date END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('1' AS BINARY) ELSE CAST('2017-12-11 09:30:00' AS DATE) END"
+    "dataType" : "[\"BINARY\", \"DATE\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BINARY) ELSE CAST(2017-12-11 09:30:00 AS DATE) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1493,11 +1493,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN boolean ELSE tinyint END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS TINYINT) END"
+    "dataType" : "[\"BOOLEAN\", \"TINYINT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS TINYINT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1516,11 +1516,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN boolean ELSE smallint END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS SMALLINT) END"
+    "dataType" : "[\"BOOLEAN\", \"SMALLINT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS SMALLINT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1539,11 +1539,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN boolean ELSE int END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS INT) END"
+    "dataType" : "[\"BOOLEAN\", \"INT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS INT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1562,11 +1562,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN boolean ELSE bigint END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS BIGINT) END"
+    "dataType" : "[\"BOOLEAN\", \"BIGINT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS BIGINT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1585,11 +1585,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN boolean ELSE float END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS FLOAT) END"
+    "dataType" : "[\"BOOLEAN\", \"FLOAT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS FLOAT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1608,11 +1608,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN boolean ELSE double END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS DOUBLE) END"
+    "dataType" : "[\"BOOLEAN\", \"DOUBLE\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS DOUBLE) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1631,11 +1631,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN boolean ELSE decimal(10,0) END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS DECIMAL(10,0)) END"
+    "dataType" : "[\"BOOLEAN\", \"DECIMAL(10,0)\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS DECIMAL(10,0)) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1654,11 +1654,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN boolean ELSE string END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS STRING) END"
+    "dataType" : "[\"BOOLEAN\", \"STRING\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS STRING) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1677,11 +1677,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN boolean ELSE binary END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST('2' AS BINARY) END"
+    "dataType" : "[\"BOOLEAN\", \"BINARY\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS BINARY) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1708,11 +1708,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN boolean ELSE timestamp END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) END"
+    "dataType" : "[\"BOOLEAN\", \"TIMESTAMP\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1731,11 +1731,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN boolean ELSE date END",
-    "sqlExpr" : "CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST('2017-12-11 09:30:00' AS DATE) END"
+    "dataType" : "[\"BOOLEAN\", \"DATE\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2017-12-11 09:30:00 AS DATE) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1754,11 +1754,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN timestamp ELSE tinyint END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) ELSE CAST(2 AS TINYINT) END"
+    "dataType" : "[\"TIMESTAMP\", \"TINYINT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(2 AS TINYINT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1777,11 +1777,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN timestamp ELSE smallint END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) ELSE CAST(2 AS SMALLINT) END"
+    "dataType" : "[\"TIMESTAMP\", \"SMALLINT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(2 AS SMALLINT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1800,11 +1800,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN timestamp ELSE int END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) ELSE CAST(2 AS INT) END"
+    "dataType" : "[\"TIMESTAMP\", \"INT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(2 AS INT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1823,11 +1823,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN timestamp ELSE bigint END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) ELSE CAST(2 AS BIGINT) END"
+    "dataType" : "[\"TIMESTAMP\", \"BIGINT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(2 AS BIGINT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1846,11 +1846,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN timestamp ELSE float END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) ELSE CAST(2 AS FLOAT) END"
+    "dataType" : "[\"TIMESTAMP\", \"FLOAT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(2 AS FLOAT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1869,11 +1869,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN timestamp ELSE double END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) ELSE CAST(2 AS DOUBLE) END"
+    "dataType" : "[\"TIMESTAMP\", \"DOUBLE\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(2 AS DOUBLE) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1892,11 +1892,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN timestamp ELSE decimal(10,0) END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) ELSE CAST(2 AS DECIMAL(10,0)) END"
+    "dataType" : "[\"TIMESTAMP\", \"DECIMAL(10,0)\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(2 AS DECIMAL(10,0)) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1923,11 +1923,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN timestamp ELSE binary END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) ELSE CAST('2' AS BINARY) END"
+    "dataType" : "[\"TIMESTAMP\", \"BINARY\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(2 AS BINARY) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1946,11 +1946,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN timestamp ELSE boolean END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) ELSE CAST(2 AS BOOLEAN) END"
+    "dataType" : "[\"TIMESTAMP\", \"BOOLEAN\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(2 AS BOOLEAN) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1985,11 +1985,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN date ELSE tinyint END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00' AS DATE) ELSE CAST(2 AS TINYINT) END"
+    "dataType" : "[\"DATE\", \"TINYINT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00 AS DATE) ELSE CAST(2 AS TINYINT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2008,11 +2008,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN date ELSE smallint END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00' AS DATE) ELSE CAST(2 AS SMALLINT) END"
+    "dataType" : "[\"DATE\", \"SMALLINT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00 AS DATE) ELSE CAST(2 AS SMALLINT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2031,11 +2031,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN date ELSE int END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00' AS DATE) ELSE CAST(2 AS INT) END"
+    "dataType" : "[\"DATE\", \"INT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00 AS DATE) ELSE CAST(2 AS INT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2054,11 +2054,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN date ELSE bigint END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00' AS DATE) ELSE CAST(2 AS BIGINT) END"
+    "dataType" : "[\"DATE\", \"BIGINT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00 AS DATE) ELSE CAST(2 AS BIGINT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2077,11 +2077,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN date ELSE float END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00' AS DATE) ELSE CAST(2 AS FLOAT) END"
+    "dataType" : "[\"DATE\", \"FLOAT\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00 AS DATE) ELSE CAST(2 AS FLOAT) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2100,11 +2100,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN date ELSE double END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00' AS DATE) ELSE CAST(2 AS DOUBLE) END"
+    "dataType" : "[\"DATE\", \"DOUBLE\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00 AS DATE) ELSE CAST(2 AS DOUBLE) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2123,11 +2123,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN date ELSE decimal(10,0) END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00' AS DATE) ELSE CAST(2 AS DECIMAL(10,0)) END"
+    "dataType" : "[\"DATE\", \"DECIMAL(10,0)\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00 AS DATE) ELSE CAST(2 AS DECIMAL(10,0)) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2154,11 +2154,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN date ELSE binary END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00' AS DATE) ELSE CAST('2' AS BINARY) END"
+    "dataType" : "[\"DATE\", \"BINARY\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00 AS DATE) ELSE CAST(2 AS BINARY) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2177,11 +2177,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "THEN and ELSE expressions should all be same type or coercible to a common type, got CASE WHEN ... THEN date ELSE boolean END",
-    "sqlExpr" : "CASE WHEN true THEN CAST('2017-12-12 09:30:00' AS DATE) ELSE CAST(2 AS BOOLEAN) END"
+    "dataType" : "[\"DATE\", \"BOOLEAN\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN CAST(2017-12-12 09:30:00 AS DATE) ELSE CAST(2 AS BOOLEAN) END\""
   },
   "queryContext" : [ {
     "objectType" : "",
