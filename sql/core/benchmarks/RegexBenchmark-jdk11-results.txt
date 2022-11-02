@@ -1,0 +1,27 @@
+================================================================================================
+Regex rlike
+================================================================================================
+
+OpenJDK 64-Bit Server VM 11.0.16+8-post-Ubuntu-0ubuntu120.04 on Linux 5.4.0-131-generic
+Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz
+Regex rlike:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Regex rlike java wholestage off                    1091           1123          46          0.9        1091.0       1.0X
+Regex rlike java wholestage on                      896            904           5          1.1         896.4       1.2X
+Regex rlike joni wholestage off                     479            479           0          2.1         478.6       2.3X
+Regex rlike joni wholestage on                      388            391           3          2.6         388.3       2.8X
+
+
+
+================================================================================================
+Regex like
+================================================================================================
+
+OpenJDK 64-Bit Server VM 11.0.16+8-post-Ubuntu-0ubuntu120.04 on Linux 5.4.0-131-generic
+Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz
+Regex like:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Regex like java wholestage off                      603            605           2          1.7         603.4       1.0X
+Regex like java wholestage on                       503            513           9          2.0         503.1       1.2X
+Regex like joni wholestage off                      469            473           6          2.1         468.6       1.3X
+Regex like joni wholestage on                       385            387           2          2.6         385.3       1.6X

@@ -1,0 +1,27 @@
+================================================================================================
+Regex rlike
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.4+8-Ubuntu-120.04 on Linux 5.4.0-131-generic
+Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz
+Regex rlike:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Regex rlike java wholestage off                    1124           1130          10          0.9        1123.6       1.0X
+Regex rlike java wholestage on                      981            992           9          1.0         981.2       1.1X
+Regex rlike joni wholestage off                     566            567           1          1.8         566.3       2.0X
+Regex rlike joni wholestage on                      478            479           2          2.1         477.5       2.4X
+
+
+
+================================================================================================
+Regex like
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.4+8-Ubuntu-120.04 on Linux 5.4.0-131-generic
+Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz
+Regex like:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Regex like java wholestage off                      669            670           1          1.5         669.3       1.0X
+Regex like java wholestage on                       574            577           4          1.7         574.5       1.2X
+Regex like joni wholestage off                      541            542           2          1.8         540.8       1.2X
+Regex like joni wholestage on                       458            461           2          2.2         458.4       1.5X
