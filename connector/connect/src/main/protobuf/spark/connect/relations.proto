@@ -226,15 +226,11 @@ message Range {
   int64 start = 1;
   // Required.
   int64 end = 2;
-  // Optional. Default value = 1
-  Step step = 3;
+  // Required.
+  int64 step = 3;
   // Optional. Default value is assigned by 1) SQL conf "spark.sql.leafNodeDefaultParallelism" if
   // it is set, or 2) spark default parallelism.
   NumPartitions num_partitions = 4;
-
-  message Step {
-    int64 step = 1;
-  }
 
   message NumPartitions {
     int32 num_partitions = 1;

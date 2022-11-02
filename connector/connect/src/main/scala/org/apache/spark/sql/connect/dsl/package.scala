@@ -190,7 +190,9 @@ package object dsl {
         }
         range.setEnd(end)
         if (step.isDefined) {
-          range.setStep(proto.Range.Step.newBuilder().setStep(step.get))
+          range.setStep(step.get)
+        } else {
+          range.setStep(1L)
         }
         if (numPartitions.isDefined) {
           range.setNumPartitions(

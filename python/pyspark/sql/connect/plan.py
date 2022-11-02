@@ -705,7 +705,7 @@ class Range(LogicalPlan):
         self,
         start: int,
         end: int,
-        step: Optional[int] = None,
+        step: int,
         num_partitions: Optional[int] = None,
     ) -> None:
         super().__init__(None)
@@ -718,10 +718,7 @@ class Range(LogicalPlan):
         rel = proto.Relation()
         rel.range.start = self._start
         rel.range.end = self._end
-        if self._step is not None:
-            step_proto = rel.range.Step()
-            step_proto.step = self._step
-            rel.range.step.CopyFrom(step_proto)
+        rel.range.step = self._step
         if self._num_partitions is not None:
             num_partitions_proto = rel.range.NumPartitions()
             num_partitions_proto.num_partitions = self._num_partitions

@@ -80,7 +80,7 @@ class PlanOnlyTestFixture(unittest.TestCase):
         cls,
         start: int,
         end: int,
-        step: Optional[int] = None,
+        step: int = 1,
         num_partitions: Optional[int] = None,
     ) -> "DataFrame":
         return DataFrame.withPlan(

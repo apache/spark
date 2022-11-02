@@ -110,11 +110,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   private def transformRange(rel: proto.Range): LogicalPlan = {
     val start = rel.getStart
     val end = rel.getEnd
-    val step = if (rel.hasStep) {
-      rel.getStep.getStep
-    } else {
-      1
-    }
+    val step = rel.getStep
     val numPartitions = if (rel.hasNumPartitions) {
       rel.getNumPartitions.getNumPartitions
     } else {
