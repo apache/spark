@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.util.{Collections, LinkedHashMap}
+import java.util.{Collections, LinkedHashMap => JLinkedHashMap}
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -74,7 +74,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
    * Cache the latest two batches. [[StreamExecution]] usually just accesses the latest two batches
    * when committing offsets, this cache will save some file system operations.
    */
-  protected[sql] val batchCache = Collections.synchronizedMap(new LinkedHashMap[Long, T](2) {
+  protected[sql] val batchCache = Collections.synchronizedMap(new JLinkedHashMap[Long, T](2) {
     override def removeEldestEntry(e: java.util.Map.Entry[Long, T]): Boolean = size > 2
   })
 
@@ -316,7 +316,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     logInfo("BatchIds found from listing: " + batchIds.sorted.mkString(", "))
 
     if (batchIds.isEmpty) {
-      return Array.empty
+      Array.empty
     } else {
       // Assume batch ids are continuous
       (batchIds.min to batchIds.max).toArray
