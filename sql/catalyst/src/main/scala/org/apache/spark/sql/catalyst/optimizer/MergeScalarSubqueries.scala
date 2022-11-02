@@ -162,6 +162,8 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
   private def insertReferences(plan: LogicalPlan, cache: ArrayBuffer[Header]): LogicalPlan = {
     plan.transformUpWithSubqueries {
       case n => n.transformExpressionsUpWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY)) {
+        // The subquery could contain a hint that is not propagated once we cache it, but as a
+        // non-correlated scalar subquery won't be turned into a Join the loss of hints is fine.
         case s: ScalarSubquery if !s.isCorrelated && s.deterministic =>
           val (subqueryIndex, headerIndex) = cacheSubquery(s.plan, cache)
           ScalarSubqueryReference(subqueryIndex, headerIndex, s.dataType, s.exprId)

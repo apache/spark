@@ -66,7 +66,8 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
       IsNotNull(
         ScalarSubquery(
           plan = Limit(Literal(1), Project(Seq(Alias(Literal(1), "col")()), exists.plan)),
-          exprId = exists.exprId))
+          exprId = exists.exprId,
+          hint = exists.hint))
   }
 }
 
