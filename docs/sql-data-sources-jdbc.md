@@ -149,7 +149,18 @@ logging into the data sources.
       <code>partitionColumn</code> must be a numeric, date, or timestamp column from the table in question.
       Notice that <code>lowerBound</code> and <code>upperBound</code> are just used to decide the
       partition stride, not for filtering the rows in table. So all rows in the table will be
-      partitioned and returned. This option applies only to reading.
+      partitioned and returned. This option applies only to reading.<br>
+      Example:<br>
+      <code>
+         spark.read.format("jdbc")<br>
+           .option("url", jdbcUrl)<br>
+           .option("dbtable", "(select c1, c2 from t1) as subq")<br>
+           .option("partitionColumn", "c1")<br>
+           .option("lowerBound", "1")<br>
+           .option("upperBound", "100")<br>
+           .option("numPartitions", "3")<br>
+           .load()
+      </code>
     </td>
     <td>read</td>
   </tr>
