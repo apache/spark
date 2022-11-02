@@ -34,7 +34,10 @@ from pyspark.sql.connect.column import (
     Expression,
     LiteralExpression,
 )
-from pyspark.sql.types import StructType
+from pyspark.sql.types import (
+    StructType,
+    Row,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString
@@ -317,8 +320,12 @@ class DataFrame(object):
             return self._plan.print()
         return ""
 
-    def collect(self) -> None:
-        raise NotImplementedError("Please use toPandas().")
+    def collect(self) -> List[Row]:
+        pdf = self.toPandas()
+        if pdf is not None:
+            return list(pdf.apply(lambda row: Row(**row), axis=1))
+        else:
+            return []
 
     def toPandas(self) -> Optional["pandas.DataFrame"]:
         if self._plan is None:
