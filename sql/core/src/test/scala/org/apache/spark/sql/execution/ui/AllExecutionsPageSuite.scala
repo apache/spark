@@ -115,7 +115,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
         System.currentTimeMillis(),
         Map.empty))
       listener.onOtherEvent(SparkListenerSQLExecutionEnd(
-        executionId, System.currentTimeMillis()))
+        executionId, System.currentTimeMillis(), Some("Oops")))
       listener.onJobStart(SparkListenerJobStart(
         jobId = 0,
         time = System.currentTimeMillis(),
