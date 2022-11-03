@@ -3991,15 +3991,15 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
                paste("Error in load : analysis error - Unable to infer schema for JSON.",
                      "It must be specified manually"))
   expect_error(read.df("arbitrary_path"),
-               "Error in load : analysis error - [PATH_NOT_FOUND] Path does not exist:*")
+               "Error in load : analysis error - [PATH_NOT_FOUND] Path does not exist:.*")
   expect_error(read.json("arbitrary_path"),
-               "Error in json : analysis error - [PATH_NOT_FOUND] Path does not exist:*")
+               "Error in json : analysis error - [PATH_NOT_FOUND] Path does not exist:.*")
   expect_error(read.text("arbitrary_path"),
-               "Error in text : analysis error - [PATH_NOT_FOUND] Path does not exist:*")
+               "Error in text : analysis error - [PATH_NOT_FOUND] Path does not exist:.*")
   expect_error(read.orc("arbitrary_path"),
-               "Error in orc : analysis error - [PATH_NOT_FOUND] Path does not exist:*")
+               "Error in orc : analysis error - [PATH_NOT_FOUND] Path does not exist:.*")
   expect_error(read.parquet("arbitrary_path"),
-               "Error in parquet : analysis error - [PATH_NOT_FOUND] Path does not exist:*")
+               "Error in parquet : analysis error - [PATH_NOT_FOUND] Path does not exist:.*")
 
   # Arguments checking in R side.
   expect_error(read.df(path = c(3)),
