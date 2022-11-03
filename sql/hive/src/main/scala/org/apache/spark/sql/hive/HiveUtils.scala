@@ -205,7 +205,7 @@ private[spark] object HiveUtils extends Logging {
         "table scan in order to fix the issue of empty splits")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   /**
    * The version of the hive client that will be used to communicate with the metastore.  Note that
