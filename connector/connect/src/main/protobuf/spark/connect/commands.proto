@@ -17,7 +17,6 @@
 
 syntax = 'proto3';
 
-import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 
