@@ -318,13 +318,16 @@ Arguments: 100, [s_store_name1#42 ASC NULLS FIRST, s_store_id1#44 ASC NULLS FIRS
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 6 Hosting Expression = Subquery scalar-subquery#7, [id=#8]
-ObjectHashAggregate (61)
-+- Exchange (60)
-   +- ObjectHashAggregate (59)
-      +- * Project (58)
-         +- * Filter (57)
-            +- * ColumnarToRow (56)
-               +- Scan parquet spark_catalog.default.date_dim (55)
+ObjectHashAggregate (64)
++- Exchange (63)
+   +- ObjectHashAggregate (62)
+      +- * HashAggregate (61)
+         +- Exchange (60)
+            +- * HashAggregate (59)
+               +- * Project (58)
+                  +- * Filter (57)
+                     +- * ColumnarToRow (56)
+                        +- Scan parquet spark_catalog.default.date_dim (55)
 
 
 (55) Scan parquet spark_catalog.default.date_dim
@@ -345,68 +348,107 @@ Condition : (((isnotnull(d_month_seq#40) AND (d_month_seq#40 >= 1212)) AND (d_mo
 Output [1]: [d_week_seq#41]
 Input [2]: [d_month_seq#40, d_week_seq#41]
 
-(59) ObjectHashAggregate
+(59) HashAggregate [codegen id : 1]
 Input [1]: [d_week_seq#41]
-Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(d_week_seq#41, 42), 335, 8990, 0, 0)]
-Aggregate Attributes [1]: [buf#88]
-Results [1]: [buf#89]
+Keys [1]: [d_week_seq#41 AS d_week_seq#41#88]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [d_week_seq#41#88]
 
 (60) Exchange
-Input [1]: [buf#89]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
+Input [1]: [d_week_seq#41#88]
+Arguments: hashpartitioning(d_week_seq#41#88, 5), ENSURE_REQUIREMENTS, [plan_id=10]
 
-(61) ObjectHashAggregate
-Input [1]: [buf#89]
+(61) HashAggregate [codegen id : 2]
+Input [1]: [d_week_seq#41#88]
+Keys [1]: [d_week_seq#41#88]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [d_week_seq#41#88]
+
+(62) ObjectHashAggregate
+Input [1]: [d_week_seq#41#88]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(d_week_seq#41, 42), 335, 8990, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_week_seq#41, 42), 335, 8990, 0, 0)#90]
-Results [1]: [bloom_filter_agg(xxhash64(d_week_seq#41, 42), 335, 8990, 0, 0)#90 AS bloomFilter#91]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(d_week_seq#41#88, 42), 335, 8990, 0, 0)]
+Aggregate Attributes [1]: [buf#89]
+Results [1]: [buf#90]
+
+(63) Exchange
+Input [1]: [buf#90]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=11]
+
+(64) ObjectHashAggregate
+Input [1]: [buf#90]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(d_week_seq#41#88, 42), 335, 8990, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_week_seq#41#88, 42), 335, 8990, 0, 0)#91]
+Results [1]: [bloom_filter_agg(xxhash64(d_week_seq#41#88, 42), 335, 8990, 0, 0)#91 AS bloomFilter#92]
 
 Subquery:2 Hosting operator id = 31 Hosting Expression = Subquery scalar-subquery#52, [id=#53]
-ObjectHashAggregate (68)
-+- Exchange (67)
-   +- ObjectHashAggregate (66)
-      +- * Project (65)
-         +- * Filter (64)
-            +- * ColumnarToRow (63)
-               +- Scan parquet spark_catalog.default.date_dim (62)
+ObjectHashAggregate (74)
++- Exchange (73)
+   +- ObjectHashAggregate (72)
+      +- * HashAggregate (71)
+         +- Exchange (70)
+            +- * HashAggregate (69)
+               +- * Project (68)
+                  +- * Filter (67)
+                     +- * ColumnarToRow (66)
+                        +- Scan parquet spark_catalog.default.date_dim (65)
 
 
-(62) Scan parquet spark_catalog.default.date_dim
+(65) Scan parquet spark_catalog.default.date_dim
 Output [2]: [d_month_seq#70, d_week_seq#71]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1224), LessThanOrEqual(d_month_seq,1235), IsNotNull(d_week_seq)]
 ReadSchema: struct<d_month_seq:int,d_week_seq:int>
 
-(63) ColumnarToRow [codegen id : 1]
+(66) ColumnarToRow [codegen id : 1]
 Input [2]: [d_month_seq#70, d_week_seq#71]
 
-(64) Filter [codegen id : 1]
+(67) Filter [codegen id : 1]
 Input [2]: [d_month_seq#70, d_week_seq#71]
 Condition : (((isnotnull(d_month_seq#70) AND (d_month_seq#70 >= 1224)) AND (d_month_seq#70 <= 1235)) AND isnotnull(d_week_seq#71))
 
-(65) Project [codegen id : 1]
+(68) Project [codegen id : 1]
 Output [1]: [d_week_seq#71]
 Input [2]: [d_month_seq#70, d_week_seq#71]
 
-(66) ObjectHashAggregate
+(69) HashAggregate [codegen id : 1]
 Input [1]: [d_week_seq#71]
-Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(d_week_seq#71, 42), 335, 8990, 0, 0)]
-Aggregate Attributes [1]: [buf#92]
-Results [1]: [buf#93]
+Keys [1]: [d_week_seq#71 AS d_week_seq#71#93]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [d_week_seq#71#93]
 
-(67) Exchange
-Input [1]: [buf#93]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=11]
+(70) Exchange
+Input [1]: [d_week_seq#71#93]
+Arguments: hashpartitioning(d_week_seq#71#93, 5), ENSURE_REQUIREMENTS, [plan_id=12]
 
-(68) ObjectHashAggregate
-Input [1]: [buf#93]
+(71) HashAggregate [codegen id : 2]
+Input [1]: [d_week_seq#71#93]
+Keys [1]: [d_week_seq#71#93]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [d_week_seq#71#93]
+
+(72) ObjectHashAggregate
+Input [1]: [d_week_seq#71#93]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(d_week_seq#71, 42), 335, 8990, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_week_seq#71, 42), 335, 8990, 0, 0)#94]
-Results [1]: [bloom_filter_agg(xxhash64(d_week_seq#71, 42), 335, 8990, 0, 0)#94 AS bloomFilter#95]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(d_week_seq#71#93, 42), 335, 8990, 0, 0)]
+Aggregate Attributes [1]: [buf#94]
+Results [1]: [buf#95]
+
+(73) Exchange
+Input [1]: [buf#95]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=13]
+
+(74) ObjectHashAggregate
+Input [1]: [buf#95]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(d_week_seq#71#93, 42), 335, 8990, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_week_seq#71#93, 42), 335, 8990, 0, 0)#96]
+Results [1]: [bloom_filter_agg(xxhash64(d_week_seq#71#93, 42), 335, 8990, 0, 0)#96 AS bloomFilter#97]
 
 

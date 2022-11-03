@@ -231,7 +231,7 @@ Join condition: None
 Output [6]: [ss_store_sk#2, ss_ext_sales_price#5, ss_net_profit#6, ss_sold_date_sk#7, sr_return_amt#15, sr_net_loss#16]
 Input [8]: [ss_store_sk#2, ss_promo_sk#3, ss_ext_sales_price#5, ss_net_profit#6, ss_sold_date_sk#7, sr_return_amt#15, sr_net_loss#16, p_promo_sk#20]
 
-(28) ReusedExchange [Reuses operator id: 126]
+(28) ReusedExchange [Reuses operator id: 132]
 Output [1]: [d_date_sk#22]
 
 (29) BroadcastHashJoin [codegen id : 9]
@@ -375,7 +375,7 @@ Join condition: None
 Output [6]: [cs_catalog_page_sk#43, cs_ext_sales_price#47, cs_net_profit#48, cs_sold_date_sk#49, cr_return_amount#52, cr_net_loss#53]
 Input [8]: [cs_catalog_page_sk#43, cs_promo_sk#45, cs_ext_sales_price#47, cs_net_profit#48, cs_sold_date_sk#49, cr_return_amount#52, cr_net_loss#53, p_promo_sk#56]
 
-(59) ReusedExchange [Reuses operator id: 126]
+(59) ReusedExchange [Reuses operator id: 132]
 Output [1]: [d_date_sk#57]
 
 (60) BroadcastHashJoin [codegen id : 19]
@@ -519,7 +519,7 @@ Join condition: None
 Output [6]: [ws_web_site_sk#79, ws_ext_sales_price#82, ws_net_profit#83, ws_sold_date_sk#84, wr_return_amt#87, wr_net_loss#88]
 Input [8]: [ws_web_site_sk#79, ws_promo_sk#80, ws_ext_sales_price#82, ws_net_profit#83, ws_sold_date_sk#84, wr_return_amt#87, wr_net_loss#88, p_promo_sk#91]
 
-(90) ReusedExchange [Reuses operator id: 126]
+(90) ReusedExchange [Reuses operator id: 132]
 Output [1]: [d_date_sk#92]
 
 (91) BroadcastHashJoin [codegen id : 29]
@@ -609,13 +609,16 @@ Arguments: 100, [channel#113 ASC NULLS FIRST, id#114 ASC NULLS FIRST], [channel#
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#9, [id=#10]
-ObjectHashAggregate (114)
-+- Exchange (113)
-   +- ObjectHashAggregate (112)
-      +- * Project (111)
-         +- * Filter (110)
-            +- * ColumnarToRow (109)
-               +- Scan parquet spark_catalog.default.item (108)
+ObjectHashAggregate (117)
++- Exchange (116)
+   +- ObjectHashAggregate (115)
+      +- * HashAggregate (114)
+         +- Exchange (113)
+            +- * HashAggregate (112)
+               +- * Project (111)
+                  +- * Filter (110)
+                     +- * ColumnarToRow (109)
+                        +- Scan parquet spark_catalog.default.item (108)
 
 
 (108) Scan parquet spark_catalog.default.item
@@ -636,99 +639,138 @@ Condition : ((isnotnull(i_current_price#19) AND (i_current_price#19 > 50.00)) AN
 Output [1]: [i_item_sk#18]
 Input [2]: [i_item_sk#18, i_current_price#19]
 
-(112) ObjectHashAggregate
+(112) HashAggregate [codegen id : 1]
 Input [1]: [i_item_sk#18]
-Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#18, 42), 101823, 1521109, 0, 0)]
-Aggregate Attributes [1]: [buf#134]
-Results [1]: [buf#135]
+Keys [1]: [i_item_sk#18 AS i_item_sk#18#134]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [i_item_sk#18#134]
 
 (113) Exchange
-Input [1]: [buf#135]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=16]
+Input [1]: [i_item_sk#18#134]
+Arguments: hashpartitioning(i_item_sk#18#134, 5), ENSURE_REQUIREMENTS, [plan_id=16]
 
-(114) ObjectHashAggregate
-Input [1]: [buf#135]
+(114) HashAggregate [codegen id : 2]
+Input [1]: [i_item_sk#18#134]
+Keys [1]: [i_item_sk#18#134]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [i_item_sk#18#134]
+
+(115) ObjectHashAggregate
+Input [1]: [i_item_sk#18#134]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#18, 42), 101823, 1521109, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#18, 42), 101823, 1521109, 0, 0)#136]
-Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#18, 42), 101823, 1521109, 0, 0)#136 AS bloomFilter#137]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#18#134, 42), 101823, 1521109, 0, 0)]
+Aggregate Attributes [1]: [buf#135]
+Results [1]: [buf#136]
+
+(116) Exchange
+Input [1]: [buf#136]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=17]
+
+(117) ObjectHashAggregate
+Input [1]: [buf#136]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#18#134, 42), 101823, 1521109, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#18#134, 42), 101823, 1521109, 0, 0)#137]
+Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#18#134, 42), 101823, 1521109, 0, 0)#137 AS bloomFilter#138]
 
 Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#11, [id=#12]
-ObjectHashAggregate (121)
-+- Exchange (120)
-   +- ObjectHashAggregate (119)
-      +- * Project (118)
-         +- * Filter (117)
-            +- * ColumnarToRow (116)
-               +- Scan parquet spark_catalog.default.promotion (115)
+ObjectHashAggregate (127)
++- Exchange (126)
+   +- ObjectHashAggregate (125)
+      +- * HashAggregate (124)
+         +- Exchange (123)
+            +- * HashAggregate (122)
+               +- * Project (121)
+                  +- * Filter (120)
+                     +- * ColumnarToRow (119)
+                        +- Scan parquet spark_catalog.default.promotion (118)
 
 
-(115) Scan parquet spark_catalog.default.promotion
+(118) Scan parquet spark_catalog.default.promotion
 Output [2]: [p_promo_sk#20, p_channel_tv#21]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/promotion]
 PushedFilters: [IsNotNull(p_channel_tv), EqualTo(p_channel_tv,N), IsNotNull(p_promo_sk)]
 ReadSchema: struct<p_promo_sk:int,p_channel_tv:string>
 
-(116) ColumnarToRow [codegen id : 1]
+(119) ColumnarToRow [codegen id : 1]
 Input [2]: [p_promo_sk#20, p_channel_tv#21]
 
-(117) Filter [codegen id : 1]
+(120) Filter [codegen id : 1]
 Input [2]: [p_promo_sk#20, p_channel_tv#21]
 Condition : ((isnotnull(p_channel_tv#21) AND (p_channel_tv#21 = N)) AND isnotnull(p_promo_sk#20))
 
-(118) Project [codegen id : 1]
+(121) Project [codegen id : 1]
 Output [1]: [p_promo_sk#20]
 Input [2]: [p_promo_sk#20, p_channel_tv#21]
 
-(119) ObjectHashAggregate
+(122) HashAggregate [codegen id : 1]
 Input [1]: [p_promo_sk#20]
-Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(p_promo_sk#20, 42), 986, 24246, 0, 0)]
-Aggregate Attributes [1]: [buf#138]
-Results [1]: [buf#139]
+Keys [1]: [p_promo_sk#20 AS p_promo_sk#20#139]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [p_promo_sk#20#139]
 
-(120) Exchange
-Input [1]: [buf#139]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=17]
+(123) Exchange
+Input [1]: [p_promo_sk#20#139]
+Arguments: hashpartitioning(p_promo_sk#20#139, 5), ENSURE_REQUIREMENTS, [plan_id=18]
 
-(121) ObjectHashAggregate
-Input [1]: [buf#139]
+(124) HashAggregate [codegen id : 2]
+Input [1]: [p_promo_sk#20#139]
+Keys [1]: [p_promo_sk#20#139]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [p_promo_sk#20#139]
+
+(125) ObjectHashAggregate
+Input [1]: [p_promo_sk#20#139]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(p_promo_sk#20, 42), 986, 24246, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(p_promo_sk#20, 42), 986, 24246, 0, 0)#140]
-Results [1]: [bloom_filter_agg(xxhash64(p_promo_sk#20, 42), 986, 24246, 0, 0)#140 AS bloomFilter#141]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(p_promo_sk#20#139, 42), 986, 24246, 0, 0)]
+Aggregate Attributes [1]: [buf#140]
+Results [1]: [buf#141]
+
+(126) Exchange
+Input [1]: [buf#141]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=19]
+
+(127) ObjectHashAggregate
+Input [1]: [buf#141]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(p_promo_sk#20#139, 42), 986, 24246, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(p_promo_sk#20#139, 42), 986, 24246, 0, 0)#142]
+Results [1]: [bloom_filter_agg(xxhash64(p_promo_sk#20#139, 42), 986, 24246, 0, 0)#142 AS bloomFilter#143]
 
 Subquery:3 Hosting operator id = 1 Hosting Expression = ss_sold_date_sk#7 IN dynamicpruning#8
-BroadcastExchange (126)
-+- * Project (125)
-   +- * Filter (124)
-      +- * ColumnarToRow (123)
-         +- Scan parquet spark_catalog.default.date_dim (122)
+BroadcastExchange (132)
++- * Project (131)
+   +- * Filter (130)
+      +- * ColumnarToRow (129)
+         +- Scan parquet spark_catalog.default.date_dim (128)
 
 
-(122) Scan parquet spark_catalog.default.date_dim
-Output [2]: [d_date_sk#22, d_date#142]
+(128) Scan parquet spark_catalog.default.date_dim
+Output [2]: [d_date_sk#22, d_date#144]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-08-23), LessThanOrEqual(d_date,2000-09-22), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
-(123) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#22, d_date#142]
+(129) ColumnarToRow [codegen id : 1]
+Input [2]: [d_date_sk#22, d_date#144]
 
-(124) Filter [codegen id : 1]
-Input [2]: [d_date_sk#22, d_date#142]
-Condition : (((isnotnull(d_date#142) AND (d_date#142 >= 2000-08-23)) AND (d_date#142 <= 2000-09-22)) AND isnotnull(d_date_sk#22))
+(130) Filter [codegen id : 1]
+Input [2]: [d_date_sk#22, d_date#144]
+Condition : (((isnotnull(d_date#144) AND (d_date#144 >= 2000-08-23)) AND (d_date#144 <= 2000-09-22)) AND isnotnull(d_date_sk#22))
 
-(125) Project [codegen id : 1]
+(131) Project [codegen id : 1]
 Output [1]: [d_date_sk#22]
-Input [2]: [d_date_sk#22, d_date#142]
+Input [2]: [d_date_sk#22, d_date#144]
 
-(126) BroadcastExchange
+(132) BroadcastExchange
 Input [1]: [d_date_sk#22]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=18]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=20]
 
 Subquery:4 Hosting operator id = 42 Hosting Expression = ReusedSubquery Subquery scalar-subquery#9, [id=#10]
 

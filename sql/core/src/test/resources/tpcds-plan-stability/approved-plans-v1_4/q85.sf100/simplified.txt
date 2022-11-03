@@ -62,27 +62,37 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                                                                     ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(cd_demo_sk, 42), 159981, 2239471, 0, 0),bloomFilter,buf]
                                                                       Exchange #7
                                                                         ObjectHashAggregate [cd_demo_sk] [buf,buf]
-                                                                          WholeStageCodegen (1)
-                                                                            Project [cd_demo_sk]
-                                                                              Filter [cd_demo_sk,cd_marital_status,cd_education_status]
-                                                                                ColumnarToRow
-                                                                                  InputAdapter
-                                                                                    Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
+                                                                          WholeStageCodegen (2)
+                                                                            HashAggregate [cd_demo_sk]
+                                                                              InputAdapter
+                                                                                Exchange [cd_demo_sk] #8
+                                                                                  WholeStageCodegen (1)
+                                                                                    HashAggregate [cd_demo_sk] [cd_demo_sk]
+                                                                                      Project [cd_demo_sk]
+                                                                                        Filter [cd_demo_sk,cd_marital_status,cd_education_status]
+                                                                                          ColumnarToRow
+                                                                                            InputAdapter
+                                                                                              Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
                                                                   Subquery #3
                                                                     ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 152837, 2153999, 0, 0),bloomFilter,buf]
-                                                                      Exchange #8
+                                                                      Exchange #9
                                                                         ObjectHashAggregate [ca_address_sk] [buf,buf]
-                                                                          WholeStageCodegen (1)
-                                                                            Project [ca_address_sk]
-                                                                              Filter [ca_country,ca_address_sk,ca_state]
-                                                                                ColumnarToRow
-                                                                                  InputAdapter
-                                                                                    Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state,ca_country]
+                                                                          WholeStageCodegen (2)
+                                                                            HashAggregate [ca_address_sk]
+                                                                              InputAdapter
+                                                                                Exchange [ca_address_sk] #10
+                                                                                  WholeStageCodegen (1)
+                                                                                    HashAggregate [ca_address_sk] [ca_address_sk]
+                                                                                      Project [ca_address_sk]
+                                                                                        Filter [ca_country,ca_address_sk,ca_state]
+                                                                                          ColumnarToRow
+                                                                                            InputAdapter
+                                                                                              Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state,ca_country]
                                                                   ColumnarToRow
                                                                     InputAdapter
                                                                       Scan parquet spark_catalog.default.web_returns [wr_item_sk,wr_refunded_cdemo_sk,wr_refunded_addr_sk,wr_returning_cdemo_sk,wr_reason_sk,wr_order_number,wr_fee,wr_refunded_cash,wr_returned_date_sk]
                                               InputAdapter
-                                                BroadcastExchange #9
+                                                BroadcastExchange #11
                                                   WholeStageCodegen (6)
                                                     Filter [cd_demo_sk,cd_marital_status,cd_education_status]
                                                       ColumnarToRow
@@ -92,14 +102,14 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                                 WholeStageCodegen (10)
                                   Sort [cd_demo_sk,cd_marital_status,cd_education_status]
                                     InputAdapter
-                                      Exchange [cd_demo_sk,cd_marital_status,cd_education_status] #10
+                                      Exchange [cd_demo_sk,cd_marital_status,cd_education_status] #12
                                         WholeStageCodegen (9)
                                           Filter [cd_demo_sk,cd_marital_status,cd_education_status]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
                           InputAdapter
-                            BroadcastExchange #11
+                            BroadcastExchange #13
                               WholeStageCodegen (11)
                                 Project [ca_address_sk,ca_state]
                                   Filter [ca_country,ca_address_sk,ca_state]
@@ -109,7 +119,7 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                       InputAdapter
                         ReusedExchange [d_date_sk] #4
                   InputAdapter
-                    BroadcastExchange #12
+                    BroadcastExchange #14
                       WholeStageCodegen (13)
                         Filter [r_reason_sk]
                           ColumnarToRow

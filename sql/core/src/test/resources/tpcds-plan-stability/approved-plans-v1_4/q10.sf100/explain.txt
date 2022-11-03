@@ -84,7 +84,7 @@ ReadSchema: struct<ss_customer_sk:int>
 (7) ColumnarToRow [codegen id : 4]
 Input [2]: [ss_customer_sk#8, ss_sold_date_sk#9]
 
-(8) ReusedExchange [Reuses operator id: 63]
+(8) ReusedExchange [Reuses operator id: 66]
 Output [1]: [d_date_sk#11]
 
 (9) BroadcastHashJoin [codegen id : 4]
@@ -121,7 +121,7 @@ ReadSchema: struct<ws_bill_customer_sk:int>
 (15) ColumnarToRow [codegen id : 8]
 Input [2]: [ws_bill_customer_sk#12, ws_sold_date_sk#13]
 
-(16) ReusedExchange [Reuses operator id: 63]
+(16) ReusedExchange [Reuses operator id: 66]
 Output [1]: [d_date_sk#14]
 
 (17) BroadcastHashJoin [codegen id : 8]
@@ -158,7 +158,7 @@ ReadSchema: struct<cs_ship_customer_sk:int>
 (23) ColumnarToRow [codegen id : 12]
 Input [2]: [cs_ship_customer_sk#15, cs_sold_date_sk#16]
 
-(24) ReusedExchange [Reuses operator id: 63]
+(24) ReusedExchange [Reuses operator id: 66]
 Output [1]: [d_date_sk#17]
 
 (25) BroadcastHashJoin [codegen id : 12]
@@ -290,13 +290,16 @@ Arguments: 100, [cd_gender#21 ASC NULLS FIRST, cd_marital_status#22 ASC NULLS FI
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#6, [id=#7]
-ObjectHashAggregate (58)
-+- Exchange (57)
-   +- ObjectHashAggregate (56)
-      +- * Project (55)
-         +- * Filter (54)
-            +- * ColumnarToRow (53)
-               +- Scan parquet spark_catalog.default.customer_address (52)
+ObjectHashAggregate (61)
++- Exchange (60)
+   +- ObjectHashAggregate (59)
+      +- * HashAggregate (58)
+         +- Exchange (57)
+            +- * HashAggregate (56)
+               +- * Project (55)
+                  +- * Filter (54)
+                     +- * ColumnarToRow (53)
+                        +- Scan parquet spark_catalog.default.customer_address (52)
 
 
 (52) Scan parquet spark_catalog.default.customer_address
@@ -317,53 +320,71 @@ Condition : (ca_county#19 IN (Rush County,Toole County,Jefferson County,Dona Ana
 Output [1]: [ca_address_sk#18]
 Input [2]: [ca_address_sk#18, ca_county#19]
 
-(56) ObjectHashAggregate
+(56) HashAggregate [codegen id : 1]
 Input [1]: [ca_address_sk#18]
-Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(ca_address_sk#18, 42), 2555, 57765, 0, 0)]
-Aggregate Attributes [1]: [buf#38]
-Results [1]: [buf#39]
+Keys [1]: [ca_address_sk#18 AS ca_address_sk#18#38]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [ca_address_sk#18#38]
 
 (57) Exchange
-Input [1]: [buf#39]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=9]
+Input [1]: [ca_address_sk#18#38]
+Arguments: hashpartitioning(ca_address_sk#18#38, 5), ENSURE_REQUIREMENTS, [plan_id=9]
 
-(58) ObjectHashAggregate
-Input [1]: [buf#39]
+(58) HashAggregate [codegen id : 2]
+Input [1]: [ca_address_sk#18#38]
+Keys [1]: [ca_address_sk#18#38]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [ca_address_sk#18#38]
+
+(59) ObjectHashAggregate
+Input [1]: [ca_address_sk#18#38]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(ca_address_sk#18, 42), 2555, 57765, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(ca_address_sk#18, 42), 2555, 57765, 0, 0)#40]
-Results [1]: [bloom_filter_agg(xxhash64(ca_address_sk#18, 42), 2555, 57765, 0, 0)#40 AS bloomFilter#41]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(ca_address_sk#18#38, 42), 2555, 57765, 0, 0)]
+Aggregate Attributes [1]: [buf#39]
+Results [1]: [buf#40]
+
+(60) Exchange
+Input [1]: [buf#40]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
+
+(61) ObjectHashAggregate
+Input [1]: [buf#40]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(ca_address_sk#18#38, 42), 2555, 57765, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(ca_address_sk#18#38, 42), 2555, 57765, 0, 0)#41]
+Results [1]: [bloom_filter_agg(xxhash64(ca_address_sk#18#38, 42), 2555, 57765, 0, 0)#41 AS bloomFilter#42]
 
 Subquery:2 Hosting operator id = 6 Hosting Expression = ss_sold_date_sk#9 IN dynamicpruning#10
-BroadcastExchange (63)
-+- * Project (62)
-   +- * Filter (61)
-      +- * ColumnarToRow (60)
-         +- Scan parquet spark_catalog.default.date_dim (59)
+BroadcastExchange (66)
++- * Project (65)
+   +- * Filter (64)
+      +- * ColumnarToRow (63)
+         +- Scan parquet spark_catalog.default.date_dim (62)
 
 
-(59) Scan parquet spark_catalog.default.date_dim
-Output [3]: [d_date_sk#11, d_year#42, d_moy#43]
+(62) Scan parquet spark_catalog.default.date_dim
+Output [3]: [d_date_sk#11, d_year#43, d_moy#44]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2002), GreaterThanOrEqual(d_moy,1), LessThanOrEqual(d_moy,4), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
-(60) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#11, d_year#42, d_moy#43]
+(63) ColumnarToRow [codegen id : 1]
+Input [3]: [d_date_sk#11, d_year#43, d_moy#44]
 
-(61) Filter [codegen id : 1]
-Input [3]: [d_date_sk#11, d_year#42, d_moy#43]
-Condition : (((((isnotnull(d_year#42) AND isnotnull(d_moy#43)) AND (d_year#42 = 2002)) AND (d_moy#43 >= 1)) AND (d_moy#43 <= 4)) AND isnotnull(d_date_sk#11))
+(64) Filter [codegen id : 1]
+Input [3]: [d_date_sk#11, d_year#43, d_moy#44]
+Condition : (((((isnotnull(d_year#43) AND isnotnull(d_moy#44)) AND (d_year#43 = 2002)) AND (d_moy#44 >= 1)) AND (d_moy#44 <= 4)) AND isnotnull(d_date_sk#11))
 
-(62) Project [codegen id : 1]
+(65) Project [codegen id : 1]
 Output [1]: [d_date_sk#11]
-Input [3]: [d_date_sk#11, d_year#42, d_moy#43]
+Input [3]: [d_date_sk#11, d_year#43, d_moy#44]
 
-(63) BroadcastExchange
+(66) BroadcastExchange
 Input [1]: [d_date_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=11]
 
 Subquery:3 Hosting operator id = 14 Hosting Expression = ws_sold_date_sk#13 IN dynamicpruning#10
 

@@ -82,7 +82,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val bloomFilterAgg =
       if (rowCount.isDefined && rowCount.get.longValue > 0L) {
         new BloomFilterAggregate(
-          new XxHash64(childAggregate.output), Literal(rowCount.get.longValue))
+          new XxHash64(childAggregate.output), rowCount.get.longValue)
       } else {
         new BloomFilterAggregate(new XxHash64(childAggregate.output))
       }

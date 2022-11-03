@@ -338,13 +338,16 @@ Input [1]: [d_date_sk#32]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=10]
 
 Subquery:2 Hosting operator id = 14 Hosting Expression = Subquery scalar-subquery#19, [id=#20]
-ObjectHashAggregate (66)
-+- Exchange (65)
-   +- ObjectHashAggregate (64)
-      +- * Project (63)
-         +- * Filter (62)
-            +- * ColumnarToRow (61)
-               +- Scan parquet spark_catalog.default.customer_demographics (60)
+ObjectHashAggregate (69)
++- Exchange (68)
+   +- ObjectHashAggregate (67)
+      +- * HashAggregate (66)
+         +- Exchange (65)
+            +- * HashAggregate (64)
+               +- * Project (63)
+                  +- * Filter (62)
+                     +- * ColumnarToRow (61)
+                        +- Scan parquet spark_catalog.default.customer_demographics (60)
 
 
 (60) Scan parquet spark_catalog.default.customer_demographics
@@ -365,68 +368,107 @@ Condition : (((isnotnull(cd_demo_sk#23) AND isnotnull(cd_marital_status#24)) AND
 Output [1]: [cd_demo_sk#23]
 Input [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
 
-(64) ObjectHashAggregate
+(64) HashAggregate [codegen id : 1]
 Input [1]: [cd_demo_sk#23]
-Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(cd_demo_sk#23, 42), 159981, 2239471, 0, 0)]
-Aggregate Attributes [1]: [buf#55]
-Results [1]: [buf#56]
+Keys [1]: [cd_demo_sk#23 AS cd_demo_sk#23#55]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [cd_demo_sk#23#55]
 
 (65) Exchange
-Input [1]: [buf#56]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=11]
+Input [1]: [cd_demo_sk#23#55]
+Arguments: hashpartitioning(cd_demo_sk#23#55, 5), ENSURE_REQUIREMENTS, [plan_id=11]
 
-(66) ObjectHashAggregate
-Input [1]: [buf#56]
+(66) HashAggregate [codegen id : 2]
+Input [1]: [cd_demo_sk#23#55]
+Keys [1]: [cd_demo_sk#23#55]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [cd_demo_sk#23#55]
+
+(67) ObjectHashAggregate
+Input [1]: [cd_demo_sk#23#55]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#23, 42), 159981, 2239471, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#23, 42), 159981, 2239471, 0, 0)#57]
-Results [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#23, 42), 159981, 2239471, 0, 0)#57 AS bloomFilter#58]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(cd_demo_sk#23#55, 42), 159981, 2239471, 0, 0)]
+Aggregate Attributes [1]: [buf#56]
+Results [1]: [buf#57]
+
+(68) Exchange
+Input [1]: [buf#57]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=12]
+
+(69) ObjectHashAggregate
+Input [1]: [buf#57]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#23#55, 42), 159981, 2239471, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#23#55, 42), 159981, 2239471, 0, 0)#58]
+Results [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#23#55, 42), 159981, 2239471, 0, 0)#58 AS bloomFilter#59]
 
 Subquery:3 Hosting operator id = 14 Hosting Expression = Subquery scalar-subquery#21, [id=#22]
-ObjectHashAggregate (73)
-+- Exchange (72)
-   +- ObjectHashAggregate (71)
-      +- * Project (70)
-         +- * Filter (69)
-            +- * ColumnarToRow (68)
-               +- Scan parquet spark_catalog.default.customer_address (67)
+ObjectHashAggregate (79)
++- Exchange (78)
+   +- ObjectHashAggregate (77)
+      +- * HashAggregate (76)
+         +- Exchange (75)
+            +- * HashAggregate (74)
+               +- * Project (73)
+                  +- * Filter (72)
+                     +- * ColumnarToRow (71)
+                        +- Scan parquet spark_catalog.default.customer_address (70)
 
 
-(67) Scan parquet spark_catalog.default.customer_address
+(70) Scan parquet spark_catalog.default.customer_address
 Output [3]: [ca_address_sk#29, ca_state#30, ca_country#31]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_country), EqualTo(ca_country,United States), IsNotNull(ca_address_sk), Or(Or(In(ca_state, [IN,NJ,OH]),In(ca_state, [CT,KY,WI])),In(ca_state, [AR,IA,LA]))]
 ReadSchema: struct<ca_address_sk:int,ca_state:string,ca_country:string>
 
-(68) ColumnarToRow [codegen id : 1]
+(71) ColumnarToRow [codegen id : 1]
 Input [3]: [ca_address_sk#29, ca_state#30, ca_country#31]
 
-(69) Filter [codegen id : 1]
+(72) Filter [codegen id : 1]
 Input [3]: [ca_address_sk#29, ca_state#30, ca_country#31]
 Condition : (((isnotnull(ca_country#31) AND (ca_country#31 = United States)) AND isnotnull(ca_address_sk#29)) AND ((ca_state#30 IN (IN,OH,NJ) OR ca_state#30 IN (WI,CT,KY)) OR ca_state#30 IN (LA,IA,AR)))
 
-(70) Project [codegen id : 1]
+(73) Project [codegen id : 1]
 Output [1]: [ca_address_sk#29]
 Input [3]: [ca_address_sk#29, ca_state#30, ca_country#31]
 
-(71) ObjectHashAggregate
+(74) HashAggregate [codegen id : 1]
 Input [1]: [ca_address_sk#29]
-Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(ca_address_sk#29, 42), 152837, 2153999, 0, 0)]
-Aggregate Attributes [1]: [buf#59]
-Results [1]: [buf#60]
+Keys [1]: [ca_address_sk#29 AS ca_address_sk#29#60]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [ca_address_sk#29#60]
 
-(72) Exchange
-Input [1]: [buf#60]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=12]
+(75) Exchange
+Input [1]: [ca_address_sk#29#60]
+Arguments: hashpartitioning(ca_address_sk#29#60, 5), ENSURE_REQUIREMENTS, [plan_id=13]
 
-(73) ObjectHashAggregate
-Input [1]: [buf#60]
+(76) HashAggregate [codegen id : 2]
+Input [1]: [ca_address_sk#29#60]
+Keys [1]: [ca_address_sk#29#60]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [ca_address_sk#29#60]
+
+(77) ObjectHashAggregate
+Input [1]: [ca_address_sk#29#60]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(ca_address_sk#29, 42), 152837, 2153999, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(ca_address_sk#29, 42), 152837, 2153999, 0, 0)#61]
-Results [1]: [bloom_filter_agg(xxhash64(ca_address_sk#29, 42), 152837, 2153999, 0, 0)#61 AS bloomFilter#62]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(ca_address_sk#29#60, 42), 152837, 2153999, 0, 0)]
+Aggregate Attributes [1]: [buf#61]
+Results [1]: [buf#62]
+
+(78) Exchange
+Input [1]: [buf#62]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=14]
+
+(79) ObjectHashAggregate
+Input [1]: [buf#62]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(ca_address_sk#29#60, 42), 152837, 2153999, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(ca_address_sk#29#60, 42), 152837, 2153999, 0, 0)#63]
+Results [1]: [bloom_filter_agg(xxhash64(ca_address_sk#29#60, 42), 152837, 2153999, 0, 0)#63 AS bloomFilter#64]
 
 
