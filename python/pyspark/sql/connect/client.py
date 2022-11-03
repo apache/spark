@@ -24,6 +24,7 @@ import uuid
 
 import grpc  # type: ignore
 import pyarrow as pa
+import pandas
 
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
@@ -40,8 +41,7 @@ NumericType = typing.Union[int, float]
 
 logging.basicConfig(level=logging.INFO)
 
-if TYPE_CHECKING:
-    import pandas
+
 
 
 class ChannelBuilder:
