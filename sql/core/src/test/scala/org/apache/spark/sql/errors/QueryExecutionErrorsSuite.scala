@@ -723,6 +723,35 @@ class QueryExecutionErrorsSuite
       }
     }
   }
+
+  test("LOCATION_ALREADY_EXISTS: in create or rename a managed table") {
+    val (tbl, oldTable) = ("table_in_test", "old_table_in_test")
+    withTable(tbl, oldTable) {
+      val warehouseFilePath = new URI(spark.sessionState.conf.warehousePath).getPath
+      val tableDir = new File(warehouseFilePath, tbl)
+      tableDir.createNewFile()
+
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql(s"CREATE TABLE $tbl (a INT) USING parquet")
+        },
+        errorClass = "LOCATION_ALREADY_EXISTS.CREATE_MANAGED_TABLE",
+        parameters = Map(
+          "location" -> s"'${tableDir.toURI.toString}'",
+          "table" -> s"`spark_catalog`.`default`.`$tbl`"))
+
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql(s"CREATE TABLE $oldTable (a INT) USING parquet")
+          sql(s"ALTER TABLE $oldTable RENAME TO $tbl")
+        },
+        errorClass = "LOCATION_ALREADY_EXISTS.RENAME_MANAGED_TABLE",
+        parameters = Map(
+          "location" -> s"'${tableDir.toURI.toString}'",
+          "table" -> s"`spark_catalog`.`default`.`$oldTable`",
+          "newTable" -> s"`spark_catalog`.`default`.`$tbl`"))
+    }
+  }
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {
