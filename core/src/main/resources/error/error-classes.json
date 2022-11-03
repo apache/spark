@@ -108,6 +108,11 @@
       "Cannot resolve <sqlExpr> due to data type mismatch:"
     ],
     "subClass" : {
+      "ARRAY_FUNCTION_DIFF_TYPES" : {
+        "message" : [
+          "Input to <functionName> should have been <dataType> followed by a value with same element type, but it's [<leftType>, <rightType>]."
+        ]
+      },
       "BINARY_ARRAY_DIFF_TYPES" : {
         "message" : [
           "Input to function <functionName> should have been two <arrayType> with same element type, but it's [<leftType>, <rightType>]."
@@ -225,14 +230,14 @@
           "The <functionName> should all be of type map, but it's <dataType>."
         ]
       },
-      "MAP_CONTAINS_KEY_DIFF_TYPES" : {
-        "message" : [
-          "Input to <functionName> should have been <dataType> followed by a value with same key type, but it's [<leftType>, <rightType>]."
-        ]
-      },
       "MAP_FROM_ENTRIES_WRONG_TYPE" : {
         "message" : [
           "The <functionName> accepts only arrays of pair structs, but <childExpr> is of <childType>."
+        ]
+      },
+      "MAP_FUNCTION_DIFF_TYPES" : {
+        "message" : [
+          "Input to <functionName> should have been <dataType> followed by a value with same key type, but it's [<leftType>, <rightType>]."
         ]
       },
       "MAP_ZIP_WITH_DIFF_TYPES" : {
@@ -273,6 +278,14 @@
       "RANGE_FRAME_WITHOUT_ORDER" : {
         "message" : [
           "A range window frame cannot be used in an unordered window specification."
+        ]
+      },
+      "SEQUENCE_WRONG_INPUT_TYPES" : {
+        "message" : [
+          "<functionName> uses the wrong parameter type. The parameter type must conform to:",
+          "1. The start and stop expressions must resolve to the same type.",
+          "2. If start and stop expressions resolve to the <startType> type, then the step expression must resolve to the <stepType> type",
+          "3. Otherwise to the same type as the start and stop expressions."
         ]
       },
       "SPECIFIED_WINDOW_FRAME_DIFF_TYPES" : {
