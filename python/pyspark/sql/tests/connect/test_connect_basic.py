@@ -159,6 +159,16 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             .equals(self.spark.range(start=0, end=10, step=3, numPartitions=2).toPandas())
         )
 
+    def test_take(self) -> None:
+        df = self.connect.read.table(self.tbl_name)
+        self.assertEqual(5, len(df.take(5)))
+
+    def test_head(self) -> None:
+        df = self.connect.read.table(self.tbl_name)
+        self.assertIsNotNone(len(df.head()))
+        self.assertIsNotNone(len(df.head(1)))
+        self.assertIsNotNone(len(df.head(5)))
+
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text
         tmpPath = tempfile.mkdtemp()

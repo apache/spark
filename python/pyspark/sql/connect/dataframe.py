@@ -217,8 +217,43 @@ class DataFrame(object):
     def groupBy(self, *cols: "ColumnOrString") -> GroupingFrame:
         return GroupingFrame(self, *cols)
 
-    def head(self, n: int) -> Optional["pandas.DataFrame"]:
-        return self.limit(n).toPandas()
+    def head(self, n: Optional[int] = None) -> Union[Optional[Row], List[Row]]:
+        """Returns the first ``n`` rows.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        n : int, optional
+            default 1. Number of rows to return.
+
+        Returns
+        -------
+        If n is greater than 1, return a list of :class:`Row`.
+        If n is 1, return a single Row.
+        """
+        if n is None:
+            rs = self.head(1)
+            return rs[0] if rs else None
+        return self.take(n)
+
+    def take(self, num: int) -> List[Row]:
+        """Returns the first ``num`` rows as a :class:`list` of :class:`Row`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or whataver number is available.
+
+        Returns
+        -------
+        list
+            List of rows
+        """
+        return self.limit(num).collect()
 
     # TODO: extend `on` to also be type List[ColumnRef].
     def join(
