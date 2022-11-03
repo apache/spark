@@ -26,6 +26,7 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -894,12 +895,14 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
           sql(insertString.toLowerCase(Locale.ROOT))
           sql(insertString.toUpperCase(Locale.ROOT))
+          spark.sessionState.catalog.alterTableStats(TableIdentifier("test1"), None)
 
           sql(dropString)
           sql(createSpark.toUpperCase(Locale.ROOT))
 
           sql(insertString.toLowerCase(Locale.ROOT))
           sql(insertString.toUpperCase(Locale.ROOT))
+          spark.sessionState.catalog.alterTableStats(TableIdentifier("test1"), None)
         }
       }
     }

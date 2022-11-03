@@ -609,6 +609,17 @@ private[hive] class HiveClientImpl(
     shim.alterTable(client, qualifiedTableName, hiveTable)
   }
 
+  override def alterTableStats(
+      dbName: String,
+      tableName: String,
+      updateStats: Map[String, String]): Unit = withHiveState {
+    val hiveTable =
+      getRawTableOption(dbName, tableName).getOrElse(
+        throw new NoSuchTableException(dbName, tableName))
+    updateStats.foreach { case (k, v) => hiveTable.setProperty(k, v) }
+    shim.alterTable(client, s"$dbName.$tableName", hiveTable)
+  }
+
   override def alterTableDataSchema(
       dbName: String,
       tableName: String,
