@@ -178,4 +178,8 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(driverConf.asInstanceOf[KubernetesConf].appId === KubernetesTestConf.APP_ID)
     assert(execConf.asInstanceOf[KubernetesConf].appId === KubernetesTestConf.APP_ID)
   }
+
+  test("SPARK-40869: Resource name prefix should not start with a hyphen") {
+    assert(KubernetesConf.getResourceNamePrefix("_hello_").startsWith("hello"))
+  }
 }
