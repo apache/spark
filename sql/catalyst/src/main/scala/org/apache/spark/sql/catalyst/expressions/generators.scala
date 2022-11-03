@@ -207,7 +207,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
               "leftParamIndex" -> (j + 1).toString,
               "leftType" -> toSQLType(elementSchema.fields(j).dataType),
               "rightParamIndex" -> i.toString,
-              "rightType" -> toSQLType(children(i).dataType),
+              "rightType" -> toSQLType(children(i).dataType)
             )
           )
         }
