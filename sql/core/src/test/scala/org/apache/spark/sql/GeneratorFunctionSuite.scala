@@ -283,10 +283,18 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("inline raises exception on array of null type") {
-    val m = intercept[AnalysisException] {
-      spark.range(2).select(inline(array()))
-    }.getMessage
-    assert(m.contains("data type mismatch"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(2).select(inline(array()))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"inline(array())\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"array()\"",
+        "inputType" -> "\"ARRAY<VOID>\"",
+        "requiredType" -> "\"ARRAY<STRUCT>\"")
+    )
   }
 
   test("inline with empty table") {
@@ -315,20 +323,30 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       Row(1, 2) :: Row(1, 2) :: Nil)
 
     // Spark think [struct<a:int>, struct<b:int>] is heterogeneous due to name difference.
-    val m = intercept[AnalysisException] {
-      df.select(inline(array(struct('a), struct('b))))
-    }.getMessage
-    assert(m.contains("data type mismatch"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(inline(array(struct('a), struct('b))))
+      },
+      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"array(struct(a), struct(b))\"",
+        "functionName" -> "`array`",
+        "dataType" -> "(\"STRUCT<a: INT>\" or \"STRUCT<b: INT>\")"))
 
     checkAnswer(
       df.select(inline(array(struct('a), struct('b.alias("a"))))),
       Row(1) :: Row(2) :: Nil)
 
     // Spark think [struct<a:int>, struct<col1:int>] is heterogeneous due to name difference.
-    val m2 = intercept[AnalysisException] {
-      df.select(inline(array(struct('a), struct(lit(2)))))
-    }.getMessage
-    assert(m2.contains("data type mismatch"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(inline(array(struct('a), struct(lit(2)))))
+      },
+      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"array(struct(a), struct(2))\"",
+        "functionName" -> "`array`",
+        "dataType" -> "(\"STRUCT<a: INT>\" or \"STRUCT<col1: INT>\")"))
 
     checkAnswer(
       df.select(inline(array(struct('a), struct(lit(2).alias("a"))))),
@@ -395,30 +413,39 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         Row(1, 2) :: Row(1, 3) :: Nil
       )
 
-      val msg1 = intercept[AnalysisException] {
-        sql("select 1 + explode(array(min(c2), max(c2))) from t1 group by c1")
-      }.getMessage
-      assert(msg1.contains("The generator is not supported: nested in expressions"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select 1 + explode(array(min(c2), max(c2))) from t1 group by c1")
+        },
+        errorClass = "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+        parameters = Map(
+          "expression" -> "\"(1 + explode(array(min(c2), max(c2))))\""))
 
-      val msg2 = intercept[AnalysisException] {
-        sql(
-          """select
-            |  explode(array(min(c2), max(c2))),
-            |  posexplode(array(min(c2), max(c2)))
-            |from t1 group by c1
-          """.stripMargin)
-      }.getMessage
-      assert(msg2.contains("The generator is not supported: " +
-        "only one generator allowed per aggregate clause"))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            """select
+              |  explode(array(min(c2), max(c2))),
+              |  posexplode(array(min(c2), max(c2)))
+              |from t1 group by c1""".stripMargin)
+        },
+        errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
+        parameters = Map(
+          "clause" -> "aggregate",
+          "num" -> "2",
+          "generators" -> ("\"explode(array(min(c2), max(c2)))\", " +
+            "\"posexplode(array(min(c2), max(c2)))\"")))
     }
   }
 
   test("SPARK-30998: Unsupported nested inner generators") {
-    val errMsg = intercept[AnalysisException] {
-      sql("SELECT array(array(1, 2), array(3)) v").select(explode(explode($"v"))).collect
-    }.getMessage
-    assert(errMsg.contains("The generator is not supported: " +
-      """nested in expressions "explode(explode(v))""""))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT array(array(1, 2), array(3)) v").select(explode(explode($"v"))).collect
+      },
+      errorClass = "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+      parameters = Map("expression" -> "\"explode(explode(v))\""))
   }
 
   test("SPARK-30997: generators in aggregate expressions for dataframe") {
