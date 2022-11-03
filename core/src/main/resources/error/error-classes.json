@@ -22,9 +22,19 @@
       "Error constructing FileDescriptor for <descFilePath>"
     ]
   },
+  "CANNOT_CONVERT_PROTOBUF_FIELD_TYPE_TO_SQL_TYPE" : {
+    "message" : [
+      "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
+    ]
+  },
   "CANNOT_CONVERT_PROTOBUF_MESSAGE_TYPE_TO_SQL_TYPE" : {
     "message" : [
       "Unable to convert <protobufType> of Protobuf to SQL type <toType>."
+    ]
+  },
+  "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_ENUM_TYPE" : {
+    "message" : [
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> cannot be written since it's not defined in ENUM <enumString>"
     ]
   },
   "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_FIELD_TYPE" : {
@@ -46,7 +56,7 @@
   },
   "CANNOT_LOAD_PROTOBUF_CLASS" : {
     "message" : [
-      "Could not load Protobuf class with name <protobufClassName><message>"
+      "Could not load Protobuf class with name <protobufClassName>. Ensure the class name includes package prefix."
     ]
   },
   "CANNOT_PARSE_DECIMAL" : {
@@ -758,11 +768,6 @@
       "Type mismatch encountered for field: <field>"
     ]
   },
-  "PROTOBUF_FIELD_TYPE_TO_SQL_TYPE_ERROR" : {
-    "message" : [
-      "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
-    ]
-  },
   "PROTOBUF_MESSAGE_NOT_FOUND" : {
     "message" : [
       "Unable to locate Message <messageName> in Descriptor"
@@ -831,11 +836,6 @@
       "The second argument of <functionName> function needs to be an integer."
     ],
     "sqlState" : "22023"
-  },
-  "SQL_TYPE_TO_PROTOBUF_ENUM_TYPE_ERROR" : {
-    "message" : [
-      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> cannot be written since it's not defined in ENUM <enumString>"
-    ]
   },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [

@@ -159,8 +159,7 @@ private[sql] object ProtobufUtils extends Logging {
       Utils.classForName(protobufClassName)
     } catch {
       case e: ClassNotFoundException =>
-        val hasDots = protobufClassName.contains(".")
-        throw QueryCompilationErrors.protobufClassLoadError(protobufClassName, hasDots, e)
+        throw QueryCompilationErrors.protobufClassLoadError(protobufClassName, e)
     }
 
     if (!classOf[Message].isAssignableFrom(protobufClass)) {

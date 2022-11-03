@@ -3219,7 +3219,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       protobufType: String,
       sqlType: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "PROTOBUF_FIELD_TYPE_TO_SQL_TYPE_ERROR",
+      errorClass = "CANNOT_CONVERT_PROTOBUF_FIELD_TYPE_TO_SQL_TYPE",
       messageParameters = Map(
         "protobufColumn" -> protobufColumn,
         "sqlColumn" -> toSQLId(sqlColumn),
@@ -3247,7 +3247,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       data: String,
       enumString: String): Throwable = {
     new AnalysisException(
-      errorClass = "SQL_TYPE_TO_PROTOBUF_ENUM_TYPE_ERROR",
+      errorClass = "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_ENUM_TYPE",
       messageParameters = Map(
         "sqlColumn" -> toSQLId(sqlColumn),
         "protobufColumn" -> protobufColumn,
@@ -3361,12 +3361,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def protobufClassLoadError(
       protobufClassName: String,
-      hasDots: Boolean,
       cause: Throwable): Throwable = {
-    val message = if (hasDots) "" else ". Ensure the class name includes package prefix."
     new AnalysisException(
       errorClass = "CANNOT_LOAD_PROTOBUF_CLASS",
-      messageParameters = Map("protobufClassName" -> protobufClassName, "message" -> message),
+      messageParameters = Map("protobufClassName" -> protobufClassName),
       cause = Option(cause.getCause))
   }
 
