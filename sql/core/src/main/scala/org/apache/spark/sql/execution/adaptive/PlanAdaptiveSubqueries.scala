@@ -44,7 +44,7 @@ case class PlanAdaptiveSubqueries(
           )
         }
         InSubqueryExec(expr, subqueryMap(exprId.id), exprId, shouldBroadcast = true)
-      case expressions.DynamicPruningSubquery(value, _, _, _, _, exprId) =>
+      case expressions.DynamicPruningSubquery(value, _, _, _, _, exprId, _) =>
         DynamicPruningExpression(InSubqueryExec(value, subqueryMap(exprId.id), exprId))
     }
   }

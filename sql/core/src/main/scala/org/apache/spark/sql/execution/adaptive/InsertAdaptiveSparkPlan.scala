@@ -136,7 +136,7 @@ case class InsertAdaptiveSparkPlan(
         val subquery = SubqueryExec(s"subquery#${exprId.id}", executedPlan)
         subqueryMap.put(exprId.id, subquery)
       case expressions.DynamicPruningSubquery(value, buildPlan,
-          buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId)
+          buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId, _)
           if !subqueryMap.contains(exprId.id) =>
         val executedPlan = compileSubquery(buildPlan)
         verifyAdaptivePlan(executedPlan, buildPlan)
