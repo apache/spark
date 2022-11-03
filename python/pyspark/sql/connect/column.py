@@ -114,7 +114,7 @@ class LiteralExpression(Expression):
             exp.literal.decimal.scale = abs(v_tuple.exponent)
             exp.literal.decimal.precision = len(v_tuple.digits) - abs(v_tuple.exponent)
             # Two complement yeah...
-            raise ValueError("cannnt....")
+            raise ValueError("Python Decimal not supported.")
         elif value_type is bytes:
             exp.literal.binary = self._value
         elif value_type is datetime.datetime:
@@ -132,7 +132,7 @@ class LiteralExpression(Expression):
             days_since_epoch = (cast(datetime.date, self._value) - datetime.date(1970, 1, 1)).days
             exp.literal.date = days_since_epoch
         elif value_type is uuid.UUID:
-            exp.literal.uuid = cast(uuid.UUID, self._value).bytes
+            raise ValueError("Python UUID type not supported.")
         elif value_type is list:
             lv = cast(list, self._value)
             for k in lv:

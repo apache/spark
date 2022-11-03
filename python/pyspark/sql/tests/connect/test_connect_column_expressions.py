@@ -75,9 +75,8 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
     def test_uuid_literal(self):
         val = uuid.uuid4()
         lit = fun.lit(val)
-        lit_p = lit.to_plan(None)
-
-        self.assertIsNotNone(lit_p)
+        with self.assertRaises(ValueError):
+            lit.to_plan(None)
 
     def test_column_literals(self):
         df = c.DataFrame.withPlan(p.Read("table"))
