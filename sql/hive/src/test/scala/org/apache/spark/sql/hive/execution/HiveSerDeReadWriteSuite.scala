@@ -226,7 +226,8 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
     }
   }
 
-  test("SPARK-40815: DelegateSymlinkTextInputFormat serialization") {
+  // Ignored due to JDK 11 failures reported in https://github.com/apache/spark/pull/38277.
+  ignore("SPARK-40815: DelegateSymlinkTextInputFormat serialization") {
     def assertSerDe(split: DelegateSymlinkTextInputFormat.DelegateSymlinkTextInputSplit): Unit = {
       val buf = new ByteArrayOutputStream()
       val out = new DataOutputStream(buf)
