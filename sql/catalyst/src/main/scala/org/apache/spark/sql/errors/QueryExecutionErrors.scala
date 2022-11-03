@@ -22,7 +22,6 @@ import java.lang.reflect.InvocationTargetException
 import java.net.{URISyntaxException, URL}
 import java.time.{DateTimeException, LocalDate}
 import java.time.temporal.ChronoField
-import java.util.ConcurrentModificationException
 import java.util.concurrent.TimeoutException
 
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
