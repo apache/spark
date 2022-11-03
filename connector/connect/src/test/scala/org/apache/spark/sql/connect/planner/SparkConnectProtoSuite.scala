@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.connect.planner
 
-import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.{Column, DataFrame, Row}
@@ -69,7 +68,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val connectPlan =
       connectTestRelation.select(callFunction(Seq("default", "hex"), Seq("id".protoAttr)))
 
-    assertThrows[SparkException] {
+    assertThrows[UnsupportedOperationException] {
       analyzePlan(transform(connectPlan))
     }
 

@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.Assertions._
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -879,14 +878,9 @@ class AnalysisErrorSuite extends AnalysisTest {
         Project(
           Alias(Literal(1), "x")() :: Nil,
           UnresolvedRelation(TableIdentifier("t", Option("nonexist")))))))
-    val analyzer = getAnalyzer
-    checkError(
-      exception = intercept[SparkException] {
-        analyzer.checkAnalysis(analyzer.execute(plan))
-      },
-      errorClass = "_LEGACY_ERROR_TEMP_2221",
-      parameters = Map("key" -> "spark.sql.catalog.nonexist")
-    )
+    assertAnalysisErrorClass(plan,
+      expectedErrorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      Map("relationName" -> "`nonexist`.`t`"))
   }
 
   test("SPARK-33909: Check rand functions seed is legal at analyzer side") {
