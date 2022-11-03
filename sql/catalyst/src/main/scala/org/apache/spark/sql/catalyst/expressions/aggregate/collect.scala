@@ -22,9 +22,11 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
 import org.apache.spark.util.BoundedPriorityQueue
 
@@ -145,7 +147,8 @@ case class CollectList(
 case class CollectSet(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect[mutable.HashSet[Any]] {
+    inputAggBufferOffset: Int = 0)
+  extends Collect[mutable.HashSet[Any]] with QueryErrorsBase {
 
   def this(child: Expression) = this(child, 0, 0)
 
@@ -177,7 +180,13 @@ case class CollectSet(
     if (!child.dataType.existsRecursively(_.isInstanceOf[MapType])) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure("collect_set() cannot have map type data")
+      DataTypeMismatch(
+        errorSubClass = "UNSUPPORTED_INPUT_TYPE",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> toSQLType(MapType)
+        )
+      )
     }
   }
 
