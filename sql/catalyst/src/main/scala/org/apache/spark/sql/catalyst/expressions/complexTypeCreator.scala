@@ -22,6 +22,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -202,16 +204,30 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
-      TypeCheckResult.TypeCheckFailure(
-        s"$prettyName expects a positive even number of arguments.")
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "expectedNum" -> "2n (n > 0)",
+          "actualNum" -> children.length.toString
+        )
+      )
     } else if (!TypeCoercion.haveSameType(keys.map(_.dataType))) {
-      TypeCheckResult.TypeCheckFailure(
-        "The given keys of function map should all be the same type, but they are " +
-          keys.map(_.dataType.catalogString).mkString("[", ", ", "]"))
+      DataTypeMismatch(
+        errorSubClass = "CREATE_MAP_KEY_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> keys.map(key => toSQLType(key.dataType)).mkString("[", ", ", "]")
+        )
+      )
     } else if (!TypeCoercion.haveSameType(values.map(_.dataType))) {
-      TypeCheckResult.TypeCheckFailure(
-        "The given values of function map should all be the same type, but they are " +
-          values.map(_.dataType.catalogString).mkString("[", ", ", "]"))
+      DataTypeMismatch(
+        errorSubClass = "CREATE_MAP_VALUE_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> values.map(value => toSQLType(value.dataType)).mkString("[", ", ", "]")
+        )
+      )
     } else {
       TypeUtils.checkForMapKeyType(dataType.keyType)
     }
@@ -444,17 +460,32 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "expectedNum" -> "2n (n > 0)",
+          "actualNum" -> children.length.toString
+        )
+      )
     } else {
       val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
       if (invalidNames.nonEmpty) {
-        TypeCheckResult.TypeCheckFailure(
-          s"Only foldable ${StringType.catalogString} expressions are allowed to appear at odd" +
-            s" position, got: ${invalidNames.mkString(",")}")
+        DataTypeMismatch(
+          errorSubClass = "CREATE_NAMED_STRUCT_WITHOUT_FOLDABLE_STRING",
+          messageParameters = Map(
+            "inputExprs" -> invalidNames.map(toSQLExpr(_)).mkString("[", ", ", "]")
+          )
+        )
       } else if (!names.contains(null)) {
         TypeCheckResult.TypeCheckSuccess
       } else {
-        TypeCheckResult.TypeCheckFailure("Field name should not be null")
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_NULL",
+          messageParameters = Map(
+            "exprName" -> nameExprs.map(toSQLExpr).mkString("[", ", ", "]")
+          )
+        )
       }
     }
   }
@@ -668,10 +699,19 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
   override def checkInputDataTypes(): TypeCheckResult = {
     val dataType = structExpr.dataType
     if (!dataType.isInstanceOf[StructType]) {
-      TypeCheckResult.TypeCheckFailure("struct argument should be struct type, got: " +
-        dataType.catalogString)
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> toSQLType(StructType),
+          "inputSql" -> toSQLExpr(structExpr),
+          "inputType" -> toSQLType(structExpr.dataType))
+      )
     } else if (newExprs.isEmpty) {
-      TypeCheckResult.TypeCheckFailure("cannot drop all fields in struct")
+      DataTypeMismatch(
+        errorSubClass = "CANNOT_DROP_ALL_FIELDS",
+        messageParameters = Map.empty
+      )
     } else {
       TypeCheckResult.TypeCheckSuccess
     }

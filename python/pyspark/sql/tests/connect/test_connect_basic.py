@@ -136,6 +136,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         pd2 = df.offset(98).limit(10).toPandas()
         self.assertEqual(2, len(pd2.index))
 
+    def test_sql(self):
+        pdf = self.connect.sql("SELECT 1").toPandas()
+        self.assertEqual(1, len(pdf.index))
+
     def test_head(self):
         df = self.connect.read.table(self.tbl_name)
         pd = df.head(10)
