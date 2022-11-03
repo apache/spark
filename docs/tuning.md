@@ -293,7 +293,7 @@ available in `SparkContext` can greatly reduce the size of each serialized task,
 of launching a job over a cluster. If your tasks use any large object from the driver program
 inside of them (e.g. a static lookup table), consider turning it into a broadcast variable.
 Spark prints the serialized size of each task on the master, so you can look at that to
-decide whether your tasks are too large; in general tasks larger than about 20 KiB are probably
+decide whether your tasks are too large; in general, tasks larger than about 20 KiB are probably
 worth optimizing.
 
 ## Data Locality
