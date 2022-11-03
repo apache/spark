@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, BinaryComparison, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, EqualTo, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -525,40 +525,36 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def pushDownJoinKey(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case join: Join =>
+    case join: Join if join.condition.nonEmpty =>
       val joinKeys = splitConjunctivePredicates(join.condition.get)
-      val conditions = joinKeys.map(_.asInstanceOf[BinaryComparison])
-
-      var leftKeys = Seq[NamedReference]()
-      conditions.map(condition =>
-        condition.left match {
-          case attr: AttributeReference =>
-            if (join.left.outputSet.contains(attr)) {
+      if (joinKeys.forall(_.isInstanceOf[EqualTo])) {
+        val conditions = joinKeys.map(_.asInstanceOf[EqualTo])
+        if (conditions.forall(condition => condition.left.isInstanceOf[AttributeReference]
+            && condition.right.isInstanceOf[AttributeReference])) {
+          var leftKeys = Seq[NamedReference]()
+          conditions.map(condition =>
+            if (join.left.outputSet.contains(condition.left.asInstanceOf[AttributeReference])) {
               leftKeys = leftKeys :+ getFieldReference(condition.left)
             } else {
               leftKeys = leftKeys :+ getFieldReference(condition.right)
             }
-          case _ =>
-        }
-      )
-      if (leftKeys.nonEmpty) {
-        pushDownJoinKeys(join.left, leftKeys)
-      }
+          )
+          if (leftKeys.nonEmpty) {
+            pushDownJoinKeys(join.left, leftKeys)
+          }
 
-      var rightKeys = Seq[NamedReference]()
-      conditions.map(condition =>
-        condition.right match {
-          case attr: AttributeReference =>
-            if (join.right.outputSet.contains(attr)) {
+          var rightKeys = Seq[NamedReference]()
+          conditions.map(condition =>
+            if (join.right.outputSet.contains(condition.right.asInstanceOf[AttributeReference])) {
               rightKeys = rightKeys :+ getFieldReference(condition.right)
             } else {
               rightKeys = rightKeys :+ getFieldReference(condition.left)
             }
-          case _ =>
+          )
+          if (rightKeys.nonEmpty) {
+            pushDownJoinKeys(join.right, rightKeys)
+          }
         }
-      )
-      if (rightKeys.nonEmpty) {
-        pushDownJoinKeys(join.right, rightKeys)
       }
       join
   }

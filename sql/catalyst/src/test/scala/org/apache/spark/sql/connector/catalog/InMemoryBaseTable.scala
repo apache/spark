@@ -281,7 +281,7 @@ abstract class InMemoryBaseTable(
     override def pushClusterKeys(expressions: Array[Expression]): Boolean = {
       joinKeys = (joinKeys ++ expressions).distinct
       joinKeys.map(_.asInstanceOf[NamedReference]).foreach(key =>
-        if (getPartitionColumns.contains(key)) {
+        if (partition.nonEmpty && getPartitionColumns.contains(key)) {
           return true
         }
       )
