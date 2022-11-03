@@ -34,6 +34,14 @@
               files="connector/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java"/>
     <suppress checks=".*"
               files="sql/core/src/main/java/org/apache/spark/sql/api/java/*"/>
+    <suppress checks=".*"
+              files="antlr4/org/apache/spark/sql/catalyst/parser/*"/>
+    <suppress checks=".*"
+              files="org/apache/spark/connect/proto/*"/>
+    <suppress checks=".*"
+              files="test/gen-java/org/apache/spark/sql/execution/datasources/parquet/test/avro/*"/>
+    <suppress checks=".*"
+              files="generated-test-sources/org/apache/spark/sql/protobuf/*"/>
     <suppress checks="LineLength"
               files="src/test/java/org/apache/spark/sql/hive/test/Complex.java"/>
     <suppress checks="LineLength"
