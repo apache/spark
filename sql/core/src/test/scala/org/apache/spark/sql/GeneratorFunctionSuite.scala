@@ -99,10 +99,10 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"stack(2, 1, 2.2)\"",
         "columnIndex" -> "0",
-        "leftParamIndex" -> "2",
-        "leftType" -> "\"STRING\"",
+        "leftParamIndex" -> "1",
+        "leftType" -> "\"INT\"",
         "rightParamIndex" -> "2",
-        "rightType" -> "\"INT\""),
+        "rightType" -> "\"STRING\""),
       context = ExpectedContext(
         fragment = "stack(2, 1, '2.2')",
         start = 0,
@@ -140,10 +140,10 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"stack(2, a, b)\"",
         "columnIndex" -> "0",
-        "leftParamIndex" -> "2",
-        "leftType" -> "\"DOUBLE\"",
+        "leftParamIndex" -> "1",
+        "leftType" -> "\"INT\"",
         "rightParamIndex" -> "2",
-        "rightType" -> "\"INT\""),
+        "rightType" -> "\"DOUBLE\""),
       context = ExpectedContext(
         fragment = "stack(2, a, b)",
         start = 0,

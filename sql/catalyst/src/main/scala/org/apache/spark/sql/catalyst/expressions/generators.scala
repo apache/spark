@@ -204,10 +204,10 @@ case class Stack(children: Seq[Expression]) extends Generator {
             errorSubClass = "STACK_COLUMN_DIFF_TYPES",
             messageParameters = Map(
               "columnIndex" -> j.toString,
-              "leftType" -> toSQLType(children(i).dataType),
-              "leftParamIndex" -> i.toString,
-              "rightType" -> toSQLType(elementSchema.fields(j).dataType),
-              "rightParamIndex" -> (children.length - numFields + j).toString
+              "leftParamIndex" -> (j + 1).toString,
+              "leftType" -> toSQLType(elementSchema.fields(j).dataType),
+              "rightParamIndex" -> i.toString,
+              "rightType" -> toSQLType(children(i).dataType),
             )
           )
         }
