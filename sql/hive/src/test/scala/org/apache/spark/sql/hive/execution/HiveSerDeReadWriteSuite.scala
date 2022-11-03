@@ -261,7 +261,8 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
     )
   }
 
-  test("SPARK-40815: Read SymlinkTextInputFormat") {
+  // Ignored due to JDK 11 failures reported in https://github.com/apache/spark/pull/38277.
+  ignore("SPARK-40815: Read SymlinkTextInputFormat") {
     withTable("t") {
       withTempDir { root =>
         val dataPath = new File(root, "data")
