@@ -140,7 +140,13 @@ SELECT udf(a) FROM test_having HAVING udf(min(a)) < udf(max(a))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping expressions sequence is empty, and 'spark_catalog.default.test_having.a' is not an aggregate function. Wrap '(min(spark_catalog.default.test_having.a) AS `min(a#x)`, max(spark_catalog.default.test_having.a) AS `max(a#x)`)' in windowing function(s) or wrap 'spark_catalog.default.test_having.a' in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
+  "messageParameters" : {
+    "aggExprs" : "(min(spark_catalog.default.test_having.a) AS `min(a#x)`, max(spark_catalog.default.test_having.a) AS `max(a#x)`)",
+    "sqlExpr" : "spark_catalog.default.test_having.a"
+  }
+}
 
 
 -- !query

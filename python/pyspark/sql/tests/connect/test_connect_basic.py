@@ -73,7 +73,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
         # Setup Remote Spark Session
         cls.connect = RemoteSparkSession(user_id="test_user")
         df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
-        # Since we might create multiple Spark sessions, we need to creata global temporary view
+        # Since we might create multiple Spark sessions, we need to create global temporary view
         # that is specifically maintained in the "global_temp" schema.
         df.write.saveAsTable(cls.tbl_name)
 
@@ -88,6 +88,14 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         data = df.limit(10).toPandas()
         # Check that the limit is applied
         self.assertEqual(len(data.index), 10)
+
+    def test_collect(self):
+        df = self.connect.read.table(self.tbl_name)
+        data = df.limit(10).collect()
+        self.assertEqual(len(data), 10)
+        # Check Row has schema column names.
+        self.assertTrue("name" in data[0])
+        self.assertTrue("id" in data[0])
 
     def test_simple_udf(self):
         def conv_udf(x) -> str:
@@ -127,6 +135,33 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(9, len(pd.index))
         pd2 = df.offset(98).limit(10).toPandas()
         self.assertEqual(2, len(pd2.index))
+
+    def test_sql(self):
+        pdf = self.connect.sql("SELECT 1").toPandas()
+        self.assertEqual(1, len(pdf.index))
+
+    def test_head(self):
+        df = self.connect.read.table(self.tbl_name)
+        pd = df.head(10)
+        self.assertIsNotNone(pd)
+        self.assertEqual(10, len(pd.index))
+
+    def test_range(self):
+        self.assertTrue(
+            self.connect.range(start=0, end=10)
+            .toPandas()
+            .equals(self.spark.range(start=0, end=10).toPandas())
+        )
+        self.assertTrue(
+            self.connect.range(start=0, end=10, step=3)
+            .toPandas()
+            .equals(self.spark.range(start=0, end=10, step=3).toPandas())
+        )
+        self.assertTrue(
+            self.connect.range(start=0, end=10, step=3, numPartitions=2)
+            .toPandas()
+            .equals(self.spark.range(start=0, end=10, step=3, numPartitions=2).toPandas())
+        )
 
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text

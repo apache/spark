@@ -40,6 +40,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     $"arrayField".array(StringType),
     Symbol("mapField").map(StringType, LongType))
 
+  private def analysisException(expr: Expression): AnalysisException = {
+    intercept[AnalysisException](assertSuccess(expr))
+  }
+
   def assertError(expr: Expression, errorMessage: String): Unit = {
     val e = intercept[AnalysisException] {
       assertSuccess(expr)
@@ -351,23 +355,62 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       )
     )
 
-    assertError(If($"intField", $"stringField", $"stringField"),
-      "type of predicate expression in If should be boolean")
-    assertError(If($"booleanField", $"intField", $"booleanField"),
-      "data type mismatch")
+    assert(If(Literal(1), Literal("a"), Literal("b")).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> toSQLType(BooleanType),
+          "inputSql" -> "\"1\"",
+          "inputType" -> "\"INT\""
+        )
+      )
+    )
 
-    assertError(
-      CaseWhen(Seq(($"booleanField".attr, $"intField".attr),
-        ($"booleanField".attr, $"mapField".attr))),
-      "THEN and ELSE expressions should all be same type or coercible to a common type")
-    assertError(
-      CaseKeyWhen($"intField", Seq($"intField", $"stringField",
-        $"intField", $"mapField")),
-      "THEN and ELSE expressions should all be same type or coercible to a common type")
-    assertError(
-      CaseWhen(Seq(($"booleanField".attr, $"intField".attr),
-        ($"intField".attr, $"intField".attr))),
-      "WHEN expressions in CaseWhen should all be boolean type")
+    assert(If(Literal(true), Literal(1), Literal(false)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`if`",
+          "dataType" -> "[\"INT\", \"BOOLEAN\"]"
+        )
+      )
+    )
+
+    assert(CaseWhen(Seq((Literal(true), Literal(1)),
+      (Literal(true), Literal("a")))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`casewhen`",
+          "dataType" -> "[\"INT\", \"STRING\"]"
+        )
+      )
+    )
+
+    assert(CaseKeyWhen(Literal(1), Seq(Literal(1), Literal("a"),
+      Literal(2), Literal(3))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`casewhen`",
+          "dataType" -> "[\"STRING\", \"INT\"]"
+        )
+      )
+    )
+
+    assert(CaseWhen(Seq((Literal(true), Literal(1)),
+      (Literal(2), Literal(3)))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> "\"BOOLEAN\"",
+          "inputSql" -> "\"2\"",
+          "inputType" -> "\"INT\""
+        )
+      )
+    )
   }
 
   test("check types for aggregates") {
@@ -483,29 +526,68 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
   }
 
   test("check types for CreateNamedStruct") {
-    assertError(
-      CreateNamedStruct(Seq("a", "b", 2.0)), "even number of arguments")
-    assertError(
-      CreateNamedStruct(Seq(1, "a", "b", 2.0)),
-      "Only foldable string expressions are allowed to appear at odd position")
-    assertError(
-      CreateNamedStruct(Seq($"a".string.at(0), "a", "b", 2.0)),
-      "Only foldable string expressions are allowed to appear at odd position")
-    assertError(
-      CreateNamedStruct(Seq(Literal.create(null, StringType), "a")),
-      "Field name should not be null")
+    checkError(
+      exception = analysisException(CreateNamedStruct(Seq("a", "b", 2.0))),
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      parameters = Map(
+        "sqlExpr" -> "\"named_struct(a, b, 2.0)\"",
+        "functionName" -> "`named_struct`",
+        "expectedNum" -> "2n (n > 0)",
+        "actualNum" -> "3")
+    )
+    checkError(
+      exception = analysisException(CreateNamedStruct(Seq(1, "a", "b", 2.0))),
+      errorClass = "DATATYPE_MISMATCH.CREATE_NAMED_STRUCT_WITHOUT_FOLDABLE_STRING",
+      parameters = Map(
+        "sqlExpr" -> "\"named_struct(1, a, b, 2.0)\"",
+        "inputExprs" -> "[\"1\"]")
+    )
+    checkError(
+      exception = analysisException(CreateNamedStruct(Seq($"a".string.at(0), "a", "b", 2.0))),
+      errorClass = "DATATYPE_MISMATCH.CREATE_NAMED_STRUCT_WITHOUT_FOLDABLE_STRING",
+      parameters = Map(
+        "sqlExpr" -> "\"named_struct(boundreference(), a, b, 2.0)\"",
+        "inputExprs" -> "[\"boundreference()\"]")
+    )
+    checkError(
+      exception = analysisException(CreateNamedStruct(Seq(Literal.create(null, StringType), "a"))),
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      parameters = Map(
+        "sqlExpr" -> "\"named_struct(NULL, a)\"",
+        "exprName" -> "[\"NULL\"]")
+    )
   }
 
   test("check types for CreateMap") {
-    assertError(CreateMap(Seq("a", "b", 2.0)), "even number of arguments")
-    assertError(
-      CreateMap(Seq($"intField", $"stringField",
-        $"booleanField", $"stringField")),
-      "keys of function map should all be the same type")
-    assertError(
-      CreateMap(Seq($"stringField", $"intField",
-        $"stringField", $"booleanField")),
-      "values of function map should all be the same type")
+    checkError(
+      exception = analysisException(CreateMap(Seq("a", "b", 2.0))),
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      parameters = Map(
+        "sqlExpr" -> "\"map(a, b, 2.0)\"",
+        "functionName" -> "`map`",
+        "expectedNum" -> "2n (n > 0)",
+        "actualNum" -> "3")
+    )
+    checkError(
+      exception = analysisException(CreateMap(Seq(Literal(1),
+        Literal("a"), Literal(true), Literal("b")))),
+      errorClass = "DATATYPE_MISMATCH.CREATE_MAP_KEY_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"map(1, a, true, b)\"",
+        "functionName" -> "`map`",
+        "dataType" -> "[\"INT\", \"BOOLEAN\"]"
+      )
+    )
+    checkError(
+      exception = analysisException(CreateMap(Seq(Literal("a"),
+        Literal(1), Literal("b"), Literal(true)))),
+      errorClass = "DATATYPE_MISMATCH.CREATE_MAP_VALUE_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"map(a, 1, b, true)\"",
+        "functionName" -> "`map`",
+        "dataType" -> "[\"INT\", \"BOOLEAN\"]"
+      )
+    )
   }
 
   test("check types for ROUND/BROUND") {
