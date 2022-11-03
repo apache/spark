@@ -98,10 +98,14 @@ class ArrowStreamSerializer(Serializer):
 
         writer = None
         try:
-            for batch in iterator:
-                if writer is None:
-                    writer = pa.RecordBatchStreamWriter(stream, batch.schema)
-                writer.write_batch(batch)
+            print(f'iterating over it={iterator}')
+            for it in iterator:
+                for it2, _ in it:
+                    for batch in it2:
+                        print(f'batch={batch}')
+                        if writer is None:
+                            writer = pa.RecordBatchStreamWriter(stream, batch.schema)
+                        writer.write_batch(batch)
         finally:
             if writer is not None:
                 writer.close()
@@ -131,7 +135,10 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
 
         batches = super(ArrowStreamUDFSerializer, self).load_stream(stream)
         for batch in batches:
+            print(f"batch={batch.to_pandas()}")
+            print(f"schema={batch.schema}")
             struct = batch.column(0)
+            print(f"struct={struct}")
             yield [pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))]
 
     def dump_stream(self, iterator, stream):
@@ -160,6 +167,16 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
                 yield batch
 
         return super(ArrowStreamUDFSerializer, self).dump_stream(wrap_and_init_stream(), stream)
+
+
+class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
+    """
+    Same as :class:`ArrowStreamSerializer` but it flattens the struct to Arrow record batch
+    for applying each function with the raw record arrow batch. See also `DataFrame.mapInArrow`.
+    """
+
+    def load_stream(self, stream):
+        return super(ArrowStreamUDFSerializer, self).load_stream(stream)
 
 
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):

@@ -50,6 +50,7 @@ from pyspark.sql.pandas.serializers import (
     CogroupArrowUDFSerializer,
     CogroupPandasUDFSerializer,
     ArrowStreamUDFSerializer,
+    ArrowStreamSerializer,
     ApplyInPandasWithStateSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type
@@ -309,18 +310,13 @@ def wrap_arrow_batch_iter_udf(f, return_type):
 
 
 def wrap_cogrouped_map_arrow_udf(f, return_type, argspec):
-    def wrapped(left_key_batches, left_value_batches, right_key_batches, right_value_batches):
+    def wrapped(left_key_batch, left_value_batch, right_key_batch, right_value_batch):
         if len(argspec.args) == 2:
-            result = f(left_value_batches, right_value_batches)
+            result = f(left_value_batch, right_value_batch)
         elif len(argspec.args) == 3:
-            key_batches = (
-                left_key_batches
-                if any(batch.num_rows > 0 for batch in left_key_batches)
-                else right_key_batches
-            )
-            first_non_empty_key_batch = next(batch for batch in key_batches if batch.num_rows > 0)
-            key = tuple(c[0] for c in first_non_empty_key_batch.columns)
-            result = f(key, left_value_batches, right_value_batches)
+            key_batch = left_key_batch if left_key_batch.num_rows > 0 else right_key_batch
+            key = tuple(c[0] for c in key_batch.columns)
+            result = f(key, left_value_batch, right_value_batch)
 
         if not isinstance(result, Iterator):
             raise TypeError(
@@ -349,6 +345,7 @@ def wrap_cogrouped_map_arrow_udf(f, return_type, argspec):
                     "doesn't match specified schema. "
                     "Expected: {} Actual: {}".format(len(return_type), len(batch.columns))
                 )
+            return batch
 
         return map(verify_batch, result)
 
@@ -380,13 +377,12 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
 
 def wrap_grouped_map_arrow_udf(f, return_type, argspec):
-    def wrapped(key_batches, value_batches):
+    def wrapped(key_batch, value_batch):
         if len(argspec.args) == 1:
-            result = f(value_batches)
+            result = f(value_batch)
         elif len(argspec.args) == 2:
-            first_non_empty_key_batch = next(batch for batch in key_batches if batch.num_rows > 0)
-            key = tuple(c[0] for c in first_non_empty_key_batch.columns)
-            result = f(key, value_batches)
+            key = tuple(c[0] for c in key_batch.columns)
+            result = f(key, value_batch)
 
         if not isinstance(result, Iterator):
             raise TypeError(
@@ -397,24 +393,24 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec):
         def verify_batch(batch):
             import pyarrow as pa
 
-            if not isinstance(result, pa.RecordBatch):
+            if not isinstance(batch, pa.RecordBatch):
                 raise TypeError(
                     "Return type of the user-defined function should be "
-                    "iter(pyarrow.RecordBatch), but is iter({})".format(type(result))
+                    "iter(pyarrow.RecordBatch), but is iter({})".format(type(batch))
                 )
 
             # the number of columns of result have to match the return type
             # but it is fine for result to have no columns at all if it is empty
             if not (
                 len(batch.columns) == len(return_type)
-                or len(batch.columns) == 0
-                and batch.num_rows == 0
+                or (len(batch.columns) == 0 and batch.num_rows == 0)
             ):
                 raise RuntimeError(
                     "Number of columns of the returned pyarrow.BatchRecord "
                     "doesn't match specified schema. "
                     "Expected: {} Actual: {}".format(len(return_type), len(batch.columns))
                 )
+            return batch
 
         return map(verify_batch, result)
 
@@ -1319,11 +1315,10 @@ def read_udfs(pickleSer, infile, eval_type):
                 state_object_schema,
                 arrow_max_records_per_batch,
             )
-        elif (
-            eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF
-            or eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
-        ):
+        elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
             ser = ArrowStreamUDFSerializer()
+        elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
+            ser = ArrowStreamSerializer()
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
@@ -1483,10 +1478,13 @@ def read_udfs(pickleSer, infile, eval_type):
                 names=[batch.schema.names[o] for o in offsets],
             )
 
-        def mapper(a):
-            keys = [batch_from_offset(batch, parsed_offsets[0][0]) for batch in a]
-            vals = [batch_from_offset(batch, parsed_offsets[0][1]) for batch in a]
-            return f(keys, vals)
+        def mapper(batch):
+            print(f'mapper({batch}) called')
+            keys = batch_from_offset(batch, parsed_offsets[0][0])
+            vals = batch_from_offset(batch, parsed_offsets[0][1])
+            res = f(keys, vals)
+            print(f'mapper({batch}) returns {res}')
+            return res
 
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
         # We assume there is only one UDF here because grouped map doesn't
@@ -1578,6 +1576,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 return result
 
     def func(_, it):
+        print(f'mapping it={it} with mapper {mapper}')
         return map(mapper, it)
 
     # profiling is not supported for UDF
