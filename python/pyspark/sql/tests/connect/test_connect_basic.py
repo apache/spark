@@ -43,6 +43,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
     if have_pandas:
         connect: RemoteSparkSession
     tbl_name: str
+    tbl_name_empty: str
     df_text: "DataFrame"
 
     @classmethod
