@@ -217,7 +217,7 @@ The goal of GC tuning in Spark is to ensure that only long-lived RDDs are stored
 the Young generation is sufficiently sized to store short-lived objects. This will help avoid full GCs to collect
 temporary objects created during task execution. Some steps which may be useful are:
 
-* Check if there are too many garbage collections by collecting GC stats. If a full GC is invoked multiple times for
+* Check if there are too many garbage collections by collecting GC stats. If a full GC is invoked multiple times
   before a task completes, it means that there isn't enough memory available for executing tasks.
 
 * If there are too many minor collections but not many major GCs, allocating more memory for Eden would help. You
