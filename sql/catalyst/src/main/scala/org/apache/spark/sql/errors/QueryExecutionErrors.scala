@@ -2760,6 +2760,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "location" -> toSQLValue(location.toString, StringType),
         "table" -> toSQLId(tableId.nameParts)))
   }
+
   def locationAlreadyExistsInRename(
       tableId: TableIdentifier,
       newTableId: TableIdentifier,
