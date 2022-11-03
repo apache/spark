@@ -42,8 +42,6 @@ NumericType = typing.Union[int, float]
 logging.basicConfig(level=logging.INFO)
 
 
-
-
 class ChannelBuilder:
     """
     This is a helper class that is used to create a GRPC channel based on the given
