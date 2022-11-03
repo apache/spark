@@ -613,6 +613,24 @@
       }
     }
   },
+  "LOCATION_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot create the location <location> because it already exists.",
+      "Choose a different path or remove the existing location."
+    ],
+    "subClass" : {
+      "CREATE_MANAGED_TABLE" : {
+        "message" : [
+          "Creation of the managed table <table> failed. Please, consider to choose another table name or specify another location explicitly."
+        ]
+      },
+      "RENAME_MANAGED_TABLE" : {
+        "message" : [
+          "Renaming of the managed table <table> to <newTable> failed. Please, consider to choose another new name."
+        ]
+      }
+    }
+  },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [
       "Unknown static partition column: <columnName>"
@@ -1836,11 +1854,6 @@
   "_LEGACY_ERROR_TEMP_1069" : {
     "message" : [
       "CREATE EXTERNAL TABLE must be accompanied by LOCATION."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1070" : {
-    "message" : [
-      "Can not <methodName> the managed table('<tableIdentifier>'). The associated location('<tableLocation>') already exists."
     ]
   },
   "_LEGACY_ERROR_TEMP_1071" : {
