@@ -299,8 +299,8 @@ worth optimizing.
 ## Data Locality
 
 Data locality can have a major impact on the performance of Spark jobs.  If data and the code that
-operates on it are together then computation tends to be fast.  But if code and data are separated,
-one must move to the other.  Typically it is faster to ship serialized code from place to place than
+operates on it are together, then computation tends to be fast.  But if code and data are separated,
+one must move to the other.  Typically, it is faster to ship serialized code from place to place than
 a chunk of data because code size is much smaller than data.  Spark builds its scheduling around
 this general principle of data locality.
 
@@ -308,14 +308,14 @@ Data locality is how close data is to the code processing it.  There are several
 locality based on the data's current location.  In order from closest to farthest:
 
 - `PROCESS_LOCAL` data is in the same JVM as the running code.  This is the best locality
-  possible
+  possible.
 - `NODE_LOCAL` data is on the same node.  Examples might be in HDFS on the same node, or in
   another executor on the same node.  This is a little slower than `PROCESS_LOCAL` because the data
-  has to travel between processes
-- `NO_PREF` data is accessed equally quickly from anywhere and has no locality preference
+  has to travel between processes.
+- `NO_PREF` data is accessed equally quickly from anywhere and has no locality preference.
 - `RACK_LOCAL` data is on the same rack of servers.  Data is on a different server on the same rack
-  so needs to be sent over the network, typically through a single switch
-- `ANY` data is elsewhere on the network and not in the same rack
+  so needs to be sent over the network, typically through a single switch.
+- `ANY` data is elsewhere on the network and not in the same rack.
 
 Spark prefers to schedule all tasks at the best locality level, but this is not always possible.  In
 situations where there is no unprocessed data on any idle executor, Spark switches to lower locality
