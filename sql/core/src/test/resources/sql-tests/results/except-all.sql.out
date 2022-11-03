@@ -138,7 +138,17 @@ SELECT array(1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ExceptAll can only be performed on tables with compatible column types. The first column of the second table is array<int> type which is not compatible with int at the same column of the first table
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "messageParameters" : {
+    "ci" : "first",
+    "dt1" : "array<int>",
+    "dt2" : "int",
+    "hint" : "",
+    "operator" : "ExceptAll",
+    "ti" : "second"
+  }
+}
 
 
 -- !query
@@ -210,7 +220,15 @@ SELECT k, v FROM tab4
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ExceptAll can only be performed on tables with the same number of columns, but the first table has 1 columns and the second table has 2 columns
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2429",
+  "messageParameters" : {
+    "firstColNum" : "1",
+    "nColNum" : "2",
+    "nTab" : "second",
+    "operator" : "ExceptAll"
+  }
+}
 
 
 -- !query

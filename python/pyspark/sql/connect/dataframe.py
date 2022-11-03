@@ -34,6 +34,10 @@ from pyspark.sql.connect.column import (
     Expression,
     LiteralExpression,
 )
+from pyspark.sql.types import (
+    StructType,
+    Row,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString
@@ -96,7 +100,7 @@ class DataFrame(object):
     of the DataFrame with the changes applied.
     """
 
-    def __init__(self, data: Optional[List[Any]] = None, schema: Optional[List[str]] = None):
+    def __init__(self, data: Optional[List[Any]] = None, schema: Optional[StructType] = None):
         """Creates a new data frame"""
         self._schema = schema
         self._plan: Optional[plan.LogicalPlan] = None
@@ -120,7 +124,7 @@ class DataFrame(object):
         return self.groupBy().agg(exprs)
 
     def alias(self, alias: str) -> "DataFrame":
-        return DataFrame.withPlan(plan.Project(self._plan).withAlias(alias), session=self._session)
+        return DataFrame.withPlan(plan.SubqueryAlias(self._plan, alias), session=self._session)
 
     def approxQuantile(self, col: ColumnRef, probabilities: Any, relativeError: Any) -> "DataFrame":
         ...
@@ -214,11 +218,15 @@ class DataFrame(object):
         return GroupingFrame(self, *cols)
 
     def head(self, n: int) -> Optional["pandas.DataFrame"]:
-        self.limit(n)
-        return self.toPandas()
+        return self.limit(n).toPandas()
 
-    # TODO(martin.grund) fix mypu
-    def join(self, other: "DataFrame", on: Any, how: Optional[str] = None) -> "DataFrame":
+    # TODO: extend `on` to also be type List[ColumnRef].
+    def join(
+        self,
+        other: "DataFrame",
+        on: Optional[Union[str, List[str], ColumnRef]] = None,
+        how: Optional[str] = None,
+    ) -> "DataFrame":
         if self._plan is None:
             raise Exception("Cannot join when self._plan is empty.")
         if other._plan is None:
@@ -237,7 +245,15 @@ class DataFrame(object):
 
     def sort(self, *cols: "ColumnOrString") -> "DataFrame":
         """Sort by a specific column"""
-        return DataFrame.withPlan(plan.Sort(self._plan, *cols), session=self._session)
+        return DataFrame.withPlan(
+            plan.Sort(self._plan, columns=list(cols), is_global=True), session=self._session
+        )
+
+    def sortWithinPartitions(self, *cols: "ColumnOrString") -> "DataFrame":
+        """Sort within each partition by a specific column"""
+        return DataFrame.withPlan(
+            plan.Sort(self._plan, columns=list(cols), is_global=False), session=self._session
+        )
 
     def sample(
         self,
@@ -277,6 +293,33 @@ class DataFrame(object):
             raise ValueError("Argument to Union does not contain a valid plan.")
         return DataFrame.withPlan(plan.UnionAll(self._plan, other._plan), session=self._session)
 
+    def unionByName(self, other: "DataFrame", allowMissingColumns: bool = False) -> "DataFrame":
+        """Returns a new :class:`DataFrame` containing union of rows in this and another
+        :class:`DataFrame`.
+
+        This is different from both `UNION ALL` and `UNION DISTINCT` in SQL. To do a SQL-style set
+        union (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined.
+        allowMissingColumns : bool, optional, default False
+           Specify whether to allow missing columns.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame.
+        """
+        if other._plan is None:
+            raise ValueError("Argument to UnionByName does not contain a valid plan.")
+        return DataFrame.withPlan(
+            plan.UnionAll(self._plan, other._plan, allowMissingColumns), session=self._session
+        )
+
     def where(self, condition: Expression) -> "DataFrame":
         return self.filter(condition)
 
@@ -304,8 +347,12 @@ class DataFrame(object):
             return self._plan.print()
         return ""
 
-    def collect(self) -> None:
-        raise NotImplementedError("Please use toPandas().")
+    def collect(self) -> List[Row]:
+        pdf = self.toPandas()
+        if pdf is not None:
+            return list(pdf.apply(lambda row: Row(**row), axis=1))
+        else:
+            return []
 
     def toPandas(self) -> Optional["pandas.DataFrame"]:
         if self._plan is None:
@@ -315,11 +362,32 @@ class DataFrame(object):
         query = self._plan.to_proto(self._session)
         return self._session._to_pandas(query)
 
+    def schema(self) -> StructType:
+        """Returns the schema of this :class:`DataFrame` as a :class:`pyspark.sql.types.StructType`.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`StructType`
+        """
+        if self._schema is None:
+            if self._plan is not None:
+                query = self._plan.to_proto(self._session)
+                if self._session is None:
+                    raise Exception("Cannot analyze without RemoteSparkSession.")
+                self._schema = self._session.schema(query)
+                return self._schema
+            else:
+                raise Exception("Empty plan.")
+        else:
+            return self._schema
+
     def explain(self) -> str:
         if self._plan is not None:
             query = self._plan.to_proto(self._session)
             if self._session is None:
                 raise Exception("Cannot analyze without RemoteSparkSession.")
-            return self._session.analyze(query).explain_string
+            return self._session.explain_string(query)
         else:
             return ""

@@ -76,9 +76,31 @@
       "Another instance of this query was just started by a concurrent session."
     ]
   },
+  "CONNECT" : {
+    "message" : [
+      "Generic Spark Connect error."
+    ],
+    "subClass" : {
+      "INTERCEPTOR_CTOR_MISSING" : {
+        "message" : [
+          "Cannot instantiate GRPC interceptor because <cls> is missing a default constructor without arguments."
+        ]
+      },
+      "INTERCEPTOR_RUNTIME_ERROR" : {
+        "message" : [
+          "Error instantiating GRPC interceptor: <msg>"
+        ]
+      }
+    }
+  },
   "CONVERSION_INVALID_INPUT" : {
     "message" : [
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
+    ]
+  },
+  "CREATE_TABLE_COLUMN_OPTION_DUPLICATE" : {
+    "message" : [
+      "CREATE TABLE column <columnName> specifies option \"<optionName>\" more than once, which is invalid"
     ]
   },
   "DATATYPE_MISMATCH" : {
@@ -116,6 +138,11 @@
           "Unable to convert column <name> of type <type> to JSON."
         ]
       },
+      "CANNOT_DROP_ALL_FIELDS" : {
+        "message" : [
+          "Cannot drop all fields in struct."
+        ]
+      },
       "CAST_WITHOUT_SUGGESTION" : {
         "message" : [
           "cannot cast <srcType> to <targetType>."
@@ -133,6 +160,21 @@
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
         ]
       },
+      "CREATE_MAP_KEY_DIFF_TYPES" : {
+        "message" : [
+          "The given keys of function <functionName> should all be the same type, but they are <dataType>."
+        ]
+      },
+      "CREATE_MAP_VALUE_DIFF_TYPES" : {
+        "message" : [
+          "The given values of function <functionName> should all be the same type, but they are <dataType>."
+        ]
+      },
+      "CREATE_NAMED_STRUCT_WITHOUT_FOLDABLE_STRING" : {
+        "message" : [
+          "Only foldable `STRING` expressions are allowed to appear at odd position, but they are <inputExprs>."
+        ]
+      },
       "DATA_DIFF_TYPES" : {
         "message" : [
           "Input to <functionName> should all be the same type, but it's <dataType>."
@@ -141,6 +183,11 @@
       "FRAME_LESS_OFFSET_WITHOUT_FOLDABLE" : {
         "message" : [
           "Offset expression <offset> must be a literal."
+        ]
+      },
+      "HASH_MAP_TYPE" : {
+        "message" : [
+          "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
         ]
       },
       "INVALID_JSON_MAP_KEY_TYPE" : {
@@ -163,6 +210,16 @@
           "The <functionName> does not support ordering on type <dataType>."
         ]
       },
+      "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
+        "message" : [
+          "The data type of one or more elements in the left hand side of an IN subquery is not compatible with the data type of the output of the subquery. Mismatched columns: [<mismatchedColumns>], left side: [<leftType>], right side: [<rightType>]."
+        ]
+      },
+      "IN_SUBQUERY_LENGTH_MISMATCH" : {
+        "message" : [
+          "The number of columns in the left hand side of an IN subquery does not match the number of columns in the output of subquery. Left hand side columns(length: <leftLength>): [<leftColumns>], right hand side columns(length: <rightLength>): [<rightColumns>]."
+        ]
+      },
       "MAP_CONCAT_DIFF_TYPES" : {
         "message" : [
           "The <functionName> should all be of type map, but it's <dataType>."
@@ -178,6 +235,11 @@
           "The <functionName> accepts only arrays of pair structs, but <childExpr> is of <childType>."
         ]
       },
+      "MAP_ZIP_WITH_DIFF_TYPES" : {
+        "message" : [
+          "Input to the <functionName> should have been two maps with compatible key types, but it's [<leftType>, <rightType>]."
+        ]
+      },
       "NON_FOLDABLE_INPUT" : {
         "message" : [
           "the input <inputName> should be a foldable <inputType> expression; however, got <inputExpr>."
@@ -191,6 +253,11 @@
       "NULL_TYPE" : {
         "message" : [
           "Null typed values cannot be used as arguments of <functionName>."
+        ]
+      },
+      "PARAMETER_CONSTRAINT_VIOLATION" : {
+        "message" : [
+          "The <leftExprName>(<leftExprValue>) must be <constraint> the <rightExprName>(<rightExprValue>)"
         ]
       },
       "RANGE_FRAME_INVALID_TYPE" : {
@@ -248,6 +315,11 @@
           "The <exprName> must not be null"
         ]
       },
+      "UNEXPECTED_RETURN_TYPE" : {
+        "message" : [
+          "The <functionName> requires return <expectedType> type, but the actual is <actualType> type."
+        ]
+      },
       "UNEXPECTED_STATIC_METHOD" : {
         "message" : [
           "cannot find a static method <methodName> that matches the argument types in <className>"
@@ -263,14 +335,14 @@
           "The <exprName> must be between <valueRange> (current value = <currentValue>)"
         ]
       },
+      "WRONG_NUM_ARGS" : {
+        "message" : [
+          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
+        ]
+      },
       "WRONG_NUM_ENDPOINTS" : {
         "message" : [
           "The number of endpoints must be >= 2 to construct intervals but the actual number is <actualNumber>."
-        ]
-      },
-      "WRONG_NUM_PARAMS" : {
-        "message" : [
-          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
         ]
       }
     }
@@ -318,6 +390,11 @@
       "Failed to rename <sourcePath> to <targetPath> as destination already exists"
     ],
     "sqlState" : "22023"
+  },
+  "FIELD_NOT_FOUND" : {
+    "message" : [
+      "No such struct field <fieldName> in <fields>."
+    ]
   },
   "FORBIDDEN_OPERATION" : {
     "message" : [
@@ -385,12 +462,6 @@
           "Fail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"
         ]
       },
-      "FORMAT_DATETIME_BY_NEW_PARSER" : {
-        "message" : [
-          "Spark >= 3.0:",
-          "Fail to format it to <resultCandidate> in the new formatter. You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0, or set to \"CORRECTED\" and treat it as an invalid datetime string."
-        ]
-      },
       "PARSE_DATETIME_BY_NEW_PARSER" : {
         "message" : [
           "Spark >= 3.0:",
@@ -431,7 +502,7 @@
       "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but it's <endSeconds> now."
     ]
   },
-  "INCORRECT_RUMP_UP_RATE" : {
+  "INCORRECT_RAMP_UP_RATE" : {
     "message" : [
       "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but 'rampUpTimeSeconds' is <rampUpTimeSeconds>."
     ]
@@ -498,6 +569,11 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_IDENTIFIER" : {
+    "message" : [
+      "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
+    ]
+  },
   "INVALID_JSON_SCHEMA_MAP_TYPE" : {
     "message" : [
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
@@ -558,25 +634,21 @@
       "More than one row returned by a subquery used as an expression."
     ]
   },
-  "NAMESPACE_ALREADY_EXISTS" : {
+  "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
     "message" : [
-      "Cannot create namespace <nameSpaceName> because it already exists.",
-      "Choose a different name, drop the existing namespace, or add the IF NOT EXISTS clause to tolerate pre-existing namespace."
+      "When there are more than one MATCHED clauses in a MERGE statement, only the last MATCHED clause can omit the condition."
     ],
     "sqlState" : "42000"
   },
-  "NAMESPACE_NOT_EMPTY" : {
+  "NON_LAST_NOT_MATCHED_BY_SOURCE_CLAUSE_OMIT_CONDITION" : {
     "message" : [
-      "Cannot drop a namespace <nameSpaceNameName> because it contains objects.",
-      "Use DROP NAMESPACE ... CASCADE to drop the namespace and all its objects."
+      "When there are more than one NOT MATCHED BY SOURCE clauses in a MERGE statement, only the last NOT MATCHED BY SOURCE clause can omit the condition."
     ],
     "sqlState" : "42000"
   },
-  "NAMESPACE_NOT_FOUND" : {
+  "NON_LAST_NOT_MATCHED_BY_TARGET_CLAUSE_OMIT_CONDITION" : {
     "message" : [
-      "The namespace <nameSpaceName> cannot be found. Verify the spelling and correctness of the namespace.",
-      "If you did not qualify the name with, verify the current_schema() output, or qualify the name with the correctly.",
-      "To tolerate the error on drop use DROP NAMESPACE IF EXISTS."
+      "When there are more than one NOT MATCHED [BY TARGET] clauses in a MERGE statement, only the last NOT MATCHED [BY TARGET] clause can omit the condition."
     ],
     "sqlState" : "42000"
   },
@@ -927,6 +999,11 @@
           "Literal for '<value>' of <type>."
         ]
       },
+      "MULTIPLE_BUCKET_TRANSFORMS" : {
+        "message" : [
+          "Multiple bucket TRANSFORMs."
+        ]
+      },
       "NATURAL_CROSS_JOIN" : {
         "message" : [
           "NATURAL CROSS JOIN."
@@ -1121,6 +1198,11 @@
       }
     }
   },
+  "UNSUPPORTED_TYPED_LITERAL" : {
+    "message" : [
+      "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
+    ]
+  },
   "UNTYPED_SCALA_UDF" : {
     "message" : [
       "You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. To get rid of this error, you could:",
@@ -1149,34 +1231,14 @@
       "Empty source for merge: you should specify a source table/subquery in merge."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0005" : {
-    "message" : [
-      "Unrecognized matched action: <matchedAction>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0006" : {
     "message" : [
       "The number of inserted values cannot match the fields."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0007" : {
-    "message" : [
-      "Unrecognized not matched action: <notMatchedAction>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0008" : {
     "message" : [
       "There must be at least one WHEN clause in a MERGE statement."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0009" : {
-    "message" : [
-      "When there are more than one MATCHED clauses in a MERGE statement, only the last MATCHED clause can omit the condition."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0010" : {
-    "message" : [
-      "When there are more than one NOT MATCHED clauses in a MERGE statement, only the last NOT MATCHED clause can omit the condition."
     ]
   },
   "_LEGACY_ERROR_TEMP_0011" : {
@@ -1227,11 +1289,6 @@
   "_LEGACY_ERROR_TEMP_0020" : {
     "message" : [
       "Cannot parse the INTERVAL value: <value>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0021" : {
-    "message" : [
-      "Literals of type '<valueType>' are currently not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_0022" : {
@@ -1322,11 +1379,6 @@
   "_LEGACY_ERROR_TEMP_0039" : {
     "message" : [
       "Unsupported SQL statement."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0040" : {
-    "message" : [
-      "Possibly unquoted identifier <ident> detected. Please consider quoting it with back-quotes as `<ident>`."
     ]
   },
   "_LEGACY_ERROR_TEMP_0041" : {
@@ -2465,11 +2517,6 @@
       "The duration and time inputs to window must be an integer, long or string literal."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1208" : {
-    "message" : [
-      "No such struct field <fieldName> in <fields>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1209" : {
     "message" : [
       "Ambiguous reference to fields <fields>."
@@ -3161,11 +3208,6 @@
   "_LEGACY_ERROR_TEMP_2000" : {
     "message" : [
       "<message>. If necessary set <ansiConfig> to false to bypass this error."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2002" : {
-    "message" : [
-      "<message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2003" : {
@@ -4289,6 +4331,584 @@
   "_LEGACY_ERROR_TEMP_2250" : {
     "message" : [
       "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastjoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2251" : {
+    "message" : [
+      "<execName> does not support the execute() code path."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2252" : {
+    "message" : [
+      "Cannot merge <className> with <otherClass>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2253" : {
+    "message" : [
+      "Data source <sourceName> does not support continuous processing."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2254" : {
+    "message" : [
+      "Data read failed"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2255" : {
+    "message" : [
+      "Epoch marker generation failed"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2256" : {
+    "message" : [
+      "Foreach writer has been aborted due to a task failure"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2258" : {
+    "message" : [
+      "Error reading delta file <fileToRead> of <clazz>: key size cannot be <keySize>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2259" : {
+    "message" : [
+      "Error reading snapshot file <fileToRead> of <clazz>: <message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2260" : {
+    "message" : [
+      "Cannot purge as it might break internal state."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2261" : {
+    "message" : [
+      "Clean up source files is not supported when reading from the output directory of FileStreamSink."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2262" : {
+    "message" : [
+      "latestOffset(Offset, ReadLimit) should be called instead of this method"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2263" : {
+    "message" : [
+      "Error: we detected a possible problem with the location of your checkpoint and you",
+      "likely need to move it before restarting this query.",
+      "",
+      "Earlier version of Spark incorrectly escaped paths when writing out checkpoints for",
+      "structured streaming. While this was corrected in Spark 3.0, it appears that your",
+      "query was started using an earlier version that incorrectly handled the checkpoint",
+      "path.",
+      "",
+      "Correct Checkpoint Directory: <checkpointPath>",
+      "Incorrect Checkpoint Directory: <legacyCheckpointDir>",
+      "",
+      "Please move the data from the incorrect directory to the correct one, delete the",
+      "incorrect directory, and then restart this query. If you believe you are receiving",
+      "this message in error, you can disable it with the SQL conf",
+      "<StreamingCheckpointEscapedPathCheckEnabled>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2264" : {
+    "message" : [
+      "Subprocess exited with status <exitCode>. Error: <stderrBuffer>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2265" : {
+    "message" : [
+      "<nodeName> without serde does not support <dt> as output data type"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2266" : {
+    "message" : [
+      "Invalid `startIndex` provided for generating iterator over the array. Total elements: <numRows>, requested `startIndex`: <startIndex>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2267" : {
+    "message" : [
+      "The backing <className> has been modified since the creation of this Iterator"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2268" : {
+    "message" : [
+      "<nodeName> does not implement doExecuteBroadcast"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2269" : {
+    "message" : [
+      "<globalTempDB> is a system preserved database, please rename your existing database to resolve the name conflict, or set a different value for <globalTempDatabase>, and launch your Spark application again."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2270" : {
+    "message" : [
+      "comment on table is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2271" : {
+    "message" : [
+      "UpdateColumnNullability is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2272" : {
+    "message" : [
+      "Rename column is only supported for MySQL version 8.0 and above."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2273" : {
+    "message" : [
+      "<message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2274" : {
+    "message" : [
+      "Nested field <colName> is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2275" : {
+    "message" : [
+      "Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2276" : {
+    "message" : [
+      "Hive table <tableName> with ANSI intervals is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2277" : {
+    "message" : [
+      "Number of dynamic partitions created is <numWrittenParts>, which is more than <maxDynamicPartitions>. To solve this try to set <maxDynamicPartitionsKey> to at least <numWrittenParts>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2278" : {
+    "message" : [
+      "The input <valueType> '<input>' does not match the given number format: '<format>'"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2279" : {
+    "message" : [
+      "Multiple bucket transforms are not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2280" : {
+    "message" : [
+      "Create namespace comment is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2281" : {
+    "message" : [
+      "Remove namespace comment is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2282" : {
+    "message" : [
+      "Drop namespace restrict is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2300" : {
+    "message" : [
+      "The number of lambda function arguments '<namesSize>' does not match the number of arguments expected by the higher order function '<argInfoSize>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2301" : {
+    "message" : [
+      "Lambda function arguments should not have names that are semantically the same."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2302" : {
+    "message" : [
+      "'<name>' does not support more than one sources"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2303" : {
+    "message" : [
+      "incompatible types found in column <name> for inline table"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2304" : {
+    "message" : [
+      "cannot evaluate expression <sqlExpr> in inline table definition"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2305" : {
+    "message" : [
+      "expected <numCols> columns but found <rowSize> columns in row <ri>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2306" : {
+    "message" : [
+      "A lambda function should only be used in a higher order function. However, its class is <class>, which is not a higher order function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2307" : {
+    "message" : [
+      "Number of given aliases does not match number of output columns. Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2308" : {
+    "message" : [
+      "could not resolve `<name>` to a table-valued function"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2309" : {
+    "message" : [
+      "cannot resolve <sqlExpr> in MERGE command given columns [<cols>]"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2310" : {
+    "message" : [
+      "'writeStream' can be called only on streaming Dataset/DataFrame"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2311" : {
+    "message" : [
+      "'writeTo' can not be called on streaming Dataset/DataFrame"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2312" : {
+    "message" : [
+      "'write' can not be called on streaming Dataset/DataFrame"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2313" : {
+    "message" : [
+      "Hint not found: <name>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2314" : {
+    "message" : [
+      "cannot resolve '<sqlExpr>' due to argument data type mismatch: <msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2315" : {
+    "message" : [
+      "cannot resolve '<sqlExpr>' due to data type mismatch: <msg><hint>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2316" : {
+    "message" : [
+      "observed metrics should be named: <operator>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2317" : {
+    "message" : [
+      "window expressions are not allowed in observed metrics, but found: <sqlExpr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2318" : {
+    "message" : [
+      "non-deterministic expression <sqlExpr> can only be used as an argument to an aggregate function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2319" : {
+    "message" : [
+      "nested aggregates are not allowed in observed metrics, but found: <sqlExpr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2320" : {
+    "message" : [
+      "distinct aggregates are not allowed in observed metrics, but found: <sqlExpr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2321" : {
+    "message" : [
+      "aggregates with filter predicate are not allowed in observed metrics, but found: <sqlExpr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2322" : {
+    "message" : [
+      "attribute <sqlExpr> can only be used as an argument to an aggregate function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2323" : {
+    "message" : [
+      "Cannot <op> column, because <fieldNames> already exists in <struct>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2324" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> type: update a struct by updating its fields"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2325" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> type: update a map by updating <fieldName>.key or <fieldName>.value"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2326" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> type: update the element by updating <fieldName>.element"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2327" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> type: update a UserDefinedType[<udtSql>] by updating its fields"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2328" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> to interval type"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2329" : {
+    "message" : [
+      "Cannot update <table> field <fieldName>: <oldType> cannot be cast to <newType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2330" : {
+    "message" : [
+      "Cannot change nullable column to non-nullable: <fieldName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2331" : {
+    "message" : [
+      "failed to evaluate expression <sqlExpr>: <msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2332" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2400" : {
+    "message" : [
+      "The <name> expression must evaluate to a constant value, but got <limitExpr>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2401" : {
+    "message" : [
+      "The <name> expression must be integer type, but got <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2402" : {
+    "message" : [
+      "The evaluated <name> expression must not be null, but got <limitExpr>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2403" : {
+    "message" : [
+      "The <name> expression must be equal to or greater than 0, but got <v>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2404" : {
+    "message" : [
+      "Table <name> is not partitioned."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2405" : {
+    "message" : [
+      "Table <name> does not support partition management."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2406" : {
+    "message" : [
+      "invalid cast from <srcType> to <targetType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2407" : {
+    "message" : [
+      "grouping_id() can only be used with GroupingSets/Cube/Rollup"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2408" : {
+    "message" : [
+      "Window function <w> requires an OVER clause."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2409" : {
+    "message" : [
+      "Distinct window functions are not supported: <w>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2410" : {
+    "message" : [
+      "<wf> function can only be evaluated in an ordered row-based window frame with a single offset: <w>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2411" : {
+    "message" : [
+      "Cannot specify order by or frame for '<aggFunc>'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2412" : {
+    "message" : [
+      "Expression '<sqlExpr>' not supported within a window function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2413" : {
+    "message" : [
+      "Input argument to <argName> must be a constant."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2414" : {
+    "message" : [
+      "Event time must be defined on a window or a timestamp, but <evName> is of type <evType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2415" : {
+    "message" : [
+      "filter expression '<filter>' of type <type> is not a boolean."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2416" : {
+    "message" : [
+      "join condition '<join>' of type <type> is not a boolean."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2417" : {
+    "message" : [
+      "join condition '<condition>' of type <dataType> is not a boolean."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2418" : {
+    "message" : [
+      "Input argument tolerance must be a constant."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2419" : {
+    "message" : [
+      "Input argument tolerance must be non-negative."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2420" : {
+    "message" : [
+      "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2421" : {
+    "message" : [
+      "nondeterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2422" : {
+    "message" : [
+      "grouping expressions sequence is empty, and '<sqlExpr>' is not an aggregate function. Wrap '<aggExprs>' in windowing function(s) or wrap '<sqlExpr>' in first() (or first_value) if you don't care which value you get."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2423" : {
+    "message" : [
+      "Correlated scalar subquery '<sqlExpr>' is neither present in the group by, nor in an aggregate function. Add it to group by using ordinal position or wrap it in first() (or first_value) if you don't care which value you get."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2424" : {
+    "message" : [
+      "aggregate functions are not allowed in GROUP BY, but found <sqlExpr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2425" : {
+    "message" : [
+      "expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2426" : {
+    "message" : [
+      "nondeterministic expression <sqlExpr> should not appear in grouping expression."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2427" : {
+    "message" : [
+      "sorting is not supported for columns of type <type>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2428" : {
+    "message" : [
+      "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2429" : {
+    "message" : [
+      "<operator> can only be performed on tables with the same number of columns, but the first table has <firstColNum> columns and the <nTab> table has <nColNum> columns."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2430" : {
+    "message" : [
+      "<operator> can only be performed on tables with compatible column types. The <ci> column of the <ti> table is <dt1> type which is not compatible with <dt2> at the same column of the first table.<hint>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2431" : {
+    "message" : [
+      "Invalid partitioning: <cols> is missing or is in a map or array"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2432" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2433" : {
+    "message" : [
+      "Only a single table generating function is allowed in a SELECT clause, found:",
+      "<sqlExprs>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2434" : {
+    "message" : [
+      "Failure when resolving conflicting references in Join:",
+      "<plan>",
+      "Conflicting attributes: <conflictingAttributes>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2435" : {
+    "message" : [
+      "Failure when resolving conflicting references in Intersect:",
+      "<plan>",
+      "Conflicting attributes: <conflictingAttributes>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2436" : {
+    "message" : [
+      "Failure when resolving conflicting references in Except:",
+      "<plan>",
+      "Conflicting attributes: <conflictingAttributes>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2437" : {
+    "message" : [
+      "Failure when resolving conflicting references in AsOfJoin:",
+      "<plan>",
+      "Conflicting attributes: <conflictingAttributes>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2438" : {
+    "message" : [
+      "Cannot have map type columns in DataFrame which calls set operations(intersect, except, etc.), but the type of column <colName> is <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2439" : {
+    "message" : [
+      "nondeterministic expressions are only allowed in Project, Filter, Aggregate or Window, found:",
+      "<sqlExprs>",
+      "in operator <operator>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2440" : {
+    "message" : [
+      "Aggregate/Window/Generate expressions are not valid in where clause of the query.",
+      "Expression in where clause: [<condition>]",
+      "Invalid expressions: [<invalidExprSqls>]"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2441" : {
+    "message" : [
+      "The query operator `<operator>` contains one or more unsupported expression types Aggregate, Window or Generate.",
+      "Invalid expressions: [<invalidExprSqls>]"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2442" : {
+    "message" : [
+      "unresolved operator <operator>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2443" : {
+    "message" : [
+      "Multiple definitions of observed metrics named '<name>': <plan>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2444" : {
+    "message" : [
+      "Function '<funcName>' does not implement ScalarFunction or AggregateFunction"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2445" : {
+    "message" : [
+      "grouping() can only be used with GroupingSets/Cube/Rollup"
     ]
   }
 }

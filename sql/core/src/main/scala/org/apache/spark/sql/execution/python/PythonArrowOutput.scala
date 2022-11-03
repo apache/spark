@@ -27,6 +27,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, SpecialLengths}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
@@ -36,6 +37,8 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, Column
  * Python (Arrow) to JVM (output type being deserialized from ColumnarBatch).
  */
 private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[_, OUT] =>
+
+  protected def pythonMetrics: Map[String, SQLMetric]
 
   protected def handleMetadataAfterExec(stream: DataInputStream): Unit = { }
 
@@ -82,10 +85,15 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
         }
         try {
           if (reader != null && batchLoaded) {
+            val bytesReadStart = reader.bytesRead()
             batchLoaded = reader.loadNextBatch()
             if (batchLoaded) {
               val batch = new ColumnarBatch(vectors)
+              val rowCount = root.getRowCount
               batch.setNumRows(root.getRowCount)
+              val bytesReadEnd = reader.bytesRead()
+              pythonMetrics("pythonNumRowsReceived") += rowCount
+              pythonMetrics("pythonDataReceived") += bytesReadEnd - bytesReadStart
               deserializeColumnarBatch(batch, schema)
             } else {
               reader.close(false)

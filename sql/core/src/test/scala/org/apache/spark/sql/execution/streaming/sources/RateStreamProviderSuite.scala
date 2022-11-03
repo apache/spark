@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
@@ -197,7 +197,7 @@ class RateStreamProviderSuite extends StreamTest {
     }
   }
 
-  testQuietly("microbatch - rump up error") {
+  testQuietly("microbatch - ramp up error") {
     val e = intercept[SparkRuntimeException](
       new RateStreamMicroBatchStream(
         rowsPerSecond = Long.MaxValue,
@@ -207,7 +207,7 @@ class RateStreamProviderSuite extends StreamTest {
 
     checkError(
       exception = e,
-      errorClass = "INCORRECT_RUMP_UP_RATE",
+      errorClass = "INCORRECT_RAMP_UP_RATE",
       parameters = Map(
         "rowsPerSecond" -> Long.MaxValue.toString,
         "maxSeconds" -> "1",

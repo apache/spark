@@ -325,7 +325,7 @@ case object PostProcessor extends SqlBaseParserBaseListener {
   override def exitErrorIdent(ctx: SqlBaseParser.ErrorIdentContext): Unit = {
     val ident = ctx.getParent.getText
 
-    throw QueryParsingErrors.unquotedIdentifierError(ident, ctx)
+    throw QueryParsingErrors.invalidIdentifierError(ident, ctx)
   }
 
   /** Remove the back ticks from an Identifier. */

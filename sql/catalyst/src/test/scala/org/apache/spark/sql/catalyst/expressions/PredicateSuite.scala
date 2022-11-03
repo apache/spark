@@ -242,7 +242,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
         assert(errorSubClass == "INVALID_ORDERING_TYPE")
         assert(messageParameters === Map(
-          "functionName" -> "function in", "dataType" -> "\"MAP<INT, INT>\""))
+          "functionName" -> "`in`", "dataType" -> "\"MAP<INT, INT>\""))
     }
   }
 

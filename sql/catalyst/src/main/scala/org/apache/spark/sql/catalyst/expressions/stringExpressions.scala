@@ -276,9 +276,9 @@ case class Elt(
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {
       DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_PARAMS",
+        errorSubClass = "WRONG_NUM_ARGS",
         messageParameters = Map(
-          "functionName" -> "elt",
+          "functionName" -> toSQLId(prettyName),
           "expectedNum" -> "> 1",
           "actualNum" -> children.length.toString
         )
@@ -305,7 +305,7 @@ case class Elt(
           )
         )
       }
-      TypeUtils.checkForSameTypeInputExpr(inputTypes, s"function $prettyName")
+      TypeUtils.checkForSameTypeInputExpr(inputTypes, prettyName)
     }
   }
 
@@ -782,7 +782,7 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
       TypeUtils.checkForSameTypeInputExpr(
-        input.dataType :: replace.dataType :: Nil, s"function $prettyName")
+        input.dataType :: replace.dataType :: Nil, prettyName)
     } else {
       inputTypeCheck
     }

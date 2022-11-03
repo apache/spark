@@ -18,13 +18,18 @@ from typing import Any
 import unittest
 import shutil
 import tempfile
+from pyspark.testing.sqlutils import have_pandas
 
-import pandas
+if have_pandas:
+    import pandas
 
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.connect.client import RemoteSparkSession
-from pyspark.sql.connect.function_builder import udf
-from pyspark.sql.connect.functions import lit
+from pyspark.sql.types import StructType, StructField, LongType, StringType
+
+if have_pandas:
+    from pyspark.sql.connect.client import RemoteSparkSession
+    from pyspark.sql.connect.function_builder import udf
+    from pyspark.sql.connect.functions import lit
 from pyspark.sql.dataframe import DataFrame
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import ReusedPySparkTestCase
@@ -35,7 +40,8 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
     """Parent test fixture class for all Spark Connect related
     test cases."""
 
-    connect: RemoteSparkSession
+    if have_pandas:
+        connect: RemoteSparkSession
     tbl_name: str
     df_text: "DataFrame"
 
@@ -67,7 +73,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
         # Setup Remote Spark Session
         cls.connect = RemoteSparkSession(user_id="test_user")
         df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
-        # Since we might create multiple Spark sessions, we need to creata global temporary view
+        # Since we might create multiple Spark sessions, we need to create global temporary view
         # that is specifically maintained in the "global_temp" schema.
         df.write.saveAsTable(cls.tbl_name)
 
@@ -83,6 +89,14 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # Check that the limit is applied
         self.assertEqual(len(data.index), 10)
 
+    def test_collect(self):
+        df = self.connect.read.table(self.tbl_name)
+        data = df.limit(10).collect()
+        self.assertEqual(len(data), 10)
+        # Check Row has schema column names.
+        self.assertTrue("name" in data[0])
+        self.assertTrue("id" in data[0])
+
     def test_simple_udf(self):
         def conv_udf(x) -> str:
             return "Martin"
@@ -96,6 +110,15 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         df = self.connect.read.table(self.tbl_name).limit(10)
         result = df.explain()
         self.assertGreater(len(result), 0)
+
+    def test_schema(self):
+        schema = self.connect.read.table(self.tbl_name).schema()
+        self.assertEqual(
+            StructType(
+                [StructField("id", LongType(), True), StructField("name", StringType(), True)]
+            ),
+            schema,
+        )
 
     def test_simple_binary_expressions(self):
         """Test complex expression"""
@@ -112,6 +135,33 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(9, len(pd.index))
         pd2 = df.offset(98).limit(10).toPandas()
         self.assertEqual(2, len(pd2.index))
+
+    def test_sql(self):
+        pdf = self.connect.sql("SELECT 1").toPandas()
+        self.assertEqual(1, len(pdf.index))
+
+    def test_head(self):
+        df = self.connect.read.table(self.tbl_name)
+        pd = df.head(10)
+        self.assertIsNotNone(pd)
+        self.assertEqual(10, len(pd.index))
+
+    def test_range(self):
+        self.assertTrue(
+            self.connect.range(start=0, end=10)
+            .toPandas()
+            .equals(self.spark.range(start=0, end=10).toPandas())
+        )
+        self.assertTrue(
+            self.connect.range(start=0, end=10, step=3)
+            .toPandas()
+            .equals(self.spark.range(start=0, end=10, step=3).toPandas())
+        )
+        self.assertTrue(
+            self.connect.range(start=0, end=10, step=3, numPartitions=2)
+            .toPandas()
+            .equals(self.spark.range(start=0, end=10, step=3, numPartitions=2).toPandas())
+        )
 
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text

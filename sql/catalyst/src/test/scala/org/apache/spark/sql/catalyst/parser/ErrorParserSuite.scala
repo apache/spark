@@ -42,22 +42,22 @@ class ErrorParserSuite extends AnalysisTest {
   test("hyphen in identifier - DDL tests") {
     checkError(
       exception = parseException("USE test-test"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-test"))
     checkError(
       exception = parseException("CREATE DATABASE IF NOT EXISTS my-database"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "my-database"))
     checkError(
       exception = parseException(
       """
         |ALTER DATABASE my-database
         |SET DBPROPERTIES ('p1'='v1')""".stripMargin),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "my-database"))
     checkError(
       exception = parseException("DROP DATABASE my-database"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "my-database"))
     checkError(
       exception = parseException(
@@ -66,7 +66,7 @@ class ErrorParserSuite extends AnalysisTest {
           |CHANGE COLUMN
           |test-col TYPE BIGINT
         """.stripMargin),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-col"))
     checkError(
       exception = parseException(
@@ -75,7 +75,7 @@ class ErrorParserSuite extends AnalysisTest {
           |RENAME COLUMN
           |test-col TO test
         """.stripMargin),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-col"))
     checkError(
       exception = parseException(
@@ -84,7 +84,7 @@ class ErrorParserSuite extends AnalysisTest {
           |RENAME COLUMN
           |test TO test-col
         """.stripMargin),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-col"))
     checkError(
       exception = parseException(
@@ -93,23 +93,23 @@ class ErrorParserSuite extends AnalysisTest {
           |DROP COLUMN
           |test-col, test
         """.stripMargin),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-col"))
     checkError(
       exception = parseException("CREATE TABLE test (attri-bute INT)"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "attri-bute"))
     checkError(
       exception = parseException("CREATE FUNCTION test-func as org.test.func"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-func"))
     checkError(
       exception = parseException("DROP FUNCTION test-func as org.test.func"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-func"))
     checkError(
       exception = parseException("SHOW FUNCTIONS LIKE test-func"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-func"))
     checkError(
       exception = parseException(
@@ -120,7 +120,7 @@ class ErrorParserSuite extends AnalysisTest {
           |LOCATION '/user/external/page_view'
           |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
           |AS SELECT * FROM src""".stripMargin),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "page-view"))
     checkError(
       exception = parseException(
@@ -128,31 +128,31 @@ class ErrorParserSuite extends AnalysisTest {
           |CREATE TABLE IF NOT EXISTS tab
           |USING test-provider
           |AS SELECT * FROM src""".stripMargin),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-provider"))
     checkError(
       exception = parseException("SHOW TABLES IN hyphen-database"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "hyphen-database"))
     checkError(
       exception = parseException("SHOW TABLE EXTENDED IN hyphen-db LIKE \"str\""),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "hyphen-db"))
     checkError(
       exception = parseException("SHOW COLUMNS IN t FROM test-db"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-db"))
     checkError(
       exception = parseException("DESC SCHEMA EXTENDED test-db"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-db"))
     checkError(
       exception = parseException("ANALYZE TABLE test-table PARTITION (part1)"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-table"))
     checkError(
       exception = parseException("LOAD DATA INPATH \"path\" INTO TABLE my-tab"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "my-tab"))
   }
 
@@ -160,28 +160,28 @@ class ErrorParserSuite extends AnalysisTest {
     // dml tests
     checkError(
       exception = parseException("SELECT * FROM table-with-hyphen"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "table-with-hyphen"))
     // special test case: minus in expression shouldn't be treated as hyphen in identifiers
     checkError(
       exception = parseException("SELECT a-b FROM table-with-hyphen"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "table-with-hyphen"))
     checkError(
       exception = parseException("SELECT a-b AS a-b FROM t"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "a-b"))
     checkError(
       exception = parseException("SELECT a-b FROM table-hyphen WHERE a-b = 0"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "table-hyphen"))
     checkError(
       exception = parseException("SELECT (a - test_func(b-c)) FROM test-table"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-table"))
     checkError(
       exception = parseException("WITH a-b AS (SELECT 1 FROM s) SELECT * FROM s;"),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "a-b"))
     checkError(
       exception = parseException(
@@ -190,7 +190,7 @@ class ErrorParserSuite extends AnalysisTest {
           |FROM t1 JOIN t2
           |USING (a, b, at-tr)
         """.stripMargin),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "at-tr"))
     checkError(
       exception = parseException(
@@ -199,7 +199,7 @@ class ErrorParserSuite extends AnalysisTest {
           |OVER (PARTITION BY category ORDER BY revenue DESC) as hyphen-rank
           |FROM productRevenue
         """.stripMargin),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "hyphen-rank"))
     checkError(
       exception = parseException(
@@ -210,7 +210,7 @@ class ErrorParserSuite extends AnalysisTest {
           |GROUP BY fake-breaker
           |ORDER BY c
         """.stripMargin),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "grammar-breaker"))
     assert(parsePlan(
       """
@@ -231,7 +231,7 @@ class ErrorParserSuite extends AnalysisTest {
           |WINDOW hyphen-window AS
           |  (PARTITION BY a, b ORDER BY c rows BETWEEN 1 PRECEDING AND 1 FOLLOWING)
         """.stripMargin),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "hyphen-window"))
     checkError(
       exception = parseException(
@@ -239,7 +239,7 @@ class ErrorParserSuite extends AnalysisTest {
           |SELECT * FROM tab
           |WINDOW window_ref AS window-ref
         """.stripMargin),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "window-ref"))
     checkError(
       exception = parseException(
@@ -248,7 +248,7 @@ class ErrorParserSuite extends AnalysisTest {
           |FROM t-a INNER JOIN tb
           |ON ta.a = tb.a AND ta.tag = tb.tag
         """.stripMargin),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "t-a"))
     checkError(
       exception = parseException(
@@ -257,7 +257,7 @@ class ErrorParserSuite extends AnalysisTest {
           |SELECT a
           |SELECT b
         """.stripMargin),
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-table"))
   }
 

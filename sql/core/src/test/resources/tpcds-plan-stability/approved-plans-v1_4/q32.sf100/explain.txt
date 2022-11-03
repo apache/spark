@@ -205,7 +205,7 @@ Input [2]: [i_item_sk#1, i_manufact_id#2]
 (34) ObjectHashAggregate
 Input [1]: [i_item_sk#1]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#1, 42), 199, 1592, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#1, 42), 199, 5556, 0, 0)]
 Aggregate Attributes [1]: [buf#24]
 Results [1]: [buf#25]
 
@@ -216,9 +216,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
 (36) ObjectHashAggregate
 Input [1]: [buf#25]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 199, 1592, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 199, 1592, 0, 0)#26]
-Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 199, 1592, 0, 0)#26 AS bloomFilter#27]
+Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 199, 5556, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 199, 5556, 0, 0)#26]
+Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 199, 5556, 0, 0)#26 AS bloomFilter#27]
 
 Subquery:2 Hosting operator id = 6 Hosting Expression = cs_sold_date_sk#5 IN dynamicpruning#6
 BroadcastExchange (41)
