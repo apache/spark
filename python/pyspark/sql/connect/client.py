@@ -23,8 +23,6 @@ import urllib.parse
 import uuid
 
 import grpc  # type: ignore
-import pandas
-import pandas as pd
 import pyarrow as pa
 
 import pyspark.sql.connect.proto as pb2
@@ -36,11 +34,14 @@ from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.plan import SQL, Range
 from pyspark.sql.types import DataType, StructType, StructField, LongType, StringType
 
-from typing import Optional, Any, Union
+from typing import Optional, Any, Union, TYPE_CHECKING
 
 NumericType = typing.Union[int, float]
 
 logging.basicConfig(level=logging.INFO)
+
+if TYPE_CHECKING:
+    import pandas
 
 
 class ChannelBuilder:
@@ -161,7 +162,6 @@ class ChannelBuilder:
         if not self.secure:
             if self.params.get(ChannelBuilder.PARAM_TOKEN, None) is not None:
                 raise AttributeError("Token based authentication cannot be used without TLS")
-            print("insecure channel")
             return grpc.insecure_channel(destination)
         else:
             # Default SSL Credentials.
@@ -240,6 +240,18 @@ class RemoteSparkSession(object):
     """Conceptually the remote spark session that communicates with the server"""
 
     def __init__(self, user_id: str, connection_string: str = "sc://localhost"):
+        """
+        Creates a new RemoteSparkSession for the Spark Connect interface.
+
+        Parameters
+        ----------
+        user_id : str
+            Unique User ID that is used to differentiate multiple users and
+            isolate their Spark Sessions.
+        connection_string: str
+            Connection string that is used to extract the connection parameters and configure
+            the GRPC connection.
+        """
 
         # Parse the connection string.
         self._builder = ChannelBuilder(connection_string)
@@ -367,6 +379,8 @@ class RemoteSparkSession(object):
         return AnalyzeResult.fromProto(resp)
 
     def _process_batch(self, b: pb2.Response) -> Optional[pandas.DataFrame]:
+        import pandas as pd
+
         if b.batch is not None and len(b.batch.data) > 0:
             with pa.ipc.open_stream(b.batch.data) as rd:
                 return rd.read_pandas()
@@ -375,6 +389,8 @@ class RemoteSparkSession(object):
         return None
 
     def _execute_and_fetch(self, req: pb2.Request) -> typing.Optional[pandas.DataFrame]:
+        import pandas as pd
+
         m: Optional[pb2.Response.Metrics] = None
         result_dfs = []
 
