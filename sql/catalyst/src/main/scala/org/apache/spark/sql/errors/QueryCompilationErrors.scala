@@ -472,7 +472,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def orderByPositionRangeError(index: Int, size: Int, t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1022",
+      errorClass = "ORDER_BY_POS_OUT_OF_RANGE",
       messageParameters = Map(
         "index" -> index.toString,
         "size" -> size.toString),

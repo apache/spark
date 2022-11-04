@@ -757,6 +757,12 @@
     ],
     "sqlState" : "22005"
   },
+  "ORDER_BY_POS_OUT_OF_RANGE" : {
+    "message" : [
+      "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
+    ],
+    "sqlState" : "42000"
+  },
   "OUT_OF_DECIMAL_TYPE_RANGE" : {
     "message" : [
       "Out of decimal type range: <value>."
@@ -1720,11 +1726,6 @@
   "_LEGACY_ERROR_TEMP_1021" : {
     "message" : [
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1022" : {
-    "message" : [
-      "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
     ]
   },
   "_LEGACY_ERROR_TEMP_1023" : {
