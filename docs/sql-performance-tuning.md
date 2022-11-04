@@ -308,7 +308,7 @@ AQE converts sort-merge join to shuffled hash join when all post shuffle partiti
        <td><code>spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold</code></td>
        <td>0</td>
        <td>
-         Configures the maximum size in bytes per partition that can be allowed to build local hash map. If this value is not smaller than <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> and all the partition size are not larger than this config, join selection prefer to use shuffled hash join instead of sort merge join regardless of the value of <code>spark.sql.join.preferSortMergeJoin</code>.
+         Configures the maximum size in bytes per partition that can be allowed to build local hash map. If this value is not smaller than <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> and all the partition sizes are not larger than this config, join selection prefers to use shuffled hash join instead of sort merge join regardless of the value of <code>spark.sql.join.preferSortMergeJoin</code>.
        </td>
        <td>3.2.0</td>
      </tr>
