@@ -53,7 +53,7 @@ class ChannelBuilder:
     --------
     >>> cb =  ChannelBuilder("sc://localhost")
     ... cb.endpoint
-    "localhost:15002
+    "localhost:15002"
 
     >>> cb = ChannelBuilder("sc://localhost/;use_ssl=true;token=aaa")
     ... cb.secure
