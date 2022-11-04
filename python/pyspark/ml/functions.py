@@ -122,23 +122,17 @@ def _batched(
 ) -> Iterator[pd.DataFrame]:
     """Generator that splits a pandas dataframe/series into batches."""
     if isinstance(data, pd.DataFrame):
-        index = 0
-        data_size = len(data)
-        while index < data_size:
-            yield data.iloc[index : index + batch_size]
-            index += batch_size
-    else:
-        # convert (tuple of) pd.Series into pd.DataFrame
-        if isinstance(data, pd.Series):
-            df = pd.concat((data,), axis=1)
-        else:  # isinstance(data, Tuple[pd.Series]):
-            df = pd.concat(data, axis=1)
+        df = data
+    elif isinstance(data, pd.Series):
+        df = pd.concat((data,), axis=1)
+    else:  # isinstance(data, Tuple[pd.Series]):
+        df = pd.concat(data, axis=1)
 
-        index = 0
-        data_size = len(df)
-        while index < data_size:
-            yield df.iloc[index : index + batch_size]
-            index += batch_size
+    index = 0
+    data_size = len(df)
+    while index < data_size:
+        yield df.iloc[index : index + batch_size]
+        index += batch_size
 
 
 def _is_tensor_col(data: pd.Series | pd.DataFrame) -> bool:
@@ -162,20 +156,25 @@ def _has_tensor_cols(data: pd.Series | pd.DataFrame | Tuple[pd.Series]) -> bool:
         return any(_is_tensor_col(elem) for elem in data)
 
 
-def _validate(
+def _validate_and_transform(
     preds: np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, Any]],
     num_input_rows: int,
     return_type: DataType,
-) -> None:
-    """Validate model predictions against the expected pandas_udf return_type."""
+) -> pd.DataFrame | pd.Series:
+    """Validate numpy-based model predictions against the expected pandas_udf return_type and
+    transforms the predictions into an equivalent pandas DataFrame or Series."""
     if isinstance(return_type, StructType):
         struct_rtype: StructType = return_type
         fieldNames = struct_rtype.names
         if isinstance(preds, dict):
             # dictionary of columns
             predNames = list(preds.keys())
-            if not all(v.shape == (num_input_rows,) for v in preds.values()):
-                raise ValueError("Prediction results for StructType fields must be scalars.")
+            for field in struct_rtype.fields:
+                if len(preds[field.name]) != num_input_rows:
+                    raise ValueError("Prediction results must have same length as input data.")
+                if field.dataType == ArrayType and preds[field.name].shape != 2:
+                    raise ValueError("Prediction results for ArrayType must be two-dimensional.")
+
         elif isinstance(preds, list) and isinstance(preds[0], dict):
             # rows of dictionaries
             predNames = list(preds[0].keys())
@@ -188,22 +187,28 @@ def _validate(
             )
 
         # check column names
-        if len(predNames) != len(fieldNames) or not all(
-            [predNames[i] == fieldNames[i] for i in range(len(fieldNames))]
-        ):
+        if set(predNames) != set(fieldNames):
             raise ValueError(
                 "Prediction result columns did not match expected return_type "
                 "columns: expected {}, got: {}".format(fieldNames, predNames)
             )
+
+        return pd.DataFrame(preds)
     elif isinstance(return_type, ArrayType):
         if isinstance(preds, np.ndarray):
             if len(preds) != num_input_rows:
                 raise ValueError("Prediction results must have same length as input data.")
+            if len(preds.shape) != 2:
+                raise ValueError("Prediction results for ArrayType must be two-dimensional.")
         else:
             raise ValueError("Prediction results for ArrayType must be an ndarray.")
-    else:
+
+        return pd.Series(list(preds))
+    else:  # scalar
         if len(preds) != num_input_rows:
             raise ValueError("Prediction results must have same length as input data.")
+
+        return pd.Series(np.squeeze(preds))  # type: ignore
 
 
 def predict_batch_udf(
@@ -541,12 +546,14 @@ def predict_batch_udf(
     model_uuid = uuid.uuid4()
 
     def predict(data: Iterator[Union[pd.Series, pd.DataFrame]]) -> Iterator[pd.DataFrame]:
+        # TODO: adjust return type hint when Iterator[Union[pd.Series, pd.DataFrame]] is supported
         from pyspark.ml.model_cache import ModelCache
 
         # get predict function (from cache or from running user-provided predict_batch_fn)
         predict_fn = ModelCache.get(model_uuid)
         if not predict_fn:
             predict_fn = predict_batch_fn()
+            # TODO: cache invalidation
             ModelCache.add(model_uuid, predict_fn)
 
         # get number of expected parameters for predict function
@@ -642,13 +649,7 @@ def predict_batch_udf(
                     raise ValueError(msg.format(num_expected_cols, num_input_cols))
 
                 # return predictions to Spark
-                _validate(preds, num_input_rows, return_type)
-                if isinstance(return_type, StructType):
-                    yield pd.DataFrame(preds)
-                elif isinstance(return_type, ArrayType):
-                    yield pd.Series(list(preds))  # type: ignore[misc]
-                else:
-                    yield pd.Series(np.squeeze(preds))  # type: ignore
+                yield _validate_and_transform(preds, num_input_rows, return_type)  # type: ignore
 
     return pandas_udf(predict, return_type)  # type: ignore[call-overload]
 
