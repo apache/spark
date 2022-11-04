@@ -721,7 +721,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       stats: Option[CatalogStatistics]): Unit = withClient {
     requireTableExists(db, table)
-    client.alterTableStats(db, table, stats.map(statsToProperties(_)).getOrElse(Map.empty))
+    val rawTable = getRawTable(db, table)
+    val oldTableNonStatsProps = rawTable.properties.filterNot(_._1.startsWith(STATISTICS_PREFIX))
+    val statsProperties =
+      if (stats.isDefined) {
+        statsToProperties(stats.get)
+      } else {
+        new mutable.HashMap[String, String]()
+      }
+
+    client.alterTableStats(db, table, parameters = oldTableNonStatsProps ++ statsProperties)
   }
 
   override def getTable(db: String, table: String): CatalogTable = withClient {

@@ -22,7 +22,7 @@ import java.lang.{Iterable => JIterable}
 import java.lang.reflect.InvocationTargetException
 import java.net.URI
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.{Locale, Map => JMap}
+import java.util.{HashMap => JHashMap, Locale, Map => JMap}
 import java.util.concurrent.TimeUnit._
 
 import scala.collection.JavaConverters._
@@ -612,11 +612,13 @@ private[hive] class HiveClientImpl(
   override def alterTableStats(
       dbName: String,
       tableName: String,
-      updateStats: Map[String, String]): Unit = withHiveState {
+      parameters: Map[String, String]): Unit = withHiveState {
     val hiveTable =
       getRawTableOption(dbName, tableName).getOrElse(
         throw new NoSuchTableException(dbName, tableName))
-    updateStats.foreach { case (k, v) => hiveTable.setProperty(k, v) }
+    val newParameters = new JHashMap[String, String]()
+    newParameters.putAll(parameters.asJava)
+    hiveTable.setParameters(newParameters)
     shim.alterTable(client, s"$dbName.$tableName", hiveTable)
   }
 
