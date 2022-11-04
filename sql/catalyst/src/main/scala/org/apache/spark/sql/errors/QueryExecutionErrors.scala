@@ -2808,4 +2808,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "UNSUPPORTED_EMPTY_LOCATION",
       messageParameters = Map.empty)
   }
+
+  def malformedProtobufMessageDetectedInMessageParsingError(e: Throwable): Throwable = {
+    new SparkException(
+      errorClass = "MALFORMED_PROTOBUF_MESSAGE",
+      messageParameters = Map(
+        "failFastMode" -> FailFastMode.name),
+      cause = e)
+  }
 }

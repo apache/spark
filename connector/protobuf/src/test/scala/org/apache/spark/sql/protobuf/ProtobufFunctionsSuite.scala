@@ -24,11 +24,11 @@ import scala.collection.JavaConverters._
 import com.google.protobuf.{ByteString, DynamicMessage}
 
 import org.apache.spark.sql.{Column, QueryTest, Row}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.functions.{lit, struct}
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
-import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, StringType, StructField, StructType, TimestampType}
 
@@ -36,7 +36,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
   import testImplicits._
 
-  val testFileDesc = testFile("protobuf/functions_suite.desc").replace("file:/", "/")
+  val testFileDesc = testFile("functions_suite.desc").replace("file:/", "/")
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SimpleMessageProtos$"
 
   /**
@@ -114,7 +114,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       .addRdoubleValue(1092093.654d)
       .addRfloatValue(10903.0f)
       .addRfloatValue(10902.0f)
-      .addRnestedEnum(NestedEnum.ESTED_NOTHING)
+      .addRnestedEnum(NestedEnum.NESTED_NOTHING)
       .addRnestedEnum(NestedEnum.NESTED_FIRST)
       .build()
 
@@ -324,7 +324,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
       .setField(messageEnumDesc.findFieldByName("value"), "value")
       .setField(
         messageEnumDesc.findFieldByName("nested_enum"),
-        messageEnumDesc.findEnumTypeByName("NestedEnum").findValueByName("ESTED_NOTHING"))
+        messageEnumDesc.findEnumTypeByName("NestedEnum").findValueByName("NESTED_NOTHING"))
       .setField(
         messageEnumDesc.findFieldByName("nested_enum"),
         messageEnumDesc.findEnumTypeByName("NestedEnum").findValueByName("NESTED_FIRST"))
@@ -410,7 +410,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
     checkWithFileAndClassName("recursiveB") {
       case (name, descFilePathOpt) =>
-        val e = intercept[IncompatibleSchemaException] {
+        val e = intercept[AnalysisException] {
           df.select(
             from_protobuf_wrapper($"messageB", name, descFilePathOpt).as("messageFromProto"))
             .show()
@@ -446,7 +446,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
     checkWithFileAndClassName("recursiveD") {
       case (name, descFilePathOpt) =>
-        val e = intercept[IncompatibleSchemaException] {
+        val e = intercept[AnalysisException] {
           df.select(
             from_protobuf_wrapper($"messageD", name, descFilePathOpt).as("messageFromProto"))
             .show()
@@ -458,7 +458,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("Handle extra fields : oldProducer -> newConsumer") {
-    val testFileDesc = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
+    val testFileDesc = testFile("catalyst_types.desc").replace("file:/", "/")
     val oldProducer = ProtobufUtils.buildDescriptor(testFileDesc, "oldProducer")
     val newConsumer = ProtobufUtils.buildDescriptor(testFileDesc, "newConsumer")
 
@@ -498,7 +498,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("Handle extra fields : newProducer -> oldConsumer") {
-    val testFileDesc = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
+    val testFileDesc = testFile("catalyst_types.desc").replace("file:/", "/")
     val newProducer = ProtobufUtils.buildDescriptor(testFileDesc, "newProducer")
     val oldConsumer = ProtobufUtils.buildDescriptor(testFileDesc, "oldConsumer")
 
@@ -587,19 +587,16 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
 
     val df = Seq(basicMessage.toByteArray).toDF("value")
 
-    checkWithFileAndClassName("BasicMessage") {
-      case (name, descFilePathOpt) =>
-        val resultFrom = df
-          .select(from_protobuf_wrapper($"value", name, descFilePathOpt) as 'sample)
-          .where("sample.string_value == \"slam\"")
+    val resultFrom = df
+      .select(from_protobuf_wrapper($"value", "BasicMessage", Some(testFileDesc)) as 'sample)
+      .where("sample.string_value == \"slam\"")
 
-        val resultToFrom = resultFrom
-          .select(to_protobuf_wrapper($"sample", name, descFilePathOpt) as 'value)
-          .select(from_protobuf_wrapper($"value", name, descFilePathOpt) as 'sample)
-          .where("sample.string_value == \"slam\"")
+    val resultToFrom = resultFrom
+      .select(to_protobuf_wrapper($"sample", "BasicMessage", Some(testFileDesc)) as 'value)
+      .select(from_protobuf_wrapper($"value", "BasicMessage", Some(testFileDesc)) as 'sample)
+      .where("sample.string_value == \"slam\"")
 
-        assert(resultFrom.except(resultToFrom).isEmpty)
-    }
+    assert(resultFrom.except(resultToFrom).isEmpty)
   }
 
   test("Handle TimestampType between to_protobuf and from_protobuf") {
