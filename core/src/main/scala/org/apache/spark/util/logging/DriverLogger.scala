@@ -142,7 +142,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       threadpool = ThreadUtils.newDaemonSingleThreadScheduledExecutor("dfsSyncThread")
       threadpool.scheduleWithFixedDelay(this, UPLOAD_INTERVAL_IN_SECS, UPLOAD_INTERVAL_IN_SECS,
         TimeUnit.SECONDS)
-      logInfo(s"Started driver log file sync to: ${dfsLogFile.toString}")
+      logInfo(s"Started driver log file sync to: ${dfsLogFile}")
     }
 
     def run(): Unit = {
