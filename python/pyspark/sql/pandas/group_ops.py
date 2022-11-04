@@ -114,7 +114,9 @@ class PandasGroupedOpsMixin:
         as a `DataFrame`.
 
         The function should take a `pandas.DataFrame` and return another
-        `pandas.DataFrame`. For each group, all columns are passed together as a `pandas.DataFrame`
+        `pandas.DataFrame`. Alternatively, the user can pass a function that takes
+        a tuple of the grouping key(s) and a `pandas.DataFrame`.
+        For each group, all columns are passed together as a `pandas.DataFrame`
         to the user-function and the returned `pandas.DataFrame` are combined as a
         :class:`DataFrame`.
 
@@ -129,8 +131,9 @@ class PandasGroupedOpsMixin:
         Parameters
         ----------
         func : function
-            a Python native function that takes a `pandas.DataFrame`, and outputs a
-            `pandas.DataFrame`.
+            a Python native function that takes a `pandas.DataFrame` and outputs a
+            `pandas.DataFrame`, or that takes one tuple (grouping keys) and a
+            `pandas.DataFrame` and outputs a `pandas.DataFrame`.
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
@@ -377,7 +380,9 @@ class PandasCogroupedOps:
         as a `DataFrame`.
 
         The function should take two `pandas.DataFrame`\\s and return another
-        `pandas.DataFrame`.  For each side of the cogroup, all columns are passed together as a
+        `pandas.DataFrame`. Alternatively, the user can pass a function that takes
+        a tuple of the grouping key(s) and the two `pandas.DataFrame`\\s.
+        For each side of the cogroup, all columns are passed together as a
         `pandas.DataFrame` to the user-function and the returned `pandas.DataFrame` are combined as
         a :class:`DataFrame`.
 
@@ -394,7 +399,7 @@ class PandasCogroupedOps:
         func : function
             a Python native function that takes two `pandas.DataFrame`\\s, and
             outputs a `pandas.DataFrame`, or that takes one tuple (grouping keys) and two
-            pandas ``DataFrame``\\s, and outputs a pandas ``DataFrame``.
+            ``pandas.DataFrame``\\s, and outputs a ``pandas.DataFrame``.
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.

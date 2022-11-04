@@ -336,6 +336,9 @@ PandasMapIterFunction = Callable[[Iterable[DataFrameLike]], Iterable[DataFrameLi
 
 ArrowMapIterFunction = Callable[[Iterable[pyarrow.RecordBatch]], Iterable[pyarrow.RecordBatch]]
 
-PandasCogroupedMapFunction = Callable[[DataFrameLike, DataFrameLike], DataFrameLike]
+PandasCogroupedMapFunction = Union[
+    Callable[[DataFrameLike, DataFrameLike], DataFrameLike],
+    Callable[[Any, DataFrameLike, DataFrameLike], DataFrameLike],
+]
 
 GroupedMapPandasUserDefinedFunction = NewType("GroupedMapPandasUserDefinedFunction", FunctionType)
