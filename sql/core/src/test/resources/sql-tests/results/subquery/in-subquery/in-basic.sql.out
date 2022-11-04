@@ -39,11 +39,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "\nThe number of columns in the left hand side of an IN subquery does not match the\nnumber of columns in the output of subquery.\n#columns in left hand side: 2.\n#columns in right hand side: 1.\nLeft side columns:\n[tab_a.a1, tab_a.b1].\nRight side columns:\n[`named_struct(a2, a2, b2, b2)`].",
-    "sqlExpr" : "(named_struct('a1', tab_a.a1, 'b1', tab_a.b1) IN (listquery()))"
+    "leftColumns" : "\"a1\", \"b1\"",
+    "leftLength" : "2",
+    "rightColumns" : "\"named_struct(a2, a2, b2, b2)\"",
+    "rightLength" : "1",
+    "sqlExpr" : "\"(named_struct('a1', a1, 'b1', b1) IN (listquery()))\""
   },
   "queryContext" : [ {
     "objectType" : "",

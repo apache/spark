@@ -960,18 +960,6 @@ class Range(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class Step(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        STEP_FIELD_NUMBER: builtins.int
-        step: builtins.int
-        def __init__(
-            self,
-            *,
-            step: builtins.int = ...,
-        ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["step", b"step"]) -> None: ...
-
     class NumPartitions(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -994,9 +982,8 @@ class Range(google.protobuf.message.Message):
     """Optional. Default value = 0"""
     end: builtins.int
     """Required."""
-    @property
-    def step(self) -> global___Range.Step:
-        """Optional. Default value = 1"""
+    step: builtins.int
+    """Required."""
     @property
     def num_partitions(self) -> global___Range.NumPartitions:
         """Optional. Default value is assigned by 1) SQL conf "spark.sql.leafNodeDefaultParallelism" if
@@ -1007,12 +994,11 @@ class Range(google.protobuf.message.Message):
         *,
         start: builtins.int = ...,
         end: builtins.int = ...,
-        step: global___Range.Step | None = ...,
+        step: builtins.int = ...,
         num_partitions: global___Range.NumPartitions | None = ...,
     ) -> None: ...
     def HasField(
-        self,
-        field_name: typing_extensions.Literal["num_partitions", b"num_partitions", "step", b"step"],
+        self, field_name: typing_extensions.Literal["num_partitions", b"num_partitions"]
     ) -> builtins.bool: ...
     def ClearField(
         self,

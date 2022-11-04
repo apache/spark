@@ -32,6 +32,10 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
 
+    def test_sql_project(self):
+        plan = self.connect.sql("SELECT 1")._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.sql.query, "SELECT 1")
+
     def test_simple_project(self):
         plan = self.connect.readTable(table_name=self.tbl_name)._plan.to_proto(self.connect)
         self.assertIsNotNone(plan.root, "Root relation must be set")
@@ -150,13 +154,13 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         )
         self.assertEqual(plan.root.range.start, 10)
         self.assertEqual(plan.root.range.end, 20)
-        self.assertEqual(plan.root.range.step.step, 3)
+        self.assertEqual(plan.root.range.step, 3)
         self.assertEqual(plan.root.range.num_partitions.num_partitions, 4)
 
         plan = self.connect.range(start=10, end=20)._plan.to_proto(self.connect)
         self.assertEqual(plan.root.range.start, 10)
         self.assertEqual(plan.root.range.end, 20)
-        self.assertFalse(plan.root.range.HasField("step"))
+        self.assertEqual(plan.root.range.step, 1)
         self.assertFalse(plan.root.range.HasField("num_partitions"))
 
     def test_datasource_read(self):
@@ -185,6 +189,16 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         plan = df._plan.to_proto(self.connect)
         self.assertIsNotNone(plan.root, "Root relation must be set")
         self.assertIsNotNone(plan.root.read)
+
+    def test_union(self):
+        df1 = self.connect.readTable(table_name=self.tbl_name)
+        df2 = self.connect.readTable(table_name=self.tbl_name)
+        plan1 = df1.union(df2)._plan.to_proto(self.connect)
+        self.assertTrue(plan1.root.set_op.is_all)
+        plan2 = df1.union(df2)._plan.to_proto(self.connect)
+        self.assertTrue(plan2.root.set_op.is_all)
+        plan3 = df1.unionByName(df2, True)._plan.to_proto(self.connect)
+        self.assertTrue(plan3.root.set_op.by_name)
 
 
 if __name__ == "__main__":

@@ -34,7 +34,10 @@ from pyspark.sql.connect.column import (
     Expression,
     LiteralExpression,
 )
-from pyspark.sql.types import StructType
+from pyspark.sql.types import (
+    StructType,
+    Row,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString
@@ -290,6 +293,33 @@ class DataFrame(object):
             raise ValueError("Argument to Union does not contain a valid plan.")
         return DataFrame.withPlan(plan.UnionAll(self._plan, other._plan), session=self._session)
 
+    def unionByName(self, other: "DataFrame", allowMissingColumns: bool = False) -> "DataFrame":
+        """Returns a new :class:`DataFrame` containing union of rows in this and another
+        :class:`DataFrame`.
+
+        This is different from both `UNION ALL` and `UNION DISTINCT` in SQL. To do a SQL-style set
+        union (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined.
+        allowMissingColumns : bool, optional, default False
+           Specify whether to allow missing columns.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame.
+        """
+        if other._plan is None:
+            raise ValueError("Argument to UnionByName does not contain a valid plan.")
+        return DataFrame.withPlan(
+            plan.UnionAll(self._plan, other._plan, allowMissingColumns), session=self._session
+        )
+
     def where(self, condition: Expression) -> "DataFrame":
         return self.filter(condition)
 
@@ -317,8 +347,12 @@ class DataFrame(object):
             return self._plan.print()
         return ""
 
-    def collect(self) -> None:
-        raise NotImplementedError("Please use toPandas().")
+    def collect(self) -> List[Row]:
+        pdf = self.toPandas()
+        if pdf is not None:
+            return list(pdf.apply(lambda row: Row(**row), axis=1))
+        else:
+            return []
 
     def toPandas(self) -> Optional["pandas.DataFrame"]:
         if self._plan is None:

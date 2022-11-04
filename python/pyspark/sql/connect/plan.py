@@ -606,9 +606,12 @@ class Join(LogicalPlan):
 
 
 class UnionAll(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], other: "LogicalPlan") -> None:
+    def __init__(
+        self, child: Optional["LogicalPlan"], other: "LogicalPlan", by_name: bool = False
+    ) -> None:
         super().__init__(child)
         self.other = other
+        self.by_name = by_name
 
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
@@ -617,6 +620,7 @@ class UnionAll(LogicalPlan):
         rel.set_op.right_input.CopyFrom(self.other.plan(session))
         rel.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_UNION
         rel.set_op.is_all = True
+        rel.set_op.by_name = self.by_name
         return rel
 
     def print(self, indent: int = 0) -> str:
@@ -705,7 +709,7 @@ class Range(LogicalPlan):
         self,
         start: int,
         end: int,
-        step: Optional[int] = None,
+        step: int,
         num_partitions: Optional[int] = None,
     ) -> None:
         super().__init__(None)
@@ -718,10 +722,7 @@ class Range(LogicalPlan):
         rel = proto.Relation()
         rel.range.start = self._start
         rel.range.end = self._end
-        if self._step is not None:
-            step_proto = rel.range.Step()
-            step_proto.step = self._step
-            rel.range.step.CopyFrom(step_proto)
+        rel.range.step = self._step
         if self._num_partitions is not None:
             num_partitions_proto = rel.range.NumPartitions()
             num_partitions_proto.num_partitions = self._num_partitions

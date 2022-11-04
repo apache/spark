@@ -22,7 +22,7 @@ from pyspark.testing.sqlutils import have_pandas
 
 if have_pandas:
     from pyspark.sql.connect import DataFrame
-    from pyspark.sql.connect.plan import Read, Range
+    from pyspark.sql.connect.plan import Read, Range, SQL
     from pyspark.testing.utils import search_jar
 
     connect_jar = search_jar("connector/connect", "spark-connect-assembly-", "spark-connect")
@@ -80,12 +80,16 @@ class PlanOnlyTestFixture(unittest.TestCase):
         cls,
         start: int,
         end: int,
-        step: Optional[int] = None,
+        step: int = 1,
         num_partitions: Optional[int] = None,
     ) -> "DataFrame":
         return DataFrame.withPlan(
             Range(start, end, step, num_partitions), cls.connect  # type: ignore
         )
+
+    @classmethod
+    def _session_sql(cls, query: str) -> "DataFrame":
+        return DataFrame.withPlan(SQL(query), cls.connect)  # type: ignore
 
     @classmethod
     def setUpClass(cls: Any) -> None:
@@ -95,9 +99,11 @@ class PlanOnlyTestFixture(unittest.TestCase):
         cls.connect.set_hook("register_udf", cls._udf_mock)
         cls.connect.set_hook("readTable", cls._read_table)
         cls.connect.set_hook("range", cls._session_range)
+        cls.connect.set_hook("sql", cls._session_sql)
 
     @classmethod
     def tearDownClass(cls: Any) -> None:
         cls.connect.drop_hook("register_udf")
         cls.connect.drop_hook("readTable")
         cls.connect.drop_hook("range")
+        cls.connect.drop_hook("sql")
