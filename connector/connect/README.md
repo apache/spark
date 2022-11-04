@@ -69,4 +69,4 @@ To use the release version of Spark Connect:
 When contributing a new client please be aware that we strive to have a common
 user experience across all languages. Please follow the below guidelines:
 
-* [Connection string configuration](docs/client_connection_string.md)
+* [Connection string configuration](docs/client-connection-string.md)

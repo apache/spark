@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-addSbtPlugin("com.etsy" % "sbt-checkstyle-plugin" % "3.1.1")
+addSbtPlugin("software.purpledragon" % "sbt-checkstyle-plugin" % "4.0.0")
 
 // sbt-checkstyle-plugin uses an old version of checkstyle. Match it to Maven's.
 // If you are changing the dependency setting for checkstyle plugin,

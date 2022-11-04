@@ -448,9 +448,9 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       Some("_LEGACY_ERROR_TEMP_0039"))
   }
 
-  def unquotedIdentifierError(ident: String, ctx: ErrorIdentContext): Throwable = {
+  def invalidIdentifierError(ident: String, ctx: ErrorIdentContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       messageParameters = Map("ident" -> ident),
       ctx)
   }

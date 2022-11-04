@@ -569,6 +569,11 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_IDENTIFIER" : {
+    "message" : [
+      "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
+    ]
+  },
   "INVALID_JSON_SCHEMA_MAP_TYPE" : {
     "message" : [
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
@@ -1374,11 +1379,6 @@
   "_LEGACY_ERROR_TEMP_0039" : {
     "message" : [
       "Unsupported SQL statement."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0040" : {
-    "message" : [
-      "Possibly unquoted identifier <ident> detected. Please consider quoting it with back-quotes as `<ident>`."
     ]
   },
   "_LEGACY_ERROR_TEMP_0041" : {

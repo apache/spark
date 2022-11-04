@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future => JFuture}
 import java.util.concurrent.atomic.AtomicLong
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{ErrorMessageFormat, SparkContext, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
@@ -115,7 +115,15 @@ object SQLExecution {
             throw e
         } finally {
           val endTime = System.nanoTime()
-          val event = SparkListenerSQLExecutionEnd(executionId, System.currentTimeMillis())
+          val errorMessage = ex.map {
+            case e: SparkThrowable =>
+              SparkThrowableHelper.getMessage(e, ErrorMessageFormat.STANDARD)
+            case e =>
+              // unexpected behavior
+              SparkThrowableHelper.getMessage(e)
+          }
+          val event = SparkListenerSQLExecutionEnd(
+            executionId, System.currentTimeMillis(), errorMessage)
           // Currently only `Dataset.withAction` and `DataFrameWriter.runCommand` specify the `name`
           // parameter. The `ExecutionListenerManager` only watches SQL executions with name. We
           // can specify the execution name in more places in the future, so that
