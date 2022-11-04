@@ -150,6 +150,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(2, len(pd2.index))
 
     def test_head(self):
+        # SPARK-41002: test `head` API in Python Client
         df = self.connect.read.table(self.tbl_name)
         self.assertIsNotNone(len(df.head()))
         self.assertIsNotNone(len(df.head(1)))
@@ -158,12 +159,14 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertIsNone(df2.head())
 
     def test_first(self):
+        # SPARK-41002: test `first` API in Python Client
         df = self.connect.read.table(self.tbl_name)
         self.assertIsNotNone(len(df.first()))
         df2 = self.connect.read.table(self.tbl_name_empty)
         self.assertIsNone(df2.first())
 
     def test_take(self) -> None:
+        # SPARK-41002: test `take` API in Python Client
         df = self.connect.read.table(self.tbl_name)
         self.assertEqual(5, len(df.take(5)))
         df2 = self.connect.read.table(self.tbl_name_empty)
