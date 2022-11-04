@@ -107,7 +107,8 @@ private[spark] class DiskBlockManager(
         old
       } else {
         val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
-        if (!newDir.exists() && needCreate) {
+        val alreadyExists = newDir.exists()
+        if (!alreadyExists && needCreate) {
           val path = newDir.toPath
           Files.createDirectory(path)
           if (permissionChangingRequired) {
@@ -119,7 +120,8 @@ private[spark] class DiskBlockManager(
             Files.setPosixFilePermissions(path, currentPerms)
           }
         }
-        if (newDir.exists()) {
+        // If needCreate is set, exception is thrown if directory cannot be created.
+        if (alreadyExists || needCreate) {
           subDirs(dirId)(subDirId) = newDir
         }
         newDir
