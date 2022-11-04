@@ -23,11 +23,12 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 
 import com.google.protobuf.{DescriptorProtos, Descriptors, InvalidProtocolBufferException, Message}
+import com.google.protobuf.DescriptorProtos.{FileDescriptorProto, FileDescriptorSet}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -61,9 +62,9 @@ private[sql] object ProtobufUtils extends Logging {
       protoPath: Seq[String],
       catalystPath: Seq[String]) {
     if (descriptor.getName == null) {
-      throw new IncompatibleSchemaException(
-        s"Attempting to treat ${descriptor.getName} as a RECORD, " +
-          s"but it was: ${descriptor.getContainingType}")
+      throw QueryCompilationErrors.unknownProtobufMessageTypeError(
+        descriptor.getName,
+        descriptor.getContainingType().getName)
     }
 
     private[this] val protoFieldArray = descriptor.getFields.asScala.toArray
@@ -79,30 +80,29 @@ private[sql] object ProtobufUtils extends Logging {
 
     /**
      * Validate that there are no Catalyst fields which don't have a matching Protobuf field,
-     * throwing [[IncompatibleSchemaException]] if such extra fields are found. If
-     * `ignoreNullable` is false, consider nullable Catalyst fields to be eligible to be an extra
-     * field; otherwise, ignore nullable Catalyst fields when checking for extras.
+     * throwing [[AnalysisException]] if such extra fields are found. If `ignoreNullable` is
+     * false, consider nullable Catalyst fields to be eligible to be an extra field; otherwise,
+     * ignore nullable Catalyst fields when checking for extras.
      */
     def validateNoExtraCatalystFields(ignoreNullable: Boolean): Unit =
       catalystSchema.fields.foreach { sqlField =>
         if (getFieldByName(sqlField.name).isEmpty &&
           (!ignoreNullable || !sqlField.nullable)) {
-          throw new IncompatibleSchemaException(
-            s"Cannot find ${toFieldStr(catalystPath :+ sqlField.name)} in Protobuf schema")
+          throw QueryCompilationErrors.cannotFindCatalystTypeInProtobufSchemaError(
+            toFieldStr(catalystPath :+ sqlField.name))
         }
       }
 
     /**
      * Validate that there are no Protobuf fields which don't have a matching Catalyst field,
-     * throwing [[IncompatibleSchemaException]] if such extra fields are found. Only required
-     * (non-nullable) fields are checked; nullable fields are ignored.
+     * throwing [[AnalysisException]] if such extra fields are found. Only required (non-nullable)
+     * fields are checked; nullable fields are ignored.
      */
     def validateNoExtraRequiredProtoFields(): Unit = {
       val extraFields = protoFieldArray.toSet -- matchedFields.map(_.fieldDescriptor)
       extraFields.filterNot(isNullable).foreach { extraField =>
-        throw new IncompatibleSchemaException(
-          s"Found ${toFieldStr(protoPath :+ extraField.getName())} in Protobuf schema " +
-            "but there is no match in the SQL schema")
+        throw QueryCompilationErrors.cannotFindProtobufFieldInCatalystError(
+          toFieldStr(protoPath :+ extraField.getName()))
       }
     }
 
@@ -125,10 +125,11 @@ private[sql] object ProtobufUtils extends Logging {
         case Seq(protoField) => Some(protoField)
         case Seq() => None
         case matches =>
-          throw new IncompatibleSchemaException(
-            s"Searching for '$name' in " +
-              s"Protobuf schema at ${toFieldStr(protoPath)} gave ${matches.size} matches. " +
-              s"Candidates: " + matches.map(_.getName()).mkString("[", ", ", "]"))
+          throw QueryCompilationErrors.protobufFieldMatchError(
+            name,
+            toFieldStr(protoPath),
+            s"${matches.size}",
+            matches.map(_.getName()).mkString("[", ", ", "]"))
       }
     }
   }
@@ -157,16 +158,12 @@ private[sql] object ProtobufUtils extends Logging {
     val protobufClass = try {
       Utils.classForName(protobufClassName)
     } catch {
-      case _: ClassNotFoundException =>
-        val hasDots = protobufClassName.contains(".")
-        throw new IllegalArgumentException(
-          s"Could not load Protobuf class with name '$protobufClassName'" +
-          (if (hasDots) "" else ". Ensure the class name includes package prefix.")
-        )
+      case e: ClassNotFoundException =>
+        throw QueryCompilationErrors.protobufClassLoadError(protobufClassName, e)
     }
 
     if (!classOf[Message].isAssignableFrom(protobufClass)) {
-      throw new IllegalArgumentException(s"$protobufClassName is not a Protobuf message type")
+      throw QueryCompilationErrors.protobufMessageTypeError(protobufClassName)
       // TODO: Need to support V2. This might work with V2 classes too.
     }
 
@@ -178,46 +175,70 @@ private[sql] object ProtobufUtils extends Logging {
   }
 
   def buildDescriptor(descFilePath: String, messageName: String): Descriptor = {
-    val descriptor = parseFileDescriptor(descFilePath).getMessageTypes.asScala.find { desc =>
-      desc.getName == messageName || desc.getFullName == messageName
-    }
+    // Find the first message descriptor that matches the name.
+    val descriptorOpt = parseFileDescriptorSet(descFilePath)
+      .flatMap { fileDesc =>
+        fileDesc.getMessageTypes.asScala.find { desc =>
+          desc.getName == messageName || desc.getFullName == messageName
+        }
+      }.headOption
 
-    descriptor match {
+    descriptorOpt match {
       case Some(d) => d
-      case None =>
-        throw new RuntimeException(s"Unable to locate Message '$messageName' in Descriptor")
+      case None => throw QueryCompilationErrors.unableToLocateProtobufMessageError(messageName)
     }
   }
 
-  private def parseFileDescriptor(descFilePath: String): Descriptors.FileDescriptor = {
+  private def parseFileDescriptorSet(descFilePath: String): List[Descriptors.FileDescriptor] = {
     var fileDescriptorSet: DescriptorProtos.FileDescriptorSet = null
     try {
       val dscFile = new BufferedInputStream(new FileInputStream(descFilePath))
       fileDescriptorSet = DescriptorProtos.FileDescriptorSet.parseFrom(dscFile)
     } catch {
       case ex: InvalidProtocolBufferException =>
-        // TODO move all the exceptions to core/src/main/resources/error/error-classes.json
-        throw new RuntimeException("Error parsing descriptor byte[] into Descriptor object", ex)
+        throw QueryCompilationErrors.descrioptorParseError(descFilePath, ex)
       case ex: IOException =>
-        throw new RuntimeException(
-          "Error reading Protobuf descriptor file at path: " +
-            descFilePath,
-          ex)
+        throw QueryCompilationErrors.cannotFindDescriptorFileError(descFilePath, ex)
     }
-
-    val descriptorProto: DescriptorProtos.FileDescriptorProto = fileDescriptorSet.getFile(0)
     try {
-      val fileDescriptor: Descriptors.FileDescriptor = Descriptors.FileDescriptor.buildFrom(
-        descriptorProto,
-        new Array[Descriptors.FileDescriptor](0))
-      if (fileDescriptor.getMessageTypes().isEmpty()) {
-        throw new RuntimeException("No MessageTypes returned, " + fileDescriptor.getName());
-      }
-      fileDescriptor
+      val fileDescriptorProtoIndex = createDescriptorProtoMap(fileDescriptorSet)
+      val fileDescriptorList: List[Descriptors.FileDescriptor] =
+        fileDescriptorSet.getFileList.asScala.map( fileDescriptorProto =>
+          buildFileDescriptor(fileDescriptorProto, fileDescriptorProtoIndex)
+        ).toList
+      fileDescriptorList
     } catch {
       case e: Descriptors.DescriptorValidationException =>
-        throw new RuntimeException("Error constructing FileDescriptor", e)
+        throw QueryCompilationErrors.failedParsingDescriptorError(descFilePath, e)
     }
+  }
+
+  /**
+   * Recursively constructs file descriptors for all dependencies for given
+   * FileDescriptorProto and return.
+   */
+  private def buildFileDescriptor(
+    fileDescriptorProto: FileDescriptorProto,
+    fileDescriptorProtoMap: Map[String, FileDescriptorProto]): Descriptors.FileDescriptor = {
+    val fileDescriptorList = fileDescriptorProto.getDependencyList().asScala.map { dependency =>
+      fileDescriptorProtoMap.get(dependency) match {
+        case Some(dependencyProto) =>
+          buildFileDescriptor(dependencyProto, fileDescriptorProtoMap)
+        case None =>
+          throw QueryCompilationErrors.protobufDescriptorDependencyError(dependency)
+      }
+    }
+    Descriptors.FileDescriptor.buildFrom(fileDescriptorProto, fileDescriptorList.toArray)
+  }
+
+  /**
+   * Returns a map from descriptor proto name as found inside the descriptors to protos.
+   */
+  private def createDescriptorProtoMap(
+    fileDescriptorSet: FileDescriptorSet): Map[String, FileDescriptorProto] = {
+    fileDescriptorSet.getFileList().asScala.map { descriptorProto =>
+      descriptorProto.getName() -> descriptorProto
+    }.toMap[String, FileDescriptorProto]
   }
 
   /**

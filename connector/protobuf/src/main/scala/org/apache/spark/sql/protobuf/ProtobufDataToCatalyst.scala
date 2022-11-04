@@ -21,11 +21,10 @@ import scala.util.control.NonFatal
 
 import com.google.protobuf.DynamicMessage
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, SpecificInternalRow, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.protobuf.utils.{ProtobufOptions, ProtobufUtils, SchemaConverters}
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, StructType}
 
@@ -71,14 +70,9 @@ private[protobuf] case class ProtobufDataToCatalyst(
   @transient private lazy val parseMode: ParseMode = {
     val mode = protobufOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
-      throw new AnalysisException(unacceptableModeMessage(mode.name))
+      throw QueryCompilationErrors.parseModeUnsupportedError(prettyName, mode)
     }
     mode
-  }
-
-  private def unacceptableModeMessage(name: String): String = {
-    s"from_protobuf() doesn't support the $name mode. " +
-      s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}."
   }
 
   @transient private lazy val nullResultRow: Any = dataType match {
@@ -98,13 +92,9 @@ private[protobuf] case class ProtobufDataToCatalyst(
       case PermissiveMode =>
         nullResultRow
       case FailFastMode =>
-        throw new SparkException(
-          "Malformed records are detected in record parsing. " +
-            s"Current parse Mode: ${FailFastMode.name}. To process malformed records as null " +
-            "result, try setting the option 'mode' as 'PERMISSIVE'.",
-          e)
+        throw QueryExecutionErrors.malformedProtobufMessageDetectedInMessageParsingError(e)
       case _ =>
-        throw new AnalysisException(unacceptableModeMessage(parseMode.name))
+        throw QueryCompilationErrors.parseModeUnsupportedError(prettyName, parseMode)
     }
   }
 
@@ -119,8 +109,8 @@ private[protobuf] case class ProtobufDataToCatalyst(
         case Some(number) =>
           // Unknown fields contain a field with same number as a known field. Must be due to
           // mismatch of schema between writer and reader here.
-          throw new IllegalArgumentException(s"Type mismatch encountered for field:" +
-              s" ${messageDescriptor.getFields.get(number)}")
+          throw QueryCompilationErrors.protobufFieldTypeMismatchError(
+            messageDescriptor.getFields.get(number).toString)
         case None =>
       }
 

@@ -293,6 +293,33 @@ class DataFrame(object):
             raise ValueError("Argument to Union does not contain a valid plan.")
         return DataFrame.withPlan(plan.UnionAll(self._plan, other._plan), session=self._session)
 
+    def unionByName(self, other: "DataFrame", allowMissingColumns: bool = False) -> "DataFrame":
+        """Returns a new :class:`DataFrame` containing union of rows in this and another
+        :class:`DataFrame`.
+
+        This is different from both `UNION ALL` and `UNION DISTINCT` in SQL. To do a SQL-style set
+        union (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined.
+        allowMissingColumns : bool, optional, default False
+           Specify whether to allow missing columns.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame.
+        """
+        if other._plan is None:
+            raise ValueError("Argument to UnionByName does not contain a valid plan.")
+        return DataFrame.withPlan(
+            plan.UnionAll(self._plan, other._plan, allowMissingColumns), session=self._session
+        )
+
     def where(self, condition: Expression) -> "DataFrame":
         return self.filter(condition)
 
