@@ -66,8 +66,8 @@ case class Count(children: Seq[Expression]) extends DeclarativeAggregate
           "expectedNum" -> " >= 1",
           "actualNum" -> "0",
           "legacyNum" -> "0",
-          "legacyConfKey" -> SQLConf.ALLOW_PARAMETERLESS_COUNT.key,
-          "legacyConfValue" -> true.toString
+          "legacyConfKey" -> toSQLConf(SQLConf.ALLOW_PARAMETERLESS_COUNT.key),
+          "legacyConfValue" -> toSQLConfVal(true.toString)
         )
       )
     } else {

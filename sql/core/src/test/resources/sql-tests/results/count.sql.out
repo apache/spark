@@ -152,8 +152,8 @@ org.apache.spark.sql.AnalysisException
     "actualNum" : "0",
     "expectedNum" : " >= 1",
     "functionName" : "`count`",
-    "legacyConfKey" : "spark.sql.legacy.allowParameterlessCount",
-    "legacyConfValue" : "true",
+    "legacyConfKey" : "\"spark.sql.legacy.allowParameterlessCount\"",
+    "legacyConfValue" : "\"true\"",
     "legacyNum" : "0",
     "sqlExpr" : "\"count()\""
   },
