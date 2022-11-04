@@ -370,6 +370,11 @@
           "Cannot use an UnspecifiedFrame. This should have been converted during analysis."
         ]
       },
+      "UNSUPPORTED_INPUT_TYPE" : {
+        "message" : [
+          "The input of <functionName> can't be <dataType> type data."
+        ]
+      },
       "VALUE_OUT_OF_RANGE" : {
         "message" : [
           "The <exprName> must be between <valueRange> (current value = <currentValue>)"
@@ -378,6 +383,12 @@
       "WRONG_NUM_ARGS" : {
         "message" : [
           "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
+        ]
+      },
+      "WRONG_NUM_ARGS_WITH_SUGGESTION" : {
+        "message" : [
+          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>.",
+          "If you have to call this function with <legacyNum> parameters, set the legacy configuration <legacyConfKey> to <legacyConfValue>."
         ]
       },
       "WRONG_NUM_ENDPOINTS" : {

@@ -23,10 +23,11 @@ import com.google.common.primitives.{Doubles, Ints}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.NumericHistogram
@@ -63,7 +64,7 @@ case class HistogramNumeric(
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
   extends TypedImperativeAggregate[NumericHistogram] with ImplicitCastInputTypes
-  with BinaryLike[Expression] {
+  with BinaryLike[Expression] with QueryErrorsBase {
 
   def this(child: Expression, nBins: Expression) = {
     this(child, nBins, 0, 0)
@@ -89,11 +90,26 @@ case class HistogramNumeric(
     if (defaultCheck.isFailure) {
       defaultCheck
     } else if (!nBins.foldable) {
-      TypeCheckFailure(s"${this.prettyName} needs the nBins provided must be a constant literal.")
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "nb",
+          "inputType" -> toSQLType(nBins.dataType),
+          "inputExpr" -> toSQLExpr(nBins))
+      )
     } else if (nb == null) {
-      TypeCheckFailure(s"${this.prettyName} needs nBins value must not be null.")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "nb"))
     } else if (nb.asInstanceOf[Int] < 2) {
-      TypeCheckFailure(s"${this.prettyName} needs nBins to be at least 2, but you supplied $nb.")
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "nb",
+          "valueRange" -> s"[2, ${Int.MaxValue}]",
+          "currentValue" -> toSQLValue(nb, IntegerType)
+        )
+      )
     } else {
       TypeCheckSuccess
     }
