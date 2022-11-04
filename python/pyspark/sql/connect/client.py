@@ -35,7 +35,7 @@ from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.plan import SQL, Range
 from pyspark.sql.types import DataType, StructType, StructField, LongType, StringType
 
-from typing import Optional, Any, Union, TYPE_CHECKING
+from typing import Optional, Any, Union
 
 NumericType = typing.Union[int, float]
 
