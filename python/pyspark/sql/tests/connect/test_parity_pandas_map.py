@@ -22,8 +22,8 @@ class MapInPandasParityTests(MapInPandasTestsMixin, ReusedConnectTestCase):
     def test_empty_dataframes_with_less_columns(self):
         self.check_empty_dataframes_with_less_columns()
 
-    def test_other_than_dataframe(self):
-        self.check_other_than_dataframe()
+    def test_other_than_dataframe_iter(self):
+        self.check_other_than_dataframe_iter()
 
 
 if __name__ == "__main__":
