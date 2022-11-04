@@ -4571,7 +4571,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
     }
   }
 
-  override def prettyName: String = "array_exceseqpt"
+  override def prettyName: String = "array_except"
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ArrayExcept = copy(left = newLeft, right = newRight)
