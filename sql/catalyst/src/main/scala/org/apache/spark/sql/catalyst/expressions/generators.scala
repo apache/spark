@@ -22,6 +22,8 @@ import scala.collection.mutable
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GENERATOR, TreePattern}
@@ -160,16 +162,54 @@ case class Stack(children: Seq[Expression]) extends Generator {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName requires at least 2 arguments.")
-    } else if (children.head.dataType != IntegerType || !children.head.foldable || numRows < 1) {
-      TypeCheckResult.TypeCheckFailure("The number of rows must be a positive constant integer.")
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "expectedNum" -> "> 1",
+          "actualNum" -> children.length.toString)
+      )
+    } else if (children.head.dataType != IntegerType) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> toSQLType(IntegerType),
+          "inputSql" -> toSQLExpr(children.head),
+          "inputType" -> toSQLType(children.head.dataType))
+      )
+    } else if (!children.head.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "n",
+          "inputType" -> toSQLType(IntegerType),
+          "inputExpr" -> toSQLExpr(children.head)
+        )
+      )
+    } else if (numRows < 1) {
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> toSQLId("n"),
+          "valueRange" -> s"(0, ${Int.MaxValue}]",
+          "currentValue" -> toSQLValue(numRows, children.head.dataType)
+        )
+      )
     } else {
       for (i <- 1 until children.length) {
         val j = (i - 1) % numFields
         if (children(i).dataType != elementSchema.fields(j).dataType) {
-          return TypeCheckResult.TypeCheckFailure(
-            s"Argument ${j + 1} (${elementSchema.fields(j).dataType.catalogString}) != " +
-              s"Argument $i (${children(i).dataType.catalogString})")
+          return DataTypeMismatch(
+            errorSubClass = "STACK_COLUMN_DIFF_TYPES",
+            messageParameters = Map(
+              "columnIndex" -> j.toString,
+              "leftParamIndex" -> (j + 1).toString,
+              "leftType" -> toSQLType(elementSchema.fields(j).dataType),
+              "rightParamIndex" -> i.toString,
+              "rightType" -> toSQLType(children(i).dataType)
+            )
+          )
         }
       }
       TypeCheckResult.TypeCheckSuccess
@@ -296,9 +336,14 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
     case _: ArrayType | _: MapType =>
       TypeCheckResult.TypeCheckSuccess
     case _ =>
-      TypeCheckResult.TypeCheckFailure(
-        "input to function explode should be array or map type, " +
-          s"not ${child.dataType.catalogString}")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> toSQLType(TypeCollection(ArrayType, MapType)),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType))
+      )
   }
 
   // hive-compatible default alias for explode function ("col" for array, "key", "value" for map)
@@ -438,9 +483,14 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
     case ArrayType(st: StructType, _) =>
       TypeCheckResult.TypeCheckSuccess
     case _ =>
-      TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName should be array of struct type, " +
-          s"not ${child.dataType.catalogString}")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> toSQLType("ARRAY<STRUCT>"),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType))
+      )
   }
 
   override def elementSchema: StructType = child.dataType match {

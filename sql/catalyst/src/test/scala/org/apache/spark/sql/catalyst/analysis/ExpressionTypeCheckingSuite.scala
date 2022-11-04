@@ -519,10 +519,30 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         "expectedNum" -> "> 0",
         "actualNum" -> "0"))
 
-    assertError(Explode($"intField"),
-      "input to function explode should be array or map type")
-    assertError(PosExplode($"intField"),
-      "input to function explode should be array or map type")
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(Explode($"intField"))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"explode(intField)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"intField\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "(\"ARRAY\" or \"MAP\")"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(PosExplode($"intField"))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"posexplode(intField)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"intField\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "(\"ARRAY\" or \"MAP\")")
+    )
   }
 
   test("check types for CreateNamedStruct") {
