@@ -47,19 +47,17 @@ class ChannelBuilder:
     This is a helper class that is used to create a GRPC channel based on the given
     connection string per the documentation of Spark Connect.
 
+    .. versionadded:: 3.4.0
+
     Examples
     --------
     >>> cb =  ChannelBuilder("sc://localhost")
     ... cb.endpoint
     "localhost:15002
 
-
     >>> cb = ChannelBuilder("sc://localhost/;use_ssl=true;token=aaa")
     ... cb.secure
     True
-
-    .. versionadded:: 3.4.0
-
     """
 
     PARAM_USE_SSL = "use_ssl"
