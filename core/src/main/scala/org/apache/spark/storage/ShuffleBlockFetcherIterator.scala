@@ -799,6 +799,9 @@ final class ShuffleBlockFetcherIterator(
             val msg = s"Received a zero-size buffer for block $blockId from $address " +
               s"(expectedApproxSize = $size, isNetworkReqDone=$isNetworkReqDone)"
             if (blockId.isShuffleChunk) {
+              // Zero-size block may come from nodes with hardware failures, For shuffle chunks,
+              // the original shuffle blocks that belong to that zero-size shuffle chunk is
+              // available and we can opt to fallback immediately.
               logWarning(msg)
               pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(blockId, address)
               // Set result to null to trigger another iteration of the while loop to get either.
