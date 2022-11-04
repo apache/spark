@@ -1317,6 +1317,10 @@ case class ArrayContains(left: Expression, right: Expression)
         DataTypeMismatch(
           errorSubClass = "NULL_TYPE",
           messageParameters = Map("functionName" -> toSQLId(prettyName)))
+      case (NullType, _) =>
+        DataTypeMismatch(
+          errorSubClass = "NULL_TYPE",
+          messageParameters = Map("functionName" -> toSQLId(prettyName)))
       case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
         TypeUtils.checkForOrderingExpr(e2, prettyName)
       case _ =>
