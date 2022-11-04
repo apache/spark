@@ -18,6 +18,9 @@ from typing import Any
 import unittest
 import shutil
 import tempfile
+
+import grpc  # type: ignore
+
 from pyspark.testing.sqlutils import have_pandas
 
 if have_pandas:
@@ -27,7 +30,7 @@ from pyspark.sql import SparkSession, Row
 from pyspark.sql.types import StructType, StructField, LongType, StringType
 
 if have_pandas:
-    from pyspark.sql.connect.client import RemoteSparkSession
+    from pyspark.sql.connect.client import RemoteSparkSession, ChannelBuilder
     from pyspark.sql.connect.function_builder import udf
     from pyspark.sql.connect.functions import lit
 from pyspark.sql.dataframe import DataFrame
@@ -67,6 +70,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
     @classmethod
     def tearDownClass(cls: Any) -> None:
         cls.spark_connect_clean_up_test_data()
+        ReusedPySparkTestCase.tearDownClass()
 
     @classmethod
     def spark_connect_load_test_data(cls: Any):
@@ -177,6 +181,43 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         else:
             actualResult = pandasResult.values.tolist()
             self.assertEqual(len(expectResult), len(actualResult))
+
+
+class ChannelBuilderTests(ReusedPySparkTestCase):
+    def test_invalid_connection_strings(self):
+        invalid = [
+            "scc://host:12",
+            "http://host",
+            "sc:/host:1234/path",
+            "sc://host/path",
+            "sc://host/;parm1;param2",
+        ]
+        for i in invalid:
+            self.assertRaises(AttributeError, ChannelBuilder, i)
+
+        self.assertRaises(AttributeError, ChannelBuilder("sc://host/;token=123").to_channel)
+
+    def test_valid_channel_creation(self):
+        chan = ChannelBuilder("sc://host").to_channel()
+        self.assertIsInstance(chan, grpc.Channel)
+
+        # Sets up a channel without tokens because ssl is not used.
+        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc").to_channel()
+        self.assertIsInstance(chan, grpc.Channel)
+
+        chan = ChannelBuilder("sc://host/;use_ssl=true").to_channel()
+        self.assertIsInstance(chan, grpc.Channel)
+
+    def test_channel_properties(self):
+        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;param1=120%2021")
+        self.assertEqual("host:15002", chan.endpoint)
+        self.assertEqual(True, chan.secure)
+        self.assertEqual("120 21", chan.get("param1"))
+
+    def test_metadata(self):
+        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;param1=120%2021;x-my-header=abcd")
+        md = chan.metadata()
+        self.assertEqual([("param1", "120 21"), ("x-my-header", "abcd")], md)
 
 
 if __name__ == "__main__":
