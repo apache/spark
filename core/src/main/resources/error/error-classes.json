@@ -17,6 +17,31 @@
     ],
     "sqlState" : "22005"
   },
+  "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR" : {
+    "message" : [
+      "Error constructing FileDescriptor for <descFilePath>"
+    ]
+  },
+  "CANNOT_CONVERT_PROTOBUF_FIELD_TYPE_TO_SQL_TYPE" : {
+    "message" : [
+      "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
+    ]
+  },
+  "CANNOT_CONVERT_PROTOBUF_MESSAGE_TYPE_TO_SQL_TYPE" : {
+    "message" : [
+      "Unable to convert <protobufType> of Protobuf to SQL type <toType>."
+    ]
+  },
+  "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_ENUM_TYPE" : {
+    "message" : [
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> cannot be written since it's not defined in ENUM <enumString>"
+    ]
+  },
+  "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_FIELD_TYPE" : {
+    "message" : [
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
+    ]
+  },
   "CANNOT_DECODE_URL" : {
     "message" : [
       "Cannot decode url : <url>."
@@ -29,11 +54,21 @@
     ],
     "sqlState" : "22007"
   },
+  "CANNOT_LOAD_PROTOBUF_CLASS" : {
+    "message" : [
+      "Could not load Protobuf class with name <protobufClassName>. Ensure the class name includes package prefix."
+    ]
+  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
       "Cannot parse decimal"
     ],
     "sqlState" : "42000"
+  },
+  "CANNOT_PARSE_PROTOBUF_DESCRIPTOR" : {
+    "message" : [
+      "Error parsing file <descFilePath> descriptor byte[] into Descriptor object"
+    ]
   },
   "CANNOT_PARSE_TIMESTAMP" : {
     "message" : [
@@ -551,6 +586,11 @@
       "Invalid bucket file: <path>"
     ]
   },
+  "INVALID_BYTE_STRING" : {
+    "message" : [
+      "The expected format is ByteString, but was <unsupported> (<class>)."
+    ]
+  },
   "INVALID_COLUMN_OR_FIELD_DATA_TYPE" : {
     "message" : [
       "Column or field <name> is of type <type> while it's required to be <expectedType>."
@@ -600,6 +640,11 @@
       "<value> is an invalid property value, please use quotes, e.g. SET <key>=<value>"
     ]
   },
+  "INVALID_PROTOBUF_MESSAGE_TYPE" : {
+    "message" : [
+      "<protobufClassName> is not a Protobuf message type"
+    ]
+  },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
       "Invalid SQL syntax: <inputString>"
@@ -617,6 +662,11 @@
         ]
       }
     }
+  },
+  "MALFORMED_PROTOBUF_MESSAGE" : {
+    "message" : [
+      "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
+    ]
   },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [
@@ -669,7 +719,12 @@
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
     ]
   },
-  "NO_UDF_INTERFACE_ERROR" : {
+  "NO_SQL_TYPE_IN_PROTOBUF_SCHEMA" : {
+    "message" : [
+      "Cannot find <catalystFieldPath> in Protobuf schema"
+    ]
+  },
+  "NO_UDF_INTERFACE" : {
     "message" : [
       "UDF class <className> doesn't implement any UDF interface"
     ]
@@ -740,6 +795,46 @@
       "Invalid pivot value '<value>': value data type <valueType> does not match pivot column data type <pivotType>"
     ],
     "sqlState" : "42000"
+  },
+  "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
+    "message" : [
+      "Could not find dependency: <dependencyName>"
+    ]
+  },
+  "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND" : {
+    "message" : [
+      "Error reading Protobuf descriptor file at path: <filePath>"
+    ]
+  },
+  "PROTOBUF_FIELD_MISSING" : {
+    "message" : [
+      "Searching for <field> in Protobuf schema at <protobufSchema> gave <matchSize> matches. Candidates: <matches>"
+    ]
+  },
+  "PROTOBUF_FIELD_MISSING_IN_SQL_SCHEMA" : {
+    "message" : [
+      "Found <field> in Protobuf schema but there is no match in the SQL schema"
+    ]
+  },
+  "PROTOBUF_FIELD_TYPE_MISMATCH" : {
+    "message" : [
+      "Type mismatch encountered for field: <field>"
+    ]
+  },
+  "PROTOBUF_MESSAGE_NOT_FOUND" : {
+    "message" : [
+      "Unable to locate Message <messageName> in Descriptor"
+    ]
+  },
+  "PROTOBUF_TYPE_NOT_SUPPORT" : {
+    "message" : [
+      "Protobuf type not yet supported: <protobufType>."
+    ]
+  },
+  "RECURSIVE_PROTOBUF_SCHEMA" : {
+    "message" : [
+      "Found recursive reference in Protobuf schema, which can not be processed by Spark: <fieldDescriptor>"
+    ]
   },
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [
@@ -825,6 +920,16 @@
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"
+    ]
+  },
+  "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE" : {
+    "message" : [
+      "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
+    ]
+  },
+  "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
+    "message" : [
+      "Attempting to treat <descriptorName> as a Message, but it was <containingType>"
     ]
   },
   "UNPIVOT_REQUIRES_ATTRIBUTES" : {
@@ -3806,7 +3911,7 @@
   },
   "_LEGACY_ERROR_TEMP_2125" : {
     "message" : [
-      "Failed to merge incompatible data types ${leftCatalogString} and ${rightCatalogString}"
+      "Failed to merge incompatible data types <leftCatalogString> and <rightCatalogString>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2126" : {
@@ -4205,6 +4310,121 @@
       "incorrect directory, and then restart this query. If you believe you are receiving",
       "this message in error, you can disable it with the SQL conf",
       "<StreamingCheckpointEscaptedPathCheckEnabled>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2201" : {
+    "message" : [
+      "Partition column <col> not found in schema <schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2203" : {
+    "message" : [
+      "Cannot set timeout duration without enabling processing time timeout in [map|flatMap]GroupsWithState"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2204" : {
+    "message" : [
+      "Cannot get event time watermark timestamp without setting watermark before [map|flatMap]GroupsWithState"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2205" : {
+    "message" : [
+      "Cannot set timeout timestamp without enabling event time timeout in [map|flatMapGroupsWithState"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2206" : {
+    "message" : [
+      "Unable to find batch <batchMetadataFile>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2207" : {
+    "message" : [
+      "Multiple streaming queries are concurrently using <path>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2208" : {
+    "message" : [
+      "<commitProtocol> does not support adding files with an absolute path"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2209" : {
+    "message" : [
+      "Data source <srcName> does not support microbatch processing.",
+      "",
+      "Either the data source is disabled at",
+      "SQLConf.get.DISABLED_V2_STREAMING_MICROBATCH_READERS.key (The disabled sources",
+      "are [<disabledSources>]) or the table <table> does not have MICRO_BATCH_READ",
+      "capability. Meanwhile, the fallback, data source v1, is not available.\""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2210" : {
+    "message" : [
+      "StreamingRelationExec cannot be executed"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2211" : {
+    "message" : [
+      "Invalid output mode: <outputMode>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2212" : {
+    "message" : [
+      "Invalid catalog name: <name>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2214" : {
+    "message" : [
+      "Plugin class for catalog '<name>' does not implement CatalogPlugin: <pluginClassName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2215" : {
+    "message" : [
+      "Cannot find catalog plugin class for catalog '<name>': <pluginClassName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2216" : {
+    "message" : [
+      "Failed to find public no-arg constructor for catalog '<name>': <pluginClassName>)"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2217" : {
+    "message" : [
+      "Failed to call public no-arg constructor for catalog '<name>': <pluginClassName>)"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2218" : {
+    "message" : [
+      "Cannot instantiate abstract catalog plugin class for catalog '<name>': <pluginClassName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2219" : {
+    "message" : [
+      "Failed during instantiating constructor for catalog '<name>': <pluginClassName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2220" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2222" : {
+    "message" : [
+      "Cannot mutate ReadOnlySQLConf."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2223" : {
+    "message" : [
+      "Cannot clone/copy ReadOnlySQLConf."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2224" : {
+    "message" : [
+      "Cannot get SQLConf inside scheduler event loop thread."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2225" : {
+    "message" : [
+      ""
     ]
   },
   "_LEGACY_ERROR_TEMP_2226" : {
