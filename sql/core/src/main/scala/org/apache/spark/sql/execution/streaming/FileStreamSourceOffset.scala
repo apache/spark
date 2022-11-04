@@ -22,14 +22,24 @@ import scala.util.control.Exception._
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
+import org.apache.spark.sql.connector.read.streaming.ComparableOffset
+import org.apache.spark.sql.connector.read.streaming.ComparableOffset.CompareResult
+
 /**
  * Offset for the [[FileStreamSource]].
  *
  * @param logOffset  Position in the [[FileStreamSourceLog]]
  */
-case class FileStreamSourceOffset(logOffset: Long) extends Offset {
+case class FileStreamSourceOffset(logOffset: Long) extends Offset with ComparableOffset {
   override def json: String = {
     Serialization.write(this)(FileStreamSourceOffset.format)
+  }
+
+  override def compareTo(other: ComparableOffset): ComparableOffset.CompareResult = {
+    other match {
+      case o: FileStreamSourceOffset => LongOffset.compareOffsetValues(logOffset, o.logOffset)
+      case _ => CompareResult.NOT_COMPARABLE
+    }
   }
 }
 

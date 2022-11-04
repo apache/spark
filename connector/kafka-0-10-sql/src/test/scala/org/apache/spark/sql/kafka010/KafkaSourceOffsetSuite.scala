@@ -19,6 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import java.io.File
 
+import org.apache.spark.sql.connector.read.streaming.ComparableOffset.CompareResult
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.streaming.OffsetSuite
 import org.apache.spark.sql.test.SharedSparkSession
@@ -95,6 +96,58 @@ class KafkaSourceOffsetSuite extends OffsetSuite with SharedSparkSession {
     val offset = readFromResource("kafka-source-offset-version-2.1.0.txt")
     assert(KafkaSourceOffset(offset) ===
       KafkaSourceOffset(("topic1", 0, 456L), ("topic1", 1, 789L), ("topic2", 0, 0L)))
+  }
+
+  test("comparison of offsets") {
+    // offsets for all topic partitions are equal
+    assert(
+      KafkaSourceOffset(("t", 0, 1L))
+        .compareTo(KafkaSourceOffset(("t", 0, 1L))) === CompareResult.EQUAL)
+
+    // offsets for all topic partitions are less in left side
+    assert(
+      KafkaSourceOffset(("t", 0, 1L), ("t", 1, 1L), ("t2", 0, 1L))
+        .compareTo(KafkaSourceOffset(("t", 0, 2L), ("t", 1, 2L), ("t2", 0, 2L))) ===
+          CompareResult.LESS)
+
+    // offsets for some of topic partitions are less in left side, and offsets for remaining
+    // topic partitions are equal
+    assert(
+      KafkaSourceOffset(("t", 0, 1L), ("t", 1, 1L), ("t2", 0, 1L))
+        .compareTo(KafkaSourceOffset(("t", 0, 2L), ("t", 1, 1L), ("t2", 0, 1L))) ===
+          CompareResult.LESS)
+
+    // offsets for all topic partitions are greater in left side
+    assert(
+      KafkaSourceOffset(("t", 0, 2L), ("t", 1, 2L), ("t2", 0, 2L))
+        .compareTo(KafkaSourceOffset(("t", 0, 1L), ("t", 1, 2L), ("t2", 0, 2L))) ===
+          CompareResult.GREATER)
+
+    // offsets for some of topic partitions are greater in left side, and offsets for remaining
+    // topic partitions are equal
+    assert(
+      KafkaSourceOffset(("t", 0, 2L), ("t", 1, 2L), ("t2", 0, 2L))
+        .compareTo(KafkaSourceOffset(("t", 0, 1L), ("t", 1, 1L), ("t2", 0, 1L))) ===
+          CompareResult.GREATER)
+
+    // offsets for some of topic partitions are greater in left side, and offsets for remaining
+    // topic partitions are less in left side
+    assert(
+      KafkaSourceOffset(("t", 0, 2L), ("t", 1, 1L), ("t2", 1, 1L))
+        .compareTo(KafkaSourceOffset(("t", 0, 1L), ("t", 1, 2L), ("t2", 1, 1L))) ===
+        CompareResult.UNDETERMINED)
+
+    // types of offsets are different
+    assert(
+      KafkaSourceOffset(("t", 0, 2L), ("t", 1, 1L))
+        .compareTo(LongOffset(1L)) === CompareResult.NOT_COMPARABLE)
+  }
+
+  test("comparison of offsets - only compare topic partitions co-exist in both offsets") {
+    // (t2, 0) and (t, 1) will be ignored. (t, 0) will be only one topic partition to be compared.
+    assert(
+      KafkaSourceOffset(("t", 0, 1L), ("t2", 0, 10L))
+        .compareTo(KafkaSourceOffset(("t", 0, 1L), ("t", 1, 5L))) === CompareResult.EQUAL)
   }
 
   private def readFromResource(file: String): SerializedOffset = {

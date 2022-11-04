@@ -28,7 +28,8 @@ import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStre
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
-import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsTriggerAvailableNow}
+import org.apache.spark.sql.connector.read.streaming.{ComparableOffset, MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsTriggerAvailableNow, ValidateOffsetRange}
+import org.apache.spark.sql.connector.read.streaming.ComparableOffset.CompareResult
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -194,6 +195,9 @@ class MicroBatchExecution(
    * (i.e. written to the offsetLog) and is ready for execution.
    */
   private var isCurrentBatchConstructed = false
+
+  private val enableAssertionOffsetRange = sparkSession.conf
+    .get(SQLConf.STREAMING_OFFSET_RANGE_ASSERTION_ENABLED)
 
   /**
    * Signals to the thread executing micro-batches that it should stop running after the next
@@ -578,6 +582,7 @@ class MicroBatchExecution(
         case (source: Source, available: Offset)
           if committedOffsets.get(source).map(_ != available).getOrElse(true) =>
           val current = committedOffsets.get(source).map(_.asInstanceOf[Offset])
+          assertOffsetRange(source, current, available)
           val batch = source.getBatch(current, available)
           assert(batch.isStreaming,
             s"DataFrame returned by getBatch from $source did not have isStreaming=true\n" +
@@ -595,6 +600,8 @@ class MicroBatchExecution(
             case v2: OffsetV2 => v2
           }
           val startOffset = current.getOrElse(stream.initialOffset)
+          assertOffsetRange(stream, Some(startOffset), endOffset)
+
           logDebug(s"Retrieving data from $stream: $current -> $endOffset")
 
           // To be compatible with the v1 source, the `newData` is represented as a logical plan,
@@ -736,6 +743,32 @@ class MicroBatchExecution(
       committedOffsets ++= availableOffsets
     }
     logDebug(s"Completed batch ${currentBatchId}")
+  }
+
+  private def assertOffsetRange(
+      source: SparkDataStream,
+      start: Option[OffsetV2],
+      end: OffsetV2): Unit = {
+    source match {
+      case v: ValidateOffsetRange if v.shouldValidate() && enableAssertionOffsetRange =>
+        (start, end) match {
+          case (None, _) => // no-op
+
+          case (Some(c: ComparableOffset), a: ComparableOffset) =>
+            val res = c.compareTo(a)
+            assert(res == CompareResult.EQUAL || res == CompareResult.LESS,
+              s"Invalid Offset range! start: ${c.json()}, end: ${a.json()}, " +
+                s"comparison result: $res, expected: [" +
+                s"${CompareResult.EQUAL}, ${CompareResult.LESS}]")
+
+          case (Some(s), e) =>
+            assert(assertion = false, "Source requires offset range validation, but the offset " +
+              s"implementation does not implement ComparableOffset. Class of start offset: " +
+              s"${s.getClass}, Class of end offset: ${e.getClass}.")
+        }
+
+      case _ => // no-op
+    }
   }
 
   /** Execute a function while locking the stream from making an progress */

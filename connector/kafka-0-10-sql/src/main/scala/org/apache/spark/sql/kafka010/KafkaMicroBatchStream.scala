@@ -58,7 +58,11 @@ private[kafka010] class KafkaMicroBatchStream(
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends SupportsTriggerAvailableNow with ReportsSourceMetrics with MicroBatchStream with Logging {
+  extends SupportsTriggerAvailableNow
+  with ReportsSourceMetrics
+  with ValidateOffsetRange
+  with MicroBatchStream
+  with Logging {
 
   private[kafka010] val pollTimeoutMs = options.getLong(
     KafkaSourceProvider.CONSUMER_POLL_TIMEOUT,
@@ -121,6 +125,13 @@ private[kafka010] class KafkaMicroBatchStream(
     throw new UnsupportedOperationException(
       "latestOffset(Offset, ReadLimit) should be called instead of this method")
   }
+
+  /**
+   * Don't validate the offset range if `failOnDataLoss` is false, as the mode tolerates
+   * deletion of topic-partitions as well as smaller offset for topic-partition compared to
+   * previous offset.
+   */
+  override def shouldValidate(): Boolean = failOnDataLoss
 
   override def latestOffset(start: Offset, readLimit: ReadLimit): Offset = {
     val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets

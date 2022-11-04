@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.kafka010
 
+import scala.collection.mutable
+
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.sql.connector.read.streaming
-import org.apache.spark.sql.connector.read.streaming.PartitionOffset
+import org.apache.spark.sql.connector.read.streaming.{ComparableOffset, PartitionOffset}
+import org.apache.spark.sql.connector.read.streaming.ComparableOffset.CompareResult
 import org.apache.spark.sql.execution.streaming.{Offset, SerializedOffset}
 
 /**
@@ -28,9 +31,43 @@ import org.apache.spark.sql.execution.streaming.{Offset, SerializedOffset}
  * their offsets.
  */
 private[kafka010]
-case class KafkaSourceOffset(partitionToOffsets: Map[TopicPartition, Long]) extends Offset {
+case class KafkaSourceOffset(partitionToOffsets: Map[TopicPartition, Long])
+  extends Offset with ComparableOffset {
 
   override val json = JsonUtils.partitionOffsets(partitionToOffsets)
+
+  override def compareTo(other: ComparableOffset): ComparableOffset.CompareResult = {
+    // Compare offsets for topic-partitions which exist on both KafkaSourceOffsets.
+    // Ignore the case of topic-partitions being added or removed, as they will be handled with
+    // `failOnDataLoss` option.
+
+    other match {
+      case o: KafkaSourceOffset =>
+        val partitionToOffsetsFromOther = o.partitionToOffsets
+        val partitionsCoExist = partitionToOffsets.keySet.intersect(
+          partitionToOffsetsFromOther.keySet)
+        val results = new mutable.ArrayBuffer[Long]()
+        partitionsCoExist.foreach { tp =>
+          val offset = partitionToOffsets(tp)
+          val offsetFromOther = partitionToOffsetsFromOther(tp)
+          results += (offset - offsetFromOther)
+        }
+
+        if (results.forall(_ == 0L)) {
+          CompareResult.EQUAL
+        } else if (results.forall(_ <= 0L)) {
+          CompareResult.LESS
+        } else if (results.forall(_ >= 0L)) {
+          CompareResult.GREATER
+        } else {
+          // Meaning that this instance is greater for some topic partitions but is less
+          // for some other topic partitions.
+          CompareResult.UNDETERMINED
+        }
+
+      case _ => CompareResult.NOT_COMPARABLE
+    }
+  }
 }
 
 private[kafka010]

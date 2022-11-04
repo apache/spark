@@ -28,7 +28,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
-import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ValidateOffsetRange}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -41,7 +41,7 @@ class RateStreamMicroBatchStream(
     numPartitions: Int = 1,
     options: CaseInsensitiveStringMap,
     checkpointLocation: String)
-  extends MicroBatchStream with Logging {
+  extends MicroBatchStream with ValidateOffsetRange with Logging {
   import RateStreamProvider._
 
   private[sources] val clock = {

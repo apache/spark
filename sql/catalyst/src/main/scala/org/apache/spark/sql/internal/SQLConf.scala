@@ -2014,6 +2014,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STREAMING_OFFSET_RANGE_ASSERTION_ENABLED =
+    buildConf("spark.sql.streaming.microbatch.assertOffsetRange.enabled")
+      .internal()
+      .doc("When true, microbatch execution will perform assertion for offset range (start, end)" +
+        " during batch planning.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")

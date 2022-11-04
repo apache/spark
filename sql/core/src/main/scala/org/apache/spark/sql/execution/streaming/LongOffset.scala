@@ -17,15 +17,26 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.sql.connector.read.streaming.ComparableOffset
+import org.apache.spark.sql.connector.read.streaming.ComparableOffset.CompareResult
+import org.apache.spark.sql.execution.streaming.LongOffset.compareOffsetValues
+
 /**
  * A simple offset for sources that produce a single linear stream of data.
  */
-case class LongOffset(offset: Long) extends Offset {
+case class LongOffset(offset: Long) extends Offset with ComparableOffset {
 
   override val json = offset.toString
 
   def +(increment: Long): LongOffset = new LongOffset(offset + increment)
   def -(decrement: Long): LongOffset = new LongOffset(offset - decrement)
+
+  override def compareTo(other: ComparableOffset): ComparableOffset.CompareResult = {
+    other match {
+      case o: LongOffset => compareOffsetValues(offset, o.offset)
+      case _ => CompareResult.NOT_COMPARABLE
+    }
+  }
 }
 
 object LongOffset {
@@ -35,4 +46,15 @@ object LongOffset {
    * @return new LongOffset
    */
   def apply(offset: SerializedOffset) : LongOffset = new LongOffset(offset.json.toLong)
+
+  def compareOffsetValues(left: Long, right: Long): CompareResult = {
+    val comp = left - right
+    if (comp == 0) {
+      CompareResult.EQUAL
+    } else if (comp > 0) {
+      CompareResult.GREATER
+    } else {
+      CompareResult.LESS
+    }
+  }
 }

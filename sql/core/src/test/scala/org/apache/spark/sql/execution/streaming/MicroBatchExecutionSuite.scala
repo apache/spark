@@ -24,10 +24,12 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should._
 import org.scalatest.time.{Seconds, Span}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.connector.read.streaming
-import org.apache.spark.sql.connector.read.streaming.SparkDataStream
+import org.apache.spark.sql.connector.read.streaming.{ComparableOffset, SparkDataStream, ValidateOffsetRange}
+import org.apache.spark.sql.connector.read.streaming.ComparableOffset.CompareResult
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest, Trigger}
@@ -294,5 +296,153 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
         case _ => throw new IllegalArgumentException("incorrect offset type: " + offset)
       }
     }
+  }
+
+  test("offset range assertion") {
+    def updateOffset(
+        source: OffsetAssertionTestSource,
+        newOffset: MockOffset): StreamAction = new AddData {
+      override def addData(query: Option[StreamExecution]): (SparkDataStream, streaming.Offset) = {
+        source.setOffset(newOffset)
+        (source, source.getOffset.get)
+      }
+    }
+
+    def assertExceptionMessage(
+        exc: Throwable,
+        startOffset: MockOffset,
+        endOffset: MockOffset): Unit = {
+      assert(exc.getCause.isInstanceOf[AssertionError])
+      val excMessage = exc.getCause.getMessage
+      assert(excMessage.contains("Invalid Offset range!"))
+      assert(excMessage.contains(s"start: ${startOffset.json()}"))
+      assert(excMessage.contains(s"end: ${endOffset.json()}"))
+      assert(excMessage.contains(s"comparison result: ${endOffset.desiredCompareResult}"))
+    }
+
+    val testSource = OffsetAssertionTestSource(spark)
+    val df = testSource.toDF()
+    testStream(df)(
+      // first offset would be OK for anything, as nothing to compare with
+      updateOffset(testSource, MockOffset(0L, CompareResult.NOT_COMPARABLE)),
+      CheckNewAnswer(0, 1, 2, 3, 4),
+
+      // prev < next : OK
+      updateOffset(testSource, MockOffset(1L, CompareResult.LESS)),
+      CheckNewAnswer(0, 1, 2, 3, 4),
+
+      // prev = next : OK
+      // Note that two offset instances are not actually same, hence next microbatch
+      // will still be triggered. We are just checking the logic for offset assertion.
+      updateOffset(testSource, MockOffset(2L, CompareResult.EQUAL)),
+      CheckNewAnswer(0, 1, 2, 3, 4)
+    )
+
+    val testSource2 = OffsetAssertionTestSource(spark)
+    val df2 = testSource2.toDF()
+    testStream(df2)(
+      // first offset would be OK for anything, as nothing to compare with
+      updateOffset(testSource2, MockOffset(0L, CompareResult.NOT_COMPARABLE)),
+      CheckNewAnswer(0, 1, 2, 3, 4),
+
+      // prev > next : FAIL
+      updateOffset(testSource2, MockOffset(3L, CompareResult.GREATER)),
+      ExpectFailure[SparkException] { throwable =>
+        assertExceptionMessage(throwable, MockOffset(0L, CompareResult.NOT_COMPARABLE),
+          MockOffset(3L, CompareResult.GREATER))
+      }
+    )
+
+    val testSource3 = OffsetAssertionTestSource(spark)
+    val df3 = testSource3.toDF()
+    testStream(df3)(
+      // first offset would be OK for anything, as nothing to compare with
+      updateOffset(testSource3, MockOffset(0L, CompareResult.NOT_COMPARABLE)),
+      CheckNewAnswer(0, 1, 2, 3, 4),
+
+      // undetermined for comparison between prev and next : FAIL
+      updateOffset(testSource3, MockOffset(4L, CompareResult.UNDETERMINED)),
+      ExpectFailure[SparkException] { throwable =>
+        assertExceptionMessage(throwable, MockOffset(0L, CompareResult.NOT_COMPARABLE),
+          MockOffset(4L, CompareResult.UNDETERMINED))
+      }
+    )
+
+    val testSource4 = OffsetAssertionTestSource(spark)
+    val df4 = testSource4.toDF()
+    testStream(df4)(
+      // first offset would be OK for anything, as nothing to compare with
+      updateOffset(testSource4, MockOffset(0L, CompareResult.NOT_COMPARABLE)),
+      CheckNewAnswer(0, 1, 2, 3, 4),
+
+      // two offsets are not comparable : FAIL
+      updateOffset(testSource4, MockOffset(5L, CompareResult.NOT_COMPARABLE)),
+      ExpectFailure[SparkException] { throwable =>
+        assertExceptionMessage(throwable, MockOffset(0L, CompareResult.NOT_COMPARABLE),
+          MockOffset(5L, CompareResult.NOT_COMPARABLE))
+      }
+    )
+  }
+
+  test("offset range assertion - source disabled validation of offset range") {
+    def updateOffset(
+        source: OffsetAssertionTestSource,
+        newOffset: MockOffset): StreamAction = new AddData {
+      override def addData(query: Option[StreamExecution]): (SparkDataStream, streaming.Offset) = {
+        source.setOffset(newOffset)
+        (source, source.getOffset.get)
+      }
+    }
+
+    val testSource = OffsetAssertionTestSource(spark, validateOffsetRange = false)
+    val df = testSource.toDF()
+    testStream(df)(
+      // first offset would be OK for anything, as nothing to compare with
+      updateOffset(testSource, MockOffset(0L, CompareResult.NOT_COMPARABLE)),
+      CheckNewAnswer(0, 1, 2, 3, 4),
+
+      // prev > next : should FAIL, but the source turns off validation, so should not fail
+      updateOffset(testSource, MockOffset(3L, CompareResult.GREATER)),
+      CheckNewAnswer(0, 1, 2, 3, 4)
+    )
+  }
+
+  case class MockOffset(id: Long, desiredCompareResult: CompareResult)
+    extends Offset with ComparableOffset {
+    override def compareTo(other: ComparableOffset): ComparableOffset.CompareResult = {
+      other match {
+        case m: MockOffset => m.desiredCompareResult
+        case _ => CompareResult.NOT_COMPARABLE
+      }
+    }
+
+    override def json(): String = {
+      s"""{ "id": $id, "desiredCompareResult": $desiredCompareResult }"""
+    }
+  }
+
+  case class OffsetAssertionTestSource(spark: SparkSession, validateOffsetRange: Boolean = true)
+    extends Source with ValidateOffsetRange {
+
+    @volatile var currentOffset: Option[MockOffset] = None
+
+    override def getOffset: Option[Offset] = currentOffset
+
+    override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+      // consistently produce 0 to 4 regardless of range. we don't aim to test the data from
+      // this source.
+      val plan = Range(0L, 5L, 1, None, isStreaming = true)
+      Dataset.ofRows(spark, plan)
+    }
+
+    override def shouldValidate(): Boolean = validateOffsetRange
+
+    def setOffset(newOffset: MockOffset): Unit = {
+      currentOffset = Some(newOffset)
+    }
+
+    def toDF(): DataFrame = Dataset.ofRows(spark, StreamingExecutionRelation(this, spark))
+    override def schema: StructType = new StructType().add("value", LongType)
+    override def stop(): Unit = {}
   }
 }

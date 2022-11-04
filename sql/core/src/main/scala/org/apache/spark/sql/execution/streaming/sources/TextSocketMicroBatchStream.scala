@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
-import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ValidateOffsetRange}
 import org.apache.spark.sql.execution.streaming.LongOffset
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -39,7 +39,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * multiple reasons, including no support for fault recovery.
  */
 class TextSocketMicroBatchStream(host: String, port: Int, numPartitions: Int)
-  extends MicroBatchStream with Logging {
+  extends MicroBatchStream with ValidateOffsetRange with Logging {
 
   @GuardedBy("this")
   private var socket: Socket = null
