@@ -294,7 +294,7 @@ AQE converts sort-merge join to broadcast hash join when the runtime statistics 
        <td><code>spark.sql.adaptive.autoBroadcastJoinThreshold</code></td>
        <td>(none)</td>
        <td>
-         Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when performing a join. By setting this value to -1 broadcasting can be disabled. The default value is same with <code>spark.sql.autoBroadcastJoinThreshold</code>. Note that, this config is used only in adaptive framework.
+         Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when performing a join. By setting this value to -1, broadcasting can be disabled. The default value is the same with <code>spark.sql.autoBroadcastJoinThreshold</code>. Note that, this config is used only in adaptive framework.
        </td>
        <td>3.2.0</td>
      </tr>
