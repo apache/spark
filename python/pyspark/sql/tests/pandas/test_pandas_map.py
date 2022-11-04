@@ -94,20 +94,30 @@ class MapInPandasTestsMixin:
         actual = df.repartition(1).mapInPandas(func, "a long").collect()
         self.assertEqual(set((r.a for r in actual)), set(range(100)))
 
-    def test_other_than_dataframe(self):
+    def test_other_than_dataframe_iter(self):
         with QuietTest(self.sc):
-            self.check_other_than_dataframe()
+            self.check_other_than_dataframe_iter()
 
-    def check_other_than_dataframe(self):
-        def bad_iter(_):
+    def check_other_than_dataframe_iter(self):
+        def no_iter(_):
+            return 1
+
+        def bad_iter_elem(_):
             return iter([1])
 
         with self.assertRaisesRegex(
             PythonException,
-            "Return type of the user-defined function should be Pandas.DataFrame, "
+            "Return type of the user-defined function should be iterator of Pandas.DataFrame, "
             "but is <class 'int'>",
         ):
-            self.spark.range(10, numPartitions=3).mapInPandas(bad_iter, "a int, b string").count()
+            (self.spark.range(10, numPartitions=3).mapInPandas(no_iter, "a int").count())
+
+        with self.assertRaisesRegex(
+            PythonException,
+            "Return type of the user-defined function should be iterator of Pandas.DataFrame, "
+            "but is iterator of <class 'int'>",
+        ):
+            (self.spark.range(10, numPartitions=3).mapInPandas(bad_iter_elem, "a int").count())
 
     def test_empty_iterator(self):
         def empty_iter(_):
