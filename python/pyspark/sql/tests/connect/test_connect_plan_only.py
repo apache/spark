@@ -204,6 +204,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(proto.SetOperation.SET_OP_TYPE_UNION, plan3.root.set_op.set_op_type)
 
     def test_except(self):
+        # SPARK-41010: test `except` API for Python client.
         df1 = self.connect.readTable(table_name=self.tbl_name)
         df2 = self.connect.readTable(table_name=self.tbl_name)
         plan1 = df1.exceptAll(df2)._plan.to_proto(self.connect)
@@ -211,6 +212,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(proto.SetOperation.SET_OP_TYPE_EXCEPT, plan1.root.set_op.set_op_type)
 
     def test_intersect(self):
+        # SPARK-41010: test `intersect` API for Python client.
         df1 = self.connect.readTable(table_name=self.tbl_name)
         df2 = self.connect.readTable(table_name=self.tbl_name)
         plan1 = df1.intersect(df2)._plan.to_proto(self.connect)
