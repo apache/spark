@@ -73,7 +73,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1022",
+  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42000",
   "messageParameters" : {
     "index" : "0",
     "size" : "2"
@@ -95,7 +96,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1022",
+  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42000",
   "messageParameters" : {
     "index" : "-1",
     "size" : "2"
@@ -117,7 +119,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1022",
+  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42000",
   "messageParameters" : {
     "index" : "3",
     "size" : "2"
