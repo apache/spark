@@ -78,7 +78,7 @@ that these options will be deprecated in future release as more optimizations ar
     <td>4194304 (4 MB)</td>
     <td>
       The estimated cost to open a file, measured by the number of bytes could that be scanned in the same
-      time. This is used when putting multiple files into a partition. It is better to over-estimated,
+      time. This is used when putting multiple files into a partition. It is better to over-estimate,
       then the partitions with small files will be faster than partitions with bigger files (which is
       scheduled first). This configuration is effective only when using file-based sources such as Parquet,
       JSON and ORC.
