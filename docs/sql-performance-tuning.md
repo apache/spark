@@ -40,7 +40,7 @@ Configuration of in-memory caching can be done using the `setConf` method on `Sp
   <td><code>spark.sql.inMemoryColumnarStorage.compressed</code></td>
   <td>true</td>
   <td>
-    When set to true Spark SQL will automatically select a compression codec for each column based
+    When set to true, Spark SQL will automatically select a compression codec for each column based
     on statistics of the data.
   </td>
   <td>1.0.1</td>
