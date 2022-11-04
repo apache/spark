@@ -618,7 +618,7 @@ private[hive] class HiveClientImpl(
         throw new NoSuchTableException(dbName, tableName))
     val newParameters = new JHashMap[String, String]()
     newParameters.putAll(parameters.asJava)
-    hiveTable.setParameters(newParameters)
+    hiveTable.getTTable.setParameters(newParameters)
     shim.alterTable(client, s"$dbName.$tableName", hiveTable)
   }
 
