@@ -481,12 +481,12 @@ case class Add(
     // TODO: do not reorder consecutive `Add`s with different `evalMode`
     val reorderResult =
       orderCommutative({ case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, evalMode))
-    if (resolved && reorderResult.resolved && reorderResult.dataType == dataType) {
-      reorderResult
+    if (resolved && reorderResult.resolved && reorderResult.dataType != dataType) {
+      // SPARK-40903: Append cast for the canonicalization of decimal Add if the result data type is
+      // changed. Otherwise, it may cause data checking error within ComplexTypeMergingExpression.
+      Cast(reorderResult, dataType)
     } else {
-      // SPARK-40903: Avoid reordering decimal Add for canonicalization if the result data type is
-      // changed, which may cause data checking error within ComplexTypeMergingExpression.
-      withCanonicalizedChildren
+      reorderResult
     }
   }
 }

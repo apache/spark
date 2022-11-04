@@ -206,4 +206,16 @@ class CanonicalizeSuite extends SparkFunSuite {
     assert(!Add(Add(literal4, literal5), literal1).semanticEquals(
       Add(Add(literal1, literal5), literal4)))
   }
+
+  test("SPARK-40903: Append Casting if the canonicalization result type is changed") {
+    val d = Decimal(1.2)
+    val literal1 = Literal.create(d, DecimalType(2, 1))
+    val literal2 = Literal.create(d, DecimalType(12, 5))
+    val literal3 = Literal.create(d, DecimalType(12, 6))
+    val add1 = Add(literal1, Add(literal2, literal3)).canonicalized
+    val add2 = Add(Add(literal3, literal2), literal1).canonicalized
+    assert(add1.isInstanceOf[Cast] && add1.dataType == DecimalType(15, 6))
+    assert(add2.isInstanceOf[Cast] && add2.dataType == DecimalType(15, 6))
+    assert(add1 == add2)
+  }
 }
