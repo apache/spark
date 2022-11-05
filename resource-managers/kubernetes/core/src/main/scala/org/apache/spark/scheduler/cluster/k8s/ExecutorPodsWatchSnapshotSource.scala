@@ -45,6 +45,7 @@ class ExecutorPodsWatchSnapshotSource(
     conf: SparkConf) extends Logging {
 
   private var watchConnection: Closeable = _
+  private var watchApplicationId: String = null
   private val enableWatching = conf.get(KUBERNETES_EXECUTOR_ENABLE_API_WATCHER)
 
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
@@ -60,6 +61,7 @@ class ExecutorPodsWatchSnapshotSource(
       require(watchConnection == null, "Cannot start the watcher twice.")
       logDebug(s"Starting to watch for pods with labels $SPARK_APP_ID_LABEL=$applicationId," +
         s" $SPARK_ROLE_LABEL=$SPARK_POD_EXECUTOR_ROLE.")
+      watchApplicationId = applicationId
       watchConnection = kubernetesClient.pods()
         .inNamespace(namespace)
         .withLabel(SPARK_APP_ID_LABEL, applicationId)
@@ -78,6 +80,15 @@ class ExecutorPodsWatchSnapshotSource(
     }
   }
 
+  def reset(watcher: ExecutorPodsWatcher): Unit = {
+    stop()
+    watchConnection = kubernetesClient.pods()
+      .inNamespace(namespace)
+      .withLabel(SPARK_APP_ID_LABEL, watchApplicationId)
+      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+      .watch(watcher)
+  }
+
   private class ExecutorPodsWatcher extends Watcher[Pod] {
     override def eventReceived(action: Action, pod: Pod): Unit = {
       val podName = pod.getMetadata.getName
@@ -86,8 +97,13 @@ class ExecutorPodsWatchSnapshotSource(
     }
 
     override def onClose(e: WatcherException): Unit = {
-      logWarning("Kubernetes client has been closed (this is expected if the application is" +
-        " shutting down.)", e)
+      if (e != null && e.isHttpGone) {
+        logDebug(s"Got HTTP Gone code, resource version changed in k8s api: $e")
+        reset(this)
+      } else {
+        logWarning("Kubernetes client has been closed (this is expected if the application is" +
+          " shutting down.)", e)
+      }
     }
 
     override def onClose(): Unit = {
