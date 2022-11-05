@@ -95,6 +95,18 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.selectExpr("key", "json_tuple(jstring, 'f1', 'f2', 'f3', 'f4', 'f5')"),
       expected)
+
+    val nonStringDF = Seq(1, 2).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        nonStringDF.select(json_tuple($"a", "1")).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.NON_STRING_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"json_tuple(a, 1)\"",
+        "funcName" -> "`json_tuple`"
+      )
+    )
   }
 
   test("json_tuple filter and group") {

@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Lag, Literal, NonFoldableLiteral}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -844,6 +844,48 @@ class DataFrameWindowFunctionsSuite extends QueryTest
           "z", null, "v", "z", "y", "x", "za"),
         Row("a", 8, null, null, null, null, null, null, null, null,
           "v", "z", null, "v", "z", "y", "va")))
+  }
+
+  test("lag - Offset expression <offset> must be a literal") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("b", 2, nullStr),
+      ("c", 3, nullStr),
+      ("a", 4, "y"),
+      ("b", 5, nullStr),
+      ("a", 6, "z"),
+      ("a", 7, "v"),
+      ("a", 8, nullStr)).
+      toDF("key", "order", "value")
+    val window = Window.orderBy($"order")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(
+          $"key",
+          $"order",
+          $"value",
+          lead($"value", 1).over(window),
+          lead($"value", 2).over(window),
+          lead($"value", 0, null, true).over(window),
+          lead($"value", 1, null, true).over(window),
+          lead($"value", 2, null, true).over(window),
+          lead($"value", 3, null, true).over(window),
+          lead(concat($"value", $"key"), 1, null, true).over(window),
+          Column(Lag($"value".expr, NonFoldableLiteral(1), Literal(null), true)).over(window),
+          lag($"value", 2).over(window),
+          lag($"value", 0, null, true).over(window),
+          lag($"value", 1, null, true).over(window),
+          lag($"value", 2, null, true).over(window),
+          lag($"value", 3, null, true).over(window),
+          lag(concat($"value", $"key"), 1, null, true).over(window)).orderBy($"order").collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.FRAME_LESS_OFFSET_WITHOUT_FOLDABLE",
+      parameters = Map(
+        "sqlExpr" -> "\"lag(value, nonfoldableliteral(), NULL)\"",
+        "offset" -> "\"(- nonfoldableliteral())\"")
+    )
   }
 
   test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {

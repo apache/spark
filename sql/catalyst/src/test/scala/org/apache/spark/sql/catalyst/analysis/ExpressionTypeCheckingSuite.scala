@@ -745,4 +745,50 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       )
     )
   }
+
+  test("Lag") {
+    val lag = Lag(Literal(1), NonFoldableLiteral(10), Literal(null), true)
+    assert(lag.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "FRAME_LESS_OFFSET_WITHOUT_FOLDABLE",
+        messageParameters = Map("offset" -> "\"(- nonfoldableliteral())\"")
+      ))
+  }
+
+  test("SpecifiedWindowFrame") {
+    val swf1 = SpecifiedWindowFrame(RangeFrame, Literal(10.0), Literal(2147483648L))
+    assert(swf1.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
+        messageParameters = Map(
+          "lower" -> "\"10.0\"",
+          "upper" -> "\"2147483648\"",
+          "lowerType" -> "\"DOUBLE\"",
+          "upperType" -> "\"BIGINT\"")
+      )
+    )
+
+    val swf2 = SpecifiedWindowFrame(RangeFrame, NonFoldableLiteral(10.0), Literal(2147483648L))
+    assert(swf2.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
+        messageParameters = Map(
+          "location" -> "lower",
+          "expression" -> "\"nonfoldableliteral()\"")
+      )
+    )
+  }
+
+  test("WindowSpecDefinition") {
+    val wsd = WindowSpecDefinition(
+      UnresolvedAttribute("a") :: Nil,
+      SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+      UnspecifiedFrame)
+    assert(wsd.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNSPECIFIED_FRAME",
+        messageParameters = Map.empty
+      )
+    )
+  }
 }
