@@ -676,12 +676,12 @@
     "subClass" : {
       "CREATE_MANAGED_TABLE" : {
         "message" : [
-          "Creation of the managed table <table> failed. Please, consider to choose another table name or specify another location explicitly."
+          "Creation of the managed table <table> failed. Please, consider to specify another location explicitly or to choose another table name since the location is derived from it."
         ]
       },
       "RENAME_MANAGED_TABLE" : {
         "message" : [
-          "Renaming of the managed table <table> to <newTable> failed. Please, consider to choose another new name."
+          "Renaming of the managed table <table> to <newTable> failed. Please, consider to choose another new table name since the location is derived from it."
         ]
       }
     }
