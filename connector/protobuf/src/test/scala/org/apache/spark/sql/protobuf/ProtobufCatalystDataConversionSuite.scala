@@ -123,7 +123,7 @@ class ProtobufCatalystDataConversionSuite
     StringType -> ("StringMsg", ""))
 
   testingTypes.foreach { dt =>
-    val seed = 1 + scala.util.Random.nextInt((1024 - 1) + 1)
+    val seed = scala.util.Random.nextInt(RandomDataGenerator.MAX_STR_LEN)
     test(s"single $dt with seed $seed") {
 
       val (messageName, defaultValue) = catalystTypesToProtoMessages(dt.fields(0).dataType)
@@ -131,8 +131,13 @@ class ProtobufCatalystDataConversionSuite
       val rand = new scala.util.Random(seed)
       val generator = RandomDataGenerator.forType(dt, rand = rand).get
       var data = generator()
-      while (data.asInstanceOf[Row].get(0) == defaultValue) // Do not use default values, since
-        data = generator()                                  // from_protobuf() returns null in v3.
+      // Do not use default values, since from_protobuf() returns null in v3.
+      while (
+        data != null &&
+        (data.asInstanceOf[Row].get(0) == defaultValue ||
+          (data.asInstanceOf[Row].get(0).isInstanceOf[Array[Byte]] &&
+          data.asInstanceOf[Row].get(0).asInstanceOf[Array[Byte]].isEmpty)))
+        data = generator()
 
       val converter = CatalystTypeConverters.createToCatalystConverter(dt)
       val input = Literal.create(converter(data), dt)
