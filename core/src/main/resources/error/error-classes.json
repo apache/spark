@@ -5115,7 +5115,7 @@
       "in operator <operator>"
     ]
   },
-  "INVALID_EXPRESSION_IN_WHERE" : {
+  "_LEGACY_ERROR_TEMP_2440" : {
     "message" : [
       "Aggregate/Window/Generate expressions are not valid in where clause of the query.",
       "Expression in where clause: [<condition>]",
