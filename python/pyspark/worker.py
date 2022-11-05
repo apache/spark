@@ -214,6 +214,8 @@ def verify_pandas_result(result, return_type, assign_cols_by_name):
 
 
 def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
+    _assign_cols_by_name = assign_cols_by_name(runner_conf)
+
     def wrapped(left_key_series, left_value_series, right_key_series, right_value_series):
         import pandas as pd
 
@@ -226,13 +228,16 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
             key_series = left_key_series if not left_df.empty else right_key_series
             key = tuple(s[0] for s in key_series)
             result = f(key, left_df, right_df)
-        verify_pandas_result(result, return_type, assign_cols_by_name(runner_conf))
+        verify_pandas_result(result, return_type, _assign_cols_by_name)
+
         return result
 
     return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), to_arrow_type(return_type))]
 
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
+    _assign_cols_by_name = assign_cols_by_name(runner_conf)
+
     def wrapped(key_series, value_series):
         import pandas as pd
 
@@ -241,7 +246,8 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
         elif len(argspec.args) == 2:
             key = tuple(s[0] for s in key_series)
             result = f(key, pd.concat(value_series, axis=1))
-        verify_pandas_result(result, return_type, assign_cols_by_name(runner_conf))
+        verify_pandas_result(result, return_type, _assign_cols_by_name)
+
         return result
 
     return lambda k, v: [(wrapped(k, v), to_arrow_type(return_type))]
