@@ -912,6 +912,11 @@
     ],
     "sqlState" : "22023"
   },
+  "STAR_GROUP_BY_POS" : {
+    "message" : [
+      "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
+    ]
+  },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create table or view <relationName> because it already exists.",
@@ -1722,11 +1727,6 @@
   "_LEGACY_ERROR_TEMP_1018" : {
     "message" : [
       "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table` yet."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1019" : {
-    "message" : [
-      "Star (*) is not allowed in select list when GROUP BY ordinal position is used"
     ]
   },
   "_LEGACY_ERROR_TEMP_1020" : {
@@ -5115,7 +5115,7 @@
       "in operator <operator>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2440" : {
+  "INVALID_EXPRESSION_IN_WHERE" : {
     "message" : [
       "Aggregate/Window/Generate expressions are not valid in where clause of the query.",
       "Expression in where clause: [<condition>]",
