@@ -98,7 +98,8 @@ class ExecutorPodsWatchSnapshotSource(
 
     override def onClose(e: WatcherException): Unit = {
       if (e != null && e.isHttpGone) {
-        logDebug(s"Got HTTP Gone code, resource version changed in k8s api: $e")
+        logDebug(s"Got HTTP Gone code, should be reset watcher connection, " +
+          s"resource version changed in k8s api: $e")
         reset(this)
       } else {
         logWarning("Kubernetes client has been closed (this is expected if the application is" +
