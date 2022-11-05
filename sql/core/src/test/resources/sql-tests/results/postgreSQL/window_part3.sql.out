@@ -331,10 +331,13 @@ SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-
-The query operator `Join` contains one or more unsupported
-expression types Aggregate, Window or Generate.
-Invalid expressions: [row_number() OVER (ORDER BY spark_catalog.default.empsalary.salary ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)]
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2441",
+  "messageParameters" : {
+    "invalidExprSqls" : "row_number() OVER (ORDER BY spark_catalog.default.empsalary.salary ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)",
+    "operator" : "Join"
+  }
+}
 
 
 -- !query
@@ -343,10 +346,13 @@ SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-
-The query operator `Aggregate` contains one or more unsupported
-expression types Aggregate, Window or Generate.
-Invalid expressions: [RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)]
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2441",
+  "messageParameters" : {
+    "invalidExprSqls" : "RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)",
+    "operator" : "Aggregate"
+  }
+}
 
 
 -- !query
@@ -438,11 +444,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "Buckets expression must be positive, but got: 0",
-    "sqlExpr" : "ntile(0)"
+    "currentValue" : "0",
+    "exprName" : "buckets",
+    "sqlExpr" : "\"ntile(0)\"",
+    "valueRange" : "(0, 2147483647]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -461,11 +468,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "The 'offset' argument of nth_value must be greater than zero but it is 0.",
-    "sqlExpr" : "nth_value(spark_catalog.default.tenk1.four, 0)"
+    "currentValue" : "0L",
+    "exprName" : "offset",
+    "sqlExpr" : "\"nth_value(four, 0)\"",
+    "valueRange" : "(0, 9223372036854775807]"
   },
   "queryContext" : [ {
     "objectType" : "",

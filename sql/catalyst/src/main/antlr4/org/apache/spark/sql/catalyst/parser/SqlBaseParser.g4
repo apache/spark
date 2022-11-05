@@ -440,7 +440,8 @@ dmlStatementNoWith
           LEFT_PAREN sourceQuery=query RIGHT_PAREN) sourceAlias=tableAlias
         ON mergeCondition=booleanExpression
         matchedClause*
-        notMatchedClause*                                                          #mergeIntoTable
+        notMatchedClause*
+        notMatchedBySourceClause*                                                  #mergeIntoTable
     ;
 
 queryOrganization
@@ -537,7 +538,11 @@ matchedClause
     : WHEN MATCHED (AND matchedCond=booleanExpression)? THEN matchedAction
     ;
 notMatchedClause
-    : WHEN NOT MATCHED (AND notMatchedCond=booleanExpression)? THEN notMatchedAction
+    : WHEN NOT MATCHED (BY TARGET)? (AND notMatchedCond=booleanExpression)? THEN notMatchedAction
+    ;
+
+notMatchedBySourceClause
+    : WHEN NOT MATCHED BY SOURCE (AND notMatchedBySourceCond=booleanExpression)? THEN notMatchedBySourceAction
     ;
 
 matchedAction
@@ -550,6 +555,11 @@ notMatchedAction
     : INSERT ASTERISK
     | INSERT LEFT_PAREN columns=multipartIdentifierList RIGHT_PAREN
         VALUES LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
+    ;
+
+notMatchedBySourceAction
+    : DELETE
+    | UPDATE SET assignmentList
     ;
 
 assignmentList
@@ -1320,6 +1330,7 @@ ansiNonReserved
     | SKEWED
     | SORT
     | SORTED
+    | SOURCE
     | START
     | STATISTICS
     | STORED
@@ -1332,6 +1343,7 @@ ansiNonReserved
     | SYSTEM_VERSION
     | TABLES
     | TABLESAMPLE
+    | TARGET
     | TBLPROPERTIES
     | TEMPORARY
     | TERMINATED
@@ -1610,6 +1622,7 @@ nonReserved
     | SOME
     | SORT
     | SORTED
+    | SOURCE
     | START
     | STATISTICS
     | STORED
@@ -1623,6 +1636,7 @@ nonReserved
     | TABLE
     | TABLES
     | TABLESAMPLE
+    | TARGET
     | TBLPROPERTIES
     | TEMPORARY
     | TERMINATED

@@ -23,7 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.UnresolvedStar
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -32,7 +32,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  */
 trait SparkConnectPlanTest extends SharedSparkSession {
 
-  def transform(rel: proto.Relation): LogicalPlan = {
+  def transform(rel: proto.Relation): logical.LogicalPlan = {
     new SparkConnectPlanner(rel, spark).transform()
   }
 
@@ -149,9 +149,25 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val res = transform(
       proto.Relation.newBuilder
-        .setSort(proto.Sort.newBuilder.addAllSortFields(Seq(f).asJava).setInput(readRel))
+        .setSort(
+          proto.Sort.newBuilder
+            .addAllSortFields(Seq(f).asJava)
+            .setInput(readRel)
+            .setIsGlobal(true))
         .build())
     assert(res.nodeName == "Sort")
+    assert(res.asInstanceOf[logical.Sort].global)
+
+    val res2 = transform(
+      proto.Relation.newBuilder
+        .setSort(
+          proto.Sort.newBuilder
+            .addAllSortFields(Seq(f).asJava)
+            .setInput(readRel)
+            .setIsGlobal(false))
+        .build())
+    assert(res2.nodeName == "Sort")
+    assert(!res2.asInstanceOf[logical.Sort].global)
   }
 
   test("Simple Union") {

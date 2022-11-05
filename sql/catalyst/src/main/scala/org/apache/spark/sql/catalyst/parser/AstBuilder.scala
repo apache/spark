@@ -29,6 +29,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.apache.commons.codec.DecoderException
 import org.apache.commons.codec.binary.Hex
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
@@ -425,8 +426,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             UpdateAction(condition, withAssignments(clause.matchedAction().assignmentList()))
           }
         } else {
-          // It should not be here.
-          throw QueryParsingErrors.unrecognizedMatchedActionError(clause)
+          throw SparkException.internalError(
+            s"Unrecognized matched action: ${clause.matchedAction().getText}")
         }
       }
     }
@@ -446,12 +447,27 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             InsertAction(condition, columns.zip(values).map(kv => Assignment(kv._1, kv._2)).toSeq)
           }
         } else {
-          // It should not be here.
-          throw QueryParsingErrors.unrecognizedNotMatchedActionError(clause)
+          throw SparkException.internalError(
+            s"Unrecognized matched action: ${clause.notMatchedAction().getText}")
         }
       }
     }
-    if (matchedActions.isEmpty && notMatchedActions.isEmpty) {
+    val notMatchedBySourceActions = ctx.notMatchedBySourceClause().asScala.map {
+      clause => {
+        val notMatchedBySourceAction = clause.notMatchedBySourceAction()
+        if (notMatchedBySourceAction.DELETE() != null) {
+          DeleteAction(Option(clause.notMatchedBySourceCond).map(expression))
+        } else if (notMatchedBySourceAction.UPDATE() != null) {
+          val condition = Option(clause.notMatchedBySourceCond).map(expression)
+          UpdateAction(condition,
+            withAssignments(clause.notMatchedBySourceAction().assignmentList()))
+        } else {
+          throw SparkException.internalError(
+            s"Unrecognized matched action: ${clause.notMatchedBySourceAction().getText}")
+        }
+      }
+    }
+    if (matchedActions.isEmpty && notMatchedActions.isEmpty && notMatchedBySourceActions.isEmpty) {
       throw QueryParsingErrors.mergeStatementWithoutWhenClauseError(ctx)
     }
     // children being empty means that the condition is not set
@@ -463,13 +479,19 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     if (notMatchedActionSize >= 2 && !notMatchedActions.init.forall(_.condition.nonEmpty)) {
       throw QueryParsingErrors.nonLastNotMatchedClauseOmitConditionError(ctx)
     }
+    val notMatchedBySourceActionSize = notMatchedBySourceActions.length
+    if (notMatchedBySourceActionSize >= 2 &&
+     !notMatchedBySourceActions.init.forall(_.condition.nonEmpty)) {
+      throw QueryParsingErrors.nonLastNotMatchedBySourceClauseOmitConditionError(ctx)
+    }
 
     MergeIntoTable(
       aliasedTarget,
       aliasedSource,
       mergeCondition,
       matchedActions.toSeq,
-      notMatchedActions.toSeq)
+      notMatchedActions.toSeq,
+      notMatchedBySourceActions.toSeq)
   }
 
   /**
@@ -2397,7 +2419,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
                 s"contains illegal character for hexBinary: $padding$value");
           }
         case other =>
-          throw QueryParsingErrors.literalValueTypeUnsupportedError(other, ctx)
+          throw QueryParsingErrors.literalValueTypeUnsupportedError(
+            unsupportedType = other,
+            supportedTypes =
+              Seq("DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X"),
+            ctx)
       }
     } catch {
       case e: IllegalArgumentException =>

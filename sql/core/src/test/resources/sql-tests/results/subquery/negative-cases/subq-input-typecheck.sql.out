@@ -114,11 +114,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "\nThe number of columns in the left hand side of an IN subquery does not match the\nnumber of columns in the output of subquery.\n#columns in left hand side: 1.\n#columns in right hand side: 2.\nLeft side columns:\n[t1.t1a].\nRight side columns:\n[t2.t2a, t2.t2b].",
-    "sqlExpr" : "(t1.t1a IN (listquery(t1.t1a)))"
+    "leftColumns" : "\"t1a\"",
+    "leftLength" : "1",
+    "rightColumns" : "\"t2a\", \"t2b\"",
+    "rightLength" : "2",
+    "sqlExpr" : "\"(t1a IN (listquery(t1a)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -141,11 +143,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "\nThe number of columns in the left hand side of an IN subquery does not match the\nnumber of columns in the output of subquery.\n#columns in left hand side: 2.\n#columns in right hand side: 1.\nLeft side columns:\n[t1.t1a, t1.t1b].\nRight side columns:\n[t2.t2a].",
-    "sqlExpr" : "(named_struct('t1a', t1.t1a, 't1b', t1.t1b) IN (listquery(t1.t1a)))"
+    "leftColumns" : "\"t1a\", \"t1b\"",
+    "leftLength" : "2",
+    "rightColumns" : "\"t2a\"",
+    "rightLength" : "1",
+    "sqlExpr" : "\"(named_struct('t1a', t1a, 't1b', t1b) IN (listquery(t1a)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -169,11 +173,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "\nThe data type of one or more elements in the left hand side of an IN subquery\nis not compatible with the data type of the output of the subquery\nMismatched columns:\n[(t4.t4a:double, t5.t5a:timestamp), (t4.t4c:string, t5.t5c:bigint)]\nLeft side:\n[double, string, string].\nRight side:\n[timestamp, string, bigint].",
-    "sqlExpr" : "(named_struct('t4a', t4.t4a, 't4b', t4.t4b, 't4c', t4.t4c) IN (listquery()))"
+    "leftType" : "\"DOUBLE\", \"STRING\", \"STRING\"",
+    "mismatchedColumns" : "(t4.t4a:double, t5.t5a:timestamp), (t4.t4c:string, t5.t5c:bigint)",
+    "rightType" : "\"TIMESTAMP\", \"STRING\", \"BIGINT\"",
+    "sqlExpr" : "\"(named_struct('t4a', t4a, 't4b', t4b, 't4c', t4c) IN (listquery()))\""
   },
   "queryContext" : [ {
     "objectType" : "",

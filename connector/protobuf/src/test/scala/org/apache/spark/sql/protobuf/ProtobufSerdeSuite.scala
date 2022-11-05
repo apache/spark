@@ -20,9 +20,10 @@ package org.apache.spark.sql.protobuf
 import com.google.protobuf.Descriptors.Descriptor
 import com.google.protobuf.DynamicMessage
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.NoopFilters
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
-import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
@@ -35,7 +36,7 @@ class ProtobufSerdeSuite extends SharedSparkSession {
   import ProtoSerdeSuite._
   import ProtoSerdeSuite.MatchType._
 
-  val testFileDesc = testFile("protobuf/serde_suite.desc").replace("file:/", "/")
+  val testFileDesc = testFile("serde_suite.desc").replace("file:/", "/")
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SerdeSuiteProtos$"
 
   test("Test basic conversion") {
@@ -65,22 +66,24 @@ class ProtobufSerdeSuite extends SharedSparkSession {
 
   test("Fail to convert with field type mismatch") {
     val protoFile = ProtobufUtils.buildDescriptor(testFileDesc, "MissMatchTypeInRoot")
-
     withFieldMatchType { fieldMatch =>
       assertFailedConversionMessage(
         protoFile,
         Deserializer,
         fieldMatch,
-        "Cannot convert Protobuf field 'foo' to SQL field 'foo' because schema is incompatible " +
-          s"(protoType = org.apache.spark.sql.protobuf.MissMatchTypeInRoot.foo " +
-          s"LABEL_OPTIONAL LONG INT64, sqlType = ${CATALYST_STRUCT.head.dataType.sql})".stripMargin)
+        errorClass = "CANNOT_CONVERT_PROTOBUF_MESSAGE_TYPE_TO_SQL_TYPE",
+        params = Map(
+          "protobufType" -> "MissMatchTypeInRoot",
+          "toType" -> toSQLType(CATALYST_STRUCT)))
 
       assertFailedConversionMessage(
         protoFile,
         Serializer,
         fieldMatch,
-        s"Cannot convert SQL field 'foo' to Protobuf field 'foo' because schema is incompatible " +
-          s"""(sqlType = ${CATALYST_STRUCT.head.dataType.sql}, protoType = LONG)""")
+        errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
+        params = Map(
+          "protobufType" -> "MissMatchTypeInRoot",
+          "toType" -> toSQLType(CATALYST_STRUCT)))
     }
   }
 
@@ -91,9 +94,22 @@ class ProtobufSerdeSuite extends SharedSparkSession {
       .add("foo", new StructType().add("bar", IntegerType, nullable = false))
 
     // serialize fails whether or not 'bar' is nullable
-    val byNameMsg = "Cannot find field 'foo.bar' in Protobuf schema"
-    assertFailedConversionMessage(protoFile, Serializer, BY_NAME, byNameMsg)
-    assertFailedConversionMessage(protoFile, Serializer, BY_NAME, byNameMsg, nonnullCatalyst)
+    assertFailedConversionMessage(
+      protoFile,
+      Serializer,
+      BY_NAME,
+      errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
+      params = Map(
+        "protobufType" -> "FieldMissingInProto",
+        "toType" -> toSQLType(CATALYST_STRUCT)))
+
+    assertFailedConversionMessage(protoFile,
+      Serializer,
+      BY_NAME,
+      errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
+      params = Map(
+        "protobufType" -> "FieldMissingInProto",
+        "toType" -> toSQLType(nonnullCatalyst)))
   }
 
   test("Fail to convert with deeply nested field type mismatch") {
@@ -107,18 +123,21 @@ class ProtobufSerdeSuite extends SharedSparkSession {
         protoFile,
         Deserializer,
         fieldMatch,
-        s"Cannot convert Protobuf field 'top.foo.bar' to SQL field 'top.foo.bar' because schema " +
-          s"is incompatible (protoType = org.apache.spark.sql.protobuf.protos.TypeMiss.bar " +
-          s"LABEL_OPTIONAL LONG INT64, sqlType = INT)",
-        catalyst)
+        catalyst,
+        errorClass = "CANNOT_CONVERT_PROTOBUF_MESSAGE_TYPE_TO_SQL_TYPE",
+        params = Map(
+          "protobufType" -> "MissMatchTypeInDeepNested",
+          "toType" -> toSQLType(catalyst)))
 
       assertFailedConversionMessage(
         protoFile,
         Serializer,
         fieldMatch,
-        "Cannot convert SQL field 'top.foo.bar' to Protobuf field 'top.foo.bar' because schema " +
-          """is incompatible (sqlType = INT, protoType = LONG)""",
-        catalyst)
+        catalyst,
+        errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
+        params = Map(
+          "protobufType" -> "MissMatchTypeInDeepNested",
+          "toType" -> toSQLType(catalyst)))
     }
   }
 
@@ -130,7 +149,10 @@ class ProtobufSerdeSuite extends SharedSparkSession {
       protoFile,
       Serializer,
       BY_NAME,
-      "Found field 'boo' in Protobuf schema but there is no match in the SQL schema")
+      errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
+      params = Map(
+        "protobufType" -> "FieldMissingInSQLRoot",
+        "toType" -> toSQLType(CATALYST_STRUCT)))
 
     /* deserializing should work regardless of whether the extra field is missing
      in SQL Schema or not */
@@ -144,7 +166,10 @@ class ProtobufSerdeSuite extends SharedSparkSession {
       protoNestedFile,
       Serializer,
       BY_NAME,
-      "Found field 'foo.baz' in Protobuf schema but there is no match in the SQL schema")
+      errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
+      params = Map(
+        "protobufType" -> "FieldMissingInSQLNested",
+        "toType" -> toSQLType(CATALYST_STRUCT)))
 
     /* deserializing should work regardless of whether the extra field is missing
       in SQL Schema or not */
@@ -161,20 +186,28 @@ class ProtobufSerdeSuite extends SharedSparkSession {
       protoSchema: Descriptor,
       serdeFactory: SerdeFactory[_],
       fieldMatchType: MatchType,
-      expectedCauseMessage: String,
-      catalystSchema: StructType = CATALYST_STRUCT): Unit = {
-    val e = intercept[IncompatibleSchemaException] {
+      catalystSchema: StructType = CATALYST_STRUCT,
+      errorClass: String,
+      params: Map[String, String]): Unit = {
+
+    val e = intercept[AnalysisException] {
       serdeFactory.create(catalystSchema, protoSchema, fieldMatchType)
     }
+
     val expectMsg = serdeFactory match {
       case Deserializer =>
-        s"Cannot convert Protobuf type ${protoSchema.getName} to SQL type ${catalystSchema.sql}."
+        s"[CANNOT_CONVERT_PROTOBUF_MESSAGE_TYPE_TO_SQL_TYPE] Unable to convert" +
+          s" ${protoSchema.getName} of Protobuf to SQL type ${toSQLType(catalystSchema)}."
       case Serializer =>
-        s"Cannot convert SQL type ${catalystSchema.sql} to Protobuf type ${protoSchema.getName}."
+        s"[UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE] Unable to convert SQL type" +
+          s" ${toSQLType(catalystSchema)} to Protobuf type ${protoSchema.getName}."
     }
 
     assert(e.getMessage === expectMsg)
-    assert(e.getCause.getMessage === expectedCauseMessage)
+    checkError(
+      exception = e,
+      errorClass = errorClass,
+      parameters = params)
   }
 
   def withFieldMatchType(f: MatchType => Unit): Unit = {

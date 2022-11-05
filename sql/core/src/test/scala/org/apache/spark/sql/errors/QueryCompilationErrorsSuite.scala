@@ -227,7 +227,7 @@ class QueryCompilationErrorsSuite
       parameters = Map[String, String]())
   }
 
-  test("NO_UDF_INTERFACE_ERROR: java udf class does not implement any udf interface") {
+  test("NO_UDF_INTERFACE: java udf class does not implement any udf interface") {
     val className = "org.apache.spark.sql.errors.MyCastToString"
     val e = intercept[AnalysisException](
       spark.udf.registerJava(
@@ -237,7 +237,7 @@ class QueryCompilationErrorsSuite
     )
     checkError(
       exception = e,
-      errorClass = "NO_UDF_INTERFACE_ERROR",
+      errorClass = "NO_UDF_INTERFACE",
       parameters = Map("className" -> className))
   }
 

@@ -15,7 +15,13 @@ SELECT udf(a), udf(COUNT(b)) FROM testData
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping expressions sequence is empty, and 'testdata.a' is not an aggregate function. Wrap '(CAST(udf(cast(count(b) as string)) AS BIGINT) AS `udf(count(b))`)' in windowing function(s) or wrap 'testdata.a' in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
+  "messageParameters" : {
+    "aggExprs" : "(CAST(udf(cast(count(b) as string)) AS BIGINT) AS `udf(count(b))`)",
+    "sqlExpr" : "testdata.a"
+  }
+}
 
 
 -- !query
@@ -176,7 +182,12 @@ SELECT udf(COUNT(b)) AS k FROM testData GROUP BY k
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-aggregate functions are not allowed in GROUP BY, but found CAST(udf(cast(count(b) as string)) AS BIGINT)
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2424",
+  "messageParameters" : {
+    "sqlExpr" : "CAST(udf(cast(count(b) as string)) AS BIGINT)"
+  }
+}
 
 
 -- !query
@@ -303,7 +314,13 @@ SELECT udf(id) FROM range(10) HAVING id > 0
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping expressions sequence is empty, and 'id' is not an aggregate function. Wrap '()' in windowing function(s) or wrap 'id' in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
+  "messageParameters" : {
+    "aggExprs" : "()",
+    "sqlExpr" : "id"
+  }
+}
 
 
 -- !query
@@ -586,10 +603,13 @@ SELECT udf(count(*)) FROM test_agg WHERE count(*) > 1L
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-
-Aggregate/Window/Generate expressions are not valid in where clause of the query.
-Expression in where clause: [(count(1) > 1L)]
-Invalid expressions: [count(1)]
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "messageParameters" : {
+    "condition" : "(count(1) > 1L)",
+    "invalidExprSqls" : "count(1)"
+  }
+}
 
 
 -- !query
@@ -598,10 +618,13 @@ SELECT udf(count(*)) FROM test_agg WHERE count(*) + 1L > 1L
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-
-Aggregate/Window/Generate expressions are not valid in where clause of the query.
-Expression in where clause: [((count(1) + 1L) > 1L)]
-Invalid expressions: [count(1)]
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "messageParameters" : {
+    "condition" : "((count(1) + 1L) > 1L)",
+    "invalidExprSqls" : "count(1)"
+  }
+}
 
 
 -- !query
@@ -610,7 +633,10 @@ SELECT udf(count(*)) FROM test_agg WHERE k = 1 or k = 2 or count(*) + 1L > 1L or
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-
-Aggregate/Window/Generate expressions are not valid in where clause of the query.
-Expression in where clause: [(((test_agg.k = 1) OR (test_agg.k = 2)) OR (((count(1) + 1L) > 1L) OR (max(test_agg.k) > 1)))]
-Invalid expressions: [count(1), max(test_agg.k)]
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "messageParameters" : {
+    "condition" : "(((test_agg.k = 1) OR (test_agg.k = 2)) OR (((count(1) + 1L) > 1L) OR (max(test_agg.k) > 1)))",
+    "invalidExprSqls" : "count(1), max(test_agg.k)"
+  }
+}

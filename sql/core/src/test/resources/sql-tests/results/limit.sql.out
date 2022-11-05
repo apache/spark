@@ -50,7 +50,13 @@ SELECT * FROM testdata LIMIT -1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must be equal to or greater than 0, but got -1
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2403",
+  "messageParameters" : {
+    "name" : "limit",
+    "v" : "-1"
+  }
+}
 
 
 -- !query
@@ -59,7 +65,13 @@ SELECT * FROM testData TABLESAMPLE (-1 ROWS)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must be equal to or greater than 0, but got -1
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2403",
+  "messageParameters" : {
+    "name" : "limit",
+    "v" : "-1"
+  }
+}
 
 
 -- !query
@@ -76,7 +88,13 @@ SELECT * FROM testdata LIMIT CAST(NULL AS INT)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The evaluated limit expression must not be null, but got CAST(NULL AS INT)
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2402",
+  "messageParameters" : {
+    "limitExpr" : "CAST(NULL AS INT)",
+    "name" : "limit"
+  }
+}
 
 
 -- !query
@@ -85,7 +103,13 @@ SELECT * FROM testdata LIMIT key > 3
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must evaluate to a constant value, but got (spark_catalog.default.testdata.key > 3)
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2400",
+  "messageParameters" : {
+    "limitExpr" : "(spark_catalog.default.testdata.key > 3)",
+    "name" : "limit"
+  }
+}
 
 
 -- !query
@@ -94,7 +118,13 @@ SELECT * FROM testdata LIMIT true
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must be integer type, but got boolean
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2401",
+  "messageParameters" : {
+    "dataType" : "boolean",
+    "name" : "limit"
+  }
+}
 
 
 -- !query
@@ -103,7 +133,13 @@ SELECT * FROM testdata LIMIT 'a'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must be integer type, but got string
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2401",
+  "messageParameters" : {
+    "dataType" : "string",
+    "name" : "limit"
+  }
+}
 
 
 -- !query

@@ -92,6 +92,10 @@ private[sql] trait QueryErrorsBase {
     quoteByDefault(conf)
   }
 
+  def toSQLConfVal(conf: String): String = {
+    quoteByDefault(conf)
+  }
+
   def toDSOption(option: String): String = {
     quoteByDefault(option)
   }

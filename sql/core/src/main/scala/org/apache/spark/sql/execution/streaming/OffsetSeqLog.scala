@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.streaming
 
 
-import java.{util => ju}
 import java.io.{InputStream, OutputStream}
 import java.nio.charset.StandardCharsets._
 
@@ -46,23 +45,6 @@ import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
  */
 class OffsetSeqLog(sparkSession: SparkSession, path: String)
   extends HDFSMetadataLog[OffsetSeq](sparkSession, path) {
-
-  private val cachedMetadata = new ju.TreeMap[Long, OffsetSeq]()
-
-  override def add(batchId: Long, metadata: OffsetSeq): Boolean = {
-    val added = super.add(batchId, metadata)
-    if (added) {
-      // cache metadata as it will be read again
-      cachedMetadata.put(batchId, metadata)
-      // we don't access metadata for (batchId - 2) batches; evict them
-      cachedMetadata.headMap(batchId - 2, true).clear()
-    }
-    added
-  }
-
-  override def get(batchId: Long): Option[OffsetSeq] = {
-    Option(cachedMetadata.get(batchId)).orElse(super.get(batchId))
-  }
 
   override protected def deserialize(in: InputStream): OffsetSeq = {
     // called inside a try-finally where the underlying stream is closed in the caller
