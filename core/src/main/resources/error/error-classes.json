@@ -335,6 +335,11 @@
           "The lower bound of a window frame must be <comparison> to the upper bound."
         ]
       },
+      "STACK_COLUMN_DIFF_TYPES" : {
+        "message" : [
+          "The data type of the column (<columnIndex>) do not have the same type: <leftType> (<leftParamIndex>) <> <rightType> (<rightParamIndex>)."
+        ]
+      },
       "UNEXPECTED_CLASS_TYPE" : {
         "message" : [
           "class <className> not found"
@@ -365,6 +370,11 @@
           "Cannot use an UnspecifiedFrame. This should have been converted during analysis."
         ]
       },
+      "UNSUPPORTED_INPUT_TYPE" : {
+        "message" : [
+          "The input of <functionName> can't be <dataType> type data."
+        ]
+      },
       "VALUE_OUT_OF_RANGE" : {
         "message" : [
           "The <exprName> must be between <valueRange> (current value = <currentValue>)"
@@ -373,6 +383,12 @@
       "WRONG_NUM_ARGS" : {
         "message" : [
           "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
+        ]
+      },
+      "WRONG_NUM_ARGS_WITH_SUGGESTION" : {
+        "message" : [
+          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>.",
+          "If you have to call this function with <legacyNum> parameters, set the legacy configuration <legacyConfKey> to <legacyConfValue>."
         ]
       },
       "WRONG_NUM_ENDPOINTS" : {
@@ -751,6 +767,12 @@
       "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22005"
+  },
+  "ORDER_BY_POS_OUT_OF_RANGE" : {
+    "message" : [
+      "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
+    ],
+    "sqlState" : "42000"
   },
   "OUT_OF_DECIMAL_TYPE_RANGE" : {
     "message" : [
@@ -1715,11 +1737,6 @@
   "_LEGACY_ERROR_TEMP_1021" : {
     "message" : [
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1022" : {
-    "message" : [
-      "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
     ]
   },
   "_LEGACY_ERROR_TEMP_1023" : {
