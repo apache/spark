@@ -593,7 +593,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
 
   test("to_json - struct: Unable to convert column of ObjectType to JSON") {
     val schema = StructType(StructField("a", ObjectType(classOf[java.lang.Integer])) :: Nil)
-    val struct = Literal.create(create_row(new Integer(1)), schema)
+    val struct = Literal.create(create_row(Integer.valueOf(1)), schema)
     assert(StructsToJson(Map.empty, struct).checkInputDataTypes() ==
       DataTypeMismatch(
         errorSubClass = "CANNOT_CONVERT_TO_JSON",

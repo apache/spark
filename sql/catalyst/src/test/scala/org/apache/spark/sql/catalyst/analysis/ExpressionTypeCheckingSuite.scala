@@ -746,7 +746,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     )
   }
 
-  test("Lag") {
+  test("check types for Lag") {
     val lag = Lag(Literal(1), NonFoldableLiteral(10), Literal(null), true)
     assert(lag.checkInputDataTypes() ==
       DataTypeMismatch(
@@ -755,7 +755,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       ))
   }
 
-  test("SpecifiedWindowFrame") {
+  test("check types for SpecifiedWindowFrame") {
     val swf1 = SpecifiedWindowFrame(RangeFrame, Literal(10.0), Literal(2147483648L))
     assert(swf1.checkInputDataTypes() ==
       DataTypeMismatch(
@@ -764,7 +764,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
           "lower" -> "\"10.0\"",
           "upper" -> "\"2147483648\"",
           "lowerType" -> "\"DOUBLE\"",
-          "upperType" -> "\"BIGINT\"")
+          "upperType" -> "\"BIGINT\""
+        )
       )
     )
 
@@ -774,12 +775,13 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         errorSubClass = "SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
         messageParameters = Map(
           "location" -> "lower",
-          "expression" -> "\"nonfoldableliteral()\"")
+          "expression" -> "\"nonfoldableliteral()\""
+        )
       )
     )
   }
 
-  test("WindowSpecDefinition") {
+  test("check types for WindowSpecDefinition") {
     val wsd = WindowSpecDefinition(
       UnresolvedAttribute("a") :: Nil,
       SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
