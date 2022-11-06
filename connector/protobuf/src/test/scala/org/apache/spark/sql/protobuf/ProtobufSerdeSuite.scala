@@ -190,6 +190,18 @@ class ProtobufSerdeSuite extends SharedSparkSession {
       parameters = Map("descFilePath" -> testFileDesc))
   }
 
+  test("raise cannot construct protobuf descriptor error") {
+    val testFileDesc = testFile("basicmessage_noimports.desc").replace("file:/", "/")
+    val e = intercept[AnalysisException] {
+      ProtobufUtils.parseFileDescriptorSet(testFileDesc)
+    }
+
+    checkError(
+      exception = e,
+      errorClass = "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR",
+      parameters = Map("descFilePath" -> testFileDesc))
+  }
+
   /**
    * Attempt to convert `catalystSchema` to `protoSchema` (or vice-versa if `deserialize` is
    * true), assert that it fails, and assert that the _cause_ of the thrown exception has a

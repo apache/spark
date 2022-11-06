@@ -189,7 +189,7 @@ private[sql] object ProtobufUtils extends Logging {
     }
   }
 
-  private def parseFileDescriptorSet(descFilePath: String): List[Descriptors.FileDescriptor] = {
+  def parseFileDescriptorSet(descFilePath: String): List[Descriptors.FileDescriptor] = {
     var fileDescriptorSet: DescriptorProtos.FileDescriptorSet = null
     try {
       val dscFile = new BufferedInputStream(new FileInputStream(descFilePath))
@@ -208,7 +208,7 @@ private[sql] object ProtobufUtils extends Logging {
         ).toList
       fileDescriptorList
     } catch {
-      case e: Descriptors.DescriptorValidationException =>
+      case e: Exception =>
         throw QueryCompilationErrors.failedParsingDescriptorError(descFilePath, e)
     }
   }
