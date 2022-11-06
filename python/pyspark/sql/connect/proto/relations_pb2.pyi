@@ -75,6 +75,7 @@ class Relation(google.protobuf.message.Message):
     DEDUPLICATE_FIELD_NUMBER: builtins.int
     RANGE_FIELD_NUMBER: builtins.int
     SUBQUERY_ALIAS_FIELD_NUMBER: builtins.int
+    REPARTITION_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -109,6 +110,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def subquery_alias(self) -> global___SubqueryAlias: ...
     @property
+    def repartition(self) -> global___Repartition: ...
+    @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
         self,
@@ -129,6 +132,7 @@ class Relation(google.protobuf.message.Message):
         deduplicate: global___Deduplicate | None = ...,
         range: global___Range | None = ...,
         subquery_alias: global___SubqueryAlias | None = ...,
+        repartition: global___Repartition | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -158,6 +162,8 @@ class Relation(google.protobuf.message.Message):
             b"read",
             "rel_type",
             b"rel_type",
+            "repartition",
+            b"repartition",
             "sample",
             b"sample",
             "set_op",
@@ -199,6 +205,8 @@ class Relation(google.protobuf.message.Message):
             b"read",
             "rel_type",
             b"rel_type",
+            "repartition",
+            b"repartition",
             "sample",
             b"sample",
             "set_op",
@@ -231,6 +239,7 @@ class Relation(google.protobuf.message.Message):
         "deduplicate",
         "range",
         "subquery_alias",
+        "repartition",
         "unknown",
     ] | None: ...
 
@@ -1022,3 +1031,37 @@ class SubqueryAlias(google.protobuf.message.Message):
     ) -> None: ...
 
 global___SubqueryAlias = SubqueryAlias
+
+class Repartition(google.protobuf.message.Message):
+    """Relation repartition."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    NUM_PARTITIONS_FIELD_NUMBER: builtins.int
+    SHUFFLE_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """Required. The input relation."""
+    num_partitions: builtins.int
+    """Required. Must be positive."""
+    shuffle: builtins.bool
+    """Optional. Default value is false."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        num_partitions: builtins.int = ...,
+        shuffle: builtins.bool = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "input", b"input", "num_partitions", b"num_partitions", "shuffle", b"shuffle"
+        ],
+    ) -> None: ...
+
+global___Repartition = Repartition
