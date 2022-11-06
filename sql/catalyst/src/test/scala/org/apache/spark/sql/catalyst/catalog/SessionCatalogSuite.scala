@@ -1589,7 +1589,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[NoSuchTempFunctionException] {
           catalog.dropTempFunction("func1", ignoreIfNotExists = false)
         },
-        errorClass =  "ROUTINE_NOT_FOUND",
+        errorClass = "ROUTINE_NOT_FOUND",
         parameters = Map("routineName" -> "`func1`")
       )
       catalog.dropTempFunction("func1", ignoreIfNotExists = true)
