@@ -72,6 +72,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.RANGE => transformRange(rel.getRange)
       case proto.Relation.RelTypeCase.SUBQUERY_ALIAS =>
         transformSubqueryAlias(rel.getSubqueryAlias)
+      case proto.Relation.RelTypeCase.REPARTITION => transformRepartition(rel.getRepartition)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -105,6 +106,10 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       rel.getWithReplacement,
       if (rel.hasSeed) rel.getSeed.getSeed else Utils.random.nextLong,
       transformRelation(rel.getInput))
+  }
+
+  private def transformRepartition(rel: proto.Repartition): LogicalPlan = {
+    logical.Repartition(rel.getNumPartitions, rel.getShuffle, transformRelation(rel.getInput))
   }
 
   private def transformRange(rel: proto.Range): LogicalPlan = {
