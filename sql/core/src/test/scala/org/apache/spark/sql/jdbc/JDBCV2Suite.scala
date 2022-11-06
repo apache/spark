@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
 import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
@@ -2628,6 +2628,15 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     assert(indexes1.isEmpty)
 
     sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
+    checkError(
+      exception = intercept[IndexAlreadyExistsException] {
+        sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
+      },
+      errorClass = "INDEX_ALREADY_EXISTS",
+      parameters = Map(
+        "message" -> "Failed to create index people_index in test.people"
+      )
+    )
     assert(jdbcTable.indexExists("people_index"))
     val indexes2 = jdbcTable.listIndexes()
     assert(!indexes2.isEmpty)
@@ -2636,6 +2645,15 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     assert(tableIndex.indexName() == "people_index")
 
     sql(s"DROP INDEX people_index ON TABLE h2.test.people")
+    checkError(
+      exception = intercept[NoSuchIndexException] {
+        sql(s"DROP INDEX people_index ON TABLE h2.test.people")
+      },
+      errorClass = "INDEX_NOT_FOUND",
+      parameters = Map(
+        "message" -> "Failed to drop index people_index in test.people"
+      )
+    )
     assert(jdbcTable.indexExists("people_index") == false)
     val indexes3 = jdbcTable.listIndexes()
     assert(indexes3.isEmpty)
