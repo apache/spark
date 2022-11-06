@@ -22,9 +22,8 @@ import java.net.URL
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.test.SharedSparkSession
-
 
 /**
  * Tests for [[org.apache.spark.sql.internal.SharedState]].
@@ -34,6 +33,7 @@ class SharedStateSuite extends SharedSparkSession {
   override protected def sparkConf: SparkConf = {
     super.sparkConf
       .set("spark.hadoop.fs.defaultFS", "file:///")
+      .set("spark.sql.catalog.spark_catalog.defaultDatabase", "default_database_not_exists")
   }
 
   test("SPARK-31692: Url handler factory should have the hadoop configs from Spark conf") {
@@ -51,5 +51,15 @@ class SharedStateSuite extends SharedSparkSession {
 
     assert(conf.isInstanceOf[Configuration])
     assert(conf.asInstanceOf[Configuration].get("fs.defaultFS") == "file:///")
+  }
+
+  test("Default database does not exist") {
+    checkError(
+      exception = intercept[SparkException] {
+        spark.sharedState.externalCatalog
+      },
+      errorClass = "DEFAULT_DATABASE_NOT_EXISTS",
+      parameters = Map("defaultDatabase" -> "default_database_not_exists")
+    )
   }
 }
