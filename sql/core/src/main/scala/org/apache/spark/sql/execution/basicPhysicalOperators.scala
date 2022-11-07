@@ -153,7 +153,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
       val nullCheck = if (bound.nullable) {
         s"${ev.isNull} || "
       } else {
-        s""
+        ""
       }
 
       s"""

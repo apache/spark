@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import java.util.{Locale, UUID}
 
+import scala.collection.mutable.ListBuffer
 import scala.concurrent.Future
 
 import org.apache.spark.{MapOutputStatistics, SparkFunSuite, TaskContext}
@@ -28,12 +29,12 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.plans.logical.{Limit, LocalRelation, LogicalPlan, Statistics, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Limit, LocalRelation, LogicalPlan, Statistics, UnresolvedHint}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
@@ -189,6 +190,51 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
 
   test("inject columnar AQE off") {
     testInjectColumnar(false)
+  }
+
+  test("SPARK-39991: AQE should retain column statistics from completed query stages") {
+    val extensions = create { extensions =>
+      extensions.injectColumnar(_ =>
+        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
+    }
+    withSession(extensions) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, true)
+      session.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      assert(session.sessionState.columnarRules.contains(
+        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+      import session.sqlContext.implicits._
+      // perform a join to inject a shuffle exchange
+      val left = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("l1", "l2")
+      val right = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("r1", "r2")
+      val data = left.join(right, $"l1" === $"r1")
+        // repartitioning avoids having the add operation pushed up into the LocalTableScan
+        .repartition(1)
+      val df = data.selectExpr("l2 + r2")
+      // execute the plan so that the final adaptive plan is available
+      df.collect()
+
+      // check that column stats exist
+      def findColumnStats(plan: SparkPlan,
+          columnStats: ListBuffer[AttributeMap[ColumnStat]]): Unit = {
+        plan match {
+          case a: AdaptiveSparkPlanExec =>
+            findColumnStats(a.executedPlan, columnStats)
+          case qs: ShuffleQueryStageExec =>
+            columnStats += qs.computeStats().get.attributeStats
+            findColumnStats(qs.plan, columnStats)
+          case _ =>
+            plan.children.foreach(findColumnStats(_, columnStats))
+        }
+      }
+
+      // check for expected column stats (hard-coded in MyShuffleExchangeExec)
+      val columnStats = ListBuffer[AttributeMap[ColumnStat]]()
+      findColumnStats(df.queryExecution.executedPlan, columnStats)
+      assert(columnStats.length == 3)
+      assert(columnStats.forall(s => s.forall {
+        case (_, columnStat) => columnStat.distinctCount.contains(BigInt(123))
+      }))
+    }
   }
 
   private def testInjectColumnar(enableAQE: Boolean): Unit = {
@@ -862,7 +908,13 @@ case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleE
     delegate.submitShuffleJob
   override def getShuffleRDD(partitionSpecs: Array[ShufflePartitionSpec]): RDD[_] =
     delegate.getShuffleRDD(partitionSpecs)
-  override def runtimeStatistics: Statistics = delegate.runtimeStatistics
+  override def runtimeStatistics: Statistics = {
+    val stats = delegate.runtimeStatistics
+    // add some mock column stats so we can test that AQE retains them in SPARK-39991
+    val columnStats = ColumnStat(distinctCount = Some(BigInt(123)))
+    val attributeStats = AttributeMap(Seq((child.output.head, columnStats)))
+    Statistics(stats.sizeInBytes, stats.rowCount, attributeStats)
+  }
   override def child: SparkPlan = delegate.child
   override protected def doExecute(): RDD[InternalRow] = delegate.execute()
   override def outputPartitioning: Partitioning = delegate.outputPartitioning

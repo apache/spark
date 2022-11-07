@@ -58,6 +58,16 @@ sealed trait CatalystIdentifier {
     }
   }
 
+  def nameParts: Seq[String] = {
+    if (catalog.isDefined && database.isDefined) {
+      Seq(catalog.get, database.get, identifier)
+    } else if (database.isDefined) {
+      Seq(database.get, identifier)
+    } else {
+      Seq(identifier)
+    }
+  }
+
   override def toString: String = quotedString
 }
 

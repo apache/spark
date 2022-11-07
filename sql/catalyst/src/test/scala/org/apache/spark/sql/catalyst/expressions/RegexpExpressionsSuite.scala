@@ -19,12 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 /**
  * Unit tests for regular expression (regexp) related SQL expressions.
@@ -461,6 +463,21 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       StringSplit(s1, s2, -1), Seq("aa", "bb", "cc"), row1)
     checkEvaluation(StringSplit(s1, s2, -1), null, row2)
     checkEvaluation(StringSplit(s1, s2, -1), null, row3)
+    // Empty regex
+    checkEvaluation(
+      StringSplit(Literal("hello"), Literal(""), 0), Seq("h", "e", "l", "l", "o"), row1)
+    checkEvaluation(
+      StringSplit(Literal("hello"), Literal(""), -1), Seq("h", "e", "l", "l", "o"), row1)
+    checkEvaluation(
+      StringSplit(Literal("hello"), Literal(""), 5), Seq("h", "e", "l", "l", "o"), row1)
+    checkEvaluation(
+      StringSplit(Literal("hello"), Literal(""), 3), Seq("h", "e", "l"), row1)
+    checkEvaluation(
+      StringSplit(Literal("hello"), Literal(""), 100), Seq("h", "e", "l", "l", "o"), row1)
+    checkEvaluation(
+      StringSplit(Literal(""), Literal(""), -1), Seq(""), row1)
+    checkEvaluation(
+      StringSplit(Literal(""), Literal(""), 0), Seq(""), row1)
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
@@ -506,14 +523,33 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExceptionInExpression[SparkRuntimeException](
       RegExpExtract(s, p, r),
       create_row("1a 2b 14m", "(?l)", 0),
-      s"$prefix `regexp_extract` is invalid: (?l)")
+      s"$prefix `regexp_extract` is invalid: '(?l)'")
     checkExceptionInExpression[SparkRuntimeException](
       RegExpExtractAll(s, p, r),
       create_row("abc", "] [", 0),
-      s"$prefix `regexp_extract_all` is invalid: ] [")
+      s"$prefix `regexp_extract_all` is invalid: '] ['")
     checkExceptionInExpression[SparkRuntimeException](
       RegExpInStr(s, p, r),
       create_row("abc", ", (", 0),
-      s"$prefix `regexp_instr` is invalid: , (")
+      s"$prefix `regexp_instr` is invalid: ', ('")
+  }
+
+  test("RegExpReplace: fails analysis if pos is not a constant") {
+    val s = $"s".string.at(0)
+    val p = $"p".string.at(1)
+    val r = $"r".string.at(2)
+    val posExpr = AttributeReference("b", IntegerType)()
+    val expr = RegExpReplace(s, p, r, posExpr)
+
+    assert(expr.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "position",
+          "inputType" -> toSQLType(posExpr.dataType),
+          "inputExpr" -> toSQLExpr(posExpr)
+        )
+      )
+    )
   }
 }

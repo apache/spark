@@ -142,6 +142,7 @@ Datetime Functions
     window
     session_window
     timestamp_seconds
+    window_time
 
 
 Collection Functions
@@ -176,6 +177,8 @@ Collection Functions
     explode_outer
     posexplode
     posexplode_outer
+    inline
+    inline_outer
     get
     get_json_object
     json_tuple

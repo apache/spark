@@ -32,52 +32,37 @@ class AggregateExpressionSuite extends SparkFunSuite {
   }
 
   test("test regr_r2 input types") {
-    val checkResult1 = RegrR2(Literal("a"), Literal(1d)).checkInputDataTypes()
-    assert(checkResult1.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-    assert(checkResult1.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("argument 1 requires double type, however, ''a'' is of string type"))
-    val checkResult2 = RegrR2(Literal(3.0D), Literal('b')).checkInputDataTypes()
-    assert(checkResult2.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-    assert(checkResult2.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("argument 2 requires double type, however, ''b'' is of string type"))
-    val checkResult3 = RegrR2(Literal(3.0D), Literal(Array(0))).checkInputDataTypes()
-    assert(checkResult3.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-    assert(checkResult3.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("argument 2 requires double type, however, 'ARRAY(0)' is of array<int> type"))
+    Seq(
+      RegrR2(Literal("a"), Literal(1d)),
+      RegrR2(Literal(3.0D), Literal('b')),
+      RegrR2(Literal(3.0D), Literal(Array(0)))
+    ).foreach { expr =>
+      assert(expr.checkInputDataTypes().isFailure)
+    }
     assert(RegrR2(Literal(3.0D), Literal(1d)).checkInputDataTypes() ===
       TypeCheckResult.TypeCheckSuccess)
   }
 
   test("test regr_slope input types") {
-    val checkResult1 = RegrSlope(Literal("a"), Literal(1)).checkInputDataTypes()
-    assert(checkResult1.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-    assert(checkResult1.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("argument 1 requires double type, however, ''a'' is of string type"))
-    val checkResult2 = RegrSlope(Literal(3.0D), Literal('b')).checkInputDataTypes()
-    assert(checkResult2.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-    assert(checkResult2.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("argument 2 requires double type, however, ''b'' is of string type"))
-    val checkResult3 = RegrSlope(Literal(3.0D), Literal(Array(0))).checkInputDataTypes()
-    assert(checkResult3.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-    assert(checkResult3.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("argument 2 requires double type, however, 'ARRAY(0)' is of array<int> type"))
+    Seq(
+      RegrSlope(Literal("a"), Literal(1)),
+      RegrSlope(Literal(3.0D), Literal('b')),
+      RegrSlope(Literal(3.0D), Literal(Array(0)))
+    ).foreach { expr =>
+      assert(expr.checkInputDataTypes().isFailure)
+    }
     assert(RegrSlope(Literal(3.0D), Literal(1D)).checkInputDataTypes() ===
       TypeCheckResult.TypeCheckSuccess)
   }
 
   test("test regr_intercept input types") {
-    val checkResult1 = RegrIntercept(Literal("a"), Literal(1)).checkInputDataTypes()
-    assert(checkResult1.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-    assert(checkResult1.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("argument 1 requires double type, however, ''a'' is of string type"))
-    val checkResult2 = RegrIntercept(Literal(3.0D), Literal('b')).checkInputDataTypes()
-    assert(checkResult2.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-    assert(checkResult2.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("argument 2 requires double type, however, ''b'' is of string type"))
-    val checkResult3 = RegrIntercept(Literal(3.0D), Literal(Array(0))).checkInputDataTypes()
-    assert(checkResult3.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-    assert(checkResult3.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("argument 2 requires double type, however, 'ARRAY(0)' is of array<int> type"))
+    Seq(
+      RegrIntercept(Literal("a"), Literal(1)),
+      RegrIntercept(Literal(3.0D), Literal('b')),
+      RegrIntercept(Literal(3.0D), Literal(Array(0)))
+    ).foreach { expr =>
+      assert(expr.checkInputDataTypes().isFailure)
+    }
     assert(RegrIntercept(Literal(3.0D), Literal(1D)).checkInputDataTypes() ===
       TypeCheckResult.TypeCheckSuccess)
   }

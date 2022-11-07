@@ -22,7 +22,9 @@ import scala.collection.immutable.TreeSet
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
@@ -30,7 +32,6 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-
 
 /**
  * A base class for generated/interpreted predicate
@@ -328,8 +329,8 @@ case class Not(child: Expression)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(NOT)
 
-  override lazy val preCanonicalized: Expression = {
-    withNewChildren(Seq(child.preCanonicalized)) match {
+  override lazy val canonicalized: Expression = {
+    withNewChildren(Seq(child.canonicalized)) match {
       case Not(GreaterThan(l, r)) => LessThanOrEqual(l, r)
       case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
       case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
@@ -375,16 +376,15 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (values.length != query.childOutputs.length) {
-      TypeCheckResult.TypeCheckFailure(
-        s"""
-           |The number of columns in the left hand side of an IN subquery does not match the
-           |number of columns in the output of subquery.
-           |#columns in left hand side: ${values.length}.
-           |#columns in right hand side: ${query.childOutputs.length}.
-           |Left side columns:
-           |[${values.map(_.sql).mkString(", ")}].
-           |Right side columns:
-           |[${query.childOutputs.map(_.sql).mkString(", ")}].""".stripMargin)
+      DataTypeMismatch(
+        errorSubClass = "IN_SUBQUERY_LENGTH_MISMATCH",
+        messageParameters = Map(
+          "leftLength" -> values.length.toString,
+          "rightLength" -> query.childOutputs.length.toString,
+          "leftColumns" -> values.map(toSQLExpr(_)).mkString(", "),
+          "rightColumns" -> query.childOutputs.map(toSQLExpr(_)).mkString(", ")
+        )
+      )
     } else if (!DataType.equalsStructurally(
       query.dataType, value.dataType, ignoreNullability = true)) {
 
@@ -393,18 +393,16 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
           Seq(s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})")
         case _ => None
       }
-      TypeCheckResult.TypeCheckFailure(
-        s"""
-           |The data type of one or more elements in the left hand side of an IN subquery
-           |is not compatible with the data type of the output of the subquery
-           |Mismatched columns:
-           |[${mismatchedColumns.mkString(", ")}]
-           |Left side:
-           |[${values.map(_.dataType.catalogString).mkString(", ")}].
-           |Right side:
-           |[${query.childOutputs.map(_.dataType.catalogString).mkString(", ")}].""".stripMargin)
+      DataTypeMismatch(
+        errorSubClass = "IN_SUBQUERY_DATA_TYPE_MISMATCH",
+        messageParameters = Map(
+          "mismatchedColumns" -> mismatchedColumns.mkString(", "),
+          "leftType" -> values.map(left => toSQLType(left.dataType)).mkString(", "),
+          "rightType" -> query.childOutputs.map(right => toSQLType(right.dataType)).mkString(", ")
+        )
+      )
     } else {
-      TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(value.dataType, prettyName)
     }
   }
 
@@ -450,10 +448,15 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType,
       ignoreNullability = true))
     if (mismatchOpt.isDefined) {
-      TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
-        s"${value.dataType.catalogString} != ${mismatchOpt.get.dataType.catalogString}")
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> children.map(child => toSQLType(child.dataType)).mkString("[", ", ", "]")
+        )
+      )
     } else {
-      TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(value.dataType, prettyName)
     }
   }
 
@@ -466,8 +469,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(IN)
 
-  override lazy val preCanonicalized: Expression = {
-    val basic = withNewChildren(children.map(_.preCanonicalized)).asInstanceOf[In]
+  override lazy val canonicalized: Expression = {
+    val basic = withNewChildren(children.map(_.canonicalized)).asInstanceOf[In]
     if (list.size > 1) {
       basic.copy(list = basic.list.sortBy(_.hashCode()))
     } else {
@@ -736,7 +739,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   """,
   since = "1.0.0",
   group = "predicate_funcs")
-case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
+case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate
+  with CommutativeExpression {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -807,6 +811,10 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): And =
     copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    orderCommutative({ case And(l, r) => Seq(l, r) }).reduce(And)
+  }
 }
 
 @ExpressionDescription(
@@ -824,7 +832,8 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
   """,
   since = "1.0.0",
   group = "predicate_funcs")
-case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
+case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate
+  with CommutativeExpression {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -896,6 +905,10 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Or =
     copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    orderCommutative({ case Or(l, r) => Seq(l, r) }).reduce(Or)
+  }
 }
 
 
@@ -907,8 +920,8 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_COMPARISON)
 
-  override lazy val preCanonicalized: Expression = {
-    withNewChildren(children.map(_.preCanonicalized)) match {
+  override lazy val canonicalized: Expression = {
+    withNewChildren(children.map(_.canonicalized)) match {
       case EqualTo(l, r) if l.hashCode() > r.hashCode() => EqualTo(r, l)
       case EqualNullSafe(l, r) if l.hashCode() > r.hashCode() => EqualNullSafe(r, l)
 
@@ -924,7 +937,7 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>
-      TypeUtils.checkForOrderingExpr(left.dataType, this.getClass.getSimpleName)
+      TypeUtils.checkForOrderingExpr(left.dataType, symbol)
     case failure => failure
   }
 

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving, UnresolvedRelation, UnresolvedStar}
@@ -29,6 +30,7 @@ import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
 import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -37,7 +39,7 @@ import org.apache.spark.sql.types.StringType
  * See [[org.apache.spark.sql.catalyst.parser.PlanParserSuite]] for rules
  * defined in the Catalyst module.
  */
-class SparkSqlParserSuite extends AnalysisTest {
+class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
   import org.apache.spark.sql.catalyst.dsl.expressions._
 
   private lazy val parser = new SparkSqlParser()
@@ -46,8 +48,9 @@ class SparkSqlParserSuite extends AnalysisTest {
     comparePlans(parser.parsePlan(sqlCommand), plan)
   }
 
-  private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)()
+  private def parseException(sqlText: String): SparkThrowable = {
+    intercept[ParseException](sql(sqlText).collect())
+  }
 
   test("Checks if SET/RESET can parse all the configurations") {
     // Force to build static SQL configurations
@@ -76,10 +79,16 @@ class SparkSqlParserSuite extends AnalysisTest {
 
   test("SET with comment") {
     assertEqual(s"SET my_path = /a/b/*", SetCommand(Some("my_path" -> Some("/a/b/*"))))
-    val e1 = intercept[ParseException](parser.parsePlan("SET k=`v` /*"))
-    assert(e1.getMessage.contains(s"Unclosed bracketed comment"))
-    val e2 = intercept[ParseException](parser.parsePlan("SET `k`=`v` /*"))
-    assert(e2.getMessage.contains(s"Unclosed bracketed comment"))
+
+    checkError(
+      exception = parseException("SET k=`v` /*"),
+      errorClass = "_LEGACY_ERROR_TEMP_0055",
+      parameters = Map.empty)
+
+    checkError(
+      exception = parseException("SET `k`=`v` /*"),
+      errorClass = "_LEGACY_ERROR_TEMP_0055",
+      parameters = Map.empty)
   }
 
   test("Report Error for invalid usage of SET command") {
@@ -107,21 +116,125 @@ class SparkSqlParserSuite extends AnalysisTest {
       SetCommand(Some("spark.sql.    key" -> Some("-1"))))
     assertEqual("SET key=", SetCommand(Some("key" -> Some(""))))
 
-    val expectedErrMsg = "Expected format is 'SET', 'SET key', or " +
-      "'SET key=value'. If you want to include special characters in key, or include semicolon " +
-      "in value, please use quotes, e.g., SET `key`=`value`."
-    intercept("SET spark.sql.key value", expectedErrMsg)
-    intercept("SET spark.sql.key   'value'", expectedErrMsg)
-    intercept("SET    spark.sql.key \"value\" ", expectedErrMsg)
-    intercept("SET spark.sql.key value1 value2", expectedErrMsg)
-    intercept("SET spark.   sql.key=value", expectedErrMsg)
-    intercept("SET spark   :sql:key=value", expectedErrMsg)
-    intercept("SET spark .  sql.key=value", expectedErrMsg)
-    intercept("SET spark.sql.   key=value", expectedErrMsg)
-    intercept("SET spark.sql   :key=value", expectedErrMsg)
-    intercept("SET spark.sql .  key=value", expectedErrMsg)
-    intercept("SET =", expectedErrMsg)
-    intercept("SET =value", expectedErrMsg)
+    val sql1 = "SET spark.sql.key value"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 22))
+
+    val sql2 = "SET spark.sql.key   'value'"
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 26))
+
+    val sql3 = "SET    spark.sql.key \"value\" "
+    checkError(
+      exception = parseException(sql3),
+      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "SET    spark.sql.key \"value\"",
+        start = 0,
+        stop = 27))
+
+    val sql4 = "SET spark.sql.key value1 value2"
+    checkError(
+      exception = parseException(sql4),
+      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql4,
+        start = 0,
+        stop = 30))
+
+    val sql5 = "SET spark.   sql.key=value"
+    checkError(
+      exception = parseException(sql5),
+      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql5,
+        start = 0,
+        stop = 25))
+
+    val sql6 = "SET spark   :sql:key=value"
+    checkError(
+      exception = parseException(sql6),
+      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql6,
+        start = 0,
+        stop = 25))
+
+    val sql7 = "SET spark .  sql.key=value"
+    checkError(
+      exception = parseException(sql7),
+      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql7,
+        start = 0,
+        stop = 25))
+
+    val sql8 = "SET spark.sql.   key=value"
+    checkError(
+      exception = parseException(sql8),
+      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql8,
+        start = 0,
+        stop = 25))
+
+    val sql9 = "SET spark.sql   :key=value"
+    checkError(
+      exception = parseException(sql9),
+      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql9,
+        start = 0,
+        stop = 25))
+
+    val sql10 = "SET spark.sql .  key=value"
+    checkError(
+      exception = parseException(sql10),
+      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql10,
+        start = 0,
+        stop = 25))
+
+    val sql11 = "SET ="
+    checkError(
+      exception = parseException(sql11),
+      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql11,
+        start = 0,
+        stop = 4))
+
+    val sql12 = "SET =value"
+    checkError(
+      exception = parseException(sql12),
+      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql12,
+        start = 0,
+        stop = 9))
   }
 
   test("Report Error for invalid usage of RESET command") {
@@ -134,18 +247,95 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("RESET spark:sql:3", ResetCommand(Some("spark:sql:3")))
     assertEqual("RESET `spark.sql.    key`", ResetCommand(Some("spark.sql.    key")))
 
-    val expectedErrMsg = "Expected format is 'RESET' or 'RESET key'. " +
-      "If you want to include special characters in key, " +
-      "please use quotes, e.g., RESET `key`."
-    intercept("RESET spark.sql.key1 key2", expectedErrMsg)
-    intercept("RESET spark.  sql.key1 key2", expectedErrMsg)
-    intercept("RESET spark.sql.key1 key2 key3", expectedErrMsg)
-    intercept("RESET spark:   sql:key", expectedErrMsg)
-    intercept("RESET spark   .sql.key", expectedErrMsg)
-    intercept("RESET spark :  sql:key", expectedErrMsg)
-    intercept("RESET spark.sql:   key", expectedErrMsg)
-    intercept("RESET spark.sql   .key", expectedErrMsg)
-    intercept("RESET spark.sql :  key", expectedErrMsg)
+    val sql1 = "RESET spark.sql.key1 key2"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 24))
+
+    val sql2 = "RESET spark.  sql.key1 key2"
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 26))
+
+    val sql3 = "RESET spark.sql.key1 key2 key3"
+    checkError(
+      exception = parseException(sql3),
+      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql3,
+        start = 0,
+        stop = 29))
+
+    val sql4 = "RESET spark:   sql:key"
+    checkError(
+      exception = parseException(sql4),
+      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql4,
+        start = 0,
+        stop = 21))
+
+    val sql5 = "RESET spark   .sql.key"
+    checkError(
+      exception = parseException(sql5),
+      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql5,
+        start = 0,
+        stop = 21))
+
+    val sql6 = "RESET spark :  sql:key"
+    checkError(
+      exception = parseException(sql6),
+      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql6,
+        start = 0,
+        stop = 21))
+
+    val sql7 = "RESET spark.sql:   key"
+    checkError(
+      exception = parseException(sql7),
+      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql7,
+        start = 0,
+        stop = 21))
+
+    val sql8 = "RESET spark.sql   .key"
+    checkError(
+      exception = parseException(sql8),
+      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql8,
+        start = 0,
+        stop = 21))
+
+    val sql9 = "RESET spark.sql :  key"
+    checkError(
+      exception = parseException(sql9),
+      errorClass = "_LEGACY_ERROR_TEMP_0043",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql9,
+        start = 0,
+        stop = 21))
   }
 
   test("SPARK-33419: Semicolon handling in SET command") {
@@ -160,19 +350,45 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("SET `a`=`1;`", SetCommand(Some("a" -> Some("1;"))))
     assertEqual("SET `a`=`1;`;", SetCommand(Some("a" -> Some("1;"))))
 
-    val expectedErrMsg = "Expected format is 'SET', 'SET key', or " +
-      "'SET key=value'. If you want to include special characters in key, or include semicolon " +
-      "in value, please use quotes, e.g., SET `key`=`value`."
+    val sql1 = "SET a=1; SELECT 1"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 16))
 
-    intercept("SET a=1; SELECT 1", expectedErrMsg)
-    intercept("SET a=1;2;;", expectedErrMsg)
+    val sql2 = "SET a=1;2;;"
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "SET a=1;2",
+        start = 0,
+        stop = 8))
 
-    intercept("SET a b=`1;;`",
-      "\"a b\" is an invalid property key, please use quotes, e.g. SET \"a b\"=\"1;;\"")
+    val sql3 = "SET a b=`1;;`"
+    checkError(
+      exception = parseException(sql3),
+      errorClass = "INVALID_PROPERTY_KEY",
+      parameters = Map("key" -> "\"a b\"", "value" -> "\"1;;\""),
+      context = ExpectedContext(
+        fragment = sql3,
+        start = 0,
+        stop = 12))
 
-    intercept("SET `a`=1;2;;",
-      "\"1;2;;\" is an invalid property value, please use quotes, e.g." +
-        " SET \"a\"=\"1;2;;\"")
+    val sql4 = "SET `a`=1;2;;"
+    checkError(
+      exception = parseException(sql4),
+      errorClass = "INVALID_PROPERTY_VALUE",
+      parameters = Map("value" -> "\"1;2;;\"", "key" -> "\"a\""),
+      context = ExpectedContext(
+        fragment = "SET `a`=1;2",
+        start = 0,
+        stop = 10))
   }
 
   test("refresh resource") {
@@ -184,14 +400,89 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("REFRESH path-with-dash", RefreshResource("path-with-dash"))
     assertEqual("REFRESH \'path with space\'", RefreshResource("path with space"))
     assertEqual("REFRESH \"path with space 2\"", RefreshResource("path with space 2"))
-    intercept("REFRESH a b", "REFRESH statements cannot contain")
-    intercept("REFRESH a\tb", "REFRESH statements cannot contain")
-    intercept("REFRESH a\nb", "REFRESH statements cannot contain")
-    intercept("REFRESH a\rb", "REFRESH statements cannot contain")
-    intercept("REFRESH a\r\nb", "REFRESH statements cannot contain")
-    intercept("REFRESH @ $a$", "REFRESH statements cannot contain")
-    intercept("REFRESH  ", "Resource paths cannot be empty in REFRESH statements")
-    intercept("REFRESH", "Resource paths cannot be empty in REFRESH statements")
+
+    val errMsg1 =
+      "REFRESH statements cannot contain ' ', '\\n', '\\r', '\\t' inside unquoted resource paths"
+    val sql1 = "REFRESH a b"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> errMsg1),
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 10))
+
+    val sql2 = "REFRESH a\tb"
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> errMsg1),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 10))
+
+    val sql3 = "REFRESH a\nb"
+    checkError(
+      exception = parseException(sql3),
+      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> errMsg1),
+      context = ExpectedContext(
+        fragment = sql3,
+        start = 0,
+        stop = 10))
+
+    val sql4 = "REFRESH a\rb"
+    checkError(
+      exception = parseException(sql4),
+      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> errMsg1),
+      context = ExpectedContext(
+        fragment = sql4,
+        start = 0,
+        stop = 10))
+
+    val sql5 = "REFRESH a\r\nb"
+    checkError(
+      exception = parseException(sql5),
+      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> errMsg1),
+      context = ExpectedContext(
+        fragment = sql5,
+        start = 0,
+        stop = 11))
+
+    val sql6 = "REFRESH @ $a$"
+    checkError(
+      exception = parseException(sql6),
+      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> errMsg1),
+      context = ExpectedContext(
+        fragment = sql6,
+        start = 0,
+        stop = 12))
+
+    val errMsg2 = "Resource paths cannot be empty in REFRESH statements. Use / to match everything"
+    val sql7 = "REFRESH  "
+    checkError(
+      exception = parseException(sql7),
+      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> errMsg2),
+      context = ExpectedContext(
+        fragment = "REFRESH",
+        start = 0,
+        stop = 6))
+
+    val sql8 = "REFRESH"
+    checkError(
+      exception = parseException(sql8),
+      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> errMsg2),
+      context = ExpectedContext(
+        fragment = sql8,
+        start = 0,
+        stop = 6))
   }
 
   test("SPARK-33118 CREATE TEMPORARY TABLE with LOCATION") {
@@ -431,27 +722,32 @@ class SparkSqlParserSuite extends AnalysisTest {
   test("SPARK-32607: Script Transformation ROW FORMAT DELIMITED" +
     " `TOK_TABLEROWFORMATLINES` only support '\\n'") {
 
-      // test input format TOK_TABLEROWFORMATLINES
-      intercept(
-          s"""
-             |SELECT TRANSFORM(a, b, c, d, e)
-             |  ROW FORMAT DELIMITED
-             |  FIELDS TERMINATED BY ','
-             |  LINES TERMINATED BY '@'
-             |  NULL DEFINED AS 'null'
-             |  USING 'cat' AS (value)
-             |  ROW FORMAT DELIMITED
-             |  FIELDS TERMINATED BY '&'
-             |  LINES TERMINATED BY '\n'
-             |  NULL DEFINED AS 'NULL'
-             |FROM v
-        """.stripMargin,
-      "LINES TERMINATED BY only supports newline '\\n' right now")
+    val errMsg = "LINES TERMINATED BY only supports newline '\\n' right now: @"
+    // test input format TOK_TABLEROWFORMATLINES
+    val sql1 =
+      s"""SELECT TRANSFORM(a, b, c, d, e)
+         |  ROW FORMAT DELIMITED
+         |  FIELDS TERMINATED BY ','
+         |  LINES TERMINATED BY '@'
+         |  NULL DEFINED AS 'null'
+         |  USING 'cat' AS (value)
+         |  ROW FORMAT DELIMITED
+         |  FIELDS TERMINATED BY '&'
+         |  LINES TERMINATED BY '\n'
+         |  NULL DEFINED AS 'NULL'
+         |FROM v""".stripMargin
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> errMsg),
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 264))
 
     // test output format TOK_TABLEROWFORMATLINES
-    intercept(
-      s"""
-         |SELECT TRANSFORM(a, b, c, d, e)
+    val sql2 =
+      s"""SELECT TRANSFORM(a, b, c, d, e)
          |  ROW FORMAT DELIMITED
          |  FIELDS TERMINATED BY ','
          |  LINES TERMINATED BY '\n'
@@ -461,9 +757,15 @@ class SparkSqlParserSuite extends AnalysisTest {
          |  FIELDS TERMINATED BY '&'
          |  LINES TERMINATED BY '@'
          |  NULL DEFINED AS 'NULL'
-         |FROM v
-        """.stripMargin,
-      "LINES TERMINATED BY only supports newline '\\n' right now")
+         |FROM v""".stripMargin
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> errMsg),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 264))
   }
 
   test("CLEAR CACHE") {
@@ -471,9 +773,28 @@ class SparkSqlParserSuite extends AnalysisTest {
   }
 
   test("CREATE TABLE LIKE COMMAND should reject reserved properties") {
-    Seq(TableCatalog.PROP_OWNER, TableCatalog.PROP_PROVIDER).foreach { reserved =>
-      intercept(s"CREATE TABLE target LIKE source TBLPROPERTIES ($reserved='howdy')",
-        "reserved")
-    }
+    val sql1 =
+      s"CREATE TABLE target LIKE source TBLPROPERTIES (${TableCatalog.PROP_OWNER}='howdy')"
+    checkError(
+      exception = parseException(sql1),
+      errorClass = "UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY",
+      parameters = Map("property" -> TableCatalog.PROP_OWNER,
+        "msg" -> "it will be set to the current user"),
+      context = ExpectedContext(
+        fragment = sql1,
+        start = 0,
+        stop = 60))
+
+    val sql2 =
+      s"CREATE TABLE target LIKE source TBLPROPERTIES (${TableCatalog.PROP_PROVIDER}='howdy')"
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY",
+      parameters = Map("property" -> TableCatalog.PROP_PROVIDER,
+        "msg" -> "please use the USING clause to specify it"),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 63))
   }
 }

@@ -433,3 +433,110 @@ org.apache.spark.SparkException
     "fragment" : "(SELECT a FROM (SELECT 1 AS a UNION ALL SELECT 2 AS a) t)"
   } ]
 }
+
+
+-- !query
+CREATE OR REPLACE TEMP VIEW t1(c1, c2) AS (VALUES (0, 1), (1, 2))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMP VIEW t2(c1, c2) AS (VALUES (0, 2), (0, 3))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMP VIEW students(id, name, major, year) AS (VALUES
+    (0, 'A', 'CS', 2022),
+    (1, 'B', 'CS', 2022),
+    (2, 'C', 'Math', 2022))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMP VIEW exams(sid, course, curriculum, grade, date) AS (VALUES
+    (0, 'C1', 'CS', 4, 2020),
+    (0, 'C2', 'CS', 3, 2021),
+    (1, 'C1', 'CS', 2, 2020),
+    (1, 'C2', 'CS', 1, 2021))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT students.name, exams.course
+FROM students, exams
+WHERE students.id = exams.sid
+  AND (students.major = 'CS' OR students.major = 'Games Eng')
+  AND exams.grade >= (
+        SELECT avg(exams.grade) + 1
+        FROM exams
+        WHERE students.id = exams.sid
+           OR (exams.curriculum = students.major AND students.year > exams.date))
+-- !query schema
+struct<name:string,course:string>
+-- !query output
+A	C1
+
+
+-- !query
+SELECT (SELECT min(c2) FROM t2 WHERE t1.c1 > t2.c1) FROM t1
+-- !query schema
+struct<scalarsubquery(c1):int>
+-- !query output
+2
+NULL
+
+
+-- !query
+SELECT (SELECT min(c2) FROM t2 WHERE t1.c1 >= t2.c1 AND t1.c2 < t2.c2) FROM t1
+-- !query schema
+struct<scalarsubquery(c1, c2):int>
+-- !query output
+2
+3
+
+
+-- !query
+SELECT (SELECT count(*) FROM t2 WHERE t1.c1 > t2.c1) FROM t1
+-- !query schema
+struct<scalarsubquery(c1):bigint>
+-- !query output
+0
+2
+
+
+-- !query
+SELECT c, (
+    SELECT count(*)
+    FROM (VALUES ('ab'), ('abc'), ('bc')) t2(c)
+    WHERE t1.c = substring(t2.c, 1, 1)
+) FROM (VALUES ('a'), ('b')) t1(c)
+-- !query schema
+struct<c:string,scalarsubquery(c):bigint>
+-- !query output
+a	2
+b	1
+
+
+-- !query
+SELECT c, (
+    SELECT count(*)
+    FROM (VALUES (0, 6), (1, 5), (2, 4), (3, 3)) t1(a, b)
+    WHERE a + b = c
+) FROM (VALUES (6)) t2(c)
+-- !query schema
+struct<c:int,scalarsubquery(c):bigint>
+-- !query output
+6	4

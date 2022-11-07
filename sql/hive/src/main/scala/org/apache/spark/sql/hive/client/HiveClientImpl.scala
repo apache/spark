@@ -47,10 +47,11 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.deploy.SparkHadoopUtil.SOURCE_SPARK
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils.stringToURI
@@ -101,6 +102,10 @@ private[hive] class HiveClientImpl(
     val clientLoader: IsolatedClientLoader)
   extends HiveClient
   with Logging {
+
+  private class RawHiveTableImpl(override val rawTable: HiveTable) extends RawHiveTable {
+    override lazy val toCatalogTable = convertHiveTableToCatalogTable(rawTable)
+  }
 
   import HiveClientImpl._
 
@@ -435,6 +440,13 @@ private[hive] class HiveClientImpl(
     getRawTableOption(dbName, tableName).map(convertHiveTableToCatalogTable)
   }
 
+  override def getRawHiveTableOption(
+      dbName: String,
+      tableName: String): Option[RawHiveTable] = withHiveState {
+    logDebug(s"Looking up $dbName.$tableName")
+    getRawTableOption(dbName, tableName).map(new RawHiveTableImpl(_))
+  }
+
   private def convertHiveTableToCatalogTable(h: HiveTable): CatalogTable = {
     // Note: Hive separates partition columns and the schema, but for us the
     // partition columns are part of the schema
@@ -525,12 +537,18 @@ private[hive] class HiveClientImpl(
       storage = CatalogStorageFormat(
         locationUri = shim.getDataLocation(h).map { loc =>
           val tableUri = stringToURI(loc)
-          // Before SPARK-19257, created data source table does not use absolute uri.
-          // This makes Spark can't read these tables across HDFS clusters.
-          // Rewrite table location to absolute uri based on database uri to fix this issue.
-          val absoluteUri = Option(tableUri).filterNot(_.isAbsolute)
-            .map(_ => stringToURI(client.getDatabase(h.getDbName).getLocationUri))
-          HiveExternalCatalog.toAbsoluteURI(tableUri, absoluteUri)
+          if (h.getTableType == HiveTableType.VIRTUAL_VIEW) {
+            // Data location of SQL view is useless. Do not qualify it even if it's present, as
+            // it can be an invalid path.
+            tableUri
+          } else {
+            // Before SPARK-19257, created data source table does not use absolute uri.
+            // This makes Spark can't read these tables across HDFS clusters.
+            // Rewrite table location to absolute uri based on database uri to fix this issue.
+            val absoluteUri = Option(tableUri).filterNot(_.isAbsolute)
+              .map(_ => stringToURI(client.getDatabase(h.getDbName).getLocationUri))
+            HiveExternalCatalog.toAbsoluteURI(tableUri, absoluteUri)
+          }
         },
         // To avoid ClassNotFound exception, we try our best to not get the format class, but get
         // the class name directly. However, for non-native tables, there is no interface to get
@@ -624,7 +642,11 @@ private[hive] class HiveClientImpl(
       ignoreIfExists: Boolean): Unit = withHiveState {
     def replaceExistException(e: Throwable): Unit = e match {
       case _: HiveException if e.getCause.isInstanceOf[AlreadyExistsException] =>
-        throw new PartitionsAlreadyExistException(db, table, parts.map(_.spec))
+        val hiveTable = client.getTable(db, table)
+        val existingParts = parts.filter { p =>
+          shim.getPartitions(client, hiveTable, p.spec.asJava).nonEmpty
+        }
+        throw new PartitionsAlreadyExistException(db, table, existingParts.map(_.spec))
       case _ => throw e
     }
     try {
@@ -687,13 +709,14 @@ private[hive] class HiveClientImpl(
       specs: Seq[TablePartitionSpec],
       newSpecs: Seq[TablePartitionSpec]): Unit = withHiveState {
     require(specs.size == newSpecs.size, "number of old and new partition specs differ")
-    val catalogTable = getTable(db, table)
-    val hiveTable = toHiveTable(catalogTable, Some(userName))
+    val rawHiveTable = getRawHiveTable(db, table)
+    val hiveTable = rawHiveTable.rawTable.asInstanceOf[HiveTable]
+    hiveTable.setOwner(userName)
     specs.zip(newSpecs).foreach { case (oldSpec, newSpec) =>
       if (shim.getPartition(client, hiveTable, newSpec.asJava, false) != null) {
-        throw new PartitionAlreadyExistsException(db, table, newSpec)
+        throw new PartitionsAlreadyExistException(db, table, newSpec)
       }
-      val hivePart = getPartitionOption(catalogTable, oldSpec)
+      val hivePart = getPartitionOption(rawHiveTable, oldSpec)
         .map { p => toHivePartition(p.copy(spec = newSpec), hiveTable) }
         .getOrElse { throw new NoSuchPartitionException(db, table, oldSpec) }
       shim.renamePartition(client, hiveTable, oldSpec.asJava, hivePart)
@@ -711,7 +734,10 @@ private[hive] class HiveClientImpl(
     val original = state.getCurrentDatabase
     try {
       setCurrentDatabaseRaw(db)
-      val hiveTable = toHiveTable(getTable(db, table), Some(userName))
+      val hiveTable = withHiveState {
+        getRawTableOption(db, table).getOrElse(throw new NoSuchTableException(db, table))
+      }
+      hiveTable.setOwner(userName)
       shim.alterPartitions(client, table, newParts.map { toHivePartition(_, hiveTable) }.asJava)
     } finally {
       state.setCurrentDatabase(original)
@@ -740,11 +766,12 @@ private[hive] class HiveClientImpl(
   }
 
   override def getPartitionOption(
-      table: CatalogTable,
+      rawHiveTable: RawHiveTable,
       spec: TablePartitionSpec): Option[CatalogTablePartition] = withHiveState {
-    val hiveTable = toHiveTable(table, Some(userName))
+    val hiveTable = rawHiveTable.rawTable.asInstanceOf[HiveTable]
     val hivePartition = shim.getPartition(client, hiveTable, spec.asJava, false)
-    Option(hivePartition).map(fromHivePartition(_, table.storage.locationUri))
+    Option(hivePartition)
+      .map(fromHivePartition(_, rawHiveTable.toCatalogTable.storage.locationUri))
   }
 
   override def getPartitions(
@@ -775,11 +802,13 @@ private[hive] class HiveClientImpl(
   }
 
   override def getPartitionsByFilter(
-      table: CatalogTable,
+      rawHiveTable: RawHiveTable,
       predicates: Seq[Expression]): Seq[CatalogTablePartition] = withHiveState {
-    val hiveTable = toHiveTable(table, Some(userName))
-    val parts = shim.getPartitionsByFilter(client, hiveTable, predicates, table)
-      .map(fromHivePartition(_, table.storage.locationUri))
+    val hiveTable = rawHiveTable.rawTable.asInstanceOf[HiveTable]
+    hiveTable.setOwner(userName)
+    val parts =
+      shim.getPartitionsByFilter(client, hiveTable, predicates, rawHiveTable.toCatalogTable)
+        .map(fromHivePartition(_, rawHiveTable.toCatalogTable.storage.locationUri))
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts
   }
@@ -1281,7 +1310,7 @@ private[hive] object HiveClientImpl extends Logging {
     // 3: we set all entries in config to this hiveConf.
     val confMap = (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue) ++
       sparkConf.getAll.toMap ++ extraConfig).toMap
-    confMap.foreach { case (k, v) => hiveConf.set(k, v) }
+    confMap.foreach { case (k, v) => hiveConf.set(k, v, SOURCE_SPARK) }
     SQLConf.get.redactOptions(confMap).foreach { case (k, v) =>
       logDebug(s"Applying Hadoop/Hive/Spark and extra properties to Hive Conf:$k=$v")
     }
@@ -1299,7 +1328,7 @@ private[hive] object HiveClientImpl extends Logging {
     if (hiveConf.get("hive.execution.engine") == "tez") {
       logWarning("Detected HiveConf hive.execution.engine is 'tez' and will be reset to 'mr'" +
         " to disable useless hive logic")
-      hiveConf.set("hive.execution.engine", "mr")
+      hiveConf.set("hive.execution.engine", "mr", SOURCE_SPARK)
     }
     hiveConf
   }

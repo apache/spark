@@ -93,7 +93,21 @@ SELECT CEIL(2.5, null)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The 'scale' parameter of function 'ceil' needs to be a int literal.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1100",
+  "messageParameters" : {
+    "argName" : "scale",
+    "funcName" : "ceil",
+    "requiredType" : "int"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "CEIL(2.5, null)"
+  } ]
+}
 
 
 -- !query
@@ -102,7 +116,21 @@ SELECT CEIL(2.5, 'a')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The 'scale' parameter of function 'ceil' needs to be a int literal.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1100",
+  "messageParameters" : {
+    "argName" : "scale",
+    "funcName" : "ceil",
+    "requiredType" : "int"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "CEIL(2.5, 'a')"
+  } ]
+}
 
 
 -- !query
@@ -111,7 +139,21 @@ SELECT CEIL(2.5, 0, 0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function ceil. Expected: 2; Found: 3; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "messageParameters" : {
+    "actualNumber" : "3",
+    "expectedInfo" : "2",
+    "name" : "ceil"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "CEIL(2.5, 0, 0)"
+  } ]
+}
 
 
 -- !query
@@ -208,7 +250,21 @@ SELECT FLOOR(2.5, null)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The 'scale' parameter of function 'floor' needs to be a int literal.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1100",
+  "messageParameters" : {
+    "argName" : "scale",
+    "funcName" : "floor",
+    "requiredType" : "int"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "FLOOR(2.5, null)"
+  } ]
+}
 
 
 -- !query
@@ -217,7 +273,21 @@ SELECT FLOOR(2.5, 'a')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The 'scale' parameter of function 'floor' needs to be a int literal.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1100",
+  "messageParameters" : {
+    "argName" : "scale",
+    "funcName" : "floor",
+    "requiredType" : "int"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "FLOOR(2.5, 'a')"
+  } ]
+}
 
 
 -- !query
@@ -226,4 +296,18 @@ SELECT FLOOR(2.5, 0, 0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function floor. Expected: 2; Found: 3; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "messageParameters" : {
+    "actualNumber" : "3",
+    "expectedInfo" : "2",
+    "name" : "floor"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "FLOOR(2.5, 0, 0)"
+  } ]
+}

@@ -372,7 +372,7 @@ class EliminateSortsSuite extends AnalysisTest {
       .limit(10)
     val optimized = Optimize.execute(joinPlan.analyze)
     val correctAnswer = LocalLimit(10, projectPlan)
-      .join(projectPlanB, LeftOuter)
+      .join(LocalLimit(10, projectPlanB), LeftOuter)
       .limit(10).analyze
     comparePlans(optimized, correctAnswer)
   }

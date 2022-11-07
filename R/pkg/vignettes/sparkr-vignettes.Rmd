@@ -170,7 +170,7 @@ sparkR.session(sparkHome = "/HOME/spark")
 ### Spark Session {#SetupSparkSession}
 
 
-In addition to `sparkHome`, many other options can be specified in `sparkR.session`. For a complete list, see [Starting up: SparkSession](https://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession) and [SparkR API doc](https://spark.apache.org/docs/latest/api/R/sparkR.session.html).
+In addition to `sparkHome`, many other options can be specified in `sparkR.session`. For a complete list, see [Starting up: SparkSession](https://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession) and [SparkR API doc](https://spark.apache.org/docs/latest/api/R/reference/sparkR.session.html).
 
 In particular, the following Spark driver properties can be set in `sparkConfig`.
 
@@ -231,7 +231,7 @@ The general method for creating `SparkDataFrame` from data sources is `read.df`.
 sparkR.session(sparkPackages = "com.databricks:spark-avro_2.12:3.0.0")
 ```
 
-We can see how to use data sources using an example CSV input file. For more information please refer to SparkR [read.df](https://spark.apache.org/docs/latest/api/R/read.df.html) API documentation.
+We can see how to use data sources using an example CSV input file. For more information please refer to SparkR [read.df](https://spark.apache.org/docs/latest/api/R/reference/read.df.html) API documentation.
 ```{r, eval=FALSE}
 df <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.strings = "NA")
 ```
@@ -340,7 +340,7 @@ A common flow of grouping and aggregation is
 
 2. Feed the `GroupedData` object to `agg` or `summarize` functions, with some provided aggregation functions to compute a number within each group.
 
-A number of widely used functions are supported to aggregate data after grouping, including `avg`, `count_distinct`, `count`, `first`, `kurtosis`, `last`, `max`, `mean`, `min`, `sd`, `skewness`, `stddev_pop`, `stddev_samp`, `sum_distinct`, `sum`, `var_pop`, `var_samp`, `var`. See the [API doc for aggregate functions](https://spark.apache.org/docs/latest/api/R/column_aggregate_functions.html) linked there.
+A number of widely used functions are supported to aggregate data after grouping, including `avg`, `count_distinct`, `count`, `first`, `kurtosis`, `last`, `max`, `mean`, `min`, `sd`, `skewness`, `stddev_pop`, `stddev_samp`, `sum_distinct`, `sum`, `var_pop`, `var_samp`, `var`. See the [API doc for aggregate functions](https://spark.apache.org/docs/latest/api/R/reference/column_aggregate_functions.html) linked there.
 
 For example we can compute a histogram of the number of cylinders in the `mtcars` dataset as shown below.
 

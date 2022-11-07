@@ -1080,4 +1080,28 @@ abstract class SchemaPruningSuite
       checkAnswer(query, Row(Row("Jane", "X.", "Doe")) :: Nil)
     }
   }
+
+  testSchemaPruning("SPARK-40033: Schema pruning support through element_at") {
+    // nested struct fields inside array
+    val query1 =
+      sql("""
+            |SELECT
+            |element_at(friends, 1).first, element_at(friends, 1).last
+            |FROM contacts WHERE id = 0
+            |""".stripMargin)
+    checkScan(query1, "struct<id:int,friends:array<struct<first:string,last:string>>>")
+    checkAnswer(query1.orderBy("id"),
+      Row("Susan", "Smith"))
+
+    // nested struct fields inside map values
+    val query2 =
+      sql("""
+            |SELECT
+            |element_at(relatives, "brother").first, element_at(relatives, "brother").middle
+            |FROM contacts WHERE id = 0
+            |""".stripMargin)
+    checkScan(query2, "struct<id:int,relatives:map<string,struct<first:string,middle:string>>>")
+    checkAnswer(query2.orderBy("id"),
+      Row("John", "Y."))
+  }
 }

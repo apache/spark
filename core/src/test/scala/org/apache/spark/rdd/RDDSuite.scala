@@ -697,6 +697,11 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     assert(sortedLowerK.size === 0)
   }
 
+  test("SPARK-40276: takeOrdered with empty RDDs") {
+    assert(sc.emptyRDD[Int].takeOrdered(5) === Array.emptyIntArray)
+    assert(sc.range(0, 10, 1, 3).filter(_ < 0).takeOrdered(5) === Array.emptyLongArray)
+  }
+
   test("takeOrdered with custom ordering") {
     val nums = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     implicit val ord = implicitly[Ordering[Int]].reverse

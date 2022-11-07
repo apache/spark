@@ -64,6 +64,7 @@ object UnsupportedOperationChecker extends Logging {
       case s: Aggregate if s.isStreaming => true
       case _ @ Join(left, right, _, _, _) if left.isStreaming && right.isStreaming => true
       case f: FlatMapGroupsWithState if f.isStreaming => true
+      case f: FlatMapGroupsInPandasWithState if f.isStreaming => true
       case d: Deduplicate if d.isStreaming => true
       case _ => false
     }
@@ -140,6 +141,17 @@ object UnsupportedOperationChecker extends Logging {
       throwError(
         "Multiple flatMapGroupsWithStates are not supported when they are not all in append mode" +
           " or the output mode is not append on a streaming DataFrames/Datasets")(plan)
+    }
+
+    val applyInPandasWithStates = plan.collect {
+      case f: FlatMapGroupsInPandasWithState if f.isStreaming => f
+    }
+
+    // Disallow multiple `applyInPandasWithState`s.
+    if (applyInPandasWithStates.size > 1) {
+      throwError(
+        "Multiple applyInPandasWithStates are not supported on a streaming " +
+          "DataFrames/Datasets")(plan)
     }
 
     // Disallow multiple streaming aggregations
@@ -307,6 +319,56 @@ object UnsupportedOperationChecker extends Logging {
                 "Watermark must be specified in the query using " +
                   "'[Dataset/DataFrame].withWatermark()' for using event-time timeout in a " +
                   "[map|flatMap]GroupsWithState. Event-time timeout not supported without " +
+                  "watermark.")(plan)
+            }
+          }
+
+        // applyInPandasWithState
+        case m: FlatMapGroupsInPandasWithState if m.isStreaming =>
+          // Check compatibility with output modes and aggregations in query
+          val aggsInQuery = collectStreamingAggregates(plan)
+
+          if (aggsInQuery.isEmpty) {
+            // applyInPandasWithState without aggregation: operation's output mode must
+            // match query output mode
+            m.outputMode match {
+              case InternalOutputModes.Update if outputMode != InternalOutputModes.Update =>
+                throwError(
+                  "applyInPandasWithState in update mode is not supported with " +
+                    s"$outputMode output mode on a streaming DataFrame/Dataset")
+
+              case InternalOutputModes.Append if outputMode != InternalOutputModes.Append =>
+                throwError(
+                  "applyInPandasWithState in append mode is not supported with " +
+                    s"$outputMode output mode on a streaming DataFrame/Dataset")
+
+              case _ =>
+            }
+          } else {
+            // applyInPandasWithState with aggregation: update operation mode not allowed, and
+            // *groupsWithState after aggregation not allowed
+            if (m.outputMode == InternalOutputModes.Update) {
+              throwError(
+                "applyInPandasWithState in update mode is not supported with " +
+                  "aggregation on a streaming DataFrame/Dataset")
+            } else if (collectStreamingAggregates(m).nonEmpty) {
+              throwError(
+                "applyInPandasWithState in append mode is not supported after " +
+                  "aggregation on a streaming DataFrame/Dataset")
+            }
+          }
+
+          // Check compatibility with timeout configs
+          if (m.timeout == EventTimeTimeout) {
+            // With event time timeout, watermark must be defined.
+            val watermarkAttributes = m.child.output.collect {
+              case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => a
+            }
+            if (watermarkAttributes.isEmpty) {
+              throwError(
+                "Watermark must be specified in the query using " +
+                  "'[Dataset/DataFrame].withWatermark()' for using event-time timeout in a " +
+                  "applyInPandasWithState. Event-time timeout not supported without " +
                   "watermark.")(plan)
             }
           }

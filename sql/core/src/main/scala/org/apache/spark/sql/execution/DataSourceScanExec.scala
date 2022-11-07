@@ -523,7 +523,12 @@ case class FileSourceScanExec(
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
   override lazy val supportsColumnar: Boolean = {
-    relation.fileFormat.supportBatch(relation.sparkSession, schema)
+    val conf = relation.sparkSession.sessionState.conf
+    // Only output columnar if there is WSCG to read it.
+    val requiredWholeStageCodegenSettings =
+      conf.wholeStageEnabled && !WholeStageCodegenExec.isTooManyFields(conf, schema)
+    requiredWholeStageCodegenSettings &&
+      relation.fileFormat.supportBatch(relation.sparkSession, schema)
   }
 
   private lazy val needsUnsafeRowConversion: Boolean = {
@@ -535,6 +540,8 @@ case class FileSourceScanExec(
   }
 
   lazy val inputRDD: RDD[InternalRow] = {
+    val options = relation.options +
+      (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
       relation.fileFormat.buildReaderWithPartitionValues(
         sparkSession = relation.sparkSession,
@@ -542,7 +549,7 @@ case class FileSourceScanExec(
         partitionSchema = relation.partitionSchema,
         requiredSchema = requiredSchema,
         filters = pushedDownFilters,
-        options = relation.options,
+        options = options,
         hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
 
     val readRDD = if (bucketedScan) {

@@ -21,6 +21,8 @@ import scala.math.{max, min}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
@@ -417,7 +419,8 @@ object BinaryArithmetic {
 case class Add(
     left: Expression,
     right: Expression,
-    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic
+  with CommutativeExpression {
 
   def this(left: Expression, right: Expression) =
     this(left, right, EvalMode.fromSQLConf(SQLConf.get))
@@ -473,6 +476,19 @@ case class Add(
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Add =
     copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    // TODO: do not reorder consecutive `Add`s with different `evalMode`
+    val reorderResult =
+      orderCommutative({ case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, evalMode))
+    if (resolved && reorderResult.resolved && reorderResult.dataType == dataType) {
+      reorderResult
+    } else {
+      // SPARK-40903: Avoid reordering decimal Add for canonicalization if the result data type is
+      // changed, which may cause data checking error within ComplexTypeMergingExpression.
+      withCanonicalizedChildren
+    }
+  }
 }
 
 @ExpressionDescription(
@@ -563,7 +579,8 @@ case class Subtract(
 case class Multiply(
     left: Expression,
     right: Expression,
-    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic
+  with CommutativeExpression {
 
   def this(left: Expression, right: Expression) =
     this(left, right, EvalMode.fromSQLConf(SQLConf.get))
@@ -612,6 +629,11 @@ case class Multiply(
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Multiply = copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    // TODO: do not reorder consecutive `Multiply`s with different `evalMode`
+    orderCommutative({ case Multiply(l, r, _) => Seq(l, r) }).reduce(Multiply(_, _, evalMode))
+  }
 }
 
 // Common base trait for Divide and Remainder, since these two classes are almost identical
@@ -981,9 +1003,6 @@ case class Pmod(
 
   override def symbol: String = "pmod"
 
-  protected def checkTypesInternal(t: DataType): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(t, "pmod")
-
   override def inputType: AbstractDataType = NumericType
 
   override def nullable: Boolean = true
@@ -1179,7 +1198,8 @@ case class Pmod(
   """,
   since = "1.5.0",
   group = "math_funcs")
-case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression {
+case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
+  with CommutativeExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -1188,14 +1208,22 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName requires at least two arguments")
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "expectedNum" -> "> 1",
+          "actualNum" -> children.length.toString))
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
-      TypeCheckResult.TypeCheckFailure(
-        s"The expressions should all have the same type," +
-          s" got LEAST(${children.map(_.dataType.catalogString).mkString(", ")}).")
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> children.map(_.dataType).map(toSQLType).mkString("[", ", ", "]")
+        )
+      )
     } else {
-      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(dataType, prettyName)
     }
   }
 
@@ -1242,6 +1270,10 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Least =
     copy(children = newChildren)
+
+  override lazy val canonicalized: Expression = {
+    Least(orderCommutative({ case Least(children) => children }))
+  }
 }
 
 /**
@@ -1257,7 +1289,8 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
   """,
   since = "1.5.0",
   group = "math_funcs")
-case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpression {
+case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpression
+  with CommutativeExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -1266,14 +1299,22 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName requires at least two arguments")
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "expectedNum" -> "> 1",
+          "actualNum" -> children.length.toString))
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
-      TypeCheckResult.TypeCheckFailure(
-        s"The expressions should all have the same type," +
-          s" got GREATEST(${children.map(_.dataType.catalogString).mkString(", ")}).")
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> children.map(_.dataType).map(toSQLType).mkString("[", ", ", "]")
+        )
+      )
     } else {
-      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(dataType, prettyName)
     }
   }
 
@@ -1320,4 +1361,8 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Greatest =
     copy(children = newChildren)
+
+  override lazy val canonicalized: Expression = {
+    Greatest(orderCommutative({ case Greatest(children) => children }))
+  }
 }

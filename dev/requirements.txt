@@ -13,12 +13,13 @@ matplotlib<3.3.0
 
 # PySpark test dependencies
 unittest-xml-reporting
+openpyxl
 
 # PySpark test dependencies (optional)
 coverage
 
 # Linter
-mypy
+mypy==0.920
 pytest-mypy-plugins==1.9.3
 flake8==3.9.0
 # See SPARK-38680.
@@ -45,3 +46,10 @@ PyGithub
 
 # pandas API on Spark Code formatter.
 black==22.6.0
+
+# Spark Connect (required)
+grpcio==1.48.1
+protobuf==4.21.6
+
+# Spark Connect python proto generation plugin (optional)
+mypy-protobuf==3.3.0

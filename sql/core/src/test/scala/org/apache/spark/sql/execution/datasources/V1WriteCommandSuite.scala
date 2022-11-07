@@ -18,19 +18,19 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sort}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.util.QueryExecutionListener
 
-abstract class V1WriteCommandSuiteBase extends QueryTest with SQLTestUtils {
+trait V1WriteCommandSuiteBase extends SQLTestUtils {
 
   import testImplicits._
 
   setupTestData()
 
-  protected override def beforeAll(): Unit = {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     (0 to 20).map(i => (i, i % 5, (i % 10).toString))
       .toDF("i", "j", "k")
@@ -38,12 +38,12 @@ abstract class V1WriteCommandSuiteBase extends QueryTest with SQLTestUtils {
       .saveAsTable("t0")
   }
 
-  protected override def afterAll(): Unit = {
+  override def afterAll(): Unit = {
     sql("drop table if exists t0")
     super.afterAll()
   }
 
-  protected def withPlannedWrite(testFunc: Boolean => Any): Unit = {
+  def withPlannedWrite(testFunc: Boolean => Any): Unit = {
     Seq(true, false).foreach { enabled =>
       withSQLConf(SQLConf.PLANNED_WRITE_ENABLED.key -> enabled.toString) {
         testFunc(enabled)
@@ -87,19 +87,16 @@ abstract class V1WriteCommandSuiteBase extends QueryTest with SQLTestUtils {
         s"Expect hasLogicalSort: $hasLogicalSort, Actual: ${optimizedPlan.isInstanceOf[Sort]}")
 
       // Check empty2null conversion.
-      val projection = optimizedPlan.collectFirst {
-        case p: Project
-          if p.projectList.exists(_.exists(_.isInstanceOf[V1WritesUtils.Empty2Null])) => p
-      }
-      assert(projection.isDefined == hasEmpty2Null,
-        s"Expect hasEmpty2Null: $hasEmpty2Null, Actual: ${projection.isDefined}")
+      val empty2nullExpr = optimizedPlan.exists(p => V1WritesUtils.hasEmptyToNull(p.expressions))
+      assert(empty2nullExpr == hasEmpty2Null,
+        s"Expect hasEmpty2Null: $hasEmpty2Null, Actual: $empty2nullExpr. Plan:\n$optimizedPlan")
     }
 
     spark.listenerManager.unregister(listener)
   }
 }
 
-class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSession {
+class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1WriteCommandSuiteBase {
 
   import testImplicits._
 
@@ -272,6 +269,23 @@ class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSessio
             """
               |INSERT INTO t PARTITION(p1, p2)
               |SELECT key, value, key, value FROM testData
+              |""".stripMargin)
+        }
+      }
+    }
+  }
+
+  test("v1 write with empty2null in aggregate") {
+    withPlannedWrite { enabled =>
+      withTable("t") {
+        executeAndCheckOrdering(
+          hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
+          sql(
+            """
+              |CREATE TABLE t USING PARQUET
+              |PARTITIONED BY (k) AS
+              |SELECT SUM(i) AS i, SUM(j) AS j, k
+              |FROM t0 WHERE i > 0 GROUP BY k
               |""".stripMargin)
         }
       }

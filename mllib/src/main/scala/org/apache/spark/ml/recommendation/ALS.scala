@@ -465,6 +465,8 @@ class ALSModel private[ml] (
     import srcFactors.sparkSession.implicits._
     import scala.collection.JavaConverters._
 
+    val ratingColumn = "rating"
+    val recommendColumn = "recommendations"
     val srcFactorsBlocked = blockify(srcFactors.as[(Int, Array[Float])], blockSize)
     val dstFactorsBlocked = blockify(dstFactors.as[(Int, Array[Float])], blockSize)
     val ratings = srcFactorsBlocked.crossJoin(dstFactorsBlocked)
@@ -496,18 +498,20 @@ class ALSModel private[ml] (
               .iterator.map { j => (srcId, dstIds(j), scores(j)) }
           }
         }
-      }
-    // We'll force the IDs to be Int. Unfortunately this converts IDs to Int in the output.
-    val topKAggregator = new TopByKeyAggregator[Int, Int, Float](num, Ordering.by(_._2))
-    val recs = ratings.as[(Int, Int, Float)].groupByKey(_._1).agg(topKAggregator.toColumn)
-      .toDF("id", "recommendations")
+      }.toDF(srcOutputColumn, dstOutputColumn, ratingColumn)
 
     val arrayType = ArrayType(
       new StructType()
         .add(dstOutputColumn, IntegerType)
-        .add("rating", FloatType)
+        .add(ratingColumn, FloatType)
     )
-    recs.select($"id".as(srcOutputColumn), $"recommendations".cast(arrayType))
+
+    ratings.groupBy(srcOutputColumn)
+      .agg(collect_top_k(struct(ratingColumn, dstOutputColumn), num, false))
+      .as[(Int, Seq[(Float, Int)])]
+      .map(t => (t._1, t._2.map(p => (p._2, p._1))))
+      .toDF(srcOutputColumn, recommendColumn)
+      .withColumn(recommendColumn, col(recommendColumn).cast(arrayType))
   }
 
   /**

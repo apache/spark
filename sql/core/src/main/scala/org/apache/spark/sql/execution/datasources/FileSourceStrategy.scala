@@ -186,7 +186,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
       // Partition keys are not available in the statistics of the files.
       // `dataColumns` might have partition columns, we need to filter them out.
-      val dataColumnsWithoutPartitionCols = dataColumns.filterNot(partitionColumns.contains)
+      val dataColumnsWithoutPartitionCols = dataColumns.filterNot(partitionSet.contains)
       val dataFilters = normalizedFiltersWithoutSubqueries.flatMap { f =>
         if (f.references.intersect(partitionSet).nonEmpty) {
           extractPredicatesWithinOutputSet(f, AttributeSet(dataColumnsWithoutPartitionCols))

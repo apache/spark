@@ -130,6 +130,21 @@ object SelectedField {
         val ArrayType(_, containsNull) = child.dataType
         val opt = dataTypeOpt.map(dt => ArrayType(dt, containsNull))
         selectField(child, opt)
+      case ElementAt(left, right, _, _) if right.foldable =>
+        // ElementAt does not select a field from a struct (i.e. prune the struct) so it can't be
+        // the top-level extractor. However it can be part of an extractor chain.
+        // For example:
+        // For a column schema: `c: array<struct<s1: int, s2: string>>`
+        // With the query: `SELECT element_at(c, 1).s1`
+        // The final pruned schema should be `c: array<struct<s1: int>>`
+        left.dataType match {
+          case ArrayType(_, containsNull) =>
+            val opt = dataTypeOpt.map(dt => ArrayType(dt, containsNull))
+            selectField(left, opt)
+          case MapType(keyType, _, valueContainsNull) =>
+            val opt = dataTypeOpt.map(dt => MapType(keyType, dt, valueContainsNull))
+            selectField(left, opt)
+        }
       case _ =>
         None
     }

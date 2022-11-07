@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import scala.collection.mutable.{Map => MutableMap}
+import scala.collection.mutable
 
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
@@ -45,7 +46,9 @@ class MicroBatchExecution(
     plan: WriteToStream)
   extends StreamExecution(
     sparkSession, plan.name, plan.resolvedCheckpointLocation, plan.inputQuery, plan.sink, trigger,
-    triggerClock, plan.outputMode, plan.deleteCheckpointOnStop) {
+    triggerClock, plan.outputMode, plan.deleteCheckpointOnStop) with AsyncLogPurge {
+
+  protected[sql] val errorNotifier = new ErrorNotifier()
 
   @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
 
@@ -105,7 +108,8 @@ class MicroBatchExecution(
             StreamingDataSourceV2Relation(output, scan, stream, catalog, identifier)
           })
         } else if (v1.isEmpty) {
-          throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(srcName)
+          throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
+            srcName, sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders, table)
         } else {
           v2ToExecutionRelationMap.getOrElseUpdate(s, {
             // Materialize source to avoid creating it in every batch
@@ -208,6 +212,14 @@ class MicroBatchExecution(
     logInfo(s"Query $prettyIdString was stopped")
   }
 
+  override def cleanup(): Unit = {
+    super.cleanup()
+
+    // shutdown and cleanup required for async log purge mechanism
+    asyncLogPurgeShutdown()
+    logInfo(s"Async log purge executor pool for query ${prettyIdString} has been shutdown")
+  }
+
   /** Begins recording statistics about query progress for a given trigger. */
   override protected def startTrigger(): Unit = {
     super.startTrigger()
@@ -224,6 +236,10 @@ class MicroBatchExecution(
 
     triggerExecutor.execute(() => {
       if (isActive) {
+
+        // check if there are any previous errors and bubble up any existing async operations
+        errorNotifier.throwErrorIfExists
+
         var currentBatchHasNewData = false // Whether the current batch had new data
 
         startTrigger()
@@ -534,7 +550,11 @@ class MicroBatchExecution(
         // It is now safe to discard the metadata beyond the minimum number to retain.
         // Note that purge is exclusive, i.e. it purges everything before the target ID.
         if (minLogEntriesToMaintain < currentBatchId) {
-          purge(currentBatchId - minLogEntriesToMaintain)
+          if (useAsyncPurge) {
+            purgeAsync()
+          } else {
+            purge(currentBatchId - minLogEntriesToMaintain)
+          }
         }
       }
       noNewData = false
@@ -553,7 +573,7 @@ class MicroBatchExecution(
     logDebug(s"Running batch $currentBatchId")
 
     // Request unprocessed data from all sources.
-    newData = reportTimeTaken("getBatch") {
+    val mutableNewData = mutable.Map.empty ++ reportTimeTaken("getBatch") {
       availableOffsets.flatMap {
         case (source: Source, available: Offset)
           if committedOffsets.get(source).map(_ != available).getOrElse(true) =>
@@ -590,7 +610,7 @@ class MicroBatchExecution(
     val newBatchesPlan = logicalPlan transform {
       // For v1 sources.
       case StreamingExecutionRelation(source, output, catalogTable) =>
-        newData.get(source).map { dataPlan =>
+        mutableNewData.get(source).map { dataPlan =>
           val hasFileMetadata = output.exists {
             case FileSourceMetadataAttribute(_) => true
             case _ => false
@@ -608,6 +628,11 @@ class MicroBatchExecution(
               }
               newRelation
           }
+          // SPARK-40460: overwrite the entry with the new logicalPlan
+          // because it might contain the _metadata column. It is a necessary change,
+          // in the ProgressReporter, we use the following mapping to get correct streaming metrics:
+          // streaming logical plan (with sources) <==> trigger's logical plan <==> executed plan
+          mutableNewData.put(source, finalDataPlan)
           val maxFields = SQLConf.get.maxToStringFields
           assert(output.size == finalDataPlan.output.size,
             s"Invalid batch: ${truncatedString(output, ",", maxFields)} != " +
@@ -623,14 +648,14 @@ class MicroBatchExecution(
 
       // For v2 sources.
       case r: StreamingDataSourceV2Relation =>
-        newData.get(r.stream).map {
+        mutableNewData.get(r.stream).map {
           case OffsetHolder(start, end) =>
             r.copy(startOffset = Some(start), endOffset = Some(end))
         }.getOrElse {
           LocalRelation(r.output, isStreaming = true)
         }
     }
-
+    newData = mutableNewData.toMap
     // Rewire the plan to use the new attributes that were returned by the source.
     val newAttributePlan = newBatchesPlan.transformAllExpressionsWithPruning(
       _.containsPattern(CURRENT_LIKE)) {
@@ -670,6 +695,7 @@ class MicroBatchExecution(
         id,
         runId,
         currentBatchId,
+        offsetLog.offsetSeqMetadataForBatchId(currentBatchId - 1),
         offsetSeqMetadata)
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }

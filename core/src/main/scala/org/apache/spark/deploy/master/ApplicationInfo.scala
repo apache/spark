@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.deploy.ApplicationDescription
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceUtils}
-import org.apache.spark.resource.ResourceProfile.{getCustomExecutorResources, DEFAULT_RESOURCE_PROFILE_ID}
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
@@ -101,7 +101,7 @@ private[spark] class ApplicationInfo(
         .map(_.toInt)
         .getOrElse(defaultMemoryMbPerExecutor)
       val customResources = ResourceUtils.executorResourceRequestToRequirement(
-        getCustomExecutorResources(resourceProfile).values.toSeq.sortBy(_.resourceName))
+        resourceProfile.getCustomExecutorResources().values.toSeq.sortBy(_.resourceName))
 
       rpIdToResourceDesc(resourceProfile.id) =
         ExecutorResourceDescription(coresPerExecutor, memoryMbPerExecutor, customResources)

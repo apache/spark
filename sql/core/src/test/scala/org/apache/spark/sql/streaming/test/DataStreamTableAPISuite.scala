@@ -75,9 +75,10 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   }
 
   test("read: read non-exist table") {
-    intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       spark.readStream.table("non_exist_table")
-    }.message.contains("Table not found")
+    }
+    checkErrorTableNotFound(e, "`non_exist_table`")
   }
 
   test("read: stream table API with temp view") {
@@ -605,7 +606,7 @@ class InMemoryStreamTableCatalog extends InMemoryTableCatalog {
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
     if (tables.containsKey(ident)) {
-      throw new TableAlreadyExistsException(ident)
+      throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
     }
 
     val table = if (ident.name() == DataStreamTableAPISuite.V1FallbackTestTableName) {

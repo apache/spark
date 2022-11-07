@@ -1467,8 +1467,10 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       val e = intercept[AnalysisException] {
         catalog.registerFunction(
           newFunc("temp1", None), overrideIfExists = false, functionBuilder = Some(tempFunc3))
-      }.getMessage
-      assert(e.contains("Function temp1 already exists"))
+      }
+      checkError(e,
+        errorClass = "ROUTINE_ALREADY_EXISTS",
+        parameters = Map("routineName" -> "`temp1`"))
       // Temporary function is overridden
       catalog.registerFunction(
         newFunc("temp1", None), overrideIfExists = true, functionBuilder = Some(tempFunc3))
@@ -1576,13 +1578,29 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       val arguments = Seq(Literal(1), Literal(2), Literal(3))
       assert(catalog.lookupFunction(FunctionIdentifier("func1"), arguments) === Literal(1))
       catalog.dropTempFunction("func1", ignoreIfNotExists = false)
-      intercept[NoSuchFunctionException] {
-        catalog.lookupFunction(FunctionIdentifier("func1"), arguments)
-      }
-      intercept[NoSuchTempFunctionException] {
-        catalog.dropTempFunction("func1", ignoreIfNotExists = false)
-      }
+      checkError(
+        exception = intercept[NoSuchFunctionException] {
+          catalog.lookupFunction(FunctionIdentifier("func1"), arguments)
+        },
+        errorClass = "ROUTINE_NOT_FOUND",
+        parameters = Map("routineName" -> "`default`.`func1`")
+      )
+      checkError(
+        exception = intercept[NoSuchTempFunctionException] {
+          catalog.dropTempFunction("func1", ignoreIfNotExists = false)
+        },
+        errorClass = "ROUTINE_NOT_FOUND",
+        parameters = Map("routineName" -> "`func1`")
+      )
       catalog.dropTempFunction("func1", ignoreIfNotExists = true)
+
+      checkError(
+        exception = intercept[NoSuchTempFunctionException] {
+          catalog.dropTempFunction("func2", ignoreIfNotExists = false)
+        },
+        errorClass = "ROUTINE_NOT_FOUND",
+        parameters = Map("routineName" -> "`func2`")
+      )
     }
   }
 
@@ -1725,20 +1743,6 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(original.getCurrentDatabase == db1)
       original.setCurrentDatabase(db3)
       assert(clone.getCurrentDatabase == db2)
-    }
-  }
-
-  test("SPARK-24544: test print actual failure cause when look up function failed") {
-    withBasicCatalog { catalog =>
-      val cause = intercept[NoSuchFunctionException] {
-        catalog.failFunctionLookup(FunctionIdentifier("failureFunc"),
-          Some(new Exception("Actual error")))
-      }
-
-      // fullStackTrace will be printed, but `cause.getMessage` has been
-      // override in `AnalysisException`,so here we get the root cause
-      // exception message for check.
-      assert(cause.cause.get.getMessage.contains("Actual error"))
     }
   }
 

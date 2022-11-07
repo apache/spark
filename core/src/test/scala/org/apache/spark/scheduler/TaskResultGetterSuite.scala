@@ -35,6 +35,7 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.TestUtils.JavaSourceFromString
+import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.storage.TaskResultBlockId
 import org.apache.spark.util.{MutableURLClassLoader, RpcUtils, ThreadUtils, Utils}
@@ -295,6 +296,18 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     // Job failed, even though the failure reason is unknown.
     val unknownFailure = """(?s).*Lost task.*: UnknownReason.*""".r
     assert(unknownFailure.findFirstMatchIn(message).isDefined)
+  }
+
+  test("SPARK-40261: task result metadata should not be counted into result size") {
+    val conf = new SparkConf().set(MAX_RESULT_SIZE.key, "1M")
+    sc = new SparkContext("local", "test", conf)
+    val rdd = sc.parallelize(1 to 10000, 10000)
+    // This will trigger 10k task but return empty result. The total serialized return tasks
+    // size(including accumUpdates metadata) would be ~10M in total in this example, but the result
+    // value itself is pretty small(empty arrays)
+    // Even setting MAX_RESULT_SIZE to a small value(1M here), it should not throw exception
+    // because the actual result is small
+    assert(rdd.filter(_ < 0).collect().isEmpty)
   }
 
 }

@@ -144,20 +144,23 @@ class UserDefinedFunction:
                     "Invalid return type with scalar Pandas UDFs: %s is "
                     "not supported" % str(self._returnType_placeholder)
                 )
-        elif self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
+        elif (
+            self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+            or self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE
+        ):
             if isinstance(self._returnType_placeholder, StructType):
                 try:
                     to_arrow_type(self._returnType_placeholder)
                 except TypeError:
                     raise NotImplementedError(
                         "Invalid return type with grouped map Pandas UDFs or "
-                        "at groupby.applyInPandas: %s is not supported"
+                        "at groupby.applyInPandas(WithState): %s is not supported"
                         % str(self._returnType_placeholder)
                     )
             else:
                 raise TypeError(
                     "Invalid return type for grouped map Pandas "
-                    "UDFs or at groupby.applyInPandas: return type must be a "
+                    "UDFs or at groupby.applyInPandas(WithState): return type must be a "
                     "StructType."
                 )
         elif (

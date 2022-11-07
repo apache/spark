@@ -356,7 +356,7 @@ private[spark] object ResourceUtils extends Logging {
     val fileAllocated = parseAllocated(resourcesFileOpt, componentName)
     val fileAllocResMap = fileAllocated.map(a => (a.id.resourceName, a.toResourceInformation)).toMap
     // only want to look at the ResourceProfile for resources not in the resources file
-    val execReq = ResourceProfile.getCustomExecutorResources(resourceProfile)
+    val execReq = resourceProfile.getCustomExecutorResources()
     val filteredExecreq = execReq.filterNot { case (rname, _) => fileAllocResMap.contains(rname) }
     val rpAllocations = filteredExecreq.map { case (rName, execRequest) =>
       val resourceId = new ResourceID(componentName, rName)
@@ -444,8 +444,8 @@ private[spark] object ResourceUtils extends Logging {
         maxTaskPerExec = numTasksPerExecCores
       }
     }
-    val taskReq = ResourceProfile.getCustomTaskResources(rp)
-    val execReq = ResourceProfile.getCustomExecutorResources(rp)
+    val taskReq = rp.getCustomTaskResources()
+    val execReq = rp.getCustomExecutorResources()
 
     if (limitingResource.nonEmpty && !limitingResource.equals(ResourceProfile.CPUS)) {
       if ((taskCpus * maxTaskPerExec) < cores) {

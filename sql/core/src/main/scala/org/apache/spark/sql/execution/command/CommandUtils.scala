@@ -22,7 +22,7 @@ import java.net.URI
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
@@ -113,13 +113,12 @@ object CommandUtils extends Logging {
     // countFileSize to count the table size.
     val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
 
-    def getPathSize(fs: FileSystem, path: Path): Long = {
-      val fileStatus = fs.getFileStatus(path)
+    def getPathSize(fs: FileSystem, fileStatus: FileStatus): Long = {
       val size = if (fileStatus.isDirectory) {
-        fs.listStatus(path)
+        fs.listStatus(fileStatus.getPath)
           .map { status =>
             if (isDataPath(status.getPath, stagingDir)) {
-              getPathSize(fs, status.getPath)
+              getPathSize(fs, status)
             } else {
               0L
             }
@@ -136,7 +135,7 @@ object CommandUtils extends Logging {
       val path = new Path(p)
       try {
         val fs = path.getFileSystem(sessionState.newHadoopConf())
-        getPathSize(fs, path)
+        getPathSize(fs, fs.getFileStatus(path))
       } catch {
         case NonFatal(e) =>
           logWarning(

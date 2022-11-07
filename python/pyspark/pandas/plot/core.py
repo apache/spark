@@ -27,7 +27,6 @@ from pandas.core.dtypes.inference import is_integer
 
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.utils import name_like_string
 
 
@@ -191,12 +190,12 @@ class HistogramPlotBase(NumericPlotBase):
 
             if output_df is None:
                 output_df = bucket_df.select(
-                    SF.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
+                    F.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
                 )
             else:
                 output_df = output_df.union(
                     bucket_df.select(
-                        SF.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
+                        F.lit(group_id).alias("__group_id"), F.col(bucket_name).alias("__bucket")
                     )
                 )
 
@@ -371,14 +370,14 @@ class BoxPlotBase:
         for colname in colnames:
             outlier_colname = "__{}_outlier".format(colname)
             scols.append(
-                F.min(
-                    F.when(~F.col(outlier_colname), F.col(colname)).otherwise(SF.lit(None))
-                ).alias("__{}_min".format(colname))
+                F.min(F.when(~F.col(outlier_colname), F.col(colname)).otherwise(F.lit(None))).alias(
+                    "__{}_min".format(colname)
+                )
             )
             scols.append(
-                F.max(
-                    F.when(~F.col(outlier_colname), F.col(colname)).otherwise(SF.lit(None))
-                ).alias("__{}_max".format(colname))
+                F.max(F.when(~F.col(outlier_colname), F.col(colname)).otherwise(F.lit(None))).alias(
+                    "__{}_max".format(colname)
+                )
             )
 
         pdf = multicol_outliers.select(*scols).toPandas()

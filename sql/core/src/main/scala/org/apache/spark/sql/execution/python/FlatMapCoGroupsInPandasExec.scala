@@ -54,7 +54,7 @@ case class FlatMapCoGroupsInPandasExec(
     output: Seq[Attribute],
     left: SparkPlan,
     right: SparkPlan)
-  extends SparkPlan with BinaryExecNode {
+  extends SparkPlan with BinaryExecNode with PythonSQLMetrics {
 
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
   private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
@@ -77,9 +77,8 @@ case class FlatMapCoGroupsInPandasExec(
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
-
-    val (leftDedup, leftArgOffsets) = resolveArgOffsets(left, leftGroup)
-    val (rightDedup, rightArgOffsets) = resolveArgOffsets(right, rightGroup)
+    val (leftDedup, leftArgOffsets) = resolveArgOffsets(left.output, leftGroup)
+    val (rightDedup, rightArgOffsets) = resolveArgOffsets(right.output, rightGroup)
 
     // Map cogrouped rows to ArrowPythonRunner results, Only execute if partition is not empty
     left.execute().zipPartitions(right.execute())  { (leftData, rightData) =>
@@ -97,7 +96,8 @@ case class FlatMapCoGroupsInPandasExec(
           StructType.fromAttributes(leftDedup),
           StructType.fromAttributes(rightDedup),
           sessionLocalTimeZone,
-          pythonRunnerConf)
+          pythonRunnerConf,
+          pythonMetrics)
 
         executePython(data, output, runner)
       }

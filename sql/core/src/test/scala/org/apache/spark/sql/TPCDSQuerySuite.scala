@@ -29,6 +29,10 @@ import org.apache.spark.tags.ExtendedSQLTest
 @ExtendedSQLTest
 class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSBase {
 
+  override protected def sparkConf: SparkConf =
+    // Disable read-side char padding so that the generated code is less than 8000.
+    super.sparkConf.set(SQLConf.READ_SIDE_CHAR_PADDING, false)
+
   // q72 is skipped due to GitHub Actions' memory limit.
   tpcdsQueries.filterNot(sys.env.contains("GITHUB_ACTIONS") && _ == "q72").foreach { name =>
     val queryString = resourceToString(s"tpcds/$name.sql",

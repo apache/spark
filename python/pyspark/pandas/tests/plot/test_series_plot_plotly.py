@@ -70,7 +70,7 @@ class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
 
     @property
     def pdf2(self):
-        return self.psdf2.to_pandas()
+        return self.psdf2._to_pandas()
 
     def test_bar_plot(self):
         pdf = self.pdf1
@@ -111,7 +111,7 @@ class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
 
     def test_pie_plot(self):
         psdf = self.psdf1
-        pdf = psdf.to_pandas()
+        pdf = psdf._to_pandas()
         self.assertEqual(
             psdf["a"].plot(kind="pie"),
             express.pie(pdf, values=pdf.columns[0], names=pdf.index),
@@ -134,7 +134,7 @@ class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
         #     },
         #     index=pd.MultiIndex.from_tuples([("x", "y")] * 11),
         # )
-        # pdf = psdf.to_pandas()
+        # pdf = psdf._to_pandas()
         # self.assertEqual(
         #     psdf["a"].plot(kind="pie"), express.pie(pdf, values=pdf.columns[0], names=pdf.index),
         # )

@@ -63,7 +63,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
         try {
           val (result, size) = serializer.get().deserialize[TaskResult[_]](serializedData) match {
             case directResult: DirectTaskResult[_] =>
-              if (!taskSetManager.canFetchMoreResults(serializedData.limit())) {
+              if (!taskSetManager.canFetchMoreResults(directResult.valueBytes.limit())) {
                 // kill the task so that it will not become zombie task
                 scheduler.handleFailedTask(taskSetManager, tid, TaskState.KILLED, TaskKilled(
                   "Tasks result size has exceeded maxResultSize"))

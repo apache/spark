@@ -433,8 +433,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
       EnsureRequirements.apply(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
-        SortExec(_, _, DummySparkPlan(_, _, SinglePartition, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(SinglePartition, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+          assert(left.numPartitions == 5)
+          assert(right.numPartitions == 5)
         case other => fail(other.toString)
       }
 
@@ -686,6 +688,45 @@ class EnsureRequirementsSuite extends SharedSparkSession {
             case other => fail(other.toString)
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-40703: shuffle for SinglePartitionShuffleSpec") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> 20.toString) {
+      // We should re-shuffle the side with single partition when the other side is
+      // `HashPartitioning` with shuffle node, and respect the minimum parallelism.
+      var plan1: SparkPlan = ShuffleExchangeExec(
+        outputPartitioning = HashPartitioning(exprA :: Nil, 10),
+        DummySparkPlan())
+      var plan2 = DummySparkPlan(outputPartitioning = SinglePartition)
+      var smjExec = SortMergeJoinExec(exprA :: Nil, exprC :: Nil, Inner, None, plan1, plan2)
+      EnsureRequirements.apply(smjExec) match {
+        case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+          assert(leftKeys === Seq(exprA))
+          assert(rightKeys === Seq(exprC))
+          assert(left.numPartitions == 20)
+          assert(right.numPartitions == 20)
+        case other => fail(other.toString)
+      }
+
+      // We should also re-shuffle the side with only a single partition even the other side does
+      // not have `ShuffleExchange`, but just `HashPartitioning`. However in this case the minimum
+      // shuffle parallelism will be ignored since we don't want to introduce extra shuffle.
+      plan1 = DummySparkPlan(
+        outputPartitioning = HashPartitioning(exprA :: Nil, 10))
+      plan2 = DummySparkPlan(outputPartitioning = SinglePartition)
+      smjExec = SortMergeJoinExec(exprA :: Nil, exprC :: Nil, Inner, None, plan1, plan2)
+      EnsureRequirements.apply(smjExec) match {
+        case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+        SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+          assert(leftKeys === Seq(exprA))
+          assert(rightKeys === Seq(exprC))
+          assert(right.numPartitions == 10)
+        case other => fail(other.toString)
       }
     }
   }

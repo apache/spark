@@ -46,7 +46,7 @@ from typing import (
 )
 
 from py4j.protocol import register_input_converter
-from py4j.java_gateway import GatewayClient, JavaClass, JavaObject
+from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway, JavaObject
 
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import has_numpy
@@ -2268,12 +2268,59 @@ class NumpyScalarConverter:
         return obj.item()
 
 
+class NumpyArrayConverter:
+    def _from_numpy_type_to_java_type(
+        self, nt: "np.dtype", gateway: JavaGateway
+    ) -> Optional[JavaClass]:
+        """Convert NumPy type to Py4J Java type."""
+        if nt in [np.dtype("int8"), np.dtype("int16")]:
+            # Mapping int8 to gateway.jvm.byte causes
+            #   TypeError: 'bytes' object does not support item assignment
+            return gateway.jvm.short
+        elif nt == np.dtype("int32"):
+            return gateway.jvm.int
+        elif nt == np.dtype("int64"):
+            return gateway.jvm.long
+        elif nt == np.dtype("float32"):
+            return gateway.jvm.float
+        elif nt == np.dtype("float64"):
+            return gateway.jvm.double
+        elif nt == np.dtype("bool"):
+            return gateway.jvm.boolean
+
+        return None
+
+    def can_convert(self, obj: Any) -> bool:
+        return has_numpy and isinstance(obj, np.ndarray) and obj.ndim == 1
+
+    def convert(self, obj: "np.ndarray", gateway_client: GatewayClient) -> JavaObject:
+        from pyspark import SparkContext
+
+        gateway = SparkContext._gateway
+        assert gateway is not None
+        plist = obj.tolist()
+
+        if len(obj) > 0 and isinstance(plist[0], str):
+            jtpe = gateway.jvm.String
+        else:
+            jtpe = self._from_numpy_type_to_java_type(obj.dtype, gateway)
+            if jtpe is None:
+                raise TypeError("The type of array scalar '%s' is not supported" % (obj.dtype))
+        jarr = gateway.new_array(jtpe, len(obj))
+        for i in range(len(plist)):
+            jarr[i] = plist[i]
+        return jarr
+
+
 # datetime is a subclass of date, we should register DatetimeConverter first
 register_input_converter(DatetimeNTZConverter())
 register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
 register_input_converter(DayTimeIntervalTypeConverter())
 register_input_converter(NumpyScalarConverter())
+# NumPy array satisfies py4j.java_collections.ListConverter,
+# so prepend NumpyArrayConverter
+register_input_converter(NumpyArrayConverter(), prepend=True)
 
 
 def _test() -> None:

@@ -50,7 +50,8 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
 
   def propagateNull: Boolean
 
-  override def foldable: Boolean = children.forall(_.foldable) && deterministic
+  override def foldable: Boolean =
+    children.forall(_.foldable) && deterministic && trustedSerializable(dataType)
   protected lazy val needNullCheck: Boolean = needNullCheckForIndex.contains(true)
   protected lazy val needNullCheckForIndex: Array[Boolean] =
     arguments.map(a => a.nullable && (propagateNull ||
@@ -62,6 +63,14 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
       .map(cls => v => cls.cast(v))
       .getOrElse(identity)
 
+  // Returns true if we can trust all values of the given DataType can be serialized.
+  private def trustedSerializable(dt: DataType): Boolean = {
+    // Right now we conservatively block all ObjectType (Java objects) regardless of
+    // serializability, because the type-level info with java.io.Serializable and
+    // java.io.Externalizable marker interfaces are not strong guarantees.
+    // This restriction can be relaxed in the future to expose more optimizations.
+    !dt.existsRecursively(_.isInstanceOf[ObjectType])
+  }
 
   /**
    * Prepares codes for arguments.

@@ -62,6 +62,40 @@ class TimedeltaIndexTest(PandasOnSparkTestCase, TestUtils):
     def neg_psidx(self):
         return ps.from_pandas(self.neg_pidx)
 
+    def test_timedelta_index(self):
+        # Create TimedeltaIndex from constructor
+        psidx = ps.TimedeltaIndex(
+            [
+                timedelta(days=1),
+                timedelta(seconds=1),
+                timedelta(microseconds=1),
+                timedelta(milliseconds=1),
+                timedelta(minutes=1),
+                timedelta(hours=1),
+                timedelta(weeks=1),
+            ],
+            name="x",
+        )
+        self.assert_eq(psidx, self.pidx)
+        # Create TimedeltaIndex from Series
+        self.assert_eq(
+            ps.TimedeltaIndex(ps.Series([timedelta(days=1)])),
+            pd.TimedeltaIndex(pd.Series([timedelta(days=1)])),
+        )
+        # Create TimedeltaIndex from Index
+        self.assert_eq(
+            ps.TimedeltaIndex(ps.Index([timedelta(days=1)])),
+            pd.TimedeltaIndex(pd.Index([timedelta(days=1)])),
+        )
+
+        # ps.TimedeltaIndex(ps.Index([1, 2, 3]))
+        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+            ps.TimedeltaIndex([timedelta(1), timedelta(microseconds=2)], name=[(1, 2)])
+        with self.assertRaisesRegexp(
+            TypeError, "Cannot perform 'all' with this index type: TimedeltaIndex"
+        ):
+            psidx.all()
+
     def test_properties(self):
         self.assert_eq(self.psidx.days, self.pidx.days)
         self.assert_eq(self.psidx.seconds, self.pidx.seconds)

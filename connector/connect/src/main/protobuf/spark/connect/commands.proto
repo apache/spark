@@ -1,0 +1,103 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = 'proto3';
+
+import "spark/connect/expressions.proto";
+import "spark/connect/relations.proto";
+import "spark/connect/types.proto";
+
+package spark.connect;
+
+option java_multiple_files = true;
+option java_package = "org.apache.spark.connect.proto";
+
+// A [[Command]] is an operation that is executed by the server that does not directly consume or
+// produce a relational result.
+message Command {
+  oneof command_type {
+    CreateScalarFunction create_function = 1;
+    WriteOperation write_operation = 2;
+  }
+}
+
+// Simple message that is used to create a scalar function based on the provided function body.
+//
+// This message is used to register for example a Python UDF in the session catalog by providing
+// the serialized method body.
+//
+// TODO(SPARK-40532) It is required to add the interpreter / language version to the command
+//   parameters.
+message CreateScalarFunction {
+  // Fully qualified name of the function including the catalog / schema names.
+  repeated string parts = 1;
+  FunctionLanguage language = 2;
+  bool temporary = 3;
+  repeated DataType argument_types = 4;
+  DataType return_type = 5;
+
+  // How the function body is defined:
+  oneof function_definition {
+    // As a raw string serialized:
+    bytes serialized_function = 6;
+    // As a code literal
+    string literal_string = 7;
+  }
+
+  enum FunctionLanguage {
+    FUNCTION_LANGUAGE_UNSPECIFIED = 0;
+    FUNCTION_LANGUAGE_SQL = 1;
+    FUNCTION_LANGUAGE_PYTHON = 2;
+    FUNCTION_LANGUAGE_SCALA = 3;
+  }
+}
+
+// As writes are not directly handled during analysis and planning, they are modeled as commands.
+message WriteOperation {
+  // The output of the `input` relation will be persisted according to the options.
+  Relation input = 1;
+  // Format value according to the Spark documentation. Examples are: text, parquet, delta.
+  string source = 2;
+  // The destination of the write operation must be either a path or a table.
+  oneof save_type {
+    string path = 3;
+    string table_name = 4;
+  }
+  SaveMode mode = 5;
+  // List of columns to sort the output by.
+  repeated string sort_column_names = 6;
+  // List of columns for partitioning.
+  repeated string partitioning_columns = 7;
+  // Optional bucketing specification. Bucketing must set the number of buckets and the columns
+  // to bucket by.
+  BucketBy bucket_by = 8;
+  // Optional list of configuration options.
+  map<string, string> options = 9;
+
+  message BucketBy {
+    repeated string bucket_column_names = 1;
+    int32 num_buckets = 2;
+  }
+
+  enum SaveMode {
+    SAVE_MODE_UNSPECIFIED = 0;
+    SAVE_MODE_APPEND = 1;
+    SAVE_MODE_OVERWRITE = 2;
+    SAVE_MODE_ERROR_IF_EXISTS = 3;
+    SAVE_MODE_IGNORE = 4;
+  }
+}

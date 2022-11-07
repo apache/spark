@@ -850,8 +850,8 @@ object ScalaReflection extends ScalaReflection {
         applyMethods.find { method =>
           val params = method.typeSignature.paramLists.head
           // Check that the needed params are the same length and of matching types
-          params.size == paramTypes.tail.size &&
-          params.zip(paramTypes.tail).forall { case(ps, pc) =>
+          params.size == paramTypes.size &&
+          params.zip(paramTypes).forall { case(ps, pc) =>
             ps.typeSignature.typeSymbol == mirror.classSymbol(pc)
           }
         }.map { applyMethodSymbol =>

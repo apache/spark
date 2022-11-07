@@ -24,7 +24,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark import SparkContext
-from pyspark.sql import Column
+from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
     BooleanType,
     LongType,
@@ -43,7 +43,6 @@ from pyspark.pandas.data_type_ops.base import (
     _as_string_type,
     _sanitize_list_like,
 )
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import pandas_on_spark_type
 
 
@@ -76,7 +75,7 @@ class DatetimeOps(DataTypeOps):
                 SeriesOrIndex,
                 left._with_new_scol(
                     left.astype("long").spark.column
-                    - self._cast_spark_column_timestamp_to_long(SF.lit(right)),
+                    - self._cast_spark_column_timestamp_to_long(F.lit(right)),
                     field=left._internal.data_fields[0].copy(
                         dtype=np.dtype("int64"), spark_type=LongType()
                     ),
@@ -99,7 +98,7 @@ class DatetimeOps(DataTypeOps):
             return cast(
                 SeriesOrIndex,
                 left._with_new_scol(
-                    self._cast_spark_column_timestamp_to_long(SF.lit(right))
+                    self._cast_spark_column_timestamp_to_long(F.lit(right))
                     - left.astype("long").spark.column,
                     field=left._internal.data_fields[0].copy(
                         dtype=np.dtype("int64"), spark_type=LongType()

@@ -17,6 +17,7 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.TimeUnit
+import java.util.function.UnaryOperator
 
 import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
@@ -56,6 +57,8 @@ private[spark] class ExecutorPodsLifecycleManager(
   // Keep track of which pods are inactive to avoid contacting the API server multiple times.
   // This set is cleaned up when a snapshot containing the updated pod is processed.
   private val inactivatedPods = mutable.HashSet.empty[Long]
+
+  private val namespace = conf.get(KUBERNETES_NAMESPACE)
 
   def start(schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     val eventProcessingInterval = conf.get(KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL)
@@ -168,6 +171,7 @@ private[spark] class ExecutorPodsLifecycleManager(
         // of getting rid of the pod is what matters.
         kubernetesClient
           .pods()
+          .inNamespace(namespace)
           .withName(updatedPod.getMetadata.getName)
           .delete()
       } else if (!inactivatedPods.contains(execId) && !isPodInactive(updatedPod)) {
@@ -175,16 +179,11 @@ private[spark] class ExecutorPodsLifecycleManager(
         // can be ignored in future updates from the API server.
         logDebug(s"Marking executor ${updatedPod.getMetadata.getName} as inactive since " +
           "deletion is disabled.")
-        val inactivatedPod = new PodBuilder(updatedPod)
-          .editMetadata()
-            .addToLabels(Map(SPARK_EXECUTOR_INACTIVE_LABEL -> "true").asJava)
-            .endMetadata()
-          .build()
-
         kubernetesClient
           .pods()
+          .inNamespace(namespace)
           .withName(updatedPod.getMetadata.getName)
-          .patch(inactivatedPod)
+          .edit(executorInactivationFn)
 
         inactivatedPods += execId
       }
@@ -274,4 +273,9 @@ private object ExecutorPodsLifecycleManager {
     s"${code}${humanStr}"
   }
 
+  def executorInactivationFn: UnaryOperator[Pod] = (p: Pod) => new PodBuilder(p)
+    .editOrNewMetadata()
+    .addToLabels(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
+    .endMetadata()
+    .build()
 }

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{ApplyFunctionExpression, Cast,
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, StringSelfFunction, UnboundBucketFunction, UnboundStringSelfFunction}
+import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, StringSelfFunction, TruncateFunction, UnboundBucketFunction, UnboundStringSelfFunction, UnboundTruncateFunction}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.LogicalExpressions._
@@ -45,7 +45,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   import testImplicits._
 
   before {
-    Seq(UnboundBucketFunction, UnboundStringSelfFunction).foreach { f =>
+    Seq(UnboundBucketFunction, UnboundStringSelfFunction, UnboundTruncateFunction).foreach { f =>
       catalog.createFunction(Identifier.of(Array.empty, f.name()), f)
     }
   }
@@ -1041,19 +1041,36 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       distributionStrictlyRequired: Boolean = true,
       dataSkewed: Boolean = false,
       coalesce: Boolean = false): Unit = {
+
+    val stringSelfTransform = ApplyTransform(
+      "string_self",
+      Seq(FieldReference("data")))
+    val truncateTransform = ApplyTransform(
+      "truncate",
+      Seq(stringSelfTransform, LiteralValue(2, IntegerType)))
+
     val tableOrdering = Array[SortOrder](
-      sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
+      sort(
+        stringSelfTransform,
+        SortDirection.DESCENDING,
+        NullOrdering.NULLS_FIRST),
       sort(
         BucketTransform(LiteralValue(10, IntegerType), Seq(FieldReference("id"))),
         SortDirection.DESCENDING,
         NullOrdering.NULLS_FIRST)
     )
-    val tableDistribution = Distributions.clustered(Array(
-      ApplyTransform("string_self", Seq(FieldReference("data")))))
+    val tableDistribution = Distributions.clustered(Array(truncateTransform))
+
+    val stringSelfExpr = ApplyFunctionExpression(
+      StringSelfFunction,
+      Seq(attr("data")))
+    val truncateExpr = ApplyFunctionExpression(
+      TruncateFunction,
+      Seq(stringSelfExpr, Literal(2)))
 
     val writeOrdering = Seq(
       catalyst.expressions.SortOrder(
-        attr("data"),
+        stringSelfExpr,
         catalyst.expressions.Descending,
         catalyst.expressions.NullsFirst,
         Seq.empty
@@ -1066,8 +1083,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       )
     )
 
-    val writePartitioningExprs = Seq(
-      ApplyFunctionExpression(StringSelfFunction, Seq(attr("data"))))
+    val writePartitioningExprs = Seq(truncateExpr)
     val writePartitioning = if (!coalesce) {
       clusteredWritePartitioning(writePartitioningExprs, targetNumPartitions)
     } else {

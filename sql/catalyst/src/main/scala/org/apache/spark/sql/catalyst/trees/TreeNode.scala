@@ -28,6 +28,7 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.{AliasIdentifier, CatalystIdentifier}
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
@@ -68,6 +69,12 @@ case class Origin(
 
   lazy val context: SQLQueryContext = SQLQueryContext(
     line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)
+
+  def getQueryContext: Array[QueryContext] = if (context.isValid) {
+    Array(context)
+  } else {
+    Array.empty
+  }
 }
 
 /**

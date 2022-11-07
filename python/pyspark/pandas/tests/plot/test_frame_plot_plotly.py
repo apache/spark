@@ -157,7 +157,7 @@ class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
 
     def test_pie_plot(self):
         def check_pie_plot(psdf):
-            pdf = psdf.to_pandas()
+            pdf = psdf._to_pandas()
             self.assertEqual(
                 psdf.plot(kind="pie", y=psdf.columns[0]),
                 express.pie(pdf, values="a", names=pdf.index),

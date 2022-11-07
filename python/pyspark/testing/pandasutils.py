@@ -65,6 +65,12 @@ class PandasOnSparkTestCase(ReusedSQLTestCase):
         super(PandasOnSparkTestCase, cls).setUpClass()
         cls.spark.conf.set(SPARK_CONF_ARROW_ENABLED, True)
 
+    def convert_str_to_lambda(self, func):
+        """
+        This function coverts `func` str to lambda call
+        """
+        return lambda x: getattr(x, func)()
+
     def assertPandasEqual(self, left, right, check_exact=True):
         if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
             try:
