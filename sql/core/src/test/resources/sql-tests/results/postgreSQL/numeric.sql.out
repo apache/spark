@@ -4712,11 +4712,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_BEFORE_DECIMAL",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "Thousands separators (, or G) may not appear after the decimal point in the number format: '99G999G999D999G999'",
-    "sqlExpr" : "to_number('-34,338,492.654,878', '99G999G999D999G999')"
+    "numberFormat" : "99G999G999D999G999",
+    "sqlExpr" : "\"to_number(-34,338,492.654,878, 99G999G999D999G999)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4775,11 +4774,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_HAVE_DIGIT_IN_BETWEEN",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "Thousands separators (, or G) must have digits in between them in the number format: '999G'",
-    "sqlExpr" : "to_number('123,000', '999G')"
+    "numberFormat" : "999G",
+    "sqlExpr" : "\"to_number(123,000, 999G)\""
   },
   "queryContext" : [ {
     "objectType" : "",
