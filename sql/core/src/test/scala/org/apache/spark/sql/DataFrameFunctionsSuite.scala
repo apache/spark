@@ -84,7 +84,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val expectedOnlyDataFrameFunctions = Set(
       "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
       "product", // Discussed in https://github.com/apache/spark/pull/30745
-      "unwrap_udt"
+      "unwrap_udt",
+      "collect_top_k"
     )
 
     // We only consider functions matching this pattern, this excludes symbolic and other
@@ -106,8 +107,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       .filter(_.matches(word_pattern))
       .diff(excludedSqlFunctions)
 
-    val commonCount = dataFrameFunctions.intersect(sqlFunctions).size
-
     val onlyDataFrameFunctions = dataFrameFunctions.diff(sqlFunctions)
     val onlySqlFunctions = sqlFunctions.diff(dataFrameFunctions)
 
@@ -120,18 +119,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       + onlyDataFrameFunctions.union(expectedOnlyDataFrameFunctions)
       .diff(onlyDataFrameFunctions.intersect(expectedOnlyDataFrameFunctions))
     )
-
-    // scalastyle:off println
-    println("Report: DataFrame function and SQL functon parity")
-    println(s"  There are ${dataFrameFunctions.size} relevant functions in the DataFrame API")
-    println(s"  There are ${sqlFunctions.size} relevant functions in the SQL function registry")
-    println(s"  Number of functions in both sets: $commonCount")
-    if (onlySqlFunctions.nonEmpty) {
-      val number = onlySqlFunctions.size
-      val sortedList = onlySqlFunctions.toList.sorted.mkString(", ")
-      println(s"  There are $number SQL functions that are not in the DataFrame API: $sortedList")
-    }
-    // scalastyle:on println
   }
 
   test("array with column name") {
