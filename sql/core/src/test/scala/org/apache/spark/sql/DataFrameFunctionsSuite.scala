@@ -1273,6 +1273,21 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       queryContext = Array(ExpectedContext("", "", 0, 30,
         "array_contains(array(1), 'foo')"))
     )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        OneRowRelation().selectExpr("array_contains('a string', 'foo')")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"array_contains(a string, foo)\"",
+        "paramIndex" -> "1",
+        "requiredType" -> "\"ARRAY\"",
+        "inputSql" -> "\"a string\"",
+        "inputType" -> "\"STRING\""
+      ),
+      queryContext = Array(ExpectedContext("", "", 0, 32, "array_contains('a string', 'foo')"))
+    )
   }
 
   test("SPARK-29600: ArrayContains function may return incorrect result for DecimalType") {

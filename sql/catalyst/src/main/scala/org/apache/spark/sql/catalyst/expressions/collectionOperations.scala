@@ -1313,14 +1313,19 @@ case class ArrayContains(left: Expression, right: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
-      case (_, NullType) =>
+      case (_, NullType) | (NullType, _)=>
         DataTypeMismatch(
           errorSubClass = "NULL_TYPE",
           messageParameters = Map("functionName" -> toSQLId(prettyName)))
-      case (NullType, _) =>
+      case (l, _) if !ArrayType.acceptsType(l) =>
         DataTypeMismatch(
-          errorSubClass = "NULL_TYPE",
-          messageParameters = Map("functionName" -> toSQLId(prettyName)))
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "1",
+            "requiredType" -> toSQLType(ArrayType),
+            "inputSql" -> toSQLExpr(left),
+            "inputType" -> toSQLType(left.dataType))
+        )
       case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
         TypeUtils.checkForOrderingExpr(e2, prettyName)
       case _ =>
