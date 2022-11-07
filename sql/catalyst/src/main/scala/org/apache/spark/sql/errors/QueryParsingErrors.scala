@@ -601,13 +601,13 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
-  def unclosedBracketedCommentError(command: String, position: Origin): Throwable = {
+  def unclosedBracketedCommentError(command: String, start: Origin, stop: Origin): Throwable = {
     new ParseException(
-      Some(command),
-      "Found an unclosed bracketed comment. Please, append */ at the end of the comment.",
-      position,
-      position,
-      Some("UNCLOSED_BRACKETED_COMMENT"))
+      command = Some(command),
+      start = start,
+      stop = stop,
+      errorClass = "UNCLOSED_BRACKETED_COMMENT",
+      messageParameters = Map.empty)
   }
 
   def invalidTimeTravelSpec(reason: String, ctx: ParserRuleContext): Throwable = {
