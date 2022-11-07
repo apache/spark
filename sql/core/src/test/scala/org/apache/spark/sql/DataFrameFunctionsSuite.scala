@@ -1686,6 +1686,30 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkError(
       exception = intercept[AnalysisException] {
+        Seq((null, "a")).toDF().selectExpr("array_position(_1, _2)")
+      },
+      errorClass = "DATATYPE_MISMATCH.NULL_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"array_position(_1, _2)\"",
+        "functionName" -> "`array_position`"
+      ),
+      queryContext = Array(ExpectedContext("", "", 0, 21, "array_position(_1, _2)"))
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(("a string element", null)).toDF().selectExpr("array_position(_1, _2)")
+      },
+      errorClass = "DATATYPE_MISMATCH.NULL_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"array_position(_1, _2)\"",
+        "functionName" -> "`array_position`"
+      ),
+      queryContext = Array(ExpectedContext("", "", 0, 21, "array_position(_1, _2)"))
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
         Seq(("a string element", "a")).toDF().selectExpr("array_position(_1, _2)")
       },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
