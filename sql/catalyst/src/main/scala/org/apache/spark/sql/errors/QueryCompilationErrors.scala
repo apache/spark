@@ -443,7 +443,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def starNotAllowedWhenGroupByOrdinalPositionUsedError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1019",
+      errorClass = "STAR_GROUP_BY_POS",
       messageParameters = Map.empty)
   }
 
@@ -807,7 +807,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("colName" -> colName))
   }
 
-  def renameTempViewToExistingViewError(oldName: String, newName: String): Throwable = {
+  def renameTempViewToExistingViewError(newName: String): Throwable = {
     new TableAlreadyExistsException(newName)
   }
 
@@ -892,8 +892,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "db" -> newName.database.get))
   }
 
-  def cannotRenameTempViewToExistingTableError(
-      oldName: TableIdentifier, newName: TableIdentifier): Throwable = {
+  def cannotRenameTempViewToExistingTableError(newName: TableIdentifier): Throwable = {
     new TableAlreadyExistsException(newName.nameParts)
   }
 
@@ -1389,7 +1388,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def dataPathNotExistError(path: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1130",
+      errorClass = "PATH_NOT_FOUND",
       messageParameters = Map("path" -> path))
   }
 
@@ -2354,10 +2353,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "tablePath" -> tablePath,
         "config" -> SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key))
-  }
-
-  def tableOrViewNotFoundError(table: String): Throwable = {
-    new NoSuchTableException(table)
   }
 
   def noSuchFunctionError(

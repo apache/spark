@@ -661,31 +661,6 @@ class Aggregate(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class AggregateFunction(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        NAME_FIELD_NUMBER: builtins.int
-        ARGUMENTS_FIELD_NUMBER: builtins.int
-        name: builtins.str
-        @property
-        def arguments(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]: ...
-        def __init__(
-            self,
-            *,
-            name: builtins.str = ...,
-            arguments: collections.abc.Iterable[
-                pyspark.sql.connect.proto.expressions_pb2.Expression
-            ]
-            | None = ...,
-        ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["arguments", b"arguments", "name", b"name"]
-        ) -> None: ...
-
     INPUT_FIELD_NUMBER: builtins.int
     GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
     RESULT_EXPRESSIONS_FIELD_NUMBER: builtins.int
@@ -701,7 +676,7 @@ class Aggregate(google.protobuf.message.Message):
     def result_expressions(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        global___Aggregate.AggregateFunction
+        pyspark.sql.connect.proto.expressions_pb2.Expression
     ]: ...
     def __init__(
         self,
@@ -711,7 +686,9 @@ class Aggregate(google.protobuf.message.Message):
             pyspark.sql.connect.proto.expressions_pb2.Expression
         ]
         | None = ...,
-        result_expressions: collections.abc.Iterable[global___Aggregate.AggregateFunction]
+        result_expressions: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
         | None = ...,
     ) -> None: ...
     def HasField(

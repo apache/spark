@@ -274,12 +274,19 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         proto.Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier("left").build())
       .build()
 
+    val sum =
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          proto.Expression.UnresolvedFunction
+            .newBuilder()
+            .addParts("sum")
+            .addArguments(unresolvedAttribute))
+        .build()
+
     val agg = proto.Aggregate.newBuilder
       .setInput(readRel)
-      .addResultExpressions(
-        proto.Aggregate.AggregateFunction.newBuilder
-          .setName("sum")
-          .addArguments(unresolvedAttribute))
+      .addResultExpressions(sum)
       .addGroupingExpressions(unresolvedAttribute)
       .build()
 

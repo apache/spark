@@ -20,7 +20,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "aggExprs" : "(CAST(udf(cast(count(b) as string)) AS BIGINT) AS `udf(count(b))`)",
     "sqlExpr" : "testdata.a"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 42,
+    "fragment" : "SELECT udf(a), udf(COUNT(b)) FROM testData"
+  } ]
 }
 
 
@@ -186,7 +193,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_2424",
   "messageParameters" : {
     "sqlExpr" : "CAST(udf(cast(count(b) as string)) AS BIGINT)"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "udf(COUNT(b))"
+  } ]
 }
 
 
@@ -319,7 +333,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "aggExprs" : "()",
     "sqlExpr" : "id"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 29,
+    "fragment" : "range(10)"
+  } ]
 }
 
 
@@ -608,7 +629,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "condition" : "(count(1) > 1L)",
     "invalidExprSqls" : "count(1)"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 54,
+    "fragment" : "SELECT udf(count(*)) FROM test_agg WHERE count(*) > 1L"
+  } ]
 }
 
 
@@ -623,7 +651,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "condition" : "((count(1) + 1L) > 1L)",
     "invalidExprSqls" : "count(1)"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 59,
+    "fragment" : "SELECT udf(count(*)) FROM test_agg WHERE count(*) + 1L > 1L"
+  } ]
 }
 
 
@@ -638,5 +673,12 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "condition" : "(((test_agg.k = 1) OR (test_agg.k = 2)) OR (((count(1) + 1L) > 1L) OR (max(test_agg.k) > 1)))",
     "invalidExprSqls" : "count(1), max(test_agg.k)"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 91,
+    "fragment" : "SELECT udf(count(*)) FROM test_agg WHERE k = 1 or k = 2 or count(*) + 1L > 1L or max(k) > 1"
+  } ]
 }

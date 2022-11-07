@@ -48,12 +48,6 @@
     ],
     "sqlState" : "42000"
   },
-  "CANNOT_INFER_DATE" : {
-    "message" : [
-      "Cannot infer date in schema inference when LegacyTimeParserPolicy is \"LEGACY\". Legacy Date formatter does not support strict date format matching which is required to avoid inferring timestamps and other non-date entries to date."
-    ],
-    "sqlState" : "22007"
-  },
   "CANNOT_LOAD_PROTOBUF_CLASS" : {
     "message" : [
       "Could not load Protobuf class with name <protobufClassName>. Ensure the class name includes package prefix."
@@ -807,6 +801,11 @@
     ],
     "sqlState" : "42000"
   },
+  "PATH_NOT_FOUND" : {
+    "message" : [
+      "Path does not exist: <path>."
+    ]
+  },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
       "Invalid pivot value '<value>': value data type <valueType> does not match pivot column data type <pivotType>"
@@ -906,6 +905,11 @@
       "The second argument of <functionName> function needs to be an integer."
     ],
     "sqlState" : "22023"
+  },
+  "STAR_GROUP_BY_POS" : {
+    "message" : [
+      "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
+    ]
   },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
@@ -1719,11 +1723,6 @@
       "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table` yet."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1019" : {
-    "message" : [
-      "Star (*) is not allowed in select list when GROUP BY ordinal position is used"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1020" : {
     "message" : [
       "Invalid usage of <elem> in <prettyName>."
@@ -2225,11 +2224,6 @@
   "_LEGACY_ERROR_TEMP_1129" : {
     "message" : [
       "Unable to infer schema for <format>. It must be specified manually."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1130" : {
-    "message" : [
-      "Path does not exist: <path>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1131" : {

@@ -93,6 +93,13 @@ package object dsl {
           .build()
     }
 
+    def proto_min(e: Expression): Expression =
+      Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          Expression.UnresolvedFunction.newBuilder().addParts("min").addArguments(e))
+        .build()
+
     /**
      * Create an unresolved function from name parts.
      *
@@ -383,8 +390,9 @@ package object dsl {
         for (groupingExpr <- groupingExprs) {
           agg.addGroupingExpressions(groupingExpr)
         }
-        // TODO: support aggregateExprs, which is blocked by supporting any builtin function
-        // resolution only by name in the analyzer.
+        for (aggregateExpr <- aggregateExprs) {
+          agg.addResultExpressions(aggregateExpr)
+        }
         Relation.newBuilder().setAggregate(agg.build()).build()
       }
 
