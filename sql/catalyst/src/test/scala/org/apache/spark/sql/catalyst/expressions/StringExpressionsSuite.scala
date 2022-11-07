@@ -1022,74 +1022,121 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("ToNumber and ToCharacter: negative tests (the format string is invalid)") {
-    val unexpectedCharacter = "the structure of the format string must match: " +
-      "[MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]"
-    val thousandsSeparatorDigitsBetween =
-      "Thousands separators (, or G) must have digits in between them"
-    val mustBeAtEnd = "must be at the end of the number format"
-    val atMostOne = "At most one"
     Seq(
       // The format string must not be empty.
-      ("454", "") -> "The format string cannot be empty",
+      ("454", "") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_EMPTY",
+        messageParameters = Map.empty),
       // Make sure the format string does not contain any unrecognized characters.
-      ("454", "999@") -> unexpectedCharacter,
-      ("454", "999M") -> unexpectedCharacter,
-      ("454", "999P") -> unexpectedCharacter,
+      ("454", "999@") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_UNEXPECTED_FORMAT_TOKEN",
+        messageParameters = Map("formatToken" -> "character '@''", "numberFormat" -> "999@")),
+      ("454", "999M") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_UNEXPECTED_FORMAT_TOKEN",
+        messageParameters = Map("formatToken" -> "character 'M''", "numberFormat" -> "999M")),
+      ("454", "999P") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_UNEXPECTED_FORMAT_TOKEN",
+        messageParameters = Map("formatToken" -> "character 'P''", "numberFormat" -> "999P")),
       // Make sure the format string contains at least one digit.
-      ("454", "$") -> "The format string requires at least one number digit",
+      ("454", "$") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_WRONG_NUM_DIGIT",
+        messageParameters = Map.empty),
       // Make sure the format string contains at most one decimal point.
-      ("454", "99.99.99") -> atMostOne,
+      ("454", "99.99.99") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_WRONG_NUM_TOKEN",
+        messageParameters = Map("token" -> ". or D", "numberFormat" -> "99.99.99")),
       // Make sure the format string contains at most one dollar sign.
-      ("454", "$$99") -> atMostOne,
+      ("454", "$$99") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_WRONG_NUM_TOKEN",
+        messageParameters = Map("token" -> "$", "numberFormat" -> "$$99")),
       // Make sure the format string contains at most one minus sign at the beginning or end.
-      ("$4-4", "$9MI9") -> unexpectedCharacter,
-      ("--4", "SMI9") -> unexpectedCharacter,
-      ("--$54", "SS$99") -> atMostOne,
-      ("-$54", "MI$99MI") -> atMostOne,
-      ("$4-4", "$9MI9MI") -> atMostOne,
+      ("$4-4", "$9MI9") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_UNEXPECTED_FORMAT_TOKEN",
+        messageParameters = Map("formatToken" -> "digit sequence", "numberFormat" -> "$9MI9")),
+      ("--4", "SMI9") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_UNEXPECTED_FORMAT_TOKEN",
+        messageParameters = Map("formatToken" -> "digit sequence", "numberFormat" -> "SMI9")),
+      ("--$54", "SS$99") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_WRONG_NUM_TOKEN",
+        messageParameters = Map("token" -> "S", "numberFormat" -> "SS$99")),
+      ("-$54", "MI$99MI") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_WRONG_NUM_TOKEN",
+        messageParameters = Map("token" -> "MI", "numberFormat" -> "MI$99MI")),
+      ("$4-4", "$9MI9MI") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_WRONG_NUM_TOKEN",
+        messageParameters = Map("token" -> "MI", "numberFormat" -> "$9MI9MI")),
       // Make sure the format string contains at most one closing angle bracket at the end.
-      ("<$45>", "PR$99") -> unexpectedCharacter,
-      ("$4<4>", "$9PR9") -> unexpectedCharacter,
-      ("<<454>>", "999PRPR") -> atMostOne,
+      ("<$45>", "PR$99") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_UNEXPECTED_FORMAT_TOKEN",
+        messageParameters = Map("formatToken" -> "$", "numberFormat" -> "PR$99")),
+      ("$4<4>", "$9PR9") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_UNEXPECTED_FORMAT_TOKEN",
+        messageParameters = Map("formatToken" -> "digit sequence", "numberFormat" -> "$9PR9")),
+      ("<<454>>", "999PRPR") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_WRONG_NUM_TOKEN",
+        messageParameters = Map("token" -> "PR", "numberFormat" -> "999PRPR")),
       // Make sure that any dollar sign in the format string occurs before any digits.
-      ("4$54", "9$99") -> "Currency characters must appear before digits",
+      ("4$54", "9$99") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_CURRENCY_MUST_BEFORE_DIGIT",
+        messageParameters = Map("numberFormat" -> "9$99")),
       // Make sure that any dollar sign in the format string occurs before any decimal point.
-      (".$99", ".$99") -> "Currency characters must appear before any decimal point",
+      (".$99", ".$99") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_CURRENCY_MUST_BEFORE_DECIMAL",
+        messageParameters = Map("numberFormat" -> ".$99")),
       // Thousands separators must have digits in between them.
-      (",123", ",099") -> thousandsSeparatorDigitsBetween,
-      (",123,456", ",999,099") -> thousandsSeparatorDigitsBetween,
-      (",,345", "9,,09.99") -> thousandsSeparatorDigitsBetween,
-      (",,345", "9,99,.99") -> thousandsSeparatorDigitsBetween,
-      (",,345", "9,99,") -> thousandsSeparatorDigitsBetween,
-      (",,345", ",,999,099.99") -> thousandsSeparatorDigitsBetween,
+      (",123", ",099") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_HAVE_DIGIT_IN_BETWEEN",
+        messageParameters = Map("numberFormat" -> ",099")),
+      (",123,456", ",999,099") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_HAVE_DIGIT_IN_BETWEEN",
+        messageParameters = Map("numberFormat" -> ",999,099")),
+      (",,345", "9,,09.99") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_HAVE_DIGIT_IN_BETWEEN",
+        messageParameters = Map("numberFormat" -> "9,,09.99")),
+      (",,345", "9,99,.99") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_HAVE_DIGIT_IN_BETWEEN",
+        messageParameters = Map("numberFormat" -> "9,99,.99")),
+      (",,345", "9,99,") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_HAVE_DIGIT_IN_BETWEEN",
+        messageParameters = Map("numberFormat" -> "9,99,")),
+      (",,345", ",,999,099.99") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_HAVE_DIGIT_IN_BETWEEN",
+        messageParameters = Map("numberFormat" -> ",,999,099.99")),
       // Thousands separators must not appear after the decimal point.
-      ("123.45,6", "099.99,9") ->
-        "Thousands separators (, or G) may not appear after the decimal point"
-    ).foreach { case ((str: String, format: String), expectedErrMsg: String) =>
+      ("123.45,6", "099.99,9") -> DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_BEFORE_DECIMAL",
+        messageParameters = Map("numberFormat" -> "099.99,9"))
+    ).foreach { case ((str: String, format: String), dataTypeMismatch: DataTypeMismatch) =>
       val toNumberResult = ToNumber(Literal(str), Literal(format)).checkInputDataTypes()
       assert(toNumberResult != TypeCheckResult.TypeCheckSuccess,
         s"The format string should have been invalid: $format")
-      toNumberResult match {
-        case TypeCheckResult.TypeCheckFailure(message) =>
-          assert(message.contains(expectedErrMsg))
-      }
+      assert(toNumberResult == dataTypeMismatch)
 
       val tryToNumberResult = TryToNumber(Literal(str), Literal(format)).checkInputDataTypes()
       assert(tryToNumberResult != TypeCheckResult.TypeCheckSuccess,
         s"The format string should have been invalid: $format")
-      tryToNumberResult match {
-        case TypeCheckResult.TypeCheckFailure(message) =>
-          assert(message.contains(expectedErrMsg))
-      }
+      assert(tryToNumberResult == dataTypeMismatch)
 
       val toCharResult = ToCharacter(Decimal(456), Literal(format)).checkInputDataTypes()
       assert(toCharResult != TypeCheckResult.TypeCheckSuccess,
         s"The format string should have been invalid: $format")
-      toCharResult match {
-        case TypeCheckResult.TypeCheckFailure(message) =>
-          assert(message.contains(expectedErrMsg))
-      }
+      assert(toCharResult == dataTypeMismatch)
     }
+  }
+
+  test("ToCharacter: fails analysis if numberFormat is not a constant") {
+    val right = AttributeReference("a", StringType)()
+    val toCharacterExpr = ToCharacter(Decimal(456), right)
+    assert(toCharacterExpr.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "`attributereference`",
+          "inputType" -> toSQLType(right.dataType),
+          "inputExpr" -> toSQLExpr(right)
+        )
+      )
+    )
   }
 
   test("ToNumber: negative tests (the input string does not match the format string)") {
@@ -1132,6 +1179,21 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(tryToNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(tryToNumberExpr, null)
     }
+  }
+
+  test("ToNumber: fails analysis if numberFormat is not a constant") {
+    val right = AttributeReference("a", StringType)()
+    val toNumberExpr = ToNumber(Literal("123456"), right)
+    assert(toNumberExpr.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "`attributereference`",
+          "inputType" -> toSQLType(right.dataType),
+          "inputExpr" -> toSQLExpr(right)
+        )
+      )
+    )
   }
 
   test("ToCharacter: positive tests") {

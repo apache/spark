@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{Decimal, DecimalType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -253,22 +254,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
    */
   def parsedDecimalType: DecimalType = DecimalType(precision, scale)
 
-  /**
-   * Consumes the format string to check validity and computes an appropriate Decimal output type.
-   */
-  def check(): TypeCheckResult = {
-    val validateResult: String = validateFormatString
-    if (validateResult.nonEmpty) {
-      TypeCheckResult.TypeCheckFailure(validateResult)
-    } else {
-      TypeCheckResult.TypeCheckSuccess
-    }
-  }
-
-  /**
-   * This implementation of the [[check]] method returns any error, or the empty string on success.
-   */
-  private def validateFormatString: String = {
+  def checkInputDataTypes(): TypeCheckResult = {
     val firstDollarSignIndex: Int = formatTokens.indexOf(DollarSign())
     val firstDigitIndex: Int = formatTokens.indexWhere {
       case _: DigitGroups => true
@@ -294,22 +280,37 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
 
     // Make sure the format string contains at least one token.
     if (numberFormat.isEmpty) {
-      return "The format string cannot be empty"
+      return DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_EMPTY",
+        messageParameters = Map.empty
+      )
     }
     // Make sure the format string contains at least one digit.
     if (!formatTokens.exists(
       token => token.isInstanceOf[DigitGroups])) {
-      return "The format string requires at least one number digit"
+      return DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_WRONG_NUM_DIGIT",
+        messageParameters = Map.empty
+      )
     }
     // Make sure that any dollar sign in the format string occurs before any digits.
     if (firstDigitIndex < firstDollarSignIndex) {
-      return s"Currency characters must appear before digits in the number format: '$numberFormat'"
+      return DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_CURRENCY_MUST_BEFORE_DIGIT",
+        messageParameters = Map(
+          "numberFormat" -> numberFormat
+        )
+      )
     }
     // Make sure that any dollar sign in the format string occurs before any decimal point.
     if (firstDecimalPointIndex != -1 &&
       firstDecimalPointIndex < firstDollarSignIndex) {
-      return "Currency characters must appear before any decimal point in the " +
-        s"number format: '$numberFormat'"
+      return DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_CURRENCY_MUST_BEFORE_DECIMAL",
+        messageParameters = Map(
+          "numberFormat" -> numberFormat
+        )
+      )
     }
     // Make sure that any thousands separators in the format string have digits before and after.
     if (digitGroupsBeforeDecimalPoint.exists {
@@ -325,16 +326,24 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
             false
         })
     }) {
-      return "Thousands separators (, or G) must have digits in between them " +
-        s"in the number format: '$numberFormat'"
+      return DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_HAVE_DIGIT_IN_BETWEEN",
+        messageParameters = Map(
+          "numberFormat" -> numberFormat
+        )
+      )
     }
     // Make sure that thousands separators does not appear after the decimal point, if any.
     if (digitGroupsAfterDecimalPoint.exists {
       case DigitGroups(tokens, digits) =>
         tokens.length > digits.length
     }) {
-      return "Thousands separators (, or G) may not appear after the decimal point " +
-        s"in the number format: '$numberFormat'"
+      return DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_BEFORE_DECIMAL",
+        messageParameters = Map(
+          "numberFormat" -> numberFormat
+        )
+      )
     }
     // Make sure that the format string does not contain any prohibited duplicate tokens.
     val inputTokenCounts = formatTokens.groupBy(identity).mapValues(_.size)
@@ -344,7 +353,13 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       DollarSign(),
       ClosingAngleBracket()).foreach {
       token => if (inputTokenCounts.getOrElse(token, 0) > 1) {
-        return s"At most one ${token.toString} is allowed in the number format: '$numberFormat'"
+        return DataTypeMismatch(
+          errorSubClass = "NUMBER_FORMAT_WRONG_NUM_TOKEN",
+          messageParameters = Map(
+            "token" -> token.toString,
+            "numberFormat" -> numberFormat
+          )
+        )
       }
     }
     // Enforce the ordering of tokens in the format string according to this specification:
@@ -377,12 +392,16 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       }
     }
     if (formatTokenIndex < formatTokens.length) {
-      return s"Unexpected ${formatTokens(formatTokenIndex).toString} found in the format string " +
-        s"'$numberFormat'; the structure of the format string must match: " +
-        "[MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]"
+      return DataTypeMismatch(
+        errorSubClass = "NUMBER_FORMAT_UNEXPECTED_FORMAT_TOKEN",
+        messageParameters = Map(
+          "formatToken" -> formatTokens(formatTokenIndex).toString,
+          "numberFormat" -> numberFormat
+        )
+      )
     }
     // Validation of the format string finished successfully.
-    ""
+    TypeCheckSuccess
   }
 
   /**

@@ -290,6 +290,46 @@
           "Null typed values cannot be used as arguments of <functionName>."
         ]
       },
+      "NUMBER_FORMAT_CURRENCY_MUST_BEFORE_DECIMAL" : {
+        "message" : [
+          "Currency characters must appear before any decimal point in the number format: '<numberFormat>'"
+        ]
+      },
+      "NUMBER_FORMAT_CURRENCY_MUST_BEFORE_DIGIT" : {
+        "message" : [
+          "Currency characters must appear before digits in the number format: '<numberFormat>'"
+        ]
+      },
+      "NUMBER_FORMAT_EMPTY" : {
+        "message" : [
+          "The format string cannot be empty"
+        ]
+      },
+      "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_BEFORE_DECIMAL" : {
+        "message" : [
+          "Thousands separators (, or G) may not appear after the decimal point in the number format: '<numberFormat>'"
+        ]
+      },
+      "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_HAVE_DIGIT_IN_BETWEEN" : {
+        "message" : [
+          "Thousands separators (, or G) must have digits in between them in the number format: '<numberFormat>'"
+        ]
+      },
+      "NUMBER_FORMAT_UNEXPECTED_FORMAT_TOKEN" : {
+        "message" : [
+          "Unexpected <formatToken> found in the format string '<numberFormat>'; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]"
+        ]
+      },
+      "NUMBER_FORMAT_WRONG_NUM_DIGIT" : {
+        "message" : [
+          "The format string requires at least one number digit"
+        ]
+      },
+      "NUMBER_FORMAT_WRONG_NUM_TOKEN" : {
+        "message" : [
+          "At most one <token> is allowed in the number format: '<numberFormat>'"
+        ]
+      },
       "PARAMETER_CONSTRAINT_VIOLATION" : {
         "message" : [
           "The <leftExprName>(<leftExprValue>) must be <constraint> the <rightExprName>(<rightExprValue>)"

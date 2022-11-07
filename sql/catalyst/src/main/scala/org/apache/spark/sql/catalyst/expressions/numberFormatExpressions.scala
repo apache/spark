@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.util.ToNumberParser
@@ -78,9 +80,16 @@ case class ToNumber(left: Expression, right: Expression)
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
       if (right.foldable) {
-        numberFormatter.check()
+        numberFormatter.checkInputDataTypes()
       } else {
-        TypeCheckResult.TypeCheckFailure(s"Format expression must be foldable, but got $right")
+        DataTypeMismatch(
+          errorSubClass = "NON_FOLDABLE_INPUT",
+          messageParameters = Map(
+            "inputName" -> toSQLId(right.prettyName),
+            "inputType" -> toSQLType(right.dataType),
+            "inputExpr" -> toSQLExpr(right)
+          )
+        )
       }
     } else {
       inputTypeCheck
@@ -222,9 +231,16 @@ case class ToCharacter(left: Expression, right: Expression)
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
       if (right.foldable) {
-        numberFormatter.check()
+        numberFormatter.checkInputDataTypes()
       } else {
-        TypeCheckResult.TypeCheckFailure(s"Format expression must be foldable, but got $right")
+        DataTypeMismatch(
+          errorSubClass = "NON_FOLDABLE_INPUT",
+          messageParameters = Map(
+            "inputName" -> toSQLId(right.prettyName),
+            "inputType" -> toSQLType(right.dataType),
+            "inputExpr" -> toSQLExpr(right)
+          )
+        )
       }
     } else {
       inputTypeCheck
