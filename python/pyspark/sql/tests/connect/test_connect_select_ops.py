@@ -30,7 +30,7 @@ if have_pandas:
 class SparkConnectToProtoSuite(PlanOnlyTestFixture):
     def test_select_with_columns_and_strings(self):
         df = self.connect.with_plan(Read("table"))
-        self.assertIsNotNone(df.select(col("name"))._plan.to_proto())
+        self.assertIsNotNone(df.select(col("name"))._plan.to_proto(self.connect))
         self.assertIsNotNone(df.select("name"))
         self.assertIsNotNone(df.select("name", "name2"))
         self.assertIsNotNone(df.select(col("name"), col("name2")))
@@ -49,7 +49,9 @@ class SparkConnectToProtoSuite(PlanOnlyTestFixture):
             ("leftanti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
             ("leftsemi", proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI),
         ]:
-            joined_df = df_left.join(df_right, on=col("name"), how=join_type_str)._plan.to_proto()
+            joined_df = df_left.join(df_right, on=col("name"), how=join_type_str)._plan.to_proto(
+                self.connect
+            )
             self.assertEqual(joined_df.root.join.join_type, join_type)
 
 

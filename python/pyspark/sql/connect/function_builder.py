@@ -87,7 +87,7 @@ class UserDefinedFunction(Expression):
             self._args = []
         self._func_name = None
 
-    def to_plan(self, session: Optional["RemoteSparkSession"]) -> proto.Expression:
+    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
         if session is None:
             raise Exception("CAnnot create UDF without remote Session.")
         # Needs to materialize the UDF to the server
