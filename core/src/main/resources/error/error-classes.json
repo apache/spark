@@ -265,11 +265,6 @@
           "Input to <functionName> should have been <dataType> followed by a value with same key type, but it's [<leftType>, <rightType>]."
         ]
       },
-      "MAP_FROM_ENTRIES_WRONG_TYPE" : {
-        "message" : [
-          "The <functionName> accepts only arrays of pair structs, but <childExpr> is of <childType>."
-        ]
-      },
       "MAP_ZIP_WITH_DIFF_TYPES" : {
         "message" : [
           "Input to the <functionName> should have been two maps with compatible key types, but it's [<leftType>, <rightType>]."

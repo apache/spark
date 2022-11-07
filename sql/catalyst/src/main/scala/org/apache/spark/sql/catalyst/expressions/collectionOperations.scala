@@ -833,11 +833,12 @@ case class MapFromEntries(child: Expression)
       TypeUtils.checkForMapKeyType(mapType.keyType)
     case None =>
       DataTypeMismatch(
-        errorSubClass = "MAP_FROM_ENTRIES_WRONG_TYPE",
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "childExpr" -> toSQLExpr(child),
-          "childType" -> toSQLType(child.dataType)
+          "paramIndex" -> "1",
+          "requiredType" -> s"${toSQLType(ArrayType)} of pair ${toSQLType(StructType)}",
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType)
         )
       )
   }
