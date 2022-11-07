@@ -20,14 +20,13 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
-
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryCommand}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
-import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
+import org.apache.spark.sql.execution.{SQLExecution, SparkPlan}
+import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, PartitionedWriteJobStatsTracker, WriteJobStatsTracker}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.SerializableConfiguration
@@ -54,9 +53,23 @@ trait DataWritingCommand extends UnaryCommand {
 
   lazy val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
 
+  def getWriteJobStatsTracker(hadoopConf: Configuration): WriteJobStatsTracker = {
+    if (SQLConf.get.autoPartitionStatsticsUpdateEnabled) {
+      partitionedWriteJobStatsTracker(hadoopConf)
+    } else {
+      basicWriteJobStatsTracker(hadoopConf)
+    }
+  }
+
   def basicWriteJobStatsTracker(hadoopConf: Configuration): BasicWriteJobStatsTracker = {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
     new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)
+  }
+
+  def partitionedWriteJobStatsTracker(
+      hadoopConf: Configuration): PartitionedWriteJobStatsTracker = {
+    val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
+    new PartitionedWriteJobStatsTracker(serializableHadoopConf, metrics)
   }
 
   def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row]

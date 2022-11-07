@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
-import org.apache.spark.sql.execution.datasources.FileFormatWriter
+import org.apache.spark.sql.execution.datasources.{ExecutedWriteSummary, FileFormatWriter}
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveVersion
@@ -55,7 +55,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand with V1WritesHiveU
       outputLocation: String,
       customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty,
       partitionAttributes: Seq[Attribute] = Nil,
-      bucketSpec: Option[BucketSpec] = None): Set[String] = {
+      bucketSpec: Option[BucketSpec] = None): Array[ExecutedWriteSummary] = {
 
     val isCompressed =
       fileSinkConf.getTableInfo.getOutputFileFormatClassName.toLowerCase(Locale.ROOT) match {
@@ -98,7 +98,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand with V1WritesHiveU
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = bucketSpec,
-      statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
+      statsTrackers = Seq(getWriteJobStatsTracker(hadoopConf)),
       options = options)
   }
 

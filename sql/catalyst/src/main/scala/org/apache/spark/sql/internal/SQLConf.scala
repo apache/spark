@@ -2455,6 +2455,13 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val AUTO_PARTITION_STATISTICS_UPDATE_ENABLED =
+    buildConf("spark.sql.statistics.partition.autoUpdate.enabled")
+      .doc("Enables automatic update stats for table/partition once table's data is changed.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val AUTO_SIZE_UPDATE_ENABLED =
     buildConf("spark.sql.statistics.size.autoUpdate.enabled")
       .doc("Enables automatic update for table size once table's data is changed. Note that if " +
@@ -4558,6 +4565,9 @@ class SQLConf extends Serializable with Logging {
   def planStatsEnabled: Boolean = getConf(SQLConf.PLAN_STATS_ENABLED)
 
   def autoSizeUpdateEnabled: Boolean = getConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED)
+
+  def autoPartitionStatsticsUpdateEnabled: Boolean =
+    getConf(SQLConf.AUTO_PARTITION_STATISTICS_UPDATE_ENABLED)
 
   def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 

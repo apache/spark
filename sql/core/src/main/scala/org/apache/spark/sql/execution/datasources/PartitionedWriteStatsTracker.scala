@@ -33,34 +33,35 @@ import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.SerializableConfiguration
 
-
-/**
- * Simple metrics collected during an instance of [[FileFormatDataWriter]].
- * These were first introduced in https://github.com/apache/spark/pull/18159 (SPARK-20703).
- */
-case class BasicWriteTaskStats(
-    partitions: Seq[InternalRow],
-    numFiles: Int,
-    numBytes: Long,
-    numRows: Long)
+// TODO: Support ColumnStatistics
+case class SinglePartitionWriteStats(
+    partition: InternalRow,
+    var numFiles: Int,
+    var numBytes: Long,
+    var numRows: Long)
   extends WriteTaskStats
 
+case class PartitionedWriteTaskStats(partitions: Seq[SinglePartitionWriteStats])
+  extends WriteTaskStats
 
-/**
- * Simple [[WriteTaskStatsTracker]] implementation that produces [[BasicWriteTaskStats]].
- */
-class BasicWriteTaskStatsTracker(
+class PartitionedWriteTaskStatsTracker(
     hadoopConf: Configuration,
     taskCommitTimeMetric: Option[SQLMetric] = None)
   extends WriteTaskStatsTracker with Logging {
 
   private[this] val partitions: mutable.ArrayBuffer[InternalRow] = mutable.ArrayBuffer.empty
-  private[this] var numFiles: Int = 0
-  private[this] var numSubmittedFiles: Int = 0
-  private[this] var numBytes: Long = 0L
-  private[this] var numRows: Long = 0L
 
-  private[this] val submittedFiles = mutable.HashSet[String]()
+  private[this] val partitionStats: mutable.ArrayBuffer[SinglePartitionWriteStats] =
+    mutable.ArrayBuffer.empty
+  private[this] var currentPartition: InternalRow = null
+  private[this] var currentPartitionStats: SinglePartitionWriteStats = null
+  private[this] var numFiles: Int = 0
+  private[this] var numBytes: Long = 0
+  private[this] var numRows: Long = 0
+  private[this] var numSubmittedFiles: Int = 0
+
+  private[this] val submittedFiles =
+    mutable.HashMap.empty[InternalRow, mutable.HashSet[String]]
 
   /**
    * Get the size of the file expected to have been written by a worker.
@@ -132,34 +133,48 @@ class BasicWriteTaskStatsTracker(
     Some(len)
   }
 
-
   override def newPartition(partitionValues: InternalRow): Unit = {
     partitions.append(partitionValues)
+    currentPartition = partitionValues
+    currentPartitionStats = SinglePartitionWriteStats(partitionValues, 0, 0L, 0L)
+    partitionStats.append(currentPartitionStats)
   }
 
   override def newFile(filePath: String): Unit = {
-    submittedFiles += filePath
+    if (partitionStats.isEmpty) {
+      currentPartitionStats = SinglePartitionWriteStats(InternalRow.empty, 0, 0L, 0L)
+      partitionStats.append(currentPartitionStats)
+      currentPartition = InternalRow.empty
+    }
+    val partitionSubmittedFiles =
+      submittedFiles.getOrElseUpdate(currentPartition, mutable.HashSet.empty[String])
+    partitionSubmittedFiles.add(filePath)
     numSubmittedFiles += 1
   }
 
   override def closeFile(filePath: String): Unit = {
-    updateFileStats(filePath)
-    submittedFiles.remove(filePath)
+    updateFileStats(currentPartition, filePath)
+    submittedFiles.get(currentPartition).map(_.remove(filePath))
   }
 
-  private def updateFileStats(filePath: String): Unit = {
+  private def updateFileStats(partitionValue: InternalRow, filePath: String): Unit = {
     getFileSize(filePath).foreach { len =>
-      numBytes += len
+      partitionStats(partitions.indexOf(partitionValue)).numBytes += len
+      partitionStats(partitions.indexOf(partitionValue)).numFiles += 1
+      numBytes += 1
       numFiles += 1
     }
   }
 
   override def newRow(filePath: String, row: InternalRow): Unit = {
+    currentPartitionStats.numRows += 1
     numRows += 1
   }
 
   override def getFinalStats(taskCommitTime: Long): WriteTaskStats = {
-    submittedFiles.foreach(updateFileStats)
+    submittedFiles.foreach { case (part, files) =>
+      files.foreach(file => updateFileStats(part, file))
+    }
     submittedFiles.clear()
 
     // Reports bytesWritten and recordsWritten to the Spark output metrics.
@@ -174,7 +189,7 @@ class BasicWriteTaskStatsTracker(
         "or files being not immediately visible in the filesystem.")
     }
     taskCommitTimeMetric.foreach(_ += taskCommitTime)
-    BasicWriteTaskStats(partitions.toSeq, numFiles, numBytes, numRows)
+    PartitionedWriteTaskStats(partitionStats)
   }
 }
 
@@ -185,7 +200,7 @@ class BasicWriteTaskStatsTracker(
  * [[BasicWriteTaskStats]] they produce by aggregating the metrics and posting them
  * as DriverMetricUpdates.
  */
-class BasicWriteJobStatsTracker(
+class PartitionedWriteJobStatsTracker(
     serializableHadoopConf: SerializableConfiguration,
     @transient val driverSideMetrics: Map[String, SQLMetric],
     taskCommitTimeMetric: SQLMetric)
@@ -198,7 +213,7 @@ class BasicWriteJobStatsTracker(
   }
 
   override def newTaskInstance(): WriteTaskStatsTracker = {
-    new BasicWriteTaskStatsTracker(serializableHadoopConf.value, Some(taskCommitTimeMetric))
+    new PartitionedWriteTaskStatsTracker(serializableHadoopConf.value, Some(taskCommitTimeMetric))
   }
 
   override def processStats(stats: Seq[WriteTaskStats], jobCommitTime: Long): Unit = {
@@ -208,13 +223,15 @@ class BasicWriteJobStatsTracker(
     var totalNumBytes: Long = 0L
     var totalNumOutput: Long = 0L
 
-    val basicStats = stats.map(_.asInstanceOf[BasicWriteTaskStats])
+    val basicStats = stats.map(_.asInstanceOf[PartitionedWriteTaskStats])
 
-    basicStats.foreach { summary =>
-      partitionsSet ++= summary.partitions
-      numFiles += summary.numFiles
-      totalNumBytes += summary.numBytes
-      totalNumOutput += summary.numRows
+    basicStats.foreach { partitionedStats =>
+      partitionedStats.partitions.foreach { partitionedSummary =>
+        partitionsSet += partitionedSummary.partition
+        numFiles += partitionedSummary.numFiles
+        totalNumBytes += partitionedSummary.numBytes
+        totalNumOutput += partitionedSummary.numRows
+      }
     }
 
     driverSideMetrics(JOB_COMMIT_TIME).add(jobCommitTime)
@@ -225,28 +242,5 @@ class BasicWriteJobStatsTracker(
 
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, driverSideMetrics.values.toList)
-  }
-}
-
-object BasicWriteJobStatsTracker {
-  private[datasources] val NUM_FILES_KEY = "numFiles"
-  private[datasources] val NUM_OUTPUT_BYTES_KEY = "numOutputBytes"
-  private[datasources] val NUM_OUTPUT_ROWS_KEY = "numOutputRows"
-  private[datasources] val NUM_PARTS_KEY = "numParts"
-  val TASK_COMMIT_TIME = "taskCommitTime"
-  val JOB_COMMIT_TIME = "jobCommitTime"
-  /** XAttr key of the data length header added in HADOOP-17414. */
-  val FILE_LENGTH_XATTR = "header.x-hadoop-s3a-magic-data-length"
-
-  def metrics: Map[String, SQLMetric] = {
-    val sparkContext = SparkContext.getActive.get
-    Map(
-      NUM_FILES_KEY -> SQLMetrics.createMetric(sparkContext, "number of written files"),
-      NUM_OUTPUT_BYTES_KEY -> SQLMetrics.createSizeMetric(sparkContext, "written output"),
-      NUM_OUTPUT_ROWS_KEY -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-      NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
-      TASK_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "task commit time"),
-      JOB_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "job commit time")
-    )
   }
 }

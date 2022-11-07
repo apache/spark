@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.{Date, UUID}
 
+import scala.collection.mutable
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
 import org.apache.hadoop.mapreduce._
@@ -31,14 +33,15 @@ import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStatistics}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 
@@ -88,7 +91,7 @@ object FileFormatWriter extends Logging {
       statsTrackers: Seq[WriteJobStatsTracker],
       options: Map[String, String],
       numStaticPartitionCols: Int = 0)
-    : Set[String] = {
+    : Array[ExecutedWriteSummary] = {
     require(partitionColumns.size >= numStaticPartitionCols)
 
     val job = Job.getInstance(hadoopConf)
@@ -233,6 +236,7 @@ object FileFormatWriter extends Logging {
 
       // return a set of all the partition paths that were updated during this job
       ret.map(_.summary.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)
+      ret.map(_.summary)
     } catch { case cause: Throwable =>
       logError(s"Aborting job ${description.uuid}.", cause)
       committer.abortJob(job)
@@ -337,5 +341,34 @@ object FileFormatWriter extends Logging {
     statsTrackers.zip(statsPerTracker).foreach {
       case (statsTracker, stats) => statsTracker.processStats(stats, jobCommitDuration)
     }
+  }
+
+  private[sql] def processPartitionStats(
+      stats: Array[Seq[WriteTaskStats]],
+      partitionSchema: StructType): Map[TablePartitionSpec, CatalogStatistics] = {
+    val totalPartitionStats = mutable.HashMap.empty[InternalRow, CatalogStatistics]
+    stats.foreach { perTaskStats =>
+      perTaskStats.foreach {
+        case partitionedWriteStats: PartitionedWriteTaskStats =>
+          partitionedWriteStats.partitions.foreach { partitionWriteStats =>
+            val partitionStats = totalPartitionStats.getOrElse(
+              partitionWriteStats.partition, CatalogStatistics(0L))
+            val newPartitionStats = partitionStats.copy(
+              sizeInBytes = partitionStats.sizeInBytes + partitionWriteStats.numBytes,
+              rowCount = Some(partitionStats.rowCount.map(_ + partitionWriteStats.numRows)
+                .getOrElse(partitionWriteStats.numRows)))
+            totalPartitionStats.put(partitionWriteStats.partition, newPartitionStats)
+          }
+        case _ => // Nothing to be done
+      }
+    }
+    totalPartitionStats.map { case (partitionValues, partitionStats) =>
+      val partition =
+        partitionSchema.zip(partitionValues.toSeq(partitionSchema.map(_.dataType)))
+          .map { case (col, value) =>
+            col.name -> value.toString
+          }.toMap
+      partition -> partitionStats
+    }.toMap
   }
 }

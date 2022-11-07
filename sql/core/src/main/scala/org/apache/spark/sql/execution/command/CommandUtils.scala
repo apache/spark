@@ -27,7 +27,8 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -51,10 +52,87 @@ class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serial
 }
 
 object CommandUtils extends Logging {
+  /** Change statistics after changing data by commands. */
+  def updateTableStats(
+      sparkSession: SparkSession,
+      table: CatalogTable,
+      newWriteStats: Option[CatalogStatistics] = None,
+      isOverwrite: Boolean): Unit = {
+    val catalog = sparkSession.sessionState.catalog
+    val oldTableStats = table.stats
+    val newTableStats = if (isOverwrite) {
+      newWriteStats
+    } else {
+      oldTableStats.map { stats =>
+        val newStats = newWriteStats.getOrElse(CatalogStatistics(0L))
+        val newRowCount =
+          stats.rowCount.getOrElse[BigInt](0L) + newStats.rowCount.getOrElse[BigInt](0L)
+        newStats.copy(
+          sizeInBytes = stats.sizeInBytes + newStats.sizeInBytes,
+          rowCount = Some(newRowCount))
+      }.orElse(newWriteStats)
+    }
+    catalog.alterTableStats(table.identifier, newTableStats)
+  }
 
   /** Change statistics after changing data by commands. */
-  def updateTableStats(sparkSession: SparkSession, table: CatalogTable): Unit = {
+  def updatePartitionedTableStats(
+      sparkSession: SparkSession,
+      table: CatalogTable,
+      partitionStats: Map[TablePartitionSpec, CatalogStatistics] = Map.empty,
+      oldPartitions: Seq[CatalogTablePartition] = Seq.empty,
+      isOverwrite: Boolean): Unit = {
     val catalog = sparkSession.sessionState.catalog
+    val newPartRows = partitionStats.flatMap(_._2.rowCount).sum
+    val newPartBytes = partitionStats.map(_._2.sizeInBytes).sum
+    val oldPartRows = oldPartitions.flatMap(_.stats).flatMap(_.rowCount).sum
+    val oldPartBytes = oldPartitions.flatMap(_.stats).map(_.sizeInBytes).sum
+    val newTableStats = if (table.stats.isEmpty) {
+      CatalogStatistics(newPartBytes, Some(newPartRows))
+    } else {
+      val oldTableStats = table.stats.get
+      if (isOverwrite) {
+        oldTableStats.copy(
+          sizeInBytes = oldTableStats.sizeInBytes - oldPartBytes + newPartBytes,
+          rowCount = oldTableStats.rowCount.map(_ - oldPartRows + newPartRows)
+            .orElse(Some(newPartRows)))
+      } else {
+        oldTableStats.copy(
+          sizeInBytes = oldTableStats.sizeInBytes + newPartBytes,
+          rowCount = oldTableStats.rowCount.map(_ + newPartRows)
+            .orElse(Some(newPartRows)))
+      }
+    }
+    val newPartitions = if (isOverwrite) {
+      partitionStats.map { case (spec, stats) =>
+        catalog.getPartition(table.identifier, spec).copy(stats = Some(stats))
+      }.toSeq
+    } else {
+      partitionStats.map { case (spec, stats) =>
+        oldPartitions.find(_.spec == spec).map { oldPart =>
+          val newStats = oldPart.stats.map { oldStats =>
+            stats.copy(
+              sizeInBytes = oldStats.sizeInBytes + stats.sizeInBytes,
+              rowCount = Some(oldPartRows + stats.rowCount.getOrElse[BigInt](0L)))
+          }.orElse(Some(stats))
+          oldPart.copy(stats = newStats)
+        }.getOrElse {
+          catalog.getPartition(table.identifier, spec).copy(stats = Some(stats))
+        }
+      }.toSeq
+    }
+    catalog.alterTableStats(table.identifier, Some(newTableStats))
+    catalog.alterPartitions(table.identifier, newPartitions)
+  }
+
+  /** Change statistics after changing data by commands. */
+  def updateTableStats(
+      sparkSession: SparkSession,
+      table: CatalogTable): Unit = {
+    val catalog = sparkSession.sessionState.catalog
+    if (sparkSession.sessionState.conf.autoPartitionStatsticsUpdateEnabled) {
+      return
+    }
     if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       val newTable = catalog.getTableMetadata(table.identifier)
       val (newSize, newPartitions) = CommandUtils.calculateTotalSize(sparkSession, newTable)

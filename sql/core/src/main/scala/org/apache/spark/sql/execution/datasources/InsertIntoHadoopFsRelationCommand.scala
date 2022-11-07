@@ -31,6 +31,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -175,7 +176,7 @@ case class InsertIntoHadoopFsRelationCommand(
         qualifiedOutputPath
       }
 
-      val updatedPartitionPaths =
+      val writeSummary =
         FileFormatWriter.write(
           sparkSession = sparkSession,
           plan = child,
@@ -186,10 +187,15 @@ case class InsertIntoHadoopFsRelationCommand(
           hadoopConf = hadoopConf,
           partitionColumns = partitionColumns,
           bucketSpec = bucketSpec,
-          statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
+          statsTrackers = Seq(getWriteJobStatsTracker(hadoopConf)),
           options = options,
           numStaticPartitionCols = staticPartitions.size)
 
+      // Get a set of all the partition paths that were updated during this job
+      val updatedPartitionPaths =
+        writeSummary.map(_.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)
+      val partitionStats = FileFormatWriter.processPartitionStats(
+        writeSummary.map(_.stats), StructType.fromAttributes(partitionColumns))
 
       // update metastore partition metadata
       if (updatedPartitionPaths.isEmpty && staticPartitions.nonEmpty
@@ -208,7 +214,34 @@ case class InsertIntoHadoopFsRelationCommand(
       sparkSession.sharedState.cacheManager.recacheByPath(sparkSession, outputPath, fs)
 
       if (catalogTable.nonEmpty) {
-        CommandUtils.updateTableStats(sparkSession, catalogTable.get)
+        if (conf.autoPartitionStatsticsUpdateEnabled) {
+          if (partitionColumns.isEmpty) {
+            CommandUtils.updateTableStats(
+              sparkSession,
+              catalogTable.get,
+              partitionStats.values.headOption,
+              mode == SaveMode.Overwrite)
+          } else {
+            val updatedPartitions = updatedPartitionPaths.map(PartitioningUtils.parsePathFragment)
+            val oldParts = if (mode == SaveMode.Overwrite && !dynamicPartitionOverwrite) {
+              initialMatchingPartitions
+            } else {
+              updatedPartitions -- (updatedPartitions -- initialMatchingPartitions.toSet)
+            }
+            val oldPartitions = oldParts.map{ part =>
+              sparkSession.sessionState.catalog.getPartition(catalogTable.get.identifier, part)
+            }.toSeq
+            CommandUtils.updatePartitionedTableStats(
+              sparkSession,
+              catalogTable.get,
+              partitionStats,
+              oldPartitions,
+              mode == SaveMode.Overwrite
+            )
+          }
+        } else {
+          CommandUtils.updateTableStats(sparkSession, catalogTable.get)
+        }
       }
 
     } else {
