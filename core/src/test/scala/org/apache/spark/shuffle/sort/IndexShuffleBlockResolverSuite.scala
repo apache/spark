@@ -47,9 +47,9 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite {
     MockitoAnnotations.openMocks(this).close()
 
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
-    when(diskBlockManager.getFile(any[BlockId])).thenAnswer(
+    when(diskBlockManager.getFile(any[BlockId], any[Boolean])).thenAnswer(
       (invocation: InvocationOnMock) => new File(tempDir, invocation.getArguments.head.toString))
-    when(diskBlockManager.getFile(any[String])).thenAnswer(
+    when(diskBlockManager.getFile(any[String], any[Boolean])).thenAnswer(
       (invocation: InvocationOnMock) => new File(tempDir, invocation.getArguments.head.toString))
     when(diskBlockManager.getMergedShuffleFile(
       any[BlockId], any[Option[Array[String]]])).thenAnswer(

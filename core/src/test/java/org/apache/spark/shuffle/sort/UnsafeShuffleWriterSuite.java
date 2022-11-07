@@ -312,10 +312,10 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     File checksumFile = new File(tempDir, checksumFileName);
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
-    when(diskBlockManager.getFile(checksumFileName)).thenReturn(checksumFile);
-    when(diskBlockManager.getFile(new ShuffleDataBlockId(shuffleDep.shuffleId(), 0, 0)))
+    when(diskBlockManager.getFile(checksumFileName, true)).thenReturn(checksumFile);
+    when(diskBlockManager.getFile(new ShuffleDataBlockId(shuffleDep.shuffleId(), 0, 0), true))
       .thenReturn(dataFile);
-    when(diskBlockManager.getFile(new ShuffleIndexBlockId(shuffleDep.shuffleId(), 0, 0)))
+    when(diskBlockManager.getFile(new ShuffleIndexBlockId(shuffleDep.shuffleId(), 0, 0), true))
       .thenReturn(indexFile);
 
     // In this example, each partition should have exactly one record:
@@ -342,10 +342,10 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     File checksumFile = new File(tempDir, checksumFileName);
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
-    when(diskBlockManager.getFile(checksumFileName)).thenReturn(checksumFile);
-    when(diskBlockManager.getFile(new ShuffleDataBlockId(shuffleDep.shuffleId(), 0, 0)))
+    when(diskBlockManager.getFile(checksumFileName, true)).thenReturn(checksumFile);
+    when(diskBlockManager.getFile(new ShuffleDataBlockId(shuffleDep.shuffleId(), 0, 0), true))
       .thenReturn(dataFile);
-    when(diskBlockManager.getFile(new ShuffleIndexBlockId(shuffleDep.shuffleId(), 0, 0)))
+    when(diskBlockManager.getFile(new ShuffleIndexBlockId(shuffleDep.shuffleId(), 0, 0), true))
       .thenReturn(indexFile);
 
     final UnsafeShuffleWriter<Object, Object> writer1 = createWriter(true, blockResolver);
