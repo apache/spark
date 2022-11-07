@@ -881,10 +881,13 @@ class DataFrameWindowFunctionsSuite extends QueryTest
           lag($"value", 3, null, true).over(window),
           lag(concat($"value", $"key"), 1, null, true).over(window)).orderBy($"order").collect()
       },
-      errorClass = "DATATYPE_MISMATCH.FRAME_LESS_OFFSET_WITHOUT_FOLDABLE",
+      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
         "sqlExpr" -> "\"lag(value, nonfoldableliteral(), NULL)\"",
-        "offset" -> "\"(- nonfoldableliteral())\"")
+        "inputName" -> "offset",
+        "inputType" -> "\"INT\"",
+        "inputExpr" -> "\"(- nonfoldableliteral())\""
+      )
     )
   }
 

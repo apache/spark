@@ -452,9 +452,11 @@ sealed abstract class FrameLessOffsetWindowFunction
       check
     } else if (!offset.foldable) {
       DataTypeMismatch(
-        errorSubClass = "FRAME_LESS_OFFSET_WITHOUT_FOLDABLE",
+        errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "offset" -> toSQLExpr(offset)
+          "inputName" -> "offset",
+          "inputType" -> toSQLType(offset.dataType),
+          "inputExpr" -> toSQLExpr(offset)
         )
       )
     } else {
