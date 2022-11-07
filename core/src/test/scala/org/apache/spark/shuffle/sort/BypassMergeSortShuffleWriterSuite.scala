@@ -263,9 +263,9 @@ class BypassMergeSortShuffleWriterSuite
     val dataFile = new File(tempDir, dataBlockId.name)
     val indexFile = new File(tempDir, indexBlockId.name)
     reset(diskBlockManager)
-    when(diskBlockManager.getFile(checksumFileName)).thenAnswer(_ => checksumFile)
-    when(diskBlockManager.getFile(dataBlockId)).thenAnswer(_ => dataFile)
-    when(diskBlockManager.getFile(indexBlockId)).thenAnswer(_ => indexFile)
+    when(diskBlockManager.getFile(checksumFileName, true)).thenAnswer(_ => checksumFile)
+    when(diskBlockManager.getFile(dataBlockId, true)).thenAnswer(_ => dataFile)
+    when(diskBlockManager.getFile(indexBlockId, true)).thenAnswer(_ => indexFile)
     when(diskBlockManager.createTempShuffleBlock())
       .thenAnswer { _ =>
         val blockId = new TempShuffleBlockId(UUID.randomUUID)
