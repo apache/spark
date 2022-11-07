@@ -45,7 +45,7 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     // apply special dynamic filtering only for group-based row-level operations
     case GroupBasedRowLevelOperation(replaceData, cond,
-        DataSourceV2ScanRelation(_, scan: SupportsRuntimeV2Filtering, _, _, _))
+        DataSourceV2ScanRelation(_, scan: SupportsRuntimeV2Filtering, _, _, _, _))
         if conf.runtimeRowLevelOperationGroupFilterEnabled && cond != TrueLiteral =>
 
       // use reference equality on scan to find required scan relations
