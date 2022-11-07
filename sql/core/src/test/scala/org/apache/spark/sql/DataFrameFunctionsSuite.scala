@@ -1128,6 +1128,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     // Test with cached relation, the Project will be evaluated with codegen
     sdf.cache()
     testNonPrimitiveType()
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        OneRowRelation().selectExpr("map_from_entries(array(struct(1, 'a', 'b')))")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"map_from_entries(array(struct(1, a, b)))\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"array(struct(1, a, b))\"",
+        "inputType" -> "\"ARRAY<STRUCT<col1: INT, col2: STRING, col3: STRING>>\"",
+        "requiredType" -> "\"ARRAY\" of pair \"STRUCT\""
+      ),
+      queryContext = Array(ExpectedContext("", "", 0, 43,
+        "map_from_entries(array(struct(1, 'a', 'b')))"))
+    )
   }
 
   test("array contains function") {
