@@ -363,11 +363,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val mapWrongType = MapFromEntries(Literal(1))
     assert(mapWrongType.checkInputDataTypes() ==
       DataTypeMismatch(
-        errorSubClass = "MAP_FROM_ENTRIES_WRONG_TYPE",
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "functionName" -> "`map_from_entries`",
-          "childExpr" -> "\"1\"",
-          "childType" -> "\"INT\"")
+          "paramIndex" -> "1",
+          "inputSql" -> "\"1\"",
+          "inputType" -> "\"INT\"",
+          "requiredType" -> "\"ARRAY\" of pair \"STRUCT\""
+        )
       )
     )
   }
