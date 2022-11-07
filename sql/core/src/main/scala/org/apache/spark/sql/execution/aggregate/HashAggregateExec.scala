@@ -69,7 +69,15 @@ case class HashAggregateExec(
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
     "avgHashProbe" ->
       SQLMetrics.createAverageMetric(sparkContext, "avg hash probes per key"),
-    "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext, "number of sort fallback tasks"))
+    "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext, "number of sort fallback tasks")
+  ) ++ {
+    if (isAdaptivePartialAggregationEnabled) {
+      Some("numSkippedParAggRows" -> SQLMetrics.createMetric(sparkContext,
+        "number of skipped partial aggregate rows"))
+    } else {
+      None
+    }
+  }
 
   // This is for testing. We force TungstenAggregationIterator to fall back to the unsafe row hash
   // map and/or the sort-based aggregation once it has processed a given number of input rows.
@@ -147,9 +155,32 @@ case class HashAggregateExec(
   // but the vectorized hashmap can still be switched on for testing and benchmarking purposes.
   private var isVectorizedHashMapEnabled: Boolean = false
 
+  // VisibleForTesting
+  private[sql] lazy val isAdaptivePartialAggregationEnabled = {
+    requiredChildDistributionExpressions.isEmpty && groupingAttributes.nonEmpty &&
+      conf.adaptivePartialAggregationThreshold > 0 &&
+      conf.adaptivePartialAggregationThreshold < (1 << conf.fastHashAggregateRowMaxCapacityBit) && {
+      child
+        .collectUntil(p => p.isInstanceOf[WholeStageCodegenExec] ||
+          !p.isInstanceOf[CodegenSupport] ||
+          p.isInstanceOf[LeafExecNode]).forall {
+        case _: ProjectExec | _: FilterExec | _: ColumnarToRowExec => true
+        case _: SerializeFromObjectExec => true
+        case _: InputAdapter => true
+        // HashAggregateExec, ExpandExec, SortMergeJoinExec ...
+        case _ => false
+      }
+    }
+  }
+
   // The name for UnsafeRow HashMap
   private var hashMapTerm: String = _
   private var sorterTerm: String = _
+
+  private var skipPartialAggregateTerm: String = _
+  private var numberOfConsumedTerm: String = _
+  private var childConsumedTerm: String = _
+  private var outputFunc: String = _
 
   /**
    * This is called by generated Java class, should be public.
@@ -442,6 +473,13 @@ case class HashAggregateExec(
       case _ => conf.fastHashAggregateRowMaxCapacityBit
     }
 
+    if (isAdaptivePartialAggregationEnabled) {
+      skipPartialAggregateTerm = ctx.
+        addMutableState(CodeGenerator.JAVA_BOOLEAN, "skipPartialAggregate", v => s"$v = false;")
+      numberOfConsumedTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "numberOfConsumed")
+      childConsumedTerm = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "childConsumed")
+    }
+
     val thisPlan = ctx.addReferenceObj("plan", this)
 
     // Create a name for the iterator from the fast hash map, and the code to create fast hash map.
@@ -523,10 +561,16 @@ case class HashAggregateExec(
       finishRegularHashMap
     }
 
+    outputFunc = generateResultFunction(ctx)
+
+    val genChildConsumedCode =
+      if (isAdaptivePartialAggregationEnabled) s"$childConsumedTerm = true;" else ""
+
     val doAggFuncName = ctx.addNewFunction(doAgg,
       s"""
          |private void $doAgg() throws java.io.IOException {
          |  ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
+         |  $genChildConsumedCode
          |  $finishHashMap
          |}
        """.stripMargin)
@@ -534,9 +578,20 @@ case class HashAggregateExec(
     // generate code for output
     val keyTerm = ctx.freshName("aggKey")
     val bufferTerm = ctx.freshName("aggBuffer")
-    val outputFunc = generateResultFunction(ctx)
 
     val limitNotReachedCondition = limitNotReachedCond
+
+    def childDoAgg =
+      if (isAdaptivePartialAggregationEnabled) {
+        s"""
+           |if (!$childConsumedTerm) {
+           |  $doAggFuncName();
+           |  $shouldStopCheckCode
+           |}
+          """.stripMargin
+      } else {
+        ""
+      }
 
     def outputFromFastHashMap: String = {
       if (isFastHashMapEnabled) {
@@ -614,7 +669,9 @@ case class HashAggregateExec(
        |  long $beforeAgg = System.nanoTime();
        |  $doAggFuncName();
        |  $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
+       |  $shouldStopCheckCode
        |}
+       |$childDoAgg
        |// output the result
        |$outputFromFastHashMap
        |$outputFromRegularHashMap
@@ -848,17 +905,59 @@ case class HashAggregateExec(
       s"UnsafeRow $unsafeRowBuffer = null;"
     }
 
+    val adaptivePartialAggregation = if (isAdaptivePartialAggregationEnabled) {
+      val numberOfConsumedKeysTerm =
+        ctx.addMutableState(CodeGenerator.JAVA_LONG, "numberOfConsumedKeys")
+      val numAggSkippedRows = metricTerm(ctx, "numSkippedParAggRows")
+      val initExpr = declFunctions.flatMap(f => f.initialValues)
+      val emptyBufferKeyCode = GenerateUnsafeProjection.createCode(ctx, initExpr)
+
+      val numberOfKeys = if (fastHashMapTerm != null) {
+        s"$numberOfConsumedKeysTerm = $fastHashMapTerm.getNumKeys();"
+      } else if (hashMapTerm != null) {
+        s"$numberOfConsumedKeysTerm = $hashMapTerm.getNumKeys();"
+      } else {
+        s"$numberOfConsumedKeysTerm = 0;"
+      }
+      s"""
+         |if (!$skipPartialAggregateTerm) {
+         |  if ($numberOfConsumedTerm == ${conf.adaptivePartialAggregationThreshold}) {
+         |    $numberOfKeys
+         |    if ((double) $numberOfConsumedKeysTerm / (double) $numberOfConsumedTerm > 0.95) {
+         |       $skipPartialAggregateTerm = true;
+         |    }
+         |  }
+         |  $numberOfConsumedTerm = $numberOfConsumedTerm + 1;
+         |}
+         |
+         |if ($skipPartialAggregateTerm) {
+         |  ${unsafeRowKeyCode.code}
+         |  ${emptyBufferKeyCode.code}
+         |  $unsafeRowBuffer = ${emptyBufferKeyCode.value};
+         |  $updateRowInHashMap
+
+         |  $outputFunc(${unsafeRowKeyCode.value}, ${emptyBufferKeyCode.value});
+         |  $numAggSkippedRows.add(1);
+         |  return;
+         |}
+       """.stripMargin
+    } else {
+      ""
+    }
     // We try to do hash map based in-memory aggregation first. If there is not enough memory (the
     // hash map will return null for new key), we spill the hash map to disk to free memory, then
     // continue to do in-memory aggregation and spilling until all the rows had been processed.
     // Finally, sort the spilled aggregate buffers by key, and merge them together for same key.
     s"""
        |$declareRowBuffer
+       |$adaptivePartialAggregation
        |$findOrInsertHashMap
        |$incCounter
        |$updateRowInHashMap
      """.stripMargin
   }
+
+  override def needStopCheck: Boolean = isAdaptivePartialAggregationEnabled
 
   override def verboseString(maxFields: Int): String = toString(verbose = true, maxFields)
 

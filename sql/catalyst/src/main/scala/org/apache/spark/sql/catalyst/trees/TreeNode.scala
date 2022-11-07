@@ -335,6 +335,18 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   /**
+   * Returns a Seq containing the result until the condition specified by `f`.
+   * The condition is recursively applied to this node and all of its children.
+   */
+  def collectUntil(f: BaseType => Boolean): Seq[BaseType] = {
+    if (f(this)) {
+      Nil
+    } else {
+      Seq(this) ++ children.foldLeft(Seq.empty[BaseType]) { (l, r) => l ++ r.collectUntil(f) }
+    }
+  }
+
+  /**
    * Finds and returns the first [[TreeNode]] of the tree for which the given partial function
    * is defined (pre-order), and applies the partial function to it.
    */
