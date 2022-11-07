@@ -70,4 +70,11 @@ private[spark] object Status {
       .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  val LOCAL_STORE_DIR = ConfigBuilder("spark.ui.store.path")
+    .doc("Local directory where to cache application information. By default this is " +
+      "not set, meaning all application information will be kept in memory.")
+    .version("3.4.0")
+    .stringConf
+    .createOptional
 }
