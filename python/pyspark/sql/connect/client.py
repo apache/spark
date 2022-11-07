@@ -285,11 +285,6 @@ class RemoteSparkSession(object):
         else:
             self._user_id = os.getenv("USER", None)
 
-        if self._user_id is None:
-            raise AttributeError(
-                "User ID must be specified either as argument, connection string, or $USER environment variable."
-            )
-
         self._channel = self._builder.to_channel()
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
 
@@ -307,7 +302,8 @@ class RemoteSparkSession(object):
         fun.serialized_function = cloudpickle.dumps((function, return_type))
 
         req = pb2.Request()
-        req.user_context.user_id = self._user_id
+        if self._user_id is not None:
+            req.user_context.user_id = self._user_id
         req.plan.command.create_function.CopyFrom(fun)
 
         self._execute_and_fetch(req)
