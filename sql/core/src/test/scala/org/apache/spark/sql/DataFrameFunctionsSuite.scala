@@ -1688,13 +1688,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         Seq(("a string element", "a")).toDF().selectExpr("array_position(_1, _2)")
       },
-      errorClass = "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"array_position(_1, _2)\"",
-        "functionName" -> "`array_position`",
-        "dataType" -> "\"ARRAY\"",
-        "leftType" -> "\"STRING\"",
-        "rightType" -> "\"STRING\""
+        "paramIndex" -> "1",
+        "requiredType" -> "\"ARRAY\"",
+        "inputSql" -> "\"_1\"",
+        "inputType" -> "\"STRING\""
       ),
       queryContext = Array(ExpectedContext("", "", 0, 21, "array_position(_1, _2)"))
     )
