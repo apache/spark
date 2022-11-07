@@ -103,8 +103,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisErrorClass(
       Project(Seq(UnresolvedAttribute("tBl.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
-      "UNRESOLVED_COLUMN",
-      Array("`tBl`.`a`", "`TbL`.`a`"))
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      Map("objectName" -> "`tBl`.`a`", "proposal" -> "`TbL`.`a`")
+    )
 
     checkAnalysisWithoutViewWrapper(
       Project(Seq(UnresolvedAttribute("TbL.a")),
@@ -328,7 +329,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val plan = Project(Alias(In(Literal(null), Seq(Literal(true), Literal(1))), "a")() :: Nil,
       LocalRelation()
     )
-    assertAnalysisError(plan, Seq("data type mismatch: Arguments must be same type"))
+    assertAnalysisErrorClass(
+      plan,
+      "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      Map(
+        "functionName" -> "`in`",
+        "dataType" -> "[\"VOID\", \"BOOLEAN\", \"INT\"]",
+        "sqlExpr" -> "\"(NULL IN (true, 1))\""))
   }
 
   test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
@@ -680,6 +687,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         testRelation,
         cond,
         UpdateAction(Some(cond), Assignment($"a", $"a") :: Nil) :: Nil,
+        Nil,
         Nil
       ),
       "Reference 'a' is ambiguous" :: Nil)
@@ -711,8 +719,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("CTE with non-existing column alias") {
     assertAnalysisErrorClass(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
-      "UNRESOLVED_COLUMN",
-      Array("`y`", "`t`.`x`"))
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      Map("objectName" -> "`y`", "proposal" -> "`t`.`x`"),
+      Array(ExpectedContext("y", 46, 46))
+    )
   }
 
   test("CTE with non-matching column alias") {
@@ -722,8 +732,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-28251: Insert into non-existing table error message is user friendly") {
-    assertAnalysisError(parsePlan("INSERT INTO test VALUES (1)"),
-      Seq("Table not found: test"))
+    assertAnalysisErrorClass(parsePlan("INSERT INTO test VALUES (1)"),
+      "TABLE_OR_VIEW_NOT_FOUND", Map("relationName" -> "`test`"),
+      Array(ExpectedContext("test", 12, 15)))
   }
 
   test("check CollectMetrics resolved") {
@@ -924,29 +935,29 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val r5 = Intersect(firstTable, secondTable, isAll = false)
 
     assertAnalysisError(r1,
-      Seq("Union can only be performed on tables with the compatible column types. " +
+      Seq("Union can only be performed on tables with compatible column types. " +
         "The second column of the second table is timestamp type which is not compatible " +
-        "with double at same column of first table"))
+        "with double at the same column of the first table"))
 
     assertAnalysisError(r2,
-      Seq("Union can only be performed on tables with the compatible column types. " +
+      Seq("Union can only be performed on tables with compatible column types. " +
         "The third column of the second table is timestamp type which is not compatible " +
-        "with int at same column of first table"))
+        "with int at the same column of the first table"))
 
     assertAnalysisError(r3,
-      Seq("Union can only be performed on tables with the compatible column types. " +
+      Seq("Union can only be performed on tables with compatible column types. " +
         "The 4th column of the second table is timestamp type which is not compatible " +
-        "with float at same column of first table"))
+        "with float at the same column of the first table"))
 
     assertAnalysisError(r4,
-      Seq("Except can only be performed on tables with the compatible column types. " +
+      Seq("Except can only be performed on tables with compatible column types. " +
         "The second column of the second table is timestamp type which is not compatible " +
-        "with double at same column of first table"))
+        "with double at the same column of the first table"))
 
     assertAnalysisError(r5,
-      Seq("Intersect can only be performed on tables with the compatible column types. " +
+      Seq("Intersect can only be performed on tables with compatible column types. " +
         "The second column of the second table is timestamp type which is not compatible " +
-        "with double at same column of first table"))
+        "with double at the same column of the first table"))
   }
 
   test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
@@ -1149,44 +1160,101 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |GROUP BY c.x
         |ORDER BY c.x + c.y
         |""".stripMargin),
-      "UNRESOLVED_COLUMN",
-      Array("`c`.`y`", "`x`"))
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      Map("objectName" -> "`c`.`y`", "proposal" -> "`x`"),
+      Array(ExpectedContext("c.y", 123, 125))
+    )
   }
 
   test("SPARK-38118: Func(wrong_type) in the HAVING clause should throw data mismatch error") {
-    Seq("mean", "abs").foreach { func =>
-      assertAnalysisError(parsePlan(
+    assertAnalysisErrorClass(
+      inputPlan = parsePlan(
         s"""
            |WITH t as (SELECT true c)
            |SELECT t.c
            |FROM t
            |GROUP BY t.c
-           |HAVING ${func}(t.c) > 0d""".stripMargin),
-        Seq(s"cannot resolve '$func(t.c)' due to data type mismatch"),
-        false)
+           |HAVING mean(t.c) > 0d""".stripMargin),
+      expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      expectedMessageParameters = Map(
+        "sqlExpr" -> "\"mean(c)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"c\"",
+        "inputType" -> "\"BOOLEAN\"",
+        "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""),
+      queryContext = Array(ExpectedContext("mean(t.c)", 65, 73)),
+      caseSensitive = false
+    )
 
-      assertAnalysisError(parsePlan(
+    assertAnalysisErrorClass(
+      inputPlan = parsePlan(
         s"""
            |WITH t as (SELECT true c, false d)
            |SELECT (t.c AND t.d) c
            |FROM t
            |GROUP BY t.c, t.d
-           |HAVING ${func}(c) > 0d""".stripMargin),
-        Seq(s"cannot resolve '$func(t.c)' due to data type mismatch"),
-        false)
-    }
+           |HAVING mean(c) > 0d""".stripMargin),
+      expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      expectedMessageParameters = Map(
+        "sqlExpr" -> "\"mean(c)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"c\"",
+        "inputType" -> "\"BOOLEAN\"",
+        "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""),
+      queryContext = Array(ExpectedContext("mean(c)", 91, 97)),
+      caseSensitive = false)
+
+    assertAnalysisErrorClass(
+      inputPlan = parsePlan(
+        s"""
+           |WITH t as (SELECT true c)
+           |SELECT t.c
+           |FROM t
+           |GROUP BY t.c
+           |HAVING abs(t.c) > 0d""".stripMargin),
+      expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      expectedMessageParameters = Map(
+        "sqlExpr" -> "\"abs(c)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"c\"",
+        "inputType" -> "\"BOOLEAN\"",
+        "requiredType" ->
+          "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")"),
+      queryContext = Array(ExpectedContext("abs(t.c)", 65, 72)),
+      caseSensitive = false
+    )
+
+    assertAnalysisErrorClass(
+      inputPlan = parsePlan(
+        s"""
+         |WITH t as (SELECT true c, false d)
+         |SELECT (t.c AND t.d) c
+         |FROM t
+         |GROUP BY t.c, t.d
+         |HAVING abs(c) > 0d""".stripMargin),
+      expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      expectedMessageParameters = Map(
+        "sqlExpr" -> "\"abs(c)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"c\"",
+        "inputType" -> "\"BOOLEAN\"",
+        "requiredType" ->
+          "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")"),
+      queryContext = Array(ExpectedContext("abs(c)", 91, 96)),
+      caseSensitive = false
+    )
   }
 
-  test("SPARK-39354: should be `Table or view not found`") {
-    assertAnalysisError(parsePlan(
+  test("SPARK-39354: should be [TABLE_OR_VIEW_NOT_FOUND]") {
+    assertAnalysisErrorClass(parsePlan(
       s"""
          |WITH t1 as (SELECT 1 user_id, CAST("2022-06-02" AS DATE) dt)
          |SELECT *
          |FROM t1
          |JOIN t2 ON t1.user_id = t2.user_id
          |WHERE t1.dt >= DATE_SUB('2020-12-27', 90)""".stripMargin),
-      Seq(s"Table or view not found: t2"),
-      false)
+      "TABLE_OR_VIEW_NOT_FOUND", Map("relationName" -> "`t2`"),
+      Array(ExpectedContext("t2", 84, 85)))
   }
 
   test("SPARK-39144: nested subquery expressions deduplicate relations should be done bottom up") {

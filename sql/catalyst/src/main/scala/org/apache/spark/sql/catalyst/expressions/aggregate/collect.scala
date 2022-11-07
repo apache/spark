@@ -22,11 +22,13 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
+import org.apache.spark.util.BoundedPriorityQueue
 
 /**
  * A base class for collect_list and collect_set aggregate functions.
@@ -145,7 +147,8 @@ case class CollectList(
 case class CollectSet(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect[mutable.HashSet[Any]] {
+    inputAggBufferOffset: Int = 0)
+  extends Collect[mutable.HashSet[Any]] with QueryErrorsBase {
 
   def this(child: Expression) = this(child, 0, 0)
 
@@ -177,7 +180,13 @@ case class CollectSet(
     if (!child.dataType.existsRecursively(_.isInstanceOf[MapType])) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure("collect_set() cannot have map type data")
+      DataTypeMismatch(
+        errorSubClass = "UNSUPPORTED_INPUT_TYPE",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> toSQLType(MapType)
+        )
+      )
     }
   }
 
@@ -193,4 +202,46 @@ case class CollectSet(
 
   override protected def withNewChildInternal(newChild: Expression): CollectSet =
     copy(child = newChild)
+}
+
+/**
+ * Collect the top-k elements. This expression is dedicated only for Spark-ML.
+ * @param reverse when true, returns the smallest k elements.
+ */
+case class CollectTopK(
+    child: Expression,
+    num: Int,
+    reverse: Boolean = false,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends Collect[BoundedPriorityQueue[Any]] {
+  assert(num > 0)
+
+  def this(child: Expression, num: Int) = this(child, num, false, 0, 0)
+  def this(child: Expression, num: Int, reverse: Boolean) = this(child, num, reverse, 0, 0)
+
+  override protected lazy val bufferElementType: DataType = child.dataType
+  override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
+
+  private def ordering: Ordering[Any] = if (reverse) {
+    TypeUtils.getInterpretedOrdering(child.dataType).reverse
+  } else {
+    TypeUtils.getInterpretedOrdering(child.dataType)
+  }
+
+  override def createAggregationBuffer(): BoundedPriorityQueue[Any] =
+    new BoundedPriorityQueue[Any](num)(ordering)
+
+  override def eval(buffer: BoundedPriorityQueue[Any]): Any =
+    new GenericArrayData(buffer.toArray.sorted(ordering.reverse))
+
+  override def prettyName: String = "collect_top_k"
+
+  override protected def withNewChildInternal(newChild: Expression): CollectTopK =
+    copy(child = newChild)
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): CollectTopK =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): CollectTopK =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 }

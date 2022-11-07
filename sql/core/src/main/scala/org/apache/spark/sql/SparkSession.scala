@@ -294,7 +294,7 @@ class SparkSession private(
   /**
    * Creates a new [[Dataset]] of type T containing zero elements.
    *
-   * @return 2.0.0
+   * @since 2.0.0
    */
   def emptyDataset[T: Encoder]: Dataset[T] = {
     val encoder = implicitly[Encoder[T]]
@@ -857,6 +857,31 @@ object SparkSession extends Logging {
     def config(key: String, value: Boolean): Builder = synchronized {
       options += key -> value.toString
       this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to
+     * both `SparkConf` and SparkSession's own configuration.
+     *
+     * @since 3.4.0
+     */
+    def config(map: Map[String, Any]): Builder = synchronized {
+      map.foreach {
+        kv: (String, Any) => {
+          options += kv._1 -> kv._2.toString
+        }
+      }
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to
+     * both `SparkConf` and SparkSession's own configuration.
+     *
+     * @since 3.4.0
+     */
+    def config(map: java.util.Map[String, Any]): Builder = synchronized {
+      config(map.asScala.toMap)
     }
 
     /**

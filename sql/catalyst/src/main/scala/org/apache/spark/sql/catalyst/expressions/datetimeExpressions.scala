@@ -153,6 +153,30 @@ case class CurrentDate(timeZoneId: Option[String] = None)
   override def prettyName: String = "current_date"
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns the current date at the start of query evaluation. All calls of curdate within the same query return the same value.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       2022-09-06
+  """,
+  group = "datetime_funcs",
+  since = "3.4.0")
+// scalastyle:on line.size.limit
+object CurDateExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    if (expressions.isEmpty) {
+      CurrentDate()
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
+        Seq.empty, funcName, expressions.length)
+    }
+  }
+}
+
 abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallback {
   override def foldable: Boolean = true
   override def nullable: Boolean = false
@@ -1269,7 +1293,7 @@ abstract class ToTimestamp
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
     val parseErrorBranch: String = if (failOnError) {
-      s"throw QueryExecutionErrors.ansiDateTimeParseError(e);"
+      "throw QueryExecutionErrors.ansiDateTimeParseError(e);"
     } else {
       s"${ev.isNull} = true;"
     }
@@ -3048,9 +3072,9 @@ object SubtractDates {
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_('Europe/Amsterdam', 'America/Los_Angeles', timestamp_ntz'2021-12-06 00:00:00');
+      > SELECT _FUNC_('Europe/Brussels', 'America/Los_Angeles', timestamp_ntz'2021-12-06 00:00:00');
        2021-12-05 15:00:00
-      > SELECT _FUNC_('Europe/Amsterdam', timestamp_ntz'2021-12-05 15:00:00');
+      > SELECT _FUNC_('Europe/Brussels', timestamp_ntz'2021-12-05 15:00:00');
        2021-12-06 00:00:00
   """,
   group = "datetime_funcs",

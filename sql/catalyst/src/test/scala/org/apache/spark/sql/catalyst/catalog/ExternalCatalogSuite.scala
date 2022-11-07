@@ -281,7 +281,6 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
     val tables = catalog.getTablesByName("db2", Seq("tbl1", "tbl2"))
     assert(tables.map(_.identifier.table).sorted == Seq("tbl1", "tbl2"))
 
-    // After renaming a table, the identifier should still be qualified with catalog.
     catalog.renameTable("db2", "tbl1", "tblone")
     val tables2 = catalog.getTablesByName("db2", Seq("tbl2", "tblone"))
     assert(tables2.map(_.identifier.table).sorted == Seq("tbl2", "tblone"))
@@ -421,6 +420,9 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
     val partition2 =
       CatalogTablePartition(Map("partCol1" -> "3", "partCol2" -> "4"),
         storageFormat.copy(locationUri = Some(newLocationPart2)))
+    assert(!exists(newLocationPart1))
+    assert(!exists(newLocationPart2))
+
     catalog.createPartitions("db1", "tbl", Seq(partition1), ignoreIfExists = false)
     catalog.createPartitions("db1", "tbl", Seq(partition2), ignoreIfExists = false)
 
@@ -843,6 +845,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
   test("create/drop database should create/delete the directory") {
     val catalog = newBasicCatalog()
     val db = newDb("mydb")
+    assert(!exists(db.locationUri))
     catalog.createDatabase(db, ignoreIfExists = false)
     assert(exists(db.locationUri))
 
@@ -860,7 +863,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
       schema = new StructType().add("a", "int").add("b", "string"),
       provider = Some(defaultProvider)
     )
-
+    assert(!exists(db.locationUri, "my_table"))
     catalog.createTable(table, ignoreIfExists = false)
     assert(exists(db.locationUri, "my_table"))
 
@@ -1016,11 +1019,19 @@ abstract class CatalogTestUtils {
 
   def newFunc(): CatalogFunction = newFunc("funcName")
 
-  def newUriForDatabase(): URI = new URI(Utils.createTempDir().toURI.toString.stripSuffix("/"))
+  def newUriForDatabase(): URI = {
+    val file = Utils.createTempDir()
+    val uri = new URI(file.toURI.toString.stripSuffix("/"))
+    Utils.deleteRecursively(file)
+    uri
+  }
 
   def newUriForPartition(parts: Seq[String]): URI = {
-    val path = parts.foldLeft(Utils.createTempDir())(new java.io.File(_, _))
-    new URI(path.toURI.toString.stripSuffix("/"))
+    val file = Utils.createTempDir()
+    val path = parts.foldLeft(file)(new java.io.File(_, _))
+    val uri = new URI(path.toURI.toString.stripSuffix("/"))
+    Utils.deleteRecursively(file)
+    uri
   }
 
   def newDb(name: String): CatalogDatabase = {
@@ -1091,10 +1102,7 @@ abstract class CatalogTestUtils {
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {
-    CatalogFunction(
-      FunctionIdentifier(name, database),
-      funcClass,
-      Seq.empty[FunctionResource])
+    CatalogFunction(FunctionIdentifier(name, database), funcClass, Seq.empty[FunctionResource])
   }
 
   /**

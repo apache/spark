@@ -362,9 +362,14 @@ DESC t PARTITION (c='Us', d=2)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
-Partition not found in table 't' database 'default':
-c -> Us
-d -> 2
+{
+  "errorClass" : "PARTITIONS_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "partitionList" : "PARTITION (`c` = Us, `d` = 2)",
+    "tableName" : "`default`.`t`"
+  }
+}
 
 
 -- !query
@@ -373,7 +378,14 @@ DESC t PARTITION (c='Us')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`spark_catalog`.`default`.`t`'
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1232",
+  "messageParameters" : {
+    "partitionColumnNames" : "c, d",
+    "specKeys" : "c",
+    "tableName" : "`spark_catalog`.`default`.`t`"
+  }
+}
 
 
 -- !query
@@ -382,12 +394,20 @@ DESC t PARTITION (c='Us', d)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[INVALID_SQL_SYNTAX] Invalid SQL syntax: PARTITION specification is incomplete: `d`(line 1, pos 0)
-
-== SQL ==
-DESC t PARTITION (c='Us', d)
-^^^
+{
+  "errorClass" : "INVALID_SQL_SYNTAX",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "inputString" : "PARTITION specification is incomplete: `d`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 28,
+    "fragment" : "DESC t PARTITION (c='Us', d)"
+  } ]
+}
 
 
 -- !query
@@ -463,7 +483,14 @@ DESC temp_v PARTITION (c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[FORBIDDEN_OPERATION] The operation DESC PARTITION is not allowed on the TEMPORARY VIEW: `temp_v`
+{
+  "errorClass" : "FORBIDDEN_OPERATION",
+  "messageParameters" : {
+    "objectName" : "`temp_v`",
+    "objectType" : "TEMPORARY VIEW",
+    "statement" : "DESC PARTITION"
+  }
+}
 
 
 -- !query
@@ -542,7 +569,14 @@ DESC v PARTITION (c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[FORBIDDEN_OPERATION] The operation DESC PARTITION is not allowed on the VIEW: `v`
+{
+  "errorClass" : "FORBIDDEN_OPERATION",
+  "messageParameters" : {
+    "objectName" : "`v`",
+    "objectType" : "VIEW",
+    "statement" : "DESC PARTITION"
+  }
+}
 
 
 -- !query

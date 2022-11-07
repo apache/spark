@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.shuffle.ShuffleBlockInfo
 import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Class to handle block manager decommissioning retries.
@@ -127,7 +127,7 @@ private[storage] class BlockManagerDecommissioner(
               }
               logInfo(s"Migrated $shuffleBlockInfo to $peer")
             } catch {
-              case e: IOException =>
+              case e @ ( _ : IOException | _ : SparkException) =>
                 // If a block got deleted before netty opened the file handle, then trying to
                 // load the blocks now will fail. This is most likely to occur if we start
                 // migrating blocks and then the shuffle TTL cleaner kicks in. However this
@@ -280,14 +280,16 @@ private[storage] class BlockManagerDecommissioner(
       .sortBy(b => (b.shuffleId, b.mapId))
     shufflesToMigrate.addAll(newShufflesToMigrate.map(x => (x, 0)).asJava)
     migratingShuffles ++= newShufflesToMigrate
+    val remainedShuffles = migratingShuffles.size - numMigratedShuffles.get()
     logInfo(s"${newShufflesToMigrate.size} of ${localShuffles.size} local shuffles " +
-      s"are added. In total, ${migratingShuffles.size} shuffles are remained.")
+      s"are added. In total, $remainedShuffles shuffles are remained.")
 
     // Update the threads doing migrations
     val livePeerSet = bm.getPeers(false).toSet
     val currentPeerSet = migrationPeers.keys.toSet
     val deadPeers = currentPeerSet.diff(livePeerSet)
-    val newPeers = livePeerSet.diff(currentPeerSet)
+    // Randomize the orders of the peers to avoid hotspot nodes.
+    val newPeers = Utils.randomize(livePeerSet.diff(currentPeerSet))
     migrationPeers ++= newPeers.map { peer =>
       logDebug(s"Starting thread to migrate shuffle blocks to ${peer}")
       val runnable = new ShuffleMigrationRunnable(peer)

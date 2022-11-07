@@ -26,6 +26,7 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Ro
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 
@@ -222,10 +223,12 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     )
 
     // select metadata will fail when analysis
-    val ex = intercept[AnalysisException] {
-      df.select("name", METADATA_FILE_NAME).collect()
-    }
-    assert(ex.getMessage.contains("No such struct field file_name in id, university"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select("name", METADATA_FILE_NAME).collect()
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"))
   }
 
   metadataColumnsTest("select only metadata", schema) { (df, f0, f1) =>
@@ -378,15 +381,19 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
           )
 
           // select metadata will fail when analysis - metadata cannot overwrite user data
-          val ex = intercept[AnalysisException] {
-            df.select("name", "_metadata.file_name").collect()
-          }
-          assert(ex.getMessage.contains("No such struct field file_name in id, university"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              df.select("name", "_metadata.file_name").collect()
+            },
+            errorClass = "FIELD_NOT_FOUND",
+            parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"))
 
-          val ex1 = intercept[AnalysisException] {
-            df.select("name", "_METADATA.file_NAME").collect()
-          }
-          assert(ex1.getMessage.contains("No such struct field file_NAME in id, university"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              df.select("name", "_METADATA.file_NAME").collect()
+            },
+            errorClass = "FIELD_NOT_FOUND",
+            parameters = Map("fieldName" -> "`file_NAME`", "fields" -> "`id`, `university`"))
         }
       }
     }
@@ -518,16 +525,19 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     withTempDir { dir =>
       df.coalesce(1).write.format("json").save(dir.getCanonicalPath + "/source/new-streaming-data")
 
-      val stream = spark.readStream.format("json")
+      val streamDf = spark.readStream.format("json")
         .schema(schema)
         .load(dir.getCanonicalPath + "/source/new-streaming-data")
         .select("*", "_metadata")
+
+      val streamQuery0 = streamDf
         .writeStream.format("json")
         .option("checkpointLocation", dir.getCanonicalPath + "/target/checkpoint")
+        .trigger(Trigger.AvailableNow())
         .start(dir.getCanonicalPath + "/target/new-streaming-data")
 
-      stream.processAllAvailable()
-      stream.stop()
+      streamQuery0.awaitTermination()
+      assert(streamQuery0.lastProgress.numInputRows == 2L)
 
       val newDF = spark.read.format("json")
         .load(dir.getCanonicalPath + "/target/new-streaming-data")
@@ -565,6 +575,34 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
             sourceFileMetadata(METADATA_FILE_MODIFICATION_TIME))
         )
       )
+
+      // Verify self-union
+      val streamQuery1 = streamDf.union(streamDf)
+        .writeStream.format("json")
+        .option("checkpointLocation", dir.getCanonicalPath + "/target/checkpoint_union")
+        .trigger(Trigger.AvailableNow())
+        .start(dir.getCanonicalPath + "/target/new-streaming-data-union")
+      streamQuery1.awaitTermination()
+      val df1 = spark.read.format("json")
+        .load(dir.getCanonicalPath + "/target/new-streaming-data-union")
+      // Verify self-union results
+      assert(streamQuery1.lastProgress.numInputRows == 4L)
+      assert(df1.count() == 4L)
+      assert(df1.select("*").columns.toSet == Set("name", "age", "info", "_metadata"))
+
+      // Verify self-join
+      val streamQuery2 = streamDf.join(streamDf, Seq("name", "age", "info", "_metadata"))
+        .writeStream.format("json")
+        .option("checkpointLocation", dir.getCanonicalPath + "/target/checkpoint_join")
+        .trigger(Trigger.AvailableNow())
+        .start(dir.getCanonicalPath + "/target/new-streaming-data-join")
+      streamQuery2.awaitTermination()
+      val df2 = spark.read.format("json")
+        .load(dir.getCanonicalPath + "/target/new-streaming-data-join")
+      // Verify self-join results
+      assert(streamQuery2.lastProgress.numInputRows == 4L)
+      assert(df2.count() == 2L)
+      assert(df2.select("*").columns.toSet == Set("name", "age", "info", "_metadata"))
     }
   }
 
@@ -586,6 +624,32 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
           checkAnswer(spark.read.parquet(dir.getAbsolutePath)
             .select("*", METADATA_FILE_NAME, METADATA_FILE_SIZE), expectedDf)
+        }
+      }
+    }
+  }
+
+  Seq("parquet", "orc").foreach { format =>
+    test(s"SPARK-40918: Output cols around WSCG.isTooManyFields limit in $format") {
+      // The issue was that ParquetFileFormat would not count the _metadata columns towards
+      // the WholeStageCodegenExec.isTooManyFields limit, while FileSourceScanExec would,
+      // resulting in Parquet reader returning columnar output, while scan expected row.
+      withTempPath { dir =>
+        sql(s"SELECT ${(1 to 100).map(i => s"id+$i as c$i").mkString(", ")} FROM RANGE(100)")
+          .write.format(format).save(dir.getAbsolutePath)
+        (98 to 102).foreach { wscgCols =>
+          withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> wscgCols.toString) {
+            // Would fail with
+            // java.lang.ClassCastException: org.apache.spark.sql.vectorized.ColumnarBatch
+            // cannot be cast to org.apache.spark.sql.catalyst.InternalRow
+            sql(
+              s"""
+                 |SELECT
+                 |  ${(1 to 100).map(i => s"sum(c$i)").mkString(", ")},
+                 |  max(_metadata.file_path)
+                 |FROM $format.`$dir`""".stripMargin
+            ).collect()
+          }
         }
       }
     }

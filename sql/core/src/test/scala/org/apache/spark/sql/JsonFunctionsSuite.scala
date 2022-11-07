@@ -24,6 +24,8 @@ import java.util.Locale
 import collection.JavaConverters._
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Literal, StructsToJson}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -95,6 +97,18 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.selectExpr("key", "json_tuple(jstring, 'f1', 'f2', 'f3', 'f4', 'f5')"),
       expected)
+
+    val nonStringDF = Seq(1, 2).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        nonStringDF.select(json_tuple($"a", "1")).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.NON_STRING_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"json_tuple(a, 1)\"",
+        "funcName" -> "`json_tuple`"
+      )
+    )
   }
 
   test("json_tuple filter and group") {
@@ -488,11 +502,14 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-24027: from_json of a map with unsupported key type") {
     val schema = MapType(StructType(StructField("f", IntegerType) :: Nil), StringType)
-    val startMsg = "cannot resolve 'entries' due to data type mismatch:"
-    val exception = intercept[AnalysisException] {
-      Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema))
-    }.getMessage
-    assert(exception.contains(startMsg))
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema))
+      },
+      errorClass = "DATATYPE_MISMATCH.INVALID_JSON_MAP_KEY_TYPE",
+      parameters = Map(
+        "schema" -> "\"MAP<STRUCT<f: INT>, STRING>\"",
+        "sqlExpr" -> "\"entries\""))
   }
 
   test("SPARK-24709: infers schemas of json strings and pass them to from_json") {
@@ -850,9 +867,79 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val df2 = Seq("""{"data": {"c2": [19], "c1": 123456}}""").toDF("c0")
     checkAnswer(df2.select(from_json($"c0", new StructType().add("data", st))), Row(Row(null)))
     val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
-    checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(null))
+    checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(Array(Row(123456, null))))
     val df4 = Seq("""{"c2": [19]}""").toDF("c0")
     checkAnswer(df4.select(from_json($"c0", MapType(StringType, st))), Row(null))
+  }
+
+  test("SPARK-40646: return partial results for JSON arrays with objects") {
+    val st = new StructType()
+      .add("c1", StringType)
+      .add("c2", ArrayType(new StructType().add("a", LongType)))
+
+    // "c2" is expected to be an array of structs but it is a struct in the data.
+    val df = Seq("""[{"c2": {"a": 1}, "c1": "abc"}]""").toDF("c0")
+    checkAnswer(
+      df.select(from_json($"c0", ArrayType(st))),
+      Row(Array(Row("abc", null)))
+    )
+  }
+
+  test("SPARK-40646: return partial results for JSON maps") {
+    val st = new StructType()
+      .add("c1", MapType(StringType, IntegerType))
+      .add("c2", StringType)
+
+    // Map "c2" has "k2" key that is a string, not an integer.
+    val df = Seq("""{"c1": {"k1": 1, "k2": "A", "k3": 3}, "c2": "abc"}""").toDF("c0")
+    checkAnswer(
+      df.select(from_json($"c0", st)),
+      Row(Row(null, "abc"))
+    )
+  }
+
+  test("SPARK-40646: return partial results for JSON arrays") {
+    val st = new StructType()
+      .add("c", ArrayType(IntegerType))
+
+    // Values in the array are strings instead of integers.
+    val df = Seq("""["a", "b", "c"]""").toDF("c0")
+    checkAnswer(
+      df.select(from_json($"c0", ArrayType(st))),
+      Row(null)
+    )
+  }
+
+  test("SPARK-40646: return partial results for nested JSON arrays") {
+    val st = new StructType()
+      .add("c", ArrayType(ArrayType(IntegerType)))
+
+    // The second array contains a string instead of an integer.
+    val df = Seq("""[[1], ["2"]]""").toDF("c0")
+    checkAnswer(
+      df.select(from_json($"c0", ArrayType(st))),
+      Row(null)
+    )
+  }
+
+  test("SPARK-40646: return partial results for objects with values as JSON arrays") {
+    val st = new StructType()
+      .add("c1",
+        ArrayType(
+          StructType(
+            StructField("c2", ArrayType(IntegerType)) ::
+            Nil
+          )
+        )
+      )
+
+    // Value "a" cannot be parsed as an integer,
+    // the error cascades to "c2", thus making its value null.
+    val df = Seq("""[{"c1": [{"c2": ["a"]}]}]""").toDF("c0")
+    checkAnswer(
+      df.select(from_json($"c0", ArrayType(st))),
+      Row(Array(Row(null)))
+    )
   }
 
   test("SPARK-33270: infers schema for JSON field with spaces and pass them to from_json") {
@@ -1023,5 +1110,23 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         from_json($"json", StructType(StructField("key", TimestampNTZType) :: Nil)) as "value")
       .selectExpr("value['key']")
     checkAnswer(fromJsonDF, Row(localDT))
+  }
+
+  test("to_json: unable to convert column of ObjectType to JSON") {
+    val df = Seq(1).toDF("a")
+    val schema = StructType(StructField("b", ObjectType(classOf[java.lang.Integer])) :: Nil)
+    val row = InternalRow.fromSeq(Seq(Integer.valueOf(1)))
+    val structData = Literal.create(row, schema)
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select($"a").withColumn("c", Column(StructsToJson(Map.empty, structData))).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.CANNOT_CONVERT_TO_JSON",
+      parameters = Map(
+        "sqlExpr" -> "\"to_json(NAMED_STRUCT('b', 1))\"",
+        "name" -> "`b`",
+        "type" -> "\"JAVA.LANG.INTEGER\""
+      )
+    )
   }
 }

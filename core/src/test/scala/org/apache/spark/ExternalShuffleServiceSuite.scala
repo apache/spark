@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermission
 
+import scala.collection
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
 
@@ -111,6 +112,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
     val confWithRddFetchEnabled = conf.clone
       .set(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, true)
       .set(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
+      .set(config.EXECUTOR_REMOVE_DELAY.key, "0s")
     sc = new SparkContext("local-cluster[1,1,1024]", "test", confWithRddFetchEnabled)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
     sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
@@ -183,6 +185,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
       val confWithLocalDiskReading = conf.clone
         .set(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, true)
         .set(config.SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED, enabled)
+        .set(config.EXECUTOR_REMOVE_DELAY.key, "0s")
       sc = new SparkContext("local-cluster[1,1,1024]", "test", confWithLocalDiskReading)
       sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
       sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
@@ -199,7 +202,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
           .getOrElse(fail("No host local dir manager"))
 
         val promises = mapOutputs.map { case (bmid, blocks) =>
-          val promise = Promise[Seq[File]]()
+          val promise = Promise[collection.Seq[File]]()
           dirManager.getHostLocalDirs(bmid.host, bmid.port, Seq(bmid.executorId).toArray) {
             case scala.util.Success(res) => res.foreach { case (eid, dirs) =>
               val files = blocks.flatMap { case (blockId, _, _) =>

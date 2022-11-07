@@ -95,10 +95,10 @@ case class CreateTableLikeCommand(
         DataSource.lookupDataSource(provider.get, sparkSession.sessionState.conf)
       }
       provider
-    } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
-      Some(sparkSession.sessionState.conf.defaultDataSourceName)
     } else if (fileFormat.inputFormat.isDefined) {
       Some(DDLUtils.HIVE_PROVIDER)
+    } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
+      Some(sparkSession.sessionState.conf.defaultDataSourceName)
     } else {
       sourceTableDesc.provider
     }
@@ -207,9 +207,8 @@ case class AlterTableRenameCommand(
       // back into the hive metastore cache
       catalog.refreshTable(oldName)
       catalog.renameTable(oldName, newName)
-      val newQualifiedIdent = catalog.qualifyIdentifier(oldName.copy(table = newName.table))
       optStorageLevel.foreach { storageLevel =>
-        sparkSession.catalog.cacheTable(newQualifiedIdent.unquotedString, storageLevel)
+        sparkSession.catalog.cacheTable(newName.unquotedString, storageLevel)
       }
     }
     Seq.empty[Row]
@@ -1343,7 +1342,7 @@ case class ShowCreateTableAsSerdeCommand(
     storage.serde.foreach { serde =>
       builder ++= s"ROW FORMAT SERDE '$serde'\n"
 
-      val serdeProps = conf.redactOptions(metadata.storage.properties).map {
+      val serdeProps = conf.redactOptions(metadata.storage.properties).toSeq.sortBy(_._1).map {
         case (key, value) =>
           s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }

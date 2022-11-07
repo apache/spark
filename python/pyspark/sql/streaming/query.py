@@ -21,7 +21,6 @@ from typing import Any, Dict, List, Optional
 
 from py4j.java_gateway import JavaObject, java_import
 
-from pyspark import since
 from pyspark.sql.utils import StreamingQueryException
 from pyspark.sql.streaming.listener import StreamingQueryListener
 
@@ -43,8 +42,7 @@ class StreamingQuery:
     def __init__(self, jsq: JavaObject) -> None:
         self._jsq = jsq
 
-    @property  # type: ignore[misc]
-    @since(2.0)
+    @property
     def id(self) -> str:
         """
         Returns the unique id of this query that persists across restarts from checkpoint data.
@@ -52,6 +50,13 @@ class StreamingQuery:
         will be the same every time it is restarted from checkpoint data.
         There can only be one query with the same id active in a Spark cluster.
         Also see, `runId`.
+
+        .. versionadded:: 2.0.0
+
+        Returns
+        -------
+        str
+            The unique id of query that persists across restarts from checkpoint data.
 
         Examples
         --------
@@ -67,12 +72,18 @@ class StreamingQuery:
         """
         return self._jsq.id().toString()
 
-    @property  # type: ignore[misc]
-    @since(2.1)
+    @property
     def runId(self) -> str:
         """
         Returns the unique id of this query that does not persist across restarts. That is, every
         query that is started (or restarted from checkpoint) will have a different runId.
+
+        .. versionadded:: 2.1.0
+
+        Returns
+        -------
+        str
+            The unique id of query that does not persist across restarts.
 
         Examples
         --------
@@ -88,14 +99,20 @@ class StreamingQuery:
         """
         return self._jsq.runId().toString()
 
-    @property  # type: ignore[misc]
-    @since(2.0)
+    @property
     def name(self) -> str:
         """
         Returns the user-specified name of the query, or null if not specified.
         This name can be specified in the `org.apache.spark.sql.streaming.DataStreamWriter`
         as `dataframe.writeStream.queryName("query").start()`.
         This name, if set, must be unique across all active queries.
+
+        .. versionadded:: 2.0.0
+
+        Returns
+        -------
+        str
+            The user-specified name of the query, or null if not specified.
 
         Examples
         --------
@@ -111,11 +128,17 @@ class StreamingQuery:
         """
         return self._jsq.name()
 
-    @property  # type: ignore[misc]
-    @since(2.0)
+    @property
     def isActive(self) -> bool:
         """
         Whether this streaming query is currently active or not.
+
+        .. versionadded:: 2.0.0
+
+        Returns
+        -------
+        bool
+            The result whether specified streaming query is currently active or not.
 
         Examples
         --------
@@ -128,7 +151,6 @@ class StreamingQuery:
         """
         return self._jsq.isActive()
 
-    @since(2.0)
     def awaitTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
         """
         Waits for the termination of `this` query, either by :func:`query.stop()` or by an
@@ -141,6 +163,20 @@ class StreamingQuery:
         immediately (if the query has terminated with exception).
 
         throws :class:`StreamingQueryException`, if `this` query has terminated with an exception
+
+        .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        timeout : int, optional
+            default ``None``. The waiting time for specified streaming query to terminate.
+
+        Returns
+        -------
+        bool, optional
+            The result whether specified streaming query has terminated or not within the `timeout`
+            seconds if `timeout` is set. The :class:`StreamingQueryException` will be thrown if the
+            query has terminated with an exception.
 
         Examples
         --------
@@ -161,11 +197,17 @@ class StreamingQuery:
         else:
             return self._jsq.awaitTermination()
 
-    @property  # type: ignore[misc]
-    @since(2.1)
+    @property
     def status(self) -> Dict[str, Any]:
         """
         Returns the current status of the query.
+
+        .. versionadded:: 2.1.0
+
+        Returns
+        -------
+        dict
+            The current status of the specified query.
 
         Examples
         --------
@@ -181,13 +223,20 @@ class StreamingQuery:
         """
         return json.loads(self._jsq.status().json())
 
-    @property  # type: ignore[misc]
-    @since(2.1)
+    @property
     def recentProgress(self) -> List[Dict[str, Any]]:
         """
         Returns an array of the most recent [[StreamingQueryProgress]] updates for this query.
         The number of progress updates retained for each stream is configured by Spark session
         configuration `spark.sql.streaming.numRecentProgressUpdates`.
+
+        .. versionadded:: 2.1.0
+
+        Returns
+        -------
+        list
+            List of dict which is the most recent :class:`StreamingQueryProgress` updates
+            for this query.
 
         Examples
         --------
@@ -213,7 +262,9 @@ class StreamingQuery:
 
         Returns
         -------
-        dict
+        dict, optional
+            The most recent :class:`StreamingQueryProgress` update of this streaming query or
+            None if there were no progress updates.
 
         Examples
         --------
@@ -260,10 +311,11 @@ class StreamingQuery:
         """
         return self._jsq.processAllAvailable()
 
-    @since(2.0)
     def stop(self) -> None:
         """
         Stop this streaming query.
+
+        .. versionadded:: 2.0.0
 
         Examples
         --------
@@ -360,6 +412,11 @@ class StreamingQueryManager:
 
         .. versionadded:: 2.0.0
 
+        Returns
+        -------
+        list
+            The active queries associated with this :class:`SparkSession`.
+
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
@@ -381,10 +438,23 @@ class StreamingQueryManager:
 
     def get(self, id: str) -> StreamingQuery:
         """
-        Returns an active query from this SparkSession or throws exception if an active query
-        with this name doesn't exist.
+        Returns an active query from this :class:`SparkSession`.
 
         .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        id : str
+            The unique id of specified query.
+
+        Returns
+        -------
+        :class:`StreamingQuery`
+            An active query with `id` from this SparkSession.
+
+        Notes
+        -----
+        Exception will be thrown if an active query with this id does not exist.
 
         Examples
         --------
@@ -407,7 +477,6 @@ class StreamingQueryManager:
         """
         return StreamingQuery(self._jsqm.get(id))
 
-    @since(2.0)
     def awaitAnyTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
         """
         Wait until any of the queries on the associated SparkSession has terminated since the
@@ -428,6 +497,20 @@ class StreamingQueryManager:
         then check the `query.exception()` for each query.
 
         throws :class:`StreamingQueryException`, if `this` query has terminated with an exception
+
+        .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        timeout : int, optional
+            default ``None``. The waiting time for any streaming query to terminate.
+
+        Returns
+        -------
+        bool, optional
+            The result whether any streaming query has terminated or not within the `timeout`
+            seconds if `timeout` is set. The :class:`StreamingQueryException` will be thrown if any
+            query has terminated with an exception.
 
         Examples
         --------
@@ -468,6 +551,12 @@ class StreamingQueryManager:
 
         .. versionadded:: 3.4.0
 
+        Parameters
+        ----------
+        listener : :class:`StreamingQueryListener`
+            A :class:`StreamingQueryListener` to receive up-calls for life cycle events of
+            :class:`~pyspark.sql.streaming.StreamingQuery`.
+
         Examples
         --------
         >>> from pyspark.sql.streaming import StreamingQueryListener
@@ -506,6 +595,14 @@ class StreamingQueryManager:
 
         .. versionadded:: 3.4.0
 
+        Parameters
+        ----------
+        listener : :class:`StreamingQueryListener`
+            A :class:`StreamingQueryListener` to receive up-calls for life cycle events of
+            :class:`~pyspark.sql.streaming.StreamingQuery`.
+
+        Examples
+        --------
         >>> from pyspark.sql.streaming import StreamingQueryListener
         >>> class TestListener(StreamingQueryListener):
         ...     def onQueryStarted(self, event):

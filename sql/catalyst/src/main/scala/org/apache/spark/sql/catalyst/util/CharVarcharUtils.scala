@@ -181,50 +181,91 @@ object CharVarcharUtils extends Logging {
   }
 
   def stringLengthCheck(expr: Expression, dt: DataType): Expression = {
+    processStringForCharVarchar(
+      expr,
+      dt,
+      charFuncName = Some("charTypeWriteSideCheck"),
+      varcharFuncName = Some("varcharTypeWriteSideCheck"))
+  }
+
+  private def processStringForCharVarchar(
+      expr: Expression,
+      dt: DataType,
+      charFuncName: Option[String],
+      varcharFuncName: Option[String]): Expression = {
     dt match {
-      case CharType(length) =>
+      case CharType(length) if charFuncName.isDefined =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
           StringType,
-          "charTypeWriteSideCheck",
+          charFuncName.get,
           expr :: Literal(length) :: Nil,
           returnNullable = false)
 
-      case VarcharType(length) =>
+      case VarcharType(length) if varcharFuncName.isDefined =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
           StringType,
-          "varcharTypeWriteSideCheck",
+          varcharFuncName.get,
           expr :: Literal(length) :: Nil,
           returnNullable = false)
 
       case StructType(fields) =>
         val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
-          Seq(Literal(f.name),
-            stringLengthCheck(GetStructField(expr, i, Some(f.name)), f.dataType))
+          Seq(Literal(f.name), processStringForCharVarchar(
+            GetStructField(expr, i, Some(f.name)), f.dataType, charFuncName, varcharFuncName))
         })
-        if (expr.nullable) {
+        if (struct.valExprs.forall(_.isInstanceOf[GetStructField])) {
+          // No field needs char/varchar processing, just return the original expression.
+          expr
+        } else if (expr.nullable) {
           If(IsNull(expr), Literal(null, struct.dataType), struct)
         } else {
           struct
         }
 
-      case ArrayType(et, containsNull) => stringLengthCheckInArray(expr, et, containsNull)
+      case ArrayType(et, containsNull) =>
+        processStringForCharVarcharInArray(expr, et, containsNull, charFuncName, varcharFuncName)
 
       case MapType(kt, vt, valueContainsNull) =>
-        val newKeys = stringLengthCheckInArray(MapKeys(expr), kt, containsNull = false)
-        val newValues = stringLengthCheckInArray(MapValues(expr), vt, valueContainsNull)
-        MapFromArrays(newKeys, newValues)
+        val keys = MapKeys(expr)
+        val newKeys = processStringForCharVarcharInArray(
+          keys, kt, containsNull = false, charFuncName, varcharFuncName)
+        val values = MapValues(expr)
+        val newValues = processStringForCharVarcharInArray(
+          values, vt, valueContainsNull, charFuncName, varcharFuncName)
+        if (newKeys.fastEquals(keys) && newValues.fastEquals(values)) {
+          // If map key/value does not need char/varchar processing, return the original expression.
+          expr
+        } else {
+          MapFromArrays(newKeys, newValues)
+        }
 
       case _ => expr
     }
   }
 
-  private def stringLengthCheckInArray(
-      arr: Expression, et: DataType, containsNull: Boolean): Expression = {
+  private def processStringForCharVarcharInArray(
+      arr: Expression,
+      et: DataType,
+      containsNull: Boolean,
+      charFuncName: Option[String],
+      varcharFuncName: Option[String]): Expression = {
     val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
-    val func = LambdaFunction(stringLengthCheck(param, et), Seq(param))
-    ArrayTransform(arr, func)
+    val funcBody = processStringForCharVarchar(param, et, charFuncName, varcharFuncName)
+    if (funcBody.fastEquals(param)) {
+      // If array element does not need char/varchar processing, return the original expression.
+      arr
+    } else {
+      ArrayTransform(arr, LambdaFunction(funcBody, Seq(param)))
+    }
+  }
+
+  def addPaddingForScan(attr: Attribute): Expression = {
+    getRawType(attr.metadata).map { rawType =>
+      processStringForCharVarchar(
+        attr, rawType, charFuncName = Some("readSidePadding"), varcharFuncName = None)
+    }.getOrElse(attr)
   }
 
   /**

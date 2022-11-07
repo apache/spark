@@ -433,14 +433,10 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(length($"a"), length($"b")),
       Row(3, 4))
 
-    checkAnswer(
-      df.selectExpr("length(a)", "length(b)"),
-      Row(3, 4))
-
-    checkAnswer(
-      df.selectExpr("length(c)", "length(d)", "length(e)"),
-      Row(3, 3, 5)
-    )
+    Seq("length", "len").foreach { len =>
+      checkAnswer(df.selectExpr(s"$len(a)", s"$len(b)"), Row(3, 4))
+      checkAnswer(df.selectExpr(s"$len(c)", s"$len(d)", s"$len(e)"), Row(3, 3, 5))
+    }
   }
 
   test("SPARK-36751: add octet length api for scala") {
@@ -606,12 +602,54 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
 
+    checkAnswer(
+      df2.selectExpr("str_to_map(a, ',')"),
+      Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
+    )
+
+    val df3 = Seq(
+      ("a=1&b=2", "&", "="),
+      ("k#2%v#3", "%", "#")
+    ).toDF("str", "delim1", "delim2")
+
+    checkAnswer(
+      df3.selectExpr("str_to_map(str, delim1, delim2)"),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("k" -> "2", "v" -> "3"))
+      )
+    )
+
+    val df4 = Seq(
+      ("a:1&b:2", "&"),
+      ("k:2%v:3", "%")
+    ).toDF("str", "delim1")
+
+    checkAnswer(
+      df4.selectExpr("str_to_map(str, delim1)"),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("k" -> "2", "v" -> "3"))
+      )
+    )
   }
 
   test("SPARK-36148: check input data types of regexp_replace") {
-    val m = intercept[AnalysisException] {
-      sql("select regexp_replace(collect_list(1), '1', '2')")
-    }.getMessage
-    assert(m.contains("data type mismatch: argument 1 requires string type"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select regexp_replace(collect_list(1), '1', '2')")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"regexp_replace(collect_list(1), 1, 2, 1)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"collect_list(1)\"",
+        "inputType" -> "\"ARRAY<INT>\"",
+        "requiredType" -> "\"STRING\""),
+      context = ExpectedContext(
+        fragment = "regexp_replace(collect_list(1), '1', '2')",
+        start = 7,
+        stop = 47))
   }
 }

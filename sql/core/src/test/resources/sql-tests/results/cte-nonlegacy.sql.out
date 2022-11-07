@@ -232,3 +232,108 @@ SELECT * FROM t2
 struct<1:int>
 -- !query output
 1
+
+
+-- !query
+WITH cte_outer AS (
+  SELECT 1
+)
+SELECT * FROM (
+  WITH cte_inner AS (
+    SELECT * FROM cte_outer
+  )
+  SELECT * FROM cte_inner
+)
+-- !query schema
+struct<1:int>
+-- !query output
+1
+
+
+-- !query
+WITH cte_outer AS (
+  SELECT 1
+)
+SELECT * FROM (
+  WITH cte_inner AS (
+    SELECT * FROM (
+      WITH cte_inner_inner AS (
+        SELECT * FROM cte_outer
+      )
+      SELECT * FROM cte_inner_inner
+    )
+  )
+  SELECT * FROM cte_inner
+)
+-- !query schema
+struct<1:int>
+-- !query output
+1
+
+
+-- !query
+WITH cte_outer AS (
+  WITH cte_invisible_inner AS (
+    SELECT 1
+  )
+  SELECT * FROM cte_invisible_inner
+)
+SELECT * FROM (
+  WITH cte_inner AS (
+    SELECT * FROM cte_invisible_inner
+  )
+  SELECT * FROM cte_inner
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`cte_invisible_inner`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 164,
+    "stopIndex" : 182,
+    "fragment" : "cte_invisible_inner"
+  } ]
+}
+
+
+-- !query
+WITH cte_outer AS (
+  SELECT * FROM (
+    WITH cte_invisible_inner AS (
+      SELECT 1
+    )
+    SELECT * FROM cte_invisible_inner
+  )
+)
+SELECT * FROM (
+  WITH cte_inner AS (
+    SELECT * FROM cte_invisible_inner
+  )
+  SELECT * FROM cte_inner
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`cte_invisible_inner`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 194,
+    "stopIndex" : 212,
+    "fragment" : "cte_invisible_inner"
+  } ]
+}

@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -32,7 +33,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, Tree
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SQLOpenHashSet
@@ -45,8 +46,10 @@ import org.apache.spark.unsafe.types.{ByteArray, CalendarInterval, UTF8String}
  * Base trait for [[BinaryExpression]]s with two arrays of the same element type and implicit
  * casting.
  */
-trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
-  with ImplicitCastInputTypes {
+trait BinaryArrayExpressionWithImplicitCast
+  extends BinaryExpression
+  with ImplicitCastInputTypes
+  with QueryErrorsBase {
 
   @transient protected lazy val elementType: DataType =
     inputTypes.head.asInstanceOf[ArrayType].elementType
@@ -66,9 +69,16 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
     (left.dataType, right.dataType) match {
       case (ArrayType(e1, _), ArrayType(e2, _)) if e1.sameType(e2) =>
         TypeCheckResult.TypeCheckSuccess
-      case _ => TypeCheckResult.TypeCheckFailure(s"input to function $prettyName should have " +
-        s"been two ${ArrayType.simpleString}s with same element type, but it's " +
-        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}]")
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "BINARY_ARRAY_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> toSQLId(prettyName),
+            "arrayType" -> toSQLType(ArrayType),
+            "leftType" -> toSQLType(left.dataType),
+            "rightType" -> toSQLType(right.dataType)
+          )
+        )
     }
   }
 
@@ -210,7 +220,10 @@ case class MapKeys(child: Expression)
   group = "map_funcs",
   since = "3.3.0")
 case class MapContainsKey(left: Expression, right: Expression)
-  extends RuntimeReplaceable with BinaryLike[Expression] with ImplicitCastInputTypes {
+  extends RuntimeReplaceable
+  with BinaryLike[Expression]
+  with ImplicitCastInputTypes
+  with QueryErrorsBase {
 
   override lazy val replacement: Expression = ArrayContains(MapKeys(left), right)
 
@@ -229,12 +242,21 @@ case class MapContainsKey(left: Expression, right: Expression)
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
       case (_, NullType) =>
-        TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
+        DataTypeMismatch(
+          errorSubClass = "NULL_TYPE",
+          Map("functionName" -> toSQLId(prettyName)))
       case (MapType(kt, _, _), dt) if kt.sameType(dt) =>
-        TypeUtils.checkForOrderingExpr(kt, s"function $prettyName")
-      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
-        s"been ${MapType.simpleString} followed by a value with same key type, but it's " +
-        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+        TypeUtils.checkForOrderingExpr(kt, prettyName)
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "MAP_CONTAINS_KEY_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> toSQLId(prettyName),
+            "dataType" -> toSQLType(MapType),
+            "leftType" -> toSQLType(left.dataType),
+            "rightType" -> toSQLType(right.dataType)
+          )
+        )
     }
   }
 
@@ -270,6 +292,9 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
         case (u: UnresolvedAttribute, _) => Literal(u.nameParts.last)
         case (e: NamedExpression, _) if e.resolved => Literal(e.name)
         case (e: NamedExpression, _) => NamePlaceholder
+        case (g: GetStructField, _) => Literal(g.extractFieldName)
+        case (g: GetArrayStructFields, _) => Literal(g.field.name)
+        case (g: GetMapValue, _) => Literal(g.key)
         case (_, idx) => Literal(idx.toString)
       })
   }
@@ -655,16 +680,21 @@ case class MapEntries(child: Expression)
   """,
   group = "map_funcs",
   since = "2.4.0")
-case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
+case class MapConcat(children: Seq[Expression])
+  extends ComplexTypeMergingExpression
+  with QueryErrorsBase {
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val funcName = s"function $prettyName"
     if (children.exists(!_.dataType.isInstanceOf[MapType])) {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to $funcName should all be of type map, but it's " +
-          children.map(_.dataType.catalogString).mkString("[", ", ", "]"))
+      DataTypeMismatch(
+        errorSubClass = "MAP_CONCAT_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> children.map(_.dataType).map(toSQLType).mkString("[", ", ", "]")
+        )
+      )
     } else {
-      val sameTypeCheck = TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), funcName)
+      val sameTypeCheck = TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), prettyName)
       if (sameTypeCheck.isFailure) {
         sameTypeCheck
       } else {
@@ -727,7 +757,7 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     val prepareMaps = ctx.splitExpressionsWithCurrentInputs(
       expressions = assignments,
       funcName = "getMapConcatInputs",
-      extraArguments = (s"MapData[]", argsName) :: ("boolean", hasNullName) :: Nil,
+      extraArguments = ("MapData[]", argsName) :: ("boolean", hasNullName) :: Nil,
       returnType = "boolean",
       makeSplitFunction = body =>
         s"""
@@ -777,7 +807,10 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
   """,
   group = "map_funcs",
   since = "2.4.0")
-case class MapFromEntries(child: Expression) extends UnaryExpression with NullIntolerant {
+case class MapFromEntries(child: Expression)
+  extends UnaryExpression
+  with NullIntolerant
+  with QueryErrorsBase {
 
   @transient
   private lazy val dataTypeDetails: Option[(MapType, Boolean, Boolean)] = child.dataType match {
@@ -798,8 +831,15 @@ case class MapFromEntries(child: Expression) extends UnaryExpression with NullIn
   override def checkInputDataTypes(): TypeCheckResult = dataTypeDetails match {
     case Some((mapType, _, _)) =>
       TypeUtils.checkForMapKeyType(mapType.keyType)
-    case None => TypeCheckResult.TypeCheckFailure(s"'${child.sql}' is of " +
-      s"${child.dataType.catalogString} type. $prettyName accepts only arrays of pair structs.")
+    case None =>
+      DataTypeMismatch(
+        errorSubClass = "MAP_FROM_ENTRIES_WRONG_TYPE",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "childExpr" -> toSQLExpr(child),
+          "childType" -> toSQLType(child.dataType)
+        )
+      )
   }
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
@@ -1258,7 +1298,7 @@ case class ArrayContains(left: Expression, right: Expression)
       case (_, NullType) =>
         TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
       case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
-        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
+        TypeUtils.checkForOrderingExpr(e2, prettyName)
       case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
         s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
         s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
@@ -1341,7 +1381,7 @@ case class ArraysOverlap(left: Expression, right: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>
-      TypeUtils.checkForOrderingExpr(elementType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(elementType, prettyName)
     case failure => failure
   }
 
@@ -1869,7 +1909,7 @@ case class ArrayMin(child: Expression)
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()
     if (typeCheckResult.isSuccess) {
-      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(dataType, prettyName)
     } else {
       typeCheckResult
     }
@@ -1942,7 +1982,7 @@ case class ArrayMax(child: Expression)
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()
     if (typeCheckResult.isSuccess) {
-      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(dataType, prettyName)
     } else {
       typeCheckResult
     }
@@ -2031,7 +2071,7 @@ case class ArrayPosition(left: Expression, right: Expression)
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
       case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
-        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
+        TypeUtils.checkForOrderingExpr(e2, prettyName)
       case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
         s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
         s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
@@ -2228,7 +2268,7 @@ case class ElementAt(
           }
         } else {
           val idx = if (index == 0) {
-            throw QueryExecutionErrors.elementAtByIndexZeroError()
+            throw QueryExecutionErrors.elementAtByIndexZeroError(getContextOrNull())
           } else if (index > 0) {
             index - 1
           } else {
@@ -2259,9 +2299,8 @@ case class ElementAt(
           } else {
             ""
           }
-
+          val errorContext = getContextOrNullCode(ctx)
           val indexOutOfBoundBranch = if (failOnError) {
-            val errorContext = getContextOrNullCode(ctx)
             // scalastyle:off line.size.limit
             s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements(), $errorContext);"
             // scalastyle:on line.size.limit
@@ -2271,8 +2310,8 @@ case class ElementAt(
                 val defaultValueEval = value.genCode(ctx)
                 s"""
                   ${defaultValueEval.code}
-                  ${ev.isNull} = ${defaultValueEval.isNull}
-                  ${ev.value} = ${defaultValueEval.value}
+                  ${ev.isNull} = ${defaultValueEval.isNull};
+                  ${ev.value} = ${defaultValueEval.value};
                 """.stripMargin
               case None => s"${ev.isNull} = true;"
             }
@@ -2284,7 +2323,7 @@ case class ElementAt(
              |  $indexOutOfBoundBranch
              |} else {
              |  if ($index == 0) {
-             |    throw QueryExecutionErrors.elementAtByIndexZeroError();
+             |    throw QueryExecutionErrors.elementAtByIndexZeroError($errorContext);
              |  } else if ($index > 0) {
              |    $index--;
              |  } else {
@@ -2388,7 +2427,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
             s" ${BinaryType.simpleString} or ${ArrayType.simpleString}, but it's " +
             childTypes.map(_.catalogString).mkString("[", ", ", "]"))
       }
-      TypeUtils.checkForSameTypeInputExpr(childTypes, s"function $prettyName")
+      TypeUtils.checkForSameTypeInputExpr(childTypes, prettyName)
     }
   }
 
@@ -3119,7 +3158,7 @@ object Sequence {
           // "spring forward" without a corresponding "fall back", make a copy
           // that's larger by 1
           if (i == arr.length) {
-            arr = arr.padTo(estimatedArrayLength + 1, fromLong(0L))
+            arr = arr.padTo(i + 1, fromLong(0L))
           }
           arr(i) = fromLong(result)
           i += 1
@@ -3442,7 +3481,7 @@ case class ArrayRemove(left: Expression, right: Expression)
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
       case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
-        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
+        TypeUtils.checkForOrderingExpr(e2, prettyName)
       case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
         s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
         s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
@@ -3640,9 +3679,9 @@ case class ArrayDistinct(child: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
-      case f: TypeCheckResult.TypeCheckFailure => f
+      case f if f.isFailure => f
       case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForOrderingExpr(elementType, s"function $prettyName")
+        TypeUtils.checkForOrderingExpr(elementType, prettyName)
     }
   }
 
@@ -3797,8 +3836,7 @@ trait ArrayBinaryLike
   override def checkInputDataTypes(): TypeCheckResult = {
     val typeCheckResult = super.checkInputDataTypes()
     if (typeCheckResult.isSuccess) {
-      TypeUtils.checkForOrderingExpr(dataType.asInstanceOf[ArrayType].elementType,
-        s"function $prettyName")
+      TypeUtils.checkForOrderingExpr(dataType.asInstanceOf[ArrayType].elementType, prettyName)
     } else {
       typeCheckResult
     }

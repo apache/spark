@@ -39,6 +39,12 @@ import org.apache.spark.util.Utils
 class HivePartitionFilteringSuite(version: String)
     extends HiveVersionSuite(version) with BeforeAndAfterAll with SQLHelper {
 
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    // SPARK-40619: explicitly call gc to avoid OutOfMemoryError as far as possible.
+    System.gc()
+  }
+
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
   private val fallbackKey = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key
   private val pruningFastFallback = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK.key
@@ -121,7 +127,7 @@ class HivePartitionFilteringSuite(version: String)
   test(s"getPartitionsByFilter returns all partitions when $fallbackKey=true") {
     withSQLConf(fallbackKey -> "true") {
       val filteredPartitions = clientWithoutDirectSql.getPartitionsByFilter(
-        clientWithoutDirectSql.getTable("default", "test"),
+        clientWithoutDirectSql.getRawHiveTable("default", "test"),
         Seq(attr("ds") === 20170101))
 
       assert(filteredPartitions.size == testPartitionCount)
@@ -132,7 +138,7 @@ class HivePartitionFilteringSuite(version: String)
     withSQLConf(fallbackKey -> "false") {
       val e = intercept[RuntimeException](
         clientWithoutDirectSql.getPartitionsByFilter(
-          clientWithoutDirectSql.getTable("default", "test"),
+          clientWithoutDirectSql.getRawHiveTable("default", "test"),
           Seq(attr("ds") === 20170101)))
       assert(e.getMessage.contains("Caught Hive MetaException"))
     }
@@ -628,7 +634,7 @@ class HivePartitionFilteringSuite(version: String)
   test(s"SPARK-35437: getPartitionsByFilter: ds=20170101 when $fallbackKey=true") {
     withSQLConf(fallbackKey -> "true", pruningFastFallback -> "true") {
       val filteredPartitions = clientWithoutDirectSql.getPartitionsByFilter(
-        clientWithoutDirectSql.getTable("default", "test"),
+        clientWithoutDirectSql.getRawHiveTable("default", "test"),
         Seq(attr("ds") === 20170101))
 
       assert(filteredPartitions.size == 1 * hValue.size * chunkValue.size *
@@ -705,7 +711,7 @@ class HivePartitionFilteringSuite(version: String)
       filterExpr: Expression,
       expectedPartitionCubes: Seq[(Seq[Int], Seq[Int], Seq[String], Seq[String], Seq[String])],
       transform: Expression => Expression): Unit = {
-    val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
+    val filteredPartitions = client.getPartitionsByFilter(client.getRawHiveTable("default", "test"),
       Seq(
         transform(filterExpr)
       ))

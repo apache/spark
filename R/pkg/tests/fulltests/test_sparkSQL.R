@@ -622,7 +622,7 @@ test_that("read/write json files", {
 
     # Test errorifexists
     expect_error(write.df(df, jsonPath2, "json", mode = "errorifexists"),
-                 "analysis error - path file:.*already exists")
+                 "analysis error - Path file:.*already exists")
 
     # Test write.json
     jsonPath3 <- tempfile(pattern = "jsonPath3", fileext = ".json")
@@ -722,7 +722,7 @@ test_that("test tableExists, cache, uncache and clearCache", {
   clearCache()
 
   expect_error(uncacheTable("zxwtyswklpf"),
-      "Error in uncacheTable : analysis error - Table or view not found: zxwtyswklpf")
+      "[TABLE_OR_VIEW_NOT_FOUND]*`zxwtyswklpf`*")
 
   expect_true(tableExists("table1"))
   expect_true(tableExists("default.table1"))
@@ -1604,6 +1604,16 @@ test_that("column functions", {
 
   result <- collect(select(df, array_sort(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L, NA), list(4L, 5L, 6L, NA, NA)))
+  result <- collect(select(
+    df,
+    array_sort(
+      df[[1]],
+      function(x, y) otherwise(
+        when(isNull(x), 1L), otherwise(when(isNull(y), -1L), cast(y - x, "integer"))
+      )
+    )
+  ))[[1]]
+  expect_equal(result, list(list(3L, 2L, 1L, NA), list(6L, 5L, 4L, NA, NA)))
 
   result <- collect(select(df, sort_array(df[[1]], FALSE)))[[1]]
   expect_equal(result, list(list(3L, 2L, 1L, NA), list(6L, 5L, 4L, NA, NA)))
@@ -3357,8 +3367,8 @@ test_that("approxQuantile() on a DataFrame", {
 
 test_that("SQL error message is returned from JVM", {
   retError <- tryCatch(sql("select * from blah"), error = function(e) e)
-  expect_equal(grepl("Table or view not found", retError), TRUE)
-  expect_equal(grepl("blah", retError), TRUE)
+  expect_equal(grepl("[TABLE_OR_VIEW_NOT_FOUND]", retError), TRUE)
+  expect_equal(grepl("`blah`", retError), TRUE)
 })
 
 irisDF <- suppressWarnings(createDataFrame(iris))
@@ -3951,15 +3961,16 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
   # It makes sure that we can omit path argument in write.df API and then it calls
   # DataFrameWriter.save() without path.
   expect_error(write.df(df, source = "csv"),
-              "Error in save : illegal argument - Expected exactly one path to be specified")
+               paste("Error in save : org.apache.spark.SparkIllegalArgumentException:",
+                     "Expected exactly one path to be specified"))
   expect_error(write.json(df, jsonPath),
-              "Error in json : analysis error - path file:.*already exists")
+              "Error in json : analysis error - Path file:.*already exists")
   expect_error(write.text(df, jsonPath),
-              "Error in text : analysis error - path file:.*already exists")
+              "Error in text : analysis error - Path file:.*already exists")
   expect_error(write.orc(df, jsonPath),
-              "Error in orc : analysis error - path file:.*already exists")
+              "Error in orc : analysis error - Path file:.*already exists")
   expect_error(write.parquet(df, jsonPath),
-              "Error in parquet : analysis error - path file:.*already exists")
+              "Error in parquet : analysis error - Path file:.*already exists")
   expect_error(write.parquet(df, jsonPath, mode = 123), "mode should be character or omitted.")
 
   # Arguments checking in R side.
@@ -3979,12 +3990,21 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
   expect_error(read.df(source = "json"),
                paste("Error in load : analysis error - Unable to infer schema for JSON.",
                      "It must be specified manually"))
-  expect_error(read.df("arbitrary_path"), "Error in load : analysis error - Path does not exist")
-  expect_error(read.json("arbitrary_path"), "Error in json : analysis error - Path does not exist")
-  expect_error(read.text("arbitrary_path"), "Error in text : analysis error - Path does not exist")
-  expect_error(read.orc("arbitrary_path"), "Error in orc : analysis error - Path does not exist")
+  expect_error(read.df("arbitrary_path"),
+               paste("Error in load : analysis error - [PATH_NOT_FOUND] Path does not exist:",
+                     "file:/__w/spark/spark/arbitrary_path."), fixed = TRUE)
+  expect_error(read.json("arbitrary_path"),
+               paste("Error in json : analysis error - [PATH_NOT_FOUND] Path does not exist:",
+                     "file:/__w/spark/spark/arbitrary_path."), fixed = TRUE)
+  expect_error(read.text("arbitrary_path"),
+               paste("Error in text : analysis error - [PATH_NOT_FOUND] Path does not exist:",
+                     "file:/__w/spark/spark/arbitrary_path."), fixed = TRUE)
+  expect_error(read.orc("arbitrary_path"),
+               paste("Error in orc : analysis error - [PATH_NOT_FOUND] Path does not exist:",
+                     "file:/__w/spark/spark/arbitrary_path."), fixed = TRUE)
   expect_error(read.parquet("arbitrary_path"),
-              "Error in parquet : analysis error - Path does not exist")
+               paste("Error in parquet : analysis error - [PATH_NOT_FOUND] Path does not exist:",
+                     "file:/__w/spark/spark/arbitrary_path."), fixed = TRUE)
 
   # Arguments checking in R side.
   expect_error(read.df(path = c(3)),
@@ -4066,8 +4086,7 @@ test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases, get
   expect_equal(currentDatabase(), "default")
   expect_error(setCurrentDatabase("default"), NA)
   expect_error(setCurrentDatabase("zxwtyswklpf"),
-               paste0("Error in setCurrentDatabase : no such database - Database ",
-               "'zxwtyswklpf' not found"))
+               "[SCHEMA_NOT_FOUND]*`zxwtyswklpf`*")
 
   expect_true(databaseExists("default"))
   expect_true(databaseExists("spark_catalog.default"))
@@ -4099,7 +4118,7 @@ test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, funct
   tbs <- collect(tb)
   expect_true(nrow(tbs[tbs$name == "cars", ]) > 0)
   expect_error(listTables("bar"),
-               "Error in listTables : no such database - Database 'bar' not found")
+               "[SCHEMA_NOT_FOUND]*`bar`*")
 
   c <- listColumns("cars")
   expect_equal(nrow(c), 2)
@@ -4107,7 +4126,7 @@ test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, funct
                c("name", "description", "dataType", "nullable", "isPartition", "isBucket"))
   expect_equal(collect(c)[[1]][[1]], "speed")
   expect_error(listColumns("zxwtyswklpf", "default"),
-               paste("Table or view not found: spark_catalog.default.zxwtyswklpf"))
+               "[TABLE_OR_VIEW_NOT_FOUND]*`spark_catalog`.`default`.`zxwtyswklpf`*")
 
   f <- listFunctions()
   expect_true(nrow(f) >= 200) # 250
@@ -4116,8 +4135,7 @@ test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, funct
   expect_equal(take(orderBy(filter(f, "className IS NOT NULL"), "className"), 1)$className,
                "org.apache.spark.sql.catalyst.expressions.Abs")
   expect_error(listFunctions("zxwtyswklpf_db"),
-               paste("Error in listFunctions : no such database - Database",
-                     "'zxwtyswklpf_db' not found"))
+               "[SCHEMA_NOT_FOUND]*`zxwtyswklpf_db`*")
 
   expect_true(functionExists("abs"))
   expect_false(functionExists("aabbss"))

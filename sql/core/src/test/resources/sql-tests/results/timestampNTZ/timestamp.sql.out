@@ -13,12 +13,20 @@ select timestamp '2019-01-01中文'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the TIMESTAMP value: 2019-01-01中文(line 1, pos 7)
-
-== SQL ==
-select timestamp '2019-01-01中文'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "2019-01-01中文",
+    "valueType" : "TIMESTAMP"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "timestamp '2019-01-01中文'"
+  } ]
+}
 
 
 -- !query
@@ -27,12 +35,20 @@ select timestamp'4294967297'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the TIMESTAMP value: 4294967297(line 1, pos 7)
-
-== SQL ==
-select timestamp'4294967297'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "4294967297",
+    "valueType" : "TIMESTAMP"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "timestamp'4294967297'"
+  } ]
+}
 
 
 -- !query
@@ -41,12 +57,20 @@ select timestamp'2021-01-01T12:30:4294967297.123456'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the TIMESTAMP value: 2021-01-01T12:30:4294967297.123456(line 1, pos 7)
-
-== SQL ==
-select timestamp'2021-01-01T12:30:4294967297.123456'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "2021-01-01T12:30:4294967297.123456",
+    "valueType" : "TIMESTAMP"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "timestamp'2021-01-01T12:30:4294967297.123456'"
+  } ]
+}
 
 
 -- !query
@@ -605,7 +629,23 @@ select timestamp'2011-11-11 11:11:11' - '2011-11-11 11:11:10'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(TIMESTAMP_NTZ '2011-11-11 11:11:11' - '2011-11-11 11:11:10')' due to data type mismatch: argument 2 requires (timestamp or timestamp without time zone) type, however, ''2011-11-11 11:11:10'' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"2011-11-11 11:11:10\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' - 2011-11-11 11:11:10)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 61,
+    "fragment" : "timestamp'2011-11-11 11:11:11' - '2011-11-11 11:11:10'"
+  } ]
+}
 
 
 -- !query
@@ -614,7 +654,23 @@ select '2011-11-11 11:11:11' - timestamp'2011-11-11 11:11:10'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '('2011-11-11 11:11:11' - TIMESTAMP_NTZ '2011-11-11 11:11:10')' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, ''2011-11-11 11:11:11'' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"2011-11-11 11:11:11\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"(2011-11-11 11:11:11 - TIMESTAMP_NTZ '2011-11-11 11:11:10')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 61,
+    "fragment" : "'2011-11-11 11:11:11' - timestamp'2011-11-11 11:11:10'"
+  } ]
+}
 
 
 -- !query
@@ -647,7 +703,23 @@ select str - timestamp'2011-11-11 11:11:11' from ts_view
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(ts_view.str - TIMESTAMP_NTZ '2011-11-11 11:11:11')' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'ts_view.str' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"str\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"(str - TIMESTAMP_NTZ '2011-11-11 11:11:11')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "str - timestamp'2011-11-11 11:11:11'"
+  } ]
+}
 
 
 -- !query
@@ -656,7 +728,23 @@ select timestamp'2011-11-11 11:11:11' - str from ts_view
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(TIMESTAMP_NTZ '2011-11-11 11:11:11' - ts_view.str)' due to data type mismatch: argument 2 requires (timestamp or timestamp without time zone) type, however, 'ts_view.str' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"str\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' - str)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "timestamp'2011-11-11 11:11:11' - str"
+  } ]
+}
 
 
 -- !query
@@ -665,7 +753,21 @@ select timestamp'2011-11-11 11:11:11' + '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(TIMESTAMP_NTZ '2011-11-11 11:11:11' + CAST('1' AS DOUBLE))' due to data type mismatch: differing types in '(TIMESTAMP_NTZ '2011-11-11 11:11:11' + CAST('1' AS DOUBLE))' (timestamp_ntz and double).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "left" : "\"TIMESTAMP_NTZ\"",
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' + 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "timestamp'2011-11-11 11:11:11' + '1'"
+  } ]
+}
 
 
 -- !query
@@ -674,7 +776,21 @@ select '1' + timestamp'2011-11-11 11:11:11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS DOUBLE) + TIMESTAMP_NTZ '2011-11-11 11:11:11')' due to data type mismatch: differing types in '(CAST('1' AS DOUBLE) + TIMESTAMP_NTZ '2011-11-11 11:11:11')' (double and timestamp_ntz).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "left" : "\"DOUBLE\"",
+    "right" : "\"TIMESTAMP_NTZ\"",
+    "sqlExpr" : "\"(1 + TIMESTAMP_NTZ '2011-11-11 11:11:11')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "'1' + timestamp'2011-11-11 11:11:11'"
+  } ]
+}
 
 
 -- !query
@@ -683,7 +799,21 @@ select timestamp'2011-11-11 11:11:11' + null
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL)' due to data type mismatch: differing types in '(TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL)' (timestamp_ntz and void).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "left" : "\"TIMESTAMP_NTZ\"",
+    "right" : "\"VOID\"",
+    "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 44,
+    "fragment" : "timestamp'2011-11-11 11:11:11' + null"
+  } ]
+}
 
 
 -- !query
@@ -692,7 +822,21 @@ select null + timestamp'2011-11-11 11:11:11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(NULL + TIMESTAMP_NTZ '2011-11-11 11:11:11')' due to data type mismatch: differing types in '(NULL + TIMESTAMP_NTZ '2011-11-11 11:11:11')' (void and timestamp_ntz).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "left" : "\"VOID\"",
+    "right" : "\"TIMESTAMP_NTZ\"",
+    "sqlExpr" : "\"(NULL + TIMESTAMP_NTZ '2011-11-11 11:11:11')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 44,
+    "fragment" : "null + timestamp'2011-11-11 11:11:11'"
+  } ]
+}
 
 
 -- !query
@@ -723,8 +867,13 @@ select to_timestamp('2019-10-06 A', 'yyyy-MM-dd GGGGG')
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-Fail to recognize 'yyyy-MM-dd GGGGG' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "messageParameters" : {
+    "pattern" : "'yyyy-MM-dd GGGGG'"
+  }
+}
 
 
 -- !query
@@ -732,8 +881,13 @@ select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEEE')
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-Fail to recognize 'dd MM yyyy EEEEEE' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "messageParameters" : {
+    "pattern" : "'dd MM yyyy EEEEEE'"
+  }
+}
 
 
 -- !query
@@ -741,8 +895,13 @@ select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE')
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-Fail to recognize 'dd MM yyyy EEEEE' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "messageParameters" : {
+    "pattern" : "'dd MM yyyy EEEEE'"
+  }
+}
 
 
 -- !query
@@ -751,8 +910,13 @@ select unix_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'dd MM yyyy EEEEE' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'dd MM yyyy EEEEE'"
+  }
+}
 
 
 -- !query

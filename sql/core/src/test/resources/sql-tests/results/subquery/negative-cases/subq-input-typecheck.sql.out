@@ -61,7 +61,19 @@ FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Scalar subquery must return only one column, but got 2
+{
+  "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+  "messageParameters" : {
+    "number" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 11,
+    "stopIndex" : 101,
+    "fragment" : "( SELECT max(t2b), min(t2b) \n    FROM t2 \n    WHERE t2.t2b = t1.t1b\n    GROUP BY t2.t2b\n  )"
+  } ]
+}
 
 
 -- !query
@@ -76,7 +88,19 @@ FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Scalar subquery must return only one column, but got 2
+{
+  "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+  "messageParameters" : {
+    "number" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 11,
+    "stopIndex" : 96,
+    "fragment" : "( SELECT max(t2b), min(t2b) \n    FROM t2 \n    WHERE t2.t2b > 0\n    GROUP BY t2.t2b\n  )"
+  } ]
+}
 
 
 -- !query
@@ -89,15 +113,23 @@ t1a IN (SELECT t2a, t2b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(t1.t1a IN (listquery(t1.t1a)))' due to data type mismatch: 
-The number of columns in the left hand side of an IN subquery does not match the
-number of columns in the output of subquery.
-#columns in left hand side: 1.
-#columns in right hand side: 2.
-Left side columns:
-[t1.t1a].
-Right side columns:
-[t2.t2a, t2.t2b].; line 3 pos 4
+{
+  "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
+  "messageParameters" : {
+    "leftColumns" : "\"t1a\"",
+    "leftLength" : "1",
+    "rightColumns" : "\"t2a\", \"t2b\"",
+    "rightLength" : "2",
+    "sqlExpr" : "\"(t1a IN (listquery(t1a)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 88,
+    "fragment" : "IN (SELECT t2a, t2b \n        FROM t2\n        WHERE t1a = t2a)"
+  } ]
+}
 
 
 -- !query
@@ -110,15 +142,23 @@ WHERE
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(named_struct('t1a', t1.t1a, 't1b', t1.t1b) IN (listquery(t1.t1a)))' due to data type mismatch: 
-The number of columns in the left hand side of an IN subquery does not match the
-number of columns in the output of subquery.
-#columns in left hand side: 2.
-#columns in right hand side: 1.
-Left side columns:
-[t1.t1a, t1.t1b].
-Right side columns:
-[t2.t2a].; line 3 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
+  "messageParameters" : {
+    "leftColumns" : "\"t1a\", \"t1b\"",
+    "leftLength" : "2",
+    "rightColumns" : "\"t2a\"",
+    "rightLength" : "1",
+    "sqlExpr" : "\"(named_struct('t1a', t1a, 't1b', t1b) IN (listquery(t1a)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 104,
+    "fragment" : "IN (SELECT t2a\n               FROM t2\n               WHERE t1a = t2a)"
+  } ]
+}
 
 
 -- !query
@@ -132,12 +172,19 @@ WHERE
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(named_struct('t4a', t4.t4a, 't4b', t4.t4b, 't4c', t4.t4c) IN (listquery()))' due to data type mismatch: 
-The data type of one or more elements in the left hand side of an IN subquery
-is not compatible with the data type of the output of the subquery
-Mismatched columns:
-[(t4.t4a:double, t5.t5a:timestamp), (t4.t4c:string, t5.t5c:bigint)]
-Left side:
-[double, string, string].
-Right side:
-[timestamp, string, bigint].; line 3 pos 16
+{
+  "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH",
+  "messageParameters" : {
+    "leftType" : "\"DOUBLE\", \"STRING\", \"STRING\"",
+    "mismatchedColumns" : "(t4.t4a:double, t5.t5a:timestamp), (t4.t4c:string, t5.t5c:bigint)",
+    "rightType" : "\"TIMESTAMP\", \"STRING\", \"BIGINT\"",
+    "sqlExpr" : "\"(named_struct('t4a', t4a, 't4b', t4b, 't4c', t4c) IN (listquery()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 40,
+    "stopIndex" : 146,
+    "fragment" : "IN (SELECT t5a,\n                           t5b,\n                           t5c\n                    FROM t5)"
+  } ]
+}

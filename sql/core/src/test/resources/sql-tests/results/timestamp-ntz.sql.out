@@ -45,7 +45,21 @@ SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 45.678, 'CET')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function make_timestamp_ntz. Expected: 6; Found: 7; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "messageParameters" : {
+    "actualNumber" : "7",
+    "expectedInfo" : "6",
+    "name" : "make_timestamp_ntz"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 61,
+    "fragment" : "make_timestamp_ntz(2021, 07, 11, 6, 30, 45.678, 'CET')"
+  } ]
+}
 
 
 -- !query
@@ -65,9 +79,9 @@ struct<convert_timezone(Europe/Moscow, America/Los_Angeles, TIMESTAMP_NTZ '2022-
 
 
 -- !query
-SELECT convert_timezone('Europe/Amsterdam', timestamp_ntz'2022-03-23 00:00:00')
+SELECT convert_timezone('Europe/Brussels', timestamp_ntz'2022-03-23 00:00:00')
 -- !query schema
-struct<convert_timezone(current_timezone(), Europe/Amsterdam, TIMESTAMP_NTZ '2022-03-23 00:00:00'):timestamp_ntz>
+struct<convert_timezone(current_timezone(), Europe/Brussels, TIMESTAMP_NTZ '2022-03-23 00:00:00'):timestamp_ntz>
 -- !query output
 2022-03-23 08:00:00
 

@@ -461,7 +461,7 @@ package object config {
         "a migratable shuffle resolver (like sort based shuffle)")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val STORAGE_DECOMMISSION_SHUFFLE_MAX_THREADS =
     ConfigBuilder("spark.storage.decommission.shuffleBlocks.maxThreads")
@@ -476,7 +476,7 @@ package object config {
       .doc("Whether to transfer RDD blocks during block manager decommissioning.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK =
     ConfigBuilder("spark.storage.decommission.maxReplicationFailuresPerBlock")
@@ -718,7 +718,7 @@ package object config {
   private[spark] val SHUFFLE_SERVICE_DB_BACKEND =
     ConfigBuilder(Constants.SHUFFLE_SERVICE_DB_BACKEND)
       .doc("Specifies a disk-based store used in shuffle service local db. " +
-        "Only LEVELDB is supported now.")
+        "LEVELDB or ROCKSDB.")
       .version("3.4.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
@@ -1956,6 +1956,13 @@ package object config {
       .intConf
       .createWithDefault(10)
 
+  private[spark] val RDD_LIMIT_INITIAL_NUM_PARTITIONS =
+    ConfigBuilder("spark.rdd.limit.initialNumPartitions")
+      .version("3.4.0")
+      .intConf
+      .checkValue(_ > 0, "value should be positive")
+      .createWithDefault(1)
+
   private[spark] val RDD_LIMIT_SCALE_UP_FACTOR =
     ConfigBuilder("spark.rdd.limit.scaleUpFactor")
       .version("2.1.0")
@@ -2214,6 +2221,14 @@ package object config {
       .checkValue(_ >= 0, "needs to be a non-negative value")
       .createWithDefault(5)
 
+  private[spark] val STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE =
+    ConfigBuilder("spark.stage.ignoreDecommissionFetchFailure")
+      .doc("Whether ignore stage fetch failure caused by executor decommission when " +
+        "count spark.stage.maxConsecutiveAttempts")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
     ConfigBuilder("spark.shuffle.push.enabled")
       .doc("Set to true to enable push-based shuffle on the client side and this works in " +
@@ -2320,7 +2335,18 @@ package object config {
         " shuffle is enabled.")
       .version("3.3.0")
       .intConf
-      .createWithDefault(3)
+      .createWithDefault(8)
+
+  private[spark] val PUSH_SHUFFLE_FINALIZE_RPC_THREADS =
+    ConfigBuilder("spark.shuffle.push.sendFinalizeRPCThreads")
+      .internal()
+      .doc("Number of threads used by the driver to send finalize shuffle RPC to mergers" +
+        " location and then get MergeStatus. The thread will run for up to " +
+        " PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT. The merger ESS may open too many files" +
+        " if the finalize rpc is not received.")
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(8)
 
   private[spark] val PUSH_BASED_SHUFFLE_SIZE_MIN_SHUFFLE_SIZE_TO_WAIT =
     ConfigBuilder("spark.shuffle.push.minShuffleSizeToWait")
@@ -2413,4 +2439,13 @@ package object config {
       .version("3.3.0")
       .intConf
       .createWithDefault(5)
+
+  private[spark] val EXECUTOR_REMOVE_DELAY =
+    ConfigBuilder("spark.standalone.executorRemoveDelayOnDisconnection")
+      .internal()
+      .doc("The timeout duration for a disconnected executor to wait for the specific disconnect" +
+        "reason before it gets removed. This is only used for Standalone yet.")
+      .version("3.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("5s")
 }

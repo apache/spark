@@ -195,7 +195,7 @@ als = ALS(maxIter=5, regParam=0.01, implicitPrefs=True,
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.als.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.als.html) for more details.
 
 {% include_example r/ml/als.R %}
 </div>

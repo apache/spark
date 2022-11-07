@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode}
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
@@ -45,8 +44,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends QueryTest with SharedSparkSession
-  with AdaptiveSparkPlanHelper with DisableAdaptiveExecutionSuite {
+class JDBCSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
@@ -300,15 +298,10 @@ class JDBCSuite extends QueryTest with SharedSparkSession
     val parentPlan = df.queryExecution.executedPlan
     // Check if SparkPlan Filter is removed in a physical plan and
     // the plan only has PhysicalRDD to scan JDBCRelation.
-    val child = if (df.sqlContext.conf.adaptiveExecutionEnabled) {
-      assert(parentPlan.isInstanceOf[AdaptiveSparkPlanExec])
-      parentPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-    } else {
-      assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
-      parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec].child
-    }
-    assert(child.isInstanceOf[org.apache.spark.sql.execution.DataSourceScanExec])
-    assert(child.asInstanceOf[DataSourceScanExec].nodeName.contains("JDBCRelation"))
+    assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
+    val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
+    assert(node.child.isInstanceOf[org.apache.spark.sql.execution.DataSourceScanExec])
+    assert(node.child.asInstanceOf[DataSourceScanExec].nodeName.contains("JDBCRelation"))
     df
   }
 
@@ -316,14 +309,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession
     val parentPlan = df.queryExecution.executedPlan
     // Check if SparkPlan Filter is not removed in a physical plan because JDBCRDD
     // cannot compile given predicates.
-    val child = if (df.sqlContext.conf.adaptiveExecutionEnabled) {
-      assert(parentPlan.isInstanceOf[AdaptiveSparkPlanExec])
-      parentPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-    } else {
-      assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
-      parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec].child
-    }
-    assert(child.isInstanceOf[org.apache.spark.sql.execution.FilterExec])
+    assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
+    val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
+    assert(node.child.isInstanceOf[org.apache.spark.sql.execution.FilterExec])
     df
   }
 
@@ -1779,7 +1767,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession
 
     def getRowCount(df: DataFrame): Long = {
       val queryExecution = df.queryExecution
-      val rawPlan = collect(queryExecution.executedPlan) {
+      val rawPlan = queryExecution.executedPlan.collect {
         case p: DataSourceScanExec => p
       } match {
         case Seq(p) => p
@@ -1976,5 +1964,3 @@ class JDBCSuite extends QueryTest with SharedSparkSession
     }
   }
 }
-
-class JDBCWithAQESuite extends JDBCSuite with EnableAdaptiveExecutionSuite

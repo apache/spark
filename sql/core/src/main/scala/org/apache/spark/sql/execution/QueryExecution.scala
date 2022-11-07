@@ -229,7 +229,7 @@ class QueryExecution(
       // output mode does not matter since there is no `Sink`.
       new IncrementalExecution(
         sparkSession, logical, OutputMode.Append(), "<unknown>",
-        UUID.randomUUID, UUID.randomUUID, 0, OffsetSeqMetadata(0, 0))
+        UUID.randomUUID, UUID.randomUUID, 0, None, OffsetSeqMetadata(0, 0))
     } else {
       this
     }
@@ -497,8 +497,8 @@ object QueryExecution {
     case e @ (_: java.lang.NullPointerException | _: java.lang.AssertionError) =>
       new SparkException(
         errorClass = "INTERNAL_ERROR",
-        messageParameters = Array(msg +
-          " Please, fill a bug report in, and provide the full stack trace."),
+        messageParameters = Map("message" -> (msg +
+          " Please, fill a bug report in, and provide the full stack trace.")),
         cause = e)
     case e: Throwable =>
       e

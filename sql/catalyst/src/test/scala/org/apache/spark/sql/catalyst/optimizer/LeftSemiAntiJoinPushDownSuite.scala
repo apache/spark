@@ -483,4 +483,12 @@ class LeftSemiPushdownSuite extends PlanTest {
     }
   }
 
+  test("SPARK-40628: Do not push complex left semi/anti join condition through project") {
+    val originalQuery = testRelation
+      .select(($"a" + 1).as("new_a"))
+      .join(testRelation1, joinType = LeftSemi, condition = Some($"new_a" === $"d"))
+      .analyze
+
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
 }

@@ -19,7 +19,7 @@ package org.apache.spark.sql.types
 
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite, SparkNumberFormatException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
@@ -60,11 +60,27 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     checkDecimal(Decimal(1000000000000000000L, 20, 2), "10000000000000000.00", 20, 2)
     checkDecimal(Decimal(Long.MaxValue), Long.MaxValue.toString, 20, 0)
     checkDecimal(Decimal(Long.MinValue), Long.MinValue.toString, 20, 0)
-    intercept[ArithmeticException](Decimal(170L, 2, 1))
-    intercept[ArithmeticException](Decimal(170L, 2, 0))
-    intercept[ArithmeticException](Decimal(BigDecimal("10.030"), 2, 1))
-    intercept[ArithmeticException](Decimal(BigDecimal("-9.95"), 2, 1))
-    intercept[ArithmeticException](Decimal(1e17.toLong, 17, 0))
+
+    checkError(
+      exception = intercept[SparkArithmeticException](Decimal(170L, 2, 1)),
+      errorClass = "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION",
+      parameters = Map("ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+    checkError(
+      exception = intercept[SparkArithmeticException](Decimal(170L, 2, 0)),
+      errorClass = "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION",
+      parameters = Map("ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+    checkError(
+      exception = intercept[SparkArithmeticException](Decimal(BigDecimal("10.030"), 2, 1)),
+      errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+      parameters = Map("precision" -> "3", "maxPrecision" -> "2"))
+    checkError(
+      exception = intercept[SparkArithmeticException](Decimal(BigDecimal("-9.95"), 2, 1)),
+      errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+      parameters = Map("precision" -> "3", "maxPrecision" -> "2"))
+    checkError(
+      exception = intercept[SparkArithmeticException](Decimal(1e17.toLong, 17, 0)),
+      errorClass = "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION",
+      parameters = Map("ansiConfig" -> "\"spark.sql.ansi.enabled\""))
   }
 
   test("creating decimals with negative scale under legacy mode") {
@@ -201,6 +217,27 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(Decimal(10, 2, 0) - Decimal(-90, 2, 0) === Decimal(100, 3, 0))
   }
 
+  test("quot") {
+    assert(Decimal(100).quot(Decimal(100)) === Decimal(BigDecimal("1")))
+    assert(Decimal(100).quot(Decimal(33)) === Decimal(BigDecimal("3")))
+    assert(Decimal(100).quot(Decimal(-100)) === Decimal(BigDecimal("-1")))
+    assert(Decimal(100).quot(Decimal(-33)) === Decimal(BigDecimal("-3")))
+  }
+
+  test("negate & abs") {
+    assert(-Decimal(100) === Decimal(BigDecimal("-100")))
+    assert(-Decimal(-100) === Decimal(BigDecimal("100")))
+    assert(Decimal(100).abs === Decimal(BigDecimal("100")))
+    assert(Decimal(-100).abs === Decimal(BigDecimal("100")))
+  }
+
+  test("floor & ceil") {
+    assert(Decimal("10.03").floor === Decimal(BigDecimal("10")))
+    assert(Decimal("10.03").ceil === Decimal(BigDecimal("11")))
+    assert(Decimal("-10.03").floor === Decimal(BigDecimal("-11")))
+    assert(Decimal("-10.03").ceil === Decimal(BigDecimal("-10")))
+  }
+
   // regression test for SPARK-8359
   test("accurate precision after multiplication") {
     val decimal = (Decimal(Long.MaxValue, 38, 0) * Decimal(Long.MaxValue, 38, 0)).toJavaBigDecimal
@@ -273,8 +310,11 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
     def checkOutOfRangeFromString(string: String): Unit = {
       assert(Decimal.fromString(UTF8String.fromString(string)) === null)
-      val e = intercept[ArithmeticException](Decimal.fromStringANSI(UTF8String.fromString(string)))
-      assert(e.getMessage.contains("out of decimal type range"))
+      checkError(
+        exception = intercept[SparkArithmeticException](
+          Decimal.fromStringANSI(UTF8String.fromString(string))),
+        errorClass = "OUT_OF_DECIMAL_TYPE_RANGE",
+        parameters = Map("value" -> string))
     }
 
     checkFromString("12345678901234567890123456789012345678")
@@ -290,9 +330,15 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     checkOutOfRangeFromString("6.0790316E+25569151")
 
     assert(Decimal.fromString(UTF8String.fromString("str")) === null)
-    val e = intercept[NumberFormatException](Decimal.fromStringANSI(UTF8String.fromString("str")))
-    assert(e.getMessage.contains(
-      """The value 'str' of the type "STRING" cannot be cast to "DECIMAL(10,0)""""))
+    checkError(
+      exception = intercept[SparkNumberFormatException](
+        Decimal.fromStringANSI(UTF8String.fromString("str"))),
+      errorClass = "CAST_INVALID_INPUT",
+      parameters = Map(
+        "expression" -> "'str'",
+        "sourceType" -> "\"STRING\"",
+        "targetType" -> "\"DECIMAL(10,0)\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
   }
 
   test("SPARK-35841: Casting string to decimal type doesn't work " +
@@ -312,7 +358,11 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     val values = Array("7.836725755512218E38")
     for (string <- values) {
       assert(Decimal.fromString(UTF8String.fromString(string)) === null)
-      intercept[ArithmeticException](Decimal.fromStringANSI(UTF8String.fromString(string)))
+      checkError(
+        exception = intercept[SparkArithmeticException](
+          Decimal.fromStringANSI(UTF8String.fromString(string))),
+        errorClass = "OUT_OF_DECIMAL_TYPE_RANGE",
+        parameters = Map("value" -> string))
     }
 
     withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {

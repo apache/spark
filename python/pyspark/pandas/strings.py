@@ -2315,8 +2315,8 @@ class StringMethods:
         added to the left of it (:func:`str.zfill` would have moved it to the
         left). 1000 remains unchanged as it is longer than width.
 
-        >>> s.str.zfill(3)
-        0     0-1
+        >>> s.str.zfill(3)  # doctest: +SKIP
+        0     -01
         1     001
         2    1000
         3    None

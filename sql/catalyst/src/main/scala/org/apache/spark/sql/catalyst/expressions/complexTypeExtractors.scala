@@ -107,8 +107,8 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
 
   lazy val childSchema = child.dataType.asInstanceOf[StructType]
 
-  override lazy val preCanonicalized: Expression = {
-    copy(child = child.preCanonicalized, name = None)
+  override lazy val canonicalized: Expression = {
+    copy(child = child.canonicalized, name = None)
   }
 
   override def dataType: DataType = childSchema(ordinal).dataType
@@ -442,9 +442,9 @@ case class GetMapValue(child: Expression, key: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
-      case f: TypeCheckResult.TypeCheckFailure => f
+      case f if f.isFailure => f
       case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForOrderingExpr(keyType, s"function $prettyName")
+        TypeUtils.checkForOrderingExpr(keyType, prettyName)
     }
   }
 

@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Literal, NonFoldableLiteral, RangeFrame, SortOrder, SpecifiedWindowFrame}
+import org.apache.spark.sql.expressions.{Window, WindowSpec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.CalendarIntervalType
 
 /**
  * Window frame testing for DataFrame API.
@@ -149,23 +151,48 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1, 1))
     )
 
-    val e1 = intercept[AnalysisException](
-      df.select(
-        min("key").over(window.rangeBetween(Window.unboundedPreceding, 1))))
-    assert(e1.message.contains("A range window frame with value boundaries cannot be used in a " +
-      "window specification with multiple order by expressions"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          min("key").over(window.rangeBetween(Window.unboundedPreceding, 1)))
+      ),
+      errorClass = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
+      parameters = Map(
+        "orderSpec" -> """key#\d+ ASC NULLS FIRST,value#\d+ ASC NULLS FIRST""",
+        "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
+          """BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\)"""")
+      ),
+      matchPVals = true
+    )
 
-    val e2 = intercept[AnalysisException](
-      df.select(
-        min("key").over(window.rangeBetween(-1, Window.unboundedFollowing))))
-    assert(e2.message.contains("A range window frame with value boundaries cannot be used in a " +
-      "window specification with multiple order by expressions"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          min("key").over(window.rangeBetween(-1, Window.unboundedFollowing)))
+      ),
+      errorClass = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
+      parameters = Map(
+        "orderSpec" -> """key#\d+ ASC NULLS FIRST,value#\d+ ASC NULLS FIRST""",
+        "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
+          """BETWEEN -1 FOLLOWING AND UNBOUNDED FOLLOWING\)"""")
+      ),
+      matchPVals = true
+    )
 
-    val e3 = intercept[AnalysisException](
-      df.select(
-        min("key").over(window.rangeBetween(-1, 1))))
-    assert(e3.message.contains("A range window frame with value boundaries cannot be used in a " +
-      "window specification with multiple order by expressions"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          min("key").over(window.rangeBetween(-1, 1)))
+      ),
+      errorClass = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
+      parameters = Map(
+        "orderSpec" -> """key#\d+ ASC NULLS FIRST,value#\d+ ASC NULLS FIRST""",
+        "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
+          """BETWEEN -1 FOLLOWING AND 1 FOLLOWING\)"""")
+      ),
+      matchPVals = true
+    )
+
   }
 
   test("range between should accept numeric values only when bounded") {
@@ -179,23 +206,50 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
           window.rangeBetween(Window.unboundedPreceding, Window.unboundedFollowing))),
       Row("non_numeric", "non_numeric") :: Nil)
 
-    val e1 = intercept[AnalysisException](
-      df.select(
-        min("value").over(window.rangeBetween(Window.unboundedPreceding, 1))))
-    assert(e1.message.contains("The data type of the upper bound 'string' " +
-      "does not match the expected data type"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          min("value").over(window.rangeBetween(Window.unboundedPreceding, 1)))
+      ),
+      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+      parameters = Map(
+        "location" -> "upper",
+        "exprType" -> "\"STRING\"",
+        "expectedType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR " +
+          "TO MONTH\" or \"INTERVAL\")"),
+        "sqlExpr" -> "\"RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\""
+      )
+    )
 
-    val e2 = intercept[AnalysisException](
-      df.select(
-        min("value").over(window.rangeBetween(-1, Window.unboundedFollowing))))
-    assert(e2.message.contains("The data type of the lower bound 'string' " +
-      "does not match the expected data type"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          min("value").over(window.rangeBetween(-1, Window.unboundedFollowing)))
+      ),
+      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+      parameters = Map(
+        "location" -> "lower",
+        "exprType" -> "\"STRING\"",
+        "expectedType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR " +
+          "TO MONTH\" or \"INTERVAL\")"),
+        "sqlExpr" -> "\"RANGE BETWEEN -1 FOLLOWING AND UNBOUNDED FOLLOWING\""
+      )
+    )
 
-    val e3 = intercept[AnalysisException](
-      df.select(
-        min("value").over(window.rangeBetween(-1, 1))))
-    assert(e3.message.contains("The data type of the lower bound 'string' " +
-      "does not match the expected data type"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          min("value").over(window.rangeBetween(-1, 1)))
+      ),
+      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+      parameters = Map(
+        "location" -> "lower",
+        "exprType" -> "\"STRING\"",
+        "expectedType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR " +
+          "TO MONTH\" or \"INTERVAL\")"),
+        "sqlExpr" -> "\"RANGE BETWEEN -1 FOLLOWING AND 1 FOLLOWING\""
+      )
+    )
   }
 
   test("range between should accept int/long values as boundary") {
@@ -366,5 +420,46 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       ds.withColumn("m",
         lag("i", 1).over(Window.partitionBy("n").orderBy("i").rowsBetween(-1, -1))),
       res)
+  }
+
+  test("Window frame bounds lower and upper do not have the same type") {
+    val df = Seq((1L, "1"), (1L, "1")).toDF("key", "value")
+    val windowSpec = new WindowSpec(
+      Seq(Column("value").expr),
+      Seq(SortOrder(Column("key").expr, Ascending)),
+      SpecifiedWindowFrame(RangeFrame, Literal.create(null, CalendarIntervalType), Literal(2))
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select($"key", count("key").over(windowSpec)).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"RANGE BETWEEN NULL FOLLOWING AND 2 FOLLOWING\"",
+        "lower" -> "\"NULL\"",
+        "upper" -> "\"2\"",
+        "lowerType" -> "\"INTERVAL\"",
+        "upperType" -> "\"BIGINT\""
+      )
+    )
+  }
+
+  test("Window frame lower bound is not a literal") {
+    val df = Seq((1L, "1"), (1L, "1")).toDF("key", "value")
+    val windowSpec = new WindowSpec(
+      Seq(Column("value").expr),
+      Seq(SortOrder(Column("key").expr, Ascending)),
+      SpecifiedWindowFrame(RangeFrame, NonFoldableLiteral(1), Literal(2))
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select($"key", count("key").over(windowSpec)).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
+      parameters = Map(
+        "sqlExpr" -> "\"RANGE BETWEEN nonfoldableliteral() FOLLOWING AND 2 FOLLOWING\"",
+        "location" -> "lower",
+        "expression" -> "\"nonfoldableliteral()\"")
+    )
   }
 }

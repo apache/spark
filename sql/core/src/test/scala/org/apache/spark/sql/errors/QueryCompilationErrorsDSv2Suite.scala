@@ -23,8 +23,7 @@ import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2Provider, Inse
 class QueryCompilationErrorsDSv2Suite
   extends QueryTest
   with DatasourceV2SQLBase
-  with InsertIntoSQLOnlyTests
-  with QueryErrorsSuiteBase {
+  with InsertIntoSQLOnlyTests {
 
   private val v2Source = classOf[FakeV2Provider].getName
   override protected val v2Format = v2Source
@@ -52,8 +51,7 @@ class QueryCompilationErrorsDSv2Suite
         checkAnswer(spark.table(tbl), spark.emptyDataFrame)
         checkError(
           exception = e,
-          errorClass = "UNSUPPORTED_FEATURE",
-          errorSubClass = "INSERT_PARTITION_SPEC_IF_NOT_EXISTS",
+          errorClass = "UNSUPPORTED_FEATURE.INSERT_PARTITION_SPEC_IF_NOT_EXISTS",
           parameters = Map("tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`"),
           sqlState = "0A000")
       }

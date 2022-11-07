@@ -16,11 +16,11 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.FunctionCatalog
 import org.apache.spark.sql.connector.read.{SupportsReportOrdering, SupportsReportPartitioning}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, UnknownPartitioning}
 import org.apache.spark.util.collection.Utils.sequenceToOption
@@ -30,7 +30,7 @@ import org.apache.spark.util.collection.Utils.sequenceToOption
  * and ordering reported by data sources to their catalyst counterparts. Then, annotates the plan
  * with the partitioning and ordering result.
  */
-object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with SQLConfHelper {
+object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with SQLConfHelper with Logging {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val scanRules = Seq[LogicalPlan => LogicalPlan] (partitioning, ordering)
 
@@ -41,17 +41,24 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with SQLConfHelpe
 
   private def partitioning(plan: LogicalPlan) = plan.transformDown {
     case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportPartitioning, _, None, _) =>
-      val funCatalogOpt = relation.catalog.flatMap {
-        case c: FunctionCatalog => Some(c)
-        case _ => None
-      }
-
       val catalystPartitioning = scan.outputPartitioning() match {
-        case kgp: KeyGroupedPartitioning => sequenceToOption(kgp.keys().map(
-          V2ExpressionUtils.toCatalystOpt(_, relation, funCatalogOpt)))
+        case kgp: KeyGroupedPartitioning =>
+          val partitioning = sequenceToOption(
+            kgp.keys().map(V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog)))
+          if (partitioning.isEmpty) {
+            None
+          } else {
+            if (partitioning.get.forall(p => p.references.subsetOf(d.outputSet))) {
+              partitioning
+            } else {
+              None
+            }
+          }
         case _: UnknownPartitioning => None
-        case p => throw new IllegalArgumentException("Unsupported data source V2 partitioning " +
-            "type: " + p.getClass.getSimpleName)
+        case p =>
+          logWarning(s"Spark ignores the partitioning ${p.getClass.getSimpleName}." +
+            " Please use KeyGroupedPartitioning for better performance")
+          None
       }
 
       d.copy(keyGroupedPartitioning = catalystPartitioning)
