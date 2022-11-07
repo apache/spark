@@ -679,23 +679,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("raise cannot construct protobuf descriptor error") {
-    val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
-
-    val basicMessage = DynamicMessage
-      .newBuilder(basicMessageDesc)
-      .setField(basicMessageDesc.findFieldByName("id"), 1111L)
-      .setField(basicMessageDesc.findFieldByName("string_value"), "slam")
-      .setField(basicMessageDesc.findFieldByName("int32_value"), 12345)
-      .setField(basicMessageDesc.findFieldByName("int64_value"), 0x90000000000L)
-      .setField(basicMessageDesc.findFieldByName("double_value"), 10000000000.0d)
-      .setField(basicMessageDesc.findFieldByName("float_value"), 10902.0f)
-      .setField(basicMessageDesc.findFieldByName("bool_value"), true)
-      .setField(
-        basicMessageDesc.findFieldByName("bytes_value"),
-        ByteString.copyFromUtf8("ProtobufDeserializer"))
-      .build()
-
-    val df = Seq(basicMessage.toByteArray).toDF("value")
+    val df = Seq(ByteString.empty().toByteArray).toDF("value")
     val testFileDescriptor = testFile("basicmessage_noimports.desc").replace("file:/", "/")
 
     val e = intercept[AnalysisException] {
