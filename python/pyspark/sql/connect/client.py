@@ -268,7 +268,7 @@ class RemoteSparkSession(object):
         ----------
         connection_string: Optional[str]
             Connection string that is used to extract the connection parameters and configure
-            the GRPC connection. Defaults to `sc://localhos`
+            the GRPC connection. Defaults to `sc://localhost`.
         user_id : Optional[str]
             Optional unique user ID that is used to differentiate multiple users and
             isolate their Spark Sessions. If the `user_id` is not set, will default to
