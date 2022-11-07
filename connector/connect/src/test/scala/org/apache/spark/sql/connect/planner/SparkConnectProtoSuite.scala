@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
@@ -141,6 +142,22 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       val sparkPlan =
         sparkTestRelation.groupBy(Column("id"), Column("name")).agg(Map.empty[String, String])
       comparePlans(connectPlan, sparkPlan)
+    }
+  }
+
+  test("Aggregate expressions") {
+    withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
+      val connectPlan =
+        connectTestRelation.groupBy("id".protoAttr)(proto_min("name".protoAttr))
+      val sparkPlan =
+        sparkTestRelation.groupBy(Column("id")).agg(min(Column("name")))
+      comparePlans(connectPlan, sparkPlan)
+
+      val connectPlan2 =
+        connectTestRelation.groupBy("id".protoAttr)(proto_min("name".protoAttr).as("agg1"))
+      val sparkPlan2 =
+        sparkTestRelation.groupBy(Column("id")).agg(min(Column("name")).as("agg1"))
+      comparePlans(connectPlan2, sparkPlan2)
     }
   }
 

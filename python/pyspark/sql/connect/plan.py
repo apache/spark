@@ -489,15 +489,16 @@ class Aggregate(LogicalPlan):
 
     def _convert_measure(
         self, m: MeasureType, session: Optional["RemoteSparkSession"]
-    ) -> proto.Aggregate.AggregateFunction:
+    ) -> proto.Expression:
         exp, fun = m
-        measure = proto.Aggregate.AggregateFunction()
-        measure.name = fun
+        proto_expr = proto.Expression()
+        measure = proto_expr.unresolved_function
+        measure.parts.append(fun)
         if type(exp) is str:
             measure.arguments.append(self.unresolved_attr(exp))
         else:
             measure.arguments.append(cast(Expression, exp).to_plan(session))
-        return measure
+        return proto_expr
 
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
