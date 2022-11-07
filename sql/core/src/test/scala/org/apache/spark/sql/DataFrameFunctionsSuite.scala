@@ -1468,7 +1468,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> "\"sequence(_1, _2)\"",
         "functionName" -> "`sequence`",
         "startType" -> "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"DATE\")",
-        "stepType" -> "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")"
+        "stepType" -> "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")",
+        "otherStartType" -> "\"INTEGRAL\""
       ),
       queryContext = Array(ExpectedContext("", "", 0, 15, "sequence(_1, _2)"))
     )
@@ -1481,7 +1482,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> "\"sequence(_1, _2, _3)\"",
         "functionName" -> "`sequence`",
         "startType" -> "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"DATE\")",
-        "stepType" -> "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")"
+        "stepType" -> "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")",
+        "otherStartType" -> "\"INTEGRAL\""
       ),
       queryContext = Array(ExpectedContext("", "", 0, 19, "sequence(_1, _2, _3)"))
     )
@@ -1494,7 +1496,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> "\"sequence(_1, _2, _3)\"",
         "functionName" -> "`sequence`",
         "startType" -> "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"DATE\")",
-        "stepType" -> "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")"
+        "stepType" -> "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")",
+        "otherStartType" -> "\"INTEGRAL\""
       ),
       queryContext = Array(ExpectedContext("", "", 0, 19, "sequence(_1, _2, _3)"))
     )

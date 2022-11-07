@@ -285,7 +285,7 @@
           "<functionName> uses the wrong parameter type. The parameter type must conform to:",
           "1. The start and stop expressions must resolve to the same type.",
           "2. If start and stop expressions resolve to the <startType> type, then the step expression must resolve to the <stepType> type",
-          "3. Otherwise to the same type as the start and stop expressions."
+          "3. Otherwise, if start and stop expressions resolve to the <otherStartType> type, then the step expression must resolve to the same type."
         ]
       },
       "SPECIFIED_WINDOW_FRAME_DIFF_TYPES" : {

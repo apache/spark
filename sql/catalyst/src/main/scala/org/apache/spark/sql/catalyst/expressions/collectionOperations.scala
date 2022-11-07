@@ -2885,7 +2885,8 @@ case class Sequence(
           "functionName" -> toSQLId(prettyName),
           "startType" -> toSQLType(TypeCollection(TimestampType, TimestampNTZType, DateType)),
           "stepType" -> toSQLType(
-            TypeCollection(CalendarIntervalType, YearMonthIntervalType, DayTimeIntervalType))
+            TypeCollection(CalendarIntervalType, YearMonthIntervalType, DayTimeIntervalType)),
+          "otherStartType" -> toSQLType(IntegralType)
         )
       )
     }
