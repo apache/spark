@@ -220,6 +220,20 @@ class ChannelBuilderTests(ReusedPySparkTestCase):
         self.assertEqual([("param1", "120 21"), ("x-my-header", "abcd")], md)
 
 
+class RemoteSparkSessionTests(ReusedPySparkTestCase):
+    def test_user_id(self):
+        # SPARK-41033: test `user_id` parameter in RemoteSparkSession.
+        connect = RemoteSparkSession("fake_id")
+        self.assertEqual("fake_id", connect._user_id)
+
+        connect2 = RemoteSparkSession(connection_string="sc://host/;user_id=fake_id2")
+        self.assertEqual("fake_id2", connect2._user_id)
+
+        with self.assertRaises(Exception) as context:
+            RemoteSparkSession("fake_id", "sc://host/;user_id=fake_id2")
+        self.assertTrue("user_id is provided by both" in str(context.exception))
+
+
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_basic import *  # noqa: F401
 

@@ -145,6 +145,19 @@ class ChannelBuilder:
         """
         return self.params[key]
 
+    def contains_key(self, key: str) -> bool:
+        """
+        Parameters
+        ----------
+        key : str
+            Parameter key name.
+
+        Returns
+        -------
+        True if the parameter value if present, False otherwise.
+        """
+        return key in self.params
+
     def to_channel(self) -> grpc.Channel:
         """
         Applies the parameters of the connection string and creates a new
@@ -235,7 +248,7 @@ class AnalyzeResult:
 class RemoteSparkSession(object):
     """Conceptually the remote spark session that communicates with the server"""
 
-    def __init__(self, user_id: str, connection_string: str = "sc://localhost"):
+    def __init__(self, user_id: Optional[str] = None, connection_string: str = "sc://localhost"):
         """
         Creates a new RemoteSparkSession for the Spark Connect interface.
 
@@ -251,7 +264,22 @@ class RemoteSparkSession(object):
 
         # Parse the connection string.
         self._builder = ChannelBuilder(connection_string)
-        self._user_id = user_id
+        if user_id is not None and self._builder.contains_key(ChannelBuilder.PARAM_USER_ID):
+            raise Exception(
+                """
+                user_id is provided by both RemoteSparkSession constructor and connection_string.
+                Only one is acceptable."""
+            )
+        elif user_id is not None:
+            self._user_id = user_id
+        elif self._builder.contains_key(ChannelBuilder.PARAM_USER_ID):
+            self._user_id = self._builder.get(ChannelBuilder.PARAM_USER_ID)
+        else:
+            raise Exception(
+                """
+                user_id is not provided. Please passing it in either through
+                RemoteSparkSession constructor or through connection_string"""
+            )
 
         self._channel = self._builder.to_channel()
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
