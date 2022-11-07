@@ -30,7 +30,7 @@ import org.apache.spark.util.io.ChunkedByteBuffer
 class ChunkedByteBufferSuite extends SparkFunSuite with SharedSparkContext {
 
   /**
-   * compare two [[ChunkedByteBuffer]]:
+   * compare two ChunkedByteBuffer:
    * - chunks nums equal
    * - each chunk's content
    */

@@ -28,7 +28,7 @@ private[spark] object SerializerHelper extends Logging {
 
   /**
    *
-   * @param serializerInstance instance of [[SerializerInstance]]
+   * @param serializerInstance instance of SerializerInstance
    * @param objectToSerialize the object to serialize, of type `T`
    * @param estimatedSize estimated size of `t`, used as a hint to choose proper chunk size
    */
