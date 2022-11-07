@@ -62,7 +62,11 @@ private[spark] class IndexShuffleBlockResolver(
   private val remoteShuffleMaxDisk: Option[Long] =
     conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE)
 
-  def getDataFile(shuffleId: Int, mapId: Long): File = getDataFile(shuffleId, mapId, None)
+  def getDataFile(shuffleId: Int, mapId: Long): File =
+    getDataFile(shuffleId, mapId, None, true)
+
+  def getDataFile(shuffleId: Int, mapId: Long, needCreate: Boolean): File =
+    getDataFile(shuffleId, mapId, None, needCreate)
 
   /**
    * Get the shuffle files that are stored locally. Used for block migrations.
@@ -95,12 +99,16 @@ private[spark] class IndexShuffleBlockResolver(
    * When the dirs parameter is None then use the disk manager's local directories. Otherwise,
    * read from the specified directories.
    */
-   def getDataFile(shuffleId: Int, mapId: Long, dirs: Option[Array[String]]): File = {
+  def getDataFile(
+      shuffleId: Int,
+      mapId: Long,
+      dirs: Option[Array[String]],
+      needCreate: Boolean): File = {
     val blockId = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
     dirs
       .map(d =>
         new File(ExecutorDiskUtils.getFilePath(d, blockManager.subDirsPerLocalDir, blockId.name)))
-      .getOrElse(blockManager.diskBlockManager.getFile(blockId))
+      .getOrElse(blockManager.diskBlockManager.getFile(blockId, needCreate))
   }
 
   /**
@@ -112,12 +120,13 @@ private[spark] class IndexShuffleBlockResolver(
   def getIndexFile(
       shuffleId: Int,
       mapId: Long,
-      dirs: Option[Array[String]] = None): File = {
+      dirs: Option[Array[String]] = None,
+      needCreate: Boolean = true): File = {
     val blockId = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
     dirs
       .map(d =>
         new File(ExecutorDiskUtils.getFilePath(d, blockManager.subDirsPerLocalDir, blockId.name)))
-      .getOrElse(blockManager.diskBlockManager.getFile(blockId))
+      .getOrElse(blockManager.diskBlockManager.getFile(blockId, needCreate))
   }
 
   private def getMergedBlockDataFile(
@@ -154,17 +163,18 @@ private[spark] class IndexShuffleBlockResolver(
    * Remove data file and index file that contain the output data from one map.
    */
   def removeDataByMap(shuffleId: Int, mapId: Long): Unit = {
-    var file = getDataFile(shuffleId, mapId)
+    var file = getDataFile(shuffleId, mapId, needCreate = false)
     if (file.exists() && !file.delete()) {
       logWarning(s"Error deleting data ${file.getPath()}")
     }
 
-    file = getIndexFile(shuffleId, mapId)
+    file = getIndexFile(shuffleId, mapId, needCreate = false)
     if (file.exists() && !file.delete()) {
       logWarning(s"Error deleting index ${file.getPath()}")
     }
 
-    file = getChecksumFile(shuffleId, mapId, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
+    file = getChecksumFile(shuffleId, mapId, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM),
+      needCreate = false)
     if (file.exists() && !file.delete()) {
       logWarning(s"Error deleting checksum ${file.getPath()}")
     }
@@ -549,13 +559,14 @@ private[spark] class IndexShuffleBlockResolver(
       shuffleId: Int,
       mapId: Long,
       algorithm: String,
-      dirs: Option[Array[String]] = None): File = {
+      dirs: Option[Array[String]] = None,
+      needCreate: Boolean = true): File = {
     val blockId = ShuffleChecksumBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
     val fileName = ShuffleChecksumHelper.getChecksumFileName(blockId.name, algorithm)
     dirs
       .map(d =>
         new File(ExecutorDiskUtils.getFilePath(d, blockManager.subDirsPerLocalDir, fileName)))
-      .getOrElse(blockManager.diskBlockManager.getFile(fileName))
+      .getOrElse(blockManager.diskBlockManager.getFile(fileName, needCreate))
   }
 
   override def getBlockData(
@@ -594,7 +605,7 @@ private[spark] class IndexShuffleBlockResolver(
       }
       new FileSegmentManagedBuffer(
         transportConf,
-        getDataFile(shuffleId, mapId, dirs),
+        getDataFile(shuffleId, mapId, dirs, true),
         startOffset,
         endOffset - startOffset)
     } finally {

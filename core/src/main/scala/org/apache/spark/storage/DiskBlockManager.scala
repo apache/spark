@@ -91,10 +91,10 @@ private[spark] class DiskBlockManager(
   // This method should be kept in sync with
   // org.apache.spark.network.shuffle.ExecutorDiskUtils#getFilePath().
   def getFile(filename: String): File = {
-    getFile(filename, true)
+    getFile(filename, needCreate = true)
   }
 
-  def getFile(filename: String, needCreate: Boolean = true): File = {
+  def getFile(filename: String, needCreate: Boolean): File = {
     // Figure out which local directory it hashes to, and which subdirectory in that
     val hash = Utils.nonNegativeHash(filename)
     val dirId = hash % localDirs.length
@@ -131,7 +131,10 @@ private[spark] class DiskBlockManager(
     new File(subDir, filename)
   }
 
-  def getFile(blockId: BlockId): File = getFile(blockId.name)
+  def getFile(blockId: BlockId): File = getFile(blockId.name, needCreate = true)
+
+  def getFile(blockId: BlockId, needCreate: Boolean): File =
+    getFile(blockId.name, needCreate)
 
   /**
    * This should be in sync with
@@ -162,7 +165,7 @@ private[spark] class DiskBlockManager(
 
   /** Check if disk block manager has a block. */
   def containsBlock(blockId: BlockId): Boolean = {
-    getFile(blockId.name).exists()
+    getFile(blockId.name, needCreate = false).exists()
   }
 
   /** List all the files currently stored on disk by the disk manager. */
