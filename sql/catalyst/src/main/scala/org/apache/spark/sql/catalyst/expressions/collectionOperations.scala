@@ -1313,7 +1313,7 @@ case class ArrayContains(left: Expression, right: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
-      case (_, NullType) | (NullType, _)=>
+      case (_, NullType) | (NullType, _) =>
         DataTypeMismatch(
           errorSubClass = "NULL_TYPE",
           messageParameters = Map("functionName" -> toSQLId(prettyName)))
