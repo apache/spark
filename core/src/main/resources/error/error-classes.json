@@ -17,23 +17,52 @@
     ],
     "sqlState" : "22005"
   },
+  "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR" : {
+    "message" : [
+      "Error constructing FileDescriptor for <descFilePath>"
+    ]
+  },
+  "CANNOT_CONVERT_PROTOBUF_FIELD_TYPE_TO_SQL_TYPE" : {
+    "message" : [
+      "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
+    ]
+  },
+  "CANNOT_CONVERT_PROTOBUF_MESSAGE_TYPE_TO_SQL_TYPE" : {
+    "message" : [
+      "Unable to convert <protobufType> of Protobuf to SQL type <toType>."
+    ]
+  },
+  "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_ENUM_TYPE" : {
+    "message" : [
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> cannot be written since it's not defined in ENUM <enumString>"
+    ]
+  },
+  "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_FIELD_TYPE" : {
+    "message" : [
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
+    ]
+  },
   "CANNOT_DECODE_URL" : {
     "message" : [
       "Cannot decode url : <url>."
     ],
     "sqlState" : "42000"
   },
-  "CANNOT_INFER_DATE" : {
+  "CANNOT_LOAD_PROTOBUF_CLASS" : {
     "message" : [
-      "Cannot infer date in schema inference when LegacyTimeParserPolicy is \"LEGACY\". Legacy Date formatter does not support strict date format matching which is required to avoid inferring timestamps and other non-date entries to date."
-    ],
-    "sqlState" : "22007"
+      "Could not load Protobuf class with name <protobufClassName>. Ensure the class name includes package prefix."
+    ]
   },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
       "Cannot parse decimal"
     ],
     "sqlState" : "42000"
+  },
+  "CANNOT_PARSE_PROTOBUF_DESCRIPTOR" : {
+    "message" : [
+      "Error parsing file <descFilePath> descriptor byte[] into Descriptor object"
+    ]
   },
   "CANNOT_PARSE_TIMESTAMP" : {
     "message" : [
@@ -313,6 +342,11 @@
           "The lower bound of a window frame must be <comparison> to the upper bound."
         ]
       },
+      "STACK_COLUMN_DIFF_TYPES" : {
+        "message" : [
+          "The data type of the column (<columnIndex>) do not have the same type: <leftType> (<leftParamIndex>) <> <rightType> (<rightParamIndex>)."
+        ]
+      },
       "UNEXPECTED_CLASS_TYPE" : {
         "message" : [
           "class <className> not found"
@@ -343,6 +377,11 @@
           "Cannot use an UnspecifiedFrame. This should have been converted during analysis."
         ]
       },
+      "UNSUPPORTED_INPUT_TYPE" : {
+        "message" : [
+          "The input of <functionName> can't be <dataType> type data."
+        ]
+      },
       "VALUE_OUT_OF_RANGE" : {
         "message" : [
           "The <exprName> must be between <valueRange> (current value = <currentValue>)"
@@ -351,6 +390,12 @@
       "WRONG_NUM_ARGS" : {
         "message" : [
           "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
+        ]
+      },
+      "WRONG_NUM_ARGS_WITH_SUGGESTION" : {
+        "message" : [
+          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>.",
+          "If you have to call this function with <legacyNum> parameters, set the legacy configuration <legacyConfKey> to <legacyConfValue>."
         ]
       },
       "WRONG_NUM_ENDPOINTS" : {
@@ -564,6 +609,11 @@
       "Invalid bucket file: <path>"
     ]
   },
+  "INVALID_BYTE_STRING" : {
+    "message" : [
+      "The expected format is ByteString, but was <unsupported> (<class>)."
+    ]
+  },
   "INVALID_COLUMN_OR_FIELD_DATA_TYPE" : {
     "message" : [
       "Column or field <name> is of type <type> while it's required to be <expectedType>."
@@ -581,6 +631,11 @@
       "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
     "sqlState" : "22023"
+  },
+  "INVALID_IDENTIFIER" : {
+    "message" : [
+      "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
+    ]
   },
   "INVALID_JSON_SCHEMA_MAP_TYPE" : {
     "message" : [
@@ -608,6 +663,11 @@
       "<value> is an invalid property value, please use quotes, e.g. SET <key>=<value>"
     ]
   },
+  "INVALID_PROTOBUF_MESSAGE_TYPE" : {
+    "message" : [
+      "<protobufClassName> is not a Protobuf message type"
+    ]
+  },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
       "Invalid SQL syntax: <inputString>"
@@ -625,6 +685,11 @@
         ]
       }
     }
+  },
+  "MALFORMED_PROTOBUF_MESSAGE" : {
+    "message" : [
+      "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
+    ]
   },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [
@@ -677,7 +742,12 @@
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
     ]
   },
-  "NO_UDF_INTERFACE_ERROR" : {
+  "NO_SQL_TYPE_IN_PROTOBUF_SCHEMA" : {
+    "message" : [
+      "Cannot find <catalystFieldPath> in Protobuf schema"
+    ]
+  },
+  "NO_UDF_INTERFACE" : {
     "message" : [
       "UDF class <className> doesn't implement any UDF interface"
     ]
@@ -704,6 +774,12 @@
       "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22005"
+  },
+  "ORDER_BY_POS_OUT_OF_RANGE" : {
+    "message" : [
+      "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
+    ],
+    "sqlState" : "42000"
   },
   "OUT_OF_DECIMAL_TYPE_RANGE" : {
     "message" : [
@@ -743,11 +819,56 @@
     ],
     "sqlState" : "42000"
   },
+  "PATH_NOT_FOUND" : {
+    "message" : [
+      "Path does not exist: <path>."
+    ]
+  },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
       "Invalid pivot value '<value>': value data type <valueType> does not match pivot column data type <pivotType>"
     ],
     "sqlState" : "42000"
+  },
+  "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
+    "message" : [
+      "Could not find dependency: <dependencyName>"
+    ]
+  },
+  "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND" : {
+    "message" : [
+      "Error reading Protobuf descriptor file at path: <filePath>"
+    ]
+  },
+  "PROTOBUF_FIELD_MISSING" : {
+    "message" : [
+      "Searching for <field> in Protobuf schema at <protobufSchema> gave <matchSize> matches. Candidates: <matches>"
+    ]
+  },
+  "PROTOBUF_FIELD_MISSING_IN_SQL_SCHEMA" : {
+    "message" : [
+      "Found <field> in Protobuf schema but there is no match in the SQL schema"
+    ]
+  },
+  "PROTOBUF_FIELD_TYPE_MISMATCH" : {
+    "message" : [
+      "Type mismatch encountered for field: <field>"
+    ]
+  },
+  "PROTOBUF_MESSAGE_NOT_FOUND" : {
+    "message" : [
+      "Unable to locate Message <messageName> in Descriptor"
+    ]
+  },
+  "PROTOBUF_TYPE_NOT_SUPPORT" : {
+    "message" : [
+      "Protobuf type not yet supported: <protobufType>."
+    ]
+  },
+  "RECURSIVE_PROTOBUF_SCHEMA" : {
+    "message" : [
+      "Found recursive reference in Protobuf schema, which can not be processed by Spark: <fieldDescriptor>"
+    ]
   },
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [
@@ -803,6 +924,11 @@
     ],
     "sqlState" : "22023"
   },
+  "STAR_GROUP_BY_POS" : {
+    "message" : [
+      "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
+    ]
+  },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create table or view <relationName> because it already exists.",
@@ -833,6 +959,16 @@
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"
+    ]
+  },
+  "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE" : {
+    "message" : [
+      "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
+    ]
+  },
+  "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
+    "message" : [
+      "Attempting to treat <descriptorName> as a Message, but it was <containingType>"
     ]
   },
   "UNPIVOT_REQUIRES_ATTRIBUTES" : {
@@ -1389,11 +1525,6 @@
       "Unsupported SQL statement."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0040" : {
-    "message" : [
-      "Possibly unquoted identifier <ident> detected. Please consider quoting it with back-quotes as `<ident>`."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0041" : {
     "message" : [
       "Found duplicate clauses: <clauseName>."
@@ -1610,11 +1741,6 @@
       "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table` yet."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1019" : {
-    "message" : [
-      "Star (*) is not allowed in select list when GROUP BY ordinal position is used"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1020" : {
     "message" : [
       "Invalid usage of <elem> in <prettyName>."
@@ -1623,11 +1749,6 @@
   "_LEGACY_ERROR_TEMP_1021" : {
     "message" : [
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1022" : {
-    "message" : [
-      "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
     ]
   },
   "_LEGACY_ERROR_TEMP_1023" : {
@@ -2121,11 +2242,6 @@
   "_LEGACY_ERROR_TEMP_1129" : {
     "message" : [
       "Unable to infer schema for <format>. It must be specified manually."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1130" : {
-    "message" : [
-      "Path does not exist: <path>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1131" : {
@@ -3819,7 +3935,7 @@
   },
   "_LEGACY_ERROR_TEMP_2125" : {
     "message" : [
-      "Failed to merge incompatible data types ${leftCatalogString} and ${rightCatalogString}"
+      "Failed to merge incompatible data types <leftCatalogString> and <rightCatalogString>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2126" : {
@@ -4218,6 +4334,121 @@
       "incorrect directory, and then restart this query. If you believe you are receiving",
       "this message in error, you can disable it with the SQL conf",
       "<StreamingCheckpointEscaptedPathCheckEnabled>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2201" : {
+    "message" : [
+      "Partition column <col> not found in schema <schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2203" : {
+    "message" : [
+      "Cannot set timeout duration without enabling processing time timeout in [map|flatMap]GroupsWithState"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2204" : {
+    "message" : [
+      "Cannot get event time watermark timestamp without setting watermark before [map|flatMap]GroupsWithState"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2205" : {
+    "message" : [
+      "Cannot set timeout timestamp without enabling event time timeout in [map|flatMapGroupsWithState"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2206" : {
+    "message" : [
+      "Unable to find batch <batchMetadataFile>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2207" : {
+    "message" : [
+      "Multiple streaming queries are concurrently using <path>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2208" : {
+    "message" : [
+      "<commitProtocol> does not support adding files with an absolute path"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2209" : {
+    "message" : [
+      "Data source <srcName> does not support microbatch processing.",
+      "",
+      "Either the data source is disabled at",
+      "SQLConf.get.DISABLED_V2_STREAMING_MICROBATCH_READERS.key (The disabled sources",
+      "are [<disabledSources>]) or the table <table> does not have MICRO_BATCH_READ",
+      "capability. Meanwhile, the fallback, data source v1, is not available.\""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2210" : {
+    "message" : [
+      "StreamingRelationExec cannot be executed"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2211" : {
+    "message" : [
+      "Invalid output mode: <outputMode>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2212" : {
+    "message" : [
+      "Invalid catalog name: <name>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2214" : {
+    "message" : [
+      "Plugin class for catalog '<name>' does not implement CatalogPlugin: <pluginClassName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2215" : {
+    "message" : [
+      "Cannot find catalog plugin class for catalog '<name>': <pluginClassName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2216" : {
+    "message" : [
+      "Failed to find public no-arg constructor for catalog '<name>': <pluginClassName>)"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2217" : {
+    "message" : [
+      "Failed to call public no-arg constructor for catalog '<name>': <pluginClassName>)"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2218" : {
+    "message" : [
+      "Cannot instantiate abstract catalog plugin class for catalog '<name>': <pluginClassName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2219" : {
+    "message" : [
+      "Failed during instantiating constructor for catalog '<name>': <pluginClassName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2220" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2222" : {
+    "message" : [
+      "Cannot mutate ReadOnlySQLConf."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2223" : {
+    "message" : [
+      "Cannot clone/copy ReadOnlySQLConf."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2224" : {
+    "message" : [
+      "Cannot get SQLConf inside scheduler event loop thread."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2225" : {
+    "message" : [
+      ""
     ]
   },
   "_LEGACY_ERROR_TEMP_2226" : {

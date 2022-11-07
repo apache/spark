@@ -104,7 +104,14 @@ org.apache.spark.sql.AnalysisException
     "hint" : "",
     "operator" : "IntersectAll",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 51,
+    "fragment" : "SELECT * FROM tab1\nINTERSECT ALL\nSELECT array(1), 2"
+  } ]
 }
 
 
@@ -123,7 +130,14 @@ org.apache.spark.sql.AnalysisException
     "nColNum" : "2",
     "nTab" : "second",
     "operator" : "IntersectAll"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 54,
+    "fragment" : "SELECT k FROM tab1\nINTERSECT ALL\nSELECT k, v FROM tab2"
+  } ]
 }
 
 

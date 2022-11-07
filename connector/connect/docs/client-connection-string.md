@@ -20,7 +20,7 @@ scheme is fixed and set to `sc://`. The full URI has to be a
 be parsed properly by most systems. For example, hostnames have to be valid and
 cannot contain arbitrary characters. Configuration parameter are passed in the 
 style of the HTTP URL Path Parameter Syntax. This is similar to the JDBC connection
-strings. The path component must be empty.
+strings. The path component must be empty. All parameters are interpreted **case sensitive**.
 
 ```shell
 sc://hostname:port/;param1=value;param2=value

@@ -48,7 +48,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "aggExprs" : "(avg(t2.t2b) AS avg)",
     "sqlExpr" : "t2.t2b"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 109,
+    "stopIndex" : 111,
+    "fragment" : "t2b"
+  } ]
 }
 
 
@@ -70,7 +77,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_2432",
   "messageParameters" : {
     "msg" : "Resolved attribute(s) t2b#x missing from min(t2a)#x,t2c#x in operator !Filter t2c#x IN (list#x [t2b#x])."
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 298,
+    "fragment" : "SELECT   min(t2a)\n               FROM     t2\n               GROUP BY t2c\n               HAVING   t2c IN (SELECT   max(t3c)\n                                FROM     t3\n                                GROUP BY t3b\n                                HAVING   t3b > t2b )"
+  } ]
 }
 
 

@@ -129,9 +129,7 @@ class AlterTableAddPartitionSuite
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (c int) $defaultUsing PARTITIONED BY (p int)")
 
-      withSQLConf(
-          SQLConf.SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION.key -> "true",
-          SQLConf.ANSI_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION.key -> "true") {
         sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
         checkPartitions(t, Map("p" -> defaultPartitionName))
         sql(s"ALTER TABLE $t DROP PARTITION (p=null)")

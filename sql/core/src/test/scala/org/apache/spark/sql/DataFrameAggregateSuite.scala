@@ -588,7 +588,15 @@ class DataFrameAggregateSuite extends QueryTest
     val error = intercept[AnalysisException] {
       df.select(collect_set($"a"), collect_set($"b"))
     }
-    assert(error.message.contains("collect_set() cannot have map type data"))
+    checkError(
+      exception = error,
+      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
+      parameters = Map(
+        "functionName" -> "`collect_set`",
+        "dataType" -> "\"MAP\"",
+        "sqlExpr" -> "\"collect_set(b)\""
+      )
+    )
   }
 
   test("SPARK-17641: collect functions should not collect null values") {

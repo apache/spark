@@ -723,7 +723,7 @@ object SparkProtobuf {
 
     dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
 
-    (Test / PB.protoSources) += (Test / sourceDirectory).value / "resources",
+    (Test / PB.protoSources) += (Test / sourceDirectory).value / "resources" / "protobuf",
 
     (Test / PB.targets) := Seq(
       PB.gens.java -> target.value / "generated-test-sources"
@@ -1269,7 +1269,7 @@ object Unidoc {
 
 object Checkstyle {
   lazy val settings = Seq(
-    checkstyleSeverityLevel := Some(CheckstyleSeverityLevel.Error),
+    checkstyleSeverityLevel := CheckstyleSeverityLevel.Error,
     (Compile / checkstyle / javaSource) := baseDirectory.value / "src/main/java",
     (Test / checkstyle / javaSource) := baseDirectory.value / "src/test/java",
     checkstyleConfigLocation := CheckstyleConfigLocation.File("dev/checkstyle.xml"),

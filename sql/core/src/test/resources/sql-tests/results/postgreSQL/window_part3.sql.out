@@ -336,7 +336,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "invalidExprSqls" : "row_number() OVER (ORDER BY spark_catalog.default.empsalary.salary ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)",
     "operator" : "Join"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 84,
+    "fragment" : "INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) < 10"
+  } ]
 }
 
 
@@ -351,7 +358,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "invalidExprSqls" : "RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)",
     "operator" : "Aggregate"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 58,
+    "stopIndex" : 67,
+    "fragment" : "GROUP BY 1"
+  } ]
 }
 
 

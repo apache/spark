@@ -284,7 +284,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2420"
+  "errorClass" : "_LEGACY_ERROR_TEMP_2420",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 82,
+    "stopIndex" : 94,
+    "fragment" : "avg(earnings)"
+  } ]
 }
 
 

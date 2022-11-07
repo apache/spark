@@ -22,6 +22,7 @@ import com.google.protobuf.{ByteString, DynamicMessage, Message}
 import com.google.protobuf.Descriptors._
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
@@ -29,7 +30,6 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils.ProtoMatchedField
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils.toFieldStr
-import org.apache.spark.sql.protobuf.utils.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -61,10 +61,10 @@ private[sql] class ProtobufDeserializer(
           }
       }
     } catch {
-      case ise: IncompatibleSchemaException =>
-        throw new IncompatibleSchemaException(
-          s"Cannot convert Protobuf type ${rootDescriptor.getName} " +
-            s"to SQL type ${rootCatalystType.sql}.",
+      case ise: AnalysisException =>
+        throw QueryCompilationErrors.cannotConvertProtobufTypeToCatalystTypeError(
+          rootDescriptor.getName,
+          rootCatalystType,
           ise)
     }
 
@@ -152,11 +152,6 @@ private[sql] class ProtobufDeserializer(
       catalystType: DataType,
       protoPath: Seq[String],
       catalystPath: Seq[String]): (CatalystDataUpdater, Int, Any) => Unit = {
-    val errorPrefix = s"Cannot convert Protobuf ${toFieldStr(protoPath)} to " +
-      s"SQL ${toFieldStr(catalystPath)} because "
-    val incompatibleMsg = errorPrefix +
-      s"schema is incompatible (protoType = ${protoType} ${protoType.toProto.getLabel} " +
-      s"${protoType.getJavaType} ${protoType.getType}, sqlType = ${catalystType.sql})"
 
     (protoType.getJavaType, catalystType) match {
 
@@ -175,8 +170,9 @@ private[sql] class ProtobufDeserializer(
       case (INT, ShortType) =>
         (updater, ordinal, value) => updater.setShort(ordinal, value.asInstanceOf[Short])
 
-      case  (BOOLEAN | INT | FLOAT | DOUBLE | LONG | STRING | ENUM | BYTE_STRING,
-      ArrayType(dataType: DataType, containsNull)) if protoType.isRepeated =>
+      case  (
+        BOOLEAN | INT | FLOAT | DOUBLE | LONG | STRING | ENUM | BYTE_STRING,
+        ArrayType(dataType: DataType, containsNull)) if protoType.isRepeated =>
         newArrayWriter(protoType, protoPath, catalystPath, dataType, containsNull)
 
       case (LONG, LongType) =>
@@ -199,7 +195,8 @@ private[sql] class ProtobufDeserializer(
         (updater, ordinal, value) =>
           val byte_array = value match {
             case s: ByteString => s.toByteArray
-            case _ => throw new Exception("Invalid ByteString format")
+            case unsupported =>
+              throw QueryCompilationErrors.invalidByteStringFormatError(unsupported)
           }
           updater.set(ordinal, byte_array)
 
@@ -244,7 +241,13 @@ private[sql] class ProtobufDeserializer(
       case (ENUM, StringType) =>
         (updater, ordinal, value) => updater.set(ordinal, UTF8String.fromString(value.toString))
 
-      case _ => throw new IncompatibleSchemaException(incompatibleMsg)
+      case _ =>
+        throw QueryCompilationErrors.cannotConvertProtobufTypeToSqlTypeError(
+          toFieldStr(protoPath),
+          catalystPath,
+          s"${protoType} ${protoType.toProto.getLabel} ${protoType.getJavaType}" +
+            s" ${protoType.getType}",
+          catalystType)
     }
   }
 
