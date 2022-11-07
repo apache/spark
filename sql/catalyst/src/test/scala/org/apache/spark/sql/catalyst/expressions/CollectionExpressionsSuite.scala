@@ -28,6 +28,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds, LA, UTC}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
@@ -99,6 +100,17 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("MapContainsKey") {
+    val left = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType))
+    val right = Literal.create(null, NullType)
+    assert(MapContainsKey(left, right).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NULL_TYPE",
+        messageParameters = Map("functionName" -> "`map_contains_key`")
+      )
+    )
+  }
+
+  test("ArrayContains") {
     val m0 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType))
     val m1 = Literal.create(null, MapType(StringType, StringType))
     checkEvaluation(ArrayContains(MapKeys(m0), Literal("a")), true)
@@ -346,6 +358,18 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         assert(errorSubClass === "INVALID_MAP_KEY_TYPE")
         assert(messageParameters === Map("keyType" -> "\"MAP<INT, INT>\""))
     }
+
+    // accepts only arrays of pair structs
+    val mapWrongType = MapFromEntries(Literal(1))
+    assert(mapWrongType.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "MAP_FROM_ENTRIES_WRONG_TYPE",
+        messageParameters = Map(
+          "functionName" -> "`map_from_entries`",
+          "childExpr" -> "\"1\"",
+          "childType" -> "\"INT\"")
+      )
+    )
   }
 
   test("Sort Array") {

@@ -958,6 +958,24 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     testNonPrimitiveType()
   }
 
+  test("map_contains_key function") {
+    val df = Seq(1, 2).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("map_contains_key(a, null)").collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.NULL_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"map_contains_key(a, NULL)\"",
+        "functionName" -> "`map_contains_key`"),
+      context = ExpectedContext(
+        fragment = "map_contains_key(a, null)",
+        start = 0,
+        stop = 24
+      )
+    )
+  }
+
   test("map_concat function") {
     val df1 = Seq(
       (Map[Int, Int](1 -> 100, 2 -> 200), Map[Int, Int](3 -> 300, 4 -> 400)),
@@ -1128,6 +1146,20 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     // Test with cached relation, the Project will be evaluated with codegen
     sdf.cache()
     testNonPrimitiveType()
+
+    val wrongTypeDF = Seq(1, 2).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        wrongTypeDF.select(map_from_entries($"a"))
+      },
+      errorClass = "DATATYPE_MISMATCH.MAP_FROM_ENTRIES_WRONG_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"map_from_entries(a)\"",
+        "functionName" -> "`map_from_entries`",
+        "childExpr" -> "\"a\"",
+        "childType" -> "\"INT\""
+      )
+    )
   }
 
   test("array contains function") {
@@ -1825,28 +1857,97 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df5.selectExpr("array_union(a, b)"), ans5)
 
     val df6 = Seq((null, Array("a"))).toDF("a", "b")
-    assert(intercept[AnalysisException] {
-      df6.select(array_union($"a", $"b"))
-    }.getMessage.contains("data type mismatch"))
-    assert(intercept[AnalysisException] {
-      df6.selectExpr("array_union(a, b)")
-    }.getMessage.contains("data type mismatch"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df6.select(array_union($"a", $"b"))
+      },
+      errorClass = "DATATYPE_MISMATCH.BINARY_ARRAY_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"array_union(a, b)\"",
+        "functionName" -> "`array_union`",
+        "arrayType" -> "\"ARRAY\"",
+        "leftType" -> "\"VOID\"",
+        "rightType" -> "\"ARRAY<STRING>\""))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df6.selectExpr("array_union(a, b)")
+      },
+      errorClass = "DATATYPE_MISMATCH.BINARY_ARRAY_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"array_union(a, b)\"",
+        "functionName" -> "`array_union`",
+        "arrayType" -> "\"ARRAY\"",
+        "leftType" -> "\"VOID\"",
+        "rightType" -> "\"ARRAY<STRING>\""),
+      context = ExpectedContext(
+        fragment = "array_union(a, b)",
+        start = 0,
+        stop = 16
+      )
+    )
 
     val df7 = Seq((null, null)).toDF("a", "b")
-    assert(intercept[AnalysisException] {
-      df7.select(array_union($"a", $"b"))
-    }.getMessage.contains("data type mismatch"))
-    assert(intercept[AnalysisException] {
-      df7.selectExpr("array_union(a, b)")
-    }.getMessage.contains("data type mismatch"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df7.select(array_union($"a", $"b"))
+      },
+      errorClass = "DATATYPE_MISMATCH.BINARY_ARRAY_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"array_union(a, b)\"",
+        "functionName" -> "`array_union`",
+        "arrayType" -> "\"ARRAY\"",
+        "leftType" -> "\"VOID\"",
+        "rightType" -> "\"VOID\"")
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        df7.selectExpr("array_union(a, b)")
+      },
+      errorClass = "DATATYPE_MISMATCH.BINARY_ARRAY_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"array_union(a, b)\"",
+        "functionName" -> "`array_union`",
+        "arrayType" -> "\"ARRAY\"",
+        "leftType" -> "\"VOID\"",
+        "rightType" -> "\"VOID\""),
+      context = ExpectedContext(
+        fragment = "array_union(a, b)",
+        start = 0,
+        stop = 16
+      )
+    )
 
     val df8 = Seq((Array(Array(1)), Array("a"))).toDF("a", "b")
-    assert(intercept[AnalysisException] {
-      df8.select(array_union($"a", $"b"))
-    }.getMessage.contains("data type mismatch"))
-    assert(intercept[AnalysisException] {
-      df8.selectExpr("array_union(a, b)")
-    }.getMessage.contains("data type mismatch"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df8.select(array_union($"a", $"b"))
+      },
+      errorClass = "DATATYPE_MISMATCH.BINARY_ARRAY_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"array_union(a, b)\"",
+        "functionName" -> "`array_union`",
+        "arrayType" -> "\"ARRAY\"",
+        "leftType" -> "\"ARRAY<ARRAY<INT>>\"",
+        "rightType" -> "\"ARRAY<STRING>\"")
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        df8.selectExpr("array_union(a, b)")
+      },
+      errorClass = "DATATYPE_MISMATCH.BINARY_ARRAY_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"array_union(a, b)\"",
+        "functionName" -> "`array_union`",
+        "arrayType" -> "\"ARRAY\"",
+        "leftType" -> "\"ARRAY<ARRAY<INT>>\"",
+        "rightType" -> "\"ARRAY<STRING>\""),
+      context = ExpectedContext(
+        fragment = "array_union(a, b)",
+        start = 0,
+        stop = 16
+      )
+    )
   }
 
   test("concat function - arrays") {
