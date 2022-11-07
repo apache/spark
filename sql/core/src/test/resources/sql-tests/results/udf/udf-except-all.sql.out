@@ -147,7 +147,14 @@ org.apache.spark.sql.AnalysisException
     "hint" : "",
     "operator" : "ExceptAll",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 51,
+    "fragment" : "SELECT udf(c1) FROM tab1\nEXCEPT ALL\nSELECT array(1)"
+  } ]
 }
 
 
@@ -227,7 +234,14 @@ org.apache.spark.sql.AnalysisException
     "nColNum" : "2",
     "nTab" : "second",
     "operator" : "ExceptAll"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 51,
+    "fragment" : "SELECT k FROM tab3\nEXCEPT ALL\nSELECT k, v FROM tab4"
+  } ]
 }
 
 

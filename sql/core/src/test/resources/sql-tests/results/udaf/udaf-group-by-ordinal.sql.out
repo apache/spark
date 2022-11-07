@@ -391,7 +391,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "aggExprs" : "()",
     "sqlExpr" : "data.a"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 50,
+    "fragment" : "group by cube(1, 3)"
+  } ]
 }
 
 

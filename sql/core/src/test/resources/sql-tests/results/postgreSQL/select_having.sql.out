@@ -145,7 +145,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "aggExprs" : "(min(spark_catalog.default.test_having.a) AS `min(a#x)`, max(spark_catalog.default.test_having.a) AS `max(a#x)`)",
     "sqlExpr" : "spark_catalog.default.test_having.a"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 48,
+    "fragment" : "SELECT a FROM test_having HAVING min(a) < max(a)"
+  } ]
 }
 
 
