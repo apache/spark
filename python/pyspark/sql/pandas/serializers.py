@@ -98,14 +98,13 @@ class ArrowStreamSerializer(Serializer):
 
         writer = None
         try:
-            print(f'iterating over it={iterator}')
-            for it in iterator:
-                for it2, _ in it:
-                    for batch in it2:
-                        print(f'batch={batch}')
-                        if writer is None:
-                            writer = pa.RecordBatchStreamWriter(stream, batch.schema)
-                        writer.write_batch(batch)
+            print(f'iterating over {iterator}')
+            for batch in iterator:
+                print(f'writing batch {batch} with {batch.num_rows} rows and columns {batch.columns}, as pandas {batch.to_pandas()}')
+                print()
+                if writer is None:
+                    writer = pa.RecordBatchStreamWriter(stream, batch.schema)
+                writer.write_batch(batch)
         finally:
             if writer is not None:
                 writer.close()

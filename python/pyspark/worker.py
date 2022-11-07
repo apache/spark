@@ -378,43 +378,35 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
 def wrap_grouped_map_arrow_udf(f, return_type, argspec):
     def wrapped(key_batch, value_batch):
+        import pyarrow as pa
+
         if len(argspec.args) == 1:
             result = f(value_batch)
         elif len(argspec.args) == 2:
             key = tuple(c[0] for c in key_batch.columns)
             result = f(key, value_batch)
 
-        if not isinstance(result, Iterator):
+        if not isinstance(result, pa.RecordBatch):
             raise TypeError(
                 "Return type of the user-defined function should be "
-                "iter(pyarrow.RecordBatch), but is {}".format(type(result))
+                "pyarrow.RecordBatch, but is iter({})".format(type(result))
             )
 
-        def verify_batch(batch):
-            import pyarrow as pa
+        # the number of columns of result have to match the return type
+        # but it is fine for result to have no columns at all if it is empty
+        if not (
+            len(result.columns) == len(return_type)
+            or (len(result.columns) == 0 and result.num_rows == 0)
+        ):
+            raise RuntimeError(
+                "Number of columns of the returned pyarrow.resultRecord "
+                "doesn't match specified schema. "
+                "Expected: {} Actual: {}".format(len(return_type), len(result.columns))
+            )
 
-            if not isinstance(batch, pa.RecordBatch):
-                raise TypeError(
-                    "Return type of the user-defined function should be "
-                    "iter(pyarrow.RecordBatch), but is iter({})".format(type(batch))
-                )
+        return result
 
-            # the number of columns of result have to match the return type
-            # but it is fine for result to have no columns at all if it is empty
-            if not (
-                len(batch.columns) == len(return_type)
-                or (len(batch.columns) == 0 and batch.num_rows == 0)
-            ):
-                raise RuntimeError(
-                    "Number of columns of the returned pyarrow.BatchRecord "
-                    "doesn't match specified schema. "
-                    "Expected: {} Actual: {}".format(len(return_type), len(batch.columns))
-                )
-            return batch
-
-        return map(verify_batch, result)
-
-    return lambda k, v: [(wrapped(k, v), to_arrow_type(return_type))]
+    return lambda k, v: wrapped(k, v)
 
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
@@ -1318,7 +1310,7 @@ def read_udfs(pickleSer, infile, eval_type):
         elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
             ser = ArrowStreamUDFSerializer()
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
-            ser = ArrowStreamSerializer()
+            ser = ArrowStreamUDFSerializer()  # ArrowStreamSerializer()
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
@@ -1479,11 +1471,11 @@ def read_udfs(pickleSer, infile, eval_type):
             )
 
         def mapper(batch):
-            print(f'mapper({batch}) called')
+            print(f'mapper({batch.to_pandas()}) called')
             keys = batch_from_offset(batch, parsed_offsets[0][0])
             vals = batch_from_offset(batch, parsed_offsets[0][1])
             res = f(keys, vals)
-            print(f'mapper({batch}) returns {res}')
+            print(f'mapper({batch.to_pandas()}) returns {res.num_rows} rows: {res.to_pandas()}')
             return res
 
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
