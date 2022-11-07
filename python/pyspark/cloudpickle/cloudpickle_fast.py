@@ -35,11 +35,11 @@ from .cloudpickle import (
     _is_parametrized_type_hint, PYPY, cell_set,
     parametrized_type_hint_getinitargs, _create_parametrized_type_hint,
     builtin_code_type,
-    _make_dict_keys, _make_dict_values, _make_dict_items,
+    _make_dict_keys, _make_dict_values, _make_dict_items, _make_function,
 )
 
 
-if pickle.HIGHEST_PROTOCOL >= 5 and not PYPY:
+if pickle.HIGHEST_PROTOCOL >= 5:
     # Shorthands similar to pickle.dump/pickle.dumps
 
     def dump(obj, file, protocol=None, buffer_callback=None):
@@ -123,7 +123,7 @@ def _class_getnewargs(obj):
 
 
 def _enum_getnewargs(obj):
-    members = dict((e.name, e.value) for e in obj)
+    members = {e.name: e.value for e in obj}
     return (obj.__bases__, obj.__name__, obj.__qualname__, members,
             obj.__module__, _get_or_create_tracker_id(obj), None)
 
@@ -218,7 +218,7 @@ def _class_getstate(obj):
 def _enum_getstate(obj):
     clsdict, slotstate = _class_getstate(obj)
 
-    members = dict((e.name, e.value) for e in obj)
+    members = {e.name: e.value for e in obj}
     # Cleanup the clsdict that will be passed to _rehydrate_skeleton_class:
     # Those attributes are already handled by the metaclass.
     for attrname in ["_generate_next_value_", "_member_names_",
@@ -244,7 +244,22 @@ def _enum_getstate(obj):
 
 def _code_reduce(obj):
     """codeobject reducer"""
-    if hasattr(obj, "co_linetable"):  # pragma: no branch
+    # If you are not sure about the order of arguments, take a look at help
+    # of the specific type from types, for example:
+    # >>> from types import CodeType
+    # >>> help(CodeType)
+    if hasattr(obj, "co_exceptiontable"):  # pragma: no branch
+        # Python 3.11 and later: there are some new attributes
+        # related to the enhanced exceptions.
+        args = (
+            obj.co_argcount, obj.co_posonlyargcount,
+            obj.co_kwonlyargcount, obj.co_nlocals, obj.co_stacksize,
+            obj.co_flags, obj.co_code, obj.co_consts, obj.co_names,
+            obj.co_varnames, obj.co_filename, obj.co_name, obj.co_qualname,
+            obj.co_firstlineno, obj.co_linetable, obj.co_exceptiontable,
+            obj.co_freevars, obj.co_cellvars,
+        )
+    elif hasattr(obj, "co_linetable"):  # pragma: no branch
         # Python 3.10 and later: obj.co_lnotab is deprecated and constructor
         # expects obj.co_linetable instead.
         args = (
@@ -254,6 +269,18 @@ def _code_reduce(obj):
             obj.co_varnames, obj.co_filename, obj.co_name,
             obj.co_firstlineno, obj.co_linetable, obj.co_freevars,
             obj.co_cellvars
+        )
+    elif hasattr(obj, "co_nmeta"):  # pragma: no cover
+        # "nogil" Python: modified attributes from 3.9
+        args = (
+            obj.co_argcount, obj.co_posonlyargcount,
+            obj.co_kwonlyargcount, obj.co_nlocals, obj.co_framesize,
+            obj.co_ndefaultargs, obj.co_nmeta,
+            obj.co_flags, obj.co_code, obj.co_consts,
+            obj.co_varnames, obj.co_filename, obj.co_name,
+            obj.co_firstlineno, obj.co_lnotab, obj.co_exc_handlers,
+            obj.co_jump_table, obj.co_freevars, obj.co_cellvars,
+            obj.co_free2reg, obj.co_cell2reg
         )
     elif hasattr(obj, "co_posonlyargcount"):
         # Backward compat for 3.9 and older
@@ -534,7 +561,10 @@ class CloudPickler(Pickler):
     _dispatch_table[type(OrderedDict().keys())] = _odict_keys_reduce
     _dispatch_table[type(OrderedDict().values())] = _odict_values_reduce
     _dispatch_table[type(OrderedDict().items())] = _odict_items_reduce
-
+    _dispatch_table[abc.abstractmethod] = _classmethod_reduce
+    _dispatch_table[abc.abstractclassmethod] = _classmethod_reduce
+    _dispatch_table[abc.abstractstaticmethod] = _classmethod_reduce
+    _dispatch_table[abc.abstractproperty] = _property_reduce
 
     dispatch_table = ChainMap(_dispatch_table, copyreg.dispatch_table)
 
@@ -544,7 +574,7 @@ class CloudPickler(Pickler):
         """Reduce a function that is not pickleable via attribute lookup."""
         newargs = self._function_getnewargs(func)
         state = _function_getstate(func)
-        return (types.FunctionType, newargs, state, None, None,
+        return (_make_function, newargs, state, None, None,
                 _function_setstate)
 
     def _function_reduce(self, obj):
@@ -611,6 +641,32 @@ class CloudPickler(Pickler):
                 raise
 
     if pickle.HIGHEST_PROTOCOL >= 5:
+        def __init__(self, file, protocol=None, buffer_callback=None):
+            if protocol is None:
+                protocol = DEFAULT_PROTOCOL
+            Pickler.__init__(
+                self, file, protocol=protocol, buffer_callback=buffer_callback
+            )
+            # map functions __globals__ attribute ids, to ensure that functions
+            # sharing the same global namespace at pickling time also share
+            # their global namespace at unpickling time.
+            self.globals_ref = {}
+            self.proto = int(protocol)
+    else:
+        def __init__(self, file, protocol=None):
+            if protocol is None:
+                protocol = DEFAULT_PROTOCOL
+            Pickler.__init__(self, file, protocol=protocol)
+            # map functions __globals__ attribute ids, to ensure that functions
+            # sharing the same global namespace at pickling time also share
+            # their global namespace at unpickling time.
+            self.globals_ref = {}
+            assert hasattr(self, 'proto')
+
+    if pickle.HIGHEST_PROTOCOL >= 5 and not PYPY:
+        # Pickler is the C implementation of the CPython pickler and therefore
+        # we rely on reduce_override method to customize the pickler behavior.
+
         # `CloudPickler.dispatch` is only left for backward compatibility - note
         # that when using protocol 5, `CloudPickler.dispatch` is not an
         # extension of `Pickler.dispatch` dictionary, because CloudPickler
@@ -631,17 +687,6 @@ class CloudPickler(Pickler):
         # availability of both notions coincide on CPython's pickle and the
         # pickle5 backport, but it may not be the case anymore when pypy
         # implements protocol 5
-        def __init__(self, file, protocol=None, buffer_callback=None):
-            if protocol is None:
-                protocol = DEFAULT_PROTOCOL
-            Pickler.__init__(
-                self, file, protocol=protocol, buffer_callback=buffer_callback
-            )
-            # map functions __globals__ attribute ids, to ensure that functions
-            # sharing the same global namespace at pickling time also share
-            # their global namespace at unpickling time.
-            self.globals_ref = {}
-            self.proto = int(protocol)
 
         def reducer_override(self, obj):
             """Type-agnostic reducing callback for function and classes.
@@ -701,16 +746,6 @@ class CloudPickler(Pickler):
         # must override Pickler.save_global, because pickle.py contains a
         # hard-coded call to save_global when pickling meta-classes.
         dispatch = Pickler.dispatch.copy()
-
-        def __init__(self, file, protocol=None):
-            if protocol is None:
-                protocol = DEFAULT_PROTOCOL
-            Pickler.__init__(self, file, protocol=protocol)
-            # map functions __globals__ attribute ids, to ensure that functions
-            # sharing the same global namespace at pickling time also share
-            # their global namespace at unpickling time.
-            self.globals_ref = {}
-            assert hasattr(self, 'proto')
 
         def _save_reduce_pickle5(self, func, args, state=None, listitems=None,
                                  dictitems=None, state_setter=None, obj=None):

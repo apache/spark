@@ -99,7 +99,7 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
             expected3 = expected2.set_index("index", append=True)
             # There is a bug in `to_parquet` from pandas 1.5.0 when writing MultiIndex.
             # See https://github.com/pandas-dev/pandas/issues/48848 for the reported issue.
-            if LooseVersion(pd.__version__) == LooseVersion("1.5.0"):
+            if LooseVersion(pd.__version__) > LooseVersion("1.5.0"):
                 expected_psdf = ps.read_parquet(path2, pandas_metadata=True).set_index(
                     "index", append=True
                 )

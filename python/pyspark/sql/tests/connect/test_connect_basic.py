@@ -18,6 +18,9 @@ from typing import Any
 import unittest
 import shutil
 import tempfile
+
+import grpc  # type: ignore
+
 from pyspark.testing.sqlutils import have_pandas
 
 if have_pandas:
@@ -27,7 +30,7 @@ from pyspark.sql import SparkSession, Row
 from pyspark.sql.types import StructType, StructField, LongType, StringType
 
 if have_pandas:
-    from pyspark.sql.connect.client import RemoteSparkSession
+    from pyspark.sql.connect.client import RemoteSparkSession, ChannelBuilder
     from pyspark.sql.connect.function_builder import udf
     from pyspark.sql.connect.functions import lit
 from pyspark.sql.dataframe import DataFrame
@@ -67,13 +70,14 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
     @classmethod
     def tearDownClass(cls: Any) -> None:
         cls.spark_connect_clean_up_test_data()
+        ReusedPySparkTestCase.tearDownClass()
 
     @classmethod
     def spark_connect_load_test_data(cls: Any):
         # Setup Remote Spark Session
         cls.connect = RemoteSparkSession(user_id="test_user")
         df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
-        # Since we might create multiple Spark sessions, we need to creata global temporary view
+        # Since we might create multiple Spark sessions, we need to create global temporary view
         # that is specifically maintained in the "global_temp" schema.
         df.write.saveAsTable(cls.tbl_name)
 
@@ -88,6 +92,14 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         data = df.limit(10).toPandas()
         # Check that the limit is applied
         self.assertEqual(len(data.index), 10)
+
+    def test_collect(self):
+        df = self.connect.read.table(self.tbl_name)
+        data = df.limit(10).collect()
+        self.assertEqual(len(data), 10)
+        # Check Row has schema column names.
+        self.assertTrue("name" in data[0])
+        self.assertTrue("id" in data[0])
 
     def test_simple_udf(self):
         def conv_udf(x) -> str:
@@ -128,6 +140,33 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         pd2 = df.offset(98).limit(10).toPandas()
         self.assertEqual(2, len(pd2.index))
 
+    def test_sql(self):
+        pdf = self.connect.sql("SELECT 1").toPandas()
+        self.assertEqual(1, len(pdf.index))
+
+    def test_head(self):
+        df = self.connect.read.table(self.tbl_name)
+        pd = df.head(10)
+        self.assertIsNotNone(pd)
+        self.assertEqual(10, len(pd.index))
+
+    def test_range(self):
+        self.assertTrue(
+            self.connect.range(start=0, end=10)
+            .toPandas()
+            .equals(self.spark.range(start=0, end=10).toPandas())
+        )
+        self.assertTrue(
+            self.connect.range(start=0, end=10, step=3)
+            .toPandas()
+            .equals(self.spark.range(start=0, end=10, step=3).toPandas())
+        )
+        self.assertTrue(
+            self.connect.range(start=0, end=10, step=3, numPartitions=2)
+            .toPandas()
+            .equals(self.spark.range(start=0, end=10, step=3, numPartitions=2).toPandas())
+        )
+
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text
         tmpPath = tempfile.mkdtemp()
@@ -142,6 +181,43 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         else:
             actualResult = pandasResult.values.tolist()
             self.assertEqual(len(expectResult), len(actualResult))
+
+
+class ChannelBuilderTests(ReusedPySparkTestCase):
+    def test_invalid_connection_strings(self):
+        invalid = [
+            "scc://host:12",
+            "http://host",
+            "sc:/host:1234/path",
+            "sc://host/path",
+            "sc://host/;parm1;param2",
+        ]
+        for i in invalid:
+            self.assertRaises(AttributeError, ChannelBuilder, i)
+
+        self.assertRaises(AttributeError, ChannelBuilder("sc://host/;token=123").to_channel)
+
+    def test_valid_channel_creation(self):
+        chan = ChannelBuilder("sc://host").to_channel()
+        self.assertIsInstance(chan, grpc.Channel)
+
+        # Sets up a channel without tokens because ssl is not used.
+        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc").to_channel()
+        self.assertIsInstance(chan, grpc.Channel)
+
+        chan = ChannelBuilder("sc://host/;use_ssl=true").to_channel()
+        self.assertIsInstance(chan, grpc.Channel)
+
+    def test_channel_properties(self):
+        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;param1=120%2021")
+        self.assertEqual("host:15002", chan.endpoint)
+        self.assertEqual(True, chan.secure)
+        self.assertEqual("120 21", chan.get("param1"))
+
+    def test_metadata(self):
+        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;param1=120%2021;x-my-header=abcd")
+        md = chan.metadata()
+        self.assertEqual([("param1", "120 21"), ("x-my-header", "abcd")], md)
 
 
 if __name__ == "__main__":

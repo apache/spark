@@ -393,9 +393,10 @@ class SQLAppStatusListener(
   }
 
   private def onExecutionEnd(event: SparkListenerSQLExecutionEnd): Unit = {
-    val SparkListenerSQLExecutionEnd(executionId, time) = event
+    val SparkListenerSQLExecutionEnd(executionId, time, errorMessage) = event
     Option(liveExecutions.get(executionId)).foreach { exec =>
       exec.completionTime = Some(new Date(time))
+      exec.errorMessage = errorMessage
       update(exec)
 
       // Aggregating metrics can be expensive for large queries, so do it asynchronously. The end
@@ -494,6 +495,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   var driverAccumUpdates = Seq[(Long, Long)]()
 
   @volatile var metricsValues: Map[Long, String] = null
+  var errorMessage: Option[String] = None
 
   // Just in case job end and execution end arrive out of order, keep track of how many
   // end events arrived so that the listener can stop tracking the execution.
@@ -511,7 +513,8 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
       completionTime,
       jobs,
       stages,
-      metricsValues)
+      metricsValues,
+      errorMessage)
   }
 
 }

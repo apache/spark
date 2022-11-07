@@ -207,7 +207,9 @@ SELECT course, udf(year), GROUPING(course) FROM courseSales GROUP BY course, udf
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2445"
+}
 
 
 -- !query
@@ -216,7 +218,9 @@ SELECT course, udf(year), GROUPING_ID(course, year) FROM courseSales GROUP BY ud
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping_id() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2407"
+}
 
 
 -- !query

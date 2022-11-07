@@ -275,7 +275,7 @@ class AnalysisErrorSuite extends AnalysisTest {
           SpecifiedWindowFrame(RangeFrame, Literal(1), Literal(2)))).as("window")),
     "Cannot specify window frame for lead function" :: Nil)
 
-  errorTest(
+  errorClassTest(
     "the offset of nth_value window function is negative or zero",
     testRelation2.select(
       WindowExpression(
@@ -284,7 +284,12 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           SpecifiedWindowFrame(RowFrame, Literal(0), Literal(0)))).as("window")),
-    "The 'offset' argument of nth_value must be greater than zero but it is 0." :: Nil)
+    errorClass = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+    messageParameters = Map(
+      "sqlExpr" -> "\"nth_value(b, 0)\"",
+      "exprName" -> "offset",
+      "valueRange" -> "(0, 9223372036854775807]",
+      "currentValue" -> "0L"))
 
   errorClassTest(
     "the offset of nth_value window function is not int literal",
@@ -639,13 +644,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     "The offset expression must be equal to or greater than 0, but got -1" :: Nil
   )
 
-  errorTest(
+  errorClassTest(
     "the sum of num_rows in limit clause and num_rows in offset clause less than Int.MaxValue",
     testRelation.offset(Literal(2000000000, IntegerType)).limit(Literal(1000000000, IntegerType)),
-    "The sum of the LIMIT clause and the OFFSET clause must not be greater than" +
-      " the maximum 32-bit integer value (2,147,483,647)," +
-      " but found limit = 1000000000, offset = 2000000000." :: Nil
-  )
+    "_LEGACY_ERROR_TEMP_2428",
+    Map("limit" -> "1000000000", "offset" -> "2000000000"))
 
   errorTest(
     "more than one generators in SELECT",

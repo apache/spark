@@ -32,7 +32,7 @@ RUN $APT_INSTALL software-properties-common git libxml2-dev pkg-config curl wget
 RUN update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
-RUN python3.9 -m pip install numpy pyarrow 'pandas<=1.5.0' scipy unittest-xml-reporting plotly>=4.8 sklearn 'mlflow>=1.0' coverage matplotlib openpyxl
+RUN python3.9 -m pip install numpy pyarrow 'pandas<=1.5.1' scipy unittest-xml-reporting plotly>=4.8 sklearn 'mlflow>=1.0' coverage matplotlib openpyxl
 
 RUN add-apt-repository ppa:pypy/ppa
 RUN apt update
@@ -45,7 +45,7 @@ RUN mkdir -p /usr/local/pypy/pypy3.7 && \
     ln -sf /usr/local/pypy/pypy3.7/bin/pypy /usr/local/bin/pypy3
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-RUN pypy3 -m pip install numpy 'pandas<=1.5.0' scipy coverage matplotlib
+RUN pypy3 -m pip install numpy 'pandas<=1.5.1' scipy coverage matplotlib
 
 RUN $APT_INSTALL gnupg ca-certificates pandoc
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list

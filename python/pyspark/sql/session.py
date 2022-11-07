@@ -1139,7 +1139,12 @@ class SparkSession(SparkConversionMixin):
             require_minimum_pandas_version()
             if data.ndim not in [1, 2]:
                 raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
-            column_names = ["value"] if data.ndim == 1 else ["_1", "_2"]
+
+            if data.ndim == 1 or data.shape[1] == 1:
+                column_names = ["value"]
+            else:
+                column_names = ["_%s" % i for i in range(1, data.shape[1] + 1)]
+
             if schema is None and not self._jconf.arrowPySparkEnabled():
                 # Construct `schema` from `np.dtype` of the input NumPy array
                 # TODO: Apply the logic below when self._jconf.arrowPySparkEnabled() is True
