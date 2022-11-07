@@ -19,8 +19,8 @@ import pandas as pd
 import unittest
 
 from pyspark.ml.functions import predict_batch_udf
-from pyspark.sql.functions import struct, col
-from pyspark.sql.types import DoubleType, IntegerType, StructType, StructField
+from pyspark.sql.functions import array, struct, col
+from pyspark.sql.types import ArrayType, DoubleType, IntegerType, StructType, StructField
 from pyspark.testing.mlutils import SparkSessionTestCase
 
 
@@ -406,6 +406,33 @@ class PredictBatchUDFTests(SparkSessionTestCase):
 
         self.assertTrue(np.array_equal(self.data[:, 0] * 2, preds["x2"].to_numpy()))
         self.assertTrue(np.array_equal(self.data[:, 0] * 3, preds["x3"].to_numpy()))
+
+    def test_return_struct_with_array_field(self):
+        def multiples_with_array_fn():
+            def predict(x, y):
+                return {"x2": x * 2, "y3": y * 3}
+
+            return predict
+
+        multiples_w_array = predict_batch_udf(
+            multiples_with_array_fn,
+            return_type=StructType(
+                [
+                    StructField("x2", DoubleType(), True),
+                    StructField("y3", ArrayType(DoubleType()), True),
+                ]
+            ),
+            input_tensor_shapes=[[], [3]],
+            batch_size=5,
+        )
+        preds = (
+            self.df.withColumn("preds", multiples_w_array("a", array(["b", "c", "d"])))
+            .select("a", "preds.*")
+            .toPandas()
+        )
+
+        self.assertTrue(np.array_equal(self.data[:, 0] * 2, np.array(preds["x2"])))
+        self.assertTrue(np.array_equal(self.data[:, 1:4] * 3, np.vstack(preds["y3"])))
 
 
 if __name__ == "__main__":

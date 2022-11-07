@@ -156,7 +156,7 @@ def _has_tensor_cols(data: pd.Series | pd.DataFrame | Tuple[pd.Series]) -> bool:
         return any(_is_tensor_col(elem) for elem in data)
 
 
-def _validate_and_transform(
+def _validate_and_transform_prediction_result(
     preds: np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, Any]],
     num_input_rows: int,
     return_type: DataType,
@@ -170,10 +170,15 @@ def _validate_and_transform(
             # dictionary of columns
             predNames = list(preds.keys())
             for field in struct_rtype.fields:
+                if isinstance(field.dataType, ArrayType):
+                    if len(preds[field.name].shape) == 2:
+                        preds[field.name] = list(preds[field.name])
+                    else:
+                        raise ValueError(
+                            "Prediction results for ArrayType must be two-dimensional."
+                        )
                 if len(preds[field.name]) != num_input_rows:
-                    raise ValueError("Prediction results must have same length as input data.")
-                if field.dataType == ArrayType and preds[field.name].shape != 2:
-                    raise ValueError("Prediction results for ArrayType must be two-dimensional.")
+                    raise ValueError("Prediction results must have same length as input data")
 
         elif isinstance(preds, list) and isinstance(preds[0], dict):
             # rows of dictionaries
@@ -245,7 +250,7 @@ def predict_batch_udf(
     | multi-col tensor   | N/A          | 4,2             |
 
     Notes:
-    1. pass thru dataframe column => model input as single numpy array.
+    1. pass through dataframe column => model input as single numpy array.
     2. reshape flattened tensors into expected tensor shapes.
     3. user must use `pyspark.sql.functions.struct()` or `pyspark.sql.functions.array()` to
        combine multiple input columns into the equivalent of a single-col tensor.
@@ -513,6 +518,8 @@ def predict_batch_udf(
     # +--------------------+------------------+----+----+
     ```
 
+    .. versionadded:: 3.4.0
+
     Parameters
     ----------
     predict_batch_fn : Callable[[],
@@ -522,7 +529,11 @@ def predict_batch_udf(
         output), a dictionary of named numpy arrays (for multiple outputs), or a row-oriented list
         of dictionaries (for multiple outputs).
     return_type : :class:`pspark.sql.types.DataType` or str.
-        Spark SQL datatype for the expected output.
+        Spark SQL datatype for the expected output:
+        - ArrayType --> 2-dim numpy array.
+        - StructType --> dict with keys matching struct fields.
+        - StructType --> list of dict with keys matching struct fields, for models like the
+        [Huggingface pipeline for sentiment analysis](https://huggingface.co/docs/transformers/quicktour#pipeline-usage]  # noqa: E501
     batch_size : int
         Batch size to use for inference, note that this is typically a limitation of the model
         and/or the hardware resources and is usually smaller than the Spark partition size.
@@ -649,7 +660,9 @@ def predict_batch_udf(
                     raise ValueError(msg.format(num_expected_cols, num_input_cols))
 
                 # return predictions to Spark
-                yield _validate_and_transform(preds, num_input_rows, return_type)  # type: ignore
+                yield _validate_and_transform_prediction_result(
+                    preds, num_input_rows, return_type
+                )  # type: ignore
 
     return pandas_udf(predict, return_type)  # type: ignore[call-overload]
 
