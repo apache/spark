@@ -358,7 +358,8 @@ class RemoteSparkSession(object):
 
     def _to_pandas(self, plan: pb2.Plan) -> Optional[pandas.DataFrame]:
         req = pb2.Request()
-        req.user_context.user_id = self._user_id
+        if self._user_id is not None:
+            req.user_context.user_id = self._user_id
         req.plan.CopyFrom(plan)
         return self._execute_and_fetch(req)
 
@@ -401,7 +402,8 @@ class RemoteSparkSession(object):
 
     def _analyze(self, plan: pb2.Plan) -> AnalyzeResult:
         req = pb2.Request()
-        req.user_context.user_id = self._user_id
+        if self._user_id:
+            req.user_context.user_id = self._user_id
         req.plan.CopyFrom(plan)
 
         resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
