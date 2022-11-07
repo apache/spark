@@ -195,7 +195,15 @@ class ChannelBuilderTests(ReusedPySparkTestCase):
         for i in invalid:
             self.assertRaises(AttributeError, ChannelBuilder, i)
 
-        self.assertRaises(AttributeError, ChannelBuilder("sc://host/;token=123").to_channel)
+    def test_sensible_defaults(self):
+        chan = ChannelBuilder("sc://host")
+        self.assertFalse(chan.secure, "Default URL is not secure")
+
+        chan = ChannelBuilder("sc://host/;token=abcs")
+        self.assertTrue(chan.secure, "specifying a token must set the channel to secure")
+
+        chan = ChannelBuilder("sc://host/;use_ssl=abcs")
+        self.assertFalse(chan.secure, "Garbage in, false out")
 
     def test_valid_channel_creation(self):
         chan = ChannelBuilder("sc://host").to_channel()

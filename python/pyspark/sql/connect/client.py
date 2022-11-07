@@ -18,6 +18,7 @@
 
 import io
 import logging
+import os
 import typing
 import urllib.parse
 import uuid
@@ -125,12 +126,29 @@ class ChannelBuilder:
 
     @property
     def secure(self) -> bool:
+        if self._token is not None:
+            return True
+
         value = self.params.get(ChannelBuilder.PARAM_USE_SSL, "")
         return value.lower() == "true"
 
     @property
     def endpoint(self) -> str:
         return f"{self.host}:{self.port}"
+
+    @property
+    def _token(self) -> Optional[str]:
+        return self.params.get(ChannelBuilder.PARAM_TOKEN, None)
+
+    @property
+    def user_id(self) -> Optional[str]:
+        """
+        Returns
+        -------
+        The user_id extracted from the parameters of the connection string or `None` if not
+        specified.
+        """
+        return self.params.get(ChannelBuilder.PARAM_USER_ID, None)
 
     def get(self, key: str) -> Any:
         """
@@ -155,9 +173,16 @@ class ChannelBuilder:
         GRPC Channel instance.
         """
         destination = f"{self.host}:{self.port}"
-        if not self.secure:
-            if self.params.get(ChannelBuilder.PARAM_TOKEN, None) is not None:
-                raise AttributeError("Token based authentication cannot be used without TLS")
+
+        # Setting a token implicitly sets the `use_ssl` to True.
+        if not self.secure and self._token is not None:
+            use_secure = True
+        elif self.secure:
+            use_secure = True
+        else:
+            use_secure = False
+
+        if not use_secure:
             return grpc.insecure_channel(destination)
         else:
             # Default SSL Credentials.
@@ -235,23 +260,35 @@ class AnalyzeResult:
 class RemoteSparkSession(object):
     """Conceptually the remote spark session that communicates with the server"""
 
-    def __init__(self, user_id: str, connection_string: str = "sc://localhost"):
+    def __init__(self, connection_string: str = "sc://localhost", user_id: Optional[str] = None):
         """
         Creates a new RemoteSparkSession for the Spark Connect interface.
 
         Parameters
         ----------
-        user_id : str
-            Unique User ID that is used to differentiate multiple users and
-            isolate their Spark Sessions.
-        connection_string: str
+        connection_string: Optional[str]
             Connection string that is used to extract the connection parameters and configure
-            the GRPC connection.
+            the GRPC connection. Defaults to `sc://localhos`
+        user_id : Optional[str]
+            Optional unique user ID that is used to differentiate multiple users and
+            isolate their Spark Sessions. If the `user_id` is not set, will default to
+            the $USER environment. Defining the user ID as part of the connection string
+            takes precedence.
         """
-
         # Parse the connection string.
         self._builder = ChannelBuilder(connection_string)
-        self._user_id = user_id
+        self._user_id = None
+        if self._builder.user_id is not None:
+            self._user_id = self._builder.user_id
+        elif user_id is not None:
+            self._user_id = user_id
+        else:
+            self._user_id = os.getenv("USER", None)
+
+        if self._user_id is None:
+            raise AttributeError(
+                "User ID must be specified either as argument, connection string, or $USER environment variable."
+            )
 
         self._channel = self._builder.to_channel()
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
