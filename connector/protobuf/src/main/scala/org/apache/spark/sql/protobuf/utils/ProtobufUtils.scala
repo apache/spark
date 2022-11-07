@@ -189,7 +189,7 @@ private[sql] object ProtobufUtils extends Logging {
     }
   }
 
-  def parseFileDescriptorSet(descFilePath: String): List[Descriptors.FileDescriptor] = {
+  private def parseFileDescriptorSet(descFilePath: String): List[Descriptors.FileDescriptor] = {
     var fileDescriptorSet: DescriptorProtos.FileDescriptorSet = null
     try {
       val dscFile = new BufferedInputStream(new FileInputStream(descFilePath))

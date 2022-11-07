@@ -677,4 +677,34 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
           === inputDf.select("durationMsg.duration").take(1).toSeq(0).get(0))
     }
   }
+
+  test("raise cannot construct protobuf descriptor error") {
+    val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
+
+    val basicMessage = DynamicMessage
+      .newBuilder(basicMessageDesc)
+      .setField(basicMessageDesc.findFieldByName("id"), 1111L)
+      .setField(basicMessageDesc.findFieldByName("string_value"), "slam")
+      .setField(basicMessageDesc.findFieldByName("int32_value"), 12345)
+      .setField(basicMessageDesc.findFieldByName("int64_value"), 0x90000000000L)
+      .setField(basicMessageDesc.findFieldByName("double_value"), 10000000000.0d)
+      .setField(basicMessageDesc.findFieldByName("float_value"), 10902.0f)
+      .setField(basicMessageDesc.findFieldByName("bool_value"), true)
+      .setField(
+        basicMessageDesc.findFieldByName("bytes_value"),
+        ByteString.copyFromUtf8("ProtobufDeserializer"))
+      .build()
+
+    val df = Seq(basicMessage.toByteArray).toDF("value")
+    val testFileDescriptor = testFile("basicmessage_noimports.desc").replace("file:/", "/")
+
+    val e = intercept[AnalysisException] {
+      df.select(functions.from_protobuf($"value", "BasicMessage", testFileDescriptor) as 'sample)
+        .where("sample.string_value == \"slam\"").show()
+    }
+    checkError(
+      exception = e,
+      errorClass = "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR",
+      parameters = Map("descFilePath" -> testFileDescriptor))
+  }
 }
