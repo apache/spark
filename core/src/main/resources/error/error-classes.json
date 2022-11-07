@@ -806,6 +806,11 @@
     ],
     "sqlState" : "42000"
   },
+  "PATH_NOT_FOUND" : {
+    "message" : [
+      "Path does not exist: <path>."
+    ]
+  },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
       "Invalid pivot value '<value>': value data type <valueType> does not match pivot column data type <pivotType>"
@@ -2224,11 +2229,6 @@
   "_LEGACY_ERROR_TEMP_1129" : {
     "message" : [
       "Unable to infer schema for <format>. It must be specified manually."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1130" : {
-    "message" : [
-      "Path does not exist: <path>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1131" : {
