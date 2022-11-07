@@ -717,12 +717,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def inferDateWithLegacyTimeParserError(): Throwable = {
-    new SparkIllegalArgumentException(
-      errorClass = "CANNOT_INFER_DATE",
-      messageParameters = Map.empty)
-  }
-
   def streamedOperatorUnsupportedByDataSourceError(
       className: String, operator: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
