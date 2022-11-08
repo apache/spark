@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -66,7 +67,8 @@ case class WindowSpecDefinition(
   override def checkInputDataTypes(): TypeCheckResult = {
     frameSpecification match {
       case UnspecifiedFrame =>
-        DataTypeMismatch(errorSubClass = "UNSPECIFIED_FRAME")
+        throw SparkException.internalError("Cannot use an UnspecifiedFrame. " +
+          "This should have been converted during analysis.")
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && !f.isUnbounded &&
           orderSpec.isEmpty =>
         DataTypeMismatch(errorSubClass = "RANGE_FRAME_WITHOUT_ORDER")
