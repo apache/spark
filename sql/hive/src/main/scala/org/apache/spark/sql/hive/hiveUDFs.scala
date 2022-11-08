@@ -51,6 +51,7 @@ private[hive] case class HiveSimpleUDF(
   with CodegenFallback
   with Logging
   with UserDefinedExpression {
+  override protected def untrustedOutputNullabilityName: Option[String] = Some(s"UDF $name")
 
   override lazy val deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
 
@@ -135,6 +136,7 @@ private[hive] case class HiveGenericUDF(
   with CodegenFallback
   with Logging
   with UserDefinedExpression {
+  override protected def untrustedOutputNullabilityName: Option[String] = Some(s"UDF $name")
 
   override def nullable: Boolean = true
 
@@ -210,6 +212,7 @@ private[hive] case class HiveGenericUDTF(
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression])
   extends Generator with HiveInspectors with CodegenFallback with UserDefinedExpression {
+  override protected def untrustedOutputNullabilityName: Option[String] = Some(s"UDF $name")
 
   @transient
   protected lazy val function: GenericUDTF = {
@@ -338,6 +341,8 @@ private[hive] case class HiveUDAFFunction(
   extends TypedImperativeAggregate[HiveUDAFBuffer]
   with HiveInspectors
   with UserDefinedExpression {
+
+  override protected def untrustedOutputNullabilityName: Option[String] = Some(s"UDF $name")
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)

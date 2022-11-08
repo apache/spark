@@ -523,7 +523,7 @@ abstract class DeclarativeAggregate
  * hash based aggregation under some constraints.
  */
 abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
-
+  // TODO ETK needs handling, probably at the CodegenFallback layer I guess?
   /**
    * Creates an empty aggregation buffer object. This is called before processing each key group
    * (group by key).

@@ -48,7 +48,7 @@ import org.apache.spark.sql.types._
  * result in changes to the Generator or its children.
  */
 trait Generator extends Expression {
-
+  // TODO ETK check subtypes
   override def dataType: DataType = ArrayType(elementSchema)
 
   override def foldable: Boolean = false
@@ -103,6 +103,9 @@ case class UserDefinedGenerator(
 
   @transient private[this] var inputRow: InterpretedProjection = _
   @transient private[this] var convertToScala: (InternalRow) => Row = _
+
+  override protected def untrustedOutputNullabilityName: Option[String] = Some("generator")
+  override def trusted: Boolean = false
 
   private def initializeConverters(): Unit = {
     inputRow = new InterpretedProjection(children)

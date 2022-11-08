@@ -541,6 +541,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("fieldCannotBeNullMsg" -> fieldCannotBeNullMsg(index, fieldName)))
   }
 
+  def valueCannotBeNullError(locationDesc: String): RuntimeException = {
+    new RuntimeException(s"The value at $locationDesc cannot be null, but a NULL was found. " +
+      "This is typically caused by the presence of a NULL value when the schema indicates the " +
+      "value should be non-null. Check that the input data matches the schema and/or that UDFs " +
+      "which can return null have a nullable return schema.")
+  }
+
   def unableToCreateDatabaseAsFailedToCreateDirectoryError(
       dbDefinition: CatalogDatabase, e: IOException): Throwable = {
     new SparkException(

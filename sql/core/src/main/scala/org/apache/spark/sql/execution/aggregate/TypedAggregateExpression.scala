@@ -223,6 +223,8 @@ case class ComplexTypedAggregateExpression(
     inputAggBufferOffset: Int = 0)
   extends TypedImperativeAggregate[Any] with TypedAggregateExpression with NonSQLExpression {
 
+  override protected def untrustedOutputNullabilityName: Option[String] = Some("TODO ETK name")
+  override def trusted: Boolean = false
   override lazy val deterministic: Boolean = true
 
   override def children: Seq[Expression] = {

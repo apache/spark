@@ -113,6 +113,7 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
   def withMetadata(newMetadata: Metadata): Attribute
   def withExprId(newExprId: ExprId): Attribute
   def withDataType(newType: DataType): Attribute
+  def withTrusted(newTrusted: Boolean): Attribute = ???
 
   override def toAttribute: Attribute = this
   def newInstance(): Attribute
@@ -262,9 +263,11 @@ case class AttributeReference(
     nullable: Boolean = true,
     override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
-    val qualifier: Seq[String] = Seq.empty[String])
+    val qualifier: Seq[String] = Seq.empty[String],
+    override val trusted: Boolean = true)
   extends Attribute with Unevaluable {
 
+  val test: String = "foo"
   override lazy val treePatternBits: BitSet = AttributeReferenceTreeBits.bits
 
   /**
@@ -310,6 +313,14 @@ case class AttributeReference(
       this
     } else {
       AttributeReference(name, dataType, newNullability, metadata)(exprId, qualifier)
+    }
+  }
+
+  override def withTrusted(newTrusted: Boolean): AttributeReference = {
+    if (trusted == newTrusted) {
+      this
+    } else {
+      AttributeReference(name, dataType, nullable, metadata)(exprId, qualifier, newTrusted)
     }
   }
 

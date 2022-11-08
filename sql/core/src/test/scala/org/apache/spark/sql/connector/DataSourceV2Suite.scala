@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.SparkException
+
 import java.io.File
 import java.util.OptionalLong
 
@@ -40,9 +42,10 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
@@ -596,6 +599,26 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       }
     }
   }
+
+  test("SPARK-40199: Handle incorrect nullability from source") {
+    Seq(classOf[SimpleDataSourceV2NonNullable]).foreach { cls =>
+      withClue(cls.getName) {
+        sql(s"CREATE or REPLACE TEMPORARY VIEW s1 USING ${cls.getName}")
+        Seq(
+          ("s", "string"),
+          ("i", "primitive"),
+          ("nest", "struct"),
+          ("nest.s", "nested string"),
+          ("*", "all (*)")
+        ).foreach { case (colName, desc) =>
+          withClue(s"projecting $colName ($desc)") {
+            val e = intercept[SparkException](sql(s"SELECT $colName FROM s1").collect())
+            assert(e.getMessage.contains(s"$colName cannot be null"))
+          }
+        }
+      }
+    }
+  }
 }
 
 
@@ -686,6 +709,50 @@ class SimpleDataSourceV2 extends TestingV2Source {
   }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new MyScanBuilder()
+    }
+  }
+}
+
+object SimpleDataSourceV2NonNullable {
+  private val theSchema = new StructType()
+      .add("i", IntegerType, nullable = false)
+      .add("s", StringType, nullable = false)
+      .add("nest", new StructType().add("s", StringType, nullable = false), nullable = false)
+  private val fooStr = UTF8String.fromString("foo")
+  private val rows = Array(
+    InternalRow(null, fooStr, InternalRow(fooStr)),
+    InternalRow(1, null, InternalRow(fooStr)),
+    InternalRow(1, fooStr, null),
+    InternalRow(1, fooStr, InternalRow(null))
+  )
+}
+
+class SimpleDataSourceV2NonNullable extends TestingV2Source {
+  import SimpleDataSourceV2NonNullable._
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = theSchema
+  class MyScanBuilder extends SimpleScanBuilder {
+    override def readSchema(): StructType = theSchema
+    override def planInputPartitions(): Array[InputPartition] = {
+      Array(RangeInputPartition(0, rows.length/2), RangeInputPartition(rows.length/2, rows.length))
+    }
+    override def createReaderFactory(): PartitionReaderFactory = (partition: InputPartition) => {
+      val RangeInputPartition(start, end) = partition
+      new PartitionReader[InternalRow] {
+        private var current = start - 1
+        override def next(): Boolean = {
+          current += 1
+          current < end
+        }
+        override def get(): InternalRow = rows(current)
+        override def close(): Unit = {}
+      }
+    }
+  }
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def schema(): StructType = theSchema
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new MyScanBuilder()
     }

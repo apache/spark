@@ -102,7 +102,7 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
   protected def rewriteNameFromAttrNullability(plan: LogicalPlan): LogicalPlan = {
     plan.transformAllExpressions {
       case a @ AttributeReference(name, _, false, _) =>
-        a.copy(name = s"*$name")(exprId = a.exprId, qualifier = a.qualifier)
+        a.copy(name = s"*$name")(exprId = a.exprId, qualifier = a.qualifier, trusted = a.trusted)
     }
   }
 

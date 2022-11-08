@@ -31,9 +31,13 @@ case class V2Aggregator[BUF <: java.io.Serializable, OUT](
     inputAggBufferOffset: Int = 0)
   extends TypedImperativeAggregate[BUF] with ImplicitCastInputTypes {
 
+  override protected def untrustedOutputNullabilityName: Option[String] = Some("TODO ETK name")
+
   private[this] lazy val inputProjection = UnsafeProjection.create(children)
 
   override def nullable: Boolean = aggrFunc.isResultNullable
+
+  override def trusted: Boolean = false
   override def dataType: DataType = aggrFunc.resultType()
   override def inputTypes: Seq[AbstractDataType] = aggrFunc.inputTypes().toSeq
   override def createAggregationBuffer(): BUF = aggrFunc.newAggregationState()

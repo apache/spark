@@ -117,6 +117,7 @@ abstract class Expression extends TreeNode[Expression] {
   lazy val deterministic: Boolean = children.forall(_.deterministic)
 
   def nullable: Boolean
+  def trusted: Boolean = true
 
   /**
    * Workaround scala compiler so that we can call super on lazy vals
@@ -1169,7 +1170,10 @@ trait ComplexTypeMergingExpression extends Expression {
  * and Hive function wrappers.
  */
 trait UserDefinedExpression {
+  self: Expression =>
   def name: String
+
+  override def trusted: Boolean = false
 }
 
 trait CommutativeExpression extends Expression {

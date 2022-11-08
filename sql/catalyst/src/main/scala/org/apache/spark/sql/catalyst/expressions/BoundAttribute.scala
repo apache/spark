@@ -28,7 +28,8 @@ import org.apache.spark.sql.types._
  * to be retrieved more efficiently.  However, since operations like column pruning can change
  * the layout of intermediate tuples, BindReferences should be run after all such transformations.
  */
-case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
+case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean,
+  override val trusted: Boolean = true)
   extends LeafExpression {
 
   override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
