@@ -222,7 +222,9 @@ case class AdaptiveSparkPlanExec(
       .map(_.toLong).filter(SQLExecution.getQueryExecution(_) eq context.qe)
   }
 
-  private[sql] def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
+  def finalPhysicalPlan: SparkPlan = withFinalPlanUpdate(identity)
+
+  private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
     if (isFinalPlan) return currentPhysicalPlan
 
     // In case of this adaptive plan being executed out of `withActive` scoped functions, e.g.,

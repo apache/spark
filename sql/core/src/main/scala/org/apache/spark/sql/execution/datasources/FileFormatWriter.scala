@@ -192,7 +192,7 @@ object FileFormatWriter extends Logging {
     // SPARK-40588: plan may contain an AdaptiveSparkPlanExec, which does not know
     // its final plan's ordering, so we have to materialize that plan first
     def materializeAdaptiveSparkPlan(plan: SparkPlan): SparkPlan = plan match {
-      case a: AdaptiveSparkPlanExec => a.getFinalPhysicalPlan()
+      case a: AdaptiveSparkPlanExec => a.finalPhysicalPlan
       case p: SparkPlan => p.withNewChildren(p.children.map(materializeAdaptiveSparkPlan))
     }
     val materializedPlan = materializeAdaptiveSparkPlan(empty2NullPlan)
