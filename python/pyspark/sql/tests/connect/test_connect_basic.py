@@ -106,6 +106,11 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # Check that the limit is applied
         self.assertEqual(len(data.index), 10)
 
+    def test_columns(self):
+        # SPARK-41036: test `columns` API for python client.
+        columns = self.connect.read.table(self.tbl_name).columns
+        self.assertEqual(["id", "name"], columns)
+
     def test_collect(self):
         df = self.connect.read.table(self.tbl_name)
         data = df.limit(10).collect()

@@ -141,11 +141,9 @@ class DataFrame(object):
         if self._plan is None:
             return []
         if "columns" not in self._cache and self._plan is not None:
-            pdd = self.limit(0).toPandas()
-            if pdd is None:
-                raise Exception("Empty result")
+            names = self.schema().names
             # Translate to standard pytho array
-            self._cache["columns"] = pdd.columns.values
+            self._cache["columns"] = names
         return self._cache["columns"]
 
     def count(self) -> int:
