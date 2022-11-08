@@ -423,6 +423,24 @@ package object dsl {
               byName))
           .build()
 
+      def coalesce(num: Integer): Relation =
+        Relation
+          .newBuilder()
+          .setRepartition(
+            Repartition
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setNumPartitions(num)
+              .setShuffle(false))
+          .build()
+
+      def repartition(num: Integer): Relation =
+        Relation
+          .newBuilder()
+          .setRepartition(
+            Repartition.newBuilder().setInput(logicalPlan).setNumPartitions(num).setShuffle(true))
+          .build()
+
       private def createSetOperation(
           left: Relation,
           right: Relation,

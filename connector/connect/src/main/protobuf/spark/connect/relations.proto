@@ -46,6 +46,7 @@ message Relation {
     Deduplicate deduplicate = 14;
     Range range = 15;
     SubqueryAlias subquery_alias = 16;
+    Repartition repartition = 17;
 
     Unknown unknown = 999;
   }
@@ -240,4 +241,16 @@ message SubqueryAlias {
   string alias = 2;
   // Optional. Qualifier of the alias.
   repeated string qualifier = 3;
+}
+
+// Relation repartition.
+message Repartition {
+  // Required. The input relation.
+  Relation input = 1;
+
+  // Required. Must be positive.
+  int32 num_partitions = 2;
+
+  // Optional. Default value is false.
+  bool shuffle = 3;
 }

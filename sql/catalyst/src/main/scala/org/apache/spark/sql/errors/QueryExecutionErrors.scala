@@ -367,7 +367,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "_LEGACY_ERROR_TEMP_2008",
       messageParameters = Map(
         "url" -> url.toString,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      cause = e)
   }
 
   def illegalUrlError(url: UTF8String): Throwable = {
@@ -1226,7 +1227,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       stats: String, e: NumberFormatException): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2113",
-      messageParameters = Map("stats" -> stats))
+      messageParameters = Map("stats" -> stats),
+      cause = e)
   }
 
   def statisticNotRecognizedError(stats: String): SparkIllegalArgumentException = {
