@@ -1528,7 +1528,7 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(res3, Row(1, 7, 4.5, 1) :: Row(2, 7, 4.5, 2) :: Nil)
   }
 
-  test("Reuse of literal in distinct aggregations should work") {
+  test("SPARK-41035: Reuse of literal in distinct aggregations should work") {
     val res = sql(
       """select a, count(distinct 100), count(distinct b, 100)
         |from values (1, 2), (4, 5), (4, 6) as data(a, b)
