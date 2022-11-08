@@ -201,6 +201,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertTrue(plan3.root.set_op.by_name)
 
     def test_coalesce_and_repartition(self):
+        # SPARK-41026: test Coalesce and Repartition API in Python client.
         df = self.connect.readTable(table_name=self.tbl_name)
         plan1 = df.coalesce(10)._plan.to_proto(self.connect)
         self.assertEqual(10, plan1.root.repartition.num_partitions)
