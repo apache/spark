@@ -689,7 +689,7 @@
       "Not allowed to implement multiple UDF interfaces, UDF class <className>"
     ]
   },
-  "MULTI_VALUE_SUBQUERY_ERROR" : {
+  "SCALAR_SUBQUERY_TOO_MANY_ROWS" : {
     "message" : [
       "More than one row returned by a subquery used as an expression."
     ]
