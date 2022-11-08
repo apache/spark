@@ -46,6 +46,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
     if have_pandas:
         connect: RemoteSparkSession
     tbl_name: str
+    tbl_name_empty: str
     df_text: "DataFrame"
 
     @classmethod
@@ -61,6 +62,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
         cls.df_text = cls.sc.parallelize(cls.testDataStr).toDF()
 
         cls.tbl_name = "test_connect_basic_table_1"
+        cls.tbl_name_empty = "test_connect_basic_table_empty"
 
         # Cleanup test data
         cls.spark_connect_clean_up_test_data()
@@ -80,10 +82,21 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
         # Since we might create multiple Spark sessions, we need to create global temporary view
         # that is specifically maintained in the "global_temp" schema.
         df.write.saveAsTable(cls.tbl_name)
+        empty_table_schema = StructType(
+            [
+                StructField("firstname", StringType(), True),
+                StructField("middlename", StringType(), True),
+                StructField("lastname", StringType(), True),
+            ]
+        )
+        emptyRDD = cls.spark.sparkContext.emptyRDD()
+        empty_df = cls.spark.createDataFrame(emptyRDD, empty_table_schema)
+        empty_df.write.saveAsTable(cls.tbl_name_empty)
 
     @classmethod
     def spark_connect_clean_up_test_data(cls: Any) -> None:
         cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name))
+        cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name_empty))
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
@@ -145,10 +158,27 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(1, len(pdf.index))
 
     def test_head(self):
+        # SPARK-41002: test `head` API in Python Client
         df = self.connect.read.table(self.tbl_name)
-        pd = df.head(10)
-        self.assertIsNotNone(pd)
-        self.assertEqual(10, len(pd.index))
+        self.assertIsNotNone(len(df.head()))
+        self.assertIsNotNone(len(df.head(1)))
+        self.assertIsNotNone(len(df.head(5)))
+        df2 = self.connect.read.table(self.tbl_name_empty)
+        self.assertIsNone(df2.head())
+
+    def test_first(self):
+        # SPARK-41002: test `first` API in Python Client
+        df = self.connect.read.table(self.tbl_name)
+        self.assertIsNotNone(len(df.first()))
+        df2 = self.connect.read.table(self.tbl_name_empty)
+        self.assertIsNone(df2.first())
+
+    def test_take(self) -> None:
+        # SPARK-41002: test `take` API in Python Client
+        df = self.connect.read.table(self.tbl_name)
+        self.assertEqual(5, len(df.take(5)))
+        df2 = self.connect.read.table(self.tbl_name_empty)
+        self.assertEqual(0, len(df2.take(5)))
 
     def test_range(self):
         self.assertTrue(

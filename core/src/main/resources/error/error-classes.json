@@ -214,11 +214,6 @@
           "Input to <functionName> should all be the same type, but it's <dataType>."
         ]
       },
-      "FRAME_LESS_OFFSET_WITHOUT_FOLDABLE" : {
-        "message" : [
-          "Offset expression <offset> must be a literal."
-        ]
-      },
       "HASH_MAP_TYPE" : {
         "message" : [
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
@@ -257,11 +252,6 @@
       "MAP_CONCAT_DIFF_TYPES" : {
         "message" : [
           "The <functionName> should all be of type map, but it's <dataType>."
-        ]
-      },
-      "MAP_FROM_ENTRIES_WRONG_TYPE" : {
-        "message" : [
-          "The <functionName> accepts only arrays of pair structs, but <childExpr> is of <childType>."
         ]
       },
       "MAP_FUNCTION_DIFF_TYPES" : {
@@ -307,14 +297,6 @@
       "RANGE_FRAME_WITHOUT_ORDER" : {
         "message" : [
           "A range window frame cannot be used in an unordered window specification."
-        ]
-      },
-      "SEQUENCE_WRONG_INPUT_TYPES" : {
-        "message" : [
-          "<functionName> uses the wrong parameter type. The parameter type must conform to:",
-          "1. The start and stop expressions must resolve to the same type.",
-          "2. If start and stop expressions resolve to the <startType> type, then the step expression must resolve to the <stepType> type",
-          "3. Otherwise, if start and stop expressions resolve to the <otherStartType> type, then the step expression must resolve to the same type."
         ]
       },
       "SPECIFIED_WINDOW_FRAME_DIFF_TYPES" : {
@@ -819,11 +801,6 @@
     ],
     "sqlState" : "42000"
   },
-  "PATH_NOT_FOUND" : {
-    "message" : [
-      "Path does not exist: <path>."
-    ]
-  },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
       "Invalid pivot value '<value>': value data type <valueType> does not match pivot column data type <pivotType>"
@@ -964,6 +941,11 @@
   "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
+    ]
+  },
+  "UNCLOSED_BRACKETED_COMMENT" : {
+    "message" : [
+      "Found an unclosed bracketed comment. Please, append */ at the end of the comment."
     ]
   },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
@@ -1593,11 +1575,6 @@
   "_LEGACY_ERROR_TEMP_0054" : {
     "message" : [
       "It is not allowed to add database prefix `<database>` for the TEMPORARY view name."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0055" : {
-    "message" : [
-      "Unclosed bracketed comment"
     ]
   },
   "_LEGACY_ERROR_TEMP_0056" : {
@@ -2242,6 +2219,11 @@
   "_LEGACY_ERROR_TEMP_1129" : {
     "message" : [
       "Unable to infer schema for <format>. It must be specified manually."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1130" : {
+    "message" : [
+      "Path does not exist: <path>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1131" : {

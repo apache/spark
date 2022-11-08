@@ -601,9 +601,13 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
-  def unclosedBracketedCommentError(command: String, position: Origin): Throwable = {
-    new ParseException(Some(command), "Unclosed bracketed comment", position, position,
-      Some("_LEGACY_ERROR_TEMP_0055"))
+  def unclosedBracketedCommentError(command: String, start: Origin, stop: Origin): Throwable = {
+    new ParseException(
+      command = Some(command),
+      start = start,
+      stop = stop,
+      errorClass = "UNCLOSED_BRACKETED_COMMENT",
+      messageParameters = Map.empty)
   }
 
   def invalidTimeTravelSpec(reason: String, ctx: ParserRuleContext): Throwable = {

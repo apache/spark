@@ -424,6 +424,9 @@ object JavaTypeInference {
 
         case c if c == classOf[java.time.Period] => createSerializerForJavaPeriod(inputObject)
 
+        case c if c == classOf[java.math.BigInteger] =>
+          createSerializerForJavaBigInteger(inputObject)
+
         case c if c == classOf[java.math.BigDecimal] =>
           createSerializerForJavaBigDecimal(inputObject)
 
