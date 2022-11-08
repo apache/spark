@@ -938,6 +938,11 @@
       "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
     ]
   },
+  "UNCLOSED_BRACKETED_COMMENT" : {
+    "message" : [
+      "Found an unclosed bracketed comment. Please, append */ at the end of the comment."
+    ]
+  },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "Attempting to treat <descriptorName> as a Message, but it was <containingType>"
@@ -1565,11 +1570,6 @@
   "_LEGACY_ERROR_TEMP_0054" : {
     "message" : [
       "It is not allowed to add database prefix `<database>` for the TEMPORARY view name."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0055" : {
-    "message" : [
-      "Unclosed bracketed comment"
     ]
   },
   "_LEGACY_ERROR_TEMP_0056" : {
