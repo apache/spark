@@ -24,7 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.FileFormat.METADATA_NAME
@@ -146,7 +146,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
   }
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters,
+    case ScanOperation(projects, stayUpFilters, filters,
       l @ LogicalRelation(fsRelation: HadoopFsRelation, _, table, _)) =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
@@ -204,7 +204,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val afterScanFilters = filterSet -- partitionKeyFilters.filter(_.references.nonEmpty)
       logInfo(s"Post-Scan Filters: ${afterScanFilters.mkString(",")}")
 
-      val filterAttributes = AttributeSet(afterScanFilters)
+      val filterAttributes = AttributeSet(afterScanFilters ++ stayUpFilters)
       val requiredExpressions: Seq[NamedExpression] = filterAttributes.toSeq ++ projects
       val requiredAttributes = AttributeSet(requiredExpressions)
 
@@ -222,8 +222,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         metadataColumns.filter(_.name != FileFormat.ROW_INDEX)
 
       val readDataColumns = dataColumns
-          .filter(requiredAttributes.contains)
-          .filterNot(partitionColumns.contains)
+        .filter(requiredAttributes.contains)
+        .filterNot(partitionColumns.contains)
 
       val fileFormatReaderGeneratedMetadataColumns: Seq[Attribute] =
         metadataColumns.map(_.name).flatMap {
@@ -281,10 +281,11 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           readDataColumns ++ partitionColumns :+ metadataAlias, scan)
       }.getOrElse(scan)
 
-      val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)
-      val withFilter = afterScanFilter
-        .map(execution.FilterExec(_, withMetadataProjections))
-        .getOrElse(withMetadataProjections)
+      // bottom-most filters are put in the left of the list.
+      val finalFilters = afterScanFilters.toSeq.reduceOption(expressions.And).toSeq ++ stayUpFilters
+      val withFilter = finalFilters.foldLeft(withMetadataProjections)((plan, cond) => {
+        execution.FilterExec(cond, plan)
+      })
       val withProjections = if (projects == withFilter.output) {
         withFilter
       } else {
