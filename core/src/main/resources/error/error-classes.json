@@ -299,6 +299,14 @@
           "A range window frame cannot be used in an unordered window specification."
         ]
       },
+      "SEQUENCE_WRONG_INPUT_TYPES" : {
+        "message" : [
+          "<functionName> uses the wrong parameter type. The parameter type must conform to:",
+          "1. The start and stop expressions must resolve to the same type.",
+          "2. If start and stop expressions resolve to the <startType> type, then the step expression must resolve to the <stepType> type",
+          "3. Otherwise, if start and stop expressions resolve to the <otherStartType> type, then the step expression must resolve to the same type."
+        ]
+      },
       "SPECIFIED_WINDOW_FRAME_DIFF_TYPES" : {
         "message" : [
           "Window frame bounds <lower> and <upper> do not have the same type: <lowerType> <> <upperType>."
