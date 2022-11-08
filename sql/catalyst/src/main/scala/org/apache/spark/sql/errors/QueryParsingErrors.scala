@@ -299,7 +299,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def charTypeMissingLengthError(dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
     new ParseException(
-      errorClass = "PARSE_CHAR_MISSING_LENGTH",
+      errorClass = "DATATYPE_MISSING_SIZE",
       messageParameters = Map("type" -> toSQLType(dataType)),
       ctx)
   }
