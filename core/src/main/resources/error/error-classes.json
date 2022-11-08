@@ -689,11 +689,6 @@
       "Not allowed to implement multiple UDF interfaces, UDF class <className>"
     ]
   },
-  "SCALAR_SUBQUERY_TOO_MANY_ROWS" : {
-    "message" : [
-      "More than one row returned by a subquery used as an expression."
-    ]
-  },
   "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
     "message" : [
       "When there are more than one MATCHED clauses in a MERGE statement, only the last MATCHED clause can omit the condition."
@@ -882,6 +877,11 @@
       "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
     ],
     "sqlState" : "42000"
+  },
+  "SCALAR_SUBQUERY_TOO_MANY_ROWS" : {
+    "message" : [
+      "More than one row returned by a subquery used as an expression."
+    ]
   },
   "SCHEMA_ALREADY_EXISTS" : {
     "message" : [
