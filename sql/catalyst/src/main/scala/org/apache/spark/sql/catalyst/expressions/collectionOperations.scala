@@ -833,11 +833,12 @@ case class MapFromEntries(child: Expression)
       TypeUtils.checkForMapKeyType(mapType.keyType)
     case None =>
       DataTypeMismatch(
-        errorSubClass = "MAP_FROM_ENTRIES_WRONG_TYPE",
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "childExpr" -> toSQLExpr(child),
-          "childType" -> toSQLType(child.dataType)
+          "paramIndex" -> "1",
+          "requiredType" -> s"${toSQLType(ArrayType)} of pair ${toSQLType(StructType)}",
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType)
         )
       )
   }
@@ -3712,7 +3713,7 @@ case class ArrayDistinct(child: Expression)
         withNullCheckFunc(array, i)
         i += 1
       }
-      new GenericArrayData(arrayBuffer.toSeq)
+      new GenericArrayData(arrayBuffer)
   } else {
     (data: ArrayData) => {
       val array = data.toArray[AnyRef](elementType)
@@ -3738,7 +3739,7 @@ case class ArrayDistinct(child: Expression)
           }
         }
       }
-      new GenericArrayData(arrayBuffer.toSeq)
+      new GenericArrayData(arrayBuffer)
     }
   }
 
@@ -3894,7 +3895,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
             i += 1
           }
         }
-        new GenericArrayData(arrayBuffer.toSeq)
+        new GenericArrayData(arrayBuffer)
     } else {
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
@@ -3925,7 +3926,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
             arrayBuffer += elem
           }
         }))
-        new GenericArrayData(arrayBuffer.toSeq)
+        new GenericArrayData(arrayBuffer)
     }
   }
 
@@ -4059,7 +4060,7 @@ object ArrayUnion {
         arrayBuffer += elem
       }
     }))
-    new GenericArrayData(arrayBuffer.toSeq)
+    new GenericArrayData(arrayBuffer)
   }
 }
 
@@ -4130,7 +4131,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
             withArray1NullCheckFunc(array1, i)
             i += 1
           }
-          new GenericArrayData(arrayBuffer.toSeq)
+          new GenericArrayData(arrayBuffer)
         } else {
           new GenericArrayData(Array.emptyObjectArray)
         }
@@ -4178,7 +4179,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
             }
             i += 1
           }
-          new GenericArrayData(arrayBuffer.toSeq)
+          new GenericArrayData(arrayBuffer)
         } else {
           new GenericArrayData(Array.emptyObjectArray)
         }
@@ -4353,7 +4354,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
           withArray1NullCheckFunc(array1, i)
           i += 1
         }
-        new GenericArrayData(arrayBuffer.toSeq)
+        new GenericArrayData(arrayBuffer)
     } else {
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
@@ -4398,7 +4399,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
           }
           i += 1
         }
-        new GenericArrayData(arrayBuffer.toSeq)
+        new GenericArrayData(arrayBuffer)
     }
   }
 

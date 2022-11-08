@@ -177,6 +177,29 @@ class ProtobufSerdeSuite extends SharedSparkSession {
     withFieldMatchType(Deserializer.create(CATALYST_STRUCT, protoNestedFile, _))
   }
 
+  test("raise cannot parse and construct protobuf descriptor error") {
+    // passing serde_suite.proto instead serde_suite.desc
+    var testFileDesc = testFile("serde_suite.proto").replace("file:/", "/")
+    val e1 = intercept[AnalysisException] {
+      ProtobufUtils.buildDescriptor(testFileDesc, "FieldMissingInSQLRoot")
+    }
+
+    checkError(
+      exception = e1,
+      errorClass = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR",
+      parameters = Map("descFilePath" -> testFileDesc))
+
+    testFileDesc = testFile("basicmessage_noimports.desc").replace("file:/", "/")
+    val e2 = intercept[AnalysisException] {
+      ProtobufUtils.buildDescriptor(testFileDesc, "FieldMissingInSQLRoot")
+    }
+
+    checkError(
+      exception = e2,
+      errorClass = "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR",
+      parameters = Map("descFilePath" -> testFileDesc))
+  }
+
   /**
    * Attempt to convert `catalystSchema` to `protoSchema` (or vice-versa if `deserialize` is
    * true), assert that it fails, and assert that the _cause_ of the thrown exception has a

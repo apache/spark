@@ -24,6 +24,7 @@ from typing import (
     Tuple,
     Union,
     TYPE_CHECKING,
+    overload,
 )
 
 import pandas
@@ -211,14 +212,66 @@ class DataFrame(object):
             plan.Filter(child=self._plan, filter=condition), session=self._session
         )
 
-    def first(self) -> Optional["pandas.DataFrame"]:
-        return self.head(1)
+    def first(self) -> Optional[Row]:
+        """Returns the first row as a :class:`Row`.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`Row`
+           First row if :class:`DataFrame` is not empty, otherwise ``None``.
+        """
+        return self.head()
 
     def groupBy(self, *cols: "ColumnOrString") -> GroupingFrame:
         return GroupingFrame(self, *cols)
 
-    def head(self, n: int) -> Optional["pandas.DataFrame"]:
-        return self.limit(n).toPandas()
+    @overload
+    def head(self) -> Optional[Row]:
+        ...
+
+    @overload
+    def head(self, n: int) -> List[Row]:
+        ...
+
+    def head(self, n: Optional[int] = None) -> Union[Optional[Row], List[Row]]:
+        """Returns the first ``n`` rows.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        n : int, optional
+            default 1. Number of rows to return.
+
+        Returns
+        -------
+        If n is greater than 1, return a list of :class:`Row`.
+        If n is 1, return a single Row.
+        """
+        if n is None:
+            rs = self.head(1)
+            return rs[0] if rs else None
+        return self.take(n)
+
+    def take(self, num: int) -> List[Row]:
+        """Returns the first ``num`` rows as a :class:`list` of :class:`Row`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or whataver number is available.
+
+        Returns
+        -------
+        list
+            List of rows
+        """
+        return self.limit(num).collect()
 
     # TODO: extend `on` to also be type List[ColumnRef].
     def join(

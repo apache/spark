@@ -677,4 +677,18 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
           === inputDf.select("durationMsg.duration").take(1).toSeq(0).get(0))
     }
   }
+
+  test("raise cannot construct protobuf descriptor error") {
+    val df = Seq(ByteString.empty().toByteArray).toDF("value")
+    val testFileDescriptor = testFile("basicmessage_noimports.desc").replace("file:/", "/")
+
+    val e = intercept[AnalysisException] {
+      df.select(functions.from_protobuf($"value", "BasicMessage", testFileDescriptor) as 'sample)
+        .where("sample.string_value == \"slam\"").show()
+    }
+    checkError(
+      exception = e,
+      errorClass = "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR",
+      parameters = Map("descFilePath" -> testFileDescriptor))
+  }
 }
