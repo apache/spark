@@ -952,7 +952,7 @@
   "UNCLOSED_BRACKETED_COMMENT" : {
     "message" : [
       "Found an unclosed bracketed comment. Please, append */ at the end of the comment."
-      ]
+    ]
   },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
