@@ -30,6 +30,7 @@ import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapred.TextInputFormat;
 
 /**
  * Delegate for SymlinkTextInputFormat, created to address SPARK-40815.
@@ -95,8 +96,13 @@ public class DelegateSymlinkTextInputFormat extends SymlinkTextInputFormat {
   @Override
   public RecordReader<LongWritable, Text> getRecordReader(
       InputSplit split, JobConf job, Reporter reporter) throws IOException {
-    InputSplit targetSplit = ((DelegateSymlinkTextInputSplit) split).getSplit();
-    return super.getRecordReader(targetSplit, job, reporter);
+    DelegateSymlinkTextInputSplit delegateSplit = (DelegateSymlinkTextInputSplit) split;
+    InputSplit targetSplit = ((SymlinkTextInputSplit) delegateSplit.getSplit()).getTargetSplit();
+
+    // The target data is in TextInputFormat.
+    TextInputFormat inputFormat = new TextInputFormat();
+    inputFormat.configure(job);
+    return inputFormat.getRecordReader(targetSplit, job, reporter);
   }
 
   @Override
