@@ -374,14 +374,18 @@ class RemoteSparkSession(object):
         resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
         return AnalyzeResult.fromProto(resp)
 
-    def _process_batch(self, b: pb2.Response) -> Optional[tuple[int, pandas.DataFrame]]:
+    def _process_batch(self, b: pb2.Response) -> Optional[tuple[int, int, pandas.DataFrame]]:
         import pandas as pd
 
         if b.arrow_batch is not None and len(b.arrow_batch.data) > 0:
             with pa.ipc.open_stream(b.arrow_batch.data) as rd:
-                return (b.arrow_batch.batch_id, rd.read_pandas())
+                return (b.arrow_batch.partition_id, b.arrow_batch.batch_id, rd.read_pandas())
         elif b.json_batch is not None and len(b.json_batch.data) > 0:
-            return (b.json_batch.batch_id, pd.read_json(io.BytesIO(b.json_batch.data), lines=True))
+            return (
+                b.json_batch.partition_id,
+                b.json_batch.batch_id,
+                pd.read_json(io.BytesIO(b.json_batch.data), lines=True),
+            )
         return None
 
     def _execute_and_fetch(self, req: pb2.Request) -> typing.Optional[pandas.DataFrame]:
@@ -399,10 +403,10 @@ class RemoteSparkSession(object):
                 result_dfs.append(pb)
 
         if len(result_dfs) > 0:
-            # sort by batch id
-            result_dfs.sort(key=lambda t: t[0])
+            # sort by (partition_id, batch_id)
+            result_dfs.sort(key=lambda t: (t[0], t[1]))
             # concat the pandas dataframes
-            df = pd.concat([t[1] for t in result_dfs])
+            df = pd.concat([t[2] for t in result_dfs])
             del result_dfs
 
             # pd.concat generates non-consecutive index like:
