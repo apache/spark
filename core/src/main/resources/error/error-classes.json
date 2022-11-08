@@ -382,6 +382,12 @@
       }
     }
   },
+  "DATATYPE_MISSING_SIZE" : {
+    "message" : [
+      "DataType <type> requires a length parameter, for example <type>(10). Please specify the length."
+    ],
+    "sqlState" : "42000"
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
@@ -762,12 +768,6 @@
     "message" : [
       "Out of decimal type range: <value>."
     ]
-  },
-  "PARSE_CHAR_MISSING_LENGTH" : {
-    "message" : [
-      "DataType <type> requires a length parameter, for example <type>(10). Please specify the length."
-    ],
-    "sqlState" : "42000"
   },
   "PARSE_EMPTY_STATEMENT" : {
     "message" : [
