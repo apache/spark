@@ -49,15 +49,18 @@ object FileStreamSourceOffset {
   def apply(offset: Offset): FileStreamSourceOffset = {
     offset match {
       case f: FileStreamSourceOffset => f
-      case SerializedOffset(str) =>
-        catching(classOf[NumberFormatException]).opt {
-          FileStreamSourceOffset(str.toLong)
-        }.getOrElse {
-          Serialization.read[FileStreamSourceOffset](str)
-        }
+      case SerializedOffset(str) => apply(str)
       case _ =>
         throw new IllegalArgumentException(
           s"Invalid conversion from offset of ${offset.getClass} to FileStreamSourceOffset")
+    }
+  }
+
+  def apply(json: String): FileStreamSourceOffset = {
+    catching(classOf[NumberFormatException]).opt {
+      FileStreamSourceOffset(json.toLong)
+    }.getOrElse {
+      Serialization.read[FileStreamSourceOffset](json)
     }
   }
 }

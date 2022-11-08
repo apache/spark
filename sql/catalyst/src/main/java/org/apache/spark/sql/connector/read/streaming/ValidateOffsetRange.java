@@ -20,7 +20,8 @@ package org.apache.spark.sql.connector.read.streaming;
 /**
  * Mixed-in interface for streaming source class to notice to Spark that this source wants to
  * validate the range of offset (start, end). Both DSv1 and DSv2 streaming source are eligible to
- * extend this interface.
+ * extend this interface. Note that deserializeOffset is already a part of DSv2 streaming source,
+ * hence DSv1 streaming source only needs to implement the method.
  *
  * The Offset class for this source should implement {@link ComparableOffset} to allow Spark to
  * perform validation.
@@ -38,4 +39,11 @@ public interface ValidateOffsetRange {
    * @return true if Spark should validate the offset range, false otherwise.
    */
   default boolean shouldValidate() { return true; }
+
+  /**
+   * Deserialize a JSON string into an Offset of the implementation-defined offset type.
+   *
+   * @throws IllegalArgumentException if the JSON does not encode a valid offset for this reader
+   */
+  Offset deserializeOffset(String json);
 }

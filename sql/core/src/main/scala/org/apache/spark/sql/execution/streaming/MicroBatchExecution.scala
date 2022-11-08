@@ -751,13 +751,18 @@ class MicroBatchExecution(
       end: OffsetV2): Unit = {
     source match {
       case v: ValidateOffsetRange if v.shouldValidate() && enableAssertionOffsetRange =>
-        (start, end) match {
+        val newStart = start match {
+          case Some(ser: SerializedOffset) => Some(v.deserializeOffset(ser.json))
+          case _ => start
+        }
+
+        (newStart, end) match {
           case (None, _) => // no-op
 
-          case (Some(c: ComparableOffset), a: ComparableOffset) =>
-            val res = c.compareTo(a)
+          case (Some(s: ComparableOffset), e: ComparableOffset) =>
+            val res = s.compareTo(e)
             assert(res == CompareResult.EQUAL || res == CompareResult.LESS,
-              s"Invalid Offset range! start: ${c.json()}, end: ${a.json()}, " +
+              s"Invalid Offset range! start: ${s.json()}, end: ${e.json()}, " +
                 s"comparison result: $res, expected: [" +
                 s"${CompareResult.EQUAL}, ${CompareResult.LESS}]")
 

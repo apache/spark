@@ -215,6 +215,10 @@ class FileStreamSource(
     maxFilesPerBatch.map(ReadLimit.maxFiles).getOrElse(super.getDefaultReadLimit)
   }
 
+  override def deserializeOffset(json: String): streaming.Offset = {
+    FileStreamSourceOffset(json)
+  }
+
   /**
    * For test only. Run `func` with the internal lock to make sure when `func` is running,
    * the current offset won't be changed and no new batch will be emitted.
