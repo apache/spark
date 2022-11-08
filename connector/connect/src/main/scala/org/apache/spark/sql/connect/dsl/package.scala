@@ -181,6 +181,19 @@ package object dsl {
         writeOp.setInput(logicalPlan)
         Command.newBuilder().setWriteOperation(writeOp.build()).build()
       }
+
+      def createView(name: String, global: Boolean, replace: Boolean): Command = {
+        Command
+          .newBuilder()
+          .setCreateDataframeView(
+            CreateDataFrameViewCommand
+              .newBuilder()
+              .setName(name)
+              .setIsGlobal(global)
+              .setReplace(replace)
+              .setInput(logicalPlan))
+          .build()
+      }
     }
   }
 
