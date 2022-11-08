@@ -2446,7 +2446,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     val executed = df.queryExecution.executedPlan
     val joinKeys = collect(executed) {
       case BatchScanExec(_, scan: InMemoryBaseTable#InMemoryBatchScan, _, _, _, _) =>
-        scan.joinKeys
+        scan.pushedJoinKeys
     }
 
     assert(joinKeys.size == 2)
@@ -2481,7 +2481,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     val executed = df.queryExecution.executedPlan
     val joinKeys = collect(executed) {
       case BatchScanExec(_, scan: InMemoryBaseTable#InMemoryBatchScan, _, _, _, _) =>
-        scan.joinKeys
+        scan.pushedJoinKeys
     }
 
     assert(joinKeys.size == 4)

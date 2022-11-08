@@ -266,11 +266,13 @@ abstract class InMemoryBaseTable(
       with SupportsPushDownRequiredColumns
       with SupportsPushDownClusterKeys {
     private var schema: StructType = tableSchema
-    private var joinKeys: Array[Expression] = Array.empty[Expression]
+    private var pushedJoinKeys: Array[Expression] = Array.empty[Expression]
     private val partition: Option[Array[Transform]] = partitioning
 
     override def build: Scan = {
-      InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema, joinKeys)
+      val scan = InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema)
+      scan.pushedJoinKeys = pushedJoinKeys
+      scan
     }
 
     override def pruneColumns(requiredSchema: StructType): Unit = {
@@ -279,8 +281,8 @@ abstract class InMemoryBaseTable(
     }
 
     override def pushClusterKeys(expressions: Array[Expression]): Boolean = {
-      joinKeys = (joinKeys ++ expressions).distinct
-      joinKeys.map(_.asInstanceOf[NamedReference]).foreach(key =>
+      pushedJoinKeys = (pushedJoinKeys ++ expressions).distinct
+      pushedJoinKeys.map(_.asInstanceOf[NamedReference]).foreach(key =>
         if (partition.nonEmpty && getPartitionColumns.contains(key)) {
           return true
         }
@@ -344,9 +346,10 @@ abstract class InMemoryBaseTable(
   case class InMemoryBatchScan(
       var _data: Seq[InputPartition],
       readSchema: StructType,
-      tableSchema: StructType,
-      joinKeys: Array[Expression] = Array.empty[Expression])
+      tableSchema: StructType)
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
+
+    var pushedJoinKeys = Array.empty[Expression]
 
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet

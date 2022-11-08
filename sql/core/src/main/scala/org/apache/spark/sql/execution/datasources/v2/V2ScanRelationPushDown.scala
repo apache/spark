@@ -529,8 +529,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val joinKeys = splitConjunctivePredicates(join.condition.get)
       if (joinKeys.forall(_.isInstanceOf[EqualTo])) {
         val conditions = joinKeys.map(_.asInstanceOf[EqualTo])
-        if (conditions.forall(condition => condition.left.isInstanceOf[AttributeReference]
-            && condition.right.isInstanceOf[AttributeReference])) {
+        // only push down join keys if join keys are columns,
+        // that is, the join condition is col1 = col2
+        if (conditions.forall(condition => isColumn(condition.left)
+            && isColumn(condition.right))) {
           var leftKeys = Seq[NamedReference]()
           conditions.map(condition =>
             if (join.left.outputSet.contains(condition.left.asInstanceOf[AttributeReference])) {
@@ -557,6 +559,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         }
       }
       join
+  }
+
+  private def isColumn(expr: Expression): Boolean = {
+    if (!expr.isInstanceOf[AttributeReference]) {
+      return false
+    }
+    try {
+      FieldReference.apply(expr.asInstanceOf[AttributeReference].name)
+      true
+    } catch {
+      case _: Throwable => false
+    }
   }
 
   private def getFieldReference(expr: Expression): NamedReference = {
