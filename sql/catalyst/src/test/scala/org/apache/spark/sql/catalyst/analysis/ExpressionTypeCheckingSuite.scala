@@ -770,8 +770,12 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     val lag = Lag(Literal(1), NonFoldableLiteral(10), Literal(null), true)
     assert(lag.checkInputDataTypes() ==
       DataTypeMismatch(
-        errorSubClass = "FRAME_LESS_OFFSET_WITHOUT_FOLDABLE",
-        messageParameters = Map("offset" -> "\"(- nonfoldableliteral())\"")
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "offset",
+          "inputType" -> "\"INT\"",
+          "inputExpr" -> "\"(- nonfoldableliteral())\""
+        )
       ))
   }
 
