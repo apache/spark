@@ -164,11 +164,6 @@
     <scala.version>2.12.17</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalatest-maven-plugin.version>2.1.0</scalatest-maven-plugin.version>
-    <!--
-      This needs to be managed in different profiles to avoid
-      errors building different Hadoop versions.
-      See: SPARK-36547, SPARK-38394.
-       -->
     <scala-maven-plugin.version>4.7.2</scala-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
@@ -3506,8 +3501,6 @@
         <hadoop-client-runtime.artifact>hadoop-yarn-api</hadoop-client-runtime.artifact>
         <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
         <gcs-connector.version>hadoop2-2.2.7</gcs-connector.version>
-        <!-- SPARK-36547: Please don't upgrade the version below, otherwise there will be an error on building Hadoop 2.7 package -->
-        <scala-maven-plugin.version>4.3.0</scala-maven-plugin.version>
       </properties>
     </profile>
 
