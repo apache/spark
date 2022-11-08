@@ -2322,21 +2322,15 @@ class DataFrameSuite extends QueryTest
   test("SPARK-13774: Check error message for non existent path without globbed paths") {
     val uuid = UUID.randomUUID().toString
     val baseDir = Utils.createTempDir()
-    val filePath1 = new File(baseDir, "file").getAbsolutePath
-    val filePath2 = new File(baseDir, "file2").getAbsolutePath
-    val filePath3 = new File(uuid, "file3").getAbsolutePath
     try {
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.read.format("csv").load(
-            filePath1,
-            filePath2,
-            filePath3,
-            uuid).rdd
-        },
-        errorClass = "PATH_NOT_FOUND",
-        parameters = Map("path" -> s"file:$filePath1")
-      )
+      val e = intercept[AnalysisException] {
+        spark.read.format("csv").load(
+          new File(baseDir, "file").getAbsolutePath,
+          new File(baseDir, "file2").getAbsolutePath,
+          new File(uuid, "file3").getAbsolutePath,
+          uuid).rdd
+      }
+      assert(e.getMessage.startsWith("Path does not exist"))
     } finally {
 
     }
@@ -2347,26 +2341,20 @@ class DataFrameSuite extends QueryTest
     // Non-existent initial path component:
     val nonExistentBasePath = "/" + UUID.randomUUID().toString
     assert(!new File(nonExistentBasePath).exists())
-    checkError(
-      exception = intercept[AnalysisException] {
-        spark.read.format("text").load(s"$nonExistentBasePath/*")
-      },
-      errorClass = "PATH_NOT_FOUND",
-      parameters = Map("path" -> s"file:$nonExistentBasePath/*")
-    )
+    val e = intercept[AnalysisException] {
+      spark.read.format("text").load(s"$nonExistentBasePath/*")
+    }
+    assert(e.getMessage.startsWith("Path does not exist"))
 
     // Existent initial path component, but no matching files:
     val baseDir = Utils.createTempDir()
     val childDir = Utils.createTempDir(baseDir.getAbsolutePath)
     assert(childDir.exists())
     try {
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.read.json(s"${baseDir.getAbsolutePath}/*/*-xyz.json").rdd
-        },
-        errorClass = "PATH_NOT_FOUND",
-        parameters = Map("path" -> s"file:${baseDir.getAbsolutePath}/*/*-xyz.json")
-      )
+      val e1 = intercept[AnalysisException] {
+        spark.read.json(s"${baseDir.getAbsolutePath}/*/*-xyz.json").rdd
+      }
+      assert(e1.getMessage.startsWith("Path does not exist"))
     } finally {
       Utils.deleteRecursively(baseDir)
     }

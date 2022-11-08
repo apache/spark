@@ -1388,7 +1388,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def dataPathNotExistError(path: String): Throwable = {
     new AnalysisException(
-      errorClass = "PATH_NOT_FOUND",
+      errorClass = "_LEGACY_ERROR_TEMP_1130",
       messageParameters = Map("path" -> path))
   }
 
