@@ -441,6 +441,22 @@ package object dsl {
             Repartition.newBuilder().setInput(logicalPlan).setNumPartitions(num).setShuffle(true))
           .build()
 
+      def summary(statistics: String*): Relation = {
+        Relation
+          .newBuilder()
+          .setStatFunction(
+            proto.StatFunction
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setSummary(
+                proto.StatFunction.Summary
+                  .newBuilder()
+                  .addAllStatistics(statistics.toSeq.asJava)
+                  .build())
+              .build())
+          .build()
+      }
+
       private def createSetOperation(
           left: Relation,
           right: Relation,
