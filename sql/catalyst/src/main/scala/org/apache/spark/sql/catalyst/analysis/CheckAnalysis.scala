@@ -541,12 +541,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               // Check the number of columns
               if (child.output.length != ref.length) {
                 e.failAnalysis(
-                  errorClass = "COLUMNS_NUM_MISMATCH",
+                  errorClass = "NUM_COLUMNS_MISMATCH",
                   messageParameters = Map(
                     "operator" -> toSQLStmt(operator.nodeName),
-                    "refColumnsNum" -> ref.length.toString,
+                    "refNumColumns" -> ref.length.toString,
                     "invalidOrdinalNum" -> ordinalNumber(ti + 1),
-                    "invalidColumnsNum" -> child.output.length.toString))
+                    "invalidNumColumns" -> child.output.length.toString))
               }
 
               val dataTypesAreCompatibleFn = getDataTypesAreCompatibleFn(operator)

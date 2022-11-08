@@ -94,11 +94,6 @@
     ],
     "sqlState" : "22005"
   },
-  "COLUMNS_NUM_MISMATCH" : {
-    "message" : [
-      "<operator> can only be performed on tables with the same number of columns, but the first table has <refColumnsNum> columns and the <invalidOrdinalNum> table has <invalidColumnsNum> columns."
-    ]
-  },
   "COLUMN_NOT_IN_GROUP_BY_CLAUSE" : {
     "message" : [
       "The expression <expression> is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in `first()` (or `first_value()`) if you don't care which value you get."
@@ -766,6 +761,11 @@
       "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22005"
+  },
+  "NUM_COLUMNS_MISMATCH" : {
+    "message" : [
+      "<operator> can only be performed on tables with the same number of columns, but the first table has <refNumColumns> columns and the <invalidOrdinalNum> table has <invalidNumColumns> columns."
+    ]
   },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [

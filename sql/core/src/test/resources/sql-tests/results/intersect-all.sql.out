@@ -124,12 +124,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLUMNS_NUM_MISMATCH",
+  "errorClass" : "NUM_COLUMNS_MISMATCH",
   "messageParameters" : {
-    "invalidColumnsNum" : "2",
+    "invalidNumColumns" : "2",
     "invalidOrdinalNum" : "second",
     "operator" : "INTERSECTALL",
-    "refColumnsNum" : "1"
+    "refNumColumns" : "1"
   },
   "queryContext" : [ {
     "objectType" : "",
