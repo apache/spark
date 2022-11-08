@@ -248,13 +248,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       def patchAggregateFunctionChildren(
           af: AggregateFunction)(
           attrs: Expression => Option[Expression]): AggregateFunction = {
-        val newChildren = af.children.zipWithIndex.map { case (c, i) =>
-          if (c.foldable && i > 0) {
-            c
-          } else {
-            attrs(c).getOrElse(c)
-          }
-        }
+        val newChildren = af.children.map(c => attrs(c).getOrElse(c))
         af.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
       }
 
@@ -273,7 +267,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       }.unzip3
 
       // Setup expand & aggregate operators for distinct aggregate expressions.
-      val distinctAggChildAttrLookup = distinctAggChildAttrMap.toMap
+      val distinctAggChildAttrLookup = distinctAggChildAttrMap.filter(!_._1.foldable).toMap
       val distinctAggFilterAttrLookup = Utils.toMap(distinctAggFilters, maxConds.map(_.toAttribute))
       val distinctAggOperatorMap = distinctAggGroups.toSeq.zipWithIndex.map {
         case ((group, expressions), i) =>
