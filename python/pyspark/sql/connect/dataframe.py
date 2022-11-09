@@ -156,8 +156,53 @@ class DataFrame(object):
     def crossJoin(self, other: "DataFrame") -> "DataFrame":
         ...
 
-    def coalesce(self, num_partitions: int) -> "DataFrame":
-        ...
+    def coalesce(self, numPartitions: int) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` that has exactly `numPartitions` partitions.
+
+        Coalesce does not trigger a shuffle.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        numPartitions : int
+            specify the target number of partitions
+
+        Returns
+        -------
+        :class:`DataFrame`
+        """
+        if not numPartitions > 0:
+            raise ValueError("numPartitions must be positive.")
+        return DataFrame.withPlan(
+            plan.Repartition(self._plan, num_partitions=numPartitions, shuffle=False),
+            self._session,
+        )
+
+    def repartition(self, numPartitions: int) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` that has exactly `numPartitions` partitions.
+
+        Repartition will shuffle source partition into partitions specified by numPartitions.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        numPartitions : int
+            specify the target number of partitions
+
+        Returns
+        -------
+        :class:`DataFrame`
+        """
+        if not numPartitions > 0:
+            raise ValueError("numPartitions must be positive.")
+        return DataFrame.withPlan(
+            plan.Repartition(self._plan, num_partitions=numPartitions, shuffle=True),
+            self._session,
+        )
 
     def describe(self, cols: List[ColumnRef]) -> Any:
         ...
@@ -375,6 +420,16 @@ class DataFrame(object):
 
     def where(self, condition: Expression) -> "DataFrame":
         return self.filter(condition)
+
+    def summary(self, *statistics: str) -> "DataFrame":
+        _statistics: List[str] = list(statistics)
+        for s in _statistics:
+            if not isinstance(s, str):
+                raise TypeError(f"'statistics' must be list[str], but got {type(s).__name__}")
+        return DataFrame.withPlan(
+            plan.StatFunction(child=self._plan, function="summary", statistics=_statistics),
+            session=self._session,
+        )
 
     def _get_alias(self) -> Optional[str]:
         p = self._plan

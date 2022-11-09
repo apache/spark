@@ -208,7 +208,7 @@ private[sql] object ProtobufUtils extends Logging {
         ).toList
       fileDescriptorList
     } catch {
-      case e: Descriptors.DescriptorValidationException =>
+      case e: Exception =>
         throw QueryCompilationErrors.failedParsingDescriptorError(descFilePath, e)
     }
   }

@@ -70,6 +70,21 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.filter.condition.unresolved_function.parts, [">"])
         self.assertEqual(len(plan.root.filter.condition.unresolved_function.arguments), 2)
 
+    def test_summary(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.filter(df.col_name > 3).summary()._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.stat_function.summary.statistics, [])
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .summary("count", "mean", "stddev", "min", "25%")
+            ._plan.to_proto(self.connect)
+        )
+        self.assertEqual(
+            plan.root.stat_function.summary.statistics,
+            ["count", "mean", "stddev", "min", "25%"],
+        )
+
     def test_limit(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         limit_plan = df.limit(10)._plan.to_proto(self.connect)
@@ -199,6 +214,23 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertTrue(plan2.root.set_op.is_all)
         plan3 = df1.unionByName(df2, True)._plan.to_proto(self.connect)
         self.assertTrue(plan3.root.set_op.by_name)
+
+    def test_coalesce_and_repartition(self):
+        # SPARK-41026: test Coalesce and Repartition API in Python client.
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan1 = df.coalesce(10)._plan.to_proto(self.connect)
+        self.assertEqual(10, plan1.root.repartition.num_partitions)
+        self.assertFalse(plan1.root.repartition.shuffle)
+        plan2 = df.repartition(20)._plan.to_proto(self.connect)
+        self.assertTrue(plan2.root.repartition.shuffle)
+
+        with self.assertRaises(ValueError) as context:
+            df.coalesce(-1)._plan.to_proto(self.connect)
+        self.assertTrue("numPartitions must be positive" in str(context.exception))
+
+        with self.assertRaises(ValueError) as context:
+            df.repartition(-1)._plan.to_proto(self.connect)
+        self.assertTrue("numPartitions must be positive" in str(context.exception))
 
 
 if __name__ == "__main__":
