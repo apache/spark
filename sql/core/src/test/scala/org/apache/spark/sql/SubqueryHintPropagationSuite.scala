@@ -73,7 +73,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
 
   test("Correlated Exists containing join with hint") {
     val queryDf = sql(
-      s"""select * from testData s1 WHERE EXISTS
+      s"""SELECT * FROM testData s1 WHERE EXISTS
          |(SELECT s2.key FROM
          |(SELECT $hintStringified * FROM testData) s2 JOIN testData s3
          |ON s2.key = s3.key
