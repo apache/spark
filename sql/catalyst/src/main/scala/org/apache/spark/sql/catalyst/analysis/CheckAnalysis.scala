@@ -413,7 +413,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             def checkValidGroupingExprs(expr: Expression): Unit = {
               if (expr.exists(_.isInstanceOf[AggregateExpression])) {
                 expr.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2424",
+                  errorClass = "GROUP_BY_AGGREGATE",
                   messageParameters = Map("sqlExpr" -> expr.sql))
               }
 
