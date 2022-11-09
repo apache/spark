@@ -5430,7 +5430,10 @@ class PipelinedRDD(RDD[U], Generic[T, U]):
         if self._bypass_serializer:
             self._jrdd_deserializer = NoOpSerializer()
 
-        if self.ctx.profiler_collector:
+        if (
+            self.ctx.profiler_collector
+            and self.ctx._conf.get("spark.python.profile", "false") == "true"
+        ):
             profiler = self.ctx.profiler_collector.new_profiler(self.ctx)
         else:
             profiler = None

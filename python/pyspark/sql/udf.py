@@ -236,25 +236,52 @@ class UserDefinedFunction:
         sc = SparkContext._active_spark_context
         assert sc is not None
         profiler: Optional[Profiler] = None
+        memory_profiler: Optional[Profiler] = None
         if sc.profiler_collector:
-            f = self.func
-            profiler = sc.profiler_collector.new_udf_profiler(sc)
+            profiler_enabled = sc._conf.get("spark.python.profile", "false") == "true"
+            memory_profiler_enabled = sc._conf.get("spark.python.profile.memory", "false") == "true"
 
-            @functools.wraps(f)
-            def func(*args: Any, **kwargs: Any) -> Any:
-                assert profiler is not None
-                return profiler.profile(f, *args, **kwargs)
+            if profiler_enabled and memory_profiler_enabled:
+                # When both profilers are enabled, they interfere with each other,
+                # that makes the result profile misleading.
+                raise RuntimeError(
+                    "'spark.python.profile' and 'spark.python.profile.memory' configuration"
+                    " cannot be enabled together."
+                )
+            elif profiler_enabled:
+                f = self.func
+                profiler = sc.profiler_collector.new_udf_profiler(sc)
 
-            func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
+                @functools.wraps(f)
+                def func(*args: Any, **kwargs: Any) -> Any:
+                    assert profiler is not None
+                    return profiler.profile(f, *args, **kwargs)
 
-            judf = self._create_judf(func)
+                func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
+                judf = self._create_judf(func)
+                jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
+                id = jPythonUDF.expr().resultId().id()
+                sc.profiler_collector.add_profiler(id, profiler)
+            else:  # memory_profiler_enabled
+                f = self.func
+                memory_profiler = sc.profiler_collector.new_memory_profiler(sc)
+                (sub_lines, start_line) = inspect.getsourcelines(f.__code__)
+
+                @functools.wraps(f)
+                def func(*args: Any, **kwargs: Any) -> Any:
+                    assert memory_profiler is not None
+                    return memory_profiler.profile(
+                        sub_lines, start_line, f, *args, **kwargs  # type: ignore[arg-type]
+                    )
+
+                func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
+                judf = self._create_judf(func)
+                jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
+                id = jPythonUDF.expr().resultId().id()
+                sc.profiler_collector.add_profiler(id, memory_profiler)
         else:
             judf = self._judf
-
-        jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
-        if profiler is not None:
-            id = jPythonUDF.expr().resultId().id()
-            sc.profiler_collector.add_profiler(id, profiler)
+            jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
         return Column(jPythonUDF)
 
     # This function is for improving the online help system in the interactive interpreter.
