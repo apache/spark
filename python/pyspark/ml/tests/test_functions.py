@@ -153,7 +153,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
                 batch_size = len(inputs)
                 # just return the batch size as the "prediction"
                 outputs = [batch_size for i in inputs]
-                return outputs
+                return np.array(outputs)
 
             return predict
 
@@ -182,7 +182,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
             fake_output = np.random.random()
 
             def predict(inputs):
-                return [fake_output for i in inputs]
+                return np.array([fake_output for i in inputs])
 
             return predict
 
