@@ -1059,7 +1059,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       if (!canHostOuter(p) && p.expressions.exists(containsOuter)) {
         p.failAnalysis(
           errorClass =
-            "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_REFERENCE",
+            "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
           messageParameters = Map("treeNode" -> planToString(p)))
       }
     }
