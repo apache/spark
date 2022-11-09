@@ -111,6 +111,38 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  test("SPARK-XXXXX: FIXED_LEN_BYTE_ARRAY support") {
+    import org.apache.parquet.io.api.Binary
+    Seq(true, false).foreach { dictionaryEnabled =>
+      def makeRawParquetFile(path: Path): Unit = {
+        val schemaStr =
+          """message root {
+            |  required FIXED_LEN_BYTE_ARRAY(1) a;
+            |}
+        """.stripMargin
+        val schema = MessageTypeParser.parseMessageType(schemaStr)
+
+        val writer = createParquetWriter(schema, path, dictionaryEnabled)
+
+        (0 until 10).map(_.toLong).foreach { n =>
+          val record = new SimpleGroup(schema)
+          record.add(0, Binary.fromString(n.toString))
+          writer.write(record)
+        }
+        writer.close()
+      }
+
+      withTempDir { dir =>
+        val path = new Path(dir.toURI.toString, "part-r-0.parquet")
+        makeRawParquetFile(path)
+        readParquetFile(path.toString) { df =>
+          checkAnswer(df, (0 until 10).map(n =>
+            Row(Array(n + 48)))) // "0" is 48 in ascii
+        }
+      }
+    }
+  }
+
   test("string") {
     val data = (1 to 4).map(i => Tuple1(i.toString))
     // Property spark.sql.parquet.binaryAsString shouldn't affect Parquet files written by Spark SQL
