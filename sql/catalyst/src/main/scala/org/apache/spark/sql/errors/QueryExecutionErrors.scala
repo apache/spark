@@ -2812,4 +2812,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "failFastMode" -> FailFastMode.name),
       cause = e)
   }
+
+  def locationAlreadyExists(tableId: TableIdentifier, location: Path): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "LOCATION_ALREADY_EXISTS",
+      messageParameters = Map(
+        "location" -> toSQLValue(location.toString, StringType),
+        "identifier" -> toSQLId(tableId.nameParts)))
+  }
 }

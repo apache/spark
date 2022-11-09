@@ -669,6 +669,11 @@
       }
     }
   },
+  "LOCATION_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot name the managed table as <identifier>, as its associated location <location> already exists. Please pick a different table name, or remove the existing location first."
+    ]
+  },
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [
       "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
@@ -1947,11 +1952,6 @@
   "_LEGACY_ERROR_TEMP_1069" : {
     "message" : [
       "CREATE EXTERNAL TABLE must be accompanied by LOCATION."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1070" : {
-    "message" : [
-      "Can not <methodName> the managed table('<tableIdentifier>'). The associated location('<tableLocation>') already exists."
     ]
   },
   "_LEGACY_ERROR_TEMP_1071" : {

@@ -24,7 +24,7 @@ import java.util.Locale
 import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
 import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
 
-import org.apache.spark.{SparkException, SparkFiles}
+import org.apache.spark.{SparkException, SparkFiles, SparkRuntimeException}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
@@ -366,26 +366,32 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       withEmptyDirInTablePath("tab1") { tableLoc =>
         val hiddenGarbageFile = new File(tableLoc.getCanonicalPath, ".garbage")
         hiddenGarbageFile.createNewFile()
-        val exMsgWithDefaultDB =
-          s"Can not create the managed table('`$SESSION_CATALOG_NAME`.`default`.`tab1`'). " +
-            "The associated location"
-        var ex = intercept[AnalysisException] {
-          sql(s"CREATE TABLE tab1 USING ${dataSource} AS SELECT 1, 'a'")
-        }.getMessage
-        assert(ex.contains(exMsgWithDefaultDB))
-
-        ex = intercept[AnalysisException] {
-          sql(s"CREATE TABLE tab1 (col1 int, col2 string) USING ${dataSource}")
-        }.getMessage
-        assert(ex.contains(exMsgWithDefaultDB))
+        val expectedLoc = s"'${hiddenGarbageFile.getParentFile.toURI.toString.stripSuffix("/")}'"
+        Seq(
+          s"CREATE TABLE tab1 USING $dataSource AS SELECT 1, 'a'",
+          s"CREATE TABLE tab1 (col1 int, col2 string) USING $dataSource"
+        ).foreach { createStmt =>
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              sql(createStmt)
+            },
+            errorClass = "LOCATION_ALREADY_EXISTS",
+            parameters = Map(
+              "location" -> expectedLoc,
+              "identifier" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`"))
+        }
 
         // Always check location of managed table, with or without (IF NOT EXISTS)
         withTable("tab2") {
-          sql(s"CREATE TABLE tab2 (col1 int, col2 string) USING ${dataSource}")
-          ex = intercept[AnalysisException] {
-            sql(s"CREATE TABLE IF NOT EXISTS tab1 LIKE tab2")
-          }.getMessage
-          assert(ex.contains(exMsgWithDefaultDB))
+          sql(s"CREATE TABLE tab2 (col1 int, col2 string) USING $dataSource")
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              sql(s"CREATE TABLE IF NOT EXISTS tab1 LIKE tab2")
+            },
+            errorClass = "LOCATION_ALREADY_EXISTS",
+            parameters = Map(
+              "location" -> expectedLoc,
+              "identifier" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`"))
         }
       }
     }
