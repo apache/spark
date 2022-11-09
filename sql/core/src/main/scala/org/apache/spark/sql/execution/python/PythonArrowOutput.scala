@@ -102,9 +102,6 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
             }
           } else {
             val length = stream.readInt()
-            // scalastyle:off println
-            Console.println(s"read length: $length")
-            // scalastyle:on println
             length match {
               case SpecialLengths.START_ARROW_STREAM =>
                 reader = new ArrowStreamReader(stream, allocator)

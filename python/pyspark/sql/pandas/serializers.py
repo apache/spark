@@ -98,9 +98,8 @@ class ArrowStreamSerializer(Serializer):
 
         writer = None
         try:
-            print(f'iterating over {iterator}')
             for batch in iterator:
-                print(f'writing batch {batch} with {batch.num_rows} rows and columns {batch.columns}, as pandas {batch.to_pandas()}')
+                print(f'writing batch {batch.to_pandas()}')
                 print()
                 if writer is None:
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)
@@ -134,10 +133,7 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
 
         batches = super(ArrowStreamUDFSerializer, self).load_stream(stream)
         for batch in batches:
-            print(f"batch={batch.to_pandas()}")
-            print(f"schema={batch.schema}")
             struct = batch.column(0)
-            print(f"struct={struct}")
             yield [pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))]
 
     def dump_stream(self, iterator, stream):
@@ -148,13 +144,9 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
         """
         import pyarrow as pa
 
-        print(f'dumping iterator {iterator}')
-
         def wrap_and_init_stream():
             should_write_start_length = True
-            for item in iterator:
-                print(f'element in iterator is {item}')
-                batch, _ = item
+            for batch, _ in iterator:
                 assert isinstance(batch, pa.RecordBatch), type(batch)
 
                 # Wrap the root struct
@@ -184,8 +176,8 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
                 yield item
 
     def dump_stream(self, iterator, stream):
-        for iterator2 in iterator:
-            super(ArrowStreamGroupUDFSerializer, self).dump_stream(iterator2, stream)
+        flatten_iter = [item for iterator2 in iterator for item in iterator2]
+        super(ArrowStreamGroupUDFSerializer, self).dump_stream(flatten_iter, stream)
 
 
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):

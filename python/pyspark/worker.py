@@ -1472,12 +1472,9 @@ def read_udfs(pickleSer, infile, eval_type):
             )
 
         def mapper(batch):
-            print(f'mapper({batch.to_pandas()}) called')
             keys = batch_from_offset(batch, parsed_offsets[0][0])
             vals = batch_from_offset(batch, parsed_offsets[0][1])
-            res = f(keys, vals)
-            print(f'mapper({batch}) returns {res}')
-            return res
+            return f(keys, vals)
 
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
         # We assume there is only one UDF here because grouped map doesn't
@@ -1569,7 +1566,6 @@ def read_udfs(pickleSer, infile, eval_type):
                 return result
 
     def func(_, it):
-        print(f'mapping it={it} with mapper {mapper}')
         return map(mapper, it)
 
     # profiling is not supported for UDF
@@ -1618,7 +1614,7 @@ def main(infile, outfile):
         taskContext._resources = {}
         if taskContext._partitionId == 0:
             print(f'>>>>>> partition {taskContext._partitionId} has pid {os.getpid()}')
-            time.sleep(10)
+            #time.sleep(10)
         for r in range(read_int(infile)):
             key = utf8_deserializer.loads(infile)
             name = utf8_deserializer.loads(infile)
