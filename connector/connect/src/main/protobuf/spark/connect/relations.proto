@@ -48,6 +48,8 @@ message Relation {
     SubqueryAlias subquery_alias = 16;
     Repartition repartition = 17;
 
+    StatFunction stat_function = 100;
+
     Unknown unknown = 999;
   }
 }
@@ -254,3 +256,21 @@ message Repartition {
   // Optional. Default value is false.
   bool shuffle = 3;
 }
+
+// StatFunction
+message StatFunction {
+  // Required. The input relation.
+  Relation input = 1;
+  // Required. The function and its parameters.
+  oneof function {
+    Summary summary = 2;
+
+    Unknown unknown = 999;
+  }
+
+  // StatFunctions.summary
+  message Summary {
+    repeated string statistics = 1;
+  }
+}
+

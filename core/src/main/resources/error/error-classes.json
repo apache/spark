@@ -209,11 +209,6 @@
           "Input to <functionName> should all be the same type, but it's <dataType>."
         ]
       },
-      "FRAME_LESS_OFFSET_WITHOUT_FOLDABLE" : {
-        "message" : [
-          "Offset expression <offset> must be a literal."
-        ]
-      },
       "HASH_MAP_TYPE" : {
         "message" : [
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
@@ -257,11 +252,6 @@
       "MAP_CONTAINS_KEY_DIFF_TYPES" : {
         "message" : [
           "Input to <functionName> should have been <dataType> followed by a value with same key type, but it's [<leftType>, <rightType>]."
-        ]
-      },
-      "MAP_FROM_ENTRIES_WRONG_TYPE" : {
-        "message" : [
-          "The <functionName> accepts only arrays of pair structs, but <childExpr> is of <childType>."
         ]
       },
       "MAP_ZIP_WITH_DIFF_TYPES" : {
@@ -391,6 +381,12 @@
         ]
       }
     }
+  },
+  "DATATYPE_MISSING_SIZE" : {
+    "message" : [
+      "DataType <type> requires a length parameter, for example <type>(10). Please specify the length."
+    ],
+    "sqlState" : "42000"
   },
   "DATETIME_OVERFLOW" : {
     "message" : [
@@ -757,6 +753,11 @@
     ],
     "sqlState" : "22005"
   },
+  "NUM_COLUMNS_MISMATCH" : {
+    "message" : [
+      "<operator> can only be performed on tables with the same number of columns, but the first table has <refNumColumns> columns and the <invalidOrdinalNum> table has <invalidNumColumns> columns."
+    ]
+  },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
@@ -767,12 +768,6 @@
     "message" : [
       "Out of decimal type range: <value>."
     ]
-  },
-  "PARSE_CHAR_MISSING_LENGTH" : {
-    "message" : [
-      "DataType <type> requires a length parameter, for example <type>(10). Please specify the length."
-    ],
-    "sqlState" : "42000"
   },
   "PARSE_EMPTY_STATEMENT" : {
     "message" : [
@@ -800,11 +795,6 @@
       "To tolerate the error on drop use ALTER TABLE … DROP IF EXISTS PARTITION."
     ],
     "sqlState" : "42000"
-  },
-  "PATH_NOT_FOUND" : {
-    "message" : [
-      "Path does not exist: <path>."
-    ]
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
@@ -951,6 +941,11 @@
   "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
+    ]
+  },
+  "UNCLOSED_BRACKETED_COMMENT" : {
+    "message" : [
+      "Found an unclosed bracketed comment. Please, append */ at the end of the comment."
     ]
   },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
@@ -1580,11 +1575,6 @@
   "_LEGACY_ERROR_TEMP_0054" : {
     "message" : [
       "It is not allowed to add database prefix `<database>` for the TEMPORARY view name."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0055" : {
-    "message" : [
-      "Unclosed bracketed comment"
     ]
   },
   "_LEGACY_ERROR_TEMP_0056" : {
@@ -2229,6 +2219,11 @@
   "_LEGACY_ERROR_TEMP_1129" : {
     "message" : [
       "Unable to infer schema for <format>. It must be specified manually."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1130" : {
+    "message" : [
+      "Path does not exist: <path>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1131" : {
@@ -5041,11 +5036,6 @@
   "_LEGACY_ERROR_TEMP_2428" : {
     "message" : [
       "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2429" : {
-    "message" : [
-      "<operator> can only be performed on tables with the same number of columns, but the first table has <firstColNum> columns and the <nTab> table has <nColNum> columns."
     ]
   },
   "_LEGACY_ERROR_TEMP_2430" : {

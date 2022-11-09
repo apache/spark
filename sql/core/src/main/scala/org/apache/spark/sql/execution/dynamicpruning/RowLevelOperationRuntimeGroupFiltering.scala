@@ -78,9 +78,8 @@ case class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[Logic
     // clone the relation and assign new expr IDs to avoid conflicts
     matchingRowsPlan transformUpWithNewOutput {
       case r: DataSourceV2Relation if r eq relation =>
-        val oldOutput = r.output
-        val newOutput = oldOutput.map(_.newInstance())
-        r.copy(output = newOutput) -> oldOutput.zip(newOutput)
+        val newRelation = r.newInstance()
+        newRelation -> r.output.zip(newRelation.output)
     }
   }
 

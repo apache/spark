@@ -16,6 +16,7 @@
 #
 
 from typing import (
+    Any,
     List,
     Optional,
     Sequence,
@@ -749,4 +750,41 @@ class Range(LogicalPlan):
                 {self._child_repr_()}
             </li>
         </uL>
+        """
+
+
+class StatFunction(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], function: str, **kwargs: Any) -> None:
+        super().__init__(child)
+        assert function in ["summary"]
+        self.function = function
+        self.kwargs = kwargs
+
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.stat_function.input.CopyFrom(self._child.plan(session))
+
+        if self.function == "summary":
+            plan.stat_function.summary.statistics.extend(self.kwargs.get("statistics", []))
+        else:
+            raise Exception(f"Unknown function ${self.function}.")
+
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"""{i}<StatFunction function='{self.function}' augments='{self.kwargs}'>"""
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>StatFunction</b><br />
+              Function: {self.function} <br />
+              Augments: {self.kwargs} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
         """

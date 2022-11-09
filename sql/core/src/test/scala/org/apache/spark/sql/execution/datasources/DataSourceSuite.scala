@@ -109,22 +109,18 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
   }
 
   test("test non existent paths") {
-    checkError(
-      exception = intercept[AnalysisException](
-        DataSource.checkAndGlobPathIfNecessary(
-          Seq(
-            path1.toString,
-            path2.toString,
-            nonExistentPath.toString
-          ),
-          hadoopConf,
-          checkEmptyGlobPath = true,
-          checkFilesExist = true,
-          enableGlobbing = true
-        )
-      ),
-      errorClass = "PATH_NOT_FOUND",
-      parameters = Map("path" -> "mockFs://mockFs/nonexistentpath")
+    assertThrows[AnalysisException](
+      DataSource.checkAndGlobPathIfNecessary(
+        Seq(
+          path1.toString,
+          path2.toString,
+          nonExistentPath.toString
+        ),
+        hadoopConf,
+        checkEmptyGlobPath = true,
+        checkFilesExist = true,
+        enableGlobbing = true
+      )
     )
   }
 

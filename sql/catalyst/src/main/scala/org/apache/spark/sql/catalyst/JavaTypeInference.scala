@@ -218,9 +218,7 @@ object JavaTypeInference {
 
     // Assumes we are deserializing the first column of a row.
     deserializerForWithNullSafetyAndUpcast(GetColumnByOrdinal(0, dataType), dataType,
-      nullable = nullable, walkedTypePath, (casted, walkedTypePath) => {
-        deserializerFor(typeToken, casted, walkedTypePath)
-      })
+      nullable = nullable, walkedTypePath, deserializerFor(typeToken, _, walkedTypePath))
   }
 
   private def deserializerFor(
@@ -280,7 +278,7 @@ object JavaTypeInference {
             dataType,
             nullable = elementNullable,
             newTypePath,
-            (casted, typePath) => deserializerFor(typeToken.getComponentType, casted, typePath))
+            deserializerFor(typeToken.getComponentType, _, newTypePath))
         }
 
         val arrayData = UnresolvedMapObjects(mapFunction, path)
@@ -309,7 +307,7 @@ object JavaTypeInference {
             dataType,
             nullable = elementNullable,
             newTypePath,
-            (casted, typePath) => deserializerFor(et, casted, typePath))
+            deserializerFor(et, _, newTypePath))
         }
 
         UnresolvedMapObjects(mapFunction, path, customCollectionCls = Some(c))
