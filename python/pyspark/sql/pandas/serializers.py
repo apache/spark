@@ -170,10 +170,10 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
     for applying each function with the raw record arrow batch. See also `DataFrame.mapInArrow`.
     """
 
-    def load_stream(self, stream):
-        for iterator in super(ArrowStreamGroupUDFSerializer, self).load_stream(stream):
-            for item in iterator:
-                yield item
+    #def load_stream(self, stream):
+    #    for iterator in super(ArrowStreamGroupUDFSerializer, self).load_stream(stream):
+    #        for item in iterator:
+    #            yield item
 
     def dump_stream(self, iterator, stream):
         flatten_iter = [item for iterator2 in iterator for item in iterator2]

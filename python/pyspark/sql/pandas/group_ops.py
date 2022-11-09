@@ -355,7 +355,7 @@ class PandasGroupedOpsMixin:
         return DataFrame(jdf, self.session)
 
     def applyInArrow(
-        self, func: "ArrowMapIterFunction", schema: Union[StructType, str]
+        self, func: "ArrowGroupedMapFunction", schema: Union[StructType, str]
     ) -> "DataFrame":
         from pyspark.sql import GroupedData
         from pyspark.sql.functions import pandas_udf, PandasUDFType

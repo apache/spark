@@ -343,8 +343,13 @@ PandasCogroupedMapFunction = Union[
     Callable[[Any, DataFrameLike, DataFrameLike], DataFrameLike],
 ]
 
-ArrowCogroupedMapFunction = Callable[
-    [Iterable[pyarrow.RecordBatch], Iterable[pyarrow.RecordBatch]], Iterable[pyarrow.RecordBatch]
+ArrowGroupedMapFunction = Union[
+    Callable[[pyarrow.Table], pyarrow.Table],
+    Callable[[Any, pyarrow.Table], pyarrow.Table],
+]
+ArrowCogroupedMapFunction = Union[
+    Callable[[pyarrow.Table, pyarrow.Table], pyarrow.Table],
+    Callable[[Any, pyarrow.Table, pyarrow.Table], pyarrow.Table],
 ]
 
 GroupedMapPandasUserDefinedFunction = NewType("GroupedMapPandasUserDefinedFunction", FunctionType)

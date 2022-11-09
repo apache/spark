@@ -378,19 +378,19 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
 
 def wrap_grouped_map_arrow_udf(f, return_type, argspec):
-    def wrapped(key_batch, value_batch):
+    def wrapped(key_table, value_table):
         import pyarrow as pa
 
         if len(argspec.args) == 1:
-            result = f(value_batch)
+            result = f(value_table)
         elif len(argspec.args) == 2:
-            key = tuple(c[0] for c in key_batch.columns)
-            result = f(key, value_batch)
+            key = tuple(c[0] for c in key_table.columns)
+            result = f(key, value_table)
 
-        if not isinstance(result, pa.RecordBatch):
+        if not isinstance(result, pa.Table):
             raise TypeError(
                 "Return type of the user-defined function should be "
-                "pyarrow.RecordBatch, but is iter({})".format(type(result))
+                "pyarrow.Table, but is {}".format(type(result))
             )
 
         # the number of columns of result have to match the return type
@@ -400,14 +400,14 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec):
             or (len(result.columns) == 0 and result.num_rows == 0)
         ):
             raise RuntimeError(
-                "Number of columns of the returned pyarrow.resultRecord "
+                "Number of columns of the returned pyarrow.Table "
                 "doesn't match specified schema. "
                 "Expected: {} Actual: {}".format(len(return_type), len(result.columns))
             )
 
-        return result
+        return result.to_batches()
 
-    return lambda k, v: [(wrapped(k, v), to_arrow_type(return_type))]
+    return lambda k, v: [(batch, to_arrow_type(return_type)) for batch in wrapped(k, v)]
 
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
@@ -1454,6 +1454,8 @@ def read_udfs(pickleSer, infile, eval_type):
             return f(keys, vals)
 
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
+        import pyarrow as pa
+
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
@@ -1464,16 +1466,17 @@ def read_udfs(pickleSer, infile, eval_type):
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
         def batch_from_offset(batch, offsets):
-            import pyarrow as pa
-
             return pa.RecordBatch.from_arrays(
                 arrays=[batch.columns[o] for o in offsets],
                 names=[batch.schema.names[o] for o in offsets],
             )
 
-        def mapper(batch):
-            keys = batch_from_offset(batch, parsed_offsets[0][0])
-            vals = batch_from_offset(batch, parsed_offsets[0][1])
+        def table_from_batches(batches, offsets):
+            return pa.Table.from_batches([batch_from_offset(batch, offsets) for batch in batches])
+
+        def mapper(batches):
+            keys = table_from_batches(batches, parsed_offsets[0][0])
+            vals = table_from_batches(batches, parsed_offsets[0][1])
             return f(keys, vals)
 
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
