@@ -5107,11 +5107,6 @@
       "Invalid expressions: [<invalidExprSqls>]"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2442" : {
-    "message" : [
-      "unresolved operator <operator>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2443" : {
     "message" : [
       "Multiple definitions of observed metrics named '<name>': <plan>"
