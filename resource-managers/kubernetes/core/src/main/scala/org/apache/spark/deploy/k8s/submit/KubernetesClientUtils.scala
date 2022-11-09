@@ -36,14 +36,14 @@ import org.apache.spark.internal.Logging
 private[spark] object KubernetesClientUtils extends Logging {
 
   // Config map name can be KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH chars at max.
-  def configMapName(prefix: String): String = {
+  private def configMapName(prefix: String): String = {
     val suffix = "-conf-map"
     s"${prefix.take(KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH - suffix.length)}$suffix"
   }
 
-  val configMapNameExecutor: String = configMapName(s"spark-exec-${KubernetesUtils.uniqueID()}")
+  def configMapNameExecutor(): String = configMapName(s"spark-exec-${KubernetesUtils.uniqueID()}")
 
-  val configMapNameDriver: String = configMapName(s"spark-drv-${KubernetesUtils.uniqueID()}")
+  def configMapNameDriver(): String = configMapName(s"spark-drv-${KubernetesUtils.uniqueID()}")
 
   private def buildStringFromPropertiesMap(configMapName: String,
       propertiesMap: Map[String, String]): String = {

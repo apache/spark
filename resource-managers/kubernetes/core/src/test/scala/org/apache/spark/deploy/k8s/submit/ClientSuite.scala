@@ -27,6 +27,7 @@ import io.fabric8.kubernetes.api.model.apiextensions.v1.{CustomResourceDefinitio
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatestplus.mockito.MockitoSugar._
@@ -36,6 +37,7 @@ import org.apache.spark.deploy.k8s.{Config, _}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.util.Utils
+
 
 class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -99,7 +101,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
           .withName(SPARK_CONF_VOLUME_DRIVER)
           .withNewConfigMap()
             .withItems(keyToPaths.asJava)
-            .withName(KubernetesClientUtils.configMapNameDriver)
+            .withName(KubernetesClientUtils.configMapNameDriver())
             .endConfigMap()
           .endVolume()
         .endSpec()
@@ -178,7 +180,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
     createdPodArgumentCaptor = ArgumentCaptor.forClass(classOf[Pod])
     createdResourcesArgumentCaptor = ArgumentCaptor.forClass(classOf[HasMetadata])
-    when(podsWithNamespace.resource(fullExpectedPod())).thenReturn(namedPods)
+    when(podsWithNamespace.resource(any[Pod])).thenReturn(namedPods)
     when(namedPods.create()).thenReturn(podWithOwnerReference())
     when(namedPods.watch(loggingPodStatusWatcher)).thenReturn(mock[Watch])
     when(loggingPodStatusWatcher.watchOrStop(kconf.namespace + ":" + POD_NAME)).thenReturn(true)
@@ -194,8 +196,20 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient,
       loggingPodStatusWatcher)
     submissionClient.run()
-    verify(podsWithNamespace).resource(fullExpectedPod())
+    verify(podsWithNamespace).resource(createdPodArgumentCaptor.capture())
     verify(namedPods).create()
+    val actualPod: Pod = createdPodArgumentCaptor.getValue
+    val expectedPod: Pod = fullExpectedPod()
+    assert(expectedPod.getKind === actualPod.getKind)
+    assert(expectedPod.getApiVersion === actualPod.getApiVersion)
+    assert(expectedPod.getMetadata === actualPod.getMetadata)
+    assert(expectedPod.getSpec.getHostname === actualPod.getSpec.getHostname)
+    assert(expectedPod.getSpec.getContainers === actualPod.getSpec.getContainers)
+    assert(expectedPod.getSpec.getVolumes.size() === actualPod.getSpec.getVolumes.size())
+    val expectedVolume: ConfigMapVolumeSource = expectedPod.getSpec.getVolumes.get(0).getConfigMap
+    val actualVolume: ConfigMapVolumeSource = actualPod.getSpec.getVolumes.get(0).getConfigMap
+    assert(expectedVolume.getItems === actualVolume.getItems)
+    assert(actualVolume.getName.matches("spark-drv-\\S+-conf-map"))
   }
 
   test("The client should create Kubernetes resources") {
@@ -214,8 +228,6 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(secrets.nonEmpty)
     assert(configMaps.nonEmpty)
     val configMap = configMaps.head
-    assert(configMap.getMetadata.getName ===
-      KubernetesClientUtils.configMapNameDriver)
     assert(configMap.getImmutable())
     assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf1key=conf1value"))
@@ -260,8 +272,6 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(secrets.nonEmpty)
     assert(configMaps.nonEmpty)
     val configMap = configMaps.head
-    assert(configMap.getMetadata.getName ===
-      KubernetesClientUtils.configMapNameDriver)
     assert(configMap.getImmutable())
     assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf1key=conf1value"))
@@ -304,8 +314,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     val expectedKeyToPaths = (expectedConfFiles.map(x => new KeyToPath(x, 420, x)).toList ++
       List(KEY_TO_PATH)).sortBy(x => x.getKey)
 
-    when(podsWithNamespace.resource(fullExpectedPod(expectedKeyToPaths)))
-      .thenReturn(namedPods)
+    when(podsWithNamespace.resource(any[Pod])).thenReturn(namedPods)
     when(namedPods.create()).thenReturn(podWithOwnerReference(expectedKeyToPaths))
 
     kconf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf,
@@ -325,9 +334,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     val configMaps = otherCreatedResources.toArray
       .filter(_.isInstanceOf[ConfigMap]).map(_.asInstanceOf[ConfigMap])
     assert(configMaps.nonEmpty)
-    val configMapName = KubernetesClientUtils.configMapNameDriver
     val configMap: ConfigMap = configMaps.head
-    assert(configMap.getMetadata.getName == configMapName)
     val configMapLoadedFiles = configMap.getData.keySet().asScala.toSet -
         Config.KUBERNETES_NAMESPACE.key
     assert(configMapLoadedFiles === expectedConfFiles.toSet ++ Set(SPARK_CONF_FILE_NAME))

@@ -101,7 +101,7 @@ private[spark] class BasicExecutorFeatureStep(
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val name = s"$executorPodNamePrefix-exec-${kubernetesConf.executorId}"
-    val configMapName = KubernetesClientUtils.configMapNameExecutor
+    val configMapName = KubernetesClientUtils.configMapNameExecutor()
     val confFilesMap = KubernetesClientUtils
       .buildSparkConfDirFilesMap(configMapName, kubernetesConf.sparkConf, Map.empty)
     val keyToPaths = KubernetesClientUtils.buildKeyToPathObjects(confFilesMap)

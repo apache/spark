@@ -102,7 +102,7 @@ private[spark] class Client(
 
   def run(): Unit = {
     val resolvedDriverSpec = builder.buildFromFeatures(conf, kubernetesClient)
-    val configMapName = KubernetesClientUtils.configMapNameDriver
+    val configMapName = KubernetesClientUtils.configMapNameDriver()
     val confFilesMap = KubernetesClientUtils.buildSparkConfDirFilesMap(configMapName,
       conf.sparkConf, resolvedDriverSpec.systemProperties)
     val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap +
