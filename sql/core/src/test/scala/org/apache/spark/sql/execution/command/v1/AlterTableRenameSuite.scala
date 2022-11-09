@@ -72,11 +72,10 @@ trait AlterTableRenameSuiteBase extends command.AlterTableRenameSuiteBase with Q
           exception = intercept[SparkRuntimeException] {
             sql(s"ALTER TABLE $src RENAME TO ns.dst_tbl")
           },
-          errorClass = "LOCATION_ALREADY_EXISTS.RENAME_MANAGED_TABLE",
+          errorClass = "LOCATION_ALREADY_EXISTS",
           parameters = Map(
             "location" -> s"'$dst_dir'",
-            "table" -> toSQLId(src),
-            "newTable" -> toSQLId(dst)))
+            "identifier" -> toSQLId(dst)))
       }
     }
   }

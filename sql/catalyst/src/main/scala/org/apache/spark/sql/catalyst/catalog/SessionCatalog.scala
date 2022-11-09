@@ -411,7 +411,7 @@ class SessionCatalog(
       val fs = tableLocation.getFileSystem(hadoopConf)
 
       if (fs.exists(tableLocation) && fs.listStatus(tableLocation).nonEmpty) {
-        throw QueryExecutionErrors.locationAlreadyExistsInCreate(table.identifier, tableLocation)
+        throw QueryExecutionErrors.locationAlreadyExists(table.identifier, tableLocation)
       }
     }
   }
@@ -1912,8 +1912,7 @@ class SessionCatalog(
       val newTableLocation = new Path(new Path(databaseLocation), format(newName.table))
       val fs = newTableLocation.getFileSystem(hadoopConf)
       if (fs.exists(newTableLocation)) {
-        throw QueryExecutionErrors.locationAlreadyExistsInRename(
-          oldName, newName, newTableLocation)
+        throw QueryExecutionErrors.locationAlreadyExists(newName, newTableLocation)
       }
     }
   }

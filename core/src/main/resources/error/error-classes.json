@@ -670,20 +670,8 @@
   },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
-      "Cannot create the location <location> because it already exists."
-    ],
-    "subClass" : {
-      "CREATE_MANAGED_TABLE" : {
-        "message" : [
-          "Creation of the managed table <table> failed. Please, consider to remove the existing location, specify another one explicitly or choose another table name since the location is derived from it."
-        ]
-      },
-      "RENAME_MANAGED_TABLE" : {
-        "message" : [
-          "Renaming of the managed table <table> to <newTable> failed. Please, consider to choose another new table name since the location is derived from it, or remove the existing location."
-        ]
-      }
-    }
+      "Cannot name the managed table as <identifier>, as its associated location <location> already exists. Please pick a different table name, or remove the existing location first."
+    ]
   },
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [

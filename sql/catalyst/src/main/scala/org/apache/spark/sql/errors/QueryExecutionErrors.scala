@@ -2817,25 +2817,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = e)
   }
 
-  def locationAlreadyExistsInCreate(
-      tableId: TableIdentifier,
-      location: Path): Throwable = {
+  def locationAlreadyExists(tableId: TableIdentifier, location: Path): Throwable = {
     new SparkRuntimeException(
-      errorClass = "LOCATION_ALREADY_EXISTS.CREATE_MANAGED_TABLE",
+      errorClass = "LOCATION_ALREADY_EXISTS",
       messageParameters = Map(
         "location" -> toSQLValue(location.toString, StringType),
-        "table" -> toSQLId(tableId.nameParts)))
-  }
-
-  def locationAlreadyExistsInRename(
-      tableId: TableIdentifier,
-      newTableId: TableIdentifier,
-      location: Path): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "LOCATION_ALREADY_EXISTS.RENAME_MANAGED_TABLE",
-      messageParameters = Map(
-        "location" -> toSQLValue(location.toString, StringType),
-        "table" -> toSQLId(tableId.nameParts),
-        "newTable" -> toSQLId(newTableId.nameParts)))
+        "identifier" -> toSQLId(tableId.nameParts)))
   }
 }

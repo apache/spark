@@ -375,10 +375,10 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
             exception = intercept[SparkRuntimeException] {
               sql(createStmt)
             },
-            errorClass = "LOCATION_ALREADY_EXISTS.CREATE_MANAGED_TABLE",
+            errorClass = "LOCATION_ALREADY_EXISTS",
             parameters = Map(
               "location" -> expectedLoc,
-              "table" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`"))
+              "identifier" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`"))
         }
 
         // Always check location of managed table, with or without (IF NOT EXISTS)
@@ -388,10 +388,10 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
             exception = intercept[SparkRuntimeException] {
               sql(s"CREATE TABLE IF NOT EXISTS tab1 LIKE tab2")
             },
-            errorClass = "LOCATION_ALREADY_EXISTS.CREATE_MANAGED_TABLE",
+            errorClass = "LOCATION_ALREADY_EXISTS",
             parameters = Map(
               "location" -> expectedLoc,
-              "table" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`"))
+              "identifier" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`"))
         }
       }
     }
