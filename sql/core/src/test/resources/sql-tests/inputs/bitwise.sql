@@ -75,3 +75,37 @@ select getbit(11L, 2 + 1), getbit(11L, 3 - 1), getbit(10L + 1, 1 * 1), getbit(ca
 select getbit(11L, 63);
 select getbit(11L, -1);
 select getbit(11L, 64);
+
+-- setbit
+select setbit(0, 0);
+select setbit(0, 3);
+select setbit(7, 3);
+select setbit(15, 3);
+select setbit(7, 3, 1);
+select setbit(7, 2, 0);
+select bit_set(0, 0);
+select bit_set(0, 3);
+select bit_set(7, 3);
+select bit_set(15, 3);
+select bit_set(7, 3, 1);
+select bit_set(7, 2, 0);
+select setbit(cast(32767 AS SMALLINT), 2, 1);
+select setbit(cast(32767 AS SMALLINT), 2, 0);
+select setbit(cast(127 AS TINYINT), 2, 0);
+select setbit(cast(127 AS TINYINT), 2, 1);
+select setbit(cast(9223372036854775807 AS BIGINT), 2, 1);
+select setbit(cast(9223372036854775807 AS BIGINT), 2, 0);
+select setbit(cast(9223372036854775807 AS BIGINT), 0, 0);
+select setbit(cast(9223372036854775807 AS BIGINT), 0, 1);
+select setbit(cast(9223372036854775807 AS BIGINT), 10, 0);
+select setbit(cast(140737488355327 AS BIGINT), 65, 0);
+select setbit(cast(123 AS TINYINT), 65, 0);
+select setbit(cast(123 AS SMALLINT), 65, 0);
+select setbit(cast(123 AS INT), 65, 0);
+select setbit(c1, 1, 0) from values (1234, 1, 0) as t(c1, c2, c3);
+select setbit(c1, c2, 0) from values (1234, 1, 0) as t(c1, c2, c3);
+select setbit(c1, 1, c3) from values (1234, 1, 0) as t(c1, c2, c3);
+select setbit(c1, 1, 0) from values (1234, 1, 0), (11, 1, 0) as t(c1, c2, c3);
+select setbit(123, 1, -1);
+select setbit(123, 1, 5);
+select setbit(123, -1, 1);

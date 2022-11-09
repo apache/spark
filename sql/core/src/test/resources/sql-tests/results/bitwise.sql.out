@@ -302,3 +302,392 @@ struct<>
 -- !query output
 java.lang.IllegalArgumentException
 Invalid bit position: 64 exceeds the bit upper limit
+
+
+-- !query
+select setbit(0, 0)
+-- !query schema
+struct<setbit(0, 0, 1):int>
+-- !query output
+1
+
+
+-- !query
+select setbit(0, 3)
+-- !query schema
+struct<setbit(0, 3, 1):int>
+-- !query output
+8
+
+
+-- !query
+select setbit(7, 3)
+-- !query schema
+struct<setbit(7, 3, 1):int>
+-- !query output
+15
+
+
+-- !query
+select setbit(15, 3)
+-- !query schema
+struct<setbit(15, 3, 1):int>
+-- !query output
+15
+
+
+-- !query
+select setbit(7, 3, 1)
+-- !query schema
+struct<setbit(7, 3, 1):int>
+-- !query output
+15
+
+
+-- !query
+select setbit(7, 2, 0)
+-- !query schema
+struct<setbit(7, 2, 0):int>
+-- !query output
+3
+
+
+-- !query
+select bit_set(0, 0)
+-- !query schema
+struct<bit_set(0, 0, 1):int>
+-- !query output
+1
+
+
+-- !query
+select bit_set(0, 3)
+-- !query schema
+struct<bit_set(0, 3, 1):int>
+-- !query output
+8
+
+
+-- !query
+select bit_set(7, 3)
+-- !query schema
+struct<bit_set(7, 3, 1):int>
+-- !query output
+15
+
+
+-- !query
+select bit_set(15, 3)
+-- !query schema
+struct<bit_set(15, 3, 1):int>
+-- !query output
+15
+
+
+-- !query
+select bit_set(7, 3, 1)
+-- !query schema
+struct<bit_set(7, 3, 1):int>
+-- !query output
+15
+
+
+-- !query
+select bit_set(7, 2, 0)
+-- !query schema
+struct<bit_set(7, 2, 0):int>
+-- !query output
+3
+
+
+-- !query
+select setbit(cast(32767 AS SMALLINT), 2, 1)
+-- !query schema
+struct<setbit(CAST(32767 AS SMALLINT), 2, 1):smallint>
+-- !query output
+32767
+
+
+-- !query
+select setbit(cast(32767 AS SMALLINT), 2, 0)
+-- !query schema
+struct<setbit(CAST(32767 AS SMALLINT), 2, 0):smallint>
+-- !query output
+32763
+
+
+-- !query
+select setbit(cast(127 AS TINYINT), 2, 0)
+-- !query schema
+struct<setbit(CAST(127 AS TINYINT), 2, 0):tinyint>
+-- !query output
+123
+
+
+-- !query
+select setbit(cast(127 AS TINYINT), 2, 1)
+-- !query schema
+struct<setbit(CAST(127 AS TINYINT), 2, 1):tinyint>
+-- !query output
+127
+
+
+-- !query
+select setbit(cast(9223372036854775807 AS BIGINT), 2, 1)
+-- !query schema
+struct<setbit(CAST(9223372036854775807 AS BIGINT), 2, 1):bigint>
+-- !query output
+9223372036854775807
+
+
+-- !query
+select setbit(cast(9223372036854775807 AS BIGINT), 2, 0)
+-- !query schema
+struct<setbit(CAST(9223372036854775807 AS BIGINT), 2, 0):bigint>
+-- !query output
+9223372036854775803
+
+
+-- !query
+select setbit(cast(9223372036854775807 AS BIGINT), 0, 0)
+-- !query schema
+struct<setbit(CAST(9223372036854775807 AS BIGINT), 0, 0):bigint>
+-- !query output
+9223372036854775806
+
+
+-- !query
+select setbit(cast(9223372036854775807 AS BIGINT), 0, 1)
+-- !query schema
+struct<setbit(CAST(9223372036854775807 AS BIGINT), 0, 1):bigint>
+-- !query output
+9223372036854775807
+
+
+-- !query
+select setbit(cast(9223372036854775807 AS BIGINT), 10, 0)
+-- !query schema
+struct<setbit(CAST(9223372036854775807 AS BIGINT), 10, 0):bigint>
+-- !query output
+9223372036854774783
+
+
+-- !query
+select setbit(cast(140737488355327 AS BIGINT), 65, 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_BIT_POSITION_GREATER_THAN_MAX_SIZE",
+  "messageParameters" : {
+    "position" : "65",
+    "size" : "64",
+    "sqlExpr" : "\"setbit(CAST(140737488355327 AS BIGINT), 65, 0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "setbit(cast(140737488355327 AS BIGINT), 65, 0)"
+  } ]
+}
+
+
+-- !query
+select setbit(cast(123 AS TINYINT), 65, 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_BIT_POSITION_GREATER_THAN_MAX_SIZE",
+  "messageParameters" : {
+    "position" : "65",
+    "size" : "8",
+    "sqlExpr" : "\"setbit(CAST(123 AS TINYINT), 65, 0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "setbit(cast(123 AS TINYINT), 65, 0)"
+  } ]
+}
+
+
+-- !query
+select setbit(cast(123 AS SMALLINT), 65, 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_BIT_POSITION_GREATER_THAN_MAX_SIZE",
+  "messageParameters" : {
+    "position" : "65",
+    "size" : "16",
+    "sqlExpr" : "\"setbit(CAST(123 AS SMALLINT), 65, 0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "setbit(cast(123 AS SMALLINT), 65, 0)"
+  } ]
+}
+
+
+-- !query
+select setbit(cast(123 AS INT), 65, 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_BIT_POSITION_GREATER_THAN_MAX_SIZE",
+  "messageParameters" : {
+    "position" : "65",
+    "size" : "32",
+    "sqlExpr" : "\"setbit(CAST(123 AS INT), 65, 0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 38,
+    "fragment" : "setbit(cast(123 AS INT), 65, 0)"
+  } ]
+}
+
+
+-- !query
+select setbit(c1, 1, 0) from values (1234, 1, 0) as t(c1, c2, c3)
+-- !query schema
+struct<setbit(c1, 1, 0):int>
+-- !query output
+1232
+
+
+-- !query
+select setbit(c1, c2, 0) from values (1234, 1, 0) as t(c1, c2, c3)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "messageParameters" : {
+    "inputExpr" : "\"c2\"",
+    "inputName" : "position",
+    "inputType" : "\"INT\"",
+    "sqlExpr" : "\"setbit(c1, c2, 0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "setbit(c1, c2, 0)"
+  } ]
+}
+
+
+-- !query
+select setbit(c1, 1, c3) from values (1234, 1, 0) as t(c1, c2, c3)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "messageParameters" : {
+    "inputExpr" : "\"c3\"",
+    "inputName" : "bit",
+    "inputType" : "\"INT\"",
+    "sqlExpr" : "\"setbit(c1, 1, c3)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "setbit(c1, 1, c3)"
+  } ]
+}
+
+
+-- !query
+select setbit(c1, 1, 0) from values (1234, 1, 0), (11, 1, 0) as t(c1, c2, c3)
+-- !query schema
+struct<setbit(c1, 1, 0):int>
+-- !query output
+1232
+9
+
+
+-- !query
+select setbit(123, 1, -1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_BIT_VALUE",
+  "messageParameters" : {
+    "sqlExpr" : "\"setbit(123, 1, -1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "setbit(123, 1, -1)"
+  } ]
+}
+
+
+-- !query
+select setbit(123, 1, 5)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_BIT_VALUE",
+  "messageParameters" : {
+    "sqlExpr" : "\"setbit(123, 1, 5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "setbit(123, 1, 5)"
+  } ]
+}
+
+
+-- !query
+select setbit(123, -1, 1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_BIT_POSITION_LESS_THAN_ZERO",
+  "messageParameters" : {
+    "position" : "-1",
+    "sqlExpr" : "\"setbit(123, -1, 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "setbit(123, -1, 1)"
+  } ]
+}

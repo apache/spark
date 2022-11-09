@@ -47,6 +47,8 @@
 | org.apache.spark.sql.catalyst.expressions.BitwiseGet | getbit | SELECT getbit(11, 0) | struct<getbit(11, 0):tinyint> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseNot | ~ | SELECT ~ 0 | struct<~0:int> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseOr | &#124; | SELECT 3 &#124; 5 | struct<(3 &#124; 5):int> |
+| org.apache.spark.sql.catalyst.expressions.BitwiseSet | bit_set | SELECT  bit_set(0, 0) | struct<bit_set(0, 0, 1):int> |
+| org.apache.spark.sql.catalyst.expressions.BitwiseSet | setbit | SELECT  setbit(0, 0) | struct<setbit(0, 0, 1):int> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseXor | ^ | SELECT 3 ^ 5 | struct<(3 ^ 5):int> |
 | org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection | java_method | SELECT java_method('java.util.UUID', 'randomUUID') | struct<java_method(java.util.UUID, randomUUID):string> |
 | org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection | reflect | SELECT reflect('java.util.UUID', 'randomUUID') | struct<reflect(java.util.UUID, randomUUID):string> |

@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
 
 
@@ -236,13 +238,19 @@ case class BitwiseCount(child: Expression)
     copy(child = newChild)
 }
 
-object BitwiseGetUtil {
+object BitwiseUtil {
   def checkPosition(pos: Int, size: Int): Unit = {
     if (pos < 0) {
       throw new IllegalArgumentException(s"Invalid bit position: $pos is less than zero")
     } else if (size <= pos) {
       throw new IllegalArgumentException(s"Invalid bit position: $pos exceeds the bit upper limit")
     }
+  }
+  def getBitSize(dataType: DataType): Int = dataType match {
+    case ByteType => java.lang.Byte.SIZE
+    case ShortType => java.lang.Short.SIZE
+    case IntegerType => java.lang.Integer.SIZE
+    case LongType => java.lang.Long.SIZE
   }
 }
 
@@ -268,23 +276,18 @@ case class BitwiseGet(left: Expression, right: Expression)
 
   override def dataType: DataType = ByteType
 
-  lazy val bitSize = left.dataType match {
-    case ByteType => java.lang.Byte.SIZE
-    case ShortType => java.lang.Short.SIZE
-    case IntegerType => java.lang.Integer.SIZE
-    case LongType => java.lang.Long.SIZE
-  }
+  lazy val bitSize = BitwiseUtil.getBitSize(left.dataType)
 
   override def nullSafeEval(target: Any, pos: Any): Any = {
     val posInt = pos.asInstanceOf[Int]
-    BitwiseGetUtil.checkPosition(posInt, bitSize)
+    BitwiseUtil.checkPosition(posInt, bitSize)
     ((target.asInstanceOf[Number].longValue() >> posInt) & 1).toByte
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (target, pos) => {
       s"""
-         |org.apache.spark.sql.catalyst.expressions.BitwiseGetUtil.checkPosition($pos, $bitSize);
+         |org.apache.spark.sql.catalyst.expressions.BitwiseUtil.checkPosition($pos, $bitSize);
          |${ev.value} = (byte) ((((long) $target) >> $pos) & 1);
        """.stripMargin
     })
@@ -296,3 +299,221 @@ case class BitwiseGet(left: Expression, right: Expression)
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): BitwiseGet = copy(left = newLeft, right = newRight)
 }
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(number, pos, [, bit]) - By default, changes a bit at a specified position to a 1, if it is not already.
+     If the optional third argument is set to zero, the specified bit is set to 0 instead.
+     The positions are numbered right to left, starting at zero.The position argument cannot be negative.
+     When you use a literal input value, it is treated as an 8-bit, 16-bit, and so on value, the smallest type that is appropriate.
+     The type of the input value limits the range of the positions. Cast the input value to the appropriate type
+     if you need to ensure it is treated as a 64-bit, 32-bit, and so on value.
+  """,
+  arguments = """
+    Arguments:
+      * number - input number
+      * pos - Bit index value, it is numbered right to left, starting at zero
+      * bit - Bit value to be set at 'pos', by default 1
+  """,
+  examples = """
+    Examples:
+      > SELECT  _FUNC_(0, 0);
+       1
+      > SELECT  _FUNC_(0, 3);
+       8
+      > SELECT  _FUNC_(15, 3);
+       15
+      > SELECT  _FUNC_(7, 3);
+       15
+      > SELECT  _FUNC_(7, 3, 1);
+       15
+      > SELECT  _FUNC_(7, 2, 0);
+       3
+      > SELECT  _FUNC_(CAST (12312345 AS BIGINT), 3, 0);
+       12312337
+      > SELECT  _FUNC_(CAST (123 AS TINYINT), 1, 0);
+       121
+  """,
+  since = "3.4.0",
+  group = "bitwise_funcs")
+// scalastyle:on line.size.limit
+case class BitwiseSet(child: Expression, position: Expression, bitExpr: Expression)
+    extends TernaryExpression
+    with ImplicitCastInputTypes
+    with QueryErrorsBase
+    with NullIntolerant {
+
+  def this(input: Expression, position: Expression) = this(input, position, Literal(1))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    def createNonFoldableError(expr: Expression, message: String): DataTypeMismatch = {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> message,
+          "inputType" -> toSQLType(expr.dataType),
+          "inputExpr" -> toSQLExpr(expr)))
+    }
+
+    def createUnexpectedNullError(message: String): DataTypeMismatch = {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> message))
+    }
+
+    val defaultCheckResult = super.checkInputDataTypes()
+    if (defaultCheckResult.isSuccess) {
+      if (!position.foldable) {
+        // Only literal values are allowed
+        createNonFoldableError(position, "position")
+      } else {
+        val pos = position.eval()
+        if (pos == null) {
+          createUnexpectedNullError("position")
+        } else {
+          val posInt = pos.asInstanceOf[Int]
+          val bitSize = BitwiseUtil.getBitSize(child.dataType)
+          if (posInt < 0) {
+            // -ve bit positions
+            DataTypeMismatch(
+              errorSubClass = "INVALID_BIT_POSITION_LESS_THAN_ZERO",
+              messageParameters = Map("position" -> posInt.toString))
+          } else if (bitSize <= posInt) {
+            // bit positions greater than or equal to  maximum bit size of the input type
+            DataTypeMismatch(
+              errorSubClass = "INVALID_BIT_POSITION_GREATER_THAN_MAX_SIZE",
+              messageParameters = Map("position" -> posInt.toString, "size" -> bitSize.toString))
+          } else {
+            if (!bitExpr.foldable) {
+              // Only literal values are allowed
+              createNonFoldableError(bitExpr, "bit")
+            } else {
+              val bit = bitExpr.eval()
+              if (bit == null) {
+                createUnexpectedNullError("bit")
+              } else {
+                val bitValue = bit.asInstanceOf[Int]
+                // Only bit values are supported
+                if (bitValue < 0 || bitValue > 1) {
+                  DataTypeMismatch(errorSubClass = "INVALID_BIT_VALUE")
+                } else {
+                  defaultCheckResult
+                }
+              }
+            }
+          }
+        }
+      }
+    } else {
+      defaultCheckResult
+    }
+  }
+
+  private lazy val setBit: (Any, Any, Any) => Any = {
+    dataType match {
+      case ByteType =>
+        (
+            (
+                input: Byte,
+                pos: Int,
+                bit: Int) => {
+              val mask = 1 << pos
+              ((input & ~mask) | ((bit << pos) & mask)).toByte
+            }).asInstanceOf[(Any, Any, Any) => Any]
+      case ShortType =>
+        (
+            (
+                input: Short,
+                pos: Int,
+                bit: Int) => {
+              val mask = 1 << pos
+              ((input & ~mask) | ((bit << pos) & mask)).toShort
+            }).asInstanceOf[(Any, Any, Any) => Any]
+      case IntegerType =>
+        (
+            (
+                input: Int,
+                pos: Int,
+                bit: Int) => {
+              val mask = 1 << pos
+              ((input & ~mask) | ((bit << pos) & mask))
+            }).asInstanceOf[(Any, Any, Any) => Any]
+      case LongType =>
+        (
+            (
+                input: Long,
+                pos: Int,
+                bit: Int) => {
+              val mask: Long = 1L << pos
+              (input & ~mask) | ((bit.toLong << pos) & mask)
+            }).asInstanceOf[(Any, Any, Any) => Any]
+    }
+  }
+
+  /**
+   * Called by default [[eval]] implementation. If subclass of TernaryExpression keep the default
+   * nullability, they can override this method to save null-check code. If we need full control
+   * of evaluation process, we should override [[eval]].
+   */
+  override protected def nullSafeEval(input1: Any, pos: Any, bit: Any): Any =
+    setBit(input1, pos, bit)
+
+  /**
+   * Returns Java source code that can be compiled to evaluate this expression. The default
+   * behavior is to call the eval method of the expression. Concrete expression implementations
+   * should override this to do actual code generation.
+   *
+   * @param ctx
+   *   a [[CodegenContext]]
+   * @param ev
+   *   an [[ExprCode]] with unique terms.
+   * @return
+   *   an [[ExprCode]] containing the Java source code to generate the given expression
+   */
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(
+      ctx,
+      ev,
+      (input, posInt, bitInt) => {
+        val inputDataType = CodeGenerator.javaType(dataType)
+        val mask = ctx.freshName("mask")
+        s"""
+         |$inputDataType $mask = (($inputDataType)((($inputDataType)1) << $posInt));
+         |${ev.value} = (($inputDataType)(($input & ~$mask) |
+         | (((($inputDataType)$bitInt) << $posInt) & $mask)));
+       """.stripMargin
+      })
+  }
+
+  /**
+   * Returns the [[DataType]] of the result of evaluating this expression. It is invalid to query
+   * the dataType of an unresolved expression (i.e., when `resolved` == false).
+   */
+  override def dataType: DataType = child.dataType
+
+  override def first: Expression = child
+
+  override def second: Expression = position
+
+  override def third: Expression = bitExpr
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bit_set")
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): BitwiseSet =
+    copy(child = newFirst, position = newSecond, bitExpr = newThird)
+
+  /**
+   * Expected input types from child expressions. The i-th position in the returned seq indicates
+   * the type requirement for the i-th child.
+   *
+   * The possible values at each position are:
+   *   1. a specific data type, e.g. LongType, StringType. 2. a non-leaf abstract data type, e.g.
+   *      NumericType, IntegralType, FractionalType.
+   */
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType, IntegerType, IntegralType)
+}
+

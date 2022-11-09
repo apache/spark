@@ -233,6 +233,21 @@
           "The <inputName> value must to be a <requireType> literal of <validValues>, but got <inputValue>."
         ]
       },
+      "INVALID_BIT_POSITION_GREATER_THAN_MAX_SIZE" : {
+        "message" : [
+          "Invalid bit index position: <position> should be less than bit upper limit <size>"
+        ]
+      },
+      "INVALID_BIT_POSITION_LESS_THAN_ZERO" : {
+        "message" : [
+          "Invalid bit index position: <position> is less than zero"
+        ]
+      },
+      "INVALID_BIT_VALUE" : {
+        "message" : [
+          "Invalid bit value: Use 0 or 1"
+        ]
+      },
       "INVALID_JSON_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."

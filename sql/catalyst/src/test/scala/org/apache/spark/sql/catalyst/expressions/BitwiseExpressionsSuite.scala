@@ -173,4 +173,81 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkConsistencyBetweenInterpretedAndCodegenAllowingException(BitwiseGet, dt, IntegerType)
     }
   }
+
+  test("BitSet") {
+    val inputs = Array(
+      Literal(0) -> 1,
+      Literal(0) -> 0,
+      Literal(0) -> 8,
+      Literal(7) -> 15,
+      Literal(7) -> 7,
+      Literal(15) -> 15,
+      Literal(15) -> 7,
+      Literal.create(null, IntegerType) -> null,
+      Literal(123) -> null)
+    checkEvaluation(BitwiseSet(inputs(0)._1, Literal(0), Literal(1)), inputs(0)._2)
+    checkEvaluation(BitwiseSet(inputs(1)._1, Literal(0), Literal(0)), inputs(1)._2)
+    checkEvaluation(BitwiseSet(inputs(2)._1, Literal(3), Literal(1)), inputs(2)._2)
+    checkEvaluation(BitwiseSet(inputs(3)._1, Literal(3), Literal(1)), inputs(3)._2)
+    checkEvaluation(BitwiseSet(inputs(4)._1, Literal(3), Literal(0)), inputs(4)._2)
+    checkEvaluation(BitwiseSet(inputs(5)._1, Literal(3), Literal(1)), inputs(5)._2)
+    checkEvaluation(BitwiseSet(inputs(6)._1, Literal(3), Literal(0)), inputs(6)._2)
+    // Invalid bit position , -ve position not supported
+    assert(BitwiseSet(inputs(3)._1, Literal(-1), Literal(1)).checkInputDataTypes().isFailure)
+    // Invalid bit position , higher than datatype bit size  not supported
+    assert(BitwiseSet(inputs(3)._1, Literal(80), Literal(1)).checkInputDataTypes().isFailure)
+    // Invalid replacement bit value
+    assert(BitwiseSet(inputs(3)._1, Literal(2), Literal(5)).checkInputDataTypes().isFailure)
+    assert(BitwiseSet(inputs(3)._1, Literal(2), Literal(-1)).checkInputDataTypes().isFailure)
+    val nullLongLiteral = Literal.create(null, LongType)
+    // Null input value
+    checkEvaluation(BitwiseSet(inputs(7)._1, Literal(1), Literal(1)), inputs(7)._2)
+    // -ve position not supported
+    assert(BitwiseSet(inputs(8)._1, Literal(-1), Literal(1)).checkInputDataTypes().isFailure)
+    // Null position value not supported
+    assert(BitwiseSet(inputs(8)._1, nullLongLiteral, Literal(1)).checkInputDataTypes().isFailure)
+    // Null bit value not supported
+    assert(BitwiseSet(inputs(8)._1, Literal(3), nullLongLiteral).checkInputDataTypes().isFailure)
+    // test all 64 bit set positions in Long datatype
+    Seq(9223372036854775806L, 9223372036854775805L, 9223372036854775803L, 9223372036854775799L,
+      9223372036854775791L, 9223372036854775775L, 9223372036854775743L, 9223372036854775679L,
+      9223372036854775551L, 9223372036854775295L, 9223372036854774783L, 9223372036854773759L,
+      9223372036854771711L, 9223372036854767615L, 9223372036854759423L, 9223372036854743039L,
+      9223372036854710271L, 9223372036854644735L, 9223372036854513663L, 9223372036854251519L,
+      9223372036853727231L, 9223372036852678655L, 9223372036850581503L, 9223372036846387199L,
+      9223372036837998591L, 9223372036821221375L, 9223372036787666943L, 9223372036720558079L,
+      9223372036586340351L, 9223372036317904895L, 9223372035781033983L, 9223372034707292159L,
+      9223372032559808511L, 9223372028264841215L, 9223372019674906623L, 9223372002495037439L,
+      9223371968135299071L, 9223371899415822335L, 9223371761976868863L, 9223371487098961919L,
+      9223370937343148031L, 9223369837831520255L, 9223367638808264703L, 9223363240761753599L,
+      9223354444668731391L, 9223336852482686975L, 9223301668110598143L, 9223231299366420479L,
+      9223090561878065151L, 9222809086901354495L, 9222246136947933183L, 9221120237041090559L,
+      9218868437227405311L, 9214364837600034815L, 9205357638345293823L, 9187343239835811839L,
+      9151314442816847871L, 9079256848778919935L, 8935141660703064063L, 8646911284551352319L,
+      8070450532247928831L, 6917529027641081855L, 4611686018427387903L,
+      9223372036854775807L).zipWithIndex.foreach { case (result: Long, position: Int) =>
+      checkEvaluation(
+        BitwiseSet(Literal(9223372036854775807L), Literal(position), Literal(0)),
+        result)
+    }
+    // test all 32 bit set positions in Integer datatype
+    Seq(2147483646, 2147483645, 2147483643, 2147483639, 2147483631, 2147483615, 2147483583,
+      2147483519, 2147483391, 2147483135, 2147482623, 2147481599, 2147479551, 2147475455,
+      2147467263, 2147450879, 2147418111, 2147352575, 2147221503, 2146959359, 2146435071,
+      2145386495, 2143289343, 2139095039, 2130706431, 2113929215, 2080374783, 2013265919,
+      1879048191, 1610612735, 1073741823, 2147483647).zipWithIndex.foreach {
+      case (result: Int, position: Int) =>
+        checkEvaluation(BitwiseSet(Literal(2147483647), Literal(position), Literal(0)), result)
+    }
+    // test all 16 bit set positions in Short datatype
+    Seq(32766, 32765, 32763, 32759, 32751, 32735, 32703, 32639, 32511, 32255, 31743, 30719, 28671,
+      24575, 16383, 32767).zipWithIndex.foreach { case (result: Int, position: Int) =>
+      checkEvaluation(BitwiseSet(Literal(32767), Literal(position), Literal(0)), result)
+    }
+    // test all 8 bit set positions in Byte datatype
+    Seq(126, 125, 123, 119, 111, 95, 63, 127).zipWithIndex.foreach {
+      case (result: Int, position: Int) =>
+        checkEvaluation(BitwiseSet(Literal(127), Literal(position), Literal(0)), result)
+    }
+  }
 }

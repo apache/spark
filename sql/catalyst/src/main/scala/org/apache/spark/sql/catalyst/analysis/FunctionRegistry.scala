@@ -778,6 +778,8 @@ object FunctionRegistry {
     expression[BitXorAgg]("bit_xor"),
     expression[BitwiseGet]("bit_get"),
     expression[BitwiseGet]("getbit", true),
+    expression[BitwiseSet]("bit_set"),
+    expression[BitwiseSet]("setbit", true),
 
     // json
     expression[StructsToJson]("to_json"),
