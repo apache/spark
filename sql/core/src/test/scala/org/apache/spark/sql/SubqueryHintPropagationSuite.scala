@@ -27,7 +27,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
 
   private val expectedHint =
     Some(HintInfo(strategy = Some(BROADCAST)))
-  private val hints = Seq("BROADCAST")
+  private val hints = Seq("BROADCAST", "SHUFFLE_MERGE")
   private val hintStringified = hints.map("/*+ " + _ + " */").mkString
 
   def verifyJoinContainsHint(plan: LogicalPlan): Unit = {
@@ -57,7 +57,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
       val df = spark
         .range(30)
         .where("true")
-      val dfWithHints = hints.foldLeft(df)((newDf, hint) => newDf.hint(hint))
+      val dfWithHints = hints.foldRight(df)((hint, newDf) => newDf.hint(hint))
         .selectExpr("id as key", "id as value")
       dfWithHints.createOrReplaceTempView(tempView)
 
