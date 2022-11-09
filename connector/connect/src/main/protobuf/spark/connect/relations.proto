@@ -280,9 +280,22 @@ message RenameColumns {
   // Required. The input relation.
   Relation input = 1;
 
-  // Required.
+  // Optional.
   //
   // The number of columns of the input relation must be equal to the length
   // of this field. If this is not true, an exception will be returned.
+  //
+  // This field does not co-exist with the field `rename_columns_map`.
   repeated string column_names = 2;
+
+
+  // Optional.
+  //
+  // Renaming column names of input relation from A to B where A is the map key
+  // and B is the map value. This is a no-op if schema doesn't contain any A. It
+  // does not require that all input relation column names to present as keys.
+  // duplicated B are not allowed.
+  //
+  // This field does not co-exist with the field `column_names`.
+  map<string, string> rename_columns_map = 3;
 }

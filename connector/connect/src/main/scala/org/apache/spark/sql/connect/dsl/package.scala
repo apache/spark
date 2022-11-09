@@ -476,6 +476,17 @@ package object dsl {
               .addAllColumnNames(columnNames.asJava))
           .build()
 
+      def withColumnsRenamed(renameColumnsMap: Map[String, String]): Relation = {
+        Relation
+          .newBuilder()
+          .setRenameColumns(
+            RenameColumns
+              .newBuilder()
+              .setInput(logicalPlan)
+              .putAllRenameColumnsMap(renameColumnsMap.asJava))
+          .build()
+      }
+
       private def createSetOperation(
           left: Relation,
           right: Relation,

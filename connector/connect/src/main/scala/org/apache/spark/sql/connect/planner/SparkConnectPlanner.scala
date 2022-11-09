@@ -136,10 +136,21 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   }
 
   private def transformRenameColumns(rel: proto.RenameColumns): LogicalPlan = {
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .toDF(rel.getColumnNamesList.asScala.toSeq: _*)
-      .logicalPlan
+    if (rel.getColumnNamesCount > 0 && rel.getRenameColumnsMap.size() > 0) {
+      throw InvalidPlanInput(
+        "Should not set `column_names` and `rename_columns_map` at the same time for RenameColumns")
+    }
+    if (rel.getColumnNamesCount > 0) {
+      Dataset
+        .ofRows(session, transformRelation(rel.getInput))
+        .toDF(rel.getColumnNamesList.asScala.toSeq: _*)
+        .logicalPlan
+    } else {
+      Dataset
+        .ofRows(session, transformRelation(rel.getInput))
+        .withColumnsRenamed(rel.getRenameColumnsMap)
+        .logicalPlan
+    }
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
