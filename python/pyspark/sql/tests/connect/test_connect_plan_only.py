@@ -70,6 +70,21 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.filter.condition.unresolved_function.parts, [">"])
         self.assertEqual(len(plan.root.filter.condition.unresolved_function.arguments), 2)
 
+    def test_summary(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.filter(df.col_name > 3).summary()._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.stat_function.summary.statistics, [])
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .summary("count", "mean", "stddev", "min", "25%")
+            ._plan.to_proto(self.connect)
+        )
+        self.assertEqual(
+            plan.root.stat_function.summary.statistics,
+            ["count", "mean", "stddev", "min", "25%"],
+        )
+
     def test_limit(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         limit_plan = df.limit(10)._plan.to_proto(self.connect)

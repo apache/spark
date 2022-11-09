@@ -261,6 +261,12 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan2, sparkPlan2)
   }
 
+  test("Test summary") {
+    comparePlans(
+      connectTestRelation.summary("count", "mean", "stddev"),
+      sparkTestRelation.summary("count", "mean", "stddev"))
+  }
+
   private def createLocalRelationProtoByQualifiedAttributes(
       attrs: Seq[proto.Expression.QualifiedAttribute]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()

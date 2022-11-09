@@ -758,6 +758,11 @@
     ],
     "sqlState" : "22005"
   },
+  "NUM_COLUMNS_MISMATCH" : {
+    "message" : [
+      "<operator> can only be performed on tables with the same number of columns, but the first table has <refNumColumns> columns and the <invalidOrdinalNum> table has <invalidNumColumns> columns."
+    ]
+  },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
@@ -5031,11 +5036,6 @@
   "_LEGACY_ERROR_TEMP_2428" : {
     "message" : [
       "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2429" : {
-    "message" : [
-      "<operator> can only be performed on tables with the same number of columns, but the first table has <firstColNum> columns and the <nTab> table has <nColNum> columns."
     ]
   },
   "_LEGACY_ERROR_TEMP_2430" : {
