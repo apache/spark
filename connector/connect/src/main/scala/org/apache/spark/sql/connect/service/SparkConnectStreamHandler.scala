@@ -68,7 +68,6 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
   def processRowsAsJsonBatches(clientId: String, dataframe: DataFrame): Unit = {
     // Only process up to 10MB of data.
     val sb = new StringBuilder
-    var batchId = 0
     var rowCount = 0
     dataframe.toJSON
       .collect()
@@ -93,15 +92,12 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
           val response = proto.Response.newBuilder().setClientId(clientId)
           val batch = proto.Response.JSONBatch
             .newBuilder()
-            .setPartitionId(-1)
-            .setBatchId(batchId)
             .setData(ByteString.copyFromUtf8(sb.toString()))
             .setRowCount(rowCount)
             .build()
           response.setJsonBatch(batch)
           responseObserver.onNext(response.build())
           sb.clear()
-          batchId += 1
           sb.append(row)
           rowCount = 1
         } else {
@@ -144,19 +140,21 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
       var numSent = 0
 
       if (numPartitions > 0) {
+        type Batch = (Array[Byte], Long, Long)
+
         val batches = rows.mapPartitionsInternal { iter =>
           ArrowConverters
             .toArrowBatchIterator(iter, schema, maxRecordsPerBatch, timeZoneId)
         }
 
         val signal = new Object
-        val queue = collection.mutable.Queue.empty[(Int, Array[(Array[Byte], Long, Long)])]
+        val partitions = Array.fill[Array[Batch]](numPartitions)(null)
 
-        val processPartition = (iter: Iterator[(Array[Byte], Long, Long)]) => iter.toArray
+        val processPartition = (iter: Iterator[Batch]) => iter.toArray
 
-        val resultHandler = (partitionId: Int, partition: Array[(Array[Byte], Long, Long)]) => {
+        val resultHandler = (partitionId: Int, partition: Array[Batch]) => {
           signal.synchronized {
-            queue.enqueue((partitionId, partition))
+            partitions(partitionId) = partition
             signal.notify()
           }
           val i = 0 // Unit
@@ -164,24 +162,23 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
 
         spark.sparkContext.runJob(batches, processPartition, resultHandler)
 
-        var numHandled = 0
-        while (numHandled < numPartitions) {
-          val (partitionId, partition) = signal.synchronized {
-            while (queue.isEmpty) {
+        var currentPartitionId = 0
+        while (currentPartitionId < numPartitions) {
+          val partition = signal.synchronized {
+            while (partitions(currentPartitionId) == null) {
               signal.wait()
             }
-            queue.dequeue()
+            val partition = partitions(currentPartitionId)
+            partitions(currentPartitionId) = null
+            partition
           }
 
           // only send non-empty partitions
-          if (partition.exists(_._1.nonEmpty)) {
-            var batchId = 0
+          if (partition.nonEmpty && partition.exists(_._1.nonEmpty)) {
             partition.foreach { case (bytes, count, size) =>
               val response = proto.Response.newBuilder().setClientId(clientId)
               val batch = proto.Response.ArrowBatch
                 .newBuilder()
-                .setPartitionId(partitionId)
-                .setBatchId(batchId)
                 .setRowCount(count)
                 .setUncompressedBytes(size)
                 .setCompressedBytes(bytes.length)
@@ -189,12 +186,11 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
                 .build()
               response.setArrowBatch(batch)
               responseObserver.onNext(response.build())
-              batchId += 1
             }
             numSent += 1
           }
 
-          numHandled += 1
+          currentPartitionId += 1
         }
       }
 
@@ -204,8 +200,6 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
         val response = proto.Response.newBuilder().setClientId(clientId)
         val batch = proto.Response.ArrowBatch
           .newBuilder()
-          .setPartitionId(-1)
-          .setBatchId(0)
           .setRowCount(count)
           .setUncompressedBytes(size)
           .setCompressedBytes(bytes.length)

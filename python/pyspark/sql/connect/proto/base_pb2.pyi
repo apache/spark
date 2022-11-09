@@ -177,14 +177,10 @@ class Response(google.protobuf.message.Message):
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        PARTITION_ID_FIELD_NUMBER: builtins.int
-        BATCH_ID_FIELD_NUMBER: builtins.int
         ROW_COUNT_FIELD_NUMBER: builtins.int
         UNCOMPRESSED_BYTES_FIELD_NUMBER: builtins.int
         COMPRESSED_BYTES_FIELD_NUMBER: builtins.int
         DATA_FIELD_NUMBER: builtins.int
-        partition_id: builtins.int
-        batch_id: builtins.int
         row_count: builtins.int
         uncompressed_bytes: builtins.int
         compressed_bytes: builtins.int
@@ -192,8 +188,6 @@ class Response(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            partition_id: builtins.int = ...,
-            batch_id: builtins.int = ...,
             row_count: builtins.int = ...,
             uncompressed_bytes: builtins.int = ...,
             compressed_bytes: builtins.int = ...,
@@ -202,14 +196,10 @@ class Response(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "batch_id",
-                b"batch_id",
                 "compressed_bytes",
                 b"compressed_bytes",
                 "data",
                 b"data",
-                "partition_id",
-                b"partition_id",
                 "row_count",
                 b"row_count",
                 "uncompressed_bytes",
@@ -225,34 +215,18 @@ class Response(google.protobuf.message.Message):
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        PARTITION_ID_FIELD_NUMBER: builtins.int
-        BATCH_ID_FIELD_NUMBER: builtins.int
         ROW_COUNT_FIELD_NUMBER: builtins.int
         DATA_FIELD_NUMBER: builtins.int
-        partition_id: builtins.int
-        batch_id: builtins.int
         row_count: builtins.int
         data: builtins.bytes
         def __init__(
             self,
             *,
-            partition_id: builtins.int = ...,
-            batch_id: builtins.int = ...,
             row_count: builtins.int = ...,
             data: builtins.bytes = ...,
         ) -> None: ...
         def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "batch_id",
-                b"batch_id",
-                "data",
-                b"data",
-                "partition_id",
-                b"partition_id",
-                "row_count",
-                b"row_count",
-            ],
+            self, field_name: typing_extensions.Literal["data", b"data", "row_count", b"row_count"]
         ) -> None: ...
 
     class Metrics(google.protobuf.message.Message):

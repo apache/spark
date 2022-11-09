@@ -79,22 +79,18 @@ message Response {
 
   // Batch results of metrics.
   message ArrowBatch {
-    int32 partition_id = 1;
-    int32 batch_id = 2;
-    int64 row_count = 3;
-    int64 uncompressed_bytes = 4;
-    int64 compressed_bytes = 5;
-    bytes data = 6;
+    int64 row_count = 1;
+    int64 uncompressed_bytes = 2;
+    int64 compressed_bytes = 3;
+    bytes data = 4;
   }
 
   // Message type when the result is returned as JSON. This is essentially a bulk wrapper
   // for the JSON result of a Spark DataFrame. All rows are returned in the JSON record format
   // of `{col -> row}`.
   message JSONBatch {
-    int32 partition_id = 1;
-    int32 batch_id = 2;
-    int64 row_count = 3;
-    bytes data = 4;
+    int64 row_count = 1;
+    bytes data = 2;
   }
 
   message Metrics {
