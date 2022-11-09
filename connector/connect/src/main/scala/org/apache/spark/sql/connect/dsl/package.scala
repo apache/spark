@@ -18,9 +18,10 @@ package org.apache.spark.sql.connect
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
+
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.Expression.ExpressionString
 import org.apache.spark.connect.proto._
+import org.apache.spark.connect.proto.Expression.ExpressionString
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.connect.proto.SetOperation.SetOpType
 import org.apache.spark.sql.SaveMode
