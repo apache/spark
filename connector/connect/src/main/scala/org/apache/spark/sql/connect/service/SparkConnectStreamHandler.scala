@@ -31,7 +31,6 @@ import org.apache.spark.sql.connect.command.SparkConnectCommandPlanner
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
-import org.apache.spark.sql.internal.SQLConf
 
 class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) extends Logging {
 
