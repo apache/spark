@@ -76,6 +76,7 @@ class Relation(google.protobuf.message.Message):
     RANGE_FIELD_NUMBER: builtins.int
     SUBQUERY_ALIAS_FIELD_NUMBER: builtins.int
     REPARTITION_FIELD_NUMBER: builtins.int
+    STAT_FUNCTION_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -112,6 +113,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def repartition(self) -> global___Repartition: ...
     @property
+    def stat_function(self) -> global___StatFunction: ...
+    @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
         self,
@@ -133,6 +136,7 @@ class Relation(google.protobuf.message.Message):
         range: global___Range | None = ...,
         subquery_alias: global___SubqueryAlias | None = ...,
         repartition: global___Repartition | None = ...,
+        stat_function: global___StatFunction | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -172,6 +176,8 @@ class Relation(google.protobuf.message.Message):
             b"sort",
             "sql",
             b"sql",
+            "stat_function",
+            b"stat_function",
             "subquery_alias",
             b"subquery_alias",
             "unknown",
@@ -215,6 +221,8 @@ class Relation(google.protobuf.message.Message):
             b"sort",
             "sql",
             b"sql",
+            "stat_function",
+            b"stat_function",
             "subquery_alias",
             b"subquery_alias",
             "unknown",
@@ -240,6 +248,7 @@ class Relation(google.protobuf.message.Message):
         "range",
         "subquery_alias",
         "repartition",
+        "stat_function",
         "unknown",
     ] | None: ...
 
@@ -1065,3 +1074,62 @@ class Repartition(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Repartition = Repartition
+
+class StatFunction(google.protobuf.message.Message):
+    """StatFunction"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class Summary(google.protobuf.message.Message):
+        """StatFunctions.summary"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        STATISTICS_FIELD_NUMBER: builtins.int
+        @property
+        def statistics(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+        def __init__(
+            self,
+            *,
+            statistics: collections.abc.Iterable[builtins.str] | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["statistics", b"statistics"]
+        ) -> None: ...
+
+    INPUT_FIELD_NUMBER: builtins.int
+    SUMMARY_FIELD_NUMBER: builtins.int
+    UNKNOWN_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """Required. The input relation."""
+    @property
+    def summary(self) -> global___StatFunction.Summary: ...
+    @property
+    def unknown(self) -> global___Unknown: ...
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        summary: global___StatFunction.Summary | None = ...,
+        unknown: global___Unknown | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "function", b"function", "input", b"input", "summary", b"summary", "unknown", b"unknown"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "function", b"function", "input", b"input", "summary", b"summary", "unknown", b"unknown"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["function", b"function"]
+    ) -> typing_extensions.Literal["summary", "unknown"] | None: ...
+
+global___StatFunction = StatFunction

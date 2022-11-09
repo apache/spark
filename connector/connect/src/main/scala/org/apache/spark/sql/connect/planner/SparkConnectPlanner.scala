@@ -21,7 +21,7 @@ import scala.annotation.elidable.byName
 import scala.collection.JavaConverters._
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType,
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LogicalPlan, Sample, SubqueryAlias, Union}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -73,6 +74,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.SUBQUERY_ALIAS =>
         transformSubqueryAlias(rel.getSubqueryAlias)
       case proto.Relation.RelTypeCase.REPARTITION => transformRepartition(rel.getRepartition)
+      case proto.Relation.RelTypeCase.STAT_FUNCTION =>
+        transformStatFunction(rel.getStatFunction)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -122,6 +125,19 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       session.leafNodeDefaultParallelism
     }
     logical.Range(start, end, step, numPartitions)
+  }
+
+  private def transformStatFunction(rel: proto.StatFunction): LogicalPlan = {
+    val child = transformRelation(rel.getInput)
+
+    rel.getFunctionCase match {
+      case proto.StatFunction.FunctionCase.SUMMARY =>
+        StatFunctions
+          .summary(Dataset.ofRows(session, child), rel.getSummary.getStatisticsList.asScala.toSeq)
+          .logicalPlan
+
+      case _ => throw InvalidPlanInput(s"StatFunction ${rel.getUnknown} not supported.")
+    }
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {

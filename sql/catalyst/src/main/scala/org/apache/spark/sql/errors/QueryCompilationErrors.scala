@@ -1388,7 +1388,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def dataPathNotExistError(path: String): Throwable = {
     new AnalysisException(
-      errorClass = "PATH_NOT_FOUND",
+      errorClass = "_LEGACY_ERROR_TEMP_1130",
       messageParameters = Map("path" -> path))
   }
 
@@ -3325,7 +3325,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def descrioptorParseError(descFilePath: String, cause: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR",
-      messageParameters = Map.empty("descFilePath" -> descFilePath),
+      messageParameters = Map("descFilePath" -> descFilePath),
       cause = Option(cause.getCause))
   }
 
@@ -3339,7 +3339,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def failedParsingDescriptorError(descFilePath: String, cause: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR",
-      messageParameters = Map.empty("descFilePath" -> descFilePath),
+      messageParameters = Map("descFilePath" -> descFilePath),
       cause = Option(cause.getCause))
   }
 

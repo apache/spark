@@ -40,13 +40,3 @@ case class Node private[spark](
     metrics: Seq[Metric])
 
 case class Metric private[spark] (name: String, value: String)
-
-class SQLDiagnosticData private[spark] (
-    val id: Long,
-    val physicalPlan: String,
-    val submissionTime: Date,
-    val completionTime: Option[Date],
-    val errorMessage: Option[String],
-    val planChanges: Seq[AdaptivePlanChange])
-
-case class AdaptivePlanChange(updateTime: Date, physicalPlan: String)

@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WINDOW_EXPRESSION
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -38,7 +38,7 @@ import org.apache.spark.util.Utils
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
-trait CheckAnalysis extends PredicateHelper with LookupCatalog {
+trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsBase {
 
   protected def isView(nameParts: Seq[String]): Boolean
 
@@ -541,12 +541,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               // Check the number of columns
               if (child.output.length != ref.length) {
                 e.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2429",
+                  errorClass = "NUM_COLUMNS_MISMATCH",
                   messageParameters = Map(
-                    "operator" -> operator.nodeName,
-                    "firstColNum" -> ref.length.toString,
-                    "nTab" -> ordinalNumber(ti + 1),
-                    "nColNum" -> child.output.length.toString))
+                    "operator" -> toSQLStmt(operator.nodeName),
+                    "refNumColumns" -> ref.length.toString,
+                    "invalidOrdinalNum" -> ordinalNumber(ti + 1),
+                    "invalidNumColumns" -> child.output.length.toString))
               }
 
               val dataTypesAreCompatibleFn = getDataTypesAreCompatibleFn(operator)
