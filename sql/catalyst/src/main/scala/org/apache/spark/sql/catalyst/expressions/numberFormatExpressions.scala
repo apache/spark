@@ -31,21 +31,27 @@ import org.apache.spark.unsafe.types.UTF8String
 abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Boolean)
   extends BinaryExpression with Serializable with ImplicitCastInputTypes with NullIntolerant {
 
-  private lazy val (isNullFormatCode, numberFormatter) = {
+  private lazy val numberFormatter = {
     val value = right.eval()
     if (value != null) {
-      (false, new ToNumberParser(value.toString.toUpperCase(Locale.ROOT), errorOnFail))
+      new ToNumberParser(value.toString.toUpperCase(Locale.ROOT), errorOnFail)
     } else {
-      (true, new ToNumberParser("999", true))
+      null
     }
   }
 
-  override def dataType: DataType = numberFormatter.parsedDecimalType
+  override def dataType: DataType = if (numberFormatter != null) {
+    numberFormatter.parsedDecimalType
+  } else {
+    DecimalType.USER_DEFAULT
+  }
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
-      if (right.foldable) {
+      if (numberFormatter == null) {
+        TypeCheckResult.TypeCheckSuccess
+      } else if (right.foldable) {
         numberFormatter.checkInputDataTypes()
       } else {
         DataTypeMismatch(
@@ -74,7 +80,7 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
     ev.copy(code =
       code"""
          |${eval.code}
-         |boolean ${ev.isNull} = ${eval.isNull} || $isNullFormatCode;
+         |boolean ${ev.isNull} = ${eval.isNull} || ($builder == null);
          |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (!${ev.isNull}) {
          |  ${ev.value} = $builder.parse(${eval.value});
