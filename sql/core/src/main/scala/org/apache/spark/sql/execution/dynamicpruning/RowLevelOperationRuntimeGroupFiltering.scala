@@ -64,7 +64,6 @@ object RowLevelOperationRuntimeGroupFiltering extends Rule[LogicalPlan] with Pre
           Filter(dynamicPruningCond, r)
       }
 
-      // optimize subqueries to rewrite them as joins and trigger job planning
       replaceData.copy(query = newQuery)
   }
 
