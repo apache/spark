@@ -156,6 +156,73 @@ def _has_tensor_cols(data: pd.Series | pd.DataFrame | Tuple[pd.Series]) -> bool:
         return any(_is_tensor_col(elem) for elem in data)
 
 
+def _validate_and_transform_multiple_inputs(
+    batch: pd.DataFrame, input_shapes: List[List[int] | None], num_input_cols: int
+) -> List[np.ndarray]:
+    multi_inputs = [batch[col].to_numpy() for col in batch.columns]
+    if input_shapes:
+        if len(input_shapes) == num_input_cols:
+            multi_inputs = [
+                np.vstack(v).reshape([-1] + input_shapes[i])  # type: ignore
+                if input_shapes[i]
+                else v
+                for i, v in enumerate(multi_inputs)
+            ]
+            if not all([len(x) == len(batch) for x in multi_inputs]):
+                raise ValueError("Input data does not match expected shape.")
+        else:
+            raise ValueError("input_tensor_shapes must match columns")
+
+    return multi_inputs
+
+
+def _validate_and_transform_single_input(
+    batch: pd.DataFrame,
+    input_shapes: List[List[int] | None],
+    has_tensors: bool,
+    has_tuple: bool,
+) -> np.ndarray:
+    # multiple input columns for single expected input
+    if has_tensors:
+        # tensor columns
+        if len(batch.columns) == 1:
+            # one tensor column and one expected input, vstack rows
+            single_input = np.vstack(batch.iloc[:, 0])
+        else:
+            raise ValueError(
+                "Multiple input columns found, but model expected a single "
+                "input, use `struct` or `array` to combine columns into tensors."
+            )
+    else:
+        # scalar columns
+        if len(batch.columns) == 1:
+            # single scalar column, remove extra dim
+            single_input = np.squeeze(batch.to_numpy())
+            if input_shapes and input_shapes[0] not in [None, [], [1]]:
+                raise ValueError("Invalid input_tensor_shape for scalar column.")
+        elif not has_tuple:
+            # columns grouped via struct/array, convert to single tensor
+            single_input = batch.to_numpy()
+            if input_shapes and input_shapes[0] != [len(batch.columns)]:
+                raise ValueError("Input data does not match expected shape.")
+        else:
+            raise ValueError(
+                "Multiple input columns found, but model expected a single "
+                "input, use `struct` or `array` to combine columns into tensors."
+            )
+
+    # if input_tensor_shapes provided, try to reshape input
+    if input_shapes:
+        if len(input_shapes) == 1:
+            single_input = single_input.reshape([-1] + input_shapes[0])  # type: ignore
+            if len(single_input) != len(batch):
+                raise ValueError("Input data does not match expected shape.")
+        else:
+            raise ValueError("Multiple input_tensor_shapes found, but model expected one input")
+
+    return single_input
+
+
 def _validate_and_transform_prediction_result(
     preds: np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, Any]],
     num_input_rows: int,
@@ -177,6 +244,11 @@ def _validate_and_transform_prediction_result(
                         raise ValueError(
                             "Prediction results for ArrayType must be two-dimensional."
                         )
+                else:
+                    if len(preds[field.name].shape) != 1:
+                        raise ValueError(
+                            "Prediction results for scalar types must be one-dimensional."
+                        )
                 if len(preds[field.name]) != num_input_rows:
                     raise ValueError("Prediction results must have same length as input data")
 
@@ -185,6 +257,18 @@ def _validate_and_transform_prediction_result(
             predNames = list(preds[0].keys())
             if len(preds) != num_input_rows:
                 raise ValueError("Prediction results must have same length as input data.")
+            for field in struct_rtype.fields:
+                if isinstance(field.dataType, ArrayType):
+                    if len(preds[0][field.name].shape) != 2:
+                        raise ValueError(
+                            "Prediction results for ArrayType must be two-dimensional."
+                        )
+                else:
+                    if (
+                        isinstance(preds[0][field.name], np.ndarray)
+                        and preds[0][field.name].shape != ()
+                    ):
+                        raise ValueError("Invalid shape for scalar prediction result.")
         else:
             raise ValueError(
                 "Prediction results for StructType must be a dictionary or "
@@ -210,8 +294,14 @@ def _validate_and_transform_prediction_result(
 
         return pd.Series(list(preds))
     else:  # scalar
-        if len(preds) != num_input_rows:
+        preds_array: np.ndarray = preds  # type: ignore
+        if len(preds_array) != num_input_rows:
             raise ValueError("Prediction results must have same length as input data.")
+        if not (
+            (len(preds_array.shape) == 2 and preds_array.shape[1] == 1)
+            or len(preds_array.shape) == 1
+        ):
+            raise ValueError("Invalid shape for scalar prediction result.")
 
         return pd.Series(np.squeeze(preds))  # type: ignore
 
@@ -525,11 +615,16 @@ def predict_batch_udf(
     predict_batch_fn : Callable[[],
         Callable[..., np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, np.dtype]] ]
         Function which is responsible for loading a model and returning a `predict` function which
-        takes one or more numpy arrays as input and returns either a numpy array (for a single
-        output), a dictionary of named numpy arrays (for multiple outputs), or a row-oriented list
-        of dictionaries (for multiple outputs).
+        takes one or more numpy arrays as input and returns one of the following:
+        - a numpy array (for a single output)
+        - a dictionary of named numpy arrays (for multiple outputs)
+        - a row-oriented list of dictionaries (for multiple outputs).
+        For a dictionary of named numpy arrays, the arrays can only be one or two dimensional, since
+        higher dimension arrays are not supported.  For a row-oriented list of dictionaries, each
+        element in the dictionary must be either a scalar or one-dimensional array.
     return_type : :class:`pspark.sql.types.DataType` or str.
         Spark SQL datatype for the expected output:
+        - Scalar (e.g. IntegerType, FloatType) --> 1-dim numpy array.
         - ArrayType --> 2-dim numpy array.
         - StructType --> dict with keys matching struct fields.
         - StructType --> list of dict with keys matching struct fields, for models like the
@@ -593,73 +688,24 @@ def predict_batch_udf(
                 num_input_rows = len(batch)
                 num_input_cols = len(batch.columns)
                 if num_input_cols == num_expected_cols and num_expected_cols > 1:
-                    # input column per expected input, convert each column into param
-                    multi_inputs = [batch[col].to_numpy() for col in batch.columns]
-                    if input_shapes:
-                        if len(input_shapes) == num_input_cols:
-                            multi_inputs = [
-                                np.vstack(v).reshape([-1] + input_shapes[i])  # type: ignore
-                                if input_shapes[i]
-                                else v
-                                for i, v in enumerate(multi_inputs)
-                            ]
-                            if not all([len(x) == len(batch) for x in multi_inputs]):
-                                raise ValueError("Input data does not match expected shape.")
-                        else:
-                            raise ValueError("input_tensor_shapes must match columns")
-
-                    # run model prediction function on transformed (numpy) inputs
+                    # input column per expected input for multiple inputs
+                    multi_inputs = _validate_and_transform_multiple_inputs(
+                        batch, input_shapes, num_input_cols
+                    )
+                    # run model prediction function on multiple (numpy) inputs
                     preds = predict_fn(*multi_inputs)
                 elif num_expected_cols == 1:
-                    # multiple input columns for single expected input
-                    if has_tensors:
-                        # tensor columns
-                        if len(batch.columns) == 1:
-                            # one tensor column and one expected input, vstack rows
-                            single_input = np.vstack(batch.iloc[:, 0])
-                        else:
-                            raise ValueError(
-                                "Multiple input columns found, but model expected a single "
-                                "input, use `struct` or `array` to combine columns into tensors."
-                            )
-                    else:
-                        # scalar columns
-                        if len(batch.columns) == 1:
-                            # single scalar column, remove extra dim
-                            single_input = np.squeeze(batch.to_numpy())
-                            if input_shapes and input_shapes[0] not in [None, [], [1]]:
-                                raise ValueError("Invalid input_tensor_shape for scalar column.")
-                        elif not has_tuple:
-                            # columns grouped via struct/array, convert to single tensor
-                            single_input = batch.to_numpy()
-                            if input_shapes and input_shapes[0] != [len(batch.columns)]:
-                                raise ValueError("Input data does not match expected shape.")
-                        else:
-                            raise ValueError(
-                                "Multiple input columns found, but model expected a single "
-                                "input, use `struct` or `array` to combine columns into tensors."
-                            )
-
-                    # if input_tensor_shapes provided, try to reshape input
-                    if input_shapes:
-                        if len(input_shapes) == 1:
-                            single_input = single_input.reshape(
-                                [-1] + input_shapes[0]  # type: ignore
-                            )
-                            if len(single_input) != len(batch):
-                                raise ValueError("Input data does not match expected shape.")
-                        else:
-                            raise ValueError(
-                                "Multiple input_tensor_shapes found, but model expected one input"
-                            )
-
-                    # run model prediction function on transformed (numpy) inputs
+                    # one or more input columns for single expected input
+                    single_input = _validate_and_transform_single_input(
+                        batch, input_shapes, has_tensors, has_tuple
+                    )
+                    # run model prediction function on single (numpy) inputs
                     preds = predict_fn(single_input)
                 else:
                     msg = "Model expected {} inputs, but received {} columns"
                     raise ValueError(msg.format(num_expected_cols, num_input_cols))
 
-                # return predictions to Spark
+                # return transformed predictions to Spark
                 yield _validate_and_transform_prediction_result(
                     preds, num_input_rows, return_type
                 )  # type: ignore
