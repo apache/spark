@@ -58,8 +58,6 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
   }
 
   def processRows(clientId: String, rows: DataFrame): Unit = {
-    val timeZoneId = SQLConf.get.sessionLocalTimeZone
-
     // Only process up to 10MB of data.
     val sb = new StringBuilder
     var rowCount = 0

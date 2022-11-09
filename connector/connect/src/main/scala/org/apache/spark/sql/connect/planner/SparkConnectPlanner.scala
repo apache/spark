@@ -49,12 +49,6 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   // The root of the query plan is a relation and we apply the transformations to it.
   private def transformRelation(rel: proto.Relation): LogicalPlan = {
-    val common = if (rel.hasCommon) {
-      Some(rel.getCommon)
-    } else {
-      None
-    }
-
     rel.getRelTypeCase match {
       case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead)
       case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject)
