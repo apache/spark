@@ -2249,7 +2249,7 @@ class DatasetLargeResultCollectingSuite extends QueryTest
     spark.udf.register("genData", genData.asNondeterministic())
     // create data of size >2GB in single partition, which exceeds the byte array limit
     // random gen to make sure it's poorly compressed
-    val df = spark.range(0, 2100, 1, 1).selectExpr("id", s"genData(id, 1000000) as data")
+    val df = spark.range(0, 10, 1, 1).selectExpr("id", s"genData(id, 1000000) as data")
     val res = df.queryExecution.executedPlan.executeCollect()
   }
 }
