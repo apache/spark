@@ -20,6 +20,7 @@ User-defined function related classes and functions
 import functools
 import inspect
 import sys
+import warnings
 from typing import Callable, Any, TYPE_CHECKING, Optional, cast, Union
 
 from py4j.java_gateway import JavaObject
@@ -241,6 +242,20 @@ class UserDefinedFunction:
             profiler_enabled = sc._conf.get("spark.python.profile", "false") == "true"
             memory_profiler_enabled = sc._conf.get("spark.python.profile.memory", "false") == "true"
 
+            # Disable profiling Pandas UDFs with iterators as input/output.
+            if profiler_enabled or memory_profiler_enabled:
+                if self.evalType in [
+                    PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+                    PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+                    PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+                ]:
+                    profiler_enabled = memory_profiler_enabled = False
+                    warnings.warn(
+                        "Profiling UDFs with iterators input/output is not supported.",
+                        UserWarning,
+                    )
+
+            # Disallow enabling two profilers at the same time.
             if profiler_enabled and memory_profiler_enabled:
                 # When both profilers are enabled, they interfere with each other,
                 # that makes the result profile misleading.
