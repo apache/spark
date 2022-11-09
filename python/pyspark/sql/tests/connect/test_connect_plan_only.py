@@ -215,6 +215,23 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         plan3 = df1.unionByName(df2, True)._plan.to_proto(self.connect)
         self.assertTrue(plan3.root.set_op.by_name)
 
+    def test_coalesce_and_repartition(self):
+        # SPARK-41026: test Coalesce and Repartition API in Python client.
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan1 = df.coalesce(10)._plan.to_proto(self.connect)
+        self.assertEqual(10, plan1.root.repartition.num_partitions)
+        self.assertFalse(plan1.root.repartition.shuffle)
+        plan2 = df.repartition(20)._plan.to_proto(self.connect)
+        self.assertTrue(plan2.root.repartition.shuffle)
+
+        with self.assertRaises(ValueError) as context:
+            df.coalesce(-1)._plan.to_proto(self.connect)
+        self.assertTrue("numPartitions must be positive" in str(context.exception))
+
+        with self.assertRaises(ValueError) as context:
+            df.repartition(-1)._plan.to_proto(self.connect)
+        self.assertTrue("numPartitions must be positive" in str(context.exception))
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_plan_only import *  # noqa: F401

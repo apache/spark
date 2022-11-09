@@ -652,6 +652,40 @@ class UnionAll(LogicalPlan):
         """
 
 
+class Repartition(LogicalPlan):
+    """Repartition Relation into a different number of partitions."""
+
+    def __init__(self, child: Optional["LogicalPlan"], num_partitions: int, shuffle: bool) -> None:
+        super().__init__(child)
+        self._num_partitions = num_partitions
+        self._shuffle = shuffle
+
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+        rel = proto.Relation()
+        if self._child is not None:
+            rel.repartition.input.CopyFrom(self._child.plan(session))
+        rel.repartition.shuffle = self._shuffle
+        rel.repartition.num_partitions = self._num_partitions
+        return rel
+
+    def print(self, indent: int = 0) -> str:
+        plan_name = "repartition" if self._shuffle else "coalesce"
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return f"{' ' * indent}<{plan_name} num_partitions={self._num_partitions}>\n{c_buf}"
+
+    def _repr_html_(self) -> str:
+        plan_name = "repartition" if self._shuffle else "coalesce"
+        return f"""
+        <ul>
+           <li>
+              <b>{plan_name}</b><br />
+              Child: {self._child_repr_()}
+              num_partitions: {self._num_partitions}
+           </li>
+        </ul>
+        """
+
+
 class SubqueryAlias(LogicalPlan):
     """Alias for a relation."""
 
