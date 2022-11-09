@@ -69,6 +69,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.REPARTITION => transformRepartition(rel.getRepartition)
       case proto.Relation.RelTypeCase.STAT_FUNCTION =>
         transformStatFunction(rel.getStatFunction)
+      case proto.Relation.RelTypeCase.RENAME_COLUMNS =>
+        transformRenameColumns(rel.getRenameColumns)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -131,6 +133,13 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
       case _ => throw InvalidPlanInput(s"StatFunction ${rel.getUnknown} not supported.")
     }
+  }
+
+  private def transformRenameColumns(rel: proto.RenameColumns): LogicalPlan = {
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .toDF(rel.getColumnNamesList.asScala.toSeq: _*)
+      .logicalPlan
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {

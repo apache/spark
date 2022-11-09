@@ -76,6 +76,7 @@ class Relation(google.protobuf.message.Message):
     RANGE_FIELD_NUMBER: builtins.int
     SUBQUERY_ALIAS_FIELD_NUMBER: builtins.int
     REPARTITION_FIELD_NUMBER: builtins.int
+    RENAME_COLUMNS_FIELD_NUMBER: builtins.int
     STAT_FUNCTION_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
@@ -113,6 +114,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def repartition(self) -> global___Repartition: ...
     @property
+    def rename_columns(self) -> global___RenameColumns: ...
+    @property
     def stat_function(self) -> global___StatFunction: ...
     @property
     def unknown(self) -> global___Unknown: ...
@@ -136,6 +139,7 @@ class Relation(google.protobuf.message.Message):
         range: global___Range | None = ...,
         subquery_alias: global___SubqueryAlias | None = ...,
         repartition: global___Repartition | None = ...,
+        rename_columns: global___RenameColumns | None = ...,
         stat_function: global___StatFunction | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
@@ -166,6 +170,8 @@ class Relation(google.protobuf.message.Message):
             b"read",
             "rel_type",
             b"rel_type",
+            "rename_columns",
+            b"rename_columns",
             "repartition",
             b"repartition",
             "sample",
@@ -211,6 +217,8 @@ class Relation(google.protobuf.message.Message):
             b"read",
             "rel_type",
             b"rel_type",
+            "rename_columns",
+            b"rename_columns",
             "repartition",
             b"repartition",
             "sample",
@@ -248,6 +256,7 @@ class Relation(google.protobuf.message.Message):
         "range",
         "subquery_alias",
         "repartition",
+        "rename_columns",
         "stat_function",
         "unknown",
     ] | None: ...
@@ -1133,3 +1142,38 @@ class StatFunction(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["summary", "unknown"] | None: ...
 
 global___StatFunction = StatFunction
+
+class RenameColumns(google.protobuf.message.Message):
+    """Rename columns on the input relation."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLUMN_NAMES_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """Required. The input relation."""
+    @property
+    def column_names(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """Required.
+
+        The number of columns of the input relation must be equal to the length
+        of this field. If this is not true, an exception will be returned.
+        """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        column_names: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal["column_names", b"column_names", "input", b"input"],
+    ) -> None: ...
+
+global___RenameColumns = RenameColumns
