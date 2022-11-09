@@ -32,7 +32,7 @@ from pyspark.sql.functions import pandas_udf, udf
 from pyspark.testing.utils import PySparkTestCase
 
 try:
-    import memory_profiler  # noqa: F401
+    import memory_profiler  # type: ignore[import] # noqa: F401
 
     has_memory_profiler = True
 except Exception:
@@ -117,7 +117,7 @@ class MemoryProfilerTests(PySparkTestCase):
 
     def exec_pandas_udf_ser_to_scalar(self):
         @pandas_udf("int")
-        def ser_to_scalar(ser: pd.Series) -> int:
+        def ser_to_scalar(ser: pd.Series) -> float:
             return ser.median()
 
         self.spark.range(10).select(ser_to_scalar("id")).collect()
