@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.{InnerLike, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, LogicalPlan}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -161,6 +162,31 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
          |testData s2 WHERE s1.key = s2.key AND s1.value = s2.value)
          |""".stripMargin)
     verifyJoinContainsHint(queryDf.queryExecution.optimizedPlan)
+  }
+
+  test("Scalar subquery with non-equality predicates") {
+    val queryDf = sql(
+      s"""SELECT * FROM testData s1 WHERE key =
+         |(SELECT $hintStringified MAX(key) FROM
+         |testData s2 WHERE s1.key > s2.key AND s1.value > s2.value)
+         |""".stripMargin)
+    val condContainsMax = (condition: Expression) => {
+      condition.find {
+        case e: AttributeReference if e.name.contains("max") =>
+          true
+        case _ => false
+      }.isDefined
+    }
+    val optimizedPlan = queryDf.queryExecution.optimizedPlan
+    val expectedJoinHint = JoinHint(leftHint = None, rightHint = expectedHint)
+    var matchedJoin = false
+    optimizedPlan.transformUp {
+      case j: Join if j.condition.nonEmpty && condContainsMax(j.condition.get) =>
+        assert(expectedJoinHint == j.hint)
+        matchedJoin = true
+        j
+    }
+    assert(matchedJoin)
   }
 
   test("Scalar subquery nested subquery") {
