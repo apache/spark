@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto._
+import org.apache.spark.connect.proto.Expression.ExpressionString
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.connect.proto.SetOperation.SetOpType
 import org.apache.spark.sql.SaveMode
@@ -225,6 +226,14 @@ package object dsl {
               .build())
           .build()
       }
+
+      def selectExpr(exprs: String*): Relation =
+        select(exprs.map { expr =>
+          Expression
+            .newBuilder()
+            .setExpressionString(ExpressionString.newBuilder().setExpression(expr))
+            .build()
+        }: _*)
 
       def limit(limit: Int): Relation = {
         Relation

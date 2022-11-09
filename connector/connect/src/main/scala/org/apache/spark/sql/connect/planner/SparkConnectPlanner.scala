@@ -235,6 +235,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION =>
         transformScalarFunction(exp.getUnresolvedFunction)
       case proto.Expression.ExprTypeCase.ALIAS => transformAlias(exp.getAlias)
+      case proto.Expression.ExprTypeCase.EXPRESSION_STRING =>
+        transformExpressionString(exp.getExpressionString)
       case _ => throw InvalidPlanInput()
     }
   }
@@ -310,6 +312,10 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
     Alias(transformExpression(alias.getExpr), alias.getName)()
+  }
+
+  private def transformExpressionString(expr: proto.Expression.ExpressionString): Expression = {
+    session.sessionState.sqlParser.parseExpression(expr.getExpression)
   }
 
   private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {

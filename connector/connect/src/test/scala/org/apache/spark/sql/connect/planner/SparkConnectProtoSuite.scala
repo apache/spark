@@ -63,6 +63,12 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan, sparkPlan)
   }
 
+  test("Test select expression in strings") {
+    val connectPlan = connectTestRelation.selectExpr("abs(id)", "name")
+    val sparkPlan = sparkTestRelation.selectExpr("abs(id)", "name")
+    comparePlans(connectPlan, sparkPlan)
+  }
+
   test("UnresolvedFunction resolution.") {
     assertThrows[IllegalArgumentException] {
       transform(connectTestRelation.select(callFunction("default.hex", Seq("id".protoAttr))))
