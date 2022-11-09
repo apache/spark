@@ -332,7 +332,7 @@ class DataFrame(object):
         This is equivalent to `EXCEPT ALL` in SQL.
         As standard in SQL, this function resolves columns by position (not by name).
 
-        .. versionadded:: 2.4.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -381,7 +381,7 @@ class DataFrame(object):
         This is equivalent to `INTERSECT ALL` in SQL. As standard in SQL, this function
         resolves columns by position (not by name).
 
-        .. versionadded:: 2.4.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
