@@ -2972,11 +2972,6 @@
       "<name> is not a view."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1279" : {
-    "message" : [
-      "View <name> already exists. If you want to update the view definition, please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1280" : {
     "message" : [
       "It is not allowed to create a persisted view from the Dataset API."

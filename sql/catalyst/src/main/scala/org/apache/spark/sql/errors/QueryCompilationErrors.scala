@@ -2667,8 +2667,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def viewAlreadyExistsError(name: TableIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1279",
-      messageParameters = Map("name" -> name.toString))
+      errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+      messageParameters = Map("relationName" -> name.toString))
   }
 
   def createPersistedViewFromDatasetAPINotAllowedError(): Throwable = {
