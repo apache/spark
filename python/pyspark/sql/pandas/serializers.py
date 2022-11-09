@@ -148,10 +148,14 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
         """
         import pyarrow as pa
 
+        print(f'dumping iterator {iterator}')
+
         def wrap_and_init_stream():
             should_write_start_length = True
-            for batch, _ in iterator:
-                assert isinstance(batch, pa.RecordBatch)
+            for item in iterator:
+                print(f'element in iterator is {item}')
+                batch, _ = item
+                assert isinstance(batch, pa.RecordBatch), type(batch)
 
                 # Wrap the root struct
                 struct = pa.StructArray.from_arrays(
@@ -175,7 +179,13 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
     """
 
     def load_stream(self, stream):
-        return super(ArrowStreamUDFSerializer, self).load_stream(stream)
+        for iterator in super(ArrowStreamGroupUDFSerializer, self).load_stream(stream):
+            for item in iterator:
+                yield item
+
+    def dump_stream(self, iterator, stream):
+        for iterator2 in iterator:
+            super(ArrowStreamGroupUDFSerializer, self).dump_stream(iterator2, stream)
 
 
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):

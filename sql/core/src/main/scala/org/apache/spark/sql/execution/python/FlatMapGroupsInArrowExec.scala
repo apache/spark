@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.python
 
+import scala.collection.JavaConverters._
+
+import org.apache.spark.{ContextAwareIterator, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -24,8 +27,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.python.PandasGroupUtils._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 
 /**
@@ -78,22 +82,44 @@ case class FlatMapGroupsInArrowExec(
     val (dedupAttributes, argOffsets) = resolveArgOffsets(child.output, groupingAttributes)
 
     // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
-    inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
+    inputRDD.mapPartitionsInternal { iter =>
+      if (iter.isEmpty) iter else {
 
-      val data = groupAndProject(iter, groupingAttributes, child.output, dedupAttributes)
-        .map { case (_, x) => x }
+        val data = groupAndProject(iter, groupingAttributes, child.output, dedupAttributes)
+          .map { case (_, x) => x }
 
-      val runner = new ArrowPythonRunner(
-        chainedFunc,
-        PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
-        Array(argOffsets),
-        StructType.fromAttributes(dedupAttributes),
-        sessionLocalTimeZone,
-        pythonRunnerConf,
-        pythonMetrics)
+        val sessionLocalTimeZone = conf.sessionLocalTimeZone
+        val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
-      executePython(data, output, runner)
-    }}
+        val context = TaskContext.get()
+        val contextAwareIterator = new ContextAwareIterator(context, data)
+
+        // Here we wrap it via another row so that Python sides understand it
+        // as a DataFrame.
+        val wrappedIter = contextAwareIterator.map(_.map(InternalRow(_)))
+
+        val columnarBatchIter = new ArrowPythonRunner(
+          chainedFunc,
+          PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+          Array(argOffsets),
+          StructType(StructField("struct", StructType.fromAttributes(dedupAttributes)) :: Nil),
+          sessionLocalTimeZone,
+          pythonRunnerConf,
+          pythonMetrics).compute(wrappedIter, context.partitionId(), context)
+
+        val unsafeProj = UnsafeProjection.create(output, output)
+
+        columnarBatchIter.flatMap { batch =>
+          // Scalar Iterator UDF returns a StructType column in ColumnarBatch, select
+          // the children here
+          val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
+          val outputVectors = output.indices.map(structVector.getChild)
+          val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
+          flattenedBatch.setNumRows(batch.numRows())
+          flattenedBatch.rowIterator.asScala
+        }.map(unsafeProj)
+      }
+    }
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): FlatMapGroupsInArrowExec =

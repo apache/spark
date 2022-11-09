@@ -173,7 +173,7 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.sc = SparkContext("local[4]", cls.__name__, conf=cls.conf())
+        cls.sc = SparkContext("local[1]", cls.__name__, conf=cls.conf())
 
     @classmethod
     def tearDownClass(cls):

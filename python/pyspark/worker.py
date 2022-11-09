@@ -50,6 +50,7 @@ from pyspark.sql.pandas.serializers import (
     CogroupArrowUDFSerializer,
     CogroupPandasUDFSerializer,
     ArrowStreamUDFSerializer,
+    ArrowStreamGroupUDFSerializer,
     ArrowStreamSerializer,
     ApplyInPandasWithStateSerializer,
 )
@@ -406,7 +407,7 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec):
 
         return result
 
-    return lambda k, v: wrapped(k, v)
+    return lambda k, v: [(wrapped(k, v), to_arrow_type(return_type))]
 
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
@@ -1310,7 +1311,7 @@ def read_udfs(pickleSer, infile, eval_type):
         elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
             ser = ArrowStreamUDFSerializer()
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
-            ser = ArrowStreamUDFSerializer()  # ArrowStreamSerializer()
+            ser = ArrowStreamGroupUDFSerializer()  # ArrowStreamSerializer()
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
@@ -1475,7 +1476,7 @@ def read_udfs(pickleSer, infile, eval_type):
             keys = batch_from_offset(batch, parsed_offsets[0][0])
             vals = batch_from_offset(batch, parsed_offsets[0][1])
             res = f(keys, vals)
-            print(f'mapper({batch.to_pandas()}) returns {res.num_rows} rows: {res.to_pandas()}')
+            print(f'mapper({batch}) returns {res}')
             return res
 
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
@@ -1615,6 +1616,9 @@ def main(infile, outfile):
         taskContext._taskAttemptId = read_long(infile)
         taskContext._cpus = read_int(infile)
         taskContext._resources = {}
+        if taskContext._partitionId == 0:
+            print(f'>>>>>> partition {taskContext._partitionId} has pid {os.getpid()}')
+            time.sleep(10)
         for r in range(read_int(infile)):
             key = utf8_deserializer.loads(infile)
             name = utf8_deserializer.loads(infile)
