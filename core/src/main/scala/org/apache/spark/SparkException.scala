@@ -68,6 +68,17 @@ class SparkException(
 }
 
 object SparkException {
+  def internalError(msg: String, context: Array[QueryContext]): SparkException = {
+    val errorClass = "INTERNAL_ERROR"
+    val messageParameters = Map("message" -> msg)
+    new SparkException(
+      message = SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      errorClass = Some(errorClass),
+      messageParameters = messageParameters,
+      cause = null,
+      context = context)
+  }
+
   def internalError(msg: String): SparkException = {
     new SparkException(
       errorClass = "INTERNAL_ERROR",
