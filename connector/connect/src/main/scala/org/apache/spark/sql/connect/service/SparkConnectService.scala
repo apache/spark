@@ -106,7 +106,7 @@ class SparkConnectService(debug: Boolean)
   def handleAnalyzePlanRequest(
       relation: proto.Relation,
       session: SparkSession): proto.AnalyzeResponse.Builder = {
-    val logicalPlan = new SparkConnectPlanner(relation, session).transform()
+    val logicalPlan = new SparkConnectPlanner(session).transformRelation(relation)
 
     val ds = Dataset.ofRows(session, logicalPlan)
     val explainString = ds.queryExecution.explainString(ExtendedMode)
