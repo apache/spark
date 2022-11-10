@@ -469,8 +469,8 @@ package object dsl {
       def toDF(columnNames: String*): Relation =
         Relation
           .newBuilder()
-          .setRenameColumns(
-            RenameColumns
+          .setRenameColumnsBySameLengthNames(
+            RenameColumnsBySameLengthNames
               .newBuilder()
               .setInput(logicalPlan)
               .addAllColumnNames(columnNames.asJava))
@@ -479,8 +479,8 @@ package object dsl {
       def withColumnsRenamed(renameColumnsMap: Map[String, String]): Relation = {
         Relation
           .newBuilder()
-          .setRenameColumns(
-            RenameColumns
+          .setRenameColumnsByNameToNameMap(
+            RenameColumnsByNameToNameMap
               .newBuilder()
               .setInput(logicalPlan)
               .putAllRenameColumnsMap(renameColumnsMap.asJava))

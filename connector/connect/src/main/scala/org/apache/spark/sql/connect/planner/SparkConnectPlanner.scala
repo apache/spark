@@ -69,8 +69,10 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.REPARTITION => transformRepartition(rel.getRepartition)
       case proto.Relation.RelTypeCase.STAT_FUNCTION =>
         transformStatFunction(rel.getStatFunction)
-      case proto.Relation.RelTypeCase.RENAME_COLUMNS =>
-        transformRenameColumns(rel.getRenameColumns)
+      case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_SAME_LENGTH_NAMES =>
+        transformRenameColumnsBySamelenghtNames(rel.getRenameColumnsBySameLengthNames)
+      case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_NAME_TO_NAME_MAP =>
+        transformRenameColumnsByNameToNameMap(rel.getRenameColumnsByNameToNameMap)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -135,22 +137,20 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     }
   }
 
-  private def transformRenameColumns(rel: proto.RenameColumns): LogicalPlan = {
-    if (rel.getColumnNamesCount > 0 && rel.getRenameColumnsMap.size() > 0) {
-      throw InvalidPlanInput(
-        "Should not set `column_names` and `rename_columns_map` at the same time for RenameColumns")
-    }
-    if (rel.getColumnNamesCount > 0) {
-      Dataset
-        .ofRows(session, transformRelation(rel.getInput))
-        .toDF(rel.getColumnNamesList.asScala.toSeq: _*)
-        .logicalPlan
-    } else {
-      Dataset
-        .ofRows(session, transformRelation(rel.getInput))
-        .withColumnsRenamed(rel.getRenameColumnsMap)
-        .logicalPlan
-    }
+  private def transformRenameColumnsBySamelenghtNames(
+      rel: proto.RenameColumnsBySameLengthNames): LogicalPlan = {
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .toDF(rel.getColumnNamesList.asScala.toSeq: _*)
+      .logicalPlan
+  }
+
+  private def transformRenameColumnsByNameToNameMap(
+      rel: proto.RenameColumnsByNameToNameMap): LogicalPlan = {
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .withColumnsRenamed(rel.getRenameColumnsMap)
+      .logicalPlan
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {

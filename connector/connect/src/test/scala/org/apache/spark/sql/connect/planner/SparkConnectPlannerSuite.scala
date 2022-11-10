@@ -351,16 +351,4 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       transform(proto.Relation.newBuilder.setSetOp(intersect).build()))
     assert(e2.getMessage.contains("Intersect does not support union_by_name"))
   }
-
-  test("Test invalid RenameColumns") {
-    val plan = proto.RenameColumns
-      .newBuilder()
-      .setInput(readRel)
-      .addColumnNames("col")
-      .putRenameColumnsMap("col", "col2")
-    val e =
-      intercept[InvalidPlanInput](
-        transform(proto.Relation.newBuilder.setRenameColumns(plan).build()))
-    assert(e.getMessage.contains("Should not set `column_names` and `rename_columns_map`"))
-  }
 }
