@@ -56,7 +56,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       subHint: Option[HintInfo]): Join = {
     // Deduplicate conflicting attributes if any.
     val dedupSubplan = dedupSubqueryOnSelfJoin(outerPlan, subplan, None, condition)
-    // Add sub hint as right hint as the subquery plan is on the right side of the join
+    // Add subquery hint as right hint as the subquery plan is on the right side of the join
     Join(outerPlan, dedupSubplan, joinType, condition, JoinHint(None, subHint))
   }
 
