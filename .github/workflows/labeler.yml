@@ -29,7 +29,7 @@ on: pull_request_target
 jobs:
   label:
     name: Label pull requests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     permissions:
       contents: read
       pull-requests: write

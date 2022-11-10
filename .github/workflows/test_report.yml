@@ -27,7 +27,7 @@ on:
 jobs:
   test_report:
     if: github.event.workflow_run.conclusion != 'skipped'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
     - name: Download test results to report
       uses: dawidd6/action-download-artifact@09385b76de790122f4da9c82b17bccf858b9557c # pin@v2

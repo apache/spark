@@ -27,7 +27,7 @@ on:
 jobs:
   cancel-duplicate-workflow-runs:
     name: "Cancel duplicate workflow runs"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: potiuk/cancel-workflow-runs@4723494a065d162f8e9efd071b98e0126e00f866 # @master
         name: "Cancel duplicate workflow runs"
