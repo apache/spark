@@ -394,7 +394,7 @@ case class InMemoryRelation(
       newColStats: Map[Attribute, ColumnStat]): Unit = this.synchronized {
     val newStats = statsOfPlanToCache.copy(
       rowCount = Some(rowCount),
-      attributeStats = AttributeMap((statsOfPlanToCache.attributeStats ++ newColStats).toSeq)
+      attributeStats = AttributeMap(statsOfPlanToCache.attributeStats ++ newColStats)
     )
     statsOfPlanToCache = newStats
   }
