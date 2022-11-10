@@ -30,9 +30,9 @@ import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
-import org.apache.spark.sql.catalyst.plans.physical.{Distribution, Partitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.sideBySide
@@ -205,22 +205,11 @@ case class AdaptiveSparkPlanExec(
 
   def executedPlan: SparkPlan = currentPhysicalPlan
 
+  def isFinalized: Boolean = isFinalPlan
+
   override def conf: SQLConf = context.session.sessionState.conf
 
   override def output: Seq[Attribute] = inputPlan.output
-
-  // Try our best to give a stable output partitioning and ordering.
-  override def outputPartitioning: Partitioning = if (isFinalPlan) {
-    executedPlan.outputPartitioning
-  } else {
-    super.outputPartitioning
-  }
-
-  override def outputOrdering: Seq[SortOrder] = if (isFinalPlan) {
-    executedPlan.outputOrdering
-  } else {
-    super.outputOrdering
-  }
 
   override def doCanonicalize(): SparkPlan = inputPlan.canonicalized
 
