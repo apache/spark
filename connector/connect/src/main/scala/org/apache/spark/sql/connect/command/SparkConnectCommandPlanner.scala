@@ -25,7 +25,11 @@ import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.WriteOperation
 import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.planner.{DataTypeProtoConverter, SparkConnectPlanner}
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.types.StringType
 
@@ -45,6 +49,8 @@ class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) 
         handleCreateScalarFunction(command.getCreateFunction)
       case proto.Command.CommandTypeCase.WRITE_OPERATION =>
         handleWriteOperation(command.getWriteOperation)
+      case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
+        handleCreateViewCommand(command.getCreateDataframeView)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
   }
@@ -77,6 +83,32 @@ class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) 
       udfDeterministic = false)
 
     session.udf.registerPython(cf.getPartsList.asScala.head, udf)
+  }
+
+  def handleCreateViewCommand(createView: proto.CreateDataFrameViewCommand): Unit = {
+    val viewType = if (createView.getIsGlobal) GlobalTempView else LocalTempView
+
+    val tableIdentifier =
+      try {
+        session.sessionState.sqlParser.parseTableIdentifier(createView.getName)
+      } catch {
+        case _: ParseException =>
+          throw QueryCompilationErrors.invalidViewNameError(createView.getName)
+      }
+
+    val plan = CreateViewCommand(
+      name = tableIdentifier,
+      userSpecifiedColumns = Nil,
+      comment = None,
+      properties = Map.empty,
+      originalText = None,
+      plan = new SparkConnectPlanner(createView.getInput, session).transform(),
+      allowExisting = false,
+      replace = createView.getReplace,
+      viewType = viewType,
+      isAnalyzed = true)
+
+    Dataset.ofRows(session, plan).queryExecution.commandExecuted
   }
 
   /**

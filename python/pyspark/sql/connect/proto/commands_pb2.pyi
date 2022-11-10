@@ -60,21 +60,27 @@ class Command(google.protobuf.message.Message):
 
     CREATE_FUNCTION_FIELD_NUMBER: builtins.int
     WRITE_OPERATION_FIELD_NUMBER: builtins.int
+    CREATE_DATAFRAME_VIEW_FIELD_NUMBER: builtins.int
     @property
     def create_function(self) -> global___CreateScalarFunction: ...
     @property
     def write_operation(self) -> global___WriteOperation: ...
+    @property
+    def create_dataframe_view(self) -> global___CreateDataFrameViewCommand: ...
     def __init__(
         self,
         *,
         create_function: global___CreateScalarFunction | None = ...,
         write_operation: global___WriteOperation | None = ...,
+        create_dataframe_view: global___CreateDataFrameViewCommand | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "command_type",
             b"command_type",
+            "create_dataframe_view",
+            b"create_dataframe_view",
             "create_function",
             b"create_function",
             "write_operation",
@@ -86,6 +92,8 @@ class Command(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "command_type",
             b"command_type",
+            "create_dataframe_view",
+            b"create_dataframe_view",
             "create_function",
             b"create_function",
             "write_operation",
@@ -94,7 +102,9 @@ class Command(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command_type", b"command_type"]
-    ) -> typing_extensions.Literal["create_function", "write_operation"] | None: ...
+    ) -> typing_extensions.Literal[
+        "create_function", "write_operation", "create_dataframe_view"
+    ] | None: ...
 
 global___Command = Command
 
@@ -209,6 +219,48 @@ class CreateScalarFunction(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["serialized_function", "literal_string"] | None: ...
 
 global___CreateScalarFunction = CreateScalarFunction
+
+class CreateDataFrameViewCommand(google.protobuf.message.Message):
+    """A command that can create DataFrame global temp view or local temp view."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    NAME_FIELD_NUMBER: builtins.int
+    IS_GLOBAL_FIELD_NUMBER: builtins.int
+    REPLACE_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+        """Required. The relation that this view will be built on."""
+    name: builtins.str
+    """Required. View name."""
+    is_global: builtins.bool
+    """Required. Whether this is global temp view or local temp view."""
+    replace: builtins.bool
+    """Required.
+
+    If true, and if the view already exists, updates it; if false, and if the view
+    already exists, throws exception.
+    """
+    def __init__(
+        self,
+        *,
+        input: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+        name: builtins.str = ...,
+        is_global: builtins.bool = ...,
+        replace: builtins.bool = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "input", b"input", "is_global", b"is_global", "name", b"name", "replace", b"replace"
+        ],
+    ) -> None: ...
+
+global___CreateDataFrameViewCommand = CreateDataFrameViewCommand
 
 class WriteOperation(google.protobuf.message.Message):
     """As writes are not directly handled during analysis and planning, they are modeled as commands."""
