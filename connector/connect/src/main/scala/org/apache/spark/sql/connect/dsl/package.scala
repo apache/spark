@@ -227,6 +227,21 @@ package object dsl {
       }
     }
 
+    implicit class DslStatFunctions(val logicalPlan: Relation) {
+      def crosstab(col1: String, col2: String): Relation = {
+        Relation
+          .newBuilder()
+          .setCrosstab(
+            proto.StatCrosstab
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setCol1(col1)
+              .setCol2(col2)
+              .build())
+          .build()
+      }
+    }
+
     implicit class DslLogicalPlan(val logicalPlan: Relation) {
       def select(exprs: Expression*): Relation = {
         Relation
@@ -462,6 +477,8 @@ package object dsl {
           .setRepartition(
             Repartition.newBuilder().setInput(logicalPlan).setNumPartitions(num).setShuffle(true))
           .build()
+
+      def stat: DslStatFunctions = new DslStatFunctions(logicalPlan)
 
       def summary(statistics: String*): Relation = {
         Relation

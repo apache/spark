@@ -830,3 +830,35 @@ class StatSummary(LogicalPlan):
            </li>
         </ul>
         """
+
+
+class StatCrosstab(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], col1: str, col2: str) -> None:
+        super().__init__(child)
+        self.col1 = col1
+        self.col2 = col2
+
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.crosstab.input.CopyFrom(self._child.plan(session))
+        plan.crosstab.col1 = self.col1
+        plan.crosstab.col2 = self.col2
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"""{i}<Crosstab col1='{self.col1}' col2='{self.col2}'>"""
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>Crosstab</b><br />
+              Col1: {self.col1} <br />
+              Col2: {self.col2} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
+        """

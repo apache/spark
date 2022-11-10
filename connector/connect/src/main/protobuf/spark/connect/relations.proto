@@ -52,6 +52,7 @@ message Relation {
 
     // stat functions
     StatSummary summary = 100;
+    StatCrosstab crosstab = 101;
 
     Unknown unknown = 999;
   }
@@ -282,6 +283,24 @@ message StatSummary {
   // If no statistics are given, this function computes 'count', 'mean', 'stddev', 'min',
   // 'approximate quartiles' (percentiles at 25%, 50%, and 75%), and 'max'.
   repeated string statistics = 2;
+}
+
+// Computes a pair-wise frequency table of the given columns. Also known as a contingency table.
+// It will invoke 'Dataset.stat.crosstab' (same as 'StatFunctions.crossTabulate')
+// to compute the results.
+message StatCrosstab {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The name of the first column.
+  //
+  // Distinct items will make the first item of each row.
+  string col1 = 2;
+
+  // (Required) The name of the second column.
+  //
+  // Distinct items will make the column names of the DataFrame.
+  string col2 = 3;
 }
 
 // Rename columns on the input relation by the same length of names.

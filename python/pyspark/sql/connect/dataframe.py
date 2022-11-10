@@ -501,6 +501,18 @@ class DataFrame(object):
     def where(self, condition: Expression) -> "DataFrame":
         return self.filter(condition)
 
+    @property
+    def stat(self) -> "DataFrameStatFunctions":
+        """Returns a :class:`DataFrameStatFunctions` for statistic functions.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`DataFrameStatFunctions`
+        """
+        return DataFrameStatFunctions(self)
+
     def summary(self, *statistics: str) -> "DataFrame":
         _statistics: List[str] = list(statistics)
         for s in _statistics:
@@ -508,6 +520,41 @@ class DataFrame(object):
                 raise TypeError(f"'statistics' must be list[str], but got {type(s).__name__}")
         return DataFrame.withPlan(
             plan.StatSummary(child=self._plan, statistics=_statistics),
+            session=self._session,
+        )
+
+    def crosstab(self, col1: str, col2: str) -> "DataFrame":
+        """
+        Computes a pair-wise frequency table of the given columns. Also known as a contingency
+        table. The number of distinct values for each column should be less than 1e4. At most 1e6
+        non-zero pair frequencies will be returned.
+        The first column of each row will be the distinct values of `col1` and the column names
+        will be the distinct values of `col2`. The name of the first column will be `$col1_$col2`.
+        Pairs that have no occurrences will have zero as their counts.
+        :func:`DataFrame.crosstab` and :func:`DataFrameStatFunctions.crosstab` are aliases.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        col1 : str
+            The name of the first column. Distinct items will make the first item of
+            each row.
+        col2 : str
+            The name of the second column. Distinct items will make the column names
+            of the :class:`DataFrame`.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Frequency matrix of two columns.
+        """
+        if not isinstance(col1, str):
+            raise TypeError(f"'col1' must be str, but got {type(col1).__name__}")
+        if not isinstance(col2, str):
+            raise TypeError(f"'col2' must be str, but got {type(col2).__name__}")
+        return DataFrame.withPlan(
+            plan.StatCrosstab(child=self._plan, col1=col1, col2=col2),
             session=self._session,
         )
 
@@ -579,3 +626,18 @@ class DataFrame(object):
             return self._session.explain_string(query)
         else:
             return ""
+
+
+class DataFrameStatFunctions:
+    """Functionality for statistic functions with :class:`DataFrame`.
+
+    .. versionadded:: 3.4.0
+    """
+
+    def __init__(self, df: DataFrame):
+        self.df = df
+
+    def crosstab(self, col1: str, col2: str) -> DataFrame:
+        return self.df.crosstab(col1, col2)
+
+    crosstab.__doc__ = DataFrame.crosstab.__doc__

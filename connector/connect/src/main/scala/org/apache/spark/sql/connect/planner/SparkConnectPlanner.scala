@@ -67,6 +67,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
         transformSubqueryAlias(rel.getSubqueryAlias)
       case proto.Relation.RelTypeCase.REPARTITION => transformRepartition(rel.getRepartition)
       case proto.Relation.RelTypeCase.SUMMARY => transformStatSummary(rel.getSummary)
+      case proto.Relation.RelTypeCase.CROSSTAB =>
+        transformStatCrosstab(rel.getCrosstab)
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_SAME_LENGTH_NAMES =>
         transformRenameColumnsBySamelenghtNames(rel.getRenameColumnsBySameLengthNames)
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_NAME_TO_NAME_MAP =>
@@ -126,6 +128,14 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
       .summary(rel.getStatisticsList.asScala.toSeq: _*)
+      .logicalPlan
+  }
+
+  private def transformStatCrosstab(rel: proto.StatCrosstab): LogicalPlan = {
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .stat
+      .crosstab(rel.getCol1, rel.getCol2)
       .logicalPlan
   }
 
