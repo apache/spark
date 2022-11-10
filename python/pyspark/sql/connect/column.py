@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 import uuid
-from typing import cast, get_args, TYPE_CHECKING, Optional, Callable, Any
+from typing import cast, get_args, TYPE_CHECKING, Callable, Any
 
 import decimal
 import datetime
@@ -76,7 +76,7 @@ class Expression(object):
     def __init__(self) -> None:
         pass
 
-    def to_plan(self, session: Optional["RemoteSparkSession"]) -> "proto.Expression":
+    def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
         ...
 
     def __str__(self) -> str:
@@ -93,7 +93,7 @@ class LiteralExpression(Expression):
         super().__init__()
         self._value = value
 
-    def to_plan(self, session: Optional["RemoteSparkSession"]) -> "proto.Expression":
+    def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
         """Converts the literal expression to the literal in proto.
 
         TODO(SPARK-40533) This method always assumes the largest type and can thus
@@ -181,7 +181,7 @@ class ColumnRef(Expression):
         """Returns the qualified name of the column reference."""
         return self._unparsed_identifier
 
-    def to_plan(self, session: Optional["RemoteSparkSession"]) -> proto.Expression:
+    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
         """Returns the Proto representation of the expression."""
         expr = proto.Expression()
         expr.unresolved_attribute.unparsed_identifier = self._unparsed_identifier
@@ -207,7 +207,7 @@ class SortOrder(Expression):
     def __str__(self) -> str:
         return str(self.ref) + " ASC" if self.ascending else " DESC"
 
-    def to_plan(self, session: Optional["RemoteSparkSession"]) -> proto.Expression:
+    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
         return self.ref.to_plan(session)
 
 
@@ -221,7 +221,7 @@ class ScalarFunctionExpression(Expression):
         self._args = args
         self._op = op
 
-    def to_plan(self, session: Optional["RemoteSparkSession"]) -> proto.Expression:
+    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
         fun = proto.Expression()
         fun.unresolved_function.parts.append(self._op)
         fun.unresolved_function.arguments.extend([x.to_plan(session) for x in self._args])

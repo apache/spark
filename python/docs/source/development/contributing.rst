@@ -130,7 +130,7 @@ If you are using Conda, the development environment can be set as follows.
     # Python 3.7+ is required
     conda create --name pyspark-dev-env python=3.9
     conda activate pyspark-dev-env
-    pip install -r dev/requirements.txt
+    pip install --upgrade -r dev/requirements.txt
 
 Once it is set up, make sure you switch to `pyspark-dev-env` before starting the development:
 
@@ -147,7 +147,7 @@ With Python 3.7+, pip can be used as below to install and set up the development
 
 .. code-block:: bash
 
-    pip install -r dev/requirements.txt
+    pip install --upgrade -r dev/requirements.txt
 
 Now, you can start developing and `running the tests <testing.rst>`_.
 

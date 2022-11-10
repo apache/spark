@@ -258,9 +258,10 @@ private[spark] class SparkIllegalArgumentException(
     errorClass: String,
     messageParameters: Map[String, String],
     context: Array[QueryContext] = Array.empty,
-    summary: String = "")
+    summary: String = "",
+    cause: Throwable = null)
   extends IllegalArgumentException(
-    SparkThrowableHelper.getMessage(errorClass, messageParameters, summary))
+    SparkThrowableHelper.getMessage(errorClass, messageParameters, summary), cause)
   with SparkThrowable {
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava

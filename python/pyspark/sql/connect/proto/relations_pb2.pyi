@@ -76,6 +76,10 @@ class Relation(google.protobuf.message.Message):
     RANGE_FIELD_NUMBER: builtins.int
     SUBQUERY_ALIAS_FIELD_NUMBER: builtins.int
     REPARTITION_FIELD_NUMBER: builtins.int
+    RENAME_COLUMNS_BY_SAME_LENGTH_NAMES_FIELD_NUMBER: builtins.int
+    RENAME_COLUMNS_BY_NAME_TO_NAME_MAP_FIELD_NUMBER: builtins.int
+    SUMMARY_FIELD_NUMBER: builtins.int
+    CROSSTAB_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -112,6 +116,15 @@ class Relation(google.protobuf.message.Message):
     @property
     def repartition(self) -> global___Repartition: ...
     @property
+    def rename_columns_by_same_length_names(self) -> global___RenameColumnsBySameLengthNames: ...
+    @property
+    def rename_columns_by_name_to_name_map(self) -> global___RenameColumnsByNameToNameMap: ...
+    @property
+    def summary(self) -> global___StatSummary:
+        """stat functions"""
+    @property
+    def crosstab(self) -> global___StatCrosstab: ...
+    @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
         self,
@@ -133,6 +146,10 @@ class Relation(google.protobuf.message.Message):
         range: global___Range | None = ...,
         subquery_alias: global___SubqueryAlias | None = ...,
         repartition: global___Repartition | None = ...,
+        rename_columns_by_same_length_names: global___RenameColumnsBySameLengthNames | None = ...,
+        rename_columns_by_name_to_name_map: global___RenameColumnsByNameToNameMap | None = ...,
+        summary: global___StatSummary | None = ...,
+        crosstab: global___StatCrosstab | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -142,6 +159,8 @@ class Relation(google.protobuf.message.Message):
             b"aggregate",
             "common",
             b"common",
+            "crosstab",
+            b"crosstab",
             "deduplicate",
             b"deduplicate",
             "filter",
@@ -162,6 +181,10 @@ class Relation(google.protobuf.message.Message):
             b"read",
             "rel_type",
             b"rel_type",
+            "rename_columns_by_name_to_name_map",
+            b"rename_columns_by_name_to_name_map",
+            "rename_columns_by_same_length_names",
+            b"rename_columns_by_same_length_names",
             "repartition",
             b"repartition",
             "sample",
@@ -174,6 +197,8 @@ class Relation(google.protobuf.message.Message):
             b"sql",
             "subquery_alias",
             b"subquery_alias",
+            "summary",
+            b"summary",
             "unknown",
             b"unknown",
         ],
@@ -185,6 +210,8 @@ class Relation(google.protobuf.message.Message):
             b"aggregate",
             "common",
             b"common",
+            "crosstab",
+            b"crosstab",
             "deduplicate",
             b"deduplicate",
             "filter",
@@ -205,6 +232,10 @@ class Relation(google.protobuf.message.Message):
             b"read",
             "rel_type",
             b"rel_type",
+            "rename_columns_by_name_to_name_map",
+            b"rename_columns_by_name_to_name_map",
+            "rename_columns_by_same_length_names",
+            b"rename_columns_by_same_length_names",
             "repartition",
             b"repartition",
             "sample",
@@ -217,6 +248,8 @@ class Relation(google.protobuf.message.Message):
             b"sql",
             "subquery_alias",
             b"subquery_alias",
+            "summary",
+            b"summary",
             "unknown",
             b"unknown",
         ],
@@ -240,6 +273,10 @@ class Relation(google.protobuf.message.Message):
         "range",
         "subquery_alias",
         "repartition",
+        "rename_columns_by_same_length_names",
+        "rename_columns_by_name_to_name_map",
+        "summary",
+        "crosstab",
         "unknown",
     ] | None: ...
 
@@ -1065,3 +1102,182 @@ class Repartition(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Repartition = Repartition
+
+class StatSummary(google.protobuf.message.Message):
+    """Computes specified statistics for numeric and string columns.
+    It will invoke 'Dataset.summary' (same as 'StatFunctions.summary')
+    to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    STATISTICS_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def statistics(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Statistics from to be computed.
+
+        Available statistics are:
+         count
+         mean
+         stddev
+         min
+         max
+         arbitrary approximate percentiles specified as a percentage (e.g. 75%)
+         count_distinct
+         approx_count_distinct
+
+        If no statistics are given, this function computes 'count', 'mean', 'stddev', 'min',
+        'approximate quartiles' (percentiles at 25%, 50%, and 75%), and 'max'.
+        """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        statistics: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["input", b"input", "statistics", b"statistics"]
+    ) -> None: ...
+
+global___StatSummary = StatSummary
+
+class StatCrosstab(google.protobuf.message.Message):
+    """Computes a pair-wise frequency table of the given columns. Also known as a contingency table.
+    It will invoke 'Dataset.stat.crosstab' (same as 'StatFunctions.crossTabulate')
+    to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COL1_FIELD_NUMBER: builtins.int
+    COL2_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    col1: builtins.str
+    """(Required) The name of the first column.
+
+    Distinct items will make the first item of each row.
+    """
+    col2: builtins.str
+    """(Required) The name of the second column.
+
+    Distinct items will make the column names of the DataFrame.
+    """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        col1: builtins.str = ...,
+        col2: builtins.str = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal["col1", b"col1", "col2", b"col2", "input", b"input"],
+    ) -> None: ...
+
+global___StatCrosstab = StatCrosstab
+
+class RenameColumnsBySameLengthNames(google.protobuf.message.Message):
+    """Rename columns on the input relation by the same length of names."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLUMN_NAMES_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """Required. The input relation."""
+    @property
+    def column_names(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """Required.
+
+        The number of columns of the input relation must be equal to the length
+        of this field. If this is not true, an exception will be returned.
+        """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        column_names: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal["column_names", b"column_names", "input", b"input"],
+    ) -> None: ...
+
+global___RenameColumnsBySameLengthNames = RenameColumnsBySameLengthNames
+
+class RenameColumnsByNameToNameMap(google.protobuf.message.Message):
+    """Rename columns on the input relation by a map with name to name mapping."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class RenameColumnsMapEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        value: builtins.str
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
+
+    INPUT_FIELD_NUMBER: builtins.int
+    RENAME_COLUMNS_MAP_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """Required. The input relation."""
+    @property
+    def rename_columns_map(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+        """Required.
+
+        Renaming column names of input relation from A to B where A is the map key
+        and B is the map value. This is a no-op if schema doesn't contain any A. It
+        does not require that all input relation column names to present as keys.
+        duplicated B are not allowed.
+        """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        rename_columns_map: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "input", b"input", "rename_columns_map", b"rename_columns_map"
+        ],
+    ) -> None: ...
+
+global___RenameColumnsByNameToNameMap = RenameColumnsByNameToNameMap

@@ -31,7 +31,6 @@ import org.apache.spark.sql.connect.command.SparkConnectCommandPlanner
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
-import org.apache.spark.sql.internal.SQLConf
 
 class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) extends Logging {
 
@@ -58,8 +57,6 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
   }
 
   def processRows(clientId: String, rows: DataFrame): Unit = {
-    val timeZoneId = SQLConf.get.sessionLocalTimeZone
-
     // Only process up to 10MB of data.
     val sb = new StringBuilder
     var rowCount = 0

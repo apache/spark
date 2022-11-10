@@ -4514,14 +4514,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       initPushBasedShuffleConfs(conf)
 
       sc.conf.set("spark.shuffle.push.results.timeout", "1s")
-      val myScheduler = new MyDAGScheduler(
+      val scheduler = new DAGScheduler(
         sc,
         taskScheduler,
         sc.listenerBus,
         mapOutputTracker,
         blockManagerMaster,
-        sc.env,
-        shuffleMergeFinalize = false)
+        sc.env)
 
       val mergerLocs = Seq(makeBlockManagerId("hostA"), makeBlockManagerId("hostB"))
       val timeoutSecs = 1
@@ -4554,9 +4553,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       val shuffleMapRdd = new MyRDD(sc, 1, Nil)
       val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
       shuffleDep.setMergerLocs(mergerLocs)
-      val shuffleStage = myScheduler.createShuffleMapStage(shuffleDep, 0)
+      val shuffleStage = scheduler.createShuffleMapStage(shuffleDep, 0)
 
-      myScheduler.finalizeShuffleMerge(shuffleStage, registerMergeResults)
+      scheduler.finalizeShuffleMerge(shuffleStage, registerMergeResults)
       sendRequestsLatch.await()
       verify(blockStoreClient, times(2))
         .finalizeShuffleMerge(any(), any(), any(), any(), any())

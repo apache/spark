@@ -1232,12 +1232,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         wrongTypeDF.select(map_from_entries($"a"))
       },
-      errorClass = "DATATYPE_MISMATCH.MAP_FROM_ENTRIES_WRONG_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"map_from_entries(a)\"",
-        "functionName" -> "`map_from_entries`",
-        "childExpr" -> "\"a\"",
-        "childType" -> "\"INT\""
+        "paramIndex" -> "1",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"ARRAY\" of pair \"STRUCT\""
       )
     )
   }

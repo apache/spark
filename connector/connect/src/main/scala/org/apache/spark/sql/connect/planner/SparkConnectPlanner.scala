@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.connect.planner
 
-import scala.annotation.elidable.byName
 import scala.collection.JavaConverters._
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
@@ -48,12 +47,6 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   // The root of the query plan is a relation and we apply the transformations to it.
   private def transformRelation(rel: proto.Relation): LogicalPlan = {
-    val common = if (rel.hasCommon) {
-      Some(rel.getCommon)
-    } else {
-      None
-    }
-
     rel.getRelTypeCase match {
       case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead)
       case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject)
@@ -73,6 +66,13 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.SUBQUERY_ALIAS =>
         transformSubqueryAlias(rel.getSubqueryAlias)
       case proto.Relation.RelTypeCase.REPARTITION => transformRepartition(rel.getRepartition)
+      case proto.Relation.RelTypeCase.SUMMARY => transformStatSummary(rel.getSummary)
+      case proto.Relation.RelTypeCase.CROSSTAB =>
+        transformStatCrosstab(rel.getCrosstab)
+      case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_SAME_LENGTH_NAMES =>
+        transformRenameColumnsBySamelenghtNames(rel.getRenameColumnsBySameLengthNames)
+      case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_NAME_TO_NAME_MAP =>
+        transformRenameColumnsByNameToNameMap(rel.getRenameColumnsByNameToNameMap)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -122,6 +122,37 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       session.leafNodeDefaultParallelism
     }
     logical.Range(start, end, step, numPartitions)
+  }
+
+  private def transformStatSummary(rel: proto.StatSummary): LogicalPlan = {
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .summary(rel.getStatisticsList.asScala.toSeq: _*)
+      .logicalPlan
+  }
+
+  private def transformStatCrosstab(rel: proto.StatCrosstab): LogicalPlan = {
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .stat
+      .crosstab(rel.getCol1, rel.getCol2)
+      .logicalPlan
+  }
+
+  private def transformRenameColumnsBySamelenghtNames(
+      rel: proto.RenameColumnsBySameLengthNames): LogicalPlan = {
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .toDF(rel.getColumnNamesList.asScala.toSeq: _*)
+      .logicalPlan
+  }
+
+  private def transformRenameColumnsByNameToNameMap(
+      rel: proto.RenameColumnsByNameToNameMap): LogicalPlan = {
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .withColumnsRenamed(rel.getRenameColumnsMap)
+      .logicalPlan
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
@@ -217,6 +248,8 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION =>
         transformScalarFunction(exp.getUnresolvedFunction)
       case proto.Expression.ExprTypeCase.ALIAS => transformAlias(exp.getAlias)
+      case proto.Expression.ExprTypeCase.EXPRESSION_STRING =>
+        transformExpressionString(exp.getExpressionString)
       case _ => throw InvalidPlanInput()
     }
   }
@@ -292,6 +325,10 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
     Alias(transformExpression(alias.getExpr), alias.getName)()
+  }
+
+  private def transformExpressionString(expr: proto.Expression.ExpressionString): Expression = {
+    session.sessionState.sqlParser.parseExpression(expr.getExpression)
   }
 
   private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {
