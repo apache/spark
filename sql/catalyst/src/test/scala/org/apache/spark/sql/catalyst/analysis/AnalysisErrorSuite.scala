@@ -262,7 +262,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     testRelation.groupBy($"a")(
       Max(Count(Literal(1)).toAggregateExpression()).toAggregateExpression()),
     errorClass = "NESTED_AGGREGATE_FUNCTION",
-    messageParameters = Map()
+    messageParameters = Map.empty
   )
 
   errorTest(
@@ -774,7 +774,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     assertAnalysisErrorClass(
       inputPlan = plan,
       expectedErrorClass = "NESTED_AGGREGATE_FUNCTION",
-      expectedMessageParameters = Map()
+      expectedMessageParameters = Map.empty
     )
   }
 
