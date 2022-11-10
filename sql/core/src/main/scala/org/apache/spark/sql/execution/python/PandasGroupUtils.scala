@@ -45,9 +45,6 @@ private[python] object PandasGroupUtils {
     val unsafeProj = UnsafeProjection.create(output, output)
 
     columnarBatchIter.flatMap { batch =>
-      // scalastyle:off println
-      Console.println(s"retrieved batch with ${batch.numRows()} rows")
-      // scalastyle:on println
       //  UDF returns a StructType column in ColumnarBatch, select the children here
       val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
       val outputVectors = output.indices.map(structVector.getChild)

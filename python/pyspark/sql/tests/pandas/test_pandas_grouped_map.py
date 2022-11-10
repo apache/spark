@@ -207,7 +207,6 @@ class GroupedApplyInPandasTestsMixin:
         result = df.groupby("id").apply(udf).sort("id").toPandas()
         expected = df.toPandas().groupby("id").apply(udf.func).reset_index(drop=True)
         assert_frame_equal(expected, result)
-        self.assertEqual(False, True)
 
     def test_register_grouped_map_udf(self):
         with QuietTest(self.sc):

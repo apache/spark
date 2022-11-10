@@ -99,8 +99,6 @@ class ArrowStreamSerializer(Serializer):
         writer = None
         try:
             for batch in iterator:
-                print(f'writing batch {batch.to_pandas()}')
-                print()
                 if writer is None:
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)
                 writer.write_batch(batch)
@@ -147,7 +145,7 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
         def wrap_and_init_stream():
             should_write_start_length = True
             for batch, _ in iterator:
-                assert isinstance(batch, pa.RecordBatch), type(batch)
+                assert isinstance(batch, pa.RecordBatch)
 
                 # Wrap the root struct
                 struct = pa.StructArray.from_arrays(

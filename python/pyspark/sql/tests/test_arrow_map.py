@@ -51,7 +51,6 @@ class MapInArrowTestsMixin(object):
         actual = df.mapInArrow(func, "id long").collect()
         expected = df.collect()
         self.assertEqual(actual, expected)
-        self.assertEqual(False, True)
 
     def test_multiple_columns(self):
         data = [(1, "foo"), (2, None), (3, "bar"), (4, "bar")]

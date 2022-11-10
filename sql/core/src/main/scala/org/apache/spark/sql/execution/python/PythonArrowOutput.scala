@@ -101,8 +101,7 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
               read()
             }
           } else {
-            val length = stream.readInt()
-            length match {
+            stream.readInt() match {
               case SpecialLengths.START_ARROW_STREAM =>
                 reader = new ArrowStreamReader(stream, allocator)
                 root = reader.getVectorSchemaRoot()
