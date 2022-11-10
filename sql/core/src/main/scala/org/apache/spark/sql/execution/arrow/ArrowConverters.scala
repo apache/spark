@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
-import org.apache.spark.util.{ByteBufferOutputStream, SizeEstimator, Utils}
+import org.apache.spark.util.{ByteBufferOutputStream, Utils}
 
 
 /**
@@ -132,7 +132,7 @@ private[sql] object ArrowConverters extends Logging {
       rowIter: Iterator[InternalRow],
       schema: StructType,
       maxRecordsPerBatch: Int,
-      timeZoneId: String): Iterator[(Array[Byte], Long, Long)] = {
+      timeZoneId: String): Iterator[(Array[Byte], Long)] = {
     val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
     val allocator = ArrowUtils.rootAllocator.newChildAllocator(
       "toArrowBatchIterator", 0, Long.MaxValue)
@@ -148,7 +148,7 @@ private[sql] object ArrowConverters extends Logging {
       }
     }
 
-    new Iterator[(Array[Byte], Long, Long)] {
+    new Iterator[(Array[Byte], Long)] {
 
       override def hasNext: Boolean = rowIter.hasNext || {
         root.close()
@@ -156,19 +156,16 @@ private[sql] object ArrowConverters extends Logging {
         false
       }
 
-      override def next(): (Array[Byte], Long, Long) = {
+      override def next(): (Array[Byte], Long) = {
         val out = new ByteArrayOutputStream()
         val writeChannel = new WriteChannel(Channels.newChannel(out))
 
         var rowCount = 0L
-        var estimatedSize = SizeEstimator.estimate(arrowSchema) +
-          SizeEstimator.estimate(IpcOption.DEFAULT)
         Utils.tryWithSafeFinally {
           while (rowIter.hasNext && (maxRecordsPerBatch <= 0 || rowCount < maxRecordsPerBatch)) {
             val row = rowIter.next()
             arrowWriter.write(row)
             rowCount += 1
-            estimatedSize += SizeEstimator.estimate(row)
           }
           arrowWriter.finish()
           val batch = unloader.getRecordBatch()
@@ -182,14 +179,14 @@ private[sql] object ArrowConverters extends Logging {
           arrowWriter.reset()
         }
 
-        (out.toByteArray, rowCount, estimatedSize)
+        (out.toByteArray, rowCount)
       }
     }
   }
 
   private[sql] def createEmptyArrowBatch(
       schema: StructType,
-      timeZoneId: String): (Array[Byte], Long, Long) = {
+      timeZoneId: String): Array[Byte] = {
     val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
     val allocator = ArrowUtils.rootAllocator.newChildAllocator(
       "createEmptyArrowBatch", 0, Long.MaxValue)
@@ -201,8 +198,6 @@ private[sql] object ArrowConverters extends Logging {
     val out = new ByteArrayOutputStream()
     val writeChannel = new WriteChannel(Channels.newChannel(out))
 
-    val estimatedSize = SizeEstimator.estimate(arrowSchema) +
-      SizeEstimator.estimate(IpcOption.DEFAULT)
     Utils.tryWithSafeFinally {
       arrowWriter.finish()
       val batch = unloader.getRecordBatch() // empty batch
@@ -216,7 +211,7 @@ private[sql] object ArrowConverters extends Logging {
       arrowWriter.reset()
     }
 
-    (out.toByteArray, 0L, estimatedSize)
+    out.toByteArray
   }
 
   /**

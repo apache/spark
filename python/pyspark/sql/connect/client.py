@@ -400,7 +400,6 @@ class RemoteSparkSession(object):
 
         if len(result_dfs) > 0:
             df = pd.concat(result_dfs)
-            del result_dfs
 
             # pd.concat generates non-consecutive index like:
             #   Int64Index([0, 1, 0, 1, 2, 0, 1, 0, 1, 2], dtype='int64')

@@ -178,33 +178,17 @@ class Response(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         ROW_COUNT_FIELD_NUMBER: builtins.int
-        UNCOMPRESSED_BYTES_FIELD_NUMBER: builtins.int
-        COMPRESSED_BYTES_FIELD_NUMBER: builtins.int
         DATA_FIELD_NUMBER: builtins.int
         row_count: builtins.int
-        uncompressed_bytes: builtins.int
-        compressed_bytes: builtins.int
         data: builtins.bytes
         def __init__(
             self,
             *,
             row_count: builtins.int = ...,
-            uncompressed_bytes: builtins.int = ...,
-            compressed_bytes: builtins.int = ...,
             data: builtins.bytes = ...,
         ) -> None: ...
         def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "compressed_bytes",
-                b"compressed_bytes",
-                "data",
-                b"data",
-                "row_count",
-                b"row_count",
-                "uncompressed_bytes",
-                b"uncompressed_bytes",
-            ],
+            self, field_name: typing_extensions.Literal["data", b"data", "row_count", b"row_count"]
         ) -> None: ...
 
     class JSONBatch(google.protobuf.message.Message):

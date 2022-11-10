@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connect.service
 
 import scala.collection.JavaConverters._
-import scala.util.Try
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
@@ -33,7 +32,6 @@ import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
-import org.apache.spark.sql.util.ArrowUtils
 
 class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) extends Logging {
 
@@ -55,17 +53,16 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
     // Extract the plan from the request and convert it to a logical plan
     val planner = new SparkConnectPlanner(request.getPlan.getRoot, session)
     val dataframe = Dataset.ofRows(session, planner.transform())
-    // check whether all data types are supported
-    if (Try {
-        ArrowUtils.toArrowSchema(dataframe.schema, session.sessionState.conf.sessionLocalTimeZone)
-      }.isSuccess) {
-      processRowsAsArrowBatches(request.getClientId, dataframe)
-    } else {
-      processRowsAsJsonBatches(request.getClientId, dataframe)
+    try {
+      processAsArrowBatches(request.getClientId, dataframe)
+    } catch {
+      case e: Exception =>
+        logWarning(e.getMessage)
+        processAsJsonBatches(request.getClientId, dataframe)
     }
   }
 
-  def processRowsAsJsonBatches(clientId: String, dataframe: DataFrame): Unit = {
+  def processAsJsonBatches(clientId: String, dataframe: DataFrame): Unit = {
     // Only process up to 10MB of data.
     val sb = new StringBuilder
     var rowCount = 0
@@ -127,7 +124,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
     responseObserver.onCompleted()
   }
 
-  def processRowsAsArrowBatches(clientId: String, dataframe: DataFrame): Unit = {
+  def processAsArrowBatches(clientId: String, dataframe: DataFrame): Unit = {
     val spark = dataframe.sparkSession
     val schema = dataframe.schema
     // TODO: control the batch size instead of max records
@@ -140,7 +137,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
       var numSent = 0
 
       if (numPartitions > 0) {
-        type Batch = (Array[Byte], Long, Long)
+        type Batch = (Array[Byte], Long)
 
         val batches = rows.mapPartitionsInternal { iter =>
           ArrowConverters
@@ -148,45 +145,43 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
         }
 
         val signal = new Object
-        val partitions = Array.fill[Array[Batch]](numPartitions)(null)
+        val partitions = collection.mutable.Map.empty[Int, Array[Batch]]
 
         val processPartition = (iter: Iterator[Batch]) => iter.toArray
 
+        // This callback is executed by the DAGScheduler thread.
+        // After fetching a partition, it inserts the partition into the Map, and then
+        // wakes up the main thread.
         val resultHandler = (partitionId: Int, partition: Array[Batch]) => {
           signal.synchronized {
             partitions(partitionId) = partition
             signal.notify()
           }
-          val i = 0 // Unit
+          ()
         }
 
         spark.sparkContext.runJob(batches, processPartition, resultHandler)
 
+        // The man thread will wait until 0-th partition is available,
+        // then send it to client and wait for next partition.
         var currentPartitionId = 0
         while (currentPartitionId < numPartitions) {
           val partition = signal.synchronized {
-            while (partitions(currentPartitionId) == null) {
+            while (!partitions.contains(currentPartitionId)) {
               signal.wait()
             }
-            val partition = partitions(currentPartitionId)
-            partitions(currentPartitionId) = null
-            partition
+            partitions.remove(currentPartitionId).get
           }
 
-          // only send non-empty partitions
-          if (partition.nonEmpty && partition.exists(_._1.nonEmpty)) {
-            partition.foreach { case (bytes, count, size) =>
-              val response = proto.Response.newBuilder().setClientId(clientId)
-              val batch = proto.Response.ArrowBatch
-                .newBuilder()
-                .setRowCount(count)
-                .setUncompressedBytes(size)
-                .setCompressedBytes(bytes.length)
-                .setData(ByteString.copyFrom(bytes))
-                .build()
-              response.setArrowBatch(batch)
-              responseObserver.onNext(response.build())
-            }
+          partition.foreach { case (bytes, count) =>
+            val response = proto.Response.newBuilder().setClientId(clientId)
+            val batch = proto.Response.ArrowBatch
+              .newBuilder()
+              .setRowCount(count)
+              .setData(ByteString.copyFrom(bytes))
+              .build()
+            response.setArrowBatch(batch)
+            responseObserver.onNext(response.build())
             numSent += 1
           }
 
@@ -194,15 +189,13 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
         }
       }
 
-      // make sure at least 1 batch will be sent
+      // Make sure at least 1 batch will be sent.
       if (numSent == 0) {
-        val (bytes, count, size) = ArrowConverters.createEmptyArrowBatch(schema, timeZoneId)
+        val bytes = ArrowConverters.createEmptyArrowBatch(schema, timeZoneId)
         val response = proto.Response.newBuilder().setClientId(clientId)
         val batch = proto.Response.ArrowBatch
           .newBuilder()
-          .setRowCount(count)
-          .setUncompressedBytes(size)
-          .setCompressedBytes(bytes.length)
+          .setRowCount(0L)
           .setData(ByteString.copyFrom(bytes))
           .build()
         response.setArrowBatch(batch)

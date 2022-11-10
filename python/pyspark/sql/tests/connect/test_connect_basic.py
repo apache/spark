@@ -198,6 +198,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         )
 
     def test_empty_dataset(self):
+        # SPARK-41005: Test arrow based collection with empty dataset.
         self.assertTrue(
             self.connect.sql("SELECT 1 AS X LIMIT 0")
             .toPandas()
