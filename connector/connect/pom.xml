@@ -371,4 +371,39 @@
       </plugin>
     </plugins>
   </build>
+  <profiles>
+    <profile>
+      <id>customized-pb</id>
+      <properties>
+        <protoc.executable.path>${env.PROTOC_EXEC_PATH}</protoc.executable.path>
+        <plugin.executable.path>${env.PLUGIN_EXEC_PATH}</plugin.executable.path>
+      </properties>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <plugin>
+              <groupId>org.xolstice.maven.plugins</groupId>
+              <artifactId>protobuf-maven-plugin</artifactId>
+              <version>0.6.1</version>
+              <configuration>
+                <protocExecutable>${protoc.executable.path}</protocExecutable>
+                <pluginId>grpc-java</pluginId>
+                <pluginExecutable>${plugin.executable.path}</pluginExecutable>
+                <protoSourceRoot>src/main/protobuf</protoSourceRoot>
+              </configuration>
+              <executions>
+                <execution>
+                  <goals>
+                    <goal>compile</goal>
+                    <goal>compile-custom</goal>
+                    <goal>test-compile</goal>
+                  </goals>
+                </execution>
+              </executions>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
+    </profile>
+  </profiles>
 </project>
