@@ -486,18 +486,12 @@ class KubernetesSuite extends SparkFunSuite
 
     Eventually.eventually(patienceTimeout, patienceInterval) {
       expectedDriverLogOnCompletion.foreach { e =>
-        if (kubernetesTestComponents.kubernetesClient
+        // scalastyle:off println
+        println(kubernetesTestComponents.kubernetesClient
           .pods()
           .withName(driverPod.getMetadata.getName)
-          .getLog
-          .contains(e)) {
-          // scalastyle:off println
-          println(kubernetesTestComponents.kubernetesClient
-            .pods()
-            .withName(driverPod.getMetadata.getName)
-            .getLog)
-          // scalastyle:on println
-        }
+          .getLog)
+        // scalastyle:on println
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
           .withName(driverPod.getMetadata.getName)
@@ -506,18 +500,12 @@ class KubernetesSuite extends SparkFunSuite
           s"The application did not complete, driver log did not contain str ${e}")
       }
       expectedExecutorLogOnCompletion.foreach { e =>
-        if (kubernetesTestComponents.kubernetesClient
+        // scalastyle:off println
+        println(kubernetesTestComponents.kubernetesClient
           .pods()
-          .withName(execPod.get.getMetadata.getName)
-          .getLog
-          .contains(e)) {
-          // scalastyle:off println
-          println(kubernetesTestComponents.kubernetesClient
-            .pods()
-            .withName(driverPod.getMetadata.getName)
-            .getLog)
-          // scalastyle:on println
-        }
+          .withName(driverPod.getMetadata.getName)
+          .getLog)
+        // scalastyle:on println
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
           .withName(execPod.get.getMetadata.getName)
