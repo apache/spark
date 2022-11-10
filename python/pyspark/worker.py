@@ -51,7 +51,6 @@ from pyspark.sql.pandas.serializers import (
     CogroupPandasUDFSerializer,
     ArrowStreamUDFSerializer,
     ArrowStreamGroupUDFSerializer,
-    ArrowStreamSerializer,
     ApplyInPandasWithStateSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type
@@ -1303,7 +1302,7 @@ def read_udfs(pickleSer, infile, eval_type):
         elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
             ser = ArrowStreamUDFSerializer()
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
-            ser = ArrowStreamGroupUDFSerializer()  # ArrowStreamSerializer()
+            ser = ArrowStreamGroupUDFSerializer()
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
@@ -1466,9 +1465,9 @@ def read_udfs(pickleSer, infile, eval_type):
         def table_from_batches(batches, offsets):
             return pa.Table.from_batches([batch_from_offset(batch, offsets) for batch in batches])
 
-        def mapper(batches):
-            keys = table_from_batches(batches, parsed_offsets[0][0])
-            vals = table_from_batches(batches, parsed_offsets[0][1])
+        def mapper(a):
+            keys = table_from_batches(a, parsed_offsets[0][0])
+            vals = table_from_batches(a, parsed_offsets[0][1])
             return f(keys, vals)
 
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
@@ -1542,11 +1541,11 @@ def read_udfs(pickleSer, infile, eval_type):
         def table_from_batches(batches, offsets):
             return pa.Table.from_batches([batch_from_offset(batch, offsets) for batch in batches])
 
-        def mapper(batches):
-            df1_keys = table_from_batches(batches[0], parsed_offsets[0][0])
-            df1_vals = table_from_batches(batches[0], parsed_offsets[0][1])
-            df2_keys = table_from_batches(batches[1], parsed_offsets[1][0])
-            df2_vals = table_from_batches(batches[1], parsed_offsets[1][1])
+        def mapper(a):
+            df1_keys = table_from_batches(a[0], parsed_offsets[0][0])
+            df1_vals = table_from_batches(a[0], parsed_offsets[0][1])
+            df2_keys = table_from_batches(a[1], parsed_offsets[1][0])
+            df2_vals = table_from_batches(a[1], parsed_offsets[1][1])
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
 
     else:
@@ -1610,14 +1609,6 @@ def main(infile, outfile):
         taskContext._taskAttemptId = read_long(infile)
         taskContext._cpus = read_int(infile)
         taskContext._resources = {}
-        if taskContext._partitionId == 0 and False:
-            print(f'>>>>>> partition {taskContext._partitionId} has pid {os.getpid()}')
-            for left in reversed(range(1, 5)):
-                print(left, end='')
-                for _ in range(4):
-                    time.sleep(0.25)
-                    print('.', end='')
-            print()
         for r in range(read_int(infile)):
             key = utf8_deserializer.loads(infile)
             name = utf8_deserializer.loads(infile)

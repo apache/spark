@@ -32,8 +32,8 @@ if have_pyarrow:
 
 
 @unittest.skipIf(
-   not have_pyarrow,
-   pyarrow_requirement_message,  # type: ignore[arg-type]
+    not have_pyarrow,
+    pyarrow_requirement_message,  # type: ignore[arg-type]
 )
 class GroupedMapInArrowTests(ReusedSQLTestCase):
     @classmethod

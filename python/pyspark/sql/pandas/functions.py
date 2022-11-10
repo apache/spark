@@ -503,9 +503,9 @@ def _create_pandas_udf(f, returnType, evalType):
 
     if evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF and len(argspec.args) not in (1, 2):
         raise ValueError(
-            "Invalid function: pandas_udf with function type GROUPED_MAP or "
-            "the function in groupby.applyInArrow "
-            "must take either one argument (data) or two arguments (key, data)."
+            "Invalid function: the function in groupby.applyInArrow "
+            "must take either one argument (data) "
+            "or two arguments (key, data)."
         )
 
     if evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF and len(argspec.args) not in (2, 3):

@@ -32,8 +32,8 @@ if have_pyarrow:
 
 
 @unittest.skipIf(
-   not have_pyarrow,
-   pyarrow_requirement_message,  # type: ignore[arg-type]
+    not have_pyarrow,
+    pyarrow_requirement_message,  # type: ignore[arg-type]
 )
 class CogroupedMapInArrowTests(ReusedSQLTestCase):
     @classmethod
@@ -71,7 +71,6 @@ class CogroupedMapInArrowTests(ReusedSQLTestCase):
                 "left": [min(left_ids), max(left_ids), len(left_ids), sum(left_ids)],
                 "right": [min(right_ids), max(right_ids), len(right_ids), sum(right_ids)],
             }
-            print(result)
             return pa.Table.from_pydict(result)
 
         def func2(key, left, right):
@@ -102,7 +101,7 @@ class CogroupedMapInArrowTests(ReusedSQLTestCase):
             return func2(
                 tuple(pa.scalar(k) for k in key),
                 pa.Table.from_pandas(left),
-                pa.Table.from_pandas(right)
+                pa.Table.from_pandas(right),
             ).to_pandas()
 
         left_df = self.spark.range(0, 10, 2, 3).withColumn("value", col("id") * 10)

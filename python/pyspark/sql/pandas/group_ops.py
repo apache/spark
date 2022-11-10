@@ -30,6 +30,8 @@ if TYPE_CHECKING:
         PandasGroupedMapFunction,
         PandasGroupedMapFunctionWithState,
         PandasCogroupedMapFunction,
+        ArrowGroupedMapFunction,
+        ArrowCogroupedMapFunction,
     )
     from pyspark.sql.group import GroupedData
 
@@ -358,13 +360,14 @@ class PandasGroupedOpsMixin:
         self, func: "ArrowGroupedMapFunction", schema: Union[StructType, str]
     ) -> "DataFrame":
         from pyspark.sql import GroupedData
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
+        from pyspark.sql.functions import pandas_udf
 
         assert isinstance(self, GroupedData)
 
+        # The usage of the pandas_udf is internal so type checking is disabled.
         udf = pandas_udf(
             func, returnType=schema, functionType=PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
-        )
+        )  # type: ignore[call-overload]
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInArrow(udf_column._jc.expr())

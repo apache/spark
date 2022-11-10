@@ -167,6 +167,7 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
     Loads arrow record batches as `[[pa.RecordBatch]]` (one `[pa.RecordBatch]` per group)
     and serializes `[([pa.RecordBatch], arrow_type)]`.
     """
+
     def dump_stream(self, iterator, stream):
         # flatten inner list [([pa.RecordBatch], arrow_type)] into [(pa.RecordBatch, arrow_type)]
         # so strip off inner iterator induced by ArrowStreamUDFSerializer.load_stream
@@ -654,6 +655,7 @@ class CogroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
     Loads arrow record batches as `[([pa.RecordBatch], [pa.RecordBatch])]` (one tuple per group)
     and serializes `[([pa.RecordBatch], arrow_type)]`.
     """
+
     def load_stream(self, stream):
         """
         Deserialize Cogrouped ArrowRecordBatches and yield as two `pyarrow.RecordBatch`es.
