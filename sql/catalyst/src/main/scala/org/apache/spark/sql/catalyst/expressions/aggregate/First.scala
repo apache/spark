@@ -123,6 +123,6 @@ object FirstLast {
   def validateIgnoreNullExpr(exp: Expression, funcName: String): Boolean = exp match {
     case Literal(b: Boolean, BooleanType) => b
     case _ => throw QueryCompilationErrors.secondArgumentInFunctionIsNotBooleanLiteralError(
-      funcName)
+      funcName, exp.sql)
   }
 }

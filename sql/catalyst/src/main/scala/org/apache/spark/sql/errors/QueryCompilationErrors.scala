@@ -2084,10 +2084,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("fields" -> fields))
   }
 
-  def secondArgumentInFunctionIsNotBooleanLiteralError(funcName: String): Throwable = {
+  def secondArgumentInFunctionIsNotBooleanLiteralError(
+      funcName: String, parameter: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1210",
-      messageParameters = Map("funcName" -> funcName))
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters =
+        Map("parameter" -> parameter, "functionName" -> funcName, "expected" -> "Boolean"))
   }
 
   def joinConditionMissingOrTrivialError(

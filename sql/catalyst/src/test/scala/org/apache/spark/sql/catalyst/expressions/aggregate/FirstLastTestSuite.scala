@@ -112,14 +112,14 @@ class FirstLastTestSuite extends SparkFunSuite {
     val msg1 = intercept[AnalysisException] {
       new First(input, Literal(1, IntegerType))
     }.getMessage
-    assert(msg1.contains("The second argument in first should be a boolean literal"))
+    assert(msg1.contains("INVALID_PARAMETER_VALUE"))
     val msg2 = intercept[AnalysisException] {
       new Last(input, Literal(1, IntegerType))
     }.getMessage
-    assert(msg2.contains("The second argument in last should be a boolean literal"))
+    assert(msg2.contains("INVALID_PARAMETER_VALUE"))
     val msg3 = intercept[AnalysisException] {
       new AnyValue(input, Literal(1, IntegerType))
     }.getMessage
-    assert(msg3.contains("The second argument in any_value should be a boolean literal"))
+    assert(msg3.contains("INVALID_PARAMETER_VALUE"))
   }
 }
