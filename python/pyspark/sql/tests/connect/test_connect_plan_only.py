@@ -73,7 +73,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
     def test_summary(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.filter(df.col_name > 3).summary()._plan.to_proto(self.connect)
-        self.assertEqual(plan.root.stat_function.summary.statistics, [])
+        self.assertEqual(plan.root.summary.statistics, [])
 
         plan = (
             df.filter(df.col_name > 3)
@@ -81,7 +81,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             ._plan.to_proto(self.connect)
         )
         self.assertEqual(
-            plan.root.stat_function.summary.statistics,
+            plan.root.summary.statistics,
             ["count", "mean", "stddev", "min", "25%"],
         )
 

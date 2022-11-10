@@ -466,15 +466,11 @@ package object dsl {
       def summary(statistics: String*): Relation = {
         Relation
           .newBuilder()
-          .setStatFunction(
-            proto.StatFunction
+          .setSummary(
+            proto.StatSummary
               .newBuilder()
               .setInput(logicalPlan)
-              .setSummary(
-                proto.StatFunction.Summary
-                  .newBuilder()
-                  .addAllStatistics(statistics.toSeq.asJava)
-                  .build())
+              .addAllStatistics(statistics.toSeq.asJava)
               .build())
           .build()
       }
