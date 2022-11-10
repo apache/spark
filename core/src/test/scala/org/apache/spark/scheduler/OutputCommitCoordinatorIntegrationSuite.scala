@@ -50,7 +50,7 @@ class OutputCommitCoordinatorIntegrationSuite
       withTempDir { tempDir =>
         sc.parallelize(1 to 4, 2).map(_.toString).saveAsTextFile(tempDir.getAbsolutePath + "/out")
       }
-    }.getCause.getMessage
+    }.getMessage
     assert(e.contains("failed; but task commit success, data duplication may happen.") &&
       e.contains("Intentional exception"))
   }

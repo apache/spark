@@ -103,7 +103,7 @@ object SparkHadoopWriter extends Logging {
       case cause: Throwable =>
         logError(s"Aborting job ${jobContext.getJobID}.", cause)
         committer.abortJob(jobContext)
-        throw new SparkException("Job aborted.", cause)
+        throw cause
     }
   }
 
