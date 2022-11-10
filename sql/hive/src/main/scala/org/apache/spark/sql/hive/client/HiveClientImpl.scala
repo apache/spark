@@ -762,7 +762,7 @@ private[hive] class HiveClientImpl(
           assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
           shim.getPartitionNames(client, table.database, table.identifier.table, s.asJava, -1)
       }
-    hivePartitionNames.sorted.toSeq
+    hivePartitionNames.sorted
   }
 
   override def getPartitionOption(
@@ -798,7 +798,7 @@ private[hive] class HiveClientImpl(
     val parts = shim.getPartitions(client, hiveTable, partSpec.asJava)
       .map(fromHivePartition(_, absoluteUri))
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
-    parts.toSeq
+    parts
   }
 
   override def getPartitionsByFilter(
