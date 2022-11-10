@@ -507,7 +507,7 @@ class DataFrame(object):
             if not isinstance(s, str):
                 raise TypeError(f"'statistics' must be list[str], but got {type(s).__name__}")
         return DataFrame.withPlan(
-            plan.StatFunction(child=self._plan, function="summary", statistics=_statistics),
+            plan.StatSummary(child=self._plan, statistics=_statistics),
             session=self._session,
         )
 

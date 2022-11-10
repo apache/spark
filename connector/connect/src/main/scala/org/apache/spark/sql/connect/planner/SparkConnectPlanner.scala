@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType,
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LogicalPlan, Sample, SubqueryAlias, Union}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -67,8 +66,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.SUBQUERY_ALIAS =>
         transformSubqueryAlias(rel.getSubqueryAlias)
       case proto.Relation.RelTypeCase.REPARTITION => transformRepartition(rel.getRepartition)
-      case proto.Relation.RelTypeCase.STAT_FUNCTION =>
-        transformStatFunction(rel.getStatFunction)
+      case proto.Relation.RelTypeCase.SUMMARY => transformStatSummary(rel.getSummary)
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_SAME_LENGTH_NAMES =>
         transformRenameColumnsBySamelenghtNames(rel.getRenameColumnsBySameLengthNames)
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_NAME_TO_NAME_MAP =>
@@ -124,17 +122,11 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     logical.Range(start, end, step, numPartitions)
   }
 
-  private def transformStatFunction(rel: proto.StatFunction): LogicalPlan = {
-    val child = transformRelation(rel.getInput)
-
-    rel.getFunctionCase match {
-      case proto.StatFunction.FunctionCase.SUMMARY =>
-        StatFunctions
-          .summary(Dataset.ofRows(session, child), rel.getSummary.getStatisticsList.asScala.toSeq)
-          .logicalPlan
-
-      case _ => throw InvalidPlanInput(s"StatFunction ${rel.getUnknown} not supported.")
-    }
+  private def transformStatSummary(rel: proto.StatSummary): LogicalPlan = {
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .summary(rel.getStatisticsList.asScala.toSeq: _*)
+      .logicalPlan
   }
 
   private def transformRenameColumnsBySamelenghtNames(

@@ -78,7 +78,7 @@ class Relation(google.protobuf.message.Message):
     REPARTITION_FIELD_NUMBER: builtins.int
     RENAME_COLUMNS_BY_SAME_LENGTH_NAMES_FIELD_NUMBER: builtins.int
     RENAME_COLUMNS_BY_NAME_TO_NAME_MAP_FIELD_NUMBER: builtins.int
-    STAT_FUNCTION_FIELD_NUMBER: builtins.int
+    SUMMARY_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -119,7 +119,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def rename_columns_by_name_to_name_map(self) -> global___RenameColumnsByNameToNameMap: ...
     @property
-    def stat_function(self) -> global___StatFunction: ...
+    def summary(self) -> global___StatSummary:
+        """stat functions"""
     @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
@@ -144,7 +145,7 @@ class Relation(google.protobuf.message.Message):
         repartition: global___Repartition | None = ...,
         rename_columns_by_same_length_names: global___RenameColumnsBySameLengthNames | None = ...,
         rename_columns_by_name_to_name_map: global___RenameColumnsByNameToNameMap | None = ...,
-        stat_function: global___StatFunction | None = ...,
+        summary: global___StatSummary | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -188,10 +189,10 @@ class Relation(google.protobuf.message.Message):
             b"sort",
             "sql",
             b"sql",
-            "stat_function",
-            b"stat_function",
             "subquery_alias",
             b"subquery_alias",
+            "summary",
+            b"summary",
             "unknown",
             b"unknown",
         ],
@@ -237,10 +238,10 @@ class Relation(google.protobuf.message.Message):
             b"sort",
             "sql",
             b"sql",
-            "stat_function",
-            b"stat_function",
             "subquery_alias",
             b"subquery_alias",
+            "summary",
+            b"summary",
             "unknown",
             b"unknown",
         ],
@@ -266,7 +267,7 @@ class Relation(google.protobuf.message.Message):
         "repartition",
         "rename_columns_by_same_length_names",
         "rename_columns_by_name_to_name_map",
-        "stat_function",
+        "summary",
         "unknown",
     ] | None: ...
 
@@ -1093,64 +1094,52 @@ class Repartition(google.protobuf.message.Message):
 
 global___Repartition = Repartition
 
-class StatFunction(google.protobuf.message.Message):
-    """StatFunction"""
+class StatSummary(google.protobuf.message.Message):
+    """Computes specified statistics for numeric and string columns.
+    It will invoke 'Dataset.summary' (same as 'StatFunctions.summary')
+    to compute the results.
+    """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class Summary(google.protobuf.message.Message):
-        """StatFunctions.summary"""
-
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        STATISTICS_FIELD_NUMBER: builtins.int
-        @property
-        def statistics(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
-        def __init__(
-            self,
-            *,
-            statistics: collections.abc.Iterable[builtins.str] | None = ...,
-        ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["statistics", b"statistics"]
-        ) -> None: ...
-
     INPUT_FIELD_NUMBER: builtins.int
-    SUMMARY_FIELD_NUMBER: builtins.int
-    UNKNOWN_FIELD_NUMBER: builtins.int
+    STATISTICS_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
-        """Required. The input relation."""
+        """(Required) The input relation."""
     @property
-    def summary(self) -> global___StatFunction.Summary: ...
-    @property
-    def unknown(self) -> global___Unknown: ...
+    def statistics(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Statistics from to be computed.
+
+        Available statistics are:
+         count
+         mean
+         stddev
+         min
+         max
+         arbitrary approximate percentiles specified as a percentage (e.g. 75%)
+         count_distinct
+         approx_count_distinct
+
+        If no statistics are given, this function computes 'count', 'mean', 'stddev', 'min',
+        'approximate quartiles' (percentiles at 25%, 50%, and 75%), and 'max'.
+        """
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
-        summary: global___StatFunction.Summary | None = ...,
-        unknown: global___Unknown | None = ...,
+        statistics: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "function", b"function", "input", b"input", "summary", b"summary", "unknown", b"unknown"
-        ],
+        self, field_name: typing_extensions.Literal["input", b"input"]
     ) -> builtins.bool: ...
     def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "function", b"function", "input", b"input", "summary", b"summary", "unknown", b"unknown"
-        ],
+        self, field_name: typing_extensions.Literal["input", b"input", "statistics", b"statistics"]
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["function", b"function"]
-    ) -> typing_extensions.Literal["summary", "unknown"] | None: ...
 
-global___StatFunction = StatFunction
+global___StatSummary = StatSummary
 
 class RenameColumnsBySameLengthNames(google.protobuf.message.Message):
     """Rename columns on the input relation by the same length of names."""
