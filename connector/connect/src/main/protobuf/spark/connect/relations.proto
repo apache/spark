@@ -50,7 +50,8 @@ message Relation {
     RenameColumnsBySameLengthNames rename_columns_by_same_length_names = 18;
     RenameColumnsByNameToNameMap rename_columns_by_name_to_name_map = 19;
 
-    StatFunction stat_function = 100;
+    // stat functions
+    StatSummary summary = 100;
 
     Unknown unknown = 999;
   }
@@ -259,21 +260,28 @@ message Repartition {
   bool shuffle = 3;
 }
 
-// StatFunction
-message StatFunction {
-  // Required. The input relation.
+// Computes specified statistics for numeric and string columns.
+// It will invoke 'Dataset.summary' (same as 'StatFunctions.summary')
+// to compute the results.
+message StatSummary {
+  // (Required) The input relation.
   Relation input = 1;
-  // Required. The function and its parameters.
-  oneof function {
-    Summary summary = 2;
 
-    Unknown unknown = 999;
-  }
-
-  // StatFunctions.summary
-  message Summary {
-    repeated string statistics = 1;
-  }
+  // (Optional) Statistics from to be computed.
+  //
+  // Available statistics are:
+  //  count
+  //  mean
+  //  stddev
+  //  min
+  //  max
+  //  arbitrary approximate percentiles specified as a percentage (e.g. 75%)
+  //  count_distinct
+  //  approx_count_distinct
+  //
+  // If no statistics are given, this function computes 'count', 'mean', 'stddev', 'min',
+  // 'approximate quartiles' (percentiles at 25%, 50%, and 75%), and 'max'.
+  repeated string statistics = 2;
 }
 
 // Rename columns on the input relation by the same length of names.
