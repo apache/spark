@@ -4225,10 +4225,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.4.0
 
-        .. versionchanged:: 3.4.0
-           The underlying implementation was optimized, then there is no limitaions on number of
-           distinct values or pairs.
-
         Parameters
         ----------
         col1 : str
