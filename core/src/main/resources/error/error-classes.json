@@ -471,7 +471,7 @@
   },
   "GROUP_BY_AGGREGATE" : {
     "message" : [
-      "aggregate functions are not allowed in GROUP BY, but found <sqlExpr>"
+      "Aggregate functions are not allowed in GROUP BY, but found <sqlExpr>."
     ]
   },
   "GROUP_BY_POS_OUT_OF_RANGE" : {
