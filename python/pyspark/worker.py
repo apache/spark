@@ -311,46 +311,38 @@ def wrap_arrow_batch_iter_udf(f, return_type):
 
 
 def wrap_cogrouped_map_arrow_udf(f, return_type, argspec):
-    def wrapped(left_key_batch, left_value_batch, right_key_batch, right_value_batch):
-        if len(argspec.args) == 2:
-            result = f(left_value_batch, right_value_batch)
-        elif len(argspec.args) == 3:
-            key_batch = left_key_batch if left_key_batch.num_rows > 0 else right_key_batch
-            key = tuple(c[0] for c in key_batch.columns)
-            result = f(key, left_value_batch, right_value_batch)
+    def wrapped(left_key_table, left_value_table, right_key_table, right_value_table):
+        import pyarrow as pa
 
-        if not isinstance(result, Iterator):
+        if len(argspec.args) == 2:
+            result = f(left_value_table, right_value_table)
+        elif len(argspec.args) == 3:
+            key_table = left_key_table if left_key_table.num_rows > 0 else right_key_table
+            key = tuple(c[0] for c in key_table.columns)
+            result = f(key, left_value_table, right_value_table)
+
+        if not isinstance(result, pa.Table):
             raise TypeError(
                 "Return type of the user-defined function should be "
-                "iter(pyarrow.RecordBatch), but is {}".format(type(result))
+                "pyarrow.Table, but is {}".format(type(result))
             )
 
-        def verify_batch(batch):
-            import pyarrow as pa
+        # the number of columns of result have to match the return type
+        # but it is fine for result to have no columns at all if it is empty
+        if not (
+            len(result.columns) == len(return_type)
+            or len(result.columns) == 0
+            and result.num_rows == 0
+        ):
+            raise RuntimeError(
+                "Number of columns of the returned pyarrow.BatchRecord "
+                "doesn't match specified schema. "
+                "Expected: {} Actual: {}".format(len(return_type), len(result.columns))
+            )
 
-            if not isinstance(result, pa.RecordBatch):
-                raise TypeError(
-                    "Return type of the user-defined function should be "
-                    "iter(pyarrow.RecordBatch), but is iter({})".format(type(result))
-                )
+        return result.to_batches()
 
-            # the number of columns of result have to match the return type
-            # but it is fine for result to have no columns at all if it is empty
-            if not (
-                len(batch.columns) == len(return_type)
-                or len(batch.columns) == 0
-                and batch.num_rows == 0
-            ):
-                raise RuntimeError(
-                    "Number of columns of the returned pyarrow.BatchRecord "
-                    "doesn't match specified schema. "
-                    "Expected: {} Actual: {}".format(len(return_type), len(batch.columns))
-                )
-            return batch
-
-        return map(verify_batch, result)
-
-    return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), to_arrow_type(return_type))]
+    return lambda kl, vl, kr, vr: (wrapped(kl, vl, kr, vr), to_arrow_type(return_type))
 
 
 def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
@@ -1292,7 +1284,7 @@ def read_udfs(pickleSer, infile, eval_type):
         )
 
         if eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
-            ser = CogroupArrowUDFSerializer(timezone, safecheck, assign_cols_by_name(runner_conf))
+            ser = CogroupArrowUDFSerializer()
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             ser = CogroupPandasUDFSerializer(timezone, safecheck, assign_cols_by_name(runner_conf))
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
@@ -1532,6 +1524,8 @@ def read_udfs(pickleSer, infile, eval_type):
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
 
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
+        import pyarrow as pa
+
         # We assume there is only one UDF here because cogrouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
@@ -1540,18 +1534,19 @@ def read_udfs(pickleSer, infile, eval_type):
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
         def batch_from_offset(batch, offsets):
-            import pyarrow as pa
-
             return pa.RecordBatch.from_arrays(
                 arrays=[batch.columns[o] for o in offsets],
                 names=[batch.schema.names[o] for o in offsets],
             )
 
-        def mapper(a):
-            df1_keys = [batch_from_offset(batch, parsed_offsets[0][0]) for batch in a[0]]
-            df1_vals = [batch_from_offset(batch, parsed_offsets[0][1]) for batch in a[0]]
-            df2_keys = [batch_from_offset(batch, parsed_offsets[1][0]) for batch in a[1]]
-            df2_vals = [batch_from_offset(batch, parsed_offsets[1][1]) for batch in a[1]]
+        def table_from_batches(batches, offsets):
+            return pa.Table.from_batches([batch_from_offset(batch, offsets) for batch in batches])
+
+        def mapper(batches):
+            df1_keys = table_from_batches(batches[0], parsed_offsets[0][0])
+            df1_vals = table_from_batches(batches[0], parsed_offsets[0][1])
+            df2_keys = table_from_batches(batches[1], parsed_offsets[1][0])
+            df2_vals = table_from_batches(batches[1], parsed_offsets[1][1])
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
 
     else:
@@ -1615,9 +1610,14 @@ def main(infile, outfile):
         taskContext._taskAttemptId = read_long(infile)
         taskContext._cpus = read_int(infile)
         taskContext._resources = {}
-        if taskContext._partitionId == 0:
+        if taskContext._partitionId == 0 and False:
             print(f'>>>>>> partition {taskContext._partitionId} has pid {os.getpid()}')
-            #time.sleep(10)
+            for left in reversed(range(1, 5)):
+                print(left, end='')
+                for _ in range(4):
+                    time.sleep(0.25)
+                    print('.', end='')
+            print()
         for r in range(read_int(infile)):
             key = utf8_deserializer.loads(infile)
             name = utf8_deserializer.loads(infile)
