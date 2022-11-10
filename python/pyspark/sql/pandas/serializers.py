@@ -163,13 +163,17 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
 
 
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
+    """
+    Loads arrow record batches as `[[pa.RecordBatch]]` (one `[pa.RecordBatch]` per group)
+    and serializes `[([pa.RecordBatch], arrow_type)]`.
+    """
     def dump_stream(self, iterator, stream):
-        # flatten iterator [[(pa.RecordBatch, arrow_type)]] into [(pa.RecordBatch, arrow_type)]
-        # so strip off extra outer iterator added by ArrowStreamUDFSerializer.load_stream
+        # flatten inner list [([pa.RecordBatch], arrow_type)] into [(pa.RecordBatch, arrow_type)]
+        # so strip off inner iterator induced by ArrowStreamUDFSerializer.load_stream
         batch_iter = [
-            batch_and_type
-            for item in iterator  # item is list returned by wrap_grouped_map_arrow_udf
-            for batch_and_type in item  # tuple constructed in wrap_grouped_map_arrow_udf
+            (batch, arrow_type)
+            for batches, arrow_type in iterator  # tuple constructed in wrap_grouped_map_arrow_udf
+            for batch in batches
         ]
         super(ArrowStreamGroupUDFSerializer, self).dump_stream(batch_iter, stream)
 

@@ -407,7 +407,7 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec):
 
         return result.to_batches()
 
-    return lambda k, v: [(batch, to_arrow_type(return_type)) for batch in wrapped(k, v)]
+    return lambda k, v: (wrapped(k, v), to_arrow_type(return_type))
 
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
