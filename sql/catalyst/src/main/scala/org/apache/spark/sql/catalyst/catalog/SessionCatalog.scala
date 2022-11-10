@@ -710,6 +710,7 @@ class SessionCatalog(
     name match {
       case Seq(v) => getRawTempView(v)
       case Seq(db, v) if isGlobalTempViewDB(db) => getRawGlobalTempView(v)
+      case Seq(db, v) if !isGlobalTempViewDB(db) => getRawTempView(v)
       case _ => None
     }
   }

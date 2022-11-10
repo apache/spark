@@ -1154,7 +1154,7 @@ class DatasetSuite extends QueryTest
 
       spark.sql("CREATE DATABASE IF NOT EXISTS test_db")
       dataset.createTempView("test_db.tempView")
-      spark.catalog.tableExists("test_db.tempView")
+      assert(spark.catalog.tableExists("test_db.tempView"))
     }
   }
 
