@@ -677,7 +677,7 @@ class Repartition(LogicalPlan):
         self._num_partitions = num_partitions
         self._shuffle = shuffle
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         rel = proto.Relation()
         if self._child is not None:
             rel.repartition.input.CopyFrom(self._child.plan(session))
@@ -809,7 +809,7 @@ class StatSummary(LogicalPlan):
         super().__init__(child)
         self.statistics = statistics
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
         plan.summary.input.CopyFrom(self._child.plan(session))
