@@ -66,7 +66,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelTypeCase.SUBQUERY_ALIAS =>
         transformSubqueryAlias(rel.getSubqueryAlias)
       case proto.Relation.RelTypeCase.REPARTITION => transformRepartition(rel.getRepartition)
-      case proto.Relation.RelTypeCase.SUMMARY => transformSummary(rel.getSummary)
+      case proto.Relation.RelTypeCase.SUMMARY => transformStatSummary(rel.getSummary)
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_SAME_LENGTH_NAMES =>
         transformRenameColumnsBySamelenghtNames(rel.getRenameColumnsBySameLengthNames)
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_NAME_TO_NAME_MAP =>
@@ -122,7 +122,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     logical.Range(start, end, step, numPartitions)
   }
 
-  private def transformSummary(rel: proto.StatSummary): LogicalPlan = {
+  private def transformStatSummary(rel: proto.StatSummary): LogicalPlan = {
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
       .summary(rel.getStatisticsList.asScala.toSeq: _*)

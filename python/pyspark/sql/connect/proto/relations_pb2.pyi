@@ -76,14 +76,9 @@ class Relation(google.protobuf.message.Message):
     RANGE_FIELD_NUMBER: builtins.int
     SUBQUERY_ALIAS_FIELD_NUMBER: builtins.int
     REPARTITION_FIELD_NUMBER: builtins.int
-<<<<<<< HEAD
     RENAME_COLUMNS_BY_SAME_LENGTH_NAMES_FIELD_NUMBER: builtins.int
     RENAME_COLUMNS_BY_NAME_TO_NAME_MAP_FIELD_NUMBER: builtins.int
-    STAT_FUNCTION_FIELD_NUMBER: builtins.int
-=======
-    RENAME_COLUMNS_FIELD_NUMBER: builtins.int
     SUMMARY_FIELD_NUMBER: builtins.int
->>>>>>> 6f522fa8f2 (init)
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -148,14 +143,9 @@ class Relation(google.protobuf.message.Message):
         range: global___Range | None = ...,
         subquery_alias: global___SubqueryAlias | None = ...,
         repartition: global___Repartition | None = ...,
-<<<<<<< HEAD
         rename_columns_by_same_length_names: global___RenameColumnsBySameLengthNames | None = ...,
         rename_columns_by_name_to_name_map: global___RenameColumnsByNameToNameMap | None = ...,
-        stat_function: global___StatFunction | None = ...,
-=======
-        rename_columns: global___RenameColumns | None = ...,
         summary: global___StatSummary | None = ...,
->>>>>>> 6f522fa8f2 (init)
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -275,14 +265,9 @@ class Relation(google.protobuf.message.Message):
         "range",
         "subquery_alias",
         "repartition",
-<<<<<<< HEAD
         "rename_columns_by_same_length_names",
         "rename_columns_by_name_to_name_map",
-        "stat_function",
-=======
-        "rename_columns",
         "summary",
->>>>>>> 6f522fa8f2 (init)
         "unknown",
     ] | None: ...
 
