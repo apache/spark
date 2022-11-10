@@ -618,12 +618,9 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           ("element_at(arrS, 1)", "array of str",
               "element_at(input[5, array<string>, true], 1, None, false)"),
           ("arrNest.i", "array of struct", "input[6, array<struct<i:int>>, true].i"),
-          //("mapSI", "map with null str key", "input[7, map<string,int>, false]", ""),
-          ("mapSI", "map with null str key", "ARRAY"),
           ("mapSI['foo']", "map null int value", "input[7, map<string,int>, true][foo]"),
           ("element_at(mapSI, 'foo')", "map null int value",
               "element_at(input[7, map<string,int>, true], foo, None, false)"),
-          //("mapIS", "map with null int key", "input[8, map<int,string>, true]", ""),
           ("mapIS[1]", "map null str value", "input[8, map<int,string>, true][1]"),
           ("element_at(mapIS, 1)", "map null str value",
               "element_at(input[8, map<int,string>, true], 1, None, false)"),
@@ -781,10 +778,8 @@ object SimpleDataSourceV2NonNullable {
     row("arrS[0]", arrS = Array(null)),
     row("element_at(arrS, 1)", arrS = Array(null)),
     row("arrNest.i", arrNest = Array(InternalRow(null))),
-    row("mapSI", mapSI = Map((null, 1))),
     row("mapSI['foo']", mapSI = Map(fooStr -> null)),
     row("element_at(mapSI, 'foo')", mapSI = Map(fooStr -> null)),
-    row("mapIS", mapIS = Map((null, fooStr))),
     row("mapIS[1]", mapIS = Map((1, null))),
     row("element_at(mapIS, 1)", mapIS = Map((1, null)))
   )
