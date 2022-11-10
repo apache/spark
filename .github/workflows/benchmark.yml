@@ -46,7 +46,7 @@ on:
 jobs:
   matrix-gen:
     name: Generate matrix for job splits
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     env:
@@ -60,7 +60,7 @@ jobs:
   tpcds-1g-gen:
     name: "Generate an input dataset for TPCDSQueryBenchmark with SF=1"
     if: contains(github.event.inputs.class, 'TPCDSQueryBenchmark') || contains(github.event.inputs.class, '*')
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     env:
       SPARK_LOCAL_IP: localhost
     steps:
@@ -118,7 +118,7 @@ jobs:
     if: always()
     needs: [matrix-gen, tpcds-1g-gen]
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
