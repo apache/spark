@@ -140,11 +140,8 @@ class DataFrame(object):
         """Returns the list of columns of the current data frame."""
         if self._plan is None:
             return []
-        if "columns" not in self._cache and self._plan is not None:
-            names = self.schema().names
-            # Translate to standard pytho array
-            self._cache["columns"] = names
-        return self._cache["columns"]
+
+        return self.schema().names
 
     def count(self) -> int:
         """Returns the number of rows in the data frame"""
