@@ -716,7 +716,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case o if !o.resolved =>
         throw SparkException.internalError(
           msg = s"Found the unresolved operator: ${o.simpleString(SQLConf.get.maxToStringFields)}",
-          context = o.origin.getQueryContext)
+          context = o.origin.getQueryContext,
+          summary = o.origin.context.summary)
       case _ =>
     }
 
