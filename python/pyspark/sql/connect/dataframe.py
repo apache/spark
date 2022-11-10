@@ -101,21 +101,23 @@ class DataFrame(object):
     of the DataFrame with the changes applied.
     """
 
-    def __init__(self, data: Optional[List[Any]] = None, schema: Optional[StructType] = None):
+    def __init__(
+        self,
+        session: "RemoteSparkSession",
+        data: Optional[List[Any]] = None,
+        schema: Optional[StructType] = None,
+    ):
         """Creates a new data frame"""
         self._schema = schema
         self._plan: Optional[plan.LogicalPlan] = None
         self._cache: Dict[str, Any] = {}
-        self._session: Optional["RemoteSparkSession"] = None
+        self._session: "RemoteSparkSession" = session
 
     @classmethod
-    def withPlan(
-        cls, plan: plan.LogicalPlan, session: Optional["RemoteSparkSession"] = None
-    ) -> "DataFrame":
+    def withPlan(cls, plan: plan.LogicalPlan, session: "RemoteSparkSession") -> "DataFrame":
         """Main initialization method used to construct a new data frame with a child plan."""
-        new_frame = DataFrame()
+        new_frame = DataFrame(session=session)
         new_frame._plan = plan
-        new_frame._session = session
         return new_frame
 
     def select(self, *cols: ColumnOrName) -> "DataFrame":
