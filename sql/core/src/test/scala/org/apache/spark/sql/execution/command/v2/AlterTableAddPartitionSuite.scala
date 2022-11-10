@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.SparkNumberFormatException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
 import org.apache.spark.sql.execution.command
@@ -129,12 +130,29 @@ class AlterTableAddPartitionSuite
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (c int) $defaultUsing PARTITIONED BY (p int)")
 
-      withSQLConf(
-          SQLConf.SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION.key -> "true",
-          SQLConf.ANSI_ENABLED.key -> "false") {
-        sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
-        checkPartitions(t, Map("p" -> defaultPartitionName))
-        sql(s"ALTER TABLE $t DROP PARTITION (p=null)")
+      withSQLConf(SQLConf.SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION.key -> "true") {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+          checkError(
+            exception = intercept[SparkNumberFormatException] {
+              sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
+            },
+            errorClass = "CAST_INVALID_INPUT",
+            parameters = Map(
+              "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
+              "expression" -> "'aaa'",
+              "sourceType" -> "\"STRING\"",
+              "targetType" -> "\"INT\""),
+            context = ExpectedContext(
+              fragment = s"ALTER TABLE $t ADD PARTITION (p='aaa')",
+              start = 0,
+              stop = 35 + t.length))
+        }
+
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+          sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
+          checkPartitions(t, Map("p" -> defaultPartitionName))
+          sql(s"ALTER TABLE $t DROP PARTITION (p=null)")
+        }
       }
     }
   }
