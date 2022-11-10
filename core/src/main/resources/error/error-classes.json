@@ -469,6 +469,11 @@
       "Grouping sets size cannot be greater than <maxSize>"
     ]
   },
+  "GROUP_BY_AGGREGATE" : {
+    "message" : [
+      "Aggregate functions are not allowed in GROUP BY, but found <sqlExpr>."
+    ]
+  },
   "GROUP_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
@@ -5006,11 +5011,6 @@
   "_LEGACY_ERROR_TEMP_2423" : {
     "message" : [
       "Correlated scalar subquery '<sqlExpr>' is neither present in the group by, nor in an aggregate function. Add it to group by using ordinal position or wrap it in first() (or first_value) if you don't care which value you get."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2424" : {
-    "message" : [
-      "aggregate functions are not allowed in GROUP BY, but found <sqlExpr>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2425" : {
