@@ -1085,10 +1085,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("clz" -> clz.toString))
   }
 
-  def secondArgumentNotDoubleLiteralError(): Throwable = {
+  def secondArgumentNotDoubleLiteralError(functionName: String, parameter: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1104",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters =
+        Map("parameter" -> parameter, "functionName" -> functionName, "expected" -> "Double"))
   }
 
   def dataTypeUnsupportedByExtractValueError(
@@ -2034,11 +2035,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def secondArgumentOfFunctionIsNotIntegerError(
-      function: String, e: NumberFormatException): Throwable = {
+      function: String, parameter: String, e: NumberFormatException): Throwable = {
     // The second argument of {function} function needs to be an integer
     new AnalysisException(
-      errorClass = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
-      messageParameters = Map("functionName" -> function),
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters =
+        Map("parameter" -> parameter, "functionName" -> function, "expected" -> "Integer"),
       cause = Some(e))
   }
 

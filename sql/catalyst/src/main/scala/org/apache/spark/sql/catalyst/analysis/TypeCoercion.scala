@@ -801,7 +801,8 @@ abstract class TypeCoercionBase {
           Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
         } catch {
           case e: NumberFormatException =>
-            throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_add", e)
+            throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError(
+              "date_add", r.sql, e)
         }
         DateAdd(l, Literal(days))
       case DateSub(l, r) if r.dataType == StringType && r.foldable =>
@@ -809,7 +810,8 @@ abstract class TypeCoercionBase {
           Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
         } catch {
           case e: NumberFormatException =>
-            throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_sub", e)
+            throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError(
+              "date_sub", r.sql, e)
         }
         DateSub(l, Literal(days))
     }

@@ -376,15 +376,16 @@ class QueryCompilationErrorsSuite
     }
   }
 
-  test("SECOND_FUNCTION_ARGUMENT_NOT_INTEGER: " +
+  test("INVALID_PARAMETER_VALUE: " +
     "the second argument of 'date_add' function needs to be an integer") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkError(
         exception = intercept[AnalysisException] {
           sql("select date_add('1982-08-15', 'x')").collect()
         },
-        errorClass = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
-        parameters = Map("functionName" -> "date_add"),
+        errorClass = "INVALID_PARAMETER_VALUE",
+        parameters =
+          Map("parameter" -> "'x'", "functionName" -> "date_add", "expected" -> "Integer"),
         sqlState = "22023")
     }
   }

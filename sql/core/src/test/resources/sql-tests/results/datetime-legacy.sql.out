@@ -389,10 +389,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
+  "errorClass" : "INVALID_PARAMETER_VALUE",
   "sqlState" : "22023",
   "messageParameters" : {
-    "functionName" : "date_add"
+    "expected" : "Integer",
+    "functionName" : "date_add",
+    "parameter" : "'1.2'"
   }
 }
 
@@ -551,10 +553,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
+  "errorClass" : "INVALID_PARAMETER_VALUE",
   "sqlState" : "22023",
   "messageParameters" : {
-    "functionName" : "date_sub"
+    "expected" : "Integer",
+    "functionName" : "date_sub",
+    "parameter" : "'1.2'"
   }
 }
 

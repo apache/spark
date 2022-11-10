@@ -900,12 +900,6 @@
     ],
     "sqlState" : "42000"
   },
-  "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
-    "message" : [
-      "The second argument of <functionName> function needs to be an integer."
-    ],
-    "sqlState" : "22023"
-  },
   "STAR_GROUP_BY_POS" : {
     "message" : [
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
@@ -2109,11 +2103,6 @@
       "Unsupported component type <clz> in arrays."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1104" : {
-    "message" : [
-      "The second argument should be a double literal."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1105" : {
     "message" : [
       "Field name should be String Literal, but it's <extraction>."
@@ -2631,11 +2620,6 @@
   "_LEGACY_ERROR_TEMP_1209" : {
     "message" : [
       "Ambiguous reference to fields <fields>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1210" : {
-    "message" : [
-      "The second argument in <funcName> should be a boolean literal."
     ]
   },
   "_LEGACY_ERROR_TEMP_1211" : {
