@@ -121,7 +121,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.sample.lower_bound, 0.0)
         self.assertEqual(plan.root.sample.upper_bound, 0.4)
         self.assertEqual(plan.root.sample.with_replacement, True)
-        self.assertEqual(plan.root.sample.seed.seed, -1)
+        self.assertEqual(plan.root.sample.seed, -1)
 
     def test_sort(self):
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -180,7 +180,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.range.start, 10)
         self.assertEqual(plan.root.range.end, 20)
         self.assertEqual(plan.root.range.step, 3)
-        self.assertEqual(plan.root.range.num_partitions.num_partitions, 4)
+        self.assertEqual(plan.root.range.num_partitions, 4)
 
         plan = self.connect.range(start=10, end=20)._plan.to_proto(self.connect)
         self.assertEqual(plan.root.range.start, 10)

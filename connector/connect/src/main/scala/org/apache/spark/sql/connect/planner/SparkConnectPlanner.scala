@@ -104,7 +104,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       rel.getLowerBound,
       rel.getUpperBound,
       rel.getWithReplacement,
-      if (rel.hasSeed) rel.getSeed.getSeed else Utils.random.nextLong,
+      if (rel.hasSeed) rel.getSeed else Utils.random.nextLong,
       transformRelation(rel.getInput))
   }
 
@@ -117,7 +117,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     val end = rel.getEnd
     val step = rel.getStep
     val numPartitions = if (rel.hasNumPartitions) {
-      rel.getNumPartitions.getNumPartitions
+      rel.getNumPartitions
     } else {
       session.leafNodeDefaultParallelism
     }

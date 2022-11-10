@@ -443,7 +443,7 @@ class Sample(LogicalPlan):
         plan.sample.upper_bound = self.upper_bound
         plan.sample.with_replacement = self.with_replacement
         if self.seed is not None:
-            plan.sample.seed.seed = self.seed
+            plan.sample.seed = self.seed
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -777,9 +777,7 @@ class Range(LogicalPlan):
         rel.range.end = self._end
         rel.range.step = self._step
         if self._num_partitions is not None:
-            num_partitions_proto = rel.range.NumPartitions()
-            num_partitions_proto.num_partitions = self._num_partitions
-            rel.range.num_partitions.CopyFrom(num_partitions_proto)
+            rel.range.num_partitions = self._num_partitions
         return rel
 
     def print(self, indent: int = 0) -> str:
