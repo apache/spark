@@ -75,7 +75,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
     @classmethod
     def spark_connect_load_test_data(cls: Any):
         # Setup Remote Spark Session
-        cls.connect = RemoteSparkSession(user_id="test_user")
+        cls.connect = RemoteSparkSession(userId="test_user")
         df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
         # Since we might create multiple Spark sessions, we need to create global temporary view
         # that is specifically maintained in the "global_temp" schema.
