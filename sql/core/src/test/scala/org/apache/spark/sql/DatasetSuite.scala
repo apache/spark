@@ -1135,21 +1135,27 @@ class DatasetSuite extends QueryTest
   }
 
   test("createTempView") {
-    val dataset = Seq(1, 2, 3).toDS()
-    dataset.createOrReplaceTempView("tempView")
+    withDatabase("test_db") {
+      val dataset = Seq(1, 2, 3).toDS()
+      dataset.createOrReplaceTempView("tempView")
 
-    // Overrides the existing temporary view with same name
-    // No exception should be thrown here.
-    dataset.createOrReplaceTempView("tempView")
+      // Overrides the existing temporary view with same name
+      // No exception should be thrown here.
+      dataset.createOrReplaceTempView("tempView")
 
-    // Throws AnalysisException if temp view with same name already exists
-    val e = intercept[AnalysisException](
-      dataset.createTempView("tempView"))
-    intercept[AnalysisException](dataset.createTempView("tempView"))
-    checkError(e,
-      errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
-      parameters = Map("relationName" -> "`tempView`"))
-    dataset.sparkSession.catalog.dropTempView("tempView")
+      // Throws AnalysisException if temp view with same name already exists
+      val e = intercept[AnalysisException](
+        dataset.createTempView("tempView"))
+      intercept[AnalysisException](dataset.createTempView("tempView"))
+      checkError(e,
+        errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+        parameters = Map("relationName" -> "`tempView`"))
+      dataset.sparkSession.catalog.dropTempView("tempView")
+
+      spark.sql("CREATE DATABASE IF NOT EXISTS test_db")
+      dataset.createTempView("test_db.tempView")
+      spark.catalog.tableExists("test_db.tempView")
+    }
   }
 
   test("SPARK-15381: physical object operator should define `reference` correctly") {
