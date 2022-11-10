@@ -36,8 +36,6 @@ case class V2Aggregator[BUF <: java.io.Serializable, OUT](
   private[this] lazy val inputProjection = UnsafeProjection.create(children)
 
   override def nullable: Boolean = aggrFunc.isResultNullable
-
-  override def trusted: Boolean = false
   override def dataType: DataType = aggrFunc.resultType()
   override def inputTypes: Seq[AbstractDataType] = aggrFunc.inputTypes().toSeq
   override def createAggregationBuffer(): BUF = aggrFunc.newAggregationState()

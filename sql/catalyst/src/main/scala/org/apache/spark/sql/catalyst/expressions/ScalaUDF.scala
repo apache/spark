@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.commons.text.StringEscapeUtils
+//import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.{createToCatalystConverter, createToScalaConverter => catalystCreateToScalaConverter, isPrimitive}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -1170,22 +1170,22 @@ case class ScalaUDF(
        """.stripMargin
 
     // TODO ETK potential point to hook in?
-    val nullCheck = if (nullable) {
+    val nullCheck = //if (nullable) {
       s"""
          |if (!${ev.isNull}) {
          |  ${ev.value} = $resultTerm;
          |}
        """.stripMargin
-    } else {
-      s"""
-         |if (!${ev.isNull}) {
-         |  ${ev.value} = $resultTerm;
-         |} else {
-         |  throw QueryExecutionErrors.valueCannotBeNullError(
-         |    "UDF named ${StringEscapeUtils.escapeJava(name)}");
-         |}
-       """.stripMargin
-    }
+    //} else {
+    //  s"""
+    //     |if (!${ev.isNull}) {
+    //     |  ${ev.value} = $resultTerm;
+    //     |} else {
+    //     |  throw QueryExecutionErrors.valueCannotBeNullError(
+    //     |    "UDF named ${StringEscapeUtils.escapeJava(name)}");
+    //     |}
+    //   """.stripMargin
+    //}
     ev.copy(code =
       code"""
          |$evalCode

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 trait CodegenFallback extends Expression {
 
   protected def untrustedOutputNullabilityName: Option[String] = None
+  override def trustNullability: Boolean = untrustedOutputNullabilityName.isDefined
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // LeafNode does not need `input`

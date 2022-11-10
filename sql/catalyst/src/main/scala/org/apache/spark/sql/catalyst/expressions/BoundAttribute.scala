@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.commons.text.StringEscapeUtils
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, JavaCode}
@@ -29,7 +31,7 @@ import org.apache.spark.sql.types._
  * the layout of intermediate tuples, BindReferences should be run after all such transformations.
  */
 case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean,
-  override val trusted: Boolean = true)
+  override val trustNullability: Boolean = true)
   extends LeafExpression {
 
   override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
@@ -58,6 +60,15 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean,
              |$javaType ${ev.value} = ${ev.isNull} ?
              |  ${CodeGenerator.defaultValue(dataType)} : ($value);
            """.stripMargin)
+      } else if (!trustNullability) {
+        val c =
+          code"""if (${ctx.INPUT_ROW}.isNullAt($ordinal)) {
+                |  throw QueryExecutionErrors.valueCannotBeNullError(
+                |    "${StringEscapeUtils.escapeJava(toString)}");
+                |}
+                |$javaType ${ev.value} = $value;
+                |""".stripMargin
+        ev.copy(code = c, isNull = FalseLiteral)
       } else {
         ev.copy(code = code"$javaType ${ev.value} = $value;", isNull = FalseLiteral)
       }
@@ -81,7 +92,7 @@ object BindReferences extends Logging {
             s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
         }
       } else {
-        BoundReference(ordinal, a.dataType, input(ordinal).nullable)
+        BoundReference(ordinal, a.dataType, input(ordinal).nullable, a.trustNullability)
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
   }

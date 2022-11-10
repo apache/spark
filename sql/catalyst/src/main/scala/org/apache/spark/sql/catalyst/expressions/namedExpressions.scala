@@ -264,10 +264,9 @@ case class AttributeReference(
     override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifier: Seq[String] = Seq.empty[String],
-    override val trusted: Boolean = true)
+    override val trustNullability: Boolean = true)
   extends Attribute with Unevaluable {
 
-  val test: String = "foo"
   override lazy val treePatternBits: BitSet = AttributeReferenceTreeBits.bits
 
   /**
@@ -303,7 +302,8 @@ case class AttributeReference(
   }
 
   override def newInstance(): AttributeReference =
-    AttributeReference(name, dataType, nullable, metadata)(qualifier = qualifier)
+    AttributeReference(name, dataType, nullable, metadata)(
+      qualifier = qualifier, trustNullability = trustNullability)
 
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
@@ -312,12 +312,13 @@ case class AttributeReference(
     if (nullable == newNullability) {
       this
     } else {
-      AttributeReference(name, dataType, newNullability, metadata)(exprId, qualifier)
+      AttributeReference(name, dataType, newNullability, metadata)(
+        exprId, qualifier, trustNullability)
     }
   }
 
   override def withTrusted(newTrusted: Boolean): AttributeReference = {
-    if (trusted == newTrusted) {
+    if (trustNullability == newTrusted) {
       this
     } else {
       AttributeReference(name, dataType, nullable, metadata)(exprId, qualifier, newTrusted)
@@ -328,7 +329,7 @@ case class AttributeReference(
     if (name == newName) {
       this
     } else {
-      AttributeReference(newName, dataType, nullable, metadata)(exprId, qualifier)
+      AttributeReference(newName, dataType, nullable, metadata)(exprId, qualifier, trustNullability)
     }
   }
 
@@ -339,7 +340,7 @@ case class AttributeReference(
     if (newQualifier == qualifier) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata)(exprId, newQualifier)
+      AttributeReference(name, dataType, nullable, metadata)(exprId, newQualifier, trustNullability)
     }
   }
 
@@ -347,16 +348,16 @@ case class AttributeReference(
     if (exprId == newExprId) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata)(newExprId, qualifier)
+      AttributeReference(name, dataType, nullable, metadata)(newExprId, qualifier, trustNullability)
     }
   }
 
   override def withMetadata(newMetadata: Metadata): AttributeReference = {
-    AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier)
+    AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier, trustNullability)
   }
 
   override def withDataType(newType: DataType): AttributeReference = {
-    AttributeReference(name, newType, nullable, metadata)(exprId, qualifier)
+    AttributeReference(name, newType, nullable, metadata)(exprId, qualifier, trustNullability)
   }
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {

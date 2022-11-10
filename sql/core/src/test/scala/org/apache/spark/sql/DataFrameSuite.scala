@@ -3527,8 +3527,8 @@ class DataFrameSuite extends QueryTest
 
   test("SPARK-41048: Improve output partitioning and ordering with AQE cache") {
     withSQLConf(
-        SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val df1 = spark.range(10).selectExpr("cast(id as string) c1")
       val df2 = spark.range(10).selectExpr("cast(id as string) c2")
       val cached = df1.join(df2, $"c1" === $"c2").cache()
@@ -3544,36 +3544,40 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("SPARK-40199 Projecting NULLs from non-nullable input should throw error with helpful msg") {
-    // See more in-depth testing in GeneratedProjectionSuite; this test exists mainly to validate
-    // that the column/field identifiers are populated as expected in a "real" plan
-    val df = spark.createDataFrame(List(Row(Row(null))).asJava,
-      new StructType().add("nest", new StructType().add("f", StringType, nullable = false)))
-    val e = intercept[RuntimeException](df.collect())
-    assert(e.getMessage.contains("<POS_0>.`f` cannot be null"))
-  }
+  // TODO ETK test the makeRDD case but with a nested null ... ? or was this already what Wenchen had
 
-  test("SPARK-40199 Projecting NULLs from non-nullable input should throw error for primitives") {
-    // See more in-depth testing in GeneratedProjectionSuite; this test exists mainly to validate
-    // that the column/field identifiers are populated as expected in a "real" plan
-    val df = spark.createDataFrame(List(Row(null)).asJava,
-      new StructType().add("f", LongType, nullable = false))
-    val out = df.collect()
-    val e = intercept[RuntimeException](df.collect())
-    assert(e.getMessage.contains("<POS_0> cannot be null"))
-  }
+  // only possible to cause the error using internal APIs (@DeveloperApi) so maybe that's okay
+  //test("SPARK-40199 Projecting NULLs from non-nullable input should throw error with helpful msg") {
+  //  // See more in-depth testing in GeneratedProjectionSuite; this test exists mainly to validate
+  //  // that the column/field identifiers are populated as expected in a "real" plan
+  //  val df = spark.createDataFrame(List(Row(Row(null))).asJava,
+  //    new StructType().add("nest", new StructType().add("f", StringType, nullable = false)))
+  //  val e = intercept[SparkException](df.collect())
+  //  assert(e.getMessage.contains("<POS_0>.`f` cannot be null"))
+  //}
 
-  test("todo") {
-    val rdd = spark.sparkContext.makeRDD(Seq(Row(Row(null))))
-    val df = spark.createDataFrame(rdd, new StructType().add("t", new StructType().add("i", "int", false)))
-    df.show
-  }
+  // only possible to cause the error using internal APIs (@DeveloperApi) so maybe that's okay
+  //test("SPARK-40199 Projecting NULLs from non-nullable input should throw error for primitives") {
+  //  // See more in-depth testing in GeneratedProjectionSuite; this test exists mainly to validate
+  //  // that the column/field identifiers are populated as expected in a "real" plan
+  //  val df = spark.createDataFrame(List(Row(null)).asJava,
+  //    new StructType().add("f", LongType, nullable = false))
+  //  val out = df.collect()
+  //  val e = intercept[RuntimeException](df.collect())
+  //  assert(e.getMessage.contains("<POS_0> cannot be null"))
+  //}
 
   test("SPARK-40199 Projecting NULLs from non-nullable DSv2 should throw error with helpful msg") {
-    val badUdf = spark.udf.register[String, Int]("bad_udf", _ => null).asNonNullable()
-    val e = intercept[SparkException](Seq(1).toDF("c1").select(badUdf($"c1")).collect())
-    assert(e.getMessage.contains("UDF named bad_udf cannot be null"))
+    // TODO ETK
   }
+
+  //test("SPARK-40199 Returning map with NULL key from UDF should throw error with helpful msg") {
+  //  val badUdf = spark.udf
+  //      .register[Map[String, String], Int]("bad_udf", _ => Map[String, String]("foo" -> null))
+  //      .asNonNullable()
+  //  val e = intercept[SparkException](Seq(1).toDF("c1").select(badUdf($"c1")).collect())
+  //  assert(e.getMessage.contains("UDF named bad_udf cannot be null"))
+  //}
 
   test("SPARK-40199 Projecting NULLs from non-nullable UDF should throw error with helpful msg") {
     val badUdf = spark.udf.register[String, Int]("bad_udf", _ => null).asNonNullable()

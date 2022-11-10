@@ -124,7 +124,7 @@ trait CodegenSupport extends SparkPlan {
     } else {
       if (colVars.nonEmpty) {
         val colExprs = output.zipWithIndex.map { case (attr, i) =>
-          BoundReference(i, attr.dataType, attr.nullable)
+          BoundReference(i, attr.dataType, attr.nullable, attr.trustNullability)
         }
         val evaluateInputs = evaluateVariables(colVars)
         // generate the code to create a UnsafeRow
@@ -159,7 +159,7 @@ trait CodegenSupport extends SparkPlan {
         ctx.currentVars = null
         ctx.INPUT_ROW = row
         output.zipWithIndex.map { case (attr, i) =>
-          BoundReference(i, attr.dataType, attr.nullable).genCode(ctx)
+          BoundReference(i, attr.dataType, attr.nullable, attr.trustNullability).genCode(ctx)
         }
       }
 

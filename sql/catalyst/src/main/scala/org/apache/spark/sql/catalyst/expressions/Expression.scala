@@ -117,7 +117,7 @@ abstract class Expression extends TreeNode[Expression] {
   lazy val deterministic: Boolean = children.forall(_.deterministic)
 
   def nullable: Boolean
-  def trusted: Boolean = true
+  def trustNullability: Boolean = true
 
   /**
    * Workaround scala compiler so that we can call super on lazy vals
@@ -1173,7 +1173,7 @@ trait UserDefinedExpression {
   self: Expression =>
   def name: String
 
-  override def trusted: Boolean = false
+  override def trustNullability: Boolean = false
 }
 
 trait CommutativeExpression extends Expression {

@@ -105,7 +105,6 @@ case class UserDefinedGenerator(
   @transient private[this] var convertToScala: (InternalRow) => Row = _
 
   override protected def untrustedOutputNullabilityName: Option[String] = Some("generator")
-  override def trusted: Boolean = false
 
   private def initializeConverters(): Unit = {
     inputRow = new InterpretedProjection(children)

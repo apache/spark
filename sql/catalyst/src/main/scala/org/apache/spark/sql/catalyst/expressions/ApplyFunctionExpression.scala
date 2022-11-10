@@ -31,7 +31,6 @@ case class ApplyFunctionExpression(
   override protected def untrustedOutputNullabilityName: Option[String] = Some(s"UDF $name")
 
   override def nullable: Boolean = function.isResultNullable
-  override def trusted: Boolean = false
   override def name: String = function.name()
   override def dataType: DataType = function.resultType()
   override def inputTypes: Seq[AbstractDataType] = function.inputTypes().toSeq

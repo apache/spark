@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.commons.text.StringEscapeUtils
+
 import java.time.{Duration, Period, ZoneId}
 import java.util.Comparator
 
@@ -2370,6 +2372,13 @@ case class ElementAt(
                |  ${ev.isNull} = true;
                |} else
              """.stripMargin
+          } else if (!left.trustNullability) {
+            s"""
+               |if ($eval1.isNullAt($index)) {
+               |  throw QueryExecutionErrors.valueCannotBeNullError(
+               |    "${StringEscapeUtils.escapeJava(toString)}");
+               |} else
+             """.stripMargin
           } else {
             ""
           }
@@ -2411,7 +2420,7 @@ case class ElementAt(
            """.stripMargin
         })
       case _: MapType =>
-        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType])
+        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType], toString, left.trustNullability)
     }
   }
 

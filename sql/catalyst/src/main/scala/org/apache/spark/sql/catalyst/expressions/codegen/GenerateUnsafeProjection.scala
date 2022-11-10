@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import org.apache.commons.text.StringEscapeUtils
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -33,7 +35,7 @@ import org.apache.spark.sql.types._
  */
 object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafeProjection] {
 
-  case class Schema(dataType: DataType, nullable: Boolean)
+  case class Schema(dataType: DataType, nullable: Boolean, trustNullability: Boolean)
 
   /** Returns true iff we support this data type. */
   def canSupport(dataType: DataType): Boolean = UserDefinedType.sqlType(dataType) match {
@@ -54,13 +56,23 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       rowWriter: String): String = {
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
     val tmpInput = ctx.freshName("tmpInput")
-    val fieldEvals = schemas.zipWithIndex.map { case (Schema(dt, nullable), i) =>
-      val isNull = if (nullable) {
-        JavaCode.isNullExpression(s"$tmpInput.isNullAt($i)")
+    val fieldEvals = schemas.zipWithIndex.map { case (Schema(dt, nullable, _), i) =>
+      val exprValue = JavaCode.expression(CodeGenerator.getValue(tmpInput, dt, i.toString), dt)
+      val isNull = JavaCode.isNullExpression(s"$tmpInput.isNullAt($i)")
+      if (nullable) {
+        ExprCode(isNull, exprValue)
+        // TODO ETK are any changes actually necessary here?
+      //} else if (!trustNullability) {
+      //  val block =
+      //    code"""
+      //          |if ($isNull) {
+      //          |  throw QueryExecutionErrors.valueCannotBeNullError("TODO needs filling in");
+      //          |}
+      //          |""".stripMargin
+      //  ExprCode(block, FalseLiteral, exprValue)
       } else {
-        FalseLiteral
+        ExprCode(FalseLiteral, exprValue)
       }
-      ExprCode(isNull, JavaCode.expression(CodeGenerator.getValue(tmpInput, dt, i.toString), dt))
     }
 
     val rowWriterClass = classOf[UnsafeRowWriter].getName
@@ -104,7 +116,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     }
 
     val writeFields = inputs.zip(schemas).zipWithIndex.map {
-      case ((input, Schema(dataType, nullable)), index) =>
+      case ((input, Schema(dataType, nullable, trustNullability)), index) =>
         val dt = UserDefinedType.sqlType(dataType)
 
         val setNull = dt match {
@@ -115,7 +127,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           case _ => s"$rowWriter.setNullAt($index);"
         }
 
-        val writeField = writeElement(ctx, input.value, index.toString, dt, rowWriter)
+        val writeField =
+          writeElement(ctx, input.value, index.toString, dt, rowWriter, trustNullability)
         if (!nullable) {
           s"""
              |${input.code}
@@ -154,6 +167,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       input: String,
       elementType: DataType,
       containsNull: Boolean,
+      trustNullability: Boolean,
       rowWriter: String): String = {
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
     val tmpInput = ctx.freshName("tmpInput")
@@ -176,16 +190,27 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val element = CodeGenerator.getValue(tmpInput, et, index)
 
+    val writeArrayEle = writeElement(ctx, element, index, et, arrayWriter, trustNullability)
     val elementAssignment = if (containsNull) {
       s"""
          |if ($tmpInput.isNullAt($index)) {
          |  $arrayWriter.setNull${elementOrOffsetSize}Bytes($index);
          |} else {
-         |  ${writeElement(ctx, element, index, et, arrayWriter)}
+         |  $writeArrayEle
          |}
        """.stripMargin
+    } else if (!trustNullability) {
+      // TODO ETK should this be caught at some earlier layer? is that the issue here?
+      //          this is currently the only place in GenerateUnsafeProjection where it's checked
+      s"""
+         |if ($tmpInput.isNullAt($index)) {
+         |  throw QueryExecutionErrors.valueCannotBeNullError(
+         |    "${StringEscapeUtils.escapeJava("ARRAY")}");
+         |}
+         |$writeArrayEle
+         |""".stripMargin
     } else {
-      writeElement(ctx, element, index, et, arrayWriter)
+      writeArrayEle
     }
 
     s"""
@@ -210,6 +235,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       keyType: DataType,
       valueType: DataType,
       valueContainsNull: Boolean,
+      trustNullability: Boolean,
       rowWriter: String): String = {
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
     val tmpInput = ctx.freshName("tmpInput")
@@ -218,9 +244,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     // Writes out unsafe map according to the format described in `UnsafeMapData`.
     val keyArray = writeArrayToBuffer(
-      ctx, s"$tmpInput.keyArray()", keyType, false, rowWriter)
+      ctx, s"$tmpInput.keyArray()", keyType, false, trustNullability, rowWriter)
     val valueArray = writeArrayToBuffer(
-      ctx, s"$tmpInput.valueArray()", valueType, valueContainsNull, rowWriter)
+      ctx, s"$tmpInput.valueArray()", valueType, valueContainsNull, trustNullability, rowWriter)
 
     s"""
        |final MapData $tmpInput = $input;
@@ -257,10 +283,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       input: String,
       index: String,
       dt: DataType,
-      writer: String): String = dt match {
+      writer: String,
+      trustNullability: Boolean): String = dt match {
     case t: StructType =>
       writeStructToBuffer(
-        ctx, input, index, t.map(e => Schema(e.dataType, e.nullable)), writer)
+        ctx, input, index, t.map(e => Schema(e.dataType, e.nullable, trustNullability)), writer)
 
     case ArrayType(et, en) =>
       val previousCursor = ctx.freshName("previousCursor")
@@ -268,12 +295,12 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
          |// Remember the current cursor so that we can calculate how many bytes are
          |// written later.
          |final int $previousCursor = $writer.cursor();
-         |${writeArrayToBuffer(ctx, input, et, en, writer)}
+         |${writeArrayToBuffer(ctx, input, et, en, trustNullability, writer)}
          |$writer.setOffsetAndSizeFromPreviousCursor($index, $previousCursor);
        """.stripMargin
 
     case MapType(kt, vt, vn) =>
-      writeMapToBuffer(ctx, input, index, kt, vt, vn, writer)
+      writeMapToBuffer(ctx, input, index, kt, vt, vn, trustNullability, writer)
 
     case DecimalType.Fixed(precision, scale) =>
       s"$writer.write($index, $input, $precision, $scale);"
@@ -288,10 +315,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       expressions: Seq[Expression],
       useSubexprElimination: Boolean = false): ExprCode = {
     val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination)
-    val exprSchemas = expressions.map(e => Schema(e.dataType, e.nullable))
+    val exprSchemas = expressions.map(e => Schema(e.dataType, e.nullable, e.trustNullability))
 
     val numVarLenFields = exprSchemas.count {
-      case Schema(dt, _) => !UnsafeRow.isFixedLength(dt)
+      case Schema(dt, _, _) => !UnsafeRow.isFixedLength(dt)
       // TODO: consider large decimal and interval type
     }
 

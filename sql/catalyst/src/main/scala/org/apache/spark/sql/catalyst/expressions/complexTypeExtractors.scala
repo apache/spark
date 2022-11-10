@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.commons.text.StringEscapeUtils
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
@@ -129,18 +131,26 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
+      val setVal = s"${ev.value} = ${CodeGenerator.getValue(eval, dataType, ordinal.toString)};"
       if (nullable) {
         s"""
           if ($eval.isNullAt($ordinal)) {
             ${ev.isNull} = true;
           } else {
-            ${ev.value} = ${CodeGenerator.getValue(eval, dataType, ordinal.toString)};
+             $setVal
+          }
+        """
+      } else if (!child.trustNullability) {
+        s"""
+          if ($eval.isNullAt($ordinal)) {
+            throw QueryExecutionErrors.valueCannotBeNullError(
+              "${StringEscapeUtils.escapeJava(toString)}");
+          } else {
+            $setVal
           }
         """
       } else {
-        s"""
-          ${ev.value} = ${CodeGenerator.getValue(eval, dataType, ordinal.toString)};
-        """
+        setVal
       }
     })
   }
@@ -200,6 +210,13 @@ case class GetArrayStructFields(
         s"""
          if ($row.isNullAt($ordinal)) {
            $values[$j] = null;
+         } else
+        """
+      } else if (!child.trustNullability) {
+        s"""
+         if ($row.isNullAt($ordinal)) {
+           throw QueryExecutionErrors.valueCannotBeNullError(
+             "${StringEscapeUtils.escapeJava(toString)}");
          } else
         """
       } else {
@@ -286,6 +303,12 @@ case class GetArrayItem(
       val nullCheck = if (childArrayElementNullable) {
         s"""else if ($eval1.isNullAt($index)) {
                ${ev.isNull} = true;
+            }
+         """
+      } else if (!child.trustNullability) {
+        s"""else if ($eval1.isNullAt($index)) {
+              throw QueryExecutionErrors.valueCannotBeNullError(
+                "${StringEscapeUtils.escapeJava(toString)}");
             }
          """
       } else {
@@ -387,7 +410,9 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
   def doGetValueGenCode(
       ctx: CodegenContext,
       ev: ExprCode,
-      mapType: MapType): ExprCode = {
+      mapType: MapType,
+      nodeDesc: String,
+      trustInputNullability: Boolean): ExprCode = {
     val index = ctx.freshName("index")
     val length = ctx.freshName("length")
     val keys = ctx.freshName("keys")
@@ -400,6 +425,19 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
       ""
     }
 
+    // TODO ETK simplify
+    val (nullKeyCheck, nullValueCheck) = if (!nullable && trustInputNullability) {
+      ("", "")
+    } else {
+      val template =
+        s"""
+         |if (%s.isNullAt($index)) {
+         |  throw QueryExecutionErrors.valueCannotBeNullError(
+         |    "${StringEscapeUtils.escapeJava(nodeDesc)}");
+         |}
+         |""".stripMargin
+      (template.format(keys), template.format(values))
+    }
     val keyJavaType = CodeGenerator.javaType(keyType)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
@@ -420,6 +458,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
         if ($index == $length$nullCheck) {
           ${ev.isNull} = true;
         } else {
+          $nullValueCheck
           ${ev.value} = ${CodeGenerator.getValue(values, dataType, index)};
         }
       """
@@ -473,7 +512,8 @@ case class GetMapValue(child: Expression, key: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    doGetValueGenCode(ctx, ev, child.dataType.asInstanceOf[MapType])
+    doGetValueGenCode(ctx, ev, child.dataType.asInstanceOf[MapType],
+      toString, child.trustNullability)
   }
 
   override protected def withNewChildrenInternal(
