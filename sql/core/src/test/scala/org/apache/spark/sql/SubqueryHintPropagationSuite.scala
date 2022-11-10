@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.{InnerLike, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, LogicalPlan}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SharedSparkSession
 
 class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
@@ -50,16 +51,18 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
          |s2.key FROM testData s2 WHERE s1.key = s2.key AND s1.value = s2.value)
          |""".stripMargin)
     verifyJoinContainsHint(queryDf.queryExecution.optimizedPlan)
+    checkAnswer(queryDf, testData)
   }
 
   test("Correlated Exists with hints in tempView") {
     val tempView = "tmpView"
     withTempView(tempView) {
       val df = spark
-        .range(30)
+        .range(1, 30)
         .where("true")
       val dfWithHints = hints.foldRight(df)((hint, newDf) => newDf.hint(hint))
         .selectExpr("id as key", "id as value")
+        .withColumn("value", col("value").cast("string"))
       dfWithHints.createOrReplaceTempView(tempView)
 
       val queryDf = sql(
@@ -68,6 +71,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
            |""".stripMargin)
 
       verifyJoinContainsHint(queryDf.queryExecution.optimizedPlan)
+      checkAnswer(queryDf, dfWithHints)
     }
   }
 
@@ -91,6 +95,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
         }
         j
     }
+    checkAnswer(queryDf, testData)
   }
 
   test("Negated Exists with hint") {
@@ -100,6 +105,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
          |* FROM testData s2 WHERE s1.key = s2.key AND s1.value = s2.value)
          |""".stripMargin)
     verifyJoinContainsHint(queryDf.queryExecution.optimizedPlan)
+    checkAnswer(queryDf, spark.emptyDataFrame)
   }
 
   test("Exists with complex predicate") {
@@ -109,6 +115,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
          |* FROM testData s2 WHERE s1.key = s2.key AND s1.value = s2.value) OR s1.key = 5
          |""".stripMargin)
     verifyJoinContainsHint(queryDf.queryExecution.optimizedPlan)
+    checkAnswer(queryDf, testData)
   }
 
   test("Non-correlated IN") {
@@ -117,6 +124,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
          |(SELECT $hintStringified key FROM testData s2)
          |""".stripMargin)
     verifyJoinContainsHint(queryDf.queryExecution.optimizedPlan)
+    checkAnswer(queryDf, testData)
   }
 
   test("Correlated IN") {
@@ -126,6 +134,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
          |key FROM testData s2 WHERE s1.key = s2.key AND s1.value = s2.value)
          |""".stripMargin)
     verifyJoinContainsHint(queryDf.queryExecution.optimizedPlan)
+    checkAnswer(queryDf, testData)
   }
 
   test("Negated IN with hint") {
@@ -135,6 +144,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
          |key FROM testData s2 WHERE s1.key = s2.key AND s1.value = s2.value)
          |""".stripMargin)
     verifyJoinContainsHint(queryDf.queryExecution.optimizedPlan)
+    checkAnswer(queryDf, spark.emptyDataFrame)
   }
 
   test("IN with complex predicate") {
@@ -144,6 +154,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
          | key FROM testData s2 WHERE s1.key = s2.key AND s1.value = s2.value) OR s1.key = 5
          |""".stripMargin)
     verifyJoinContainsHint(queryDf.queryExecution.optimizedPlan)
+    checkAnswer(queryDf, testData)
   }
 
   test("Scalar subquery") {
@@ -153,6 +164,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
          |testData s2 WHERE s1.key = s2.key AND s1.value = s2.value)
          |""".stripMargin)
     verifyJoinContainsHint(queryDf.queryExecution.optimizedPlan)
+    checkAnswer(queryDf, testData)
   }
 
   test("Scalar subquery with COUNT") {
@@ -162,6 +174,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
          |testData s2 WHERE s1.key = s2.key AND s1.value = s2.value)
          |""".stripMargin)
     verifyJoinContainsHint(queryDf.queryExecution.optimizedPlan)
+    checkAnswer(queryDf, Row(1, "1"))
   }
 
   test("Scalar subquery with non-equality predicates") {
@@ -187,6 +200,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
         j
     }
     assert(matchedJoin)
+    checkAnswer(queryDf, spark.emptyDataFrame)
   }
 
   test("Scalar subquery nested subquery") {
@@ -197,6 +211,7 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
          |s1.key = s2.key AND s1.value = s2.value))
          |""".stripMargin)
     verifyJoinContainsHint(queryDf.queryExecution.optimizedPlan)
+    checkAnswer(queryDf, testData)
   }
 
   test("Lateral subquery") {
@@ -205,5 +220,8 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
          |(SELECT $hintStringified * FROM testData s2)
          |""".stripMargin)
     verifyJoinContainsHint(queryDf.queryExecution.optimizedPlan)
+    // No condition, should be the same as a cross join.
+    val expectedAnswer = testData.crossJoin(testData)
+    checkAnswer(queryDf, expectedAnswer)
   }
 }
