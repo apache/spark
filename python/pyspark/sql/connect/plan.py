@@ -838,7 +838,7 @@ class StatCrosstab(LogicalPlan):
         self.col1 = col1
         self.col2 = col2
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         assert self._child is not None
 
         plan = proto.Relation()
