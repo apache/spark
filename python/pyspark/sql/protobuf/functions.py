@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 def from_protobuf(
     data: "ColumnOrName",
     messageName: str,
-    descFilePath: str,
+    descFilePath = None,
     options: Optional[Dict[str, str]] = None,
 ) -> Column:
     """
@@ -49,7 +49,10 @@ def from_protobuf(
     data : :class:`~pyspark.sql.Column` or str
         the binary column.
     messageName: str
-        the protobuf message name to look for in descriptor file.
+        the protobuf message name to look for in descriptor file. Or
+        The Protobuf class name. E.g. <code>org.spark.examples.protobuf.ExampleEvent</code>,
+        without descFilePath parameter.
+        Using the spark-submit option --jars, add a messageClassName specific jar.
     descFilePath : str
         the protobuf descriptor in Message GeneratedMessageV3 format.
     options : dict, optional
@@ -95,14 +98,32 @@ def from_protobuf(
     +------------------+
     |{2, Alice, 109200}|
     +------------------+
+    >>> data = [([(1668035962, 2020)])]
+    >>> ddl_schema = "value struct<seconds: LONG, nanos: INT>"
+    >>> df = spark.createDataFrame(data, ddl_schema)
+    >>> message_class_name = "org.sparkproject.spark-protobuf.protobuf.Timestamp"
+    >>> to_proto_df = df.select(to_protobuf(df.value, message_class_name).alias("value"))
+    >>> from_proto_df = to_proto_df.select(
+    ...     from_protobuf(to_proto_df.value, message_class_name).alias("value"))
+    >>> from_proto_df.show(truncate=False)
+    +------------------+
+    |value             |
+    +------------------+
+    |{1668035962, 2020}|
+    +------------------+
     """
 
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
     try:
-        jc = sc._jvm.org.apache.spark.sql.protobuf.functions.from_protobuf(
-            _to_java_column(data), messageName, descFilePath, options or {}
-        )
+        if descFilePath is not None:
+            jc = sc._jvm.org.apache.spark.sql.protobuf.functions.from_protobuf(
+                _to_java_column(data), messageName, descFilePath, options or {}
+            )
+        else:
+            jc = sc._jvm.org.apache.spark.sql.protobuf.functions.from_protobuf(
+                _to_java_column(data), messageName
+            )
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":
             _print_missing_jar("Protobuf", "protobuf", "protobuf", sc.version)
@@ -110,7 +131,7 @@ def from_protobuf(
     return Column(jc)
 
 
-def to_protobuf(data: "ColumnOrName", messageName: str, descFilePath: str) -> Column:
+def to_protobuf(data: "ColumnOrName", messageName: str, descFilePath = None) -> Column:
     """
     Converts a column into binary of protobuf format.
 
@@ -121,7 +142,10 @@ def to_protobuf(data: "ColumnOrName", messageName: str, descFilePath: str) -> Co
     data : :class:`~pyspark.sql.Column` or str
         the data column.
     messageName: str
-        the protobuf message name to look for in descriptor file.
+        the protobuf message name to look for in descriptor file. Or
+        The Protobuf class name. E.g. <code>org.spark.examples.protobuf.ExampleEvent</code>,
+        without descFilePath parameter.
+        Using the spark-submit option --jars, add a messageClassName specific jar.
     descFilePath : str
         the protobuf descriptor in Message GeneratedMessageV3 format.
 
@@ -157,13 +181,31 @@ def to_protobuf(data: "ColumnOrName", messageName: str, descFilePath: str) -> Co
     +-------------------------------------------+
     |[08 02 12 05 41 6C 69 63 65 18 9C 91 9F 06]|
     +-------------------------------------------+
+    >>> data = [([(1668035962, 2020)])]
+    >>> ddl_schema = "value struct<seconds: LONG, nanos: INT>"
+    >>> df = spark.createDataFrame(data, ddl_schema)
+    >>> message_class_name = "org.sparkproject.spark-protobuf.protobuf.Timestamp"
+    >>> proto_df = df.select(to_protobuf(df.value, message_class_name).alias("suite"))
+    >>> proto_df.show(truncate=False)
+    +----------------------------+
+    |suite                       |
+    +----------------------------+
+    |[08 FA EA B0 9B 06 10 E4 0F]|
+    +----------------------------+
     """
+
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
     try:
-        jc = sc._jvm.org.apache.spark.sql.protobuf.functions.to_protobuf(
-            _to_java_column(data), messageName, descFilePath
-        )
+        if descFilePath is not None:
+            jc = sc._jvm.org.apache.spark.sql.protobuf.functions.to_protobuf(
+                _to_java_column(data), messageName, descFilePath
+            )
+        else:
+            jc = sc._jvm.org.apache.spark.sql.protobuf.functions.to_protobuf(
+                _to_java_column(data), messageName
+            )
+
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":
             _print_missing_jar("Protobuf", "protobuf", "protobuf", sc.version)
