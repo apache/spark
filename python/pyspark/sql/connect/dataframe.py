@@ -156,8 +156,53 @@ class DataFrame(object):
     def crossJoin(self, other: "DataFrame") -> "DataFrame":
         ...
 
-    def coalesce(self, num_partitions: int) -> "DataFrame":
-        ...
+    def coalesce(self, numPartitions: int) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` that has exactly `numPartitions` partitions.
+
+        Coalesce does not trigger a shuffle.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        numPartitions : int
+            specify the target number of partitions
+
+        Returns
+        -------
+        :class:`DataFrame`
+        """
+        if not numPartitions > 0:
+            raise ValueError("numPartitions must be positive.")
+        return DataFrame.withPlan(
+            plan.Repartition(self._plan, num_partitions=numPartitions, shuffle=False),
+            self._session,
+        )
+
+    def repartition(self, numPartitions: int) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` that has exactly `numPartitions` partitions.
+
+        Repartition will shuffle source partition into partitions specified by numPartitions.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        numPartitions : int
+            specify the target number of partitions
+
+        Returns
+        -------
+        :class:`DataFrame`
+        """
+        if not numPartitions > 0:
+            raise ValueError("numPartitions must be positive.")
+        return DataFrame.withPlan(
+            plan.Repartition(self._plan, num_partitions=numPartitions, shuffle=True),
+            self._session,
+        )
 
     def describe(self, cols: List[ColumnRef]) -> Any:
         ...
@@ -344,7 +389,9 @@ class DataFrame(object):
     def unionAll(self, other: "DataFrame") -> "DataFrame":
         if other._plan is None:
             raise ValueError("Argument to Union does not contain a valid plan.")
-        return DataFrame.withPlan(plan.UnionAll(self._plan, other._plan), session=self._session)
+        return DataFrame.withPlan(
+            plan.SetOperation(self._plan, other._plan, "union", is_all=True), session=self._session
+        )
 
     def unionByName(self, other: "DataFrame", allowMissingColumns: bool = False) -> "DataFrame":
         """Returns a new :class:`DataFrame` containing union of rows in this and another
@@ -370,7 +417,83 @@ class DataFrame(object):
         if other._plan is None:
             raise ValueError("Argument to UnionByName does not contain a valid plan.")
         return DataFrame.withPlan(
-            plan.UnionAll(self._plan, other._plan, allowMissingColumns), session=self._session
+            plan.SetOperation(
+                self._plan, other._plan, "union", is_all=True, by_name=allowMissingColumns
+            ),
+            session=self._session,
+        )
+
+    def exceptAll(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame` but
+        not in another :class:`DataFrame` while preserving duplicates.
+
+        This is equivalent to `EXCEPT ALL` in SQL.
+        As standard in SQL, this function resolves columns by position (not by name).
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            The other :class:`DataFrame` to compare to.
+
+        Returns
+        -------
+        :class:`DataFrame`
+        """
+        return DataFrame.withPlan(
+            plan.SetOperation(self._plan, other._plan, "except", is_all=True), session=self._session
+        )
+
+    def intersect(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing rows only in
+        both this :class:`DataFrame` and another :class:`DataFrame`.
+        Note that any duplicates are removed. To preserve duplicates
+        use :func:`intersectAll`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame.
+
+        Notes
+        -----
+        This is equivalent to `INTERSECT` in SQL.
+        """
+        return DataFrame.withPlan(
+            plan.SetOperation(self._plan, other._plan, "intersect", is_all=False),
+            session=self._session,
+        )
+
+    def intersectAll(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing rows in both this :class:`DataFrame`
+        and another :class:`DataFrame` while preserving duplicates.
+
+        This is equivalent to `INTERSECT ALL` in SQL. As standard in SQL, this function
+        resolves columns by position (not by name).
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame.
+        """
+        return DataFrame.withPlan(
+            plan.SetOperation(self._plan, other._plan, "intersect", is_all=True),
+            session=self._session,
         )
 
     def where(self, condition: Expression) -> "DataFrame":

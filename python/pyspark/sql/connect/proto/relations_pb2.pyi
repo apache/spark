@@ -76,6 +76,8 @@ class Relation(google.protobuf.message.Message):
     RANGE_FIELD_NUMBER: builtins.int
     SUBQUERY_ALIAS_FIELD_NUMBER: builtins.int
     REPARTITION_FIELD_NUMBER: builtins.int
+    RENAME_COLUMNS_BY_SAME_LENGTH_NAMES_FIELD_NUMBER: builtins.int
+    RENAME_COLUMNS_BY_NAME_TO_NAME_MAP_FIELD_NUMBER: builtins.int
     STAT_FUNCTION_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
@@ -113,6 +115,10 @@ class Relation(google.protobuf.message.Message):
     @property
     def repartition(self) -> global___Repartition: ...
     @property
+    def rename_columns_by_same_length_names(self) -> global___RenameColumnsBySameLengthNames: ...
+    @property
+    def rename_columns_by_name_to_name_map(self) -> global___RenameColumnsByNameToNameMap: ...
+    @property
     def stat_function(self) -> global___StatFunction: ...
     @property
     def unknown(self) -> global___Unknown: ...
@@ -136,6 +142,8 @@ class Relation(google.protobuf.message.Message):
         range: global___Range | None = ...,
         subquery_alias: global___SubqueryAlias | None = ...,
         repartition: global___Repartition | None = ...,
+        rename_columns_by_same_length_names: global___RenameColumnsBySameLengthNames | None = ...,
+        rename_columns_by_name_to_name_map: global___RenameColumnsByNameToNameMap | None = ...,
         stat_function: global___StatFunction | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
@@ -166,6 +174,10 @@ class Relation(google.protobuf.message.Message):
             b"read",
             "rel_type",
             b"rel_type",
+            "rename_columns_by_name_to_name_map",
+            b"rename_columns_by_name_to_name_map",
+            "rename_columns_by_same_length_names",
+            b"rename_columns_by_same_length_names",
             "repartition",
             b"repartition",
             "sample",
@@ -211,6 +223,10 @@ class Relation(google.protobuf.message.Message):
             b"read",
             "rel_type",
             b"rel_type",
+            "rename_columns_by_name_to_name_map",
+            b"rename_columns_by_name_to_name_map",
+            "rename_columns_by_same_length_names",
+            b"rename_columns_by_same_length_names",
             "repartition",
             b"repartition",
             "sample",
@@ -248,6 +264,8 @@ class Relation(google.protobuf.message.Message):
         "range",
         "subquery_alias",
         "repartition",
+        "rename_columns_by_same_length_names",
+        "rename_columns_by_name_to_name_map",
         "stat_function",
         "unknown",
     ] | None: ...
@@ -1133,3 +1151,94 @@ class StatFunction(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["summary", "unknown"] | None: ...
 
 global___StatFunction = StatFunction
+
+class RenameColumnsBySameLengthNames(google.protobuf.message.Message):
+    """Rename columns on the input relation by the same length of names."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLUMN_NAMES_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """Required. The input relation."""
+    @property
+    def column_names(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """Required.
+
+        The number of columns of the input relation must be equal to the length
+        of this field. If this is not true, an exception will be returned.
+        """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        column_names: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal["column_names", b"column_names", "input", b"input"],
+    ) -> None: ...
+
+global___RenameColumnsBySameLengthNames = RenameColumnsBySameLengthNames
+
+class RenameColumnsByNameToNameMap(google.protobuf.message.Message):
+    """Rename columns on the input relation by a map with name to name mapping."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class RenameColumnsMapEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        value: builtins.str
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
+
+    INPUT_FIELD_NUMBER: builtins.int
+    RENAME_COLUMNS_MAP_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """Required. The input relation."""
+    @property
+    def rename_columns_map(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+        """Required.
+
+        Renaming column names of input relation from A to B where A is the map key
+        and B is the map value. This is a no-op if schema doesn't contain any A. It
+        does not require that all input relation column names to present as keys.
+        duplicated B are not allowed.
+        """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        rename_columns_map: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "input", b"input", "rename_columns_map", b"rename_columns_map"
+        ],
+    ) -> None: ...
+
+global___RenameColumnsByNameToNameMap = RenameColumnsByNameToNameMap

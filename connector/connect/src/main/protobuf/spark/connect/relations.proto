@@ -47,6 +47,8 @@ message Relation {
     Range range = 15;
     SubqueryAlias subquery_alias = 16;
     Repartition repartition = 17;
+    RenameColumnsBySameLengthNames rename_columns_by_same_length_names = 18;
+    RenameColumnsByNameToNameMap rename_columns_by_name_to_name_map = 19;
 
     StatFunction stat_function = 100;
 
@@ -274,3 +276,30 @@ message StatFunction {
   }
 }
 
+// Rename columns on the input relation by the same length of names.
+message RenameColumnsBySameLengthNames {
+  // Required. The input relation.
+  Relation input = 1;
+
+  // Required.
+  //
+  // The number of columns of the input relation must be equal to the length
+  // of this field. If this is not true, an exception will be returned.
+  repeated string column_names = 2;
+}
+
+
+// Rename columns on the input relation by a map with name to name mapping.
+message RenameColumnsByNameToNameMap {
+  // Required. The input relation.
+  Relation input = 1;
+
+
+  // Required.
+  //
+  // Renaming column names of input relation from A to B where A is the map key
+  // and B is the map value. This is a no-op if schema doesn't contain any A. It
+  // does not require that all input relation column names to present as keys.
+  // duplicated B are not allowed.
+  map<string, string> rename_columns_map = 2;
+}

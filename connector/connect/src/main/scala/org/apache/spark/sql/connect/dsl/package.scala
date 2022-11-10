@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto._
+import org.apache.spark.connect.proto.Expression.ExpressionString
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.connect.proto.SetOperation.SetOpType
 import org.apache.spark.sql.SaveMode
@@ -181,6 +182,19 @@ package object dsl {
         writeOp.setInput(logicalPlan)
         Command.newBuilder().setWriteOperation(writeOp.build()).build()
       }
+
+      def createView(name: String, global: Boolean, replace: Boolean): Command = {
+        Command
+          .newBuilder()
+          .setCreateDataframeView(
+            CreateDataFrameViewCommand
+              .newBuilder()
+              .setName(name)
+              .setIsGlobal(global)
+              .setReplace(replace)
+              .setInput(logicalPlan))
+          .build()
+      }
     }
   }
 
@@ -225,6 +239,14 @@ package object dsl {
               .build())
           .build()
       }
+
+      def selectExpr(exprs: String*): Relation =
+        select(exprs.map { expr =>
+          Expression
+            .newBuilder()
+            .setExpressionString(ExpressionString.newBuilder().setExpression(expr))
+            .build()
+        }: _*)
 
       def limit(limit: Int): Relation = {
         Relation
@@ -454,6 +476,27 @@ package object dsl {
                   .addAllStatistics(statistics.toSeq.asJava)
                   .build())
               .build())
+          .build()
+      }
+
+      def toDF(columnNames: String*): Relation =
+        Relation
+          .newBuilder()
+          .setRenameColumnsBySameLengthNames(
+            RenameColumnsBySameLengthNames
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllColumnNames(columnNames.asJava))
+          .build()
+
+      def withColumnsRenamed(renameColumnsMap: Map[String, String]): Relation = {
+        Relation
+          .newBuilder()
+          .setRenameColumnsByNameToNameMap(
+            RenameColumnsByNameToNameMap
+              .newBuilder()
+              .setInput(logicalPlan)
+              .putAllRenameColumnsMap(renameColumnsMap.asJava))
           .build()
       }
 

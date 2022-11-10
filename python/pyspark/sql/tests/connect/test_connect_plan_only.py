@@ -210,10 +210,49 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         df2 = self.connect.readTable(table_name=self.tbl_name)
         plan1 = df1.union(df2)._plan.to_proto(self.connect)
         self.assertTrue(plan1.root.set_op.is_all)
+        self.assertEqual(proto.SetOperation.SET_OP_TYPE_UNION, plan1.root.set_op.set_op_type)
         plan2 = df1.union(df2)._plan.to_proto(self.connect)
         self.assertTrue(plan2.root.set_op.is_all)
+        self.assertEqual(proto.SetOperation.SET_OP_TYPE_UNION, plan2.root.set_op.set_op_type)
         plan3 = df1.unionByName(df2, True)._plan.to_proto(self.connect)
         self.assertTrue(plan3.root.set_op.by_name)
+        self.assertEqual(proto.SetOperation.SET_OP_TYPE_UNION, plan3.root.set_op.set_op_type)
+
+    def test_except(self):
+        # SPARK-41010: test `except` API for Python client.
+        df1 = self.connect.readTable(table_name=self.tbl_name)
+        df2 = self.connect.readTable(table_name=self.tbl_name)
+        plan1 = df1.exceptAll(df2)._plan.to_proto(self.connect)
+        self.assertTrue(plan1.root.set_op.is_all)
+        self.assertEqual(proto.SetOperation.SET_OP_TYPE_EXCEPT, plan1.root.set_op.set_op_type)
+
+    def test_intersect(self):
+        # SPARK-41010: test `intersect` API for Python client.
+        df1 = self.connect.readTable(table_name=self.tbl_name)
+        df2 = self.connect.readTable(table_name=self.tbl_name)
+        plan1 = df1.intersect(df2)._plan.to_proto(self.connect)
+        self.assertFalse(plan1.root.set_op.is_all)
+        self.assertEqual(proto.SetOperation.SET_OP_TYPE_INTERSECT, plan1.root.set_op.set_op_type)
+        plan2 = df1.intersectAll(df2)._plan.to_proto(self.connect)
+        self.assertTrue(plan2.root.set_op.is_all)
+        self.assertEqual(proto.SetOperation.SET_OP_TYPE_INTERSECT, plan2.root.set_op.set_op_type)
+
+    def test_coalesce_and_repartition(self):
+        # SPARK-41026: test Coalesce and Repartition API in Python client.
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan1 = df.coalesce(10)._plan.to_proto(self.connect)
+        self.assertEqual(10, plan1.root.repartition.num_partitions)
+        self.assertFalse(plan1.root.repartition.shuffle)
+        plan2 = df.repartition(20)._plan.to_proto(self.connect)
+        self.assertTrue(plan2.root.repartition.shuffle)
+
+        with self.assertRaises(ValueError) as context:
+            df.coalesce(-1)._plan.to_proto(self.connect)
+        self.assertTrue("numPartitions must be positive" in str(context.exception))
+
+        with self.assertRaises(ValueError) as context:
+            df.repartition(-1)._plan.to_proto(self.connect)
+        self.assertTrue("numPartitions must be positive" in str(context.exception))
 
 
 if __name__ == "__main__":

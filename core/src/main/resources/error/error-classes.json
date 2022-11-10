@@ -669,6 +669,11 @@
       }
     }
   },
+  "LOCATION_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot name the managed table as <identifier>, as its associated location <location> already exists. Please pick a different table name, or remove the existing location first."
+    ]
+  },
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [
       "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
@@ -877,6 +882,11 @@
       "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
     ],
     "sqlState" : "42000"
+  },
+  "SCALAR_SUBQUERY_TOO_MANY_ROWS" : {
+    "message" : [
+      "More than one row returned by a subquery used as an expression."
+    ]
   },
   "SCHEMA_ALREADY_EXISTS" : {
     "message" : [
@@ -1954,11 +1964,6 @@
       "CREATE EXTERNAL TABLE must be accompanied by LOCATION."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1070" : {
-    "message" : [
-      "Can not <methodName> the managed table('<tableIdentifier>'). The associated location('<tableLocation>') already exists."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1071" : {
     "message" : [
       "Some existing schema fields (<nonExistentColumnNames>) are not present in the new schema. We don't support dropping columns yet."
@@ -2975,11 +2980,6 @@
   "_LEGACY_ERROR_TEMP_1278" : {
     "message" : [
       "<name> is not a view."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1279" : {
-    "message" : [
-      "View <name> already exists. If you want to update the view definition, please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS."
     ]
   },
   "_LEGACY_ERROR_TEMP_1280" : {

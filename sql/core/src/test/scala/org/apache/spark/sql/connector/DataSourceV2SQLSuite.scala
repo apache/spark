@@ -2676,7 +2676,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         exception = intercept[SparkException] {
           sql(s"SELECT * FROM t TIMESTAMP AS OF ($subquery4)").collect()
         },
-        errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+        errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty,
         ExpectedContext(
           fragment = "(SELECT * FROM VALUES (1), (2))",
@@ -2686,7 +2686,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         exception = intercept[SparkException] {
           sql(s"SELECT * FROM t TIMESTAMP AS OF (SELECT ($subquery4))").collect()
         },
-        errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+        errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty,
         ExpectedContext(
           fragment = "(SELECT * FROM VALUES (1), (2))",

@@ -607,21 +607,43 @@ class Join(LogicalPlan):
         """
 
 
-class UnionAll(LogicalPlan):
+class SetOperation(LogicalPlan):
     def __init__(
-        self, child: Optional["LogicalPlan"], other: "LogicalPlan", by_name: bool = False
+        self,
+        child: Optional["LogicalPlan"],
+        other: Optional["LogicalPlan"],
+        set_op: str,
+        is_all: bool = True,
+        by_name: bool = False,
     ) -> None:
         super().__init__(child)
         self.other = other
         self.by_name = by_name
+        self.is_all = is_all
+        self.set_op = set_op
 
     def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
         assert self._child is not None
         rel = proto.Relation()
-        rel.set_op.left_input.CopyFrom(self._child.plan(session))
-        rel.set_op.right_input.CopyFrom(self.other.plan(session))
-        rel.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_UNION
-        rel.set_op.is_all = True
+        if self._child is not None:
+            rel.set_op.left_input.CopyFrom(self._child.plan(session))
+        if self.other is not None:
+            rel.set_op.right_input.CopyFrom(self.other.plan(session))
+        if self.set_op == "union":
+            rel.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_UNION
+        elif self.set_op == "intersect":
+            rel.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_INTERSECT
+        elif self.set_op == "except":
+            rel.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_EXCEPT
+        else:
+            raise NotImplementedError(
+                """
+                Unsupported set operation type: %s.
+                """
+                % rel.set_op.set_op_type
+            )
+
+        rel.set_op.is_all = self.is_all
         rel.set_op.by_name = self.by_name
         return rel
 
@@ -633,7 +655,7 @@ class UnionAll(LogicalPlan):
         o = " " * (indent + LogicalPlan.INDENT)
         n = indent + LogicalPlan.INDENT * 2
         return (
-            f"{i}UnionAll\n{o}child1=\n{self._child.print(n)}"
+            f"{i}SetOperation\n{o}child1=\n{self._child.print(n)}"
             f"\n{o}child2=\n{self.other.print(n)}"
         )
 
@@ -644,11 +666,45 @@ class UnionAll(LogicalPlan):
         return f"""
         <ul>
             <li>
-                <b>Union</b><br />
+                <b>SetOperation</b><br />
                 Left: {self._child._repr_html_()}
                 Right: {self.other._repr_html_()}
             </li>
         </uL>
+        """
+
+
+class Repartition(LogicalPlan):
+    """Repartition Relation into a different number of partitions."""
+
+    def __init__(self, child: Optional["LogicalPlan"], num_partitions: int, shuffle: bool) -> None:
+        super().__init__(child)
+        self._num_partitions = num_partitions
+        self._shuffle = shuffle
+
+    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+        rel = proto.Relation()
+        if self._child is not None:
+            rel.repartition.input.CopyFrom(self._child.plan(session))
+        rel.repartition.shuffle = self._shuffle
+        rel.repartition.num_partitions = self._num_partitions
+        return rel
+
+    def print(self, indent: int = 0) -> str:
+        plan_name = "repartition" if self._shuffle else "coalesce"
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return f"{' ' * indent}<{plan_name} num_partitions={self._num_partitions}>\n{c_buf}"
+
+    def _repr_html_(self) -> str:
+        plan_name = "repartition" if self._shuffle else "coalesce"
+        return f"""
+        <ul>
+           <li>
+              <b>{plan_name}</b><br />
+              Child: {self._child_repr_()}
+              num_partitions: {self._num_partitions}
+           </li>
+        </ul>
         """
 
 
