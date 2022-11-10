@@ -34,14 +34,11 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
 
   def verifyJoinContainsHint(plan: LogicalPlan): Unit = {
     val expectedJoinHint = JoinHint(leftHint = None, rightHint = expectedHint)
-    var matchedJoin = false
-    plan.transformUp {
+    val joinsFound = plan.collect {
       case j @ Join(_, _, _, _, foundHint) =>
         assert(expectedJoinHint == foundHint)
-        matchedJoin = true
-        j
     }
-    assert(matchedJoin)
+    assert(joinsFound.size == 1)
   }
 
   test("Correlated Exists") {
@@ -86,14 +83,14 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
     val optimized = queryDf.queryExecution.optimizedPlan
 
     // the subquery will be turned into a left semi join and should not contain any hints
-    optimized.transform {
-      case j @ Join(_, _, joinType, _, hint) =>
+    optimized.foreach {
+      case Join(_, _, joinType, _, hint) =>
         joinType match {
           case _: InnerLike => assert(expectedHint == hint.leftHint)
           case LeftSemi => assert(hint.leftHint.isEmpty && hint.rightHint.isEmpty)
           case _ => throw new IllegalArgumentException("Unexpected join found.")
         }
-        j
+      case _ =>
     }
     checkAnswer(queryDf, testData)
   }
@@ -192,14 +189,11 @@ class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
     }
     val optimizedPlan = queryDf.queryExecution.optimizedPlan
     val expectedJoinHint = JoinHint(leftHint = None, rightHint = expectedHint)
-    var matchedJoin = false
-    optimizedPlan.transformUp {
+    val joinsFound = optimizedPlan.collect {
       case j: Join if j.condition.nonEmpty && condContainsMax(j.condition.get) =>
         assert(expectedJoinHint == j.hint)
-        matchedJoin = true
-        j
     }
-    assert(matchedJoin)
+    assert(joinsFound.size == 1)
     checkAnswer(queryDf, spark.emptyDataFrame)
   }
 
