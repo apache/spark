@@ -63,6 +63,12 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan, sparkPlan)
   }
 
+  test("Test select expression in strings") {
+    val connectPlan = connectTestRelation.selectExpr("abs(id)", "name")
+    val sparkPlan = sparkTestRelation.selectExpr("abs(id)", "name")
+    comparePlans(connectPlan, sparkPlan)
+  }
+
   test("UnresolvedFunction resolution.") {
     assertThrows[IllegalArgumentException] {
       transform(connectTestRelation.select(callFunction("default.hex", Seq("id".protoAttr))))
@@ -259,6 +265,16 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val connectPlan2 = connectTestRelation.coalesce(2)
     val sparkPlan2 = sparkTestRelation.coalesce(2)
     comparePlans(connectPlan2, sparkPlan2)
+  }
+
+  test("Test summary") {
+    comparePlans(
+      connectTestRelation.summary("count", "mean", "stddev"),
+      sparkTestRelation.summary("count", "mean", "stddev"))
+  }
+
+  test("Test toDF") {
+    comparePlans(connectTestRelation.toDF("col1", "col2"), sparkTestRelation.toDF("col1", "col2"))
   }
 
   private def createLocalRelationProtoByQualifiedAttributes(

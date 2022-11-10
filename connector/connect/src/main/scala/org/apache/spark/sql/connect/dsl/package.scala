@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto._
+import org.apache.spark.connect.proto.Expression.ExpressionString
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.connect.proto.SetOperation.SetOpType
 import org.apache.spark.sql.SaveMode
@@ -225,6 +226,14 @@ package object dsl {
               .build())
           .build()
       }
+
+      def selectExpr(exprs: String*): Relation =
+        select(exprs.map { expr =>
+          Expression
+            .newBuilder()
+            .setExpressionString(ExpressionString.newBuilder().setExpression(expr))
+            .build()
+        }: _*)
 
       def limit(limit: Int): Relation = {
         Relation
@@ -439,6 +448,32 @@ package object dsl {
           .newBuilder()
           .setRepartition(
             Repartition.newBuilder().setInput(logicalPlan).setNumPartitions(num).setShuffle(true))
+          .build()
+
+      def summary(statistics: String*): Relation = {
+        Relation
+          .newBuilder()
+          .setStatFunction(
+            proto.StatFunction
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setSummary(
+                proto.StatFunction.Summary
+                  .newBuilder()
+                  .addAllStatistics(statistics.toSeq.asJava)
+                  .build())
+              .build())
+          .build()
+      }
+
+      def toDF(columnNames: String*): Relation =
+        Relation
+          .newBuilder()
+          .setRenameColumns(
+            RenameColumns
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllColumnNames(columnNames.asJava))
           .build()
 
       private def createSetOperation(

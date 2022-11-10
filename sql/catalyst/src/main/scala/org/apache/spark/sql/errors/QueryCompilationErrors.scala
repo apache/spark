@@ -851,16 +851,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def cannotOperateManagedTableWithExistingLocationError(
-      methodName: String, tableIdentifier: TableIdentifier, tableLocation: Path): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1070",
-      messageParameters = Map(
-        "methodName" -> methodName,
-        "tableIdentifier" -> tableIdentifier.toString,
-        "tableLocation" -> tableLocation.toString))
-  }
-
   def dropNonExistentColumnsNotSupportedError(
       nonExistentColumnNames: Seq[String]): Throwable = {
     new AnalysisException(
@@ -2667,8 +2657,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def viewAlreadyExistsError(name: TableIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1279",
-      messageParameters = Map("name" -> name.toString))
+      errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+      messageParameters = Map("relationName" -> name.toString))
   }
 
   def createPersistedViewFromDatasetAPINotAllowedError(): Throwable = {

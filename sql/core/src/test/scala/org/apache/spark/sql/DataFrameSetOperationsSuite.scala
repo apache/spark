@@ -522,16 +522,20 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     // Check failure cases
     df1 = Seq((1, 2)).toDF("a", "c")
     df2 = Seq((3, 4, 5)).toDF("a", "b", "c")
-    var errMsg = intercept[AnalysisException] {
-      df1.unionByName(df2)
-    }.getMessage
-    assert(errMsg.contains(
-      "Union can only be performed on tables with the same number of columns, " +
-        "but the first table has 2 columns and the second table has 3 columns"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.unionByName(df2)
+      },
+      errorClass = "NUM_COLUMNS_MISMATCH",
+      parameters = Map(
+        "operator" -> "UNION",
+        "refNumColumns" -> "2",
+        "invalidOrdinalNum" -> "second",
+        "invalidNumColumns" -> "3"))
 
     df1 = Seq((1, 2, 3)).toDF("a", "b", "c")
     df2 = Seq((4, 5, 6)).toDF("a", "c", "d")
-    errMsg = intercept[AnalysisException] {
+    val errMsg = intercept[AnalysisException] {
       df1.unionByName(df2)
     }.getMessage
     assert(errMsg.contains("""Cannot resolve column name "b" among (a, c, d)"""))

@@ -445,7 +445,7 @@
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
-        <version>1.0.3</version>
+        <version>1.0.4</version>
       </dependency>
       --><!-- #endif scala-2.13 -->
       <dependency>

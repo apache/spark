@@ -228,12 +228,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2429",
+  "errorClass" : "NUM_COLUMNS_MISMATCH",
   "messageParameters" : {
-    "firstColNum" : "1",
-    "nColNum" : "2",
-    "nTab" : "second",
-    "operator" : "ExceptAll"
+    "invalidNumColumns" : "2",
+    "invalidOrdinalNum" : "second",
+    "operator" : "EXCEPTALL",
+    "refNumColumns" : "1"
   },
   "queryContext" : [ {
     "objectType" : "",

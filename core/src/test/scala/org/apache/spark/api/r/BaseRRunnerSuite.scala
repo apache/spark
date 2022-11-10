@@ -14,29 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.status.api.v1.sql
 
-import java.util.Date
+package org.apache.spark.api.r
 
-import org.apache.spark.sql.execution.ui.SparkPlanGraphEdge
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.TestUtils.testCommandAvailable
+import org.apache.spark.internal.config.R.SPARKR_COMMAND
 
-class ExecutionData private[spark] (
-    val id: Long,
-    val status: String,
-    val description: String,
-    val planDescription: String,
-    val submissionTime: Date,
-    val duration: Long,
-    val runningJobIds: Seq[Int],
-    val successJobIds: Seq[Int],
-    val failedJobIds: Seq[Int],
-    val nodes: Seq[Node],
-    val edges: Seq[SparkPlanGraphEdge])
+class BaseRRunnerSuite extends SparkFunSuite {
+  test("Retrieve R options from R command") {
+    val rCommand = SPARKR_COMMAND.defaultValue.get
+    assume(testCommandAvailable(rCommand))
+    assert(BaseRRunner.getROptions(rCommand) === "--no-restore"
+      || BaseRRunner.getROptions(rCommand) === "--vanilla")
+  }
 
-case class Node private[spark](
-    nodeId: Long,
-    nodeName: String,
-    wholeStageCodegenId: Option[Long] = None,
-    metrics: Seq[Metric])
-
-case class Metric private[spark] (name: String, value: String)
+  test("Should return the default value if the R command does not exist") {
+    assume(!testCommandAvailable("nonexistent"))
+    assert(BaseRRunner.getROptions("nonexistent") === "--vanilla")
+  }
+}
