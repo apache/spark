@@ -141,7 +141,7 @@ class ChannelBuilder:
         return self.params.get(ChannelBuilder.PARAM_TOKEN, None)
 
     @property
-    def user_id(self) -> Optional[str]:
+    def userId(self) -> Optional[str]:
         """
         Returns
         -------
@@ -163,7 +163,7 @@ class ChannelBuilder:
         """
         return self.params[key]
 
-    def to_channel(self) -> grpc.Channel:
+    def toChannel(self) -> grpc.Channel:
         """
         Applies the parameters of the connection string and creates a new
         GRPC channel according to the configuration.
@@ -260,32 +260,32 @@ class AnalyzeResult:
 class RemoteSparkSession(object):
     """Conceptually the remote spark session that communicates with the server"""
 
-    def __init__(self, connection_string: str = "sc://localhost", user_id: Optional[str] = None):
+    def __init__(self, connectionString: str = "sc://localhost", userId: Optional[str] = None):
         """
         Creates a new RemoteSparkSession for the Spark Connect interface.
 
         Parameters
         ----------
-        connection_string: Optional[str]
+        connectionString: Optional[str]
             Connection string that is used to extract the connection parameters and configure
             the GRPC connection. Defaults to `sc://localhost`.
-        user_id : Optional[str]
+        userId : Optional[str]
             Optional unique user ID that is used to differentiate multiple users and
             isolate their Spark Sessions. If the `user_id` is not set, will default to
             the $USER environment. Defining the user ID as part of the connection string
             takes precedence.
         """
         # Parse the connection string.
-        self._builder = ChannelBuilder(connection_string)
+        self._builder = ChannelBuilder(connectionString)
         self._user_id = None
-        if self._builder.user_id is not None:
-            self._user_id = self._builder.user_id
-        elif user_id is not None:
-            self._user_id = user_id
+        if self._builder.userId is not None:
+            self._user_id = self._builder.userId
+        elif userId is not None:
+            self._user_id = userId
         else:
             self._user_id = os.getenv("USER", None)
 
-        self._channel = self._builder.to_channel()
+        self._channel = self._builder.toChannel()
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
 
         # Create the reader

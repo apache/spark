@@ -206,14 +206,14 @@ class ChannelBuilderTests(ReusedPySparkTestCase):
         self.assertFalse(chan.secure, "Garbage in, false out")
 
     def test_valid_channel_creation(self):
-        chan = ChannelBuilder("sc://host").to_channel()
+        chan = ChannelBuilder("sc://host").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
 
         # Sets up a channel without tokens because ssl is not used.
-        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc").to_channel()
+        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
 
-        chan = ChannelBuilder("sc://host/;use_ssl=true").to_channel()
+        chan = ChannelBuilder("sc://host/;use_ssl=true").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
 
     def test_channel_properties(self):
