@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.planning
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateMode => AggMode, Final, Partial}
 import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -233,12 +233,14 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
  *    computation that computes `count.resultAttribute + 1`.
  */
 object PhysicalAggregation {
-  // groupingExpressions, aggregateExpressions, resultExpressions, child
+  // groupingExpressions, aggregateExpressions, resultExpressions, AggregateMode, child
   type ReturnType =
-    (Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)
+    (Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], Option[AggMode], LogicalPlan)
 
   def unapply(a: Any): Option[ReturnType] = a match {
-    case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
+    case agg: logical.AggregateBase =>
+      val groupingExpressions = agg.groupingExpressions
+      val resultExpressions = agg.aggregateExpressions
       // A single aggregate expression might appear multiple times in resultExpressions.
       // In order to avoid evaluating an individual aggregate function multiple times, we'll
       // build a set of semantically distinct aggregate expressions and re-write expressions so
@@ -293,11 +295,18 @@ object PhysicalAggregation {
         }.asInstanceOf[NamedExpression]
       }
 
+      val aggMode = agg match {
+        case _: PartialAggregate => Some(Partial)
+        case _: FinalAggregate => Some(Final)
+        case _ => None
+      }
+
       Some((
         namedGroupingExpressions.map(_._2),
         aggregateExpressions,
         rewrittenResultExpressions,
-        child))
+        aggMode,
+        agg.child))
 
     case _ => None
   }

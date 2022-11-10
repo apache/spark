@@ -39,6 +39,7 @@ class PhysicalAggregationSuite extends PlanTest {
       groupingExpressions,
       aggregateExpressions,
       resultExpressions,
+      None,
       _ /* child */
     ) = analyzedQuery
 

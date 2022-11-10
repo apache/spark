@@ -24,7 +24,7 @@ import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -397,7 +397,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         EventTimeWatermarkExec(columnName, delay, planLater(child)) :: Nil
 
       case PhysicalAggregation(
-        namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
+        namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, None, child) =>
 
         if (aggregateExpressions.exists(PythonUDF.isGroupedAggPandasUDF)) {
           throw new AnalysisException(
@@ -520,7 +520,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
+      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, mode, child)
         if aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression]) =>
         val aggregateExpressions = aggExpressions.map(expr =>
           expr.asInstanceOf[AggregateExpression])
@@ -548,7 +548,19 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         val aggregateOperator =
-          if (functionsWithDistinct.isEmpty) {
+          if (mode.contains(Partial)) {
+            AggUtils.planPartialAggregateWithoutDistinct(
+              normalizedGroupingExpressions,
+              aggregateExpressions,
+              resultExpressions,
+              planLater(child))
+          } else if (mode.contains(Final)) {
+            AggUtils.planFinalAggregateWithoutDistinct(
+              normalizedGroupingExpressions,
+              aggregateExpressions,
+              resultExpressions,
+              planLater(child))
+          } else if (functionsWithDistinct.isEmpty) {
             AggUtils.planAggregateWithoutDistinct(
               normalizedGroupingExpressions,
               aggregateExpressions,
@@ -590,7 +602,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         aggregateOperator
 
-      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
+      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, None, child)
         if aggExpressions.forall(expr => expr.isInstanceOf[PythonUDF]) =>
         val udfExpressions = aggExpressions.map(expr => expr.asInstanceOf[PythonUDF])
 
@@ -600,7 +612,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           resultExpressions,
           planLater(child)))
 
-      case PhysicalAggregation(_, aggExpressions, _, _) =>
+      case PhysicalAggregation(_, aggExpressions, _, _, _) =>
         val groupAggPandasUDFNames = aggExpressions
           .filter(_.isInstanceOf[PythonUDF])
           .map(_.asInstanceOf[PythonUDF].name)

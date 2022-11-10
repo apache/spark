@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.dsl.expressions.{sum, sumDistinct}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, RepartitionOperation, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{FinalAggregate, LocalRelation, LogicalPlan, PartialAggregate, Range, Repartition, RepartitionOperation, Union}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -1313,6 +1314,50 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
     assert(topKs.size == 1)
     assert(sorts.isEmpty)
+  }
+
+  test("SPARK-41088: Add PartialAggregate and FinalAggregate logic operators") {
+    def getPhysicalPlan(logicalPlan: LogicalPlan): SparkPlan = {
+      val planner = spark.sessionState.planner
+      import planner._
+      val plannedOption = Aggregation(logicalPlan).headOption
+      val planned =
+        plannedOption.getOrElse(
+          fail(s"Could query play aggregation query $logicalPlan. Is it an aggregation query?"))
+      planned
+    }
+
+    val a = AttributeReference("a", LongType)(exprId = ExprId(1))
+    val b = AttributeReference("a", LongType)(exprId = ExprId(2))
+    val localRelation = LocalRelation(a, b)
+    val sumAgg = Alias(sum(a), "sum_a")() :: Nil
+    val sumDistinctAgg = Alias(sumDistinct(a), "sum_a")() :: Nil
+    val sumWithFilterAgg = Alias(sum(a, Some(Literal.FalseLiteral)), "sum_a")() :: Nil
+
+    val partialPlan = PartialAggregate(Seq(b), sumAgg, localRelation)
+    val finalPlan = FinalAggregate(Seq(b), sumAgg, localRelation)
+    assert(partialPlan.resolved)
+    assert(finalPlan.resolved)
+
+    val partialPhysical = getPhysicalPlan(partialPlan)
+    val partialHashAgg = partialPhysical.collect { case h: HashAggregateExec => h }
+    assert(partialHashAgg.size === 1)
+    assert(partialHashAgg.head.requiredChildDistributionExpressions.isEmpty)
+
+    val finalPhysical = getPhysicalPlan(finalPlan)
+    val finalHashAgg = finalPhysical.collect { case h: HashAggregateExec => h }
+    assert(finalHashAgg.size === 1)
+    assert(finalHashAgg.head.requiredChildDistributionExpressions.nonEmpty)
+
+    Seq(PartialAggregate(Seq(b), sumDistinctAgg, localRelation),
+      FinalAggregate(Seq(b), sumDistinctAgg, localRelation),
+      PartialAggregate(Seq(b), sumWithFilterAgg, localRelation),
+      FinalAggregate(Seq(b), sumWithFilterAgg, localRelation)).foreach { unsupportedAgg =>
+      assert(!unsupportedAgg.resolved)
+      assert(intercept[IllegalArgumentException] {
+        getPhysicalPlan(unsupportedAgg)
+      }.getMessage.contains("Unsupported aggregate function"))
+    }
   }
 }
 

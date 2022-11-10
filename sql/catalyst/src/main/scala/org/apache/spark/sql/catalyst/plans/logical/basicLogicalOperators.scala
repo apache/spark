@@ -1098,22 +1098,11 @@ case class Range(
 }
 
 /**
- * This is a Group by operator with the aggregate functions and projections.
- *
- * @param groupingExpressions expressions for grouping keys
- * @param aggregateExpressions expressions for a project list, which could contain
- *                             [[AggregateExpression]]s.
- *
- * Note: Currently, aggregateExpressions is the project list of this Group by operator. Before
- * separating projection from grouping and aggregate, we should avoid expression-level optimization
- * on aggregateExpressions, which could reference an expression in groupingExpressions.
- * For example, see the rule [[org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps]]
+ * A base class for [[Aggregate]], [[PartialAggregate]] and [[FinalAggregate]].
  */
-case class Aggregate(
-    groupingExpressions: Seq[Expression],
-    aggregateExpressions: Seq[NamedExpression],
-    child: LogicalPlan)
-  extends UnaryNode {
+abstract class AggregateBase extends UnaryNode {
+  val groupingExpressions: Seq[Expression]
+  val aggregateExpressions: Seq[NamedExpression]
 
   override lazy val resolved: Boolean = {
     val hasWindowExpressions = aggregateExpressions.exists ( _.collect {
@@ -1121,8 +1110,11 @@ case class Aggregate(
       }.nonEmpty
     )
 
-    expressions.forall(_.resolved) && childrenResolved && !hasWindowExpressions
+    expressions.forall(_.resolved) && childrenResolved && !hasWindowExpressions &&
+      isSplittableAggregate
   }
+
+  def isSplittableAggregate: Boolean
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def metadataOutput: Seq[Attribute] = Nil
@@ -1141,8 +1133,9 @@ case class Aggregate(
     getAllValidConstraints(nonAgg)
   }
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
-    copy(child = newChild)
+  def withGroupingExpressions(groupingExpressions: Seq[Expression]): AggregateBase
+
+  def withAggregateExpressions(aggregateExpressions: Seq[NamedExpression]): AggregateBase
 
   // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
   private[sql] def groupOnly: Boolean = {
@@ -1153,6 +1146,87 @@ case class Aggregate(
       case e => e
     }.forall(a => a.foldable || groupingExpressions.exists(g => a.semanticEquals(g)))
   }
+}
+
+/**
+ * This is a Group by operator with the aggregate functions and projections.
+ *
+ * @param groupingExpressions expressions for grouping keys
+ * @param aggregateExpressions expressions for a project list, which could contain
+ *                             [[AggregateExpression]]s.
+ *
+ * Note: Currently, aggregateExpressions is the project list of this Group by operator. Before
+ * separating projection from grouping and aggregate, we should avoid expression-level optimization
+ * on aggregateExpressions, which could reference an expression in groupingExpressions.
+ * For example, see the rule [[org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps]]
+ */
+case class Aggregate(
+    groupingExpressions: Seq[Expression],
+    aggregateExpressions: Seq[NamedExpression],
+    child: LogicalPlan) extends AggregateBase {
+
+  override def isSplittableAggregate: Boolean = true
+
+  override def withGroupingExpressions(groupingExpressions: Seq[Expression]): AggregateBase =
+    copy(groupingExpressions = groupingExpressions)
+
+  override def withAggregateExpressions(aggregateExpressions: Seq[NamedExpression]): AggregateBase =
+    copy(aggregateExpressions = aggregateExpressions)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
+    copy(child = newChild)
+}
+
+/**
+ * Similar to [[Aggregate]], but only aggregates on the map side.
+ */
+case class PartialAggregate(
+    groupingExpressions: Seq[Expression],
+    aggregateExpressions: Seq[NamedExpression],
+    child: LogicalPlan) extends AggregateBase {
+
+  override private[sql] lazy val groupOnly: Boolean = false
+
+  override def isSplittableAggregate: Boolean = aggregateExpressions.flatMap { expr =>
+    expr.collect { case a if AggregateExpression.isAggregate(a) => a }
+  }.forall {
+    case ae: AggregateExpression => !ae.isDistinct && ae.filter.isEmpty
+    case _ => false
+  }
+
+  override def withGroupingExpressions(groupingExpressions: Seq[Expression]): AggregateBase =
+    copy(groupingExpressions = groupingExpressions)
+
+  override def withAggregateExpressions(aggregateExpressions: Seq[NamedExpression]): AggregateBase =
+    copy(aggregateExpressions = aggregateExpressions)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): PartialAggregate =
+    copy(child = newChild)
+}
+
+/**
+ * Similar to [[Aggregate]], but skip the partial aggregates.
+ */
+case class FinalAggregate(
+    groupingExpressions: Seq[Expression],
+    aggregateExpressions: Seq[NamedExpression],
+    child: LogicalPlan) extends AggregateBase {
+
+  override def isSplittableAggregate: Boolean = aggregateExpressions.flatMap { expr =>
+    expr.collect { case a if AggregateExpression.isAggregate(a) => a }
+  }.forall {
+    case ae: AggregateExpression => !ae.isDistinct && ae.filter.isEmpty
+    case _ => false
+  }
+
+  override def withGroupingExpressions(groupingExpressions: Seq[Expression]): AggregateBase =
+    copy(groupingExpressions = groupingExpressions)
+
+  override def withAggregateExpressions(aggregateExpressions: Seq[NamedExpression]): AggregateBase =
+    copy(aggregateExpressions = aggregateExpressions)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): FinalAggregate =
+    copy(child = newChild)
 }
 
 object Aggregate {

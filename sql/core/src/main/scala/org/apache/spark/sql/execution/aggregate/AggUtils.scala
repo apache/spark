@@ -169,6 +169,50 @@ object AggUtils {
     finalAggregate :: Nil
   }
 
+  def planPartialAggregateWithoutDistinct(
+      groupingExpressions: Seq[NamedExpression],
+      aggregateExpressions: Seq[AggregateExpression],
+      resultExpressions: Seq[NamedExpression],
+      child: SparkPlan): Seq[SparkPlan] = {
+    if (aggregateExpressions.forall(e => !e.isDistinct && e.filter.isEmpty)) {
+      val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
+      createAggregate(
+        requiredChildDistributionExpressions = None,
+        groupingExpressions = groupingExpressions.map(_.toAttribute),
+        aggregateExpressions = completeAggregateExpressions,
+        aggregateAttributes = completeAggregateExpressions.map(_.resultAttribute),
+        resultExpressions = resultExpressions,
+        child = child) :: Nil
+    } else {
+      throw new IllegalArgumentException(
+        "Unsupported aggregate function is found in partial aggregate")
+    }
+  }
+
+  def planFinalAggregateWithoutDistinct(
+      groupingExpressions: Seq[NamedExpression],
+      aggregateExpressions: Seq[AggregateExpression],
+      resultExpressions: Seq[NamedExpression],
+      child: SparkPlan): Seq[SparkPlan] = {
+    if (aggregateExpressions.forall(e => !e.isDistinct && e.filter.isEmpty)) {
+      val groupingAttributes = groupingExpressions.map(_.toAttribute)
+      val finalAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
+      val finalAggregateAttributes = finalAggregateExpressions.map(_.resultAttribute)
+
+      createAggregate(
+        requiredChildDistributionExpressions = Some(groupingAttributes),
+        groupingExpressions = groupingAttributes,
+        aggregateExpressions = finalAggregateExpressions,
+        aggregateAttributes = finalAggregateAttributes,
+        initialInputBufferOffset = groupingExpressions.length,
+        resultExpressions = resultExpressions,
+        child = child) :: Nil
+    } else {
+      throw new IllegalArgumentException(
+        "Unsupported aggregate function is found in final aggregate")
+    }
+  }
+
   def planAggregateWithOneDistinct(
       groupingExpressions: Seq[NamedExpression],
       functionsWithDistinct: Seq[AggregateExpression],
