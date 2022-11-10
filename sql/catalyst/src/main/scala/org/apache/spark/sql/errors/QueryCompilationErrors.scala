@@ -483,7 +483,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       index: Int,
       expr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "GROUP_BY_POS_REFERS_AGG_EXPR",
+      errorClass = "GROUP_BY_POS_AGGREGATE",
       messageParameters = Map(
         "index" -> index.toString,
         "aggExpr" -> expr.sql))
