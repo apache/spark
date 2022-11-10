@@ -163,19 +163,15 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
 
 
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
-    """
-    Same as :class:`ArrowStreamSerializer` but it flattens the struct to Arrow record batch
-    for applying each function with the raw record arrow batch. See also `DataFrame.mapInArrow`.
-    """
-
-    #def load_stream(self, stream):
-    #    for iterator in super(ArrowStreamGroupUDFSerializer, self).load_stream(stream):
-    #        for item in iterator:
-    #            yield item
-
     def dump_stream(self, iterator, stream):
-        flatten_iter = [item for iterator2 in iterator for item in iterator2]
-        super(ArrowStreamGroupUDFSerializer, self).dump_stream(flatten_iter, stream)
+        # flatten iterator [[(pa.RecordBatch, arrow_type)]] into [(pa.RecordBatch, arrow_type)]
+        # so strip off extra outer iterator added by ArrowStreamUDFSerializer.load_stream
+        batch_iter = [
+            batch_and_type
+            for item in iterator  # item is list returned by wrap_grouped_map_arrow_udf
+            for batch_and_type in item  # tuple constructed in wrap_grouped_map_arrow_udf
+        ]
+        super(ArrowStreamGroupUDFSerializer, self).dump_stream(batch_iter, stream)
 
 
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):
