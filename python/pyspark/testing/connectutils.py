@@ -24,6 +24,7 @@ if have_pandas:
     from pyspark.sql.connect import DataFrame
     from pyspark.sql.connect.plan import Read, Range, SQL
     from pyspark.testing.utils import search_jar
+    from pyspark.sql.connect.plan import LogicalPlan
 
     connect_jar = search_jar("connector/connect", "spark-connect-assembly-", "spark-connect")
 else:
@@ -92,6 +93,10 @@ class PlanOnlyTestFixture(unittest.TestCase):
         return DataFrame.withPlan(SQL(query), cls.connect)  # type: ignore
 
     @classmethod
+    def _with_plan(cls, plan: LogicalPlan) -> "DataFrame":
+        return DataFrame.withPlan(plan, cls.connect)  # type: ignore
+
+    @classmethod
     def setUpClass(cls: Any) -> None:
         cls.connect = MockRemoteSession()
         cls.tbl_name = "test_connect_plan_only_table_1"
@@ -100,6 +105,7 @@ class PlanOnlyTestFixture(unittest.TestCase):
         cls.connect.set_hook("readTable", cls._read_table)
         cls.connect.set_hook("range", cls._session_range)
         cls.connect.set_hook("sql", cls._session_sql)
+        cls.connect.set_hook("with_plan", cls._with_plan)
 
     @classmethod
     def tearDownClass(cls: Any) -> None:
@@ -107,3 +113,4 @@ class PlanOnlyTestFixture(unittest.TestCase):
         cls.connect.drop_hook("readTable")
         cls.connect.drop_hook("range")
         cls.connect.drop_hook("sql")
+        cls.connect.drop_hook("with_plan")

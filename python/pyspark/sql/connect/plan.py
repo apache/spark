@@ -16,7 +16,6 @@
 #
 
 from typing import (
-    Any,
     List,
     Optional,
     Sequence,
@@ -58,7 +57,7 @@ class LogicalPlan(object):
         return exp
 
     def to_attr_or_expression(
-        self, col: "ColumnOrString", session: Optional["RemoteSparkSession"]
+        self, col: "ColumnOrString", session: "RemoteSparkSession"
     ) -> proto.Expression:
         """Returns either an instance of an unresolved attribute or the serialized
         expression value of the column."""
@@ -67,7 +66,7 @@ class LogicalPlan(object):
         else:
             return cast(ColumnRef, col).to_plan(session)
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         ...
 
     def _verify(self, session: "RemoteSparkSession") -> bool:
@@ -82,9 +81,7 @@ class LogicalPlan(object):
 
         return test_plan == plan
 
-    def to_proto(
-        self, session: Optional["RemoteSparkSession"] = None, debug: bool = False
-    ) -> proto.Plan:
+    def to_proto(self, session: "RemoteSparkSession", debug: bool = False) -> proto.Plan:
         """
         Generates connect proto plan based on this LogicalPlan.
 
@@ -127,7 +124,7 @@ class DataSource(LogicalPlan):
         self.schema = schema
         self.options = options
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         plan = proto.Relation()
         if self.format is not None:
             plan.read.data_source.format = self.format
@@ -158,7 +155,7 @@ class Read(LogicalPlan):
         super().__init__(None)
         self.table_name = table_name
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         plan = proto.Relation()
         plan.read.named_table.unparsed_identifier = self.table_name
         return plan
@@ -202,7 +199,7 @@ class Project(LogicalPlan):
                     f"Only Expressions or String can be used for projections: '{c}'."
                 )
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         assert self._child is not None
         proj_exprs = []
         for c in self._raw_columns:
@@ -241,7 +238,7 @@ class Filter(LogicalPlan):
         super().__init__(child)
         self.filter = filter
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
         plan.filter.input.CopyFrom(self._child.plan(session))
@@ -269,7 +266,7 @@ class Limit(LogicalPlan):
         super().__init__(child)
         self.limit = limit
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
         plan.limit.input.CopyFrom(self._child.plan(session))
@@ -297,7 +294,7 @@ class Offset(LogicalPlan):
         super().__init__(child)
         self.offset = offset
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
         plan.offset.input.CopyFrom(self._child.plan(session))
@@ -331,7 +328,7 @@ class Deduplicate(LogicalPlan):
         self.all_columns_as_keys = all_columns_as_keys
         self.column_names = column_names
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
         plan.deduplicate.all_columns_as_keys = self.all_columns_as_keys
@@ -371,7 +368,7 @@ class Sort(LogicalPlan):
         self.is_global = is_global
 
     def col_to_sort_field(
-        self, col: Union[SortOrder, ColumnRef, str], session: Optional["RemoteSparkSession"]
+        self, col: Union[SortOrder, ColumnRef, str], session: "RemoteSparkSession"
     ) -> proto.Sort.SortField:
         if isinstance(col, SortOrder):
             sf = proto.Sort.SortField()
@@ -398,7 +395,7 @@ class Sort(LogicalPlan):
             sf.nulls = proto.Sort.SortNulls.SORT_NULLS_LAST
             return sf
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
         plan.sort.input.CopyFrom(self._child.plan(session))
@@ -438,7 +435,7 @@ class Sample(LogicalPlan):
         self.with_replacement = with_replacement
         self.seed = seed
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
         plan.sample.input.CopyFrom(self._child.plan(session))
@@ -488,9 +485,7 @@ class Aggregate(LogicalPlan):
         self.grouping_cols = grouping_cols
         self.measures = measures if measures is not None else []
 
-    def _convert_measure(
-        self, m: MeasureType, session: Optional["RemoteSparkSession"]
-    ) -> proto.Expression:
+    def _convert_measure(self, m: MeasureType, session: "RemoteSparkSession") -> proto.Expression:
         exp, fun = m
         proto_expr = proto.Expression()
         measure = proto_expr.unresolved_function
@@ -501,7 +496,7 @@ class Aggregate(LogicalPlan):
             measure.arguments.append(cast(Expression, exp).to_plan(session))
         return proto_expr
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         assert self._child is not None
         groupings = [x.to_plan(session) for x in self.grouping_cols]
 
@@ -571,7 +566,7 @@ class Join(LogicalPlan):
             )
         self.how = join_type
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         rel = proto.Relation()
         rel.join.left.CopyFrom(self.left.plan(session))
         rel.join.right.CopyFrom(self.right.plan(session))
@@ -607,21 +602,43 @@ class Join(LogicalPlan):
         """
 
 
-class UnionAll(LogicalPlan):
+class SetOperation(LogicalPlan):
     def __init__(
-        self, child: Optional["LogicalPlan"], other: "LogicalPlan", by_name: bool = False
+        self,
+        child: Optional["LogicalPlan"],
+        other: Optional["LogicalPlan"],
+        set_op: str,
+        is_all: bool = True,
+        by_name: bool = False,
     ) -> None:
         super().__init__(child)
         self.other = other
         self.by_name = by_name
+        self.is_all = is_all
+        self.set_op = set_op
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         assert self._child is not None
         rel = proto.Relation()
-        rel.set_op.left_input.CopyFrom(self._child.plan(session))
-        rel.set_op.right_input.CopyFrom(self.other.plan(session))
-        rel.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_UNION
-        rel.set_op.is_all = True
+        if self._child is not None:
+            rel.set_op.left_input.CopyFrom(self._child.plan(session))
+        if self.other is not None:
+            rel.set_op.right_input.CopyFrom(self.other.plan(session))
+        if self.set_op == "union":
+            rel.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_UNION
+        elif self.set_op == "intersect":
+            rel.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_INTERSECT
+        elif self.set_op == "except":
+            rel.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_EXCEPT
+        else:
+            raise NotImplementedError(
+                """
+                Unsupported set operation type: %s.
+                """
+                % rel.set_op.set_op_type
+            )
+
+        rel.set_op.is_all = self.is_all
         rel.set_op.by_name = self.by_name
         return rel
 
@@ -633,7 +650,7 @@ class UnionAll(LogicalPlan):
         o = " " * (indent + LogicalPlan.INDENT)
         n = indent + LogicalPlan.INDENT * 2
         return (
-            f"{i}UnionAll\n{o}child1=\n{self._child.print(n)}"
+            f"{i}SetOperation\n{o}child1=\n{self._child.print(n)}"
             f"\n{o}child2=\n{self.other.print(n)}"
         )
 
@@ -644,7 +661,7 @@ class UnionAll(LogicalPlan):
         return f"""
         <ul>
             <li>
-                <b>Union</b><br />
+                <b>SetOperation</b><br />
                 Left: {self._child._repr_html_()}
                 Right: {self.other._repr_html_()}
             </li>
@@ -660,7 +677,7 @@ class Repartition(LogicalPlan):
         self._num_partitions = num_partitions
         self._shuffle = shuffle
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         rel = proto.Relation()
         if self._child is not None:
             rel.repartition.input.CopyFrom(self._child.plan(session))
@@ -693,7 +710,7 @@ class SubqueryAlias(LogicalPlan):
         super().__init__(child)
         self._alias = alias
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         rel = proto.Relation()
         rel.subquery_alias.alias = self._alias
         return rel
@@ -719,7 +736,7 @@ class SQL(LogicalPlan):
         super().__init__(None)
         self._query = query
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         rel = proto.Relation()
         rel.sql.query = self._query
         return rel
@@ -754,7 +771,7 @@ class Range(LogicalPlan):
         self._step = step
         self._num_partitions = num_partitions
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         rel = proto.Relation()
         rel.range.start = self._start
         rel.range.end = self._end
@@ -787,37 +804,60 @@ class Range(LogicalPlan):
         """
 
 
-class StatFunction(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], function: str, **kwargs: Any) -> None:
+class StatSummary(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], statistics: List[str]) -> None:
         super().__init__(child)
-        assert function in ["summary"]
-        self.function = function
-        self.kwargs = kwargs
+        self.statistics = statistics
 
-    def plan(self, session: Optional["RemoteSparkSession"]) -> proto.Relation:
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         assert self._child is not None
-
         plan = proto.Relation()
-        plan.stat_function.input.CopyFrom(self._child.plan(session))
-
-        if self.function == "summary":
-            plan.stat_function.summary.statistics.extend(self.kwargs.get("statistics", []))
-        else:
-            raise Exception(f"Unknown function ${self.function}.")
-
+        plan.summary.input.CopyFrom(self._child.plan(session))
+        plan.summary.statistics.extend(self.statistics)
         return plan
 
     def print(self, indent: int = 0) -> str:
         i = " " * indent
-        return f"""{i}<StatFunction function='{self.function}' augments='{self.kwargs}'>"""
+        return f"""{i}<Summary statistics='{self.statistics}'>"""
 
     def _repr_html_(self) -> str:
         return f"""
         <ul>
            <li>
-              <b>StatFunction</b><br />
-              Function: {self.function} <br />
-              Augments: {self.kwargs} <br />
+              <b>Summary</b><br />
+              Statistics: {self.statistics} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class StatCrosstab(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], col1: str, col2: str) -> None:
+        super().__init__(child)
+        self.col1 = col1
+        self.col2 = col2
+
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.crosstab.input.CopyFrom(self._child.plan(session))
+        plan.crosstab.col1 = self.col1
+        plan.crosstab.col2 = self.col2
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"""{i}<Crosstab col1='{self.col1}' col2='{self.col2}'>"""
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>Crosstab</b><br />
+              Col1: {self.col1} <br />
+              Col2: {self.col2} <br />
               {self._child_repr_()}
            </li>
         </ul>

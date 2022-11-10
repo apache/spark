@@ -101,21 +101,23 @@ class DataFrame(object):
     of the DataFrame with the changes applied.
     """
 
-    def __init__(self, data: Optional[List[Any]] = None, schema: Optional[StructType] = None):
+    def __init__(
+        self,
+        session: "RemoteSparkSession",
+        data: Optional[List[Any]] = None,
+        schema: Optional[StructType] = None,
+    ):
         """Creates a new data frame"""
         self._schema = schema
         self._plan: Optional[plan.LogicalPlan] = None
         self._cache: Dict[str, Any] = {}
-        self._session: Optional["RemoteSparkSession"] = None
+        self._session: "RemoteSparkSession" = session
 
     @classmethod
-    def withPlan(
-        cls, plan: plan.LogicalPlan, session: Optional["RemoteSparkSession"] = None
-    ) -> "DataFrame":
+    def withPlan(cls, plan: plan.LogicalPlan, session: "RemoteSparkSession") -> "DataFrame":
         """Main initialization method used to construct a new data frame with a child plan."""
-        new_frame = DataFrame()
+        new_frame = DataFrame(session=session)
         new_frame._plan = plan
-        new_frame._session = session
         return new_frame
 
     def select(self, *cols: ColumnOrName) -> "DataFrame":
@@ -389,7 +391,9 @@ class DataFrame(object):
     def unionAll(self, other: "DataFrame") -> "DataFrame":
         if other._plan is None:
             raise ValueError("Argument to Union does not contain a valid plan.")
-        return DataFrame.withPlan(plan.UnionAll(self._plan, other._plan), session=self._session)
+        return DataFrame.withPlan(
+            plan.SetOperation(self._plan, other._plan, "union", is_all=True), session=self._session
+        )
 
     def unionByName(self, other: "DataFrame", allowMissingColumns: bool = False) -> "DataFrame":
         """Returns a new :class:`DataFrame` containing union of rows in this and another
@@ -415,11 +419,99 @@ class DataFrame(object):
         if other._plan is None:
             raise ValueError("Argument to UnionByName does not contain a valid plan.")
         return DataFrame.withPlan(
-            plan.UnionAll(self._plan, other._plan, allowMissingColumns), session=self._session
+            plan.SetOperation(
+                self._plan, other._plan, "union", is_all=True, by_name=allowMissingColumns
+            ),
+            session=self._session,
+        )
+
+    def exceptAll(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame` but
+        not in another :class:`DataFrame` while preserving duplicates.
+
+        This is equivalent to `EXCEPT ALL` in SQL.
+        As standard in SQL, this function resolves columns by position (not by name).
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            The other :class:`DataFrame` to compare to.
+
+        Returns
+        -------
+        :class:`DataFrame`
+        """
+        return DataFrame.withPlan(
+            plan.SetOperation(self._plan, other._plan, "except", is_all=True), session=self._session
+        )
+
+    def intersect(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing rows only in
+        both this :class:`DataFrame` and another :class:`DataFrame`.
+        Note that any duplicates are removed. To preserve duplicates
+        use :func:`intersectAll`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame.
+
+        Notes
+        -----
+        This is equivalent to `INTERSECT` in SQL.
+        """
+        return DataFrame.withPlan(
+            plan.SetOperation(self._plan, other._plan, "intersect", is_all=False),
+            session=self._session,
+        )
+
+    def intersectAll(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing rows in both this :class:`DataFrame`
+        and another :class:`DataFrame` while preserving duplicates.
+
+        This is equivalent to `INTERSECT ALL` in SQL. As standard in SQL, this function
+        resolves columns by position (not by name).
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame.
+        """
+        return DataFrame.withPlan(
+            plan.SetOperation(self._plan, other._plan, "intersect", is_all=True),
+            session=self._session,
         )
 
     def where(self, condition: Expression) -> "DataFrame":
         return self.filter(condition)
+
+    @property
+    def stat(self) -> "DataFrameStatFunctions":
+        """Returns a :class:`DataFrameStatFunctions` for statistic functions.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`DataFrameStatFunctions`
+        """
+        return DataFrameStatFunctions(self)
 
     def summary(self, *statistics: str) -> "DataFrame":
         _statistics: List[str] = list(statistics)
@@ -427,7 +519,42 @@ class DataFrame(object):
             if not isinstance(s, str):
                 raise TypeError(f"'statistics' must be list[str], but got {type(s).__name__}")
         return DataFrame.withPlan(
-            plan.StatFunction(child=self._plan, function="summary", statistics=_statistics),
+            plan.StatSummary(child=self._plan, statistics=_statistics),
+            session=self._session,
+        )
+
+    def crosstab(self, col1: str, col2: str) -> "DataFrame":
+        """
+        Computes a pair-wise frequency table of the given columns. Also known as a contingency
+        table. The number of distinct values for each column should be less than 1e4. At most 1e6
+        non-zero pair frequencies will be returned.
+        The first column of each row will be the distinct values of `col1` and the column names
+        will be the distinct values of `col2`. The name of the first column will be `$col1_$col2`.
+        Pairs that have no occurrences will have zero as their counts.
+        :func:`DataFrame.crosstab` and :func:`DataFrameStatFunctions.crosstab` are aliases.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        col1 : str
+            The name of the first column. Distinct items will make the first item of
+            each row.
+        col2 : str
+            The name of the second column. Distinct items will make the column names
+            of the :class:`DataFrame`.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Frequency matrix of two columns.
+        """
+        if not isinstance(col1, str):
+            raise TypeError(f"'col1' must be str, but got {type(col1).__name__}")
+        if not isinstance(col2, str):
+            raise TypeError(f"'col2' must be str, but got {type(col2).__name__}")
+        return DataFrame.withPlan(
+            plan.StatCrosstab(child=self._plan, col1=col1, col2=col2),
             session=self._session,
         )
 
@@ -499,3 +626,18 @@ class DataFrame(object):
             return self._session.explain_string(query)
         else:
             return ""
+
+
+class DataFrameStatFunctions:
+    """Functionality for statistic functions with :class:`DataFrame`.
+
+    .. versionadded:: 3.4.0
+    """
+
+    def __init__(self, df: DataFrame):
+        self.df = df
+
+    def crosstab(self, col1: str, col2: str) -> DataFrame:
+        return self.df.crosstab(col1, col2)
+
+    crosstab.__doc__ = DataFrame.crosstab.__doc__

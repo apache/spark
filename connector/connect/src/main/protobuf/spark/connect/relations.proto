@@ -47,9 +47,12 @@ message Relation {
     Range range = 15;
     SubqueryAlias subquery_alias = 16;
     Repartition repartition = 17;
-    RenameColumns rename_columns = 18;
+    RenameColumnsBySameLengthNames rename_columns_by_same_length_names = 18;
+    RenameColumnsByNameToNameMap rename_columns_by_name_to_name_map = 19;
 
-    StatFunction stat_function = 100;
+    // stat functions
+    StatSummary summary = 100;
+    StatCrosstab crosstab = 101;
 
     Unknown unknown = 999;
   }
@@ -258,25 +261,50 @@ message Repartition {
   bool shuffle = 3;
 }
 
-// StatFunction
-message StatFunction {
-  // Required. The input relation.
+// Computes specified statistics for numeric and string columns.
+// It will invoke 'Dataset.summary' (same as 'StatFunctions.summary')
+// to compute the results.
+message StatSummary {
+  // (Required) The input relation.
   Relation input = 1;
-  // Required. The function and its parameters.
-  oneof function {
-    Summary summary = 2;
 
-    Unknown unknown = 999;
-  }
-
-  // StatFunctions.summary
-  message Summary {
-    repeated string statistics = 1;
-  }
+  // (Optional) Statistics from to be computed.
+  //
+  // Available statistics are:
+  //  count
+  //  mean
+  //  stddev
+  //  min
+  //  max
+  //  arbitrary approximate percentiles specified as a percentage (e.g. 75%)
+  //  count_distinct
+  //  approx_count_distinct
+  //
+  // If no statistics are given, this function computes 'count', 'mean', 'stddev', 'min',
+  // 'approximate quartiles' (percentiles at 25%, 50%, and 75%), and 'max'.
+  repeated string statistics = 2;
 }
 
-// Rename columns on the input relation.
-message RenameColumns {
+// Computes a pair-wise frequency table of the given columns. Also known as a contingency table.
+// It will invoke 'Dataset.stat.crosstab' (same as 'StatFunctions.crossTabulate')
+// to compute the results.
+message StatCrosstab {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The name of the first column.
+  //
+  // Distinct items will make the first item of each row.
+  string col1 = 2;
+
+  // (Required) The name of the second column.
+  //
+  // Distinct items will make the column names of the DataFrame.
+  string col2 = 3;
+}
+
+// Rename columns on the input relation by the same length of names.
+message RenameColumnsBySameLengthNames {
   // Required. The input relation.
   Relation input = 1;
 
@@ -285,4 +313,20 @@ message RenameColumns {
   // The number of columns of the input relation must be equal to the length
   // of this field. If this is not true, an exception will be returned.
   repeated string column_names = 2;
+}
+
+
+// Rename columns on the input relation by a map with name to name mapping.
+message RenameColumnsByNameToNameMap {
+  // Required. The input relation.
+  Relation input = 1;
+
+
+  // Required.
+  //
+  // Renaming column names of input relation from A to B where A is the map key
+  // and B is the map value. This is a no-op if schema doesn't contain any A. It
+  // does not require that all input relation column names to present as keys.
+  // duplicated B are not allowed.
+  map<string, string> rename_columns_map = 2;
 }

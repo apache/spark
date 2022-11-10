@@ -28,7 +28,7 @@
   <artifactId>spark-protobuf_2.12</artifactId>
   <properties>
     <sbt.project.name>protobuf</sbt.project.name>
-    <protobuf.version>3.21.1</protobuf.version>
+    <protobuf.version>3.21.9</protobuf.version>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Protobuf</name>

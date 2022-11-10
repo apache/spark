@@ -21,7 +21,6 @@ from pyspark.testing.connectutils import PlanOnlyTestFixture
 from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
 
 if have_pandas:
-    from pyspark.sql.connect import DataFrame
     from pyspark.sql.connect.functions import col
     from pyspark.sql.connect.plan import Read
     import pyspark.sql.connect.proto as proto
@@ -30,8 +29,8 @@ if have_pandas:
 @unittest.skipIf(not have_pandas, cast(str, pandas_requirement_message))
 class SparkConnectToProtoSuite(PlanOnlyTestFixture):
     def test_select_with_columns_and_strings(self):
-        df = DataFrame.withPlan(Read("table"))
-        self.assertIsNotNone(df.select(col("name"))._plan.to_proto())
+        df = self.connect.with_plan(Read("table"))
+        self.assertIsNotNone(df.select(col("name"))._plan.to_proto(self.connect))
         self.assertIsNotNone(df.select("name"))
         self.assertIsNotNone(df.select("name", "name2"))
         self.assertIsNotNone(df.select(col("name"), col("name2")))
@@ -39,8 +38,8 @@ class SparkConnectToProtoSuite(PlanOnlyTestFixture):
         self.assertIsNotNone(df.select("*"))
 
     def test_join_with_join_type(self):
-        df_left = DataFrame.withPlan(Read("table"))
-        df_right = DataFrame.withPlan(Read("table"))
+        df_left = self.connect.with_plan(Read("table"))
+        df_right = self.connect.with_plan(Read("table"))
         for (join_type_str, join_type) in [
             (None, proto.Join.JoinType.JOIN_TYPE_INNER),
             ("inner", proto.Join.JoinType.JOIN_TYPE_INNER),
@@ -50,7 +49,9 @@ class SparkConnectToProtoSuite(PlanOnlyTestFixture):
             ("leftanti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
             ("leftsemi", proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI),
         ]:
-            joined_df = df_left.join(df_right, on=col("name"), how=join_type_str)._plan.to_proto()
+            joined_df = df_left.join(df_right, on=col("name"), how=join_type_str)._plan.to_proto(
+                self.connect
+            )
             self.assertEqual(joined_df.root.join.join_type, join_type)
 
 
