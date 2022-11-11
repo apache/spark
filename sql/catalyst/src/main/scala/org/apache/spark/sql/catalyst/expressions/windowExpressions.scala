@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -58,7 +57,8 @@ case class WindowSpecDefinition(
       frameSpecification = newChildren.last.asInstanceOf[WindowFrame])
 
   override lazy val resolved: Boolean =
-    childrenResolved && frameSpecification.isInstanceOf[SpecifiedWindowFrame]
+    childrenResolved && frameSpecification.isInstanceOf[SpecifiedWindowFrame] &&
+      checkInputDataTypes().isSuccess
 
   override def nullable: Boolean = true
   override def dataType: DataType = throw QueryExecutionErrors.dataTypeOperationUnsupportedError
