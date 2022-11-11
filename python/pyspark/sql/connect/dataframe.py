@@ -150,7 +150,7 @@ class DataFrame(object):
 
         Returns
         -------
-        :class:`SparkSession`
+        :class:`RemoteSparkSession`
         """
         return self._session
 
