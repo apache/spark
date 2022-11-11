@@ -1500,17 +1500,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0062",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "msg" : "Error parsing ' 1 fake_unit' to interval, invalid unit 'fake_unit'"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 17,
-    "stopIndex" : 27,
-    "fragment" : "1 fake_unit"
-  } ]
+    "error" : "'fake_unit'",
+    "hint" : ""
+  }
 }
 
 

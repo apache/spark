@@ -33,12 +33,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
-import org.apache.spark.util.{ByteBufferOutputStream, Utils}
+import org.apache.spark.util.{ByteBufferOutputStream, SizeEstimator, Utils}
 
 
 /**
@@ -126,6 +126,103 @@ private[sql] object ArrowConverters extends Logging {
         out.toByteArray
       }
     }
+  }
+
+  /**
+   * Convert the input rows into fully contained arrow batches.
+   * Different from [[toBatchIterator]], each output arrow batch starts with the schema.
+   */
+  private[sql] def toBatchWithSchemaIterator(
+      rowIter: Iterator[InternalRow],
+      schema: StructType,
+      maxBatchSize: Long,
+      timeZoneId: String): Iterator[(Array[Byte], Long)] = {
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+      "toArrowBatchIterator", 0, Long.MaxValue)
+
+    val root = VectorSchemaRoot.create(arrowSchema, allocator)
+    val unloader = new VectorUnloader(root)
+    val arrowWriter = ArrowWriter.create(root)
+    val arrowSchemaSize = SizeEstimator.estimate(arrowSchema)
+
+    Option(TaskContext.get).foreach {
+      _.addTaskCompletionListener[Unit] { _ =>
+        root.close()
+        allocator.close()
+      }
+    }
+
+    new Iterator[(Array[Byte], Long)] {
+
+      override def hasNext: Boolean = rowIter.hasNext || {
+        root.close()
+        allocator.close()
+        false
+      }
+
+      override def next(): (Array[Byte], Long) = {
+        val out = new ByteArrayOutputStream()
+        val writeChannel = new WriteChannel(Channels.newChannel(out))
+
+        var rowCount = 0L
+        var estimatedBatchSize = arrowSchemaSize
+        Utils.tryWithSafeFinally {
+          // Always write the schema.
+          MessageSerializer.serialize(writeChannel, arrowSchema)
+
+          // Always write the first row.
+          while (rowIter.hasNext && (rowCount == 0 || estimatedBatchSize < maxBatchSize)) {
+            val row = rowIter.next()
+            arrowWriter.write(row)
+            estimatedBatchSize += row.asInstanceOf[UnsafeRow].getSizeInBytes
+            rowCount += 1
+          }
+          arrowWriter.finish()
+          val batch = unloader.getRecordBatch()
+          MessageSerializer.serialize(writeChannel, batch)
+
+          // Always write the Ipc options at the end.
+          ArrowStreamWriter.writeEndOfStream(writeChannel, IpcOption.DEFAULT)
+
+          batch.close()
+        } {
+          arrowWriter.reset()
+        }
+
+        (out.toByteArray, rowCount)
+      }
+    }
+  }
+
+  private[sql] def createEmptyArrowBatch(
+      schema: StructType,
+      timeZoneId: String): Array[Byte] = {
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+      "createEmptyArrowBatch", 0, Long.MaxValue)
+
+    val root = VectorSchemaRoot.create(arrowSchema, allocator)
+    val unloader = new VectorUnloader(root)
+    val arrowWriter = ArrowWriter.create(root)
+
+    val out = new ByteArrayOutputStream()
+    val writeChannel = new WriteChannel(Channels.newChannel(out))
+
+    Utils.tryWithSafeFinally {
+      arrowWriter.finish()
+      val batch = unloader.getRecordBatch() // empty batch
+
+      MessageSerializer.serialize(writeChannel, arrowSchema)
+      MessageSerializer.serialize(writeChannel, batch)
+      ArrowStreamWriter.writeEndOfStream(writeChannel, IpcOption.DEFAULT)
+
+      batch.close()
+    } {
+      arrowWriter.reset()
+    }
+
+    out.toByteArray
   }
 
   /**

@@ -482,6 +482,11 @@
       "Grouping sets size cannot be greater than <maxSize>"
     ]
   },
+  "GROUP_BY_AGGREGATE" : {
+    "message" : [
+      "Aggregate functions are not allowed in GROUP BY, but found <sqlExpr>."
+    ]
+  },
   "GROUP_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
@@ -701,6 +706,11 @@
   "MULTI_UDF_INTERFACE_ERROR" : {
     "message" : [
       "Not allowed to implement multiple UDF interfaces, UDF class <className>"
+    ]
+  },
+  "NESTED_AGGREGATE_FUNCTION" : {
+    "message" : [
+      "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
     ]
   },
   "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
@@ -5001,11 +5011,6 @@
       "Input argument tolerance must be non-negative."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2420" : {
-    "message" : [
-      "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2421" : {
     "message" : [
       "nondeterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
@@ -5019,11 +5024,6 @@
   "_LEGACY_ERROR_TEMP_2423" : {
     "message" : [
       "Correlated scalar subquery '<sqlExpr>' is neither present in the group by, nor in an aggregate function. Add it to group by using ordinal position or wrap it in first() (or first_value) if you don't care which value you get."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2424" : {
-    "message" : [
-      "aggregate functions are not allowed in GROUP BY, but found <sqlExpr>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2425" : {
@@ -5118,11 +5118,6 @@
     "message" : [
       "The query operator `<operator>` contains one or more unsupported expression types Aggregate, Window or Generate.",
       "Invalid expressions: [<invalidExprSqls>]"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2442" : {
-    "message" : [
-      "unresolved operator <operator>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2443" : {

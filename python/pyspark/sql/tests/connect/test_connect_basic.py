@@ -77,7 +77,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
     @classmethod
     def spark_connect_load_test_data(cls: Any):
         # Setup Remote Spark Session
-        cls.connect = RemoteSparkSession(user_id="test_user")
+        cls.connect = RemoteSparkSession(userId="test_user")
         df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
         # Since we might create multiple Spark sessions, we need to create global temporary view
         # that is specifically maintained in the "global_temp" schema.
@@ -105,6 +105,11 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         data = df.limit(10).toPandas()
         # Check that the limit is applied
         self.assertEqual(len(data.index), 10)
+
+    def test_columns(self):
+        # SPARK-41036: test `columns` API for python client.
+        columns = self.connect.read.table(self.tbl_name).columns
+        self.assertEqual(["id", "name"], columns)
 
     def test_collect(self):
         df = self.connect.read.table(self.tbl_name)
@@ -197,6 +202,18 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             .equals(self.spark.range(start=0, end=10, step=3, numPartitions=2).toPandas())
         )
 
+    def test_empty_dataset(self):
+        # SPARK-41005: Test arrow based collection with empty dataset.
+        self.assertTrue(
+            self.connect.sql("SELECT 1 AS X LIMIT 0")
+            .toPandas()
+            .equals(self.spark.sql("SELECT 1 AS X LIMIT 0").toPandas())
+        )
+        pdf = self.connect.sql("SELECT 1 AS X LIMIT 0").toPandas()
+        self.assertEqual(0, len(pdf))  # empty dataset
+        self.assertEqual(1, len(pdf.columns))  # one column
+        self.assertEqual("X", pdf.columns[0])
+
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text
         tmpPath = tempfile.mkdtemp()
@@ -225,17 +242,25 @@ class ChannelBuilderTests(ReusedPySparkTestCase):
         for i in invalid:
             self.assertRaises(AttributeError, ChannelBuilder, i)
 
-        self.assertRaises(AttributeError, ChannelBuilder("sc://host/;token=123").to_channel)
+    def test_sensible_defaults(self):
+        chan = ChannelBuilder("sc://host")
+        self.assertFalse(chan.secure, "Default URL is not secure")
+
+        chan = ChannelBuilder("sc://host/;token=abcs")
+        self.assertTrue(chan.secure, "specifying a token must set the channel to secure")
+
+        chan = ChannelBuilder("sc://host/;use_ssl=abcs")
+        self.assertFalse(chan.secure, "Garbage in, false out")
 
     def test_valid_channel_creation(self):
-        chan = ChannelBuilder("sc://host").to_channel()
+        chan = ChannelBuilder("sc://host").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
 
         # Sets up a channel without tokens because ssl is not used.
-        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc").to_channel()
+        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
 
-        chan = ChannelBuilder("sc://host/;use_ssl=true").to_channel()
+        chan = ChannelBuilder("sc://host/;use_ssl=true").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
 
     def test_channel_properties(self):
