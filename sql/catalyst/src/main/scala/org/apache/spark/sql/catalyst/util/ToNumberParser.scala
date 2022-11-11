@@ -896,4 +896,3 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     }
   }
 }
-
