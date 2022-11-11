@@ -605,6 +605,7 @@ pyspark_ml = Module(
         "pyspark.ml.tests.test_functions",
         "pyspark.ml.tests.test_image",
         "pyspark.ml.tests.test_linalg",
+        "pyspark.ml.tests.test_model_cache",
         "pyspark.ml.tests.test_param",
         "pyspark.ml.tests.test_persistence",
         "pyspark.ml.tests.test_pipeline",

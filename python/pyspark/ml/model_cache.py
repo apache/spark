@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from collections import OrderedDict
+from threading import Lock
 from typing import Callable, Optional
 from uuid import UUID
 
@@ -21,12 +23,24 @@ from uuid import UUID
 class ModelCache:
     """Cache for model prediction functions on executors."""
 
-    _models: dict[UUID, Callable] = {}
+    _models: OrderedDict[UUID, Callable] = OrderedDict()
+    _capacity: int = 8
+    _lock: Lock = Lock()
 
     @staticmethod
     def add(uuid: UUID, predict_fn: Callable) -> None:
+        ModelCache._lock.acquire()
         ModelCache._models[uuid] = predict_fn
+        ModelCache._models.move_to_end(uuid)
+        if len(ModelCache._models) > ModelCache._capacity:
+            ModelCache._models.popitem(last=False)
+        ModelCache._lock.release()
 
     @staticmethod
     def get(uuid: UUID) -> Optional[Callable]:
-        return ModelCache._models.get(uuid)
+        ModelCache._lock.acquire()
+        predict_fn = ModelCache._models.get(uuid)
+        if predict_fn:
+            ModelCache._models.move_to_end(uuid)
+        ModelCache._lock.release()
+        return predict_fn

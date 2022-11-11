@@ -659,7 +659,6 @@ def predict_batch_udf(
         predict_fn = ModelCache.get(model_uuid)
         if not predict_fn:
             predict_fn = predict_batch_fn()
-            # TODO: cache invalidation
             ModelCache.add(model_uuid, predict_fn)
 
         # get number of expected parameters for predict function
