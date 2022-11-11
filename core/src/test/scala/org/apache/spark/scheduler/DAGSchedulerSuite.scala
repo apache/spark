@@ -4541,7 +4541,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
           if (host == "hostA") {
             sendRequestsLatch.countDown()
             canSendRequestLatch.await(timeoutSecs * 5, TimeUnit.SECONDS)
-            // should not reac here, will get interrupted by DAGScheduler
+            // should not reach here, will get interrupted by DAGScheduler
             sentHosts.add(host)
           } else {
             sentHosts.add(host)
