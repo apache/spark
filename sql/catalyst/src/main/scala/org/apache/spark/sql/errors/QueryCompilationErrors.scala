@@ -2134,7 +2134,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidPatternError(pattern: String, message: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1216",
+      errorClass = "INVALID_LIKE_PATTERN",
       messageParameters = Map(
         "pattern" -> toSQLValue(pattern, StringType),
         "message" -> message))
