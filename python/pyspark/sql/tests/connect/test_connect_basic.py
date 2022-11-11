@@ -26,6 +26,7 @@ from pyspark.testing.sqlutils import have_pandas
 if have_pandas:
     import pandas
 
+from pyspark.sql.connect import DataFrame
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.types import StructType, StructField, LongType, StringType
 
@@ -213,6 +214,9 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(0, len(pdf))  # empty dataset
         self.assertEqual(1, len(pdf.columns))  # one column
         self.assertEqual("X", pdf.columns[0])
+
+    def test_session(self):
+        self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession())
 
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text
