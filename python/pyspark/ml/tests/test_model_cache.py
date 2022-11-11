@@ -37,7 +37,7 @@ class ModelCacheTests(SparkSessionTestCase):
         self.assertTrue(len(ModelCache._models) == 8)
         self.assertTrue(list(ModelCache._models.keys()) == uuids[2:10])
 
-        # get item, expect it to be least recently used
+        # get item, expect it to be most recently used
         _ = ModelCache.get(uuids[5])
         expected_uuids = uuids[2:5] + uuids[6:10] + [uuids[5]]
         self.assertTrue(list(ModelCache._models.keys()) == expected_uuids)
