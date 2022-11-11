@@ -4818,7 +4818,8 @@ class SQLConf extends Serializable with Logging {
 
   def defaultDatabase: String = getConf(StaticSQLConf.CATALOG_DEFAULT_DATABASE)
 
-  def allowsTempViewCreationWithDatabaseName: Boolean = getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_DATABASE_NAME)
+  def allowsTempViewCreationWithDatabaseName: Boolean =
+    getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_DATABASE_NAME)
 
   /** ********************** SQLConf functionality methods ************ */
 
