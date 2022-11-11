@@ -16,6 +16,7 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.net.InetAddress
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -35,8 +36,7 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
-import org.apache.spark.scheduler.{ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason,
-  TaskSchedulerImpl}
+import org.apache.spark.scheduler.{ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -84,8 +84,17 @@ private[spark] class KubernetesClusterSchedulerBackend(
     val labels =
       Map(SPARK_APP_ID_LABEL -> applicationId(), SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE)
     val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap, labels)
-    KubernetesUtils.addOwnerReference(driverPod.orNull, Seq(configMap))
+    KubernetesUtils.addOwnerReference(getDriverPodOrLocalPod(driverPod), Seq(configMap))
     kubernetesClient.configMaps().create(configMap)
+  }
+
+  private def getDriverPodOrLocalPod(driverPod: Option[Pod]): Pod = {
+    if (driverPod.isDefined) {
+      return driverPod.get
+    }
+    val podName = InetAddress.getLocalHost.getHostName
+    logInfo(s"LocalPod={podName=$podName}")
+    kubernetesClient.pods().withName(podName).get()
   }
 
   /**
