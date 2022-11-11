@@ -214,6 +214,9 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(1, len(pdf.columns))  # one column
         self.assertEqual("X", pdf.columns[0])
 
+    def test_session(self):
+        self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession())
+
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text
         tmpPath = tempfile.mkdtemp()

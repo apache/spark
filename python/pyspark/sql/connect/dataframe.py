@@ -143,6 +143,17 @@ class DataFrame(object):
 
         return self.schema().names
 
+    def sparkSession(self) -> "RemoteSparkSession":
+        """Returns Spark session that created this :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`RemoteSparkSession`
+        """
+        return self._session
+
     def count(self) -> int:
         """Returns the number of rows in the data frame"""
         pdd = self.agg([(LiteralExpression(1), "count")]).toPandas()
