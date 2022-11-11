@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect.planner
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
-import org.apache.spark.sql.{Column, DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
@@ -273,8 +273,34 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       sparkTestRelation.summary("count", "mean", "stddev"))
   }
 
+  test("Test crosstab") {
+    comparePlans(
+      connectTestRelation.stat.crosstab("id", "name"),
+      sparkTestRelation.stat.crosstab("id", "name"))
+  }
+
   test("Test toDF") {
     comparePlans(connectTestRelation.toDF("col1", "col2"), sparkTestRelation.toDF("col1", "col2"))
+  }
+
+  test("Test withColumnsRenamed") {
+    comparePlans(
+      connectTestRelation.withColumnsRenamed(Map("id" -> "id1")),
+      sparkTestRelation.withColumnsRenamed(Map("id" -> "id1")))
+    comparePlans(
+      connectTestRelation.withColumnsRenamed(Map("id" -> "id1", "name" -> "name1")),
+      sparkTestRelation.withColumnsRenamed(Map("id" -> "id1", "name" -> "name1")))
+    comparePlans(
+      connectTestRelation.withColumnsRenamed(Map("id" -> "id1", "col1" -> "col2")),
+      sparkTestRelation.withColumnsRenamed(Map("id" -> "id1", "col1" -> "col2")))
+    comparePlans(
+      connectTestRelation.withColumnsRenamed(Map("id" -> "id1", "id" -> "id2")),
+      sparkTestRelation.withColumnsRenamed(Map("id" -> "id1", "id" -> "id2")))
+
+    val e = intercept[AnalysisException](
+      transform(connectTestRelation.withColumnsRenamed(
+        Map("id" -> "duplicatedCol", "name" -> "duplicatedCol"))))
+    assert(e.getMessage.contains("Found duplicate column(s)"))
   }
 
   private def createLocalRelationProtoByQualifiedAttributes(

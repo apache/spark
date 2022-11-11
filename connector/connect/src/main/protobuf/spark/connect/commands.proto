@@ -31,6 +31,7 @@ message Command {
   oneof command_type {
     CreateScalarFunction create_function = 1;
     WriteOperation write_operation = 2;
+    CreateDataFrameViewCommand create_dataframe_view = 3;
   }
 }
 
@@ -63,6 +64,24 @@ message CreateScalarFunction {
     FUNCTION_LANGUAGE_PYTHON = 2;
     FUNCTION_LANGUAGE_SCALA = 3;
   }
+}
+
+// A command that can create DataFrame global temp view or local temp view.
+message CreateDataFrameViewCommand {
+  // Required. The relation that this view will be built on.
+  Relation input = 1;
+
+  // Required. View name.
+  string name = 2;
+
+  // Required. Whether this is global temp view or local temp view.
+  bool is_global = 3;
+
+  // Required.
+  //
+  // If true, and if the view already exists, updates it; if false, and if the view
+  // already exists, throws exception.
+  bool replace = 4;
 }
 
 // As writes are not directly handled during analysis and planning, they are modeled as commands.

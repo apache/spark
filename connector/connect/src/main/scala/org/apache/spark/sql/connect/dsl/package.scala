@@ -182,6 +182,19 @@ package object dsl {
         writeOp.setInput(logicalPlan)
         Command.newBuilder().setWriteOperation(writeOp.build()).build()
       }
+
+      def createView(name: String, global: Boolean, replace: Boolean): Command = {
+        Command
+          .newBuilder()
+          .setCreateDataframeView(
+            CreateDataFrameViewCommand
+              .newBuilder()
+              .setName(name)
+              .setIsGlobal(global)
+              .setReplace(replace)
+              .setInput(logicalPlan))
+          .build()
+      }
     }
   }
 
@@ -211,6 +224,21 @@ package object dsl {
 
       def sql(sqlText: String): Relation = {
         Relation.newBuilder().setSql(SQL.newBuilder().setQuery(sqlText)).build()
+      }
+    }
+
+    implicit class DslStatFunctions(val logicalPlan: Relation) {
+      def crosstab(col1: String, col2: String): Relation = {
+        Relation
+          .newBuilder()
+          .setCrosstab(
+            proto.StatCrosstab
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setCol1(col1)
+              .setCol2(col2)
+              .build())
+          .build()
       }
     }
 
@@ -450,18 +478,16 @@ package object dsl {
             Repartition.newBuilder().setInput(logicalPlan).setNumPartitions(num).setShuffle(true))
           .build()
 
+      def stat: DslStatFunctions = new DslStatFunctions(logicalPlan)
+
       def summary(statistics: String*): Relation = {
         Relation
           .newBuilder()
-          .setStatFunction(
-            proto.StatFunction
+          .setSummary(
+            proto.StatSummary
               .newBuilder()
               .setInput(logicalPlan)
-              .setSummary(
-                proto.StatFunction.Summary
-                  .newBuilder()
-                  .addAllStatistics(statistics.toSeq.asJava)
-                  .build())
+              .addAllStatistics(statistics.toSeq.asJava)
               .build())
           .build()
       }
@@ -469,12 +495,23 @@ package object dsl {
       def toDF(columnNames: String*): Relation =
         Relation
           .newBuilder()
-          .setRenameColumns(
-            RenameColumns
+          .setRenameColumnsBySameLengthNames(
+            RenameColumnsBySameLengthNames
               .newBuilder()
               .setInput(logicalPlan)
               .addAllColumnNames(columnNames.asJava))
           .build()
+
+      def withColumnsRenamed(renameColumnsMap: Map[String, String]): Relation = {
+        Relation
+          .newBuilder()
+          .setRenameColumnsByNameToNameMap(
+            RenameColumnsByNameToNameMap
+              .newBuilder()
+              .setInput(logicalPlan)
+              .putAllRenameColumnsMap(renameColumnsMap.asJava))
+          .build()
+      }
 
       private def createSetOperation(
           left: Relation,

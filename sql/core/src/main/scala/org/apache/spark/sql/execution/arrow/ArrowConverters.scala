@@ -128,6 +128,92 @@ private[sql] object ArrowConverters extends Logging {
     }
   }
 
+  private[sql] def toArrowBatchIterator(
+      rowIter: Iterator[InternalRow],
+      schema: StructType,
+      maxRecordsPerBatch: Int,
+      timeZoneId: String): Iterator[(Array[Byte], Long)] = {
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+      "toArrowBatchIterator", 0, Long.MaxValue)
+
+    val root = VectorSchemaRoot.create(arrowSchema, allocator)
+    val unloader = new VectorUnloader(root)
+    val arrowWriter = ArrowWriter.create(root)
+
+    Option(TaskContext.get).foreach {
+      _.addTaskCompletionListener[Unit] { _ =>
+        root.close()
+        allocator.close()
+      }
+    }
+
+    new Iterator[(Array[Byte], Long)] {
+
+      override def hasNext: Boolean = rowIter.hasNext || {
+        root.close()
+        allocator.close()
+        false
+      }
+
+      override def next(): (Array[Byte], Long) = {
+        val out = new ByteArrayOutputStream()
+        val writeChannel = new WriteChannel(Channels.newChannel(out))
+
+        var rowCount = 0L
+        Utils.tryWithSafeFinally {
+          while (rowIter.hasNext && (maxRecordsPerBatch <= 0 || rowCount < maxRecordsPerBatch)) {
+            val row = rowIter.next()
+            arrowWriter.write(row)
+            rowCount += 1
+          }
+          arrowWriter.finish()
+          val batch = unloader.getRecordBatch()
+
+          MessageSerializer.serialize(writeChannel, arrowSchema)
+          MessageSerializer.serialize(writeChannel, batch)
+          ArrowStreamWriter.writeEndOfStream(writeChannel, IpcOption.DEFAULT)
+
+          batch.close()
+        } {
+          arrowWriter.reset()
+        }
+
+        (out.toByteArray, rowCount)
+      }
+    }
+  }
+
+  private[sql] def createEmptyArrowBatch(
+      schema: StructType,
+      timeZoneId: String): Array[Byte] = {
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+      "createEmptyArrowBatch", 0, Long.MaxValue)
+
+    val root = VectorSchemaRoot.create(arrowSchema, allocator)
+    val unloader = new VectorUnloader(root)
+    val arrowWriter = ArrowWriter.create(root)
+
+    val out = new ByteArrayOutputStream()
+    val writeChannel = new WriteChannel(Channels.newChannel(out))
+
+    Utils.tryWithSafeFinally {
+      arrowWriter.finish()
+      val batch = unloader.getRecordBatch() // empty batch
+
+      MessageSerializer.serialize(writeChannel, arrowSchema)
+      MessageSerializer.serialize(writeChannel, batch)
+      ArrowStreamWriter.writeEndOfStream(writeChannel, IpcOption.DEFAULT)
+
+      batch.close()
+    } {
+      arrowWriter.reset()
+    }
+
+    out.toByteArray
+  }
+
   /**
    * Maps iterator from serialized ArrowRecordBatches to InternalRows.
    */

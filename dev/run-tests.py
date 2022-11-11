@@ -315,6 +315,7 @@ def detect_binary_inop_with_mima(extra_profiles):
         "[info] Detecting binary incompatibilities with MiMa using SBT with these profiles: ",
         profiles,
     )
+    run_cmd(["git", "clean", "-fxd"])  # See https://github.com/sbt/sbt/issues/6183
     run_cmd([os.path.join(SPARK_HOME, "dev", "mima"), profiles])
 
 

@@ -320,6 +320,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
     }
     def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
       _.containsPattern(PLAN_EXPRESSION), ruleId) {
+      // Do not optimize DPP subquery, as it was created from optimized plan and we should not
+      // optimize it again, to save optimization time and avoid breaking broadcast/subquery reuse.
+      case d: DynamicPruningSubquery => d
       case s: SubqueryExpression =>
         val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
         // At this point we have an optimized subquery plan that we are going to attach

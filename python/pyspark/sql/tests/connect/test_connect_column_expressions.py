@@ -25,7 +25,6 @@ from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
 
 if have_pandas:
     from pyspark.sql.connect.proto import Expression as ProtoExpression
-    import pyspark.sql.connect as c
     import pyspark.sql.connect.plan as p
     import pyspark.sql.connect.column as col
     import pyspark.sql.connect.functions as fun
@@ -34,14 +33,14 @@ if have_pandas:
 @unittest.skipIf(not have_pandas, cast(str, pandas_requirement_message))
 class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
     def test_simple_column_expressions(self):
-        df = c.DataFrame.withPlan(p.Read("table"))
+        df = self.connect.with_plan(p.Read("table"))
 
         c1 = df.col_name
-        self.assertIsInstance(c1, col.ColumnRef)
+        self.assertIsInstance(c1, col.Column)
         c2 = df["col_name"]
-        self.assertIsInstance(c2, col.ColumnRef)
+        self.assertIsInstance(c2, col.Column)
         c3 = fun.col("col_name")
-        self.assertIsInstance(c3, col.ColumnRef)
+        self.assertIsInstance(c3, col.Column)
 
         # All Protos should be identical
         cp1 = c1.to_plan(None)
@@ -79,7 +78,7 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
             lit.to_plan(None)
 
     def test_column_literals(self):
-        df = c.DataFrame.withPlan(p.Read("table"))
+        df = self.connect.with_plan(p.Read("table"))
         lit_df = df.select(fun.lit(10))
         self.assertIsNotNone(lit_df._plan.to_proto(None))
 
@@ -138,7 +137,7 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
     def test_column_expressions(self):
         """Test a more complex combination of expressions and their translation into
         the protobuf structure."""
-        df = c.DataFrame.withPlan(p.Read("table"))
+        df = self.connect.with_plan(p.Read("table"))
 
         expr = fun.lit(10) < fun.lit(10)
         expr_plan = expr.to_plan(None)

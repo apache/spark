@@ -138,4 +138,23 @@ class SparkConnectCommandPlannerSuite
     }
   }
 
+  test("Test CreateView") {
+    withView("view1", "view2", "view3", "view4") {
+      transform(localRelation.createView("view1", global = true, replace = true))
+      assert(spark.catalog.tableExists("global_temp.view1"))
+
+      transform(localRelation.createView("view2", global = false, replace = true))
+      assert(spark.catalog.tableExists("view2"))
+
+      transform(localRelation.createView("view3", global = true, replace = false))
+      assertThrows[AnalysisException] {
+        transform(localRelation.createView("view3", global = true, replace = false))
+      }
+
+      transform(localRelation.createView("view4", global = false, replace = false))
+      assertThrows[AnalysisException] {
+        transform(localRelation.createView("view4", global = false, replace = false))
+      }
+    }
+  }
 }

@@ -197,6 +197,18 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             .equals(self.spark.range(start=0, end=10, step=3, numPartitions=2).toPandas())
         )
 
+    def test_empty_dataset(self):
+        # SPARK-41005: Test arrow based collection with empty dataset.
+        self.assertTrue(
+            self.connect.sql("SELECT 1 AS X LIMIT 0")
+            .toPandas()
+            .equals(self.spark.sql("SELECT 1 AS X LIMIT 0").toPandas())
+        )
+        pdf = self.connect.sql("SELECT 1 AS X LIMIT 0").toPandas()
+        self.assertEqual(0, len(pdf))  # empty dataset
+        self.assertEqual(1, len(pdf.columns))  # one column
+        self.assertEqual("X", pdf.columns[0])
+
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text
         tmpPath = tempfile.mkdtemp()
