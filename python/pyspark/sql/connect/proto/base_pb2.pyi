@@ -38,18 +38,39 @@ import collections.abc
 import google.protobuf.any_pb2
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
+import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import pyspark.sql.connect.proto.commands_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
+import typing
 
-if sys.version_info >= (3, 8):
+if sys.version_info >= (3, 10):
     import typing as typing_extensions
 else:
     import typing_extensions
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+
+class _ClientType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _ClientTypeEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_ClientType.ValueType],
+    builtins.type,
+):  # noqa: F821
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    TYPE_UNSPECIFIED: _ClientType.ValueType  # 0
+    PYTHON: _ClientType.ValueType  # 1
+
+class ClientType(_ClientType, metaclass=_ClientTypeEnumTypeWrapper):
+    """Enum to specify which client sends a request."""
+
+TYPE_UNSPECIFIED: ClientType.ValueType  # 0
+PYTHON: ClientType.ValueType  # 1
+global___ClientType = ClientType
 
 class Plan(google.protobuf.message.Message):
     """A [[Plan]] is the structure that carries the runtime information for the execution from the
@@ -135,6 +156,7 @@ class Request(google.protobuf.message.Message):
     CLIENT_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     PLAN_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     """The client_id is set by the client to be able to collate streaming responses from
     different queries.
@@ -145,12 +167,15 @@ class Request(google.protobuf.message.Message):
     @property
     def plan(self) -> global___Plan:
         """The logical plan to be executed / analyzed."""
+    client_type: global___ClientType.ValueType
+    """From which client this request was sent from."""
     def __init__(
         self,
         *,
         client_id: builtins.str = ...,
         user_context: global___Request.UserContext | None = ...,
         plan: global___Plan | None = ...,
+        client_type: global___ClientType.ValueType = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -159,7 +184,14 @@ class Request(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "client_id", b"client_id", "plan", b"plan", "user_context", b"user_context"
+            "client_id",
+            b"client_id",
+            "client_type",
+            b"client_type",
+            "plan",
+            b"plan",
+            "user_context",
+            b"user_context",
         ],
     ) -> None: ...
 
