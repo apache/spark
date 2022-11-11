@@ -22,7 +22,7 @@ import org.apache.spark.connect.proto
 class ConnectProtoMessagesSuite extends SparkFunSuite {
   test("UserContext can deal with extensions") {
     // Create the builder.
-    val builder = proto.Request.UserContext.newBuilder().setUserId("1").setUserName("Martin")
+    val builder = proto.UserContext.newBuilder().setUserId("1").setUserName("Martin")
 
     // Create the extension value.
     val lit = proto.Expression
@@ -36,7 +36,7 @@ class ConnectProtoMessagesSuite extends SparkFunSuite {
     val serialized = builder.build().toByteArray
 
     // Now, read the serialized value.
-    val result = proto.Request.UserContext.parseFrom(serialized)
+    val result = proto.UserContext.parseFrom(serialized)
     assert(result.getUserId.equals("1"))
     assert(result.getUserName.equals("Martin"))
     assert(result.getExtensionsCount == 1)

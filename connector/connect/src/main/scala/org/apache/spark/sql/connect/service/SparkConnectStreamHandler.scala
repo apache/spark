@@ -25,7 +25,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{Request, Response}
+import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -36,11 +36,13 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
 
-class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) extends Logging {
+class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResponse])
+    extends Logging {
+
   // The maximum batch size in bytes for a single batch of data to be returned via proto.
   private val MAX_BATCH_SIZE: Long = 4 * 1024 * 1024
 
-  def handle(v: Request): Unit = {
+  def handle(v: ExecutePlanRequest): Unit = {
     val session =
       SparkConnectService.getOrCreateIsolatedSession(v.getUserContext.getUserId).session
     v.getPlan.getOpTypeCase match {
@@ -51,7 +53,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
     }
   }
 
-  def handlePlan(session: SparkSession, request: Request): Unit = {
+  def handlePlan(session: SparkSession, request: ExecutePlanRequest): Unit = {
     // Extract the plan from the request and convert it to a logical plan
     val planner = new SparkConnectPlanner(session)
     val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
@@ -88,8 +90,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
 
         // Case 1 - FLush and send.
         if (sb.size + row.size > MAX_BATCH_SIZE) {
-          val response = proto.Response.newBuilder().setClientId(clientId)
-          val batch = proto.Response.JSONBatch
+          val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
+          val batch = proto.ExecutePlanResponse.JSONBatch
             .newBuilder()
             .setData(ByteString.copyFromUtf8(sb.toString()))
             .setRowCount(rowCount)
@@ -112,8 +114,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
 
     // If the last batch is not empty, send out the data to the client.
     if (sb.size > 0) {
-      val response = proto.Response.newBuilder().setClientId(clientId)
-      val batch = proto.Response.JSONBatch
+      val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
+      val batch = proto.ExecutePlanResponse.JSONBatch
         .newBuilder()
         .setData(ByteString.copyFromUtf8(sb.toString()))
         .setRowCount(rowCount)
@@ -205,8 +207,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
           }
 
           partition.foreach { case (bytes, count) =>
-            val response = proto.Response.newBuilder().setClientId(clientId)
-            val batch = proto.Response.ArrowBatch
+            val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
+            val batch = proto.ExecutePlanResponse.ArrowBatch
               .newBuilder()
               .setRowCount(count)
               .setData(ByteString.copyFrom(bytes))
@@ -223,8 +225,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
       // Make sure at least 1 batch will be sent.
       if (numSent == 0) {
         val bytes = ArrowConverters.createEmptyArrowBatch(schema, timeZoneId)
-        val response = proto.Response.newBuilder().setClientId(clientId)
-        val batch = proto.Response.ArrowBatch
+        val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
+        val batch = proto.ExecutePlanResponse.ArrowBatch
           .newBuilder()
           .setRowCount(0L)
           .setData(ByteString.copyFrom(bytes))
@@ -238,16 +240,16 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
     }
   }
 
-  def sendMetricsToResponse(clientId: String, rows: DataFrame): Response = {
+  def sendMetricsToResponse(clientId: String, rows: DataFrame): ExecutePlanResponse = {
     // Send a last batch with the metrics
-    Response
+    ExecutePlanResponse
       .newBuilder()
       .setClientId(clientId)
       .setMetrics(MetricGenerator.buildMetrics(rows.queryExecution.executedPlan))
       .build()
   }
 
-  def handleCommand(session: SparkSession, request: Request): Unit = {
+  def handleCommand(session: SparkSession, request: ExecutePlanRequest): Unit = {
     val command = request.getPlan.getCommand
     val planner = new SparkConnectPlanner(session)
     planner.process(command)
@@ -274,13 +276,13 @@ object SparkConnectStreamHandler {
 }
 
 object MetricGenerator extends AdaptiveSparkPlanHelper {
-  def buildMetrics(p: SparkPlan): Response.Metrics = {
-    val b = Response.Metrics.newBuilder
+  def buildMetrics(p: SparkPlan): ExecutePlanResponse.Metrics = {
+    val b = ExecutePlanResponse.Metrics.newBuilder
     b.addAllMetrics(transformPlan(p, p.id).asJava)
     b.build()
   }
 
-  def transformChildren(p: SparkPlan): Seq[Response.Metrics.MetricObject] = {
+  def transformChildren(p: SparkPlan): Seq[ExecutePlanResponse.Metrics.MetricObject] = {
     allChildren(p).flatMap(c => transformPlan(c, p.id))
   }
 
@@ -290,14 +292,16 @@ object MetricGenerator extends AdaptiveSparkPlanHelper {
     case _ => p.children
   }
 
-  def transformPlan(p: SparkPlan, parentId: Int): Seq[Response.Metrics.MetricObject] = {
+  def transformPlan(
+      p: SparkPlan,
+      parentId: Int): Seq[ExecutePlanResponse.Metrics.MetricObject] = {
     val mv = p.metrics.map(m =>
-      m._1 -> Response.Metrics.MetricValue.newBuilder
+      m._1 -> ExecutePlanResponse.Metrics.MetricValue.newBuilder
         .setName(m._2.name.getOrElse(""))
         .setValue(m._2.value)
         .setMetricType(m._2.metricType)
         .build())
-    val mo = Response.Metrics.MetricObject
+    val mo = ExecutePlanResponse.Metrics.MetricObject
       .newBuilder()
       .setName(p.nodeName)
       .setPlanId(p.id)

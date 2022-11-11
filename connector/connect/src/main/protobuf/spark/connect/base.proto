@@ -38,14 +38,61 @@ message Plan {
   }
 }
 
-// A request to be executed by the service.
-message Request {
+// Explains the input plan based on a configurable mode.
+message Explain {
+  // Plan explanation mode.
+  enum ExplainMode {
+    MODE_UNSPECIFIED = 0;
+
+    // Generates only physical plan.
+    SIMPLE = 1;
+
+    // Generates parsed logical plan, analyzed logical plan, optimized logical plan and physical plan.
+    // Parsed Logical plan is a unresolved plan that extracted from the query. Analyzed logical plans
+    // transforms which translates unresolvedAttribute and unresolvedRelation into fully typed objects.
+    // The optimized logical plan transforms through a set of optimization rules, resulting in the
+    // physical plan.
+    EXTENDED = 2;
+
+    // Generates code for the statement, if any and a physical plan.
+    CODEGEN = 3;
+
+    // If plan node statistics are available, generates a logical plan and also the statistics.
+    COST = 4;
+
+    // Generates a physical plan outline and also node details.
+    FORMATTED = 5;
+  }
+
+  // (Required) For analyzePlan rpc calls, configure the mode to explain plan in strings.
+  ExplainMode explain_mode= 1;
+}
+
+// User Context is used to refer to one particular user session that is executing
+// queries in the backend.
+message UserContext {
+  string user_id = 1;
+  string user_name = 2;
+
+  // To extend the existing user context message that is used to identify incoming requests,
+  // Spark Connect leverages the Any protobuf type that can be used to inject arbitrary other
+  // messages into this message. Extensions are stored as a `repeated` type to be able to
+  // handle multiple active extensions.
+  repeated google.protobuf.Any extensions = 999;
+}
+
+// Request to perform plan analyze, optionally to explain the plan.
+message AnalyzePlanRequest {
+  // (Required)
+  //
   // The client_id is set by the client to be able to collate streaming responses from
   // different queries.
   string client_id = 1;
-  // User context
+
+  // (Required) User context
   UserContext user_context = 2;
-  // The logical plan to be executed / analyzed.
+
+  // (Required) The logical plan to be analyzed.
   Plan plan = 3;
 
   // Provides optional information about the client sending the request. This field
@@ -53,23 +100,43 @@ message Request {
   // logging purposes and will not be interpreted by the server.
   optional string client_type = 4;
 
-  // User Context is used to refer to one particular user session that is executing
-  // queries in the backend.
-  message UserContext {
-    string user_id = 1;
-    string user_name = 2;
+  // (Optional) Get the explain string of the plan.
+  Explain explain = 5;
+}
 
-    // To extend the existing user context message that is used to identify incoming requests,
-    // Spark Connect leverages the Any protobuf type that can be used to inject arbitrary other
-    // messages into this message. Extensions are stored as a `repeated` type to be able to
-    // handle multiple active extensions.
-    repeated google.protobuf.Any extensions = 999;
-  }
+// Response to performing analysis of the query. Contains relevant metadata to be able to
+// reason about the performance.
+message AnalyzePlanResponse {
+  string client_id = 1;
+  DataType schema = 2;
+
+  // The extended explain string as produced by Spark.
+  string explain_string = 3;
+}
+
+// A request to be executed by the service.
+message ExecutePlanRequest {
+  // (Required)
+  //
+  // The client_id is set by the client to be able to collate streaming responses from
+  // different queries.
+  string client_id = 1;
+
+  // (Required) User context
+  UserContext user_context = 2;
+
+  // (Required) The logical plan to be executed / analyzed.
+  Plan plan = 3;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 4;
 }
 
 // The response of a query, can be one or more for each request. Responses belonging to the
 // same input query, carry the same `client_id`.
-message Response {
+message ExecutePlanResponse {
   string client_id = 1;
 
   // Result type
@@ -115,23 +182,13 @@ message Response {
   }
 }
 
-// Response to performing analysis of the query. Contains relevant metadata to be able to
-// reason about the performance.
-message AnalyzeResponse {
-  string client_id = 1;
-  DataType schema = 2;
-
-  // The extended explain string as produced by Spark.
-  string explain_string = 3;
-}
-
 // Main interface for the SparkConnect service.
 service SparkConnectService {
 
   // Executes a request that contains the query and returns a stream of [[Response]].
-  rpc ExecutePlan(Request) returns (stream Response) {}
+  rpc ExecutePlan(ExecutePlanRequest) returns (stream ExecutePlanResponse) {}
 
   // Analyzes a query and returns a [[AnalyzeResponse]] containing metadata about the query.
-  rpc AnalyzePlan(Request) returns (AnalyzeResponse) {}
+  rpc AnalyzePlan(AnalyzePlanRequest) returns (AnalyzePlanResponse) {}
 }
 
