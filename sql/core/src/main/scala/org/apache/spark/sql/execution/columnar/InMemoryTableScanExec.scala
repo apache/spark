@@ -113,7 +113,7 @@ case class InMemoryTableScanExec(
   override def output: Seq[Attribute] = attributes
 
   private def cachedPlan = relation.cachedPlan match {
-    case adaptive: AdaptiveSparkPlanExec if adaptive.isFinalized => adaptive.executedPlan
+    case adaptive: AdaptiveSparkPlanExec if adaptive.isFinalPlan => adaptive.executedPlan
     case other => other
   }
 
