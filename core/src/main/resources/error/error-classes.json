@@ -349,11 +349,6 @@
           "cannot find a static method <methodName> that matches the argument types in <className>"
         ]
       },
-      "UNSPECIFIED_FRAME" : {
-        "message" : [
-          "Cannot use an UnspecifiedFrame. This should have been converted during analysis."
-        ]
-      },
       "UNSUPPORTED_INPUT_TYPE" : {
         "message" : [
           "The input of <functionName> can't be <dataType> type data."
