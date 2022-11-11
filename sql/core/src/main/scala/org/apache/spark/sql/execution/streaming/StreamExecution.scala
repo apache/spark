@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{InterruptedIOException, IOException, UncheckedIOException}
+import java.io.{IOException, InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
-import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit, TimeoutException}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 
@@ -31,7 +31,7 @@ import scala.util.control.NonFatal
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
@@ -321,7 +321,10 @@ abstract class StreamExecution(
         // to `new IOException(ie.toString())` before Hadoop 2.8.
         updateStatusMessage("Stopped")
       case t: Throwable =>
-        val e = QueryExecution.toInternalError(msg = s"Execution of the stream $name failed.", t)
+        val e = t match {
+          case _: SparkThrowable => t
+          case _ => QueryExecutionErrors.streamFailed(prettyIdString, t)
+        }
         streamDeathCause = new StreamingQueryException(
           toDebugString(includeLogicalPlan = isInitialized),
           s"Query $prettyIdString terminated with exception: ${e.getMessage}",

@@ -911,6 +911,11 @@
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
     ]
   },
+  "STREAM_FAILED" : {
+    "message" : [
+      "Execution of the stream <id> failed."
+    ]
+  },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create table or view <relationName> because it already exists.",

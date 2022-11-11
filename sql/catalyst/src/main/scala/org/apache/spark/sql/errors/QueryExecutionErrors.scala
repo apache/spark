@@ -2820,4 +2820,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "location" -> toSQLValue(location.toString, StringType),
         "identifier" -> toSQLId(tableId.nameParts)))
   }
+
+  def streamFailed(id: String, cause: Throwable): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "STREAM_FAILED",
+      messageParameters = Map("id" -> id),
+      cause)
+  }
 }
