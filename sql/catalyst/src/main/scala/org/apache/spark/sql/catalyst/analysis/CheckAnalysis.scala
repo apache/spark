@@ -378,7 +378,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   child.foreach {
                     case expr: Expression if AggregateExpression.isAggregate(expr) =>
                       expr.failAnalysis(
-                        errorClass = "_LEGACY_ERROR_TEMP_2420",
+                        errorClass = "NESTED_AGGREGATE_FUNCTION",
                         messageParameters = Map.empty)
                     case other => // OK
                   }
