@@ -444,7 +444,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1216",
+  "errorClass" : "INVALID_LIKE_PATTERN",
   "messageParameters" : {
     "message" : "the escape character is not allowed to precede 'a'",
     "pattern" : "'m%aca'"
@@ -459,7 +459,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1216",
+  "errorClass" : "INVALID_LIKE_PATTERN",
   "messageParameters" : {
     "message" : "the escape character is not allowed to precede 'a'",
     "pattern" : "'m%aca'"
@@ -474,7 +474,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1216",
+  "errorClass" : "INVALID_LIKE_PATTERN",
   "messageParameters" : {
     "message" : "the escape character is not allowed to precede 'a'",
     "pattern" : "'m%a%%a'"
@@ -489,7 +489,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1216",
+  "errorClass" : "INVALID_LIKE_PATTERN",
   "messageParameters" : {
     "message" : "the escape character is not allowed to precede 'a'",
     "pattern" : "'m%a%%a'"
@@ -504,7 +504,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1216",
+  "errorClass" : "INVALID_LIKE_PATTERN",
   "messageParameters" : {
     "message" : "the escape character is not allowed to precede 'e'",
     "pattern" : "'b_ear'"
@@ -519,7 +519,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1216",
+  "errorClass" : "INVALID_LIKE_PATTERN",
   "messageParameters" : {
     "message" : "the escape character is not allowed to precede 'e'",
     "pattern" : "'b_ear'"
@@ -534,7 +534,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1216",
+  "errorClass" : "INVALID_LIKE_PATTERN",
   "messageParameters" : {
     "message" : "the escape character is not allowed to precede 'e'",
     "pattern" : "'b_e__r'"
@@ -549,7 +549,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1216",
+  "errorClass" : "INVALID_LIKE_PATTERN",
   "messageParameters" : {
     "message" : "the escape character is not allowed to precede 'e'",
     "pattern" : "'b_e__r'"

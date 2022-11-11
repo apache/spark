@@ -3713,7 +3713,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM df").collect()
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1216",
+        errorClass = "INVALID_LIKE_PATTERN",
         parameters = Map(
           "pattern" -> "'m%@ca'",
           "message" -> "the escape character is not allowed to precede '@'"))
