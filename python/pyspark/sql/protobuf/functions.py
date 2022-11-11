@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 def from_protobuf(
     data: "ColumnOrName",
     messageName: str,
-    descFilePath = None,
+    descFilePath: Optional[str] = None,
     options: Optional[Dict[str, str]] = None,
 ) -> Column:
     """
@@ -48,9 +48,9 @@ def from_protobuf(
     ----------
     data : :class:`~pyspark.sql.Column` or str
         the binary column.
-    messageName: str
+    messageName: str, optional
         the protobuf message name to look for in descriptor file. Or
-        The Protobuf class name. E.g. <code>org.spark.examples.protobuf.ExampleEvent</code>,
+        The Protobuf class name. E.g. ``org.spark.examples.protobuf.ExampleEvent``,
         without descFilePath parameter.
         Using the spark-submit option --jars, add a messageClassName specific jar.
     descFilePath : str
@@ -131,7 +131,9 @@ def from_protobuf(
     return Column(jc)
 
 
-def to_protobuf(data: "ColumnOrName", messageName: str, descFilePath = None) -> Column:
+def to_protobuf(
+    data: "ColumnOrName", messageName: str, descFilePath: Optional[str] = None
+) -> Column:
     """
     Converts a column into binary of protobuf format.
 
@@ -141,9 +143,9 @@ def to_protobuf(data: "ColumnOrName", messageName: str, descFilePath = None) -> 
     ----------
     data : :class:`~pyspark.sql.Column` or str
         the data column.
-    messageName: str
+    messageName: str, optional
         the protobuf message name to look for in descriptor file. Or
-        The Protobuf class name. E.g. <code>org.spark.examples.protobuf.ExampleEvent</code>,
+        The Protobuf class name. E.g. ``org.spark.examples.protobuf.ExampleEvent``,
         without descFilePath parameter.
         Using the spark-submit option --jars, add a messageClassName specific jar.
     descFilePath : str
