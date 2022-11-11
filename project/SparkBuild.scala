@@ -109,6 +109,16 @@ object SparkBuild extends PomBuild {
     if (profiles.contains("jdwp-test-debug")) {
       sys.props.put("test.jdwp.enabled", "true")
     }
+    if (profiles.contains("user-defined-pb")) {
+      val connectProtocExecPath = Properties.envOrNone("CONNECT_PROTOC_EXEC_PATH")
+      require(connectProtocExecPath.isDefined,
+        "CONNECT_PROTOC_EXEC_PATH must be set when build with -Puser-defined-pb")
+      sys.props.put("connect.protoc.executable.path", connectProtocExecPath.get)
+      val connectPluginExecPath = Properties.envOrNone("CONNECT_PLUGIN_EXEC_PATH")
+      require(connectPluginExecPath.isDefined,
+        "CONNECT_PLUGIN_EXEC_PATH must be set when build with -Puser-defined-pb")
+      sys.props.put("connect.plugin.executable.path", connectPluginExecPath.get)
+    }
     profiles
   }
 
@@ -656,10 +666,22 @@ object SparkConnect {
       )
     },
 
-    (Compile / PB.targets) := Seq(
-      PB.gens.java -> (Compile / sourceManaged).value,
-      PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
-    ),
+    (Compile / PB.targets) := {
+      val connectProtocExecPath = sys.props.get("connect.protoc.executable.path")
+      val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
+      if (connectProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
+        PB.protocExecutable := file(connectProtocExecPath.get)
+        Seq(
+          PB.gens.java -> (Compile / sourceManaged).value,
+          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) -> (Compile / sourceManaged).value
+        )
+      } else {
+        Seq(
+          PB.gens.java -> (Compile / sourceManaged).value,
+          PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
+        )
+      }
+    },
 
     (assembly / test) := { },
 
