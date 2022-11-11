@@ -1153,8 +1153,12 @@ class DatasetSuite extends QueryTest
       dataset.sparkSession.catalog.dropTempView("tempView")
 
       spark.sql("CREATE DATABASE IF NOT EXISTS test_db")
-      dataset.createTempView("test_db.tempView")
-      assert(spark.catalog.tableExists("test_db.tempView"))
+      val e1 = intercept[AnalysisException](
+        dataset.createTempView("test_db.tempView"))
+      checkError(e1,
+        errorClass = "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE",
+        parameters = Map("dbName" -> "test_db"))
+
     }
   }
 

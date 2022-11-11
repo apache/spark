@@ -933,6 +933,12 @@
     ],
     "sqlState" : "42000"
   },
+  "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE" : {
+    "message" : [
+      "Temp view does not belong to a database. <dbName> is provided as a part of view name."
+    ],
+    "sqlState" : "42000"
+  },
   "TOO_MANY_ARRAY_ELEMENTS" : {
     "message" : [
       "Cannot initialize array with <numElements> elements of size <size>"

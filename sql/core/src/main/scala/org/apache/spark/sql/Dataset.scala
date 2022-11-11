@@ -3804,6 +3804,13 @@ class Dataset[T] private[sql](
     } catch {
       case _: ParseException => throw QueryCompilationErrors.invalidViewNameError(viewName)
     }
+
+    if (tableIdentifier.database.isDefined) {
+      throw new AnalysisException(
+        errorClass = "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE",
+        messageParameters = Map("dbName" -> tableIdentifier.database.get))
+    }
+
     CreateViewCommand(
       name = tableIdentifier,
       userSpecifiedColumns = Nil,
