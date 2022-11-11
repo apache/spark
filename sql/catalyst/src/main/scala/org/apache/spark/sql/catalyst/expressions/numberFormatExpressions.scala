@@ -45,7 +45,9 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
   } else {
     DecimalType.USER_DEFAULT
   }
+
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
