@@ -33,7 +33,7 @@ import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, MapType, Metadata, StringType, StructField, StructType}
 
 /**
  * This suite is based on connect DSL and test that given same dataframe operations, whether
@@ -150,9 +150,17 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("column alias") {
+    // Simple Test.
     val connectPlan = connectTestRelation.select("id".protoAttr.as("id2"))
     val sparkPlan = sparkTestRelation.select(Column("id").alias("id2"))
     comparePlans(connectPlan, sparkPlan)
+
+    // Scalar columns with metadata
+    val mdJson = "{\"max\": 99}"
+    comparePlans(
+      connectTestRelation.select("id".protoAttr.as("id2", mdJson)),
+      sparkTestRelation.select(Column("id").as("id2", Metadata.fromJson(mdJson)))
+    )
 
     comparePlans(
       connectTestRelationMap.select(proto_explode("id".protoAttr).as(Seq("a", "b"))),

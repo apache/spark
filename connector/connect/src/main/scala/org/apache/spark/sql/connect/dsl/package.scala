@@ -82,6 +82,16 @@ package object dsl {
         .setAlias(Expression.Alias.newBuilder().addName(alias).setExpr(expr))
         .build()
 
+      def as(alias: String, metadata: String): Expression = Expression
+        .newBuilder()
+        .setAlias(
+          Expression.Alias.newBuilder()
+            .setExpr(expr)
+            .addName(alias)
+            .setMetadata(metadata)
+            .build()
+        ).build()
+
       def as(alias: Seq[String]): Expression = Expression
         .newBuilder()
         .setAlias(

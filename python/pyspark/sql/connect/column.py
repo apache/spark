@@ -129,13 +129,15 @@ class ColumnAlias(Expression):
 
     def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
         if len(self._alias) == 1:
+            exp = proto.Expression()
+            exp.alias.name.append(self._alias[0])
+            exp.alias.expr.CopyFrom(self._parent.to_plan(session))
+
             if self._metadata:
-                raise ValueError("Creating aliases with metadata is not supported.")
-            else:
-                exp = proto.Expression()
-                exp.alias.name.append(self._alias[0])
-                exp.alias.expr.CopyFrom(self._parent.to_plan(session))
-                return exp
+                import json
+
+                exp.alias.metadata = json.dumps(self._metadata)
+            return exp
         else:
             if self._metadata:
                 raise ValueError("metadata can only be provided for a single column")

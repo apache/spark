@@ -171,5 +171,7 @@ message Expression {
   message Alias {
     Expression expr = 1;
     repeated string name = 2;
+    // Alias metadata expressed as a JSON map.
+    optional string metadata = 3;
   }
 }

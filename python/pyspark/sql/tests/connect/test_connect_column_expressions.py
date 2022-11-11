@@ -138,6 +138,10 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         col0 = fun.col("a").alias("martin")
         self.assertEqual("Alias(Column(a), (martin))", str(col0))
 
+        col0 = fun.col("a").alias("martin", metadata={"pii": True})
+        plan = col0.to_plan(None)
+        self.assertEqual(plan.alias.metadata, '{"pii": true}')
+
     def test_column_expressions(self):
         """Test a more complex combination of expressions and their translation into
         the protobuf structure."""

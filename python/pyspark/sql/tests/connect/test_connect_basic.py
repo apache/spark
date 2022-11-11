@@ -234,7 +234,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
     def test_alias(self) -> None:
         """Testing supported and unsupported alias"""
-        col0 = self.connect.range(1, 10).select(col("id").alias("name")).schema().names[0]
+        col0 = (
+            self.connect.range(1, 10)
+            .select(col("id").alias("name", metadata={"max": 99}))
+            .schema()
+            .names[0]
+        )
+        self.assertEqual(True, False)
         self.assertEqual("name", col0)
 
         with self.assertRaises(Exception) as exc:

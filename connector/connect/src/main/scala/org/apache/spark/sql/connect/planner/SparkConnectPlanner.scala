@@ -337,7 +337,12 @@ class SparkConnectPlanner(session: SparkSession) {
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
     if (alias.getNameCount == 1) {
-      Alias(transformExpression(alias.getExpr), alias.getName(0))()
+      val md = if (alias.hasMetadata()) {
+        Some(Metadata.fromJson(alias.getMetadata))
+      } else {
+        None
+      }
+      Alias(transformExpression(alias.getExpr), alias.getName(0))(explicitMetadata = md)
     } else {
       MultiAlias(transformExpression(alias.getExpr), alias.getNameList.asScala.toSeq)
     }
