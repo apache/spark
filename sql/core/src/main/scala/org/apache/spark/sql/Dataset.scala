@@ -3805,10 +3805,11 @@ class Dataset[T] private[sql](
       case _: ParseException => throw QueryCompilationErrors.invalidViewNameError(viewName)
     }
 
-    if (tableIdentifier.database.isDefined) {
+    if (!SQLConf.get.allowsTempViewCreationWithDatabaseName && tableIdentifier.database.isDefined) {
+      // Temporary view names should NOT contain database prefix like "database.table"
       throw new AnalysisException(
         errorClass = "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE",
-        messageParameters = Map("dbName" -> tableIdentifier.database.get))
+        messageParameters = Map("database" -> tableIdentifier.database.get))
     }
 
     CreateViewCommand(

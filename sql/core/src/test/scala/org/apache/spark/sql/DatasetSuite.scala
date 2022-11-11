@@ -1135,30 +1135,36 @@ class DatasetSuite extends QueryTest
   }
 
   test("createTempView") {
+    val dataset = Seq(1, 2, 3).toDS()
+    dataset.createOrReplaceTempView("tempView")
+
+    // Overrides the existing temporary view with same name
+    // No exception should be thrown here.
+    dataset.createOrReplaceTempView("tempView")
+
+    // Throws AnalysisException if temp view with same name already exists
+    val e = intercept[AnalysisException](
+      dataset.createTempView("tempView"))
+    intercept[AnalysisException](dataset.createTempView("tempView"))
+    checkError(e,
+      errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+      parameters = Map("relationName" -> "`tempView`"))
+    dataset.sparkSession.catalog.dropTempView("tempView")
+
     withDatabase("test_db") {
-      val dataset = Seq(1, 2, 3).toDS()
-      dataset.createOrReplaceTempView("tempView")
+      withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_DATABASE_NAME.key -> "false") {
+        spark.sql("CREATE DATABASE IF NOT EXISTS test_db")
+        val e = intercept[AnalysisException](
+          dataset.createTempView("test_db.tempView"))
+        checkError(e,
+          errorClass = "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE",
+          parameters = Map("dbName" -> "test_db"))
+      }
 
-      // Overrides the existing temporary view with same name
-      // No exception should be thrown here.
-      dataset.createOrReplaceTempView("tempView")
-
-      // Throws AnalysisException if temp view with same name already exists
-      val e = intercept[AnalysisException](
-        dataset.createTempView("tempView"))
-      intercept[AnalysisException](dataset.createTempView("tempView"))
-      checkError(e,
-        errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
-        parameters = Map("relationName" -> "`tempView`"))
-      dataset.sparkSession.catalog.dropTempView("tempView")
-
-      spark.sql("CREATE DATABASE IF NOT EXISTS test_db")
-      val e1 = intercept[AnalysisException](
-        dataset.createTempView("test_db.tempView"))
-      checkError(e1,
-        errorClass = "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE",
-        parameters = Map("dbName" -> "test_db"))
-
+      withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_DATABASE_NAME.key -> "true") {
+          dataset.createTempView("test_db.tempView")
+          assert(spark.catalog.tableExists("tempView"))
+      }
     }
   }
 

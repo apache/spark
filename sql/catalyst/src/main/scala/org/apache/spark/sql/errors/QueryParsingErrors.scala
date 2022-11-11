@@ -545,7 +545,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       database: String,
       ctx: CreateViewContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0054",
+      errorClass = "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE",
       messageParameters = Map("database" -> database),
       ctx)
   }
