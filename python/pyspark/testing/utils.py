@@ -44,7 +44,7 @@ except ImportError:
     # No NumPy, but that's okay, we'll skip those tests
     pass
 try:
-    import memory_profiler  # noqa: F401
+    import memory_profiler  # type: ignore[import] # noqa: F401
 
     have_memory_profiler = True
 except ImportError:
