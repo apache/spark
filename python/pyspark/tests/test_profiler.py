@@ -25,7 +25,7 @@ from pyspark import SparkConf, SparkContext, BasicProfiler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import udf
 from pyspark.sql.utils import PythonException
-from pyspark.testing.utils import PySparkTestCase
+from pyspark.testing.utils import PySparkTestCase, have_memory_profiler
 
 
 class ProfilerTests(PySparkTestCase):
@@ -126,6 +126,7 @@ class ProfilerTests2(unittest.TestCase):
         finally:
             sc.stop()
 
+    @unittest.skipIf(have_memory_profiler, "Test when memory-profiler is not installed.")
     def test_no_memory_profile_installed(self):
         sc = SparkContext(
             conf=SparkConf()
