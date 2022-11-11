@@ -27,12 +27,13 @@ from unittest import mock
 import pandas as pd
 
 from pyspark import SparkConf, SparkContext
+from pyspark.profiler import has_memory_profiler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import pandas_udf, udf
-from pyspark.testing.utils import PySparkTestCase, have_memory_profiler
+from pyspark.testing.utils import PySparkTestCase
 
 
-@unittest.skipIf(not have_memory_profiler, "Must have memory-profiler installed.")
+@unittest.skipIf(not has_memory_profiler, "Must have memory-profiler installed.")
 class MemoryProfilerTests(PySparkTestCase):
     def setUp(self):
         self._old_sys_path = list(sys.path)

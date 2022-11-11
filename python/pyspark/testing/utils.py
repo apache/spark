@@ -28,7 +28,6 @@ from pyspark.find_spark_home import _find_spark_home
 
 have_scipy = False
 have_numpy = False
-have_memory_profiler = False
 try:
     import scipy.sparse  # noqa: F401
 
@@ -42,13 +41,6 @@ try:
     have_numpy = True
 except ImportError:
     # No NumPy, but that's okay, we'll skip those tests
-    pass
-try:
-    import memory_profiler  # type: ignore[import] # noqa: F401
-
-    have_memory_profiler = True
-except ImportError:
-    # No memory-profiler, but that's okay, we'll skip those tests
     pass
 
 
