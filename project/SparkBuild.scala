@@ -666,23 +666,6 @@ object SparkConnect {
       )
     },
 
-    (Compile / PB.targets) := {
-      val connectProtocExecPath = sys.props.get("connect.protoc.executable.path")
-      val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
-      if (connectProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
-        PB.protocExecutable := file(connectProtocExecPath.get)
-        Seq(
-          PB.gens.java -> (Compile / sourceManaged).value,
-          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) -> (Compile / sourceManaged).value
-        )
-      } else {
-        Seq(
-          PB.gens.java -> (Compile / sourceManaged).value,
-          PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
-        )
-      }
-    },
-
     (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
@@ -728,7 +711,26 @@ object SparkConnect {
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
     }
-  )
+  ) ++ {
+    val connectProtocExecPath = sys.props.get("connect.protoc.executable.path")
+    val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
+    if (connectProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
+      Seq(
+        (Compile / PB.targets) := Seq(
+          PB.gens.java -> (Compile / sourceManaged).value,
+          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) -> (Compile / sourceManaged).value
+        ),
+        PB.protocExecutable := file(connectProtocExecPath.get)
+      )
+    } else {
+      Seq(
+        (Compile / PB.targets) := Seq(
+          PB.gens.java -> (Compile / sourceManaged).value,
+          PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
+        )
+      )
+    }
+  }
 }
 
 object SparkProtobuf {
