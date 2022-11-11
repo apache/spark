@@ -109,13 +109,17 @@ case class AggregateExpression(
   with Unevaluable {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(AGGREGATE_EXPRESSION)
+  override def trustNullability: Boolean = aggregateFunction.trustNullability
 
   @transient
   lazy val resultAttribute: Attribute = if (aggregateFunction.resolved) {
     AttributeReference(
       aggregateFunction.toString,
       aggregateFunction.dataType,
-      aggregateFunction.nullable)(exprId = resultId)
+      aggregateFunction.nullable)(
+      exprId = resultId,
+      trustNullability = aggregateFunction.trustNullability
+    )
   } else {
     // This is a bit of a hack.  Really we should not be constructing this container and reasoning
     // about datatypes / aggregation mode until after we have finished analysis and made it to

@@ -33,6 +33,7 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
+import org.apache.spark.sql.api.java.UDF1
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
@@ -3544,45 +3545,40 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  // TODO ETK test the makeRDD case but with a nested null ... ? or was this already what Wenchen had
-
-  // only possible to cause the error using internal APIs (@DeveloperApi) so maybe that's okay
-  //test("SPARK-40199 Projecting NULLs from non-nullable input should throw error with helpful msg") {
-  //  // See more in-depth testing in GeneratedProjectionSuite; this test exists mainly to validate
-  //  // that the column/field identifiers are populated as expected in a "real" plan
-  //  val df = spark.createDataFrame(List(Row(Row(null))).asJava,
-  //    new StructType().add("nest", new StructType().add("f", StringType, nullable = false)))
-  //  val e = intercept[SparkException](df.collect())
-  //  assert(e.getMessage.contains("<POS_0>.`f` cannot be null"))
-  //}
-
-  // only possible to cause the error using internal APIs (@DeveloperApi) so maybe that's okay
-  //test("SPARK-40199 Projecting NULLs from non-nullable input should throw error for primitives") {
-  //  // See more in-depth testing in GeneratedProjectionSuite; this test exists mainly to validate
-  //  // that the column/field identifiers are populated as expected in a "real" plan
-  //  val df = spark.createDataFrame(List(Row(null)).asJava,
-  //    new StructType().add("f", LongType, nullable = false))
-  //  val out = df.collect()
-  //  val e = intercept[RuntimeException](df.collect())
-  //  assert(e.getMessage.contains("<POS_0> cannot be null"))
-  //}
-
-  test("SPARK-40199 Projecting NULLs from non-nullable DSv2 should throw error with helpful msg") {
-    // TODO ETK
-  }
-
-  //test("SPARK-40199 Returning map with NULL key from UDF should throw error with helpful msg") {
-  //  val badUdf = spark.udf
-  //      .register[Map[String, String], Int]("bad_udf", _ => Map[String, String]("foo" -> null))
-  //      .asNonNullable()
-  //  val e = intercept[SparkException](Seq(1).toDF("c1").select(badUdf($"c1")).collect())
-  //  assert(e.getMessage.contains("UDF named bad_udf cannot be null"))
-  //}
-
-  test("SPARK-40199 Projecting NULLs from non-nullable UDF should throw error with helpful msg") {
-    val badUdf = spark.udf.register[String, Int]("bad_udf", _ => null).asNonNullable()
-    val e = intercept[SparkException](Seq(1).toDF("c1").select(badUdf($"c1")).collect())
-    assert(e.getMessage.contains("UDF named bad_udf cannot be null"))
+  test("SPARK-40199 Projecting NULLS from non-nullable UDFs should throw helpful errors") {
+    val udfs = Seq(
+      // TODO try unnamed UDFs here as well
+      ("Scala UDF with string return", "bad_udf", udf[String, Int](_ => null)),
+      ("Scala UDF with int return", "bad_udf", udf[java.lang.Integer, Int](_ => null)),
+      ("Java UDF with string return", "bad_udf", udf(new UDF1[Int, String] {
+        override def call(t1: Int): String = null
+      }, StringType)),
+      ("UDAF with simple buffer type", "input[0, string, false]",
+          udaf(new Aggregator[Int, Long, String] {
+            override def zero: Long = 0
+            override def reduce(b: Long, a: Int): Long = b + a
+            override def merge(b1: Long, b2: Long): Long = b1 + b2
+            override def finish(reduction: Long): String = null
+            override def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+            override def outputEncoder: Encoder[String] = Encoders.STRING
+          })),
+      ("UDAF with complex buffer type", "input[0, string, false]",
+          udaf(new Aggregator[Int, GroupByKey, String] {
+            override def zero: GroupByKey = GroupByKey(0, 0)
+            override def reduce(b: GroupByKey, a: Int): GroupByKey = GroupByKey(0, 0)
+            override def merge(b1: GroupByKey, b2: GroupByKey): GroupByKey = GroupByKey(0, 0)
+            override def finish(reduction: GroupByKey): String = null
+            override def bufferEncoder: Encoder[GroupByKey] = Encoders.product[GroupByKey]
+            override def outputEncoder: Encoder[String] = Encoders.STRING
+          }))
+    )
+    udfs.foreach { case (desc, expectedName, udf) =>
+      withClue(desc) {
+        spark.udf.register("bad_udf", udf.asNonNullable())
+        val e = intercept[SparkException](Seq(1).toDF("c1").select(expr("bad_udf(c1)")).collect())
+        assert(e.getMessage.contains(s"$expectedName cannot be null"))
+      }
+    }
   }
   }
 

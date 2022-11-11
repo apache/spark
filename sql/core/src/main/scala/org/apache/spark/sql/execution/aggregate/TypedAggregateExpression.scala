@@ -85,6 +85,7 @@ object TypedAggregateExpression {
  * A helper class to hook [[Aggregator]] into the aggregation system.
  */
 trait TypedAggregateExpression extends AggregateFunction {
+  override def trustNullability: Boolean = false
 
   def aggregator: Aggregator[Any, Any, Any]
 
