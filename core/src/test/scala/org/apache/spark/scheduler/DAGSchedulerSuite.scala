@@ -22,6 +22,7 @@ import java.util.concurrent.{CountDownLatch, Delayed, ScheduledFuture, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 
 import scala.annotation.meta.param
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
@@ -4563,8 +4564,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       sendRequestsLatch.await()
       verify(blockStoreClient, times(2))
         .finalizeShuffleMerge(any(), any(), any(), any(), any())
-      assert(!sentHosts.isEmpty)
-      assert(1 == sentHosts.size() && sentHosts.iterator().next() === "hostB")
+      assert(1 == sentHosts.size())
+      assert(sentHosts.asScala.toSeq === Seq("hostB"))
       completeLatch.await()
       assert(hostAInterrupted)
     }
