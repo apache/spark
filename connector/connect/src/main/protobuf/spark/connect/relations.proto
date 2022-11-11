@@ -98,6 +98,7 @@ message Read {
 // The input relation must be specified.
 // The projected expression can be an arbitrary expression.
 message Project {
+  // (Optional) Input relation is optional for Project. For example, `SELECT ABS(-1)`.
   Relation input = 1;
   repeated Expression expressions = 3;
 }

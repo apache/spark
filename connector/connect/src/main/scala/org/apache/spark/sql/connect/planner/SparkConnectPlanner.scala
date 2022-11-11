@@ -235,7 +235,11 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformProject(rel: proto.Project): LogicalPlan = {
-    val baseRel = transformRelation(rel.getInput)
+    val baseRel = if (rel.hasInput) {
+      transformRelation(rel.getInput)
+    } else {
+      logical.OneRowRelation()
+    }
     // TODO: support the target field for *.
     val projection =
       if (rel.getExpressionsCount == 1 && rel.getExpressions(0).hasUnresolvedStar) {
