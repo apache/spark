@@ -79,7 +79,7 @@ package object dsl {
     implicit class DslExpression(val expr: Expression) {
       def as(alias: String): Expression = Expression
         .newBuilder()
-        .setAlias(Expression.Alias.newBuilder().setName(alias).setExpr(expr))
+        .setAlias(Expression.Alias.newBuilder().addName(alias).setExpr(expr))
         .build()
 
       def <(other: Expression): Expression =

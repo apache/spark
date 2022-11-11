@@ -635,12 +635,15 @@ class Expression(google.protobuf.message.Message):
         NAME_FIELD_NUMBER: builtins.int
         @property
         def expr(self) -> global___Expression: ...
-        name: builtins.str
+        @property
+        def name(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
         def __init__(
             self,
             *,
             expr: global___Expression | None = ...,
-            name: builtins.str = ...,
+            name: collections.abc.Iterable[builtins.str] | None = ...,
         ) -> None: ...
         def HasField(
             self, field_name: typing_extensions.Literal["expr", b"expr"]

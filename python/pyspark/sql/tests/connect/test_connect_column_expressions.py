@@ -134,6 +134,10 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         lit_list_plan = fun.lit([fun.lit(10), fun.lit("str")]).to_plan(None)
         self.assertIsNotNone(lit_list_plan)
 
+    def test_column_alias(self) -> None:
+        col0 = fun.col("a").alias("martin")
+        self.assertEqual("Alias(Column(a), (martin))", str(col0))
+
     def test_column_expressions(self):
         """Test a more complex combination of expressions and their translation into
         the protobuf structure."""

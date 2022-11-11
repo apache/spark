@@ -26,7 +26,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.WriteOperation
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
@@ -334,7 +334,11 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
-    Alias(transformExpression(alias.getExpr), alias.getName)()
+    if (alias.getNameCount == 1) {
+      Alias(transformExpression(alias.getExpr), alias.getName(0))()
+    } else {
+      MultiAlias(transformExpression(alias.getExpr), alias.getNameList.asScala.toSeq)
+    }
   }
 
   private def transformExpressionString(expr: proto.Expression.ExpressionString): Expression = {
