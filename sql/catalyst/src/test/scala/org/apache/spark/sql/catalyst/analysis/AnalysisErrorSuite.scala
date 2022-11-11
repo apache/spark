@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.Assertions._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -383,10 +384,13 @@ class AnalysisErrorSuite extends AnalysisTest {
     Map("fieldName" -> "`c`", "fields" -> "`aField`, `bField`, `cField`"),
     caseSensitive = false)
 
-  errorTest(
-    "catch all unresolved plan",
-    UnresolvedTestPlan(),
-    "unresolved" :: Nil)
+  checkError(
+    exception = intercept[SparkException] {
+      val analyzer = getAnalyzer
+      analyzer.checkAnalysis(analyzer.execute(UnresolvedTestPlan()))
+    },
+    errorClass = "INTERNAL_ERROR",
+    parameters = Map("message" -> "Found the unresolved operator: 'UnresolvedTestPlan"))
 
   errorTest(
     "union with unequal number of columns",
