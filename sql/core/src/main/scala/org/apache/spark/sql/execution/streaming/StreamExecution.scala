@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{IOException, InterruptedIOException, UncheckedIOException}
+import java.io.{InterruptedIOException, IOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
-import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit, TimeoutException}
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 

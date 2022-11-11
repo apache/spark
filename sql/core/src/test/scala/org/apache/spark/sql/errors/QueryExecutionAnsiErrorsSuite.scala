@@ -17,9 +17,10 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark._
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{Dataset, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Cast, CheckOverflowInTableInsert, Literal}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.ByteType
 
@@ -191,5 +192,21 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         "targetType" -> ("\"TINYINT\""),
         "columnName" -> "`col`")
     )
+  }
+
+  test("STREAM_FAILED: batch processing failed w/ Spark's exception") {
+    val ds = spark.readStream.format("rate").load()
+    val query = ds.writeStream.foreachBatch { (ds: Dataset[Row], _: Long) =>
+      ds.selectExpr("value / 0").collect()
+      ()
+    }.start()
+    val e = intercept[StreamingQueryException] {
+      query.awaitTermination()
+    }.getCause // SparkException: Job aborted
+    checkError(
+      exception = e.getCause.asInstanceOf[SparkArithmeticException],
+      errorClass = "DIVIDE_BY_ZERO",
+      parameters = Map("config" -> ansiConf),
+      context = ExpectedContext(fragment = "value / 0", start = 0, stop = 8))
   }
 }

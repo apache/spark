@@ -731,13 +731,14 @@ class QueryExecutionErrorsSuite
       val s: String = null
       s.length: Unit
     }.start()
-    val e = intercept[StreamingQueryException] {
+    val cause = intercept[StreamingQueryException] {
       query.awaitTermination()
-    }
+    }.cause
     checkError(
-      exception = e.cause.asInstanceOf[SparkThrowable],
+      exception = cause.asInstanceOf[SparkThrowable],
       errorClass = "STREAM_FAILED",
       parameters = Map("id" -> s"[id = ${query.id}, runId = ${query.runId}]"))
+    assert(cause.getCause.isInstanceOf[NullPointerException])
   }
 }
 
