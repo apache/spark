@@ -87,7 +87,7 @@ class Expression(object):
         Returns this column aliased with a new name or names (in the case of expressions that
         return more than one column, such as explode).
 
-        .. versionadded:: 1.3.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -100,9 +100,6 @@ class Expression(object):
             a dict of information to be stored in ``metadata`` attribute of the
             corresponding :class:`StructField <pyspark.sql.types.StructField>` (optional, keyword
             only argument)
-
-            .. versionchanged:: 2.2.0
-               Added optional ``metadata`` argument.
 
         Returns
         -------

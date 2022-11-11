@@ -82,6 +82,16 @@ package object dsl {
         .setAlias(Expression.Alias.newBuilder().addName(alias).setExpr(expr))
         .build()
 
+      def as(alias: Seq[String]): Expression = Expression
+        .newBuilder()
+        .setAlias(
+          Expression.Alias
+            .newBuilder()
+            .setExpr(expr)
+            .addAllName(alias.asJava)
+            .build())
+        .build()
+
       def <(other: Expression): Expression =
         Expression
           .newBuilder()
@@ -99,6 +109,13 @@ package object dsl {
         .newBuilder()
         .setUnresolvedFunction(
           Expression.UnresolvedFunction.newBuilder().addParts("min").addArguments(e))
+        .build()
+
+    def proto_explode(e: Expression): Expression =
+      Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          Expression.UnresolvedFunction.newBuilder().addParts("explode").addArguments(e))
         .build()
 
     /**

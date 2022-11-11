@@ -260,7 +260,9 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.ALIAS => transformAlias(exp.getAlias)
       case proto.Expression.ExprTypeCase.EXPRESSION_STRING =>
         transformExpressionString(exp.getExpressionString)
-      case _ => throw InvalidPlanInput()
+      case _ =>
+        throw InvalidPlanInput(
+          s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
     }
   }
 
