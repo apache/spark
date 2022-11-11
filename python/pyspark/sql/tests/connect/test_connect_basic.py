@@ -77,7 +77,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
     @classmethod
     def spark_connect_load_test_data(cls: Any):
         # Setup Remote Spark Session
-        cls.connect = RemoteSparkSession(user_id="test_user")
+        cls.connect = RemoteSparkSession(userId="test_user")
         df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
         # Since we might create multiple Spark sessions, we need to create global temporary view
         # that is specifically maintained in the "global_temp" schema.
@@ -237,17 +237,25 @@ class ChannelBuilderTests(ReusedPySparkTestCase):
         for i in invalid:
             self.assertRaises(AttributeError, ChannelBuilder, i)
 
-        self.assertRaises(AttributeError, ChannelBuilder("sc://host/;token=123").to_channel)
+    def test_sensible_defaults(self):
+        chan = ChannelBuilder("sc://host")
+        self.assertFalse(chan.secure, "Default URL is not secure")
+
+        chan = ChannelBuilder("sc://host/;token=abcs")
+        self.assertTrue(chan.secure, "specifying a token must set the channel to secure")
+
+        chan = ChannelBuilder("sc://host/;use_ssl=abcs")
+        self.assertFalse(chan.secure, "Garbage in, false out")
 
     def test_valid_channel_creation(self):
-        chan = ChannelBuilder("sc://host").to_channel()
+        chan = ChannelBuilder("sc://host").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
 
         # Sets up a channel without tokens because ssl is not used.
-        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc").to_channel()
+        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
 
-        chan = ChannelBuilder("sc://host/;use_ssl=true").to_channel()
+        chan = ChannelBuilder("sc://host/;use_ssl=true").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
 
     def test_channel_properties(self):
