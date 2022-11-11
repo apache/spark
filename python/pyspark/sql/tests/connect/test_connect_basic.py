@@ -26,7 +26,6 @@ from pyspark.testing.sqlutils import have_pandas
 if have_pandas:
     import pandas
 
-from pyspark.sql.connect import DataFrame
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.types import StructType, StructField, LongType, StringType
 
