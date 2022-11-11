@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) extends Logging {
 
   // The maximum batch size in bytes for a single batch of data to be returned via proto.
-  val MAX_BATCH_SIZE: Long = 10 * 1024 * 1024
+  private val MAX_BATCH_SIZE: Long = 4 * 1024 * 1024
 
   def handle(v: Request): Unit = {
     val session =
@@ -127,8 +127,6 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
   def processAsArrowBatches(clientId: String, dataframe: DataFrame): Unit = {
     val spark = dataframe.sparkSession
     val schema = dataframe.schema
-    // TODO: control the batch size instead of max records
-    val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = spark.sessionState.conf.sessionLocalTimeZone
 
     SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
@@ -141,7 +139,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
 
         val batches = rows.mapPartitionsInternal { iter =>
           ArrowConverters
-            .toArrowBatchIterator(iter, schema, maxRecordsPerBatch, timeZoneId)
+            .toBatchWithSchemaIterator(iter, schema, MAX_BATCH_SIZE, timeZoneId)
         }
 
         val signal = new Object
