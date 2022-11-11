@@ -48,7 +48,7 @@ import org.apache.spark.sql.types._
  * result in changes to the Generator or its children.
  */
 trait Generator extends Expression {
-  // TODO ETK check subtypes
+
   override def dataType: DataType = ArrayType(elementSchema)
 
   override def foldable: Boolean = false

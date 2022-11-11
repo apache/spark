@@ -3553,7 +3553,7 @@ class DataFrameSuite extends QueryTest
       ("Java UDF with string return", "bad_udf", udf(new UDF1[Int, String] {
         override def call(t1: Int): String = null
       }, StringType)),
-      ("UDAF with simple buffer type", "input[0, string, false]",
+      ("UDAF with simple buffer type", "bad_udf(c1#52)",
           udaf(new Aggregator[Int, Long, String] {
             override def zero: Long = 0
             override def reduce(b: Long, a: Int): Long = b + a
@@ -3562,7 +3562,7 @@ class DataFrameSuite extends QueryTest
             override def bufferEncoder: Encoder[Long] = Encoders.scalaLong
             override def outputEncoder: Encoder[String] = Encoders.STRING
           })),
-      ("UDAF with complex buffer type", "input[0, string, false]",
+      ("UDAF with complex buffer type", "bad_udf(c1#92)",
           udaf(new Aggregator[Int, GroupByKey, String] {
             override def zero: GroupByKey = GroupByKey(0, 0)
             override def reduce(b: GroupByKey, a: Int): GroupByKey = GroupByKey(0, 0)

@@ -31,6 +31,7 @@ import org.apache.spark.sql.types._
  * the layout of intermediate tuples, BindReferences should be run after all such transformations.
  */
 case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean,
+  userFriendlyDesc: Option[String] = None,
   override val trustNullability: Boolean = true)
   extends LeafExpression {
 
@@ -64,7 +65,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean,
         val c =
           code"""if (${ctx.INPUT_ROW}.isNullAt($ordinal)) {
                 |  throw QueryExecutionErrors.valueCannotBeNullError(
-                |    "${StringEscapeUtils.escapeJava(toString)}");
+                |    "${StringEscapeUtils.escapeJava(userFriendlyDesc.getOrElse(toString))}");
                 |}
                 |$javaType ${ev.value} = $value;
                 |""".stripMargin
@@ -92,7 +93,8 @@ object BindReferences extends Logging {
             s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
         }
       } else {
-        BoundReference(ordinal, a.dataType, input(ordinal).nullable, a.trustNullability)
+        BoundReference(ordinal, a.dataType, input(ordinal).nullable, Some(a.name),
+          a.trustNullability)
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
   }

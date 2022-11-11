@@ -124,7 +124,7 @@ trait CodegenSupport extends SparkPlan {
     } else {
       if (colVars.nonEmpty) {
         val colExprs = output.zipWithIndex.map { case (attr, i) =>
-          BoundReference(i, attr.dataType, attr.nullable, attr.trustNullability)
+          BoundReference(i, attr.dataType, attr.nullable, Some(attr.name), attr.trustNullability)
         }
         val evaluateInputs = evaluateVariables(colVars)
         // generate the code to create a UnsafeRow
@@ -159,7 +159,8 @@ trait CodegenSupport extends SparkPlan {
         ctx.currentVars = null
         ctx.INPUT_ROW = row
         output.zipWithIndex.map { case (attr, i) =>
-          BoundReference(i, attr.dataType, attr.nullable, attr.trustNullability).genCode(ctx)
+          BoundReference(i, attr.dataType, attr.nullable, Some(attr.name), attr.trustNullability)
+              .genCode(ctx)
         }
       }
 
@@ -466,7 +467,7 @@ trait InputRDDCodegen extends CodegenSupport {
       ctx.INPUT_ROW = row
       ctx.currentVars = null
       output.zipWithIndex.map { case (a, i) =>
-        BoundReference(i, a.dataType, a.nullable).genCode(ctx)
+        BoundReference(i, a.dataType, a.nullable, Some(a.name), a.trustNullability).genCode(ctx)
       }
     } else {
       null

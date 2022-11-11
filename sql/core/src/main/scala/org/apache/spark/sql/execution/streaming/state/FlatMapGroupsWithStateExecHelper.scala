@@ -237,7 +237,7 @@ object FlatMapGroupsWithStateExecHelper {
       val boundRefToNestedState =
         BoundReference(nestedStateOrdinal, stateEncoder.schema, nullable = true)
       val deserExpr = stateEncoder.resolveAndBind().deserializer.transformUp {
-        case BoundReference(ordinal, _, _, _) => GetStructField(boundRefToNestedState, ordinal)
+        case BoundReference(ordinal, _, _, _, _) => GetStructField(boundRefToNestedState, ordinal)
       }
       val nullLiteral = Literal(null, deserExpr.dataType)
       CaseWhen(Seq(IsNull(boundRefToNestedState) -> nullLiteral), elseValue = deserExpr)

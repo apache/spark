@@ -425,18 +425,15 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
       ""
     }
 
-    // TODO ETK simplify
-    val (nullKeyCheck, nullValueCheck) = if (!nullable && trustInputNullability) {
-      ("", "")
+    val nullValueCheck = if (nullable || trustInputNullability) {
+      ""
     } else {
-      val template =
-        s"""
-         |if (%s.isNullAt($index)) {
-         |  throw QueryExecutionErrors.valueCannotBeNullError(
-         |    "${StringEscapeUtils.escapeJava(nodeDesc)}");
-         |}
-         |""".stripMargin
-      (template.format(keys), template.format(values))
+      s"""
+       |if ($values.isNullAt($index)) {
+       |  throw QueryExecutionErrors.valueCannotBeNullError(
+       |    "${StringEscapeUtils.escapeJava(nodeDesc)}");
+       |}
+       |""".stripMargin
     }
     val keyJavaType = CodeGenerator.javaType(keyType)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {

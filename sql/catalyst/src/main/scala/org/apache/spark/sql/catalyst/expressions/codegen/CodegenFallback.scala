@@ -61,6 +61,7 @@ trait CodegenFallback extends Expression {
           ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
         }""")
     } else if (!nullable && untrustedOutputNullabilityName.isDefined) {
+      // TODO ETK is this needed?
       ev.copy(code =
         code"""
         $placeHolder

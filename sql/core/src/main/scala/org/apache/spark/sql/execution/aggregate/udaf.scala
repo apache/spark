@@ -356,7 +356,6 @@ case class ScalaUDAF(
   with Logging
   with ImplicitCastInputTypes
   with UserDefinedExpression {
-  // TODO ETK handle, probably up at the TypedImperativeAggregate layer
   override protected def untrustedOutputNullabilityName: Option[String] = Some(s"UDF $name")
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)

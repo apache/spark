@@ -102,7 +102,7 @@ object ExpressionEncoder {
         returnNullable = originalInputObject.nullable)
 
       val newSerializer = enc.objSerializer.transformUp {
-        case BoundReference(0, _, _, _) => newInputObject
+        case BoundReference(0, _, _, _, _) => newInputObject
       }
 
       Alias(newSerializer, s"_${index + 1}")()
