@@ -437,7 +437,11 @@ class Project(google.protobuf.message.Message):
     INPUT_FIELD_NUMBER: builtins.int
     EXPRESSIONS_FIELD_NUMBER: builtins.int
     @property
-    def input(self) -> global___Relation: ...
+    def input(self) -> global___Relation:
+        """(Optional) Input relation is optional for Project.
+
+        For example, `SELECT ABS(-1)` is valid plan without an input plan.
+        """
     @property
     def expressions(
         self,
