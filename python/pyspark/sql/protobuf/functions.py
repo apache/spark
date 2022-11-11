@@ -38,7 +38,10 @@ def from_protobuf(
     """
     Converts a binary column of Protobuf format into its corresponding catalyst value.
     The specified schema must match the read data, otherwise the behavior is undefined:
-    it may fail or return arbitrary result.
+    it may fail or return arbitrary result. The jar containing Java class should be shaded.
+    Specifically, ``com.google.protobuf.*`` should be shaded to
+    ``org.sparkproject.spark-protobuf.protobuf.*``.
+
     To deserialize the data with a compatible and evolved schema, the expected
     Protobuf schema can be set via the option protobuf descriptor.
 
@@ -135,7 +138,10 @@ def to_protobuf(
     data: "ColumnOrName", messageName: str, descFilePath: Optional[str] = None
 ) -> Column:
     """
-    Converts a column into binary of protobuf format.
+    Converts a column into binary of protobuf format. The specified Protobuf class must match the
+    data, otherwise the behavior is undefined: it may fail or return arbitrary result. The jar
+    containing Java class should be shaded. Specifically, ``com.google.protobuf.*`` should be
+    shaded to ``org.sparkproject.spark-protobuf.protobuf.*``.
 
     .. versionadded:: 3.4.0
 
