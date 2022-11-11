@@ -216,8 +216,7 @@ package object dsl {
           range.setStep(1L)
         }
         if (numPartitions.isDefined) {
-          range.setNumPartitions(
-            proto.Range.NumPartitions.newBuilder().setNumPartitions(numPartitions.get))
+          range.setNumPartitions(numPartitions.get)
         }
         Relation.newBuilder().setRange(range).build()
       }
@@ -376,7 +375,7 @@ package object dsl {
               .setUpperBound(upperBound)
               .setLowerBound(lowerBound)
               .setWithReplacement(withReplacement)
-              .setSeed(Sample.Seed.newBuilder().setSeed(seed).build())
+              .setSeed(seed)
               .build())
           .build()
       }
