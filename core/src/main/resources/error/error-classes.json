@@ -931,7 +931,7 @@
   },
   "STREAM_FAILED" : {
     "message" : [
-      "Query [id = <id>, runId = <runId>] terminated with exception: <msg>"
+      "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
     ]
   },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
