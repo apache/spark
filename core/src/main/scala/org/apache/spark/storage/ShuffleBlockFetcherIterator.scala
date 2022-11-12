@@ -806,7 +806,6 @@ final class ShuffleBlockFetcherIterator(
               pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(blockId, address)
               // Set result to null to trigger another iteration of the while loop to get either.
               result = null
-              null
             } else {
               throwFetchFailedException(blockId, mapIndex, address, new IOException(msg))
             }
