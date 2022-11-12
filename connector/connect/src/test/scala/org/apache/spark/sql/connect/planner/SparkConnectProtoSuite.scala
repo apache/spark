@@ -23,7 +23,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EvalMode}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -33,7 +33,7 @@ import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataTypes, IntegerType, StringType, StructField, StructType}
 
 /**
  * This suite is based on connect DSL and test that given same dataframe operations, whether
@@ -89,6 +89,15 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
     val validPlan = connectTestRelation.select(callFunction(Seq("hex"), Seq("id".protoAttr)))
     assert(analyzePlan(transform(validPlan)) != null)
+  }
+
+  test("Cast") {
+    comparePlans(
+      connectTestRelation.select(
+        callFunction("cast", Seq("id".protoAttr, protoStrToTypeLiteral("float")))),
+      sparkTestRelation.select(
+        Column(
+          Cast(Column("id").expr, DataTypes.FloatType, None, EvalMode.fromSQLConf(SQLConf.get)))))
   }
 
   test("Basic filter") {

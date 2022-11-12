@@ -71,6 +71,8 @@ message Expression {
       DataType.List empty_list = 31;
       DataType.Map empty_map = 32;
       UserDefined user_defined = 33;
+      // A data type literal to be used for casts etc.
+      DataType data_type = 34;
     }
 
     // whether the literal type should be treated as a nullable type. Applies to

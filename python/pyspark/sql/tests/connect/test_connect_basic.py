@@ -27,7 +27,7 @@ if have_pandas:
     import pandas
 
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import StructType, StructField, LongType, StringType
+from pyspark.sql.types import StructType, StructField, LongType, StringType, FloatType
 
 if have_pandas:
     from pyspark.sql.connect.client import RemoteSparkSession, ChannelBuilder
@@ -231,6 +231,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         else:
             actualResult = pandasResult.values.tolist()
             self.assertEqual(len(expectResult), len(actualResult))
+
+    def test_cast(self) -> None:
+        dt = self.connect.range(1, 10).select(col("id").cast("float")).schema().fields[0].dataType
+        self.assertEqual(dt, FloatType())
 
 
 class ChannelBuilderTests(ReusedPySparkTestCase):

@@ -28,7 +28,7 @@ import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
@@ -294,10 +294,20 @@ class SparkConnectPlanner(session: SparkSession) {
       // Days since UNIX epoch.
       case proto.Expression.Literal.LiteralTypeCase.DATE =>
         expressions.Literal(lit.getDate, DateType)
+      case proto.Expression.Literal.LiteralTypeCase.DATA_TYPE =>
+        transformDataTypeLiteral(lit.getDataType)
       case _ =>
         throw InvalidPlanInput(
           s"Unsupported Literal Type: ${lit.getLiteralTypeCase.getNumber}" +
             s"(${lit.getLiteralTypeCase.name})")
+    }
+  }
+
+  private def transformDataTypeLiteral(dt: proto.DataType): Expression = {
+    dt.getKindCase match {
+      case proto.DataType.KindCase.I8 => Literal.default(ByteType)
+      case proto.DataType.KindCase.FP32 => Literal.default(FloatType)
+      case _ => throw InvalidPlanInput("")
     }
   }
 
@@ -327,6 +337,7 @@ class SparkConnectPlanner(session: SparkSession) {
       throw new IllegalArgumentException(
         "Function identifier must be passed as sequence of name parts.")
     }
+
     UnresolvedFunction(
       fun.getPartsList.asScala.toSeq,
       fun.getArgumentsList.asScala.map(transformExpression).toSeq,

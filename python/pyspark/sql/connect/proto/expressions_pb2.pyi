@@ -283,6 +283,7 @@ class Expression(google.protobuf.message.Message):
         EMPTY_LIST_FIELD_NUMBER: builtins.int
         EMPTY_MAP_FIELD_NUMBER: builtins.int
         USER_DEFINED_FIELD_NUMBER: builtins.int
+        DATA_TYPE_FIELD_NUMBER: builtins.int
         NULLABLE_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
         boolean: builtins.bool
@@ -328,6 +329,9 @@ class Expression(google.protobuf.message.Message):
         def empty_map(self) -> pyspark.sql.connect.proto.types_pb2.DataType.Map: ...
         @property
         def user_defined(self) -> global___Expression.Literal.UserDefined: ...
+        @property
+        def data_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+            """A data type literal to be used for casts etc."""
         nullable: builtins.bool
         """whether the literal type should be treated as a nullable type. Applies to
         all members of union other than the Typed null (which should directly
@@ -368,6 +372,7 @@ class Expression(google.protobuf.message.Message):
             empty_list: pyspark.sql.connect.proto.types_pb2.DataType.List | None = ...,
             empty_map: pyspark.sql.connect.proto.types_pb2.DataType.Map | None = ...,
             user_defined: global___Expression.Literal.UserDefined | None = ...,
+            data_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
             nullable: builtins.bool = ...,
             type_variation_reference: builtins.int = ...,
         ) -> None: ...
@@ -378,6 +383,8 @@ class Expression(google.protobuf.message.Message):
                 b"binary",
                 "boolean",
                 b"boolean",
+                "data_type",
+                b"data_type",
                 "date",
                 b"date",
                 "decimal",
@@ -439,6 +446,8 @@ class Expression(google.protobuf.message.Message):
                 b"binary",
                 "boolean",
                 b"boolean",
+                "data_type",
+                b"data_type",
                 "date",
                 b"date",
                 "decimal",
@@ -527,6 +536,7 @@ class Expression(google.protobuf.message.Message):
             "empty_list",
             "empty_map",
             "user_defined",
+            "data_type",
         ] | None: ...
 
     class UnresolvedAttribute(google.protobuf.message.Message):

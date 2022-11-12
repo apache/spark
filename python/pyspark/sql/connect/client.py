@@ -34,7 +34,7 @@ from pyspark import cloudpickle
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.plan import SQL, Range
-from pyspark.sql.types import DataType, StructType, StructField, LongType, StringType
+from pyspark.sql.types import DataType, StructType, StructField, LongType, StringType, FloatType
 
 from typing import Optional, Any, Union
 
@@ -377,6 +377,8 @@ class RemoteSparkSession(object):
             return StructType(structFields)
         elif schema.HasField("i64"):
             return LongType()
+        elif schema.HasField("fp32"):
+            return FloatType()
         elif schema.HasField("string"):
             return StringType()
         else:

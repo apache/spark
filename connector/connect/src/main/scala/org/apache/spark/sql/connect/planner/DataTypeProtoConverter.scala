@@ -21,7 +21,7 @@ import scala.collection.convert.ImplicitConversions._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, FloatType, IntegerType, LongType, StringType, StructField, StructType}
 
 /**
  * This object offers methods to convert to/from connect proto to catalyst types.
@@ -30,6 +30,7 @@ object DataTypeProtoConverter {
   def toCatalystType(t: proto.DataType): DataType = {
     t.getKindCase match {
       case proto.DataType.KindCase.I32 => IntegerType
+      case proto.DataType.KindCase.FP32 => FloatType
       case proto.DataType.KindCase.STRING => StringType
       case proto.DataType.KindCase.STRUCT => convertProtoDataTypeToCatalyst(t.getStruct)
       case _ =>
@@ -48,6 +49,8 @@ object DataTypeProtoConverter {
     t match {
       case IntegerType =>
         proto.DataType.newBuilder().setI32(proto.DataType.I32.getDefaultInstance).build()
+      case FloatType =>
+        proto.DataType.newBuilder().setFp32(proto.DataType.FP32.getDefaultInstance).build()
       case StringType =>
         proto.DataType.newBuilder().setString(proto.DataType.String.getDefaultInstance).build()
       case LongType =>

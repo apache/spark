@@ -14,18 +14,73 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import types
 import uuid
-from typing import cast, get_args, TYPE_CHECKING, Callable, Any
+from typing import cast, get_args, TYPE_CHECKING, Callable, Any, Union
 
 import decimal
 import datetime
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect._typing import PrimitiveType
+from pyspark.sql.types import DataType
+import pyspark.sql.types as sqlTypes
+import pyspark.sql.types as sql_types
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import RemoteSparkSession
     import pyspark.sql.connect.proto as proto
+
+
+def _string_to_sql_type(dt: str) -> DataType:
+    dt = dt.lower()
+    if dt == "string":
+        return sqlTypes.StringType()
+    elif dt == "int":
+        return sqlTypes.IntegerType()
+    elif dt == "float":
+        return sqlTypes.FloatType()
+    elif dt == "double":
+        return sqlTypes.DoubleType()
+    elif dt == "decimal":
+        return sqlTypes.DecimalType()
+    elif dt == "boolean":
+        return sqlTypes.BooleanType()
+    elif dt == "short":
+        return sqlTypes.ShortType()
+    elif dt == "byte":
+        return sqlTypes.ByteType()
+    elif dt == "long":
+        return sqlTypes.LongType()
+    elif dt == "date":
+        return sqlTypes.DateType()
+    elif dt == "timestamp":
+        return sqlTypes.TimestampType()
+    else:
+        raise ValueError(f"Unsupported type: {dt} for conversion.")
+
+
+def _sql_data_type_to_proto_type(dt: DataType) -> proto.DataType:
+    """Converts the SQL Data Type to the proto one."""
+    vt = type(dt)
+    result = proto.DataType()
+    if vt is sql_types.ByteType:
+        result.i8.SetInParent()
+    elif vt is sql_types.ShortType:
+        result.i16.SetInParent()
+    elif vt is sql_types.IntegerType:
+        result.i64.SetInParent()
+    elif vt is sql_types.FloatType:
+        result.fp32.SetInParent()
+    elif vt is sql_types.DoubleType:
+        result.fp64.SetInParent()
+    elif vt is sql_types.BooleanType:
+        result.bool.SetInParent()
+    elif vt is sql_types.DateType:
+        result.date.SetInParent()
+    else:
+        raise ValueError("damnnn")
+    return result
 
 
 def _bin_op(
@@ -81,6 +136,43 @@ class Expression(object):
 
     def __str__(self) -> str:
         ...
+
+    def cast(self, dataType: Union[DataType, str]) -> "Column":
+        """
+        Casts the column into type ``dataType``.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        dataType : :class:`DataType` or str
+            a DataType or Python string literal with a DDL-formatted string
+            to use when parsing the column to the same type.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is cast into new type.
+
+        Examples
+        --------
+        >>> from pyspark.sql.types import StringType
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.select(df.age.cast("string").alias('ages')).collect()
+        [Row(ages='2'), Row(ages='5')]
+        >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
+        [Row(ages='2'), Row(ages='5')]
+        """
+        if not (isinstance(dataType, str) or isinstance(dataType, DataType)):
+            raise TypeError("unexpected type: %s" % type(dataType))
+
+        if isinstance(dataType, str):
+            return ScalarFunctionExpression(
+                "cast", self, LiteralExpression(_string_to_sql_type(dataType))
+            )
+        else:
+            return ScalarFunctionExpression("cast", self, LiteralExpression(dataType))
 
 
 class LiteralExpression(Expression):
@@ -154,6 +246,9 @@ class LiteralExpression(Expression):
                 else:
                     kv.value.CopyFrom(LiteralExpression(mv[k]).to_plan(session).literal)
                 exp.literal.map.key_values.append(kv)
+        elif isinstance(self._value, DataType):
+            # Handling of literal data types.
+            exp.literal.data_type.CopyFrom(_sql_data_type_to_proto_type(self._value))
         else:
             raise ValueError(f"Could not convert literal for type {type(self._value)}")
 

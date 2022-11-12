@@ -464,6 +464,13 @@ object Cast extends QueryErrorsBase {
 
   def apply(
       child: Expression,
+      dataType: Expression,
+      ansiEnabled: Boolean): Cast = {
+    Cast(child, dataType.dataType, ansiEnabled)
+  }
+
+  def apply(
+      child: Expression,
       dataType: DataType,
       timeZoneId: Option[String],
       ansiEnabled: Boolean): Cast =
@@ -498,6 +505,9 @@ case class Cast(
 
   def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
     this(child, dataType, timeZoneId, evalMode = EvalMode.fromSQLConf(SQLConf.get))
+
+  def this(child: Expression, dt: Expression) =
+    this(child, dt.dataType, None, EvalMode.fromSQLConf(SQLConf.get))
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))

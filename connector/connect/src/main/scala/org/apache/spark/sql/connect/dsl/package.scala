@@ -144,6 +144,28 @@ package object dsl {
         .newBuilder()
         .setLiteral(Expression.Literal.newBuilder().setI32(i))
         .build()
+
+    def protoStrToLiteral(s: String): Expression =
+      Expression
+        .newBuilder()
+        .setLiteral(Expression.Literal.newBuilder().setString(s).build())
+        .build()
+
+    def protoStrToTypeLiteral(s: String): Expression = {
+      val dt = s match {
+        case "string" =>
+          DataType.newBuilder().setString(DataType.String.getDefaultInstance).build()
+        case "float" => DataType.newBuilder().setFp32(DataType.FP32.getDefaultInstance).build()
+        case "double" => DataType.newBuilder().setFp64(DataType.FP64.getDefaultInstance).build()
+      }
+      Expression
+        .newBuilder()
+        .setLiteral(
+          Expression.Literal
+            .newBuilder()
+            .setDataType(dt))
+        .build()
+    }
   }
 
   object commands { // scalastyle:ignore
