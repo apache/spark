@@ -29,18 +29,16 @@ class ModelCache:
 
     @staticmethod
     def add(uuid: UUID, predict_fn: Callable) -> None:
-        ModelCache._lock.acquire()
-        ModelCache._models[uuid] = predict_fn
-        ModelCache._models.move_to_end(uuid)
-        if len(ModelCache._models) > ModelCache._capacity:
-            ModelCache._models.popitem(last=False)
-        ModelCache._lock.release()
+        with ModelCache._lock:
+            ModelCache._models[uuid] = predict_fn
+            ModelCache._models.move_to_end(uuid)
+            if len(ModelCache._models) > ModelCache._capacity:
+                ModelCache._models.popitem(last=False)
 
     @staticmethod
     def get(uuid: UUID) -> Optional[Callable]:
-        ModelCache._lock.acquire()
-        predict_fn = ModelCache._models.get(uuid)
-        if predict_fn:
-            ModelCache._models.move_to_end(uuid)
-        ModelCache._lock.release()
-        return predict_fn
+        with ModelCache._lock:
+            predict_fn = ModelCache._models.get(uuid)
+            if predict_fn:
+                ModelCache._models.move_to_end(uuid)
+            return predict_fn

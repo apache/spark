@@ -408,6 +408,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         self.assertTrue(np.array_equal(self.data[:, 0] * 3, preds["x3"].to_numpy()))
 
     def test_return_struct_with_array_field(self):
+        # column form
         def multiples_with_array_fn():
             def predict(x, y):
                 return {"x2": x * 2, "y3": y * 3}
@@ -433,6 +434,59 @@ class PredictBatchUDFTests(SparkSessionTestCase):
 
         self.assertTrue(np.array_equal(self.data[:, 0] * 2, np.array(preds["x2"])))
         self.assertTrue(np.array_equal(self.data[:, 1:4] * 3, np.vstack(preds["y3"])))
+
+        # row form: list of dictionaries
+        def multiples_row_array_fn():
+            def predict(x, y):
+                return [{"x2": x * 2, "y3": y * 3} for x, y in zip(x, y)]
+
+            return predict
+
+        multiples_row_array = predict_batch_udf(
+            multiples_row_array_fn,
+            return_type=StructType(
+                [
+                    StructField("x2", DoubleType(), True),
+                    StructField("y3", ArrayType(DoubleType()), True),
+                ]
+            ),
+            input_tensor_shapes=[[], [3]],
+            batch_size=5,
+        )
+
+        preds = (
+            self.df.withColumn("preds", multiples_row_array("a", array(["b", "c", "d"])))
+            .select("a", "preds.*")
+            .toPandas()
+        )
+
+        self.assertTrue(np.array_equal(self.data[:, 0] * 2, np.array(preds["x2"])))
+        self.assertTrue(np.array_equal(self.data[:, 1:4] * 3, np.vstack(preds["y3"])))
+
+        # row form: list of dictionaries, malformed array
+        def multiples_row_array_fn():
+            def predict(x, y):
+                return [{"x2": x * 2, "y3": np.reshape(y, (-1, 1)) * 3} for x, y in zip(x, y)]
+
+            return predict
+
+        multiples_row_array = predict_batch_udf(
+            multiples_row_array_fn,
+            return_type=StructType(
+                [
+                    StructField("x2", DoubleType(), True),
+                    StructField("y3", ArrayType(DoubleType()), True),
+                ]
+            ),
+            input_tensor_shapes=[[], [3]],
+            batch_size=5,
+        )
+        with self.assertRaisesRegex(Exception, "must be one-dimensional"):
+            preds = (
+                self.df.withColumn("preds", multiples_row_array("a", array(["b", "c", "d"])))
+                .select("a", "preds.*")
+                .toPandas()
+            )
 
 
 if __name__ == "__main__":

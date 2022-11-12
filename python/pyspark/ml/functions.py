@@ -23,11 +23,32 @@ import uuid
 from pyspark import SparkContext
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.column import Column, _to_java_column
-from pyspark.sql.types import ArrayType, DataType, StructType
+from pyspark.sql.types import (
+    ArrayType,
+    ByteType,
+    DataType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    ShortType,
+    StringType,
+    StructType,
+)
 from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
+
+supported_scalar_types = (
+    ByteType,
+    ShortType,
+    IntegerType,
+    LongType,
+    FloatType,
+    DoubleType,
+    StringType,
+)
 
 
 def vector_to_array(col: Column, dtype: str = "float64") -> Column:
@@ -259,16 +280,15 @@ def _validate_and_transform_prediction_result(
                 raise ValueError("Prediction results must have same length as input data.")
             for field in struct_rtype.fields:
                 if isinstance(field.dataType, ArrayType):
-                    if len(preds[0][field.name].shape) != 2:
+                    if len(preds[0][field.name].shape) != 1:
                         raise ValueError(
-                            "Prediction results for ArrayType must be two-dimensional."
+                            "Prediction results for ArrayType must be one-dimensional."
                         )
+                elif isinstance(field.dataType, supported_scalar_types):
+                    if not np.isscalar(preds[0][field.name]):
+                        raise ValueError("Invalid scalar prediction result.")
                 else:
-                    if (
-                        isinstance(preds[0][field.name], np.ndarray)
-                        and preds[0][field.name].shape != ()
-                    ):
-                        raise ValueError("Invalid shape for scalar prediction result.")
+                    raise ValueError("Unsupported field type in return struct type.")
         else:
             raise ValueError(
                 "Prediction results for StructType must be a dictionary or "
@@ -293,7 +313,7 @@ def _validate_and_transform_prediction_result(
             raise ValueError("Prediction results for ArrayType must be an ndarray.")
 
         return pd.Series(list(preds))
-    else:  # scalar
+    elif isinstance(return_type, supported_scalar_types):
         preds_array: np.ndarray = preds  # type: ignore
         if len(preds_array) != num_input_rows:
             raise ValueError("Prediction results must have same length as input data.")
@@ -304,6 +324,8 @@ def _validate_and_transform_prediction_result(
             raise ValueError("Invalid shape for scalar prediction result.")
 
         return pd.Series(np.squeeze(preds))  # type: ignore
+    else:
+        raise ValueError("Unsupported return type")
 
 
 def predict_batch_udf(
