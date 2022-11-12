@@ -160,23 +160,21 @@ private[sql] object ProtobufUtils extends Logging {
     // The incoming classes might not be shaded. Check both.
     val shadedMessageClass = classOf[Message] // Shaded in prod, not in unit tests.
     val missingShadingErrorMessage = "The jar with Protobuf classes needs to be shaded " +
-      s"(com.google.protobuf.* --> ${shadedMessageClass.getPackage.getName}.*)."
+      s"(com.google.protobuf.* --> ${shadedMessageClass.getPackage.getName}.*)"
 
     val protobufClass = try {
       Utils.classForName(protobufClassName)
     } catch {
-      case _: ClassNotFoundException =>
-        val hasDots = protobufClassName.contains(".")
-        throw new IllegalArgumentException( // XXX Update to structured error.
-          s"Could not load Protobuf class with name '$protobufClassName'." +
-          (if (hasDots) "" else " Ensure the class name includes package prefix.")
-        )
+      case e: ClassNotFoundException =>
+        val explanation =
+          if (protobufClassName.contains(".")) "Ensure the class include in the jar"
+          else "Ensure the class name includes package prefix"
+        throw QueryCompilationErrors.protobufClassLoadError(protobufClassName, explanation, e)
+
       case e: NoClassDefFoundError if e.getMessage.matches("com/google/proto.*Generated.*") =>
         // This indicates the the the Java classes are not shaded.
-        throw new IllegalArgumentException( // XXX Update to structured error.
-          s"Could not instantiate Protobuf class $protobufClassName. $missingShadingErrorMessage",
-          e
-        )
+        throw QueryCompilationErrors.protobufClassLoadError(
+          protobufClassName, missingShadingErrorMessage, e)
     }
 
     if (!shadedMessageClass.isAssignableFrom(protobufClass)) {
@@ -184,14 +182,12 @@ private[sql] object ProtobufUtils extends Logging {
       val unshadedMessageClass = Utils.classForName(
         "com.escape-shading.google.protobuf.Message".replace("escape-shading.", "")
       )
-      if (unshadedMessageClass.isAssignableFrom(protobufClass)) {
-        throw new IllegalArgumentException( // XXX Update to structured error.
+      val explanation =
+        if (unshadedMessageClass.isAssignableFrom(protobufClass)) {
           s"$protobufClassName does not extend shaded Protobuf Message class " +
           s"${shadedMessageClass.getName}. $missingShadingErrorMessage"
-        )
-      } else {
-        throw new IllegalArgumentException(s"$protobufClassName is not a Protobuf Message type")
-      }
+        } else s"$protobufClassName is not a Protobuf Message type"
+      throw QueryCompilationErrors.protobufClassLoadError(protobufClassName, explanation)
     }
 
     // Extract the descriptor from Protobuf message.
