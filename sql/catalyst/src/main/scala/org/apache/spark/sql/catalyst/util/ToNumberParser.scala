@@ -21,8 +21,9 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{Decimal, DecimalType}
+import org.apache.spark.sql.types.{Decimal, DecimalType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 // This object contains some definitions of characters and tokens for the parser below.
@@ -298,7 +299,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       return DataTypeMismatch(
         errorSubClass = "NUMBER_FORMAT_CURRENCY_MUST_BEFORE_DIGIT",
         messageParameters = Map(
-          "numberFormat" -> numberFormat
+          "numberFormat" -> toSQLValue(numberFormat, StringType)
         )
       )
     }
@@ -308,7 +309,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       return DataTypeMismatch(
         errorSubClass = "NUMBER_FORMAT_CURRENCY_MUST_BEFORE_DECIMAL",
         messageParameters = Map(
-          "numberFormat" -> numberFormat
+          "numberFormat" -> toSQLValue(numberFormat, StringType)
         )
       )
     }
@@ -329,7 +330,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       return DataTypeMismatch(
         errorSubClass = "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_HAVE_DIGIT_IN_BETWEEN",
         messageParameters = Map(
-          "numberFormat" -> numberFormat
+          "numberFormat" -> toSQLValue(numberFormat, StringType)
         )
       )
     }
@@ -341,7 +342,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       return DataTypeMismatch(
         errorSubClass = "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_BEFORE_DECIMAL",
         messageParameters = Map(
-          "numberFormat" -> numberFormat
+          "numberFormat" -> toSQLValue(numberFormat, StringType)
         )
       )
     }
@@ -357,7 +358,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           errorSubClass = "NUMBER_FORMAT_WRONG_NUM_TOKEN",
           messageParameters = Map(
             "token" -> token.toString,
-            "numberFormat" -> numberFormat
+            "numberFormat" -> toSQLValue(numberFormat, StringType)
           )
         )
       }
@@ -393,10 +394,10 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     }
     if (formatTokenIndex < formatTokens.length) {
       return DataTypeMismatch(
-        errorSubClass = "NUMBER_FORMAT_UNEXPECTED_FORMAT_TOKEN",
+        errorSubClass = "NUMBER_FORMAT_UNEXPECTED_TOKEN",
         messageParameters = Map(
-          "formatToken" -> formatTokens(formatTokenIndex).toString,
-          "numberFormat" -> numberFormat
+          "token" -> formatTokens(formatTokenIndex).toString,
+          "numberFormat" -> toSQLValue(numberFormat, StringType)
         )
       )
     }

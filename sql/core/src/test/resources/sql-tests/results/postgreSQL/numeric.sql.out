@@ -4714,7 +4714,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_BEFORE_DECIMAL",
   "messageParameters" : {
-    "numberFormat" : "99G999G999D999G999",
+    "numberFormat" : "'99G999G999D999G999'",
     "sqlExpr" : "\"to_number(-34,338,492.654,878, 99G999G999D999G999)\""
   },
   "queryContext" : [ {
@@ -4776,7 +4776,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_HAVE_DIGIT_IN_BETWEEN",
   "messageParameters" : {
-    "numberFormat" : "999G",
+    "numberFormat" : "'999G'",
     "sqlExpr" : "\"to_number(123,000, 999G)\""
   },
   "queryContext" : [ {
