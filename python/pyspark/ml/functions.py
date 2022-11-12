@@ -265,11 +265,14 @@ def _validate_and_transform_prediction_result(
                         raise ValueError(
                             "Prediction results for ArrayType must be two-dimensional."
                         )
-                else:
+                elif isinstance(field.dataType, supported_scalar_types):
                     if len(preds[field.name].shape) != 1:
                         raise ValueError(
                             "Prediction results for scalar types must be one-dimensional."
                         )
+                else:
+                    raise ValueError("Unsupported field type in return struct type.")
+
                 if len(preds[field.name]) != num_input_rows:
                     raise ValueError("Prediction results must have same length as input data")
 
