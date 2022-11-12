@@ -1248,7 +1248,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
-  test("ToNumber: null format string") {
+  test("SPARK-41118: ToNumber: null format string") {
     // if null format, to_number should return null
     val toNumberExpr = ToNumber(Literal("454"), Literal(null, StringType))
     assert(toNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)

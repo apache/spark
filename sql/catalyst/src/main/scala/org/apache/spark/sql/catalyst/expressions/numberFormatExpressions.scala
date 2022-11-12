@@ -81,12 +81,12 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
     val eval = left.genCode(ctx)
     ev.copy(code =
       code"""
-         |${eval.code}
-         |boolean ${ev.isNull} = ${eval.isNull} || ($builder == null);
-         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-         |if (!${ev.isNull}) {
-         |  ${ev.value} = $builder.parse(${eval.value});
-         |}
+        |${eval.code}
+        |boolean ${ev.isNull} = ${eval.isNull} || ($builder == null);
+        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        |if (!${ev.isNull}) {
+        |  ${ev.value} = $builder.parse(${eval.value});
+        |}
       """.stripMargin)
   }
 }
