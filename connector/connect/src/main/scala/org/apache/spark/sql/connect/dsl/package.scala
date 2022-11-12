@@ -85,12 +85,13 @@ package object dsl {
       def as(alias: String, metadata: String): Expression = Expression
         .newBuilder()
         .setAlias(
-          Expression.Alias.newBuilder()
+          Expression.Alias
+            .newBuilder()
             .setExpr(expr)
             .addName(alias)
             .setMetadata(metadata)
-            .build()
-        ).build()
+            .build())
+        .build()
 
       def as(alias: Seq[String]): Expression = Expression
         .newBuilder()

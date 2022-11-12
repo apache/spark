@@ -159,8 +159,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val mdJson = "{\"max\": 99}"
     comparePlans(
       connectTestRelation.select("id".protoAttr.as("id2", mdJson)),
-      sparkTestRelation.select(Column("id").as("id2", Metadata.fromJson(mdJson)))
-    )
+      sparkTestRelation.select(Column("id").as("id2", Metadata.fromJson(mdJson))))
 
     comparePlans(
       connectTestRelationMap.select(proto_explode("id".protoAttr).as(Seq("a", "b"))),
