@@ -240,7 +240,6 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             .schema()
             .names[0]
         )
-        self.assertEqual(True, False)
         self.assertEqual("name", col0)
 
         with self.assertRaises(Exception) as exc:
