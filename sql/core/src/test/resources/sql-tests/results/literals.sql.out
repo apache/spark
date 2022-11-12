@@ -442,9 +442,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0021",
+  "errorClass" : "UNSUPPORTED_TYPED_LITERAL",
   "messageParameters" : {
-    "valueType" : "GEO"
+    "supportedTypes" : "\"DATE\", \"TIMESTAMP_NTZ\", \"TIMESTAMP_LTZ\", \"TIMESTAMP\", \"INTERVAL\", \"X\"",
+    "unsupportedType" : "\"GEO\""
   },
   "queryContext" : [ {
     "objectType" : "",

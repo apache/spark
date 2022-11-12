@@ -723,7 +723,7 @@ object SparkProtobuf {
 
     dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
 
-    (Test / PB.protoSources) += (Test / sourceDirectory).value / "resources",
+    (Test / PB.protoSources) += (Test / sourceDirectory).value / "resources" / "protobuf",
 
     (Test / PB.targets) := Seq(
       PB.gens.java -> target.value / "generated-test-sources"
@@ -813,7 +813,7 @@ object KubernetesIntegrationTests {
         val bindingsDir = s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings"
         val javaImageTag = sys.props.get("spark.kubernetes.test.javaImageTag")
         val dockerFile = sys.props.getOrElse("spark.kubernetes.test.dockerFile",
-            s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile.java17")
+            s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile")
         val pyDockerFile = sys.props.getOrElse("spark.kubernetes.test.pyDockerFile",
             s"$bindingsDir/python/Dockerfile")
         val rDockerFile = sys.props.getOrElse("spark.kubernetes.test.rDockerFile",
@@ -1177,6 +1177,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/collection")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
@@ -1268,7 +1269,7 @@ object Unidoc {
 
 object Checkstyle {
   lazy val settings = Seq(
-    checkstyleSeverityLevel := Some(CheckstyleSeverityLevel.Error),
+    checkstyleSeverityLevel := CheckstyleSeverityLevel.Error,
     (Compile / checkstyle / javaSource) := baseDirectory.value / "src/main/java",
     (Test / checkstyle / javaSource) := baseDirectory.value / "src/test/java",
     checkstyleConfigLocation := CheckstyleConfigLocation.File("dev/checkstyle.xml"),

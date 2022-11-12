@@ -163,7 +163,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "INVALID_PARAMETER_VALUE",
   "sqlState" : "22023",
   "messageParameters" : {
-    "expected" : "(?l)",
+    "expected" : "'(?l)'",
     "functionName" : "`regexp_extract`",
     "parameter" : "regexp"
   }
@@ -334,7 +334,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "INVALID_PARAMETER_VALUE",
   "sqlState" : "22023",
   "messageParameters" : {
-    "expected" : "], [",
+    "expected" : "'], ['",
     "functionName" : "`regexp_extract_all`",
     "parameter" : "regexp"
   }
@@ -671,7 +671,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "INVALID_PARAMETER_VALUE",
   "sqlState" : "22023",
   "messageParameters" : {
-    "expected" : ") ?",
+    "expected" : "') ?'",
     "functionName" : "`regexp_instr`",
     "parameter" : "regexp"
   }

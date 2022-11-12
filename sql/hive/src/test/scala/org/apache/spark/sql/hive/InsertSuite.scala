@@ -706,40 +706,35 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   test("insert overwrite to dir with mixed syntax") {
     withTempView("test_insert_table") {
       spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
-
-      val e = intercept[ParseException] {
-        sql(
-          s"""
-             |INSERT OVERWRITE DIRECTORY 'file://tmp'
+      checkError(
+        exception = intercept[ParseException] { sql(
+          s"""INSERT OVERWRITE DIRECTORY 'file://tmp'
              |USING json
              |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-             |SELECT * FROM test_insert_table
-           """.stripMargin)
-      }.getMessage
-
-      assert(e.contains("Syntax error at or near 'ROW'"))
+             |SELECT * FROM test_insert_table""".stripMargin)
+        },
+        errorClass = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'ROW'", "hint" -> ""))
     }
   }
 
   test("insert overwrite to dir with multi inserts") {
     withTempView("test_insert_table") {
       spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
-
-      val e = intercept[ParseException] {
-        sql(
-          s"""
-             |INSERT OVERWRITE DIRECTORY 'file://tmp2'
-             |USING json
-             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-             |SELECT * FROM test_insert_table
-             |INSERT OVERWRITE DIRECTORY 'file://tmp2'
-             |USING json
-             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-             |SELECT * FROM test_insert_table
-           """.stripMargin)
-      }.getMessage
-
-      assert(e.contains("Syntax error at or near 'ROW'"))
+      checkError(
+        exception = intercept[ParseException] {
+          sql(
+            s"""INSERT OVERWRITE DIRECTORY 'file://tmp2'
+               |USING json
+               |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+               |SELECT * FROM test_insert_table
+               |INSERT OVERWRITE DIRECTORY 'file://tmp2'
+               |USING json
+               |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+               |SELECT * FROM test_insert_table""".stripMargin)
+        },
+        errorClass = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'ROW'", "hint" -> ""))
     }
   }
 

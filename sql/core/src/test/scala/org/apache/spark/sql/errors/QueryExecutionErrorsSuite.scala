@@ -574,13 +574,13 @@ class QueryExecutionErrorsSuite
   }
 
   test(
-    "MULTI_VALUE_SUBQUERY_ERROR: " +
+    "SCALAR_SUBQUERY_TOO_MANY_ROWS: " +
     "More than one row returned by a subquery used as an expression") {
     checkError(
       exception = intercept[SparkException] {
         sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
       },
-      errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+      errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
       queryContext = Array(
         ExpectedContext(
           fragment = "(select a from (select 1 as a union all select 2 as a) t)",

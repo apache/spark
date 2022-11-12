@@ -2470,25 +2470,46 @@ class SubquerySuite extends QueryTest
   test("SPARK-40800: always inline expressions in OptimizeOneRowRelationSubquery") {
     withTempView("t1") {
       sql("CREATE TEMP VIEW t1 AS SELECT ARRAY('a', 'b') a")
-      // Scalar subquery.
+      Seq(true, false).foreach { enabled =>
+        withSQLConf(SQLConf.ALWAYS_INLINE_ONE_ROW_RELATION_SUBQUERY.key -> enabled.toString) {
+          // Scalar subquery.
+          checkAnswer(sql(
+            """
+              |SELECT (
+              |  SELECT array_sort(a, (i, j) -> rank[i] - rank[j])[0] AS sorted
+              |  FROM (SELECT MAP('a', 1, 'b', 2) rank)
+              |) FROM t1
+              |""".stripMargin),
+            Row("a"))
+          // Lateral subquery.
+          checkAnswer(
+            sql("""
+                  |SELECT sorted[0] FROM t1
+                  |JOIN LATERAL (
+                  |  SELECT array_sort(a, (i, j) -> rank[i] - rank[j]) AS sorted
+                  |  FROM (SELECT MAP('a', 1, 'b', 2) rank)
+                  |)
+                  |""".stripMargin),
+            Row("a"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-40862: correlated one-row subquery with non-deterministic expressions") {
+    import org.apache.spark.sql.functions.udf
+    withTempView("t1") {
+      sql("CREATE TEMP VIEW t1 AS SELECT ARRAY('a', 'b') a")
+      val func = udf(() => "a")
+      spark.udf.register("func", func.asNondeterministic())
       checkAnswer(sql(
         """
           |SELECT (
-          |  SELECT array_sort(a, (i, j) -> rank[i] - rank[j])[0] AS sorted
-          |  FROM (SELECT MAP('a', 1, 'b', 2) rank)
+          |  SELECT array_sort(a, (i, j) -> rank[i] - rank[j])[0] || str AS sorted
+          |  FROM (SELECT MAP('a', 1, 'b', 2) rank, func() AS str)
           |) FROM t1
           |""".stripMargin),
-        Row("a"))
-      // Lateral subquery.
-      checkAnswer(
-        sql("""
-          |SELECT sorted[0] FROM t1
-          |JOIN LATERAL (
-          |  SELECT array_sort(a, (i, j) -> rank[i] - rank[j]) AS sorted
-          |  FROM (SELECT MAP('a', 1, 'b', 2) rank)
-          |)
-          |""".stripMargin),
-        Row("a"))
+        Row("aa"))
     }
   }
 }

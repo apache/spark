@@ -22,7 +22,6 @@ import java.util
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.Unstable
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.sql.connect.service.SparkConnectService
 
@@ -33,7 +32,6 @@ import org.apache.spark.sql.connect.service.SparkConnectService
  * implement it as a Driver Plugin. To enable Spark Connect, simply make sure that the appropriate
  * JAR is available in the CLASSPATH and the driver plugin is configured to load this class.
  */
-@Unstable
 class SparkConnectPlugin extends SparkPlugin {
 
   /**

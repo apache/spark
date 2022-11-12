@@ -126,13 +126,13 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
         throw new RuntimeException(s"${rootDir} does not exist." +
           s" Please create this dir in order to persist driver logs")
       }
-      val dfsLogFile: String = FileUtils.getFile(rootDir, appId
-        + DriverLogger.DRIVER_LOG_FILE_SUFFIX).getAbsolutePath()
+      val dfsLogFile: Path = fileSystem.makeQualified(new Path(rootDir, appId
+        + DriverLogger.DRIVER_LOG_FILE_SUFFIX))
       try {
         inStream = new BufferedInputStream(new FileInputStream(localLogFile))
-        outputStream = SparkHadoopUtil.createFile(fileSystem, new Path(dfsLogFile),
+        outputStream = SparkHadoopUtil.createFile(fileSystem, dfsLogFile,
           conf.get(DRIVER_LOG_ALLOW_EC))
-        fileSystem.setPermission(new Path(dfsLogFile), LOG_FILE_PERMISSIONS)
+        fileSystem.setPermission(dfsLogFile, LOG_FILE_PERMISSIONS)
       } catch {
         case e: Exception =>
           JavaUtils.closeQuietly(inStream)

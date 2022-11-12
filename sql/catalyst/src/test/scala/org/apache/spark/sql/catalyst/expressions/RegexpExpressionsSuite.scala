@@ -523,15 +523,15 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExceptionInExpression[SparkRuntimeException](
       RegExpExtract(s, p, r),
       create_row("1a 2b 14m", "(?l)", 0),
-      s"$prefix `regexp_extract` is invalid: (?l)")
+      s"$prefix `regexp_extract` is invalid: '(?l)'")
     checkExceptionInExpression[SparkRuntimeException](
       RegExpExtractAll(s, p, r),
       create_row("abc", "] [", 0),
-      s"$prefix `regexp_extract_all` is invalid: ] [")
+      s"$prefix `regexp_extract_all` is invalid: '] ['")
     checkExceptionInExpression[SparkRuntimeException](
       RegExpInStr(s, p, r),
       create_row("abc", ", (", 0),
-      s"$prefix `regexp_instr` is invalid: , (")
+      s"$prefix `regexp_instr` is invalid: ', ('")
   }
 
   test("RegExpReplace: fails analysis if pos is not a constant") {

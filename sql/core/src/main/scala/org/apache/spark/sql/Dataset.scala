@@ -3826,7 +3826,8 @@ class Dataset[T] private[sql](
   def write: DataFrameWriter[T] = {
     if (isStreaming) {
       logicalPlan.failAnalysis(
-        "'write' can not be called on streaming Dataset/DataFrame")
+        errorClass = "_LEGACY_ERROR_TEMP_2312",
+        messageParameters = Map.empty)
     }
     new DataFrameWriter[T](this)
   }
@@ -3854,7 +3855,8 @@ class Dataset[T] private[sql](
     // TODO: streaming could be adapted to use this interface
     if (isStreaming) {
       logicalPlan.failAnalysis(
-        "'writeTo' can not be called on streaming Dataset/DataFrame")
+        errorClass = "_LEGACY_ERROR_TEMP_2311",
+        messageParameters = Map.empty)
     }
     new DataFrameWriterV2[T](table, this)
   }
@@ -3868,7 +3870,8 @@ class Dataset[T] private[sql](
   def writeStream: DataStreamWriter[T] = {
     if (!isStreaming) {
       logicalPlan.failAnalysis(
-        "'writeStream' can be called only on streaming Dataset/DataFrame")
+        errorClass = "_LEGACY_ERROR_TEMP_2310",
+        messageParameters = Map.empty)
     }
     new DataStreamWriter[T](this)
   }

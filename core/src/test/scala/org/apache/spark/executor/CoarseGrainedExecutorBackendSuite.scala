@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -36,11 +37,13 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.TestUtils._
+import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
+import org.apache.spark.internal.config.PLUGINS
 import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.scheduler.TaskDescription
+import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded, SparkListenerExecutorRemoved, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{KillTask, LaunchTask}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.{SerializableBuffer, ThreadUtils, Utils}
@@ -535,6 +538,39 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     }
   }
 
+  /**
+   * A fatal error occurred when [[Executor]] was initialized, this should be caught by
+   * [[SparkUncaughtExceptionHandler]] and [[Executor]] can exit by itself.
+   */
+  test("SPARK-40320 Executor should exit when initialization failed for fatal error") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[1, 1, 1024]")
+      .set(PLUGINS, Seq(classOf[TestFatalErrorPlugin].getName))
+      .setAppName("test")
+    sc = new SparkContext(conf)
+    val executorAddCounter = new AtomicInteger(0)
+    val executorRemovedCounter = new AtomicInteger(0)
+
+    val listener = new SparkListener() {
+      override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
+        executorAddCounter.getAndIncrement()
+      }
+
+      override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
+        executorRemovedCounter.getAndIncrement()
+      }
+    }
+    try {
+      sc.addSparkListener(listener)
+      eventually(timeout(15.seconds)) {
+        assert(executorAddCounter.get() >= 2)
+        assert(executorRemovedCounter.get() >= 2)
+      }
+    } finally {
+      sc.removeSparkListener(listener)
+    }
+  }
+
   private def createMockEnv(conf: SparkConf, serializer: JavaSerializer,
       rpcEnv: Option[RpcEnv] = None): SparkEnv = {
     val mockEnv = mock[SparkEnv]
@@ -545,5 +581,26 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     when(mockEnv.rpcEnv).thenReturn(rpcEnv.getOrElse(mockRpcEnv))
     SparkEnv.set(mockEnv)
     mockEnv
+  }
+}
+
+private class TestFatalErrorPlugin extends SparkPlugin {
+  override def driverPlugin(): DriverPlugin = new TestDriverPlugin()
+
+  override def executorPlugin(): ExecutorPlugin = new TestErrorExecutorPlugin()
+}
+
+private class TestDriverPlugin extends DriverPlugin {
+}
+
+private class TestErrorExecutorPlugin extends ExecutorPlugin {
+
+  override def init(_ctx: PluginContext, extraConf: java.util.Map[String, String]): Unit = {
+    // scalastyle:off throwerror
+    /**
+     * A fatal error. See nonFatal definition in [[NonFatal]].
+     */
+    throw new UnsatisfiedLinkError("Mock throws fatal error.")
+    // scalastyle:on throwerror
   }
 }

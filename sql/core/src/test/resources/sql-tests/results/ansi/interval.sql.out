@@ -1500,17 +1500,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0062",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "msg" : "Error parsing ' 1 fake_unit' to interval, invalid unit 'fake_unit'"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 17,
-    "stopIndex" : 27,
-    "fragment" : "1 fake_unit"
-  } ]
+    "error" : "'fake_unit'",
+    "hint" : ""
+  }
 }
 
 
@@ -3609,7 +3604,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
     "dataType" : "(\"INTERVAL MONTH\" or \"INTERVAL DAY\")",
-    "functionName" : "function array",
+    "functionName" : "`array`",
     "sqlExpr" : "\"array(INTERVAL '1' MONTH, INTERVAL '20' DAY)\""
   },
   "queryContext" : [ {
@@ -3648,7 +3643,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
     "dataType" : "(\"INTERVAL MONTH\" or \"INTERVAL DAY\")",
-    "functionName" : "function coalesce",
+    "functionName" : "`coalesce`",
     "sqlExpr" : "\"coalesce(INTERVAL '1' MONTH, INTERVAL '20' DAY)\""
   },
   "queryContext" : [ {

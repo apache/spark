@@ -553,6 +553,22 @@ AABB
 
 
 -- !query
+SELECT hex(lpad(unhex('123'), 2))
+-- !query schema
+struct<hex(lpad(unhex(123), 2, X'00')):string>
+-- !query output
+0123
+
+
+-- !query
+SELECT hex(lpad(unhex('12345'), 2))
+-- !query schema
+struct<hex(lpad(unhex(12345), 2, X'00')):string>
+-- !query output
+0123
+
+
+-- !query
 SELECT hex(lpad(unhex(''), 5, unhex('1f')))
 -- !query schema
 struct<hex(lpad(unhex(), 5, unhex(1f))):string>
@@ -646,6 +662,22 @@ SELECT hex(rpad(unhex('aabbcc'), 2))
 struct<hex(rpad(unhex(aabbcc), 2, X'00')):string>
 -- !query output
 AABB
+
+
+-- !query
+SELECT hex(rpad(unhex('123'), 2))
+-- !query schema
+struct<hex(rpad(unhex(123), 2, X'00')):string>
+-- !query output
+0123
+
+
+-- !query
+SELECT hex(rpad(unhex('12345'), 2))
+-- !query schema
+struct<hex(rpad(unhex(12345), 2, X'00')):string>
+-- !query output
+0123
 
 
 -- !query
@@ -1409,6 +1441,22 @@ struct<to_binary(FF):binary>
 
 
 -- !query
+select to_binary('123', 'hex')
+-- !query schema
+struct<to_binary(123, hex):binary>
+-- !query output
+#
+
+
+-- !query
+select to_binary('12345', 'hex')
+-- !query schema
+struct<to_binary(12345, hex):binary>
+-- !query output
+#E
+
+
+-- !query
 select to_binary('GG')
 -- !query schema
 struct<>
@@ -1489,7 +1537,8 @@ select to_binary('abc', 'Hex')
 -- !query schema
 struct<to_binary(abc, Hex):binary>
 -- !query output
-� 
+
+�
 
 
 -- !query

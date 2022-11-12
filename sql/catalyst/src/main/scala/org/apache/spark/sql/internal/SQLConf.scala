@@ -1941,6 +1941,22 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STATEFUL_OPERATOR_ALLOW_MULTIPLE =
+    buildConf("spark.sql.streaming.statefulOperator.allowMultiple")
+      .internal()
+      .doc("When true, multiple stateful operators are allowed to be present in a streaming " +
+        "pipeline. The support for multiple stateful operators introduces a minor (semantically " +
+        "correct) change in respect to late record filtering - late records are detected and " +
+        "filtered in respect to the watermark from the previous microbatch instead of the " +
+        "current one. This is a behavior change for Spark streaming pipelines and we allow " +
+        "users to revert to the previous behavior of late record filtering (late records are " +
+        "detected and filtered by comparing with the current microbatch watermark) by setting " +
+        "the flag value to false. In this mode, only a single stateful operator will be allowed " +
+        "in a streaming pipeline.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION =
     buildConf("spark.sql.streaming.statefulOperator.useStrictDistribution")
       .internal()
@@ -1990,6 +2006,14 @@ object SQLConf {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
+
+  val STREAMING_METADATA_CACHE_ENABLED =
+    buildConf("spark.sql.streaming.metadataCache.enabled")
+      .internal()
+      .doc("Whether the streaming HDFSMetadataLog caches the metadata of the latest two batches.")
+      .booleanConf
+      .createWithDefault(true)
+
 
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
@@ -3097,6 +3121,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ALWAYS_INLINE_ONE_ROW_RELATION_SUBQUERY =
+    buildConf("spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline")
+      .internal()
+      .doc(s"When true, the optimizer will always inline single row subqueries even if it " +
+        "causes extra duplication. It only takes effect when " +
+        s"${OPTIMIZE_ONE_ROW_RELATION_SUBQUERY.key} is set to true.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
       .doc("In SQL queries with a SORT followed by a LIMIT like " +
@@ -3338,15 +3372,6 @@ object SQLConf {
     .version("3.0.0")
     .intConf
     .createWithDefault(25)
-
-  val MAX_TO_STRING_FIELDS_FOR_DIAGNOSTIC =
-    buildConf("spark.sql.debug.maxToStringFieldsForDiagnostic")
-      .doc(s"Similar to ${MAX_TO_STRING_FIELDS.key}, but it will take effect when the " +
-        s"output will be stored for the diagnostics API. The output will be stored in " +
-        s"disk instead of memory. So it can be larger than ${MAX_TO_STRING_FIELDS.key}")
-      .version("3.4.0")
-      .intConf
-      .createWithDefault(10000)
 
   val MAX_PLAN_STRING_LENGTH = buildConf("spark.sql.maxPlanStringLength")
     .doc("Maximum number of characters to output for a plan string.  If the plan is " +
@@ -4702,8 +4727,6 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
 
   def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
-
-  def maxToStringFieldsForDiagnostic: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS_FOR_DIAGNOSTIC)
 
   def maxPlanStringLength: Int = getConf(SQLConf.MAX_PLAN_STRING_LENGTH).toInt
 
