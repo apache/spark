@@ -933,6 +933,11 @@
     ],
     "sqlState" : "42000"
   },
+  "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE" : {
+    "message" : [
+      "It is not allowed to add database prefix `<database>` for the TEMPORARY view name."
+    ]
+  },
   "TOO_MANY_ARRAY_ELEMENTS" : {
     "message" : [
       "Cannot initialize array with <numElements> elements of size <size>"
@@ -1575,11 +1580,6 @@
   "_LEGACY_ERROR_TEMP_0053" : {
     "message" : [
       "It is not allowed to define a TEMPORARY view with IF NOT EXISTS."
-    ]
-  },
-  "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE" : {
-    "message" : [
-      "It is not allowed to add database prefix `<database>` for the TEMPORARY view name."
     ]
   },
   "_LEGACY_ERROR_TEMP_0056" : {

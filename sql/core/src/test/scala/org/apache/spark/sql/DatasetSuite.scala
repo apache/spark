@@ -1158,7 +1158,7 @@ class DatasetSuite extends QueryTest
           dataset.createTempView("test_db.tempView"))
         checkError(e,
           errorClass = "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE",
-          parameters = Map("dbName" -> "test_db"))
+          parameters = Map("database" -> "test_db"))
       }
 
       withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_DATABASE_NAME.key -> "true") {
