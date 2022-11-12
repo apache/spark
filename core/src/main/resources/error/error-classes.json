@@ -290,44 +290,44 @@
           "Null typed values cannot be used as arguments of <functionName>."
         ]
       },
-      "NUMBER_FORMAT_CURRENCY_MUST_BEFORE_DECIMAL" : {
+      "NUM_FORMAT_CONT_THOUSANDS_SEPS" : {
         "message" : [
-          "Currency characters must appear before any decimal point in the number format: <numberFormat>."
+          "Thousands separators (, or G) must have digits in between them in the number format: <format>."
         ]
       },
-      "NUMBER_FORMAT_CURRENCY_MUST_BEFORE_DIGIT" : {
+      "NUM_FORMAT_CUR_MUST_BEFORE_DEC" : {
         "message" : [
-          "Currency characters must appear before digits in the number format: <numberFormat>."
+          "Currency characters must appear before any decimal point in the number format: <format>."
         ]
       },
-      "NUMBER_FORMAT_EMPTY" : {
+      "NUM_FORMAT_CUR_MUST_BEFORE_DIGIT" : {
+        "message" : [
+          "Currency characters must appear before digits in the number format: <format>."
+        ]
+      },
+      "NUM_FORMAT_EMPTY" : {
         "message" : [
           "The number format string cannot be empty."
         ]
       },
-      "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_BEFORE_DECIMAL" : {
+      "NUM_FORMAT_THOUSANDS_SEPS_MUST_BEFORE_DEC" : {
         "message" : [
-          "Thousands separators (, or G) may not appear after the decimal point in the number format: <numberFormat>."
+          "Thousands separators (, or G) may not appear after the decimal point in the number format: <format>."
         ]
       },
-      "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_HAVE_DIGIT_IN_BETWEEN" : {
+      "NUM_FORMAT_UNEXPECTED_TOKEN" : {
         "message" : [
-          "Thousands separators (, or G) must have digits in between them in the number format: <numberFormat>."
+          "Unexpected <token> found in the format string <format>; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
         ]
       },
-      "NUMBER_FORMAT_UNEXPECTED_TOKEN" : {
-        "message" : [
-          "Unexpected <token> found in the format string <numberFormat>; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
-        ]
-      },
-      "NUMBER_FORMAT_WRONG_NUM_DIGIT" : {
+      "NUM_FORMAT_WRONG_NUM_DIGIT" : {
         "message" : [
           "The format string requires at least one number digit."
         ]
       },
-      "NUMBER_FORMAT_WRONG_NUM_TOKEN" : {
+      "NUM_FORMAT_WRONG_NUM_TOKEN" : {
         "message" : [
-          "At most one <token> is allowed in the number format: <numberFormat>."
+          "At most one <token> is allowed in the number format: <format>."
         ]
       },
       "PARAMETER_CONSTRAINT_VIOLATION" : {

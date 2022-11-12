@@ -282,7 +282,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     // Make sure the format string contains at least one token.
     if (numberFormat.isEmpty) {
       return DataTypeMismatch(
-        errorSubClass = "NUMBER_FORMAT_EMPTY",
+        errorSubClass = "NUM_FORMAT_EMPTY",
         messageParameters = Map.empty
       )
     }
@@ -290,16 +290,16 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     if (!formatTokens.exists(
       token => token.isInstanceOf[DigitGroups])) {
       return DataTypeMismatch(
-        errorSubClass = "NUMBER_FORMAT_WRONG_NUM_DIGIT",
+        errorSubClass = "NUM_FORMAT_WRONG_NUM_DIGIT",
         messageParameters = Map.empty
       )
     }
     // Make sure that any dollar sign in the format string occurs before any digits.
     if (firstDigitIndex < firstDollarSignIndex) {
       return DataTypeMismatch(
-        errorSubClass = "NUMBER_FORMAT_CURRENCY_MUST_BEFORE_DIGIT",
+        errorSubClass = "NUM_FORMAT_CUR_MUST_BEFORE_DIGIT",
         messageParameters = Map(
-          "numberFormat" -> toSQLValue(numberFormat, StringType)
+          "format" -> toSQLValue(numberFormat, StringType)
         )
       )
     }
@@ -307,9 +307,9 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     if (firstDecimalPointIndex != -1 &&
       firstDecimalPointIndex < firstDollarSignIndex) {
       return DataTypeMismatch(
-        errorSubClass = "NUMBER_FORMAT_CURRENCY_MUST_BEFORE_DECIMAL",
+        errorSubClass = "NUM_FORMAT_CUR_MUST_BEFORE_DEC",
         messageParameters = Map(
-          "numberFormat" -> toSQLValue(numberFormat, StringType)
+          "format" -> toSQLValue(numberFormat, StringType)
         )
       )
     }
@@ -328,9 +328,9 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
         })
     }) {
       return DataTypeMismatch(
-        errorSubClass = "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_HAVE_DIGIT_IN_BETWEEN",
+        errorSubClass = "NUM_FORMAT_CONT_THOUSANDS_SEPS",
         messageParameters = Map(
-          "numberFormat" -> toSQLValue(numberFormat, StringType)
+          "format" -> toSQLValue(numberFormat, StringType)
         )
       )
     }
@@ -340,9 +340,9 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
         tokens.length > digits.length
     }) {
       return DataTypeMismatch(
-        errorSubClass = "NUMBER_FORMAT_THOUSANDS_SEPARATOR_MUST_BEFORE_DECIMAL",
+        errorSubClass = "NUM_FORMAT_THOUSANDS_SEPS_MUST_BEFORE_DEC",
         messageParameters = Map(
-          "numberFormat" -> toSQLValue(numberFormat, StringType)
+          "format" -> toSQLValue(numberFormat, StringType)
         )
       )
     }
@@ -355,10 +355,10 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       ClosingAngleBracket()).foreach {
       token => if (inputTokenCounts.getOrElse(token, 0) > 1) {
         return DataTypeMismatch(
-          errorSubClass = "NUMBER_FORMAT_WRONG_NUM_TOKEN",
+          errorSubClass = "NUM_FORMAT_WRONG_NUM_TOKEN",
           messageParameters = Map(
             "token" -> token.toString,
-            "numberFormat" -> toSQLValue(numberFormat, StringType)
+            "format" -> toSQLValue(numberFormat, StringType)
           )
         )
       }
@@ -394,10 +394,10 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     }
     if (formatTokenIndex < formatTokens.length) {
       return DataTypeMismatch(
-        errorSubClass = "NUMBER_FORMAT_UNEXPECTED_TOKEN",
+        errorSubClass = "NUM_FORMAT_UNEXPECTED_TOKEN",
         messageParameters = Map(
           "token" -> formatTokens(formatTokenIndex).toString,
-          "numberFormat" -> toSQLValue(numberFormat, StringType)
+          "format" -> toSQLValue(numberFormat, StringType)
         )
       )
     }
