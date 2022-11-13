@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
 
 
@@ -198,20 +200,37 @@ case class BitwiseNot(child: Expression)
     copy(child = newChild)
 }
 
+
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the number of bits that are set in the argument expr as an" +
     " unsigned 64-bit integer, or NULL if the argument is NULL.",
   examples = """
     Examples:
-      > SELECT _FUNC_(0);
-       0
+      > SELECT _FUNC_(2);
+       1
+      > SELECT _FUNC_(2, 0);
+       31
+      > SELECT _FUNC_(5, 1);
+       2
+      > SELECT _FUNC_(5, 0);
+       30
   """,
   since = "3.0.0",
   group = "bitwise_funcs")
-case class BitwiseCount(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+case class BitwiseCount(child: Expression, bitExpr: Expression)
+    extends BinaryExpression
+    with ExpectsInputTypes
+    with QueryErrorsBase
+    with NullIntolerant {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegralType, BooleanType))
+  def this(child: Expression) = this(child, Literal(1))
+
+  lazy val bitSize = BitwiseUtil.getBitSize(left.dataType)
+
+  lazy val bitInt = bitExpr.eval()
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegralType, BooleanType), IntegerType)
 
   override def dataType: DataType = IntegerType
 
@@ -219,30 +238,106 @@ case class BitwiseCount(child: Expression)
 
   override def prettyName: String = "bit_count"
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
-    case BooleanType => defineCodeGen(ctx, ev, c => s"if ($c) 1 else 0")
-    case _ => defineCodeGen(ctx, ev, c => s"java.lang.Long.bitCount($c)")
+  override def left: Expression = child
+
+  override def right: Expression = bitExpr
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheckResult = super.checkInputDataTypes()
+    if (defaultCheckResult.isSuccess) {
+      if (!bitExpr.foldable) {
+        DataTypeMismatch(
+          errorSubClass = "NON_FOLDABLE_INPUT",
+          messageParameters = Map(
+            "inputName" -> "bitExpr",
+            "inputType" -> toSQLType(bitExpr.dataType),
+            "inputExpr" -> toSQLExpr(bitExpr)))
+      } else {
+        val bit = bitExpr.eval()
+        if (bit == null) {
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_NULL",
+            messageParameters = Map("exprName" -> "bitExpr"))
+        } else {
+          val bitValue = bit.asInstanceOf[Int]
+          // either 1 or 0 are supported
+          if (bitValue < 0 || bitValue > 1) {
+            DataTypeMismatch(errorSubClass = "INVALID_BIT_VALUE")
+          } else {
+            defaultCheckResult
+          }
+        }
+      }
+    } else {
+      defaultCheckResult
+    }
   }
 
-  protected override def nullSafeEval(input: Any): Any = child.dataType match {
-    case BooleanType => if (input.asInstanceOf[Boolean]) 1 else 0
-    case ByteType => java.lang.Long.bitCount(input.asInstanceOf[Byte])
-    case ShortType => java.lang.Long.bitCount(input.asInstanceOf[Short])
-    case IntegerType => java.lang.Long.bitCount(input.asInstanceOf[Int])
-    case LongType => java.lang.Long.bitCount(input.asInstanceOf[Long])
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): BitwiseCount = copy(child = newLeft, bitExpr = newRight)
+
+  /**
+   * Called by default [[eval]] implementation. If subclass of BinaryExpression keep the default
+   * nullability, they can override this method to save null-check code. If we need full control
+   * of evaluation process, we should override [[eval]].
+   */
+  override protected def nullSafeEval(input: Any, bit: Any): Any = {
+    val bitCount = child.dataType match {
+      case BooleanType => if (input.asInstanceOf[Boolean]) 1 else 0
+      case ByteType => java.lang.Long.bitCount(input.asInstanceOf[Byte])
+      case ShortType => java.lang.Long.bitCount(input.asInstanceOf[Short])
+      case IntegerType => java.lang.Long.bitCount(input.asInstanceOf[Int])
+      case LongType => java.lang.Long.bitCount(input.asInstanceOf[Long])
+    }
+    if (bit.asInstanceOf[Int] == 1) bitCount else bitSize - bitCount
   }
 
-  override protected def withNewChildInternal(newChild: Expression): BitwiseCount =
-    copy(child = newChild)
+  /**
+   * Returns Java source code that can be compiled to evaluate this expression. The default
+   * behavior is to call the eval method of the expression. Concrete expression implementations
+   * should override this to do actual code generation.
+   *
+   * @param ctx
+   *   a [[CodegenContext]]
+   * @param ev
+   *   an [[ExprCode]] with unique terms.
+   * @return
+   *   an [[ExprCode]] containing the Java source code to generate the given expression
+   */
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(
+      ctx,
+      ev,
+      (input, bit) => {
+        child.dataType match {
+          case BooleanType => s"if ($input) 1 else 0"
+          case _ => s"""if ($bit == 1) {
+            ${ev.value} = java.lang.Long.bitCount($input);
+          } else {
+            ${ev.value} = $bitSize - java.lang.Long.bitCount($input);
+          }"""
+        }
+      })
+  }
 }
 
-object BitwiseGetUtil {
+object BitwiseUtil {
   def checkPosition(pos: Int, size: Int): Unit = {
     if (pos < 0) {
       throw new IllegalArgumentException(s"Invalid bit position: $pos is less than zero")
     } else if (size <= pos) {
-      throw new IllegalArgumentException(s"Invalid bit position: $pos exceeds the bit upper limit")
+      throw new IllegalArgumentException(
+        s"Invalid bit position: $pos exceeds the bit upper limit")
     }
+  }
+
+  def getBitSize(dataType: DataType): Int = dataType match {
+    case BooleanType => 1
+    case ByteType => java.lang.Byte.SIZE
+    case ShortType => java.lang.Short.SIZE
+    case IntegerType => java.lang.Integer.SIZE
+    case LongType => java.lang.Long.SIZE
   }
 }
 
@@ -277,14 +372,14 @@ case class BitwiseGet(left: Expression, right: Expression)
 
   override def nullSafeEval(target: Any, pos: Any): Any = {
     val posInt = pos.asInstanceOf[Int]
-    BitwiseGetUtil.checkPosition(posInt, bitSize)
+    BitwiseUtil.checkPosition(posInt, bitSize)
     ((target.asInstanceOf[Number].longValue() >> posInt) & 1).toByte
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (target, pos) => {
       s"""
-         |org.apache.spark.sql.catalyst.expressions.BitwiseGetUtil.checkPosition($pos, $bitSize);
+         |org.apache.spark.sql.catalyst.expressions.BitwiseUtil.checkPosition($pos, $bitSize);
          |${ev.value} = (byte) ((((long) $target) >> $pos) & 1);
        """.stripMargin
     })

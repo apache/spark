@@ -773,6 +773,7 @@ object FunctionRegistry {
     expression[BitwiseOr]("|"),
     expression[BitwiseXor]("^"),
     expression[BitwiseCount]("bit_count"),
+    expression[BitwiseCount]("countset", true),
     expression[BitAndAgg]("bit_and"),
     expression[BitOrAgg]("bit_or"),
     expression[BitXorAgg]("bit_xor"),

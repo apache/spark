@@ -2,41 +2,70 @@
 
 -- null
 select bit_count(null);
+select bit_count(null, 1);
 
 -- boolean
 select bit_count(true);
+select bit_count(true, 0);
 select bit_count(false);
+select bit_count(false, 1);
 
 -- byte/tinyint
 select bit_count(cast(1 as tinyint));
+select bit_count(cast(1 as tinyint), 0);
 select bit_count(cast(2 as tinyint));
+select bit_count(cast(2 as tinyint), 0);
 select bit_count(cast(3 as tinyint));
+select bit_count(cast(3 as tinyint), 1);
+select bit_count(cast(3 as tinyint), 0);
 
 -- short/smallint
 select bit_count(1S);
+select bit_count(1S, 0);
+select bit_count(1S, 1);
 select bit_count(2S);
+select bit_count(2S, 0);
 select bit_count(3S);
+select bit_count(3S, 1);
+select bit_count(3S, 0);
 
 -- int
 select bit_count(1);
+select bit_count(1, 0);
 select bit_count(2);
+select bit_count(2, 1);
 select bit_count(3);
+select bit_count(3, 0);
 
 -- long/bigint
 select bit_count(1L);
+select bit_count(1L, 0);
+select countset(2L, 1);
 select bit_count(2L);
-select bit_count(3L);
+select countset(3L);
 
 -- negative num
 select bit_count(-1L);
+select bit_count(-1L, 0);
+select countset(-1L, 1);
 
 -- edge value
 select bit_count(9223372036854775807L);
+select bit_count(9223372036854775807L, 0);
+select bit_count(9223372036854775807L, 1);
 select bit_count(-9223372036854775808L);
+select bit_count(-9223372036854775808L, 0);
 
 -- other illegal arguments
 select bit_count("bit count");
+select bit_count(123, 5);
+select bit_count(123, -1);
+select bit_count("bit count", 0);
 select bit_count('a');
+select bit_count('a', 0);
+select countset(c1, c2), countset(c1, c3) from values (1234, 1, 0) as t(c1, c2, c3);
+select countset(c1, c2) from values (1234, -1) as t(c1, c2);
+select countset(c1, c2) from values (1234, 10) as t(c1, c2);
 
 -- test for bit_xor
 --

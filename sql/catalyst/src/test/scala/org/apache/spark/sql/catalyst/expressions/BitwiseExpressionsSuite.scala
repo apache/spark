@@ -26,6 +26,15 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   import IntegralLiteralTestUtils._
 
+  test("BitwiseCount") {
+    (1 to 64).map(BigInt(2).pow(_).toLong).foreach { input =>
+      checkEvaluation(BitwiseCount(Literal(input), Literal(1)), java.lang.Long.bitCount(input))
+      checkEvaluation(
+        BitwiseCount(Literal(input), Literal(0)),
+        java.lang.Long.SIZE - java.lang.Long.bitCount(input))
+    }
+  }
+
   test("BitwiseNOT") {
     def check(input: Any, expected: Any): Unit = {
       val expr = BitwiseNot(Literal(input))
