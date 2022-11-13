@@ -149,7 +149,7 @@ private[spark] class TaskSchedulerImpl(
 
   // Keep removed executors due to decommission, so getExecutorDecommissionState
   // still return correct value even after executor is lost
-  val removedExecutorsDueToDecom =
+  val executorsRemovedByDecom =
     CacheBuilder.newBuilder()
       .maximumSize(conf.get(SCHEDULER_MAX_RETAINED_REMOVED_EXECUTORS))
       .build[String, ExecutorDecommissionState]()
@@ -1035,7 +1035,7 @@ private[spark] class TaskSchedulerImpl(
   override def getExecutorDecommissionState(executorId: String)
     : Option[ExecutorDecommissionState] = synchronized {
     executorsPendingDecommission.get(executorId).orElse(
-      Option(removedExecutorsDueToDecom.getIfPresent(executorId)))
+      Option(executorsRemovedByDecom.getIfPresent(executorId)))
   }
 
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {
@@ -1131,7 +1131,7 @@ private[spark] class TaskSchedulerImpl(
     }
 
     executorsPendingDecommission.remove(executorId)
-      .foreach(removedExecutorsDueToDecom.put(executorId, _))
+      .foreach(executorsRemovedByDecom.put(executorId, _))
 
     if (reason != LossReasonPending) {
       executorIdToHost -= executorId
