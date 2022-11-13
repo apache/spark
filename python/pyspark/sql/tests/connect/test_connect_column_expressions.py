@@ -140,7 +140,7 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         self.assertEqual("Alias(Column(a), (martin))", str(col0))
 
         col0 = fun.col("a").alias("martin", metadata={"pii": True})
-        plan = col0.to_plan(self.connect)
+        plan = col0.to_plan(None)
         self.assertEqual(plan.alias.metadata, '{"pii": true}')
 
     def test_column_expressions(self):
