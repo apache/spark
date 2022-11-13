@@ -164,7 +164,7 @@
     </dependency>
     <dependency>
       <groupId>mysql</groupId>
-      <artifactId>mysql-connector-java</artifactId>
+      <artifactId>mysql-connector-j</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
