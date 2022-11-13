@@ -2024,6 +2024,15 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val SCHEDULER_MAX_RETAINED_REMOVED_EXECUTORS =
+    ConfigBuilder("spark.scheduler.maxRetainedRemovedExecutors")
+      .doc("Max number of removed executors by decommission to retain. This affects " +
+        "whether fetch failure caused by removed decommissioned executors could be ignored " +
+        "when spark.stage.ignoreDecommissionFetchFailure is enabled.")
+      .version("3.4.0")
+      .longConf
+      .createWithDefault(10000)
+
   private[spark] val SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO =
     ConfigBuilder("spark.scheduler.minRegisteredResourcesRatio")
       .version("1.1.1")

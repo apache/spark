@@ -1935,6 +1935,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       .setMaster(s"local[$numHosts]")
       .setAppName("TaskSchedulerImplSuite")
       .set(config.CPUS_PER_TASK.key, "1")
+      .set(config.SCHEDULER_MAX_RETAINED_REMOVED_EXECUTORS.key, "1")
     sc = new SparkContext(conf)
     val maxTaskFailures = sc.conf.get(config.TASK_MAX_FAILURES)
     taskScheduler = new TaskSchedulerImpl(sc, maxTaskFailures, clock = clock) {
@@ -1976,10 +1977,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
 
   test("test full decommissioning flow") {
     val clock = new ManualClock(10000L)
-    val scheduler = setupSchedulerForDecommissionTests(clock, 2)
+    val numTasks = 3
+    val scheduler = setupSchedulerForDecommissionTests(clock, numTasks)
     val manager = stageToMockTaskSetManager(0)
     // The task started should be running.
-    assert(manager.copiesRunning.take(2) === Array(1, 1))
+    assert(manager.copiesRunning.take(numTasks) === Array(1, 1, 1))
 
     // executor 0 is decommissioned after loosing
     assert(scheduler.getExecutorDecommissionState("executor0").isEmpty)
@@ -1989,7 +1991,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(scheduler.getExecutorDecommissionState("executor0").isEmpty)
 
     // 0th task just died above
-    assert(manager.copiesRunning.take(2) === Array(0, 1))
+    assert(manager.copiesRunning.take(numTasks) === Array(0, 1, 1))
 
     assert(scheduler.executorsPendingDecommission.isEmpty)
     clock.advance(5000)
@@ -2007,15 +2009,27 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     // [SPARK-40481] after executor lost, decommission state still be kept
     assert(scheduler.getExecutorDecommissionState("executor1").isDefined)
     // So now both the tasks are no longer running
-    assert(manager.copiesRunning.take(2) === Array(0, 0))
+
+    // executor 2 is decommissioned, then lost
+    scheduler.executorDecommission("executor2", ExecutorDecommissionInfo("", None))
+    scheduler.executorLost("executor2", ExecutorExited(0, false, "normal"))
+
+    // [SPARK-40481] only keep 1 removed executor info
+    assert(scheduler.getExecutorDecommissionState("executor1").isEmpty)
+    assert(scheduler.getExecutorDecommissionState("executor2").isDefined)
+
+    assert(manager.copiesRunning.take(numTasks) === Array(0, 0, 0))
     clock.advance(2000)
 
     // Now give it some resources and both tasks should be rerun
     val taskDescriptions = taskScheduler.resourceOffers(IndexedSeq(
-      WorkerOffer("executor2", "host2", 1), WorkerOffer("executor3", "host3", 1))).flatten
-    assert(taskDescriptions.size === 2)
-    assert(taskDescriptions.map(_.index).sorted == Seq(0, 1))
-    assert(manager.copiesRunning.take(2) === Array(1, 1))
+      WorkerOffer("executor3", "host3", 1),
+      WorkerOffer("executor4", "host4", 1),
+      WorkerOffer("executor5", "host5", 1)
+    )).flatten
+    assert(taskDescriptions.size === numTasks)
+    assert(taskDescriptions.map(_.index).sorted == Seq(0, 1, 2))
+    assert(manager.copiesRunning.take(numTasks) === Array(1, 1, 1))
   }
 
   test("SPARK-24818: test delay scheduling for barrier TaskSetManager") {

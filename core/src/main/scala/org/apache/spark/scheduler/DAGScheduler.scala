@@ -2195,6 +2195,9 @@ private[spark] class DAGScheduler(
    *  2. Under decommission process
    *  3. Stopped or terminated after finishing decommission
    *  4. Under decommission process, then removed by driver with other reasons
+   * Return false in case 3 and 4 when removed executors info are not retained.
+   * The max size of removed executors is controlled by
+   * spark.scheduler.maxRetainedRemovedExecutors
    */
   private[scheduler] def isExecutorDecommissioningOrDecommissioned(
       taskScheduler: TaskScheduler, bmAddress: BlockManagerId): Boolean = {
