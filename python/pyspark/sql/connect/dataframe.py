@@ -431,10 +431,6 @@ class DataFrame(object):
         vertical : bool, optional
             If set to ``True``, print output rows vertically (one line
             per column value).
-
-        Returns
-        -------
-        None
         """
         print(self._show_string(n, truncate, vertical))
 
