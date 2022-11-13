@@ -135,11 +135,12 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         self.assertIsNotNone(lit_list_plan)
 
     def test_column_alias(self) -> None:
+        # SPARK-40809 - Support for Column Aliases
         col0 = fun.col("a").alias("martin")
         self.assertEqual("Alias(Column(a), (martin))", str(col0))
 
         col0 = fun.col("a").alias("martin", metadata={"pii": True})
-        plan = col0.to_plan(None)
+        plan = col0.to_plan(self.connect)
         self.assertEqual(plan.alias.metadata, '{"pii": true}')
 
     def test_column_expressions(self):
