@@ -145,6 +145,13 @@ private[spark] class TaskSchedulerImpl(
   // continue to run even after being asked to decommission, but they will eventually exit.
   val executorsPendingDecommission = new HashMap[String, ExecutorDecommissionState]
 
+  // Keep removed executors due to decommission, so getExecutorDecommissionState
+  // still return correct value even after executor is lost
+  val removedExecutorsDueToDecom = new mutable.LinkedHashMap[String, ExecutorDecommissionState]
+
+  // Max size to keep removed executors due to decommission
+  val REMOVED_EXECUTORS_MAX_SIZE = 10000
+
   def runningTasksByExecutors: Map[String, Int] = synchronized {
     executorIdToRunningTaskIds.toMap.mapValues(_.size).toMap
   }
@@ -1022,7 +1029,7 @@ private[spark] class TaskSchedulerImpl(
 
   override def getExecutorDecommissionState(executorId: String)
     : Option[ExecutorDecommissionState] = synchronized {
-    executorsPendingDecommission.get(executorId)
+    executorsPendingDecommission.get(executorId).orElse(removedExecutorsDueToDecom.get(executorId))
   }
 
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {
@@ -1117,8 +1124,14 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
-    // Intentionally not remove executor from executorsPendingDecommission
-    // as info about removed executors due to decommission is needed
+    val removedDecomState = executorsPendingDecommission.remove(executorId)
+    removedDecomState.foreach(
+      s => {
+        removedExecutorsDueToDecom.put(executorId, s)
+        if (removedExecutorsDueToDecom.size >= REMOVED_EXECUTORS_MAX_SIZE) {
+          removedExecutorsDueToDecom.remove(removedExecutorsDueToDecom.head._1)
+        }
+      })
 
     if (reason != LossReasonPending) {
       executorIdToHost -= executorId
