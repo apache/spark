@@ -405,7 +405,7 @@ class RemoteSparkSession(object):
 
     def _request_with_metadata(self) -> pb2.Request:
         req = pb2.Request()
-        req.client_type = pb2.ClientType.PYTHON
+        req.client_type = "_SPARK_CONNECT_PYTHON"
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
