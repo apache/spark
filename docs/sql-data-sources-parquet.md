@@ -484,8 +484,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     <code>parquet.compression</code> is specified in the table-specific options/properties, the precedence would be
     <code>compression</code>, <code>parquet.compression</code>, <code>spark.sql.parquet.compression.codec</code>. Acceptable values include:
     none, uncompressed, snappy, gzip, lzo, brotli, lz4, zstd.
-    Note that <code>zstd</code> requires <code>ZStandardCodec</code> to be installed before Hadoop 2.9.0, <code>brotli</code> requires
-    <code>BrotliCodec</code> to be installed.
+    Note that <code>brotli</code> requires <code>BrotliCodec</code> to be installed.
   </td>
   <td>1.1.1</td>
 </tr>

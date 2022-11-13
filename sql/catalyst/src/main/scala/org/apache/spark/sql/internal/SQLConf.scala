@@ -1830,6 +1830,14 @@ object SQLConf {
       .stringConf
       .createWithDefault("lz4")
 
+  val CHECKPOINT_RENAMEDFILE_CHECK_ENABLED =
+    buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
+      .doc("When true, Spark will validate if renamed checkpoint file exists.")
+      .internal()
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Note: this is defined in `RocksDBConf.FORMAT_VERSION`. These two places should be updated
    * together.
@@ -1916,7 +1924,7 @@ object SQLConf {
         "Integration Guide.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED =
     buildConf("spark.sql.streaming.statefulOperator.checkCorrectness.enabled")
@@ -1930,6 +1938,22 @@ object SQLConf {
         "When this config is disabled, Spark will just print warning message for users. " +
         "Prior to Spark 3.1.0, the behavior is disabling this config.")
       .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val STATEFUL_OPERATOR_ALLOW_MULTIPLE =
+    buildConf("spark.sql.streaming.statefulOperator.allowMultiple")
+      .internal()
+      .doc("When true, multiple stateful operators are allowed to be present in a streaming " +
+        "pipeline. The support for multiple stateful operators introduces a minor (semantically " +
+        "correct) change in respect to late record filtering - late records are detected and " +
+        "filtered in respect to the watermark from the previous microbatch instead of the " +
+        "current one. This is a behavior change for Spark streaming pipelines and we allow " +
+        "users to revert to the previous behavior of late record filtering (late records are " +
+        "detected and filtered by comparing with the current microbatch watermark) by setting " +
+        "the flag value to false. In this mode, only a single stateful operator will be allowed " +
+        "in a streaming pipeline.")
+      .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -1973,6 +1997,23 @@ object SQLConf {
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
+
+  val ASYNC_LOG_PURGE =
+    buildConf("spark.sql.streaming.asyncLogPurge.enabled")
+      .internal()
+      .doc("When true, purging the offset log and " +
+        "commit log of old entries will be done asynchronously.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val STREAMING_METADATA_CACHE_ENABLED =
+    buildConf("spark.sql.streaming.metadataCache.enabled")
+      .internal()
+      .doc("Whether the streaming HDFSMetadataLog caches the metadata of the latest two batches.")
+      .booleanConf
+      .createWithDefault(true)
+
 
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
@@ -2987,6 +3028,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION =
+    buildConf("spark.sql.legacy.skipTypeValidationOnAlterPartition")
+      .internal()
+      .doc("When true, skip validation for partition spec in ALTER PARTITION. E.g., " +
+        "`ALTER TABLE .. ADD PARTITION(p='a')` would work even the partition type is int. " +
+        s"When false, the behavior follows ${STORE_ASSIGNMENT_POLICY.key}")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
@@ -3067,6 +3118,16 @@ object SQLConf {
       .internal()
       .doc("When true, the optimizer will inline subqueries with OneRowRelation as leaf nodes.")
       .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ALWAYS_INLINE_ONE_ROW_RELATION_SUBQUERY =
+    buildConf("spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline")
+      .internal()
+      .doc(s"When true, the optimizer will always inline single row subqueries even if it " +
+        "causes extra duplication. It only takes effect when " +
+        s"${OPTIMIZE_ONE_ROW_RELATION_SUBQUERY.key} is set to true.")
+      .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -3311,15 +3372,6 @@ object SQLConf {
     .version("3.0.0")
     .intConf
     .createWithDefault(25)
-
-  val MAX_TO_STRING_FIELDS_FOR_DIAGNOSTIC =
-    buildConf("spark.sql.debug.maxToStringFieldsForDiagnostic")
-      .doc(s"Similar to ${MAX_TO_STRING_FIELDS.key}, but it will take effect when the " +
-        s"output will be stored for the diagnostics API. The output will be stored in " +
-        s"disk instead of memory. So it can be larger than ${MAX_TO_STRING_FIELDS.key}")
-      .version("3.4.0")
-      .intConf
-      .createWithDefault(10000)
 
   val MAX_PLAN_STRING_LENGTH = buildConf("spark.sql.maxPlanStringLength")
     .doc("Maximum number of characters to output for a plan string.  If the plan is " +
@@ -4234,6 +4286,8 @@ class SQLConf extends Serializable with Logging {
 
   def stateStoreCompressionCodec: String = getConf(STATE_STORE_COMPRESSION_CODEC)
 
+  def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
+
   def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
 
   def parquetFilterPushDownDate: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DATE_ENABLED)
@@ -4673,8 +4727,6 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
 
   def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
-
-  def maxToStringFieldsForDiagnostic: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS_FOR_DIAGNOSTIC)
 
   def maxPlanStringLength: Int = getConf(SQLConf.MAX_PLAN_STRING_LENGTH).toInt
 

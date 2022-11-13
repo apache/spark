@@ -53,16 +53,18 @@ class JdbcUtilsSuite extends SparkFunSuite {
       "Found duplicate column(s) in the customSchema option value"))
 
     // Throw ParseException
-    val dataTypeNotSupported = intercept[ParseException]{
-      JdbcUtils.getCustomSchema(tableSchema, "c3 DATEE, C2 STRING", caseInsensitive) ===
-        StructType(Seq(StructField("c3", DateType, false), StructField("C2", StringType, false)))
-    }
-    assert(dataTypeNotSupported.getMessage.contains("DataType datee is not supported"))
+    checkError(
+      exception = intercept[ParseException]{
+        JdbcUtils.getCustomSchema(tableSchema, "c3 DATEE, C2 STRING", caseInsensitive)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0030",
+      parameters = Map("dataType" -> "datee"))
 
-    val mismatchedInput = intercept[ParseException]{
-      JdbcUtils.getCustomSchema(tableSchema, "c3 DATE. C2 STRING", caseInsensitive) ===
-        StructType(Seq(StructField("c3", DateType, false), StructField("C2", StringType, false)))
-    }
-    assert(mismatchedInput.getMessage.contains("Syntax error at or near '.'"))
+    checkError(
+      exception = intercept[ParseException]{
+        JdbcUtils.getCustomSchema(tableSchema, "c3 DATE. C2 STRING", caseInsensitive)
+      },
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'.'", "hint" -> ""))
   }
 }

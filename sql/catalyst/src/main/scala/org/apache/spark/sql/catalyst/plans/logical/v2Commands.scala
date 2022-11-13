@@ -566,7 +566,8 @@ case class MergeIntoTable(
     sourceTable: LogicalPlan,
     mergeCondition: Expression,
     matchedActions: Seq[MergeAction],
-    notMatchedActions: Seq[MergeAction]) extends BinaryCommand with SupportsSubquery {
+    notMatchedActions: Seq[MergeAction],
+    notMatchedBySourceActions: Seq[MergeAction]) extends BinaryCommand with SupportsSubquery {
   def duplicateResolved: Boolean = targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
 
   def skipSchemaResolution: Boolean = targetTable match {

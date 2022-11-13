@@ -447,7 +447,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1216",
   "messageParameters" : {
     "message" : "the escape character is not allowed to precede 'a'",
-    "pattern" : "m%aca"
+    "pattern" : "'m%aca'"
   }
 }
 
@@ -462,7 +462,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1216",
   "messageParameters" : {
     "message" : "the escape character is not allowed to precede 'a'",
-    "pattern" : "m%aca"
+    "pattern" : "'m%aca'"
   }
 }
 
@@ -477,7 +477,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1216",
   "messageParameters" : {
     "message" : "the escape character is not allowed to precede 'a'",
-    "pattern" : "m%a%%a"
+    "pattern" : "'m%a%%a'"
   }
 }
 
@@ -492,7 +492,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1216",
   "messageParameters" : {
     "message" : "the escape character is not allowed to precede 'a'",
-    "pattern" : "m%a%%a"
+    "pattern" : "'m%a%%a'"
   }
 }
 
@@ -507,7 +507,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1216",
   "messageParameters" : {
     "message" : "the escape character is not allowed to precede 'e'",
-    "pattern" : "b_ear"
+    "pattern" : "'b_ear'"
   }
 }
 
@@ -522,7 +522,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1216",
   "messageParameters" : {
     "message" : "the escape character is not allowed to precede 'e'",
-    "pattern" : "b_ear"
+    "pattern" : "'b_ear'"
   }
 }
 
@@ -537,7 +537,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1216",
   "messageParameters" : {
     "message" : "the escape character is not allowed to precede 'e'",
-    "pattern" : "b_e__r"
+    "pattern" : "'b_e__r'"
   }
 }
 
@@ -552,7 +552,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1216",
   "messageParameters" : {
     "message" : "the escape character is not allowed to precede 'e'",
-    "pattern" : "b_e__r"
+    "pattern" : "'b_e__r'"
   }
 }
 

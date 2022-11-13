@@ -537,12 +537,18 @@ private[hive] class HiveClientImpl(
       storage = CatalogStorageFormat(
         locationUri = shim.getDataLocation(h).map { loc =>
           val tableUri = stringToURI(loc)
-          // Before SPARK-19257, created data source table does not use absolute uri.
-          // This makes Spark can't read these tables across HDFS clusters.
-          // Rewrite table location to absolute uri based on database uri to fix this issue.
-          val absoluteUri = Option(tableUri).filterNot(_.isAbsolute)
-            .map(_ => stringToURI(client.getDatabase(h.getDbName).getLocationUri))
-          HiveExternalCatalog.toAbsoluteURI(tableUri, absoluteUri)
+          if (h.getTableType == HiveTableType.VIRTUAL_VIEW) {
+            // Data location of SQL view is useless. Do not qualify it even if it's present, as
+            // it can be an invalid path.
+            tableUri
+          } else {
+            // Before SPARK-19257, created data source table does not use absolute uri.
+            // This makes Spark can't read these tables across HDFS clusters.
+            // Rewrite table location to absolute uri based on database uri to fix this issue.
+            val absoluteUri = Option(tableUri).filterNot(_.isAbsolute)
+              .map(_ => stringToURI(client.getDatabase(h.getDbName).getLocationUri))
+            HiveExternalCatalog.toAbsoluteURI(tableUri, absoluteUri)
+          }
         },
         // To avoid ClassNotFound exception, we try our best to not get the format class, but get
         // the class name directly. However, for non-native tables, there is no interface to get

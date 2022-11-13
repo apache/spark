@@ -23,10 +23,21 @@ SPARK_ROOT_DIR="$(dirname $SCRIPT_DIR)"
 "$SCRIPT_DIR/scalastyle" "$1"
 
 # For Spark Connect, we actively enforce scalafmt and check that the produced diff is empty.
-./build/mvn -Pscala-2.12 scalafmt:format -Dscalafmt.skip=false -Dscalafmt.validateOnly=true -Dscalafmt.changedOnly=false -pl connector/connect
-if [[ $? -ne 0 ]]; then
-  echo "The scalafmt check failed on connector/connect."
+ERRORS=$(./build/mvn \
+    -Pscala-2.12 \
+    scalafmt:format \
+    -Dscalafmt.skip=false \
+    -Dscalafmt.validateOnly=true \
+    -Dscalafmt.changedOnly=false \
+    -pl connector/connect \
+    2>&1 | grep -e "^Requires formatting" \
+)
+
+if test ! -z "$ERRORS"; then
+  echo -e "The scalafmt check failed on connector/connect at following occurrences:\n\n$ERRORS\n"
   echo "Before submitting your change, please make sure to format your code using the following command:"
   echo "./build/mvn -Pscala-2.12 scalafmt:format -Dscalafmt.skip=fase -Dscalafmt.validateOnly=false -Dscalafmt.changedOnly=false -pl connector/connect"
   exit 1
+else
+  echo -e "Scalafmt checks passed."
 fi

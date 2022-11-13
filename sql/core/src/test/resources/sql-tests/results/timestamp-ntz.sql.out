@@ -79,9 +79,9 @@ struct<convert_timezone(Europe/Moscow, America/Los_Angeles, TIMESTAMP_NTZ '2022-
 
 
 -- !query
-SELECT convert_timezone('Europe/Amsterdam', timestamp_ntz'2022-03-23 00:00:00')
+SELECT convert_timezone('Europe/Brussels', timestamp_ntz'2022-03-23 00:00:00')
 -- !query schema
-struct<convert_timezone(current_timezone(), Europe/Amsterdam, TIMESTAMP_NTZ '2022-03-23 00:00:00'):timestamp_ntz>
+struct<convert_timezone(current_timezone(), Europe/Brussels, TIMESTAMP_NTZ '2022-03-23 00:00:00'):timestamp_ntz>
 -- !query output
 2022-03-23 08:00:00
 

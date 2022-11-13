@@ -119,7 +119,8 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
  * @param condition Conditions to filter rows, split by left, right, and joined. See
  *                  [[JoinConditionSplitPredicates]]
  * @param stateInfo Version information required to read join state (buffered rows)
- * @param eventTimeWatermark Watermark of input event, same for both sides
+ * @param eventTimeWatermarkForLateEvents Watermark for filtering late events, same for both sides
+ * @param eventTimeWatermarkForEviction Watermark for state eviction
  * @param stateWatermarkPredicates Predicates for removal of state, see
  *                                 [[JoinStateWatermarkPredicates]]
  * @param left      Left child plan
@@ -131,7 +132,8 @@ case class StreamingSymmetricHashJoinExec(
     joinType: JoinType,
     condition: JoinConditionSplitPredicates,
     stateInfo: Option[StatefulOperatorStateInfo],
-    eventTimeWatermark: Option[Long],
+    eventTimeWatermarkForLateEvents: Option[Long],
+    eventTimeWatermarkForEviction: Option[Long],
     stateWatermarkPredicates: JoinStateWatermarkPredicates,
     stateFormatVersion: Int,
     left: SparkPlan,
@@ -148,7 +150,8 @@ case class StreamingSymmetricHashJoinExec(
 
     this(
       leftKeys, rightKeys, joinType, JoinConditionSplitPredicates(condition, left, right),
-      stateInfo = None, eventTimeWatermark = None,
+      stateInfo = None,
+      eventTimeWatermarkForLateEvents = None, eventTimeWatermarkForEviction = None,
       stateWatermarkPredicates = JoinStateWatermarkPredicates(), stateFormatVersion, left, right)
   }
 
@@ -222,7 +225,8 @@ case class StreamingSymmetricHashJoinExec(
 
     // Latest watermark value is more than that used in this previous executed plan
     val watermarkHasChanged =
-      eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
+      eventTimeWatermarkForEviction.isDefined &&
+        newMetadata.batchWatermarkMs > eventTimeWatermarkForEviction.get
 
     watermarkUsedForStateCleanup && watermarkHasChanged
   }
@@ -555,7 +559,8 @@ case class StreamingSymmetricHashJoinExec(
 
       val watermarkAttribute = inputAttributes.find(_.metadata.contains(delayKey))
       val nonLateRows =
-        WatermarkSupport.watermarkExpression(watermarkAttribute, eventTimeWatermark) match {
+        WatermarkSupport.watermarkExpression(
+          watermarkAttribute, eventTimeWatermarkForLateEvents) match {
           case Some(watermarkExpr) =>
             val predicate = Predicate.create(watermarkExpr, inputAttributes)
             applyRemovingRowsOlderThanWatermark(inputIter, predicate)

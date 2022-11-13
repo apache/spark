@@ -76,8 +76,7 @@ case class BloomFilterMightContain(
             "functionName" -> toSQLId(prettyName),
             "expectedLeft" -> toSQLType(BinaryType),
             "expectedRight" -> toSQLType(LongType),
-            "actualLeft" -> toSQLType(left.dataType),
-            "actualRight" -> toSQLType(right.dataType)
+            "actual" -> Seq(left.dataType, right.dataType).map(toSQLType).mkString(", ")
           )
         )
     }

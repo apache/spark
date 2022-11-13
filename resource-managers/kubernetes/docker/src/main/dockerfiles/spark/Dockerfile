@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-ARG java_image_tag=11-jre-focal
+ARG java_image_tag=17-jre
 
 FROM eclipse-temurin:${java_image_tag}
 
@@ -39,7 +39,7 @@ RUN set -ex && \
     ln -sv /bin/bash /bin/sh && \
     echo "auth required pam_wheel.so use_uid" >> /etc/pam.d/su && \
     chgrp root /etc/passwd && chmod ug+rw /etc/passwd && \
-    rm -rf /var/cache/apt/*
+    rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
 
 COPY jars /opt/spark/jars
 COPY bin /opt/spark/bin

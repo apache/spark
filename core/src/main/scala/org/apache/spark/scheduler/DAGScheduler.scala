@@ -1883,7 +1883,7 @@ private[spark] class DAGScheduler(
           if (ignoreStageFailure) {
             logInfo(s"Ignoring fetch failure from $task of $failedStage attempt " +
               s"${task.stageAttemptId} when count spark.stage.maxConsecutiveAttempts " +
-              "as executor ${bmAddress.executorId} is decommissioned and " +
+              s"as executor ${bmAddress.executorId} is decommissioned and " +
               s" ${config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key}=true")
           } else {
             failedStage.failedAttemptIds.add(task.stageAttemptId)
@@ -2888,7 +2888,7 @@ private[spark] class DAGScheduler(
     listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
   }
 
-  def stop(): Unit = {
+  def stop(exitCode: Int = 0): Unit = {
     Utils.tryLogNonFatalError {
       messageScheduler.shutdownNow()
     }
@@ -2899,7 +2899,7 @@ private[spark] class DAGScheduler(
       eventProcessLoop.stop()
     }
     Utils.tryLogNonFatalError {
-      taskScheduler.stop()
+      taskScheduler.stop(exitCode)
     }
   }
 

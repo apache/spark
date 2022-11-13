@@ -334,8 +334,16 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
         // re-create the table without nested field `i` which is referred by the view.
         sql("DROP TABLE t")
         sql("CREATE TABLE t(s STRUCT<j: INT>) USING json")
-        val e = intercept[AnalysisException](spark.table(viewName))
-        assert(e.message.contains("No such struct field i in j"))
+        checkError(
+          exception = intercept[AnalysisException](spark.table(viewName)),
+          errorClass = "FIELD_NOT_FOUND",
+          parameters = Map("fieldName" -> "`i`", "fields" -> "`j`"),
+          context = ExpectedContext(
+            fragment = "s.i",
+            objectName = fullyQualifiedViewName("v"),
+            objectType = "VIEW",
+            startIndex = 7,
+            stopIndex = 9))
 
         // drop invalid view should be fine
         sql(s"DROP VIEW $viewName")

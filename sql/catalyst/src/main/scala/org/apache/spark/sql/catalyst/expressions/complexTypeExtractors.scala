@@ -444,7 +444,7 @@ case class GetMapValue(child: Expression, key: Expression)
     super.checkInputDataTypes() match {
       case f if f.isFailure => f
       case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForOrderingExpr(keyType, s"function $prettyName")
+        TypeUtils.checkForOrderingExpr(keyType, prettyName)
     }
   }
 

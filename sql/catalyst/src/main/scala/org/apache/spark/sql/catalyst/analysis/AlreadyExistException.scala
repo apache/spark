@@ -127,5 +127,5 @@ class FunctionAlreadyExistsException(errorClass: String, messageParameters: Map[
 }
 
 class IndexAlreadyExistsException(message: String, cause: Option[Throwable] = None)
-  extends AnalysisException(errorClass = "INDEX_NOT_FOUND",
+  extends AnalysisException(errorClass = "INDEX_ALREADY_EXISTS",
     Map("message" -> message), cause)
