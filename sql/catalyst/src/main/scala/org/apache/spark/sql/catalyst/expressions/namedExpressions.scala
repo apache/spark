@@ -268,7 +268,6 @@ case class AttributeReference(
     override val trustNullability: Boolean = true)
   extends Attribute with Unevaluable {
 
-  val foo = "foo"
   override lazy val treePatternBits: BitSet = AttributeReferenceTreeBits.bits
 
   /**

@@ -356,7 +356,7 @@ case class ScalaUDAF(
   with Logging
   with ImplicitCastInputTypes
   with UserDefinedExpression {
-  override protected def untrustedOutputNullabilityName: Option[String] = Some(s"UDF $name")
+
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
@@ -498,8 +498,6 @@ case class ScalaAggregator[IN, BUF, OUT](
   with UserDefinedExpression
   with ImplicitCastInputTypes
   with Logging {
-
-  override protected def untrustedOutputNullabilityName: Option[String] = Some(s"UDF $name")
 
   // input and buffer encoders are resolved by ResolveEncodersInScalaAgg
   private[this] lazy val inputDeserializer = inputEncoder.createDeserializer()

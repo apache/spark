@@ -27,9 +27,6 @@ case class ApplyFunctionExpression(
     children: Seq[Expression])
   extends Expression with UserDefinedExpression with CodegenFallback with ImplicitCastInputTypes {
 
-  // TODO ETK ??
-  override protected def untrustedOutputNullabilityName: Option[String] = Some(s"UDF $name")
-
   override def nullable: Boolean = function.isResultNullable
   override def name: String = function.name()
   override def dataType: DataType = function.resultType()

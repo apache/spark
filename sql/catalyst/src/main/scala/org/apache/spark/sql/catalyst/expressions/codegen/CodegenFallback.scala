@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.commons.text.StringEscapeUtils
-
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, Nondeterministic}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 
@@ -26,9 +24,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
  * A trait that can be used to provide a fallback mode for expression code generation.
  */
 trait CodegenFallback extends Expression {
-
-  protected def untrustedOutputNullabilityName: Option[String] = None
-  override def trustNullability: Boolean = untrustedOutputNullabilityName.isDefined
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // LeafNode does not need `input`
@@ -59,20 +54,6 @@ trait CodegenFallback extends Expression {
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(this.dataType)};
         if (!${ev.isNull}) {
           ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
-        }""")
-    } else if (!nullable && untrustedOutputNullabilityName.isDefined) {
-      // TODO ETK is this needed?
-      ev.copy(code =
-        code"""
-        $placeHolder
-        Object $objectTerm = ((Expression) references[$idx]).eval($input);
-        boolean ${ev.isNull} = $objectTerm == null;
-        $javaType ${ev.value} = ${CodeGenerator.defaultValue(this.dataType)};
-        if (!${ev.isNull}) {
-          ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
-        } else {
-          throw QueryExecutionErrors.valueCannotBeNullError(
-            "${StringEscapeUtils.escapeJava(untrustedOutputNullabilityName.get)}");
         }""")
     } else {
       ev.copy(code = code"""
