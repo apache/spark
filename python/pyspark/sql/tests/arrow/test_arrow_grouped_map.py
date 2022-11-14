@@ -18,17 +18,28 @@ import os
 import time
 import unittest
 
-from pyspark.sql.functions import col
+from pyspark.sql.functions import (
+    array,
+    ceil,
+    col,
+    explode,
+    lit,
+    mean,
+    stddev
+)
+from pyspark.sql.utils import PythonException
+from pyspark.sql.window import Window
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from pyspark.testing.utils import QuietTest
 
 
 if have_pyarrow:
     import pyarrow as pa
-    import pyarrow.compute as pac
+    import pyarrow.compute as pc
 
 
 @unittest.skipIf(
@@ -36,6 +47,16 @@ if have_pyarrow:
     pyarrow_requirement_message,  # type: ignore[arg-type]
 )
 class GroupedMapInArrowTests(ReusedSQLTestCase):
+    @property
+    def data(self):
+        return (
+            self.spark.range(10)
+                .toDF("id")
+                .withColumn("vs", array([lit(i) for i in range(20, 30)]))
+                .withColumn("v", explode(col("vs")))
+                .drop("vs")
+        )
+
     @classmethod
     def setUpClass(cls):
         ReusedSQLTestCase.setUpClass()
@@ -58,18 +79,26 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
         ReusedSQLTestCase.tearDownClass()
 
     def test_apply_in_arrow(self):
-        def func1(group):
+        def func(group):
             assert isinstance(group, pa.Table)
             assert group.schema.names == ["id", "value"]
             return group
 
-        def func2(key, group):
+        df = self.spark.range(10).withColumn("value", col("id") * 10)
+        grouped_df = df.groupBy((col("id") / 4).cast("int"))
+        expected = df.collect()
+
+        actual = grouped_df.applyInArrow(func, "id long, value long").collect()
+        self.assertEqual(actual, expected)
+
+    def test_apply_in_arrow_with_key(self):
+        def func(key, group):
             assert isinstance(key, tuple)
             assert all(isinstance(scalar, pa.Scalar) for scalar in key)
             assert isinstance(group, pa.Table)
             assert group.schema.names == ["id", "value"]
             assert all(
-                (pac.divide(k, pa.scalar(4)).cast(pa.int32()),) == key for k in group.column("id")
+                (pc.divide(k, pa.scalar(4)).cast(pa.int32()),) == key for k in group.column("id")
             )
             return group
 
@@ -77,11 +106,159 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
         grouped_df = df.groupBy((col("id") / 4).cast("int"))
         expected = df.collect()
 
-        actual = grouped_df.applyInArrow(func1, "id long, value long").collect()
-        self.assertEqual(actual, expected)
-
-        actual2 = grouped_df.applyInArrow(func2, "id long, value long").collect()
+        actual2 = grouped_df.applyInArrow(func, "id long, value long").collect()
         self.assertEqual(actual2, expected)
+
+    def test_apply_in_arrow_empty_groupby(self):
+        df = self.data
+
+        def normalize(table):
+            v = table.column("v")
+            return table.set_column(1, "v", pc.divide(pc.subtract(v, pc.mean(v)), pc.stddev(v, ddof=1)))
+
+        # casting doubles to floats to get rid of numerical precision isses comparing Arrow and Spark values
+        actual = df.groupby().applyInArrow(normalize, "id long, v double").withColumn("v", col("v").cast("float")).sort("id", "v")
+        windowSpec = Window.partitionBy()
+        expected = df.withColumn("v", ((df.v - mean(df.v).over(windowSpec)) / stddev(df.v).over(windowSpec)).cast("float"))
+        self.assertEqual(actual.collect(), expected.collect())
+
+    def test_apply_in_arrow_not_returning_arrow_table(self):
+        df = self.data
+
+        def stats(key, _):
+            return key
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                    PythonException,
+                    "Return type of the user-defined function should be pyarrow.Table, "
+                    "but is <class 'tuple'>",
+            ):
+                df.groupby("id").applyInArrow(stats, schema="id integer, m double").collect()
+
+    def test_apply_in_arrow_returning_wrong_types(self):
+        df = self.data
+
+        for schema in ["id integer, v long",
+                       "id long, v double",
+                       "id long, v string"]:
+            with self.subTest(schema=schema):
+                with QuietTest(self.sc):
+                    with self.assertRaisesRegex(
+                            PythonException,
+                            "Return type of the user-defined function should be pyarrow.Table, "
+                            "but is <class 'tuple'>",
+                    ):
+                        df.groupby("id").applyInArrow(lambda table: table, schema=schema).collect()
+
+    def test_apply_in_arrow_returning_wrong_number_of_columns(self):
+        df = self.data
+
+        def stats(key, table):
+            # returning three columns
+            return pa.Table.from_pydict({
+                "id": [key[0].as_py()],
+                "v": [pc.mean(table.column("v")).as_py()],
+                "v2": [pc.stddev(table.column("v")).as_py()]
+            })
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                    PythonException,
+                    "Number of columns of the returned pyarrow.Table doesn't match "
+                    "specified schema. Expected: 2 Actual: 3",
+            ):
+                # stats returns three columns while here we set schema with two columns
+                df.groupby("id").applyInArrow(stats, schema="id integer, m double").collect()
+
+    def test_apply_in_arrow_returning_empty_dataframe(self):
+        df = self.data
+
+        def odd_means(key, table):
+            if key[0].as_py() % 2 == 0:
+                return pa.table([])
+            else:
+                return pa.Table.from_pydict({
+                    "id": [key[0].as_py()],
+                    "v": [pc.mean(table.column("v")).as_py()]
+                })
+
+        expected_ids = {row[0] for row in self.data.collect() if row[0] % 2 != 0}
+
+        result = (
+            df.groupby("id")
+                .applyInArrow(odd_means, schema="id long, m double")
+                .sort("id", "m")
+                .collect()
+        )
+
+        actual_ids = {row[0] for row in result}
+        self.assertSetEqual(expected_ids, actual_ids)
+
+        self.assertEqual(len(expected_ids), len(result))
+        for row in result:
+            self.assertEqual(24.5, row[1])
+
+    def test_apply_in_arrow_returning_empty_dataframe_and_wrong_number_of_columns(self):
+        df = self.data
+
+        def odd_means(key, table):
+            if key[0].as_py() % 2 == 0:
+                return pa.table([[]], names=["id"])
+            else:
+                return pa.Table.from_pydict({
+                    "id": [key[0].as_py()],
+                    "v": [pc.mean(table.column("v")).as_py()]
+                })
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                    PythonException,
+                    "Number of columns of the returned pyarrow.Table doesn't match "
+                    "specified schema. Expected: 2 Actual: 1",
+            ):
+                # stats returns one column for even keys while here we set schema with two columns
+                df.groupby("id").applyInArrow(odd_means, schema="id integer, m double").collect()
+
+    def test_apply_in_arrow_column_order(self):
+
+        df = self.data
+        grouped_df = df.groupby("id")
+        expected = df.select(df.id, (df.v * 3).alias("u"), df.v).collect()
+
+        # Function returns a table with required column names but different order
+        def change_col_order(table):
+            return table.append_column("u", pc.multiply(table.column("v"), 3))
+
+        # The result should assign columns by name from the table
+        result = grouped_df.applyInArrow(change_col_order, "id long, u int, v int").sort("id", "v").select("id", "u", "v").collect()
+        self.assertEqual(expected, result)
+
+        def column_name_typo(table):
+            return table.remove_column(0).insert_column(0, "iid", table.column("id"))
+
+        def invalid_positional_types(_):
+            return pa.Table.from_pydict({"id": [1], "v": [datetime.date(2020, 10, 5)]})
+
+        with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegex(Exception, "KeyError: 'id'"):
+                    grouped_df.applyInArrow(column_name_typo, "id long, v long").collect()
+                with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
+                    grouped_df.apply(invalid_positional_types, "id long, v decimal").collect()
+
+    def test_positional_assignment_conf(self):
+        with self.sql_conf(
+                {"spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}
+        ):
+            def foo(_):
+                return pa.Table.from_pydict({"x": ["hi"], "y": [1]})
+
+            df = self.data
+            result = df.groupBy("id").applyInArrow(foo, "a string, b long").select("a", "b").collect()
+            for r in result:
+                self.assertEqual(r.a, "hi")
+                self.assertEqual(r.b, 1)
 
 
 if __name__ == "__main__":
