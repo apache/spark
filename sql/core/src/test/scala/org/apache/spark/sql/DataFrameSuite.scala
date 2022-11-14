@@ -3546,14 +3546,13 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-40199 Projecting NULLS from non-nullable UDFs should throw helpful errors") {
-    val udfs = Seq(
-      // TODO try unnamed UDFs here as well
+    Seq(
       ("Scala UDF with string return", "bad_udf", udf[String, Int](_ => null)),
       ("Scala UDF with int return", "bad_udf", udf[java.lang.Integer, Int](_ => null)),
       ("Java UDF with string return", "bad_udf", udf(new UDF1[Int, String] {
         override def call(t1: Int): String = null
       }, StringType)),
-      ("UDAF with simple buffer type", "bad_udf(c1#52)",
+      ("UDAF with simple buffer type", "bad_udf",
           udaf(new Aggregator[Int, Long, String] {
             override def zero: Long = 0
             override def reduce(b: Long, a: Int): Long = b + a
@@ -3562,7 +3561,7 @@ class DataFrameSuite extends QueryTest
             override def bufferEncoder: Encoder[Long] = Encoders.scalaLong
             override def outputEncoder: Encoder[String] = Encoders.STRING
           })),
-      ("UDAF with complex buffer type", "bad_udf(c1#92)",
+      ("UDAF with complex buffer type", "bad_udf",
           udaf(new Aggregator[Int, GroupByKey, String] {
             override def zero: GroupByKey = GroupByKey(0, 0)
             override def reduce(b: GroupByKey, a: Int): GroupByKey = GroupByKey(0, 0)
@@ -3571,12 +3570,16 @@ class DataFrameSuite extends QueryTest
             override def bufferEncoder: Encoder[GroupByKey] = Encoders.product[GroupByKey]
             override def outputEncoder: Encoder[String] = Encoders.STRING
           }))
-    )
-    udfs.foreach { case (desc, expectedName, udf) =>
+    ).foreach { case (desc, expectedName, udf) =>
       withClue(desc) {
-        spark.udf.register("bad_udf", udf.asNonNullable())
-        val e = intercept[SparkException](Seq(1).toDF("c1").select(expr("bad_udf(c1)")).collect())
-        assert(e.getMessage.contains(s"$expectedName cannot be null"))
+        val udfNN = udf.asNonNullable()
+        spark.udf.register("bad_udf", udfNN)
+        val e1 = intercept[SparkException](Seq(1).toDF("c1").select(expr("bad_udf(c1)")).collect())
+        assert(e1.getMessage.matches(s"(?s).+$expectedName\\((c1#\\d+|value)\\) cannot be null.+"))
+        // try also with the UDF being unnamed
+        val e2 = intercept[SparkException](Seq(1).toDF("c1").select(udfNN($"c1")).collect())
+        assert(e2.getMessage.matches(
+          """(?s).+(UDF|\$anon\$\d+)\((c1#\d+|value)\) cannot be null.+"""))
       }
     }
   }

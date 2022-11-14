@@ -144,7 +144,7 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
         s"""
           if ($eval.isNullAt($ordinal)) {
             throw QueryExecutionErrors.valueCannotBeNullError(
-              "${StringEscapeUtils.escapeJava(toString)}");
+              "${StringEscapeUtils.escapeJava(sql)}");
           } else {
             $setVal
           }
@@ -216,7 +216,7 @@ case class GetArrayStructFields(
         s"""
          if ($row.isNullAt($ordinal)) {
            throw QueryExecutionErrors.valueCannotBeNullError(
-             "${StringEscapeUtils.escapeJava(toString)}");
+             "${StringEscapeUtils.escapeJava(sql)}");
          } else
         """
       } else {
@@ -308,7 +308,7 @@ case class GetArrayItem(
       } else if (!child.trustNullability) {
         s"""else if ($eval1.isNullAt($index)) {
               throw QueryExecutionErrors.valueCannotBeNullError(
-                "${StringEscapeUtils.escapeJava(toString)}");
+                "${StringEscapeUtils.escapeJava(sql)}");
             }
          """
       } else {
@@ -425,7 +425,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
       ""
     }
 
-    val nullValueCheck = if (nullable || trustInputNullability) {
+    val nullValueCheck = if (mapType.valueContainsNull || trustInputNullability) {
       ""
     } else {
       s"""
@@ -510,7 +510,7 @@ case class GetMapValue(child: Expression, key: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     doGetValueGenCode(ctx, ev, child.dataType.asInstanceOf[MapType],
-      toString, child.trustNullability)
+      sql, child.trustNullability)
   }
 
   override protected def withNewChildrenInternal(

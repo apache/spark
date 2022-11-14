@@ -1181,7 +1181,7 @@ case class ScalaUDF(
          |  ${ev.value} = $resultTerm;
          |} else {
          |  throw QueryExecutionErrors.valueCannotBeNullError(
-         |    "UDF named ${StringEscapeUtils.escapeJava(name)}");
+         |    "${StringEscapeUtils.escapeJava(s"$name(${children.map(_.sql).mkString(", ")})")}");
          |}
        """.stripMargin
     }

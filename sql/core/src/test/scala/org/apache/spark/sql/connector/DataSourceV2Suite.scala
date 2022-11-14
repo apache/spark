@@ -606,31 +606,27 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       withClue(cls.getName) {
         sql(s"CREATE or REPLACE TEMPORARY VIEW s1 USING ${cls.getName}")
         Seq(
-          ("i", "primitive", "input[1, int, false]"),
-          ("s", "string", "input[2, string, false]"),
-          ("nest", "struct", "input[3, struct<s:string,i:int>, false]"),
-          ("nest.s", "nested string", "input[3, struct<s:string,i:int>, false].s"),
-          ("nest.i", "nested int", "input[3, struct<s:string,i:int>, false].i"),
-          ("arrI[0]", "array of int", "input[4, array<int>, true][0]"),
-          ("element_at(arrI, 1)", "array of int",
-              "element_at(input[4, array<int>, true], 1, None, false)"),
-          ("arrS[0]", "array of str", "input[5, array<string>, true][0]"),
-          ("element_at(arrS, 1)", "array of str",
-              "element_at(input[5, array<string>, true], 1, None, false)"),
-          ("arrNest.i", "array of struct", "input[6, array<struct<i:int>>, true].i"),
-          ("mapSI['foo']", "map null int value", "input[7, map<string,int>, true][foo]"),
-          ("element_at(mapSI, 'foo')", "map null int value",
-              "element_at(input[7, map<string,int>, true], foo, None, false)"),
-          ("mapIS[1]", "map null str value", "input[8, map<int,string>, true][1]"),
-          ("element_at(mapIS, 1)", "map null str value",
-              "element_at(input[8, map<int,string>, true], 1, None, false)"),
-        ).foreach { case (colName, desc, expect) =>
+          ("i", "primitive"),
+          ("s", "string"),
+          ("nest", "struct"),
+          ("nest.`s`", "nested string"),
+          ("nest.`i`", "nested int"),
+          ("arrI[0]", "array of int"),
+          ("element_at(arrI, 1)", "array of int using element_at"),
+          ("arrS[0]", "array of str"),
+          ("element_at(arrS, 1)", "array of str using element_at"),
+          ("arrNest.`i`", "array of struct"),
+          ("mapSI['foo']", "map null int value"),
+          ("element_at(mapSI, 'foo')", "map null int value using element_at"),
+          ("mapIS[1]", "map null str value"),
+          ("element_at(mapIS, 1)", "map null str value using element_at"),
+        ).foreach { case (colName, desc) =>
           withClue(s"projecting $colName ($desc)") {
             val e = intercept[SparkException] {
               sql(s"SELECT $colName FROM s1 WHERE nullfield = '${colName.replace("'", "\\'")}'")
                   .collect()
             }
-            assert(e.getMessage.contains(s"$expect cannot be null"))
+            assert(e.getMessage.contains(s"$colName cannot be null"))
           }
         }
       }
@@ -750,15 +746,15 @@ object SimpleDataSourceV2NonNullable {
 
   private val fooStr = UTF8String.fromString("foo")
   private def row(
-    nullfield: String,
-    i: JInt = 1,
-    s: UTF8String = fooStr,
-    nest: InternalRow = InternalRow(fooStr, 1),
-    arrI: Array[JInt] = Array(),
-    arrS: Array[UTF8String] = Array(),
-    arrNest: Array[InternalRow] = Array(),
-    mapSI: Map[UTF8String, JInt] = Map(),
-    mapIS: Map[JInt, UTF8String] = Map()): InternalRow = {
+      nullfield: String,
+      i: JInt = 1,
+      s: UTF8String = fooStr,
+      nest: InternalRow = InternalRow(fooStr, 1),
+      arrI: Array[JInt] = Array(),
+      arrS: Array[UTF8String] = Array(),
+      arrNest: Array[InternalRow] = Array(),
+      mapSI: Map[UTF8String, JInt] = Map(),
+      mapIS: Map[JInt, UTF8String] = Map()): InternalRow = {
     InternalRow(UTF8String.fromString(nullfield), i, s, nest,
       Option(arrI).map(ArrayData.toArrayData).orNull,
       Option(arrS).map(ArrayData.toArrayData).orNull,
@@ -771,13 +767,13 @@ object SimpleDataSourceV2NonNullable {
     row("i", i = null),
     row("s", s = null),
     row("nest", nest = null),
-    row("nest.s", nest = InternalRow(null, 1)),
-    row("nest.i", nest = InternalRow(fooStr, null)),
+    row("nest.`s`", nest = InternalRow(null, 1)),
+    row("nest.`i`", nest = InternalRow(fooStr, null)),
     row("arrI[0]", arrI = Array(null)),
     row("element_at(arrI, 1)", arrI = Array(null)),
     row("arrS[0]", arrS = Array(null)),
     row("element_at(arrS, 1)", arrS = Array(null)),
-    row("arrNest.i", arrNest = Array(InternalRow(null))),
+    row("arrNest.`i`", arrNest = Array(InternalRow(null))),
     row("mapSI['foo']", mapSI = Map(fooStr -> null)),
     row("element_at(mapSI, 'foo')", mapSI = Map(fooStr -> null)),
     row("mapIS[1]", mapIS = Map((1, null))),

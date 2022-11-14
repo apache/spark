@@ -36,6 +36,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean,
   extends LeafExpression {
 
   override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
+  override def sql: String = userFriendlyDesc.getOrElse(super.sql)
 
   private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType, nullable)
 
@@ -65,7 +66,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean,
         val c =
           code"""if (${ctx.INPUT_ROW}.isNullAt($ordinal)) {
                 |  throw QueryExecutionErrors.valueCannotBeNullError(
-                |    "${StringEscapeUtils.escapeJava(userFriendlyDesc.getOrElse(toString))}");
+                |    "${StringEscapeUtils.escapeJava(sql)}");
                 |}
                 |$javaType ${ev.value} = $value;
                 |""".stripMargin

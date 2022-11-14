@@ -2376,7 +2376,7 @@ case class ElementAt(
             s"""
                |if ($eval1.isNullAt($index)) {
                |  throw QueryExecutionErrors.valueCannotBeNullError(
-               |    "${StringEscapeUtils.escapeJava(toString)}");
+               |    "${StringEscapeUtils.escapeJava(sql)}");
                |} else
              """.stripMargin
           } else {
@@ -2420,7 +2420,7 @@ case class ElementAt(
            """.stripMargin
         })
       case _: MapType =>
-        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType], toString, left.trustNullability)
+        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType], sql, left.trustNullability)
     }
   }
 
