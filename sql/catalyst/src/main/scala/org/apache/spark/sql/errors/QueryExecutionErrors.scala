@@ -1249,15 +1249,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("o" -> o.toString()))
   }
 
-  def unscaledValueTooLargeForPrecisionError(): SparkArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION",
-      messageParameters = Map(
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = Array.empty,
-      summary = "")
-  }
-
   def decimalPrecisionExceedsMaxPrecisionError(
       precision: Int, maxPrecision: Int): SparkArithmeticException = {
     new SparkArithmeticException(
