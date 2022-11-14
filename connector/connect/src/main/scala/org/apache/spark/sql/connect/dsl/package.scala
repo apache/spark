@@ -241,6 +241,17 @@ package object dsl {
       }
     }
 
+    def select(exprs: Expression*): Relation = {
+      Relation
+        .newBuilder()
+        .setProject(
+          Project
+            .newBuilder()
+            .addAllExpressions(exprs.toIterable.asJava)
+            .build())
+        .build()
+    }
+
     implicit class DslLogicalPlan(val logicalPlan: Relation) {
       def select(exprs: Expression*): Relation = {
         Relation
