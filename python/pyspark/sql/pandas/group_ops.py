@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
 class PandasGroupedOpsMixin:
     """
-    Min-in for pandas grouped operations. Currently, only :class:`GroupedData`
+    Min-in for Pandas grouped operations. Currently, only :class:`GroupedData`
     can use this class.
     """
 
@@ -116,7 +116,7 @@ class PandasGroupedOpsMixin:
         self, func: "PandasGroupedMapFunction", schema: Union[StructType, str]
     ) -> DataFrame:
         """
-        Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
+        Maps each group of the current :class:`DataFrame` using a Pandas udf and returns the result
         as a `DataFrame`.
 
         The function should take a `pandas.DataFrame` and return another
@@ -150,7 +150,7 @@ class PandasGroupedOpsMixin:
         Examples
         --------
         >>> import pandas as pd  # doctest: +SKIP
-        >>> from pyspark.sql.functions import pandas_udf, ceil
+        >>> from pyspark.sql.functions import ceil
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ...     ("id", "v"))  # doctest: +SKIP
@@ -359,6 +359,113 @@ class PandasGroupedOpsMixin:
     def applyInArrow(
         self, func: "ArrowGroupedMapFunction", schema: Union[StructType, str]
     ) -> "DataFrame":
+        """
+        Maps each group of the current :class:`DataFrame` using an Arrow udf and returns the result
+        as a `DataFrame`.
+
+        The function should take a `pyarrow.Table` and return another
+        `pyarrow.Table`. Alternatively, the user can pass a function that takes
+        a tuple of `pyarrow.Scalar` grouping key(s) and a `pyarrow.Table`.
+        For each group, all columns are passed together as a `pyarrow.Table`
+        to the user-function and the returned `pyarrow.Table` are combined as a
+        :class:`DataFrame`.
+
+        The `schema` should be a :class:`StructType` describing the schema of the returned
+        `pyarrow.Table`. The column labels of the returned `pyarrow.Table` must either match
+        the field names in the defined schema if specified as strings, or match the
+        field data types by position if not strings, e.g. integer indices.
+        The length of the returned `pandas.DataFrame` can be arbitrary.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        func : function
+            a Python native function that takes a `pyarrow.Table` and outputs a
+            `pyarrow.Table`, or that takes one tuple (grouping keys) and a
+            `pyarrow.Table` and outputs a `pyarrow.Table`.
+        schema : :class:`pyspark.sql.types.DataType` or str
+            the return type of the `func` in PySpark. The value can be either a
+            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+
+        Examples
+        --------
+        >>> from pyspark.sql.functions import ceil
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+        ...     ("id", "v"))  # doctest: +SKIP
+        >>> import polars
+        >>> def normalize_polars(pdf):
+        ...     v = polars.col("v")
+        ...     return pdf.with_column((v-v.mean()) / v.std())
+        >>> def normalize_arrow(table):
+        ...     return normalize_polars(polars.from_arrow(table)).to_arrow()
+        >>> df.groupby("id").applyInArrow(
+        ...     normalize_arrow, schema="id long, v double").show()  # doctest: +SKIP
+        +---+-------------------+
+        +---+-------------------+
+        | id|                  v|
+        +---+-------------------+
+        |  1|-0.7071067811865475|
+        |  1| 0.7071067811865475|
+        |  2|-0.8320502943378437|
+        |  2|-0.2773500981126146|
+        |  2| 1.1094003924504583|
+        +---+-------------------+
+
+        Alternatively, the user can pass a function that takes two arguments.
+        In this case, the grouping key(s) will be passed as the first argument and the data will
+        be passed as the second argument. The grouping key(s) will be passed as a tuple of Arrow
+        scalars types, e.g., `pyarrow.Int32Scalar` and `pyarrow.FloatScalar`. The data will still
+        be passed in as a `pyarrow.Table` containing all columns from the original Spark DataFrame.
+        This is useful when the user does not want to hardcode grouping key(s) in the function.
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+        ...     ("id", "v"))  # doctest: +SKIP
+        >>> def mean_func(key, table):
+        ...     # key is a tuple of one pyarrow.Int64Scalar, which is the value
+        ...     # of 'id' for the current group
+        ...     mean = compute.mean(table.column("v"))
+        ...     return pyarrow.Table.from_pydict({"id": [key[0].as_py()], "v": [mean.as_py()]})
+        >>> df.groupby('id').applyInArrow(
+        ...     mean_func, schema="id long, v double")  # doctest: +SKIP
+        +---+---+
+        | id|  v|
+        +---+---+
+        |  1|1.5|
+        |  2|6.0|
+        +---+---+
+
+        >>> def sum_func(key, table):
+        ...     # key is a tuple of two pyarrow.Int64Scalars, which is the values
+        ...     # of 'id' and 'ceil(df.v / 2)' for the current group
+        ...     sum = compute.sum(table.column("v"))
+        ...     return pyarrow.Table.from_pydict({
+        ...         "id": [key[0].as_py()],
+        ...         "ceil(v / 2)": [key[1].as_py()],
+        ...         "v": [sum.as_py()]
+        ...     })
+        +---+-----------+----+
+        | id|ceil(v / 2)|   v|
+        +---+-----------+----+
+        |  2|          5|10.0|
+        |  1|          1| 3.0|
+        |  2|          3| 5.0|
+        |  2|          2| 3.0|
+        +---+-----------+----+
+
+        Notes
+        -----
+        This function requires a full shuffle. All the data of a group will be loaded
+        into memory, so the user should be aware of the potential OOM risk if data is skewed
+        and certain groups are too large to fit in memory.
+
+        This API is experimental.
+
+        See Also
+        --------
+        pyspark.sql.functions.pandas_udf
+        """
         from pyspark.sql import GroupedData
         from pyspark.sql.functions import pandas_udf
 
@@ -414,7 +521,7 @@ class PandasCogroupedOps:
         self, func: "PandasCogroupedMapFunction", schema: Union[StructType, str]
     ) -> DataFrame:
         """
-        Applies a function to each cogroup using pandas and returns the result
+        Applies a function to each cogroup using Pandas and returns the result
         as a `DataFrame`.
 
         The function should take two `pandas.DataFrame`\\s and return another
@@ -447,7 +554,6 @@ class PandasCogroupedOps:
 
         Examples
         --------
-        >>> from pyspark.sql.functions import pandas_udf
         >>> df1 = spark.createDataFrame(
         ...     [(20000101, 1, 1.0), (20000101, 2, 2.0), (20000102, 1, 3.0), (20000102, 2, 4.0)],
         ...     ("time", "id", "v1"))
@@ -473,7 +579,7 @@ class PandasCogroupedOps:
         the grouping key(s) will be passed as the first argument and the data will be passed as the
         second and third arguments.  The grouping key(s) will be passed as a tuple of numpy data
         types, e.g., `numpy.int32` and `numpy.float64`. The data will still be passed in as two
-        `pandas.DataFrame` containing all columns from the original Spark DataFrames.
+        `pandas.DataFrame`\\s containing all columns from the original Spark DataFrames.
 
         >>> def asof_join(k, l, r):
         ...     if k == (1,):
@@ -517,6 +623,99 @@ class PandasCogroupedOps:
     def applyInArrow(
         self, func: "ArrowCogroupedMapFunction", schema: Union[StructType, str]
     ) -> "DataFrame":
+        """
+        Applies a function to each cogroup using Arrow and returns the result
+        as a `DataFrame`.
+
+        The function should take two `pyarrow.Table`\\s and return another
+        `pyarrow.Table`. Alternatively, the user can pass a function that takes
+        a tuple of `pyarrow.Scalar` grouping key(s) and the two `pyarrow.Table`\\s.
+        For each side of the cogroup, all columns are passed together as a
+        `pyarrow.Table` to the user-function and the returned `pyarrow.Table` are combined as
+        a :class:`DataFrame`.
+
+        The `schema` should be a :class:`StructType` describing the schema of the returned
+        `pandas.DataFrame`. The column labels of the returned `pandas.DataFrame` must either match
+        the field names in the defined schema if specified as strings, or match the
+        field data types by position if not strings, e.g. integer indices.
+        The length of the returned `pyarrow.Table` can be arbitrary.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        func : function
+            a Python native function that takes two `pyarrow.Table`\\s, and
+            outputs a `pyarrow.Table`, or that takes one tuple (grouping keys) and two
+            ``pyarrow.Table``\\s, and outputs a ``pyarrow.Table``.
+        schema : :class:`pyspark.sql.types.DataType` or str
+            the return type of the `func` in PySpark. The value can be either a
+            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+
+        Examples
+        --------
+        >>> df1 = spark.createDataFrame(
+        ...     [(20000101, 1, 1.0), (20000101, 2, 2.0), (20000102, 1, 3.0), (20000102, 2, 4.0)],
+        ...     ("time", "id", "v1"))
+        >>> df2 = spark.createDataFrame(
+        ...     [(20000101, 1, "x"), (20000101, 2, "y")],
+        ...     ("time", "id", "v2"))
+        >>> def asof_join_polars(l, r):
+        ...     return l.join_asof(r, on="time", by="id")
+        >>> def asof_join_arrow(l, r):
+        ...     import polars
+        ...     result = asof_join_polars(polars.from_arrow(l), polars.from_arrow(r)).to_arrow()
+        ...     # to_arrow() returns large_string strings, which are not supported by PySpark
+        ...     schema = result.schema.remove(3).append(pyarrow.field("v2", pyarrow.string()))
+        ...     return result.cast(schema)
+        >>> df1.groupby("id").cogroup(df2.groupby("id")).applyInArrow(
+        ...     asof_join_arrow, schema="time long, id long, v1 double, v2 string"
+        ... ).show()  # doctest: +SKIP
+        +--------+---+---+---+
+        |    time| id| v1| v2|
+        +--------+---+---+---+
+        |20000101|  1|1.0|  x|
+        |20000102|  1|3.0|  x|
+        |20000101|  2|2.0|  y|
+        |20000102|  2|4.0|  y|
+        +--------+---+---+---+
+
+        Alternatively, the user can define a function that takes three arguments.  In this case,
+        the grouping key(s) will be passed as the first argument and the data will be passed as the
+        second and third arguments.  The grouping key(s) will be passed as a tuple of Arrow scalars
+        types, e.g., `pyarrow.Int32Scalar` and `pyarrow.FloatScalar`. The data will still be passed
+        in as two `pyarrow.Table`\\s containing all columns from the original Spark DataFrames.
+
+        >>> def asof_join_arrow(k, l, r):
+        ...     if k == (pyarrow.scalar(1),):
+        ...         result = asof_join_polars(polars.from_arrow(l), polars.from_arrow(r)).to_arrow()
+        ...         # to_arrow() returns large_string strings, which are not supported by PySpark
+        ...         schema = result.schema.remove(3).append(pyarrow.field("v2", pyarrow.string()))
+        ...         return result.cast(schema)
+        ...     else:
+        ...         return pyarrow.Table.from_pydict({"time": [], "id": [], "v1": [], "v2": []})
+        >>> df1.groupby("id").cogroup(df2.groupby("id")).applyInArrow(
+        ...     asof_join_arrow, "time long, id long, v1 double, v2 string"
+        ... ).show()  # doctest: +SKIP
+        +--------+---+---+---+
+        |    time| id| v1| v2|
+        +--------+---+---+---+
+        |20000101|  1|1.0|  x|
+        |20000102|  1|3.0|  x|
+        +--------+---+---+---+
+
+        Notes
+        -----
+        This function requires a full shuffle. All the data of a cogroup will be loaded
+        into memory, so the user should be aware of the potential OOM risk if data is skewed
+        and certain groups are too large to fit in memory.
+
+        This API is experimental.
+
+        See Also
+        --------
+        pyspark.sql.functions.pandas_udf
+        """
         from pyspark.sql.pandas.functions import pandas_udf
 
         # The usage of the pandas_udf is internal so type checking is disabled.
