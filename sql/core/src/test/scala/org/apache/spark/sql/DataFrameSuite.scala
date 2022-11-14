@@ -2322,19 +2322,18 @@ class DataFrameSuite extends QueryTest
   test("SPARK-13774: Check error message for non existent path without globbed paths") {
     val uuid = UUID.randomUUID().toString
     val baseDir = Utils.createTempDir()
-    try {
-      val e = intercept[AnalysisException] {
+    checkError(
+      exception = intercept[AnalysisException] {
         spark.read.format("csv").load(
           new File(baseDir, "file").getAbsolutePath,
           new File(baseDir, "file2").getAbsolutePath,
           new File(uuid, "file3").getAbsolutePath,
           uuid).rdd
-      }
-      assert(e.getErrorClass == "PATH_NOT_FOUND")
-    } finally {
-
-    }
-
+      },
+      errorClass = "PATH_NOT_FOUND",
+      parameters = Map("path" -> "file:.*"),
+      matchPVals = true
+    )
    }
 
   test("SPARK-13774: Check error message for not existent globbed paths") {
