@@ -24,7 +24,30 @@ or
 ```bash
 ./build/sbt -Phive clean package
 ```
-   
+
+### Build with user-defined `protoc` and `protoc-gen-grpc-java`
+
+When the user cannot use the official `protoc` and `protoc-gen-grpc-java` binary files to build the `connect` module in the compilation environment, 
+we can try to compile and test by specifying the user-defined `protoc` and `protoc-gen-grpc-java` binary files as follows:
+
+```bash
+export CONNECT_PROTOC_EXEC_PATH = /path-to-protoc-exe
+export CONNECT_PLUGIN_EXEC_PATH = /path-to-protoc-gen-grpc-java-exe
+./build/mvn -Phive -Puser-defined-pb clean package
+```
+
+or
+
+```bash
+export CONNECT_PROTOC_EXEC_PATH = /path-to-protoc-exe
+export CONNECT_PLUGIN_EXEC_PATH = /path-to-protoc-gen-grpc-java-exe
+./build/sbt -Puser-defined-pb clean package
+```
+
+The user-defined `protoc` and `protoc-gen-grpc-java` binary files can be produced in the user's compilation environment by source code compilation, 
+for compilation steps, please refer to [protobuf](https://github.com/protocolbuffers/protobuf) and [grpc-java](https://github.com/grpc/grpc-java).
+
+
 ### Run Spark Shell
 
 To run Spark Connect you locally built:
