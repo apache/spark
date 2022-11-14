@@ -111,13 +111,11 @@ object SparkBuild extends PomBuild {
     }
     if (profiles.contains("user-defined-pb")) {
       val connectProtocExecPath = Properties.envOrNone("CONNECT_PROTOC_EXEC_PATH")
-      require(connectProtocExecPath.isDefined,
-        "CONNECT_PROTOC_EXEC_PATH must be set when build with -Puser-defined-pb")
-      sys.props.put("connect.protoc.executable.path", connectProtocExecPath.get)
       val connectPluginExecPath = Properties.envOrNone("CONNECT_PLUGIN_EXEC_PATH")
-      require(connectPluginExecPath.isDefined,
-        "CONNECT_PLUGIN_EXEC_PATH must be set when build with -Puser-defined-pb")
-      sys.props.put("connect.plugin.executable.path", connectPluginExecPath.get)
+      if (connectProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
+        sys.props.put("connect.protoc.executable.path", connectProtocExecPath.get)
+        sys.props.put("connect.plugin.executable.path", connectPluginExecPath.get)
+      }
     }
     profiles
   }
