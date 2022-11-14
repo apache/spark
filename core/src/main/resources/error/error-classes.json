@@ -616,6 +616,11 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_EMPTY_LOCATION" : {
+    "message" : [
+      "A specified location cannot be empty."
+    ]
+  },
   "INVALID_FIELD_NAME" : {
     "message" : [
       "Field name <fieldName> is invalid: <path> is not a struct."
@@ -1104,11 +1109,6 @@
         ]
       }
     }
-  },
-  "UNSUPPORTED_EMPTY_LOCATION" : {
-    "message" : [
-      "Unsupported empty location."
-    ]
   },
   "UNSUPPORTED_FEATURE" : {
     "message" : [

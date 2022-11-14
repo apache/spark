@@ -2801,7 +2801,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def unsupportedEmptyLocationError(): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "UNSUPPORTED_EMPTY_LOCATION",
+      errorClass = "INVALID_EMPTY_LOCATION",
       messageParameters = Map.empty)
   }
 
