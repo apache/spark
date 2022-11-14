@@ -4924,9 +4924,9 @@ class DataFrameNaFunctions:
     def fill(
         self,
         value: Union["LiteralType", Dict[str, "LiteralType"]],
-        subset: Optional[List[str]] = None,
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
     ) -> DataFrame:
-        return self.df.fillna(value=value, subset=subset)  # type: ignore[arg-type]
+        return self.df.fillna(value=value, subset=subset)
 
     fill.__doc__ = DataFrame.fillna.__doc__
 
