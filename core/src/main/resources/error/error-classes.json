@@ -638,6 +638,23 @@
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
     ]
   },
+  "INVALID_LIKE_PATTERN" : {
+    "message" : [
+      "The pattern <pattern> is invalid."
+    ],
+    "subClass" : {
+      "ESC_IN_THE_MIDDLE" : {
+        "message" : [
+          "the escape character is not allowed to precede <char>."
+        ]
+      },
+      "ESC_AT_THE_END" : {
+        "message" : [
+          "the escape character is not allowed to end with."
+        ]
+      }
+    }
+  },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [
       "The group aggregate pandas UDF <functionList> cannot be invoked together with as other, non-pandas aggregate functions."
@@ -2687,11 +2704,6 @@
   "_LEGACY_ERROR_TEMP_1215" : {
     "message" : [
       "char/varchar type can only be used in the table schema. You can set <config> to true, so that Spark treat them as string type as same as Spark 3.0 and earlier."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1216" : {
-    "message" : [
-      "The pattern '<pattern>' is invalid, <message>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1218" : {

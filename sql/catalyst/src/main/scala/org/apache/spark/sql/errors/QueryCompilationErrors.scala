@@ -2132,12 +2132,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("config" -> SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key))
   }
 
-  def invalidPatternError(pattern: String, message: String): Throwable = {
+  def escapeCharacterInTheMiddleError(pattern: String, char: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1216",
+      errorClass = "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
       messageParameters = Map(
         "pattern" -> toSQLValue(pattern, StringType),
-        "message" -> message))
+        "char" -> toSQLValue(char, StringType)))
+  }
+
+  def escapeCharacterAtTheEndError(pattern: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_LIKE_PATTERN.ESC_AT_THE_END",
+      messageParameters = Map(
+        "pattern" -> toSQLValue(pattern, StringType)))
   }
 
   def tableIdentifierExistsError(tableIdentifier: TableIdentifier): Throwable = {
