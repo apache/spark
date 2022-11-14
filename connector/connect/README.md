@@ -31,16 +31,16 @@ When the user cannot use the official `protoc` and `protoc-gen-grpc-java` binary
 we can try to compile and test by specifying the user-defined `protoc` and `protoc-gen-grpc-java` binary files as follows:
 
 ```bash
-export CONNECT_PROTOC_EXEC_PATH = /path-to-protoc-exe
-export CONNECT_PLUGIN_EXEC_PATH = /path-to-protoc-gen-grpc-java-exe
+export CONNECT_PROTOC_EXEC_PATH=/path-to-protoc-exe
+export CONNECT_PLUGIN_EXEC_PATH=/path-to-protoc-gen-grpc-java-exe
 ./build/mvn -Phive -Puser-defined-pb clean package
 ```
 
 or
 
 ```bash
-export CONNECT_PROTOC_EXEC_PATH = /path-to-protoc-exe
-export CONNECT_PLUGIN_EXEC_PATH = /path-to-protoc-gen-grpc-java-exe
+export CONNECT_PROTOC_EXEC_PATH=/path-to-protoc-exe
+export CONNECT_PLUGIN_EXEC_PATH=/path-to-protoc-gen-grpc-java-exe
 ./build/sbt -Puser-defined-pb clean package
 ```
 
