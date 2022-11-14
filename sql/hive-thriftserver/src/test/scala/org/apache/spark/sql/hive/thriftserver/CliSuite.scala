@@ -626,7 +626,7 @@ class CliSuite extends SparkFunSuite {
   }
 
   test("SPARK-37555: spark-sql should pass last unclosed comment to backend") {
-    runCliWithin(2.minute)(
+    runCliWithin(5.minute)(
       // Only unclosed comment.
       "/* SELECT /*+ HINT() 4; */;".stripMargin -> "Syntax error at or near ';'",
       // Unclosed nested bracketed comment.
