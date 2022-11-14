@@ -344,6 +344,10 @@ class SparkConnectPlanner(session: SparkSession) {
       }
       Alias(transformExpression(alias.getExpr), alias.getName(0))(explicitMetadata = md)
     } else {
+      if (alias.hasMetadata) {
+        throw new InvalidPlanInput(
+          "Alias expressions with more than 1 identifier must not use optional metadata.")
+      }
       MultiAlias(transformExpression(alias.getExpr), alias.getNameList.asScala.toSeq)
     }
   }
