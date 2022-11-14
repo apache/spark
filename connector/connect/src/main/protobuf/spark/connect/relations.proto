@@ -49,6 +49,7 @@ message Relation {
     Repartition repartition = 17;
     RenameColumnsBySameLengthNames rename_columns_by_same_length_names = 18;
     RenameColumnsByNameToNameMap rename_columns_by_name_to_name_map = 19;
+    ShowString show_string = 20;
 
     // stat functions
     StatSummary summary = 100;
@@ -98,6 +99,9 @@ message Read {
 // The input relation must be specified.
 // The projected expression can be an arbitrary expression.
 message Project {
+  // (Optional) Input relation is optional for Project.
+  //
+  // For example, `SELECT ABS(-1)` is valid plan without an input plan.
   Relation input = 1;
   repeated Expression expressions = 3;
 }
@@ -251,6 +255,23 @@ message Repartition {
 
   // Optional. Default value is false.
   bool shuffle = 3;
+}
+
+// Compose the string representing rows for output.
+// It will invoke 'Dataset.showString' to compute the results.
+message ShowString {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Number of rows to show.
+  optional int32 numRows = 2;
+
+  // (Required) If set to more than 0, truncates strings to
+  // `truncate` characters and all cells will be aligned right.
+  optional int32 truncate = 3;
+
+  // (Required) If set to true, prints output rows vertically (one line per column value).
+  optional bool vertical = 4;
 }
 
 // Computes specified statistics for numeric and string columns.

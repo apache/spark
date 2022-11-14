@@ -129,11 +129,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "Sort order in second argument requires a boolean literal.",
-    "sqlExpr" : "sort_array(array('b', 'd'), '1')"
+    "inputSql" : "\"1\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"sort_array(array(b, d), 1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -152,11 +154,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "Sort order in second argument requires a boolean literal.",
-    "sqlExpr" : "sort_array(array('b', 'd'), CAST(NULL AS BOOLEAN))"
+    "inputSql" : "\"CAST(NULL AS BOOLEAN)\"",
+    "inputType" : "\"BOOLEAN\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"sort_array(array(b, d), CAST(NULL AS BOOLEAN))\""
   },
   "queryContext" : [ {
     "objectType" : "",

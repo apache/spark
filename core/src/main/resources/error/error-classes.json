@@ -137,6 +137,11 @@
       "Cannot resolve <sqlExpr> due to data type mismatch:"
     ],
     "subClass" : {
+      "ARRAY_FUNCTION_DIFF_TYPES" : {
+        "message" : [
+          "Input to <functionName> should have been <dataType> followed by a value with same element type, but it's [<leftType>, <rightType>]."
+        ]
+      },
       "BINARY_ARRAY_DIFF_TYPES" : {
         "message" : [
           "Input to function <functionName> should have been two <arrayType> with same element type, but it's [<leftType>, <rightType>]."
@@ -249,7 +254,7 @@
           "The <functionName> should all be of type map, but it's <dataType>."
         ]
       },
-      "MAP_CONTAINS_KEY_DIFF_TYPES" : {
+      "MAP_FUNCTION_DIFF_TYPES" : {
         "message" : [
           "Input to <functionName> should have been <dataType> followed by a value with same key type, but it's [<leftType>, <rightType>]."
         ]
@@ -292,6 +297,14 @@
       "RANGE_FRAME_WITHOUT_ORDER" : {
         "message" : [
           "A range window frame cannot be used in an unordered window specification."
+        ]
+      },
+      "SEQUENCE_WRONG_INPUT_TYPES" : {
+        "message" : [
+          "<functionName> uses the wrong parameter type. The parameter type must conform to:",
+          "1. The start and stop expressions must resolve to the same type.",
+          "2. If start and stop expressions resolve to the <startType> type, then the step expression must resolve to the <stepType> type",
+          "3. Otherwise, if start and stop expressions resolve to the <otherStartType> type, then the step expression must resolve to the same type."
         ]
       },
       "SPECIFIED_WINDOW_FRAME_DIFF_TYPES" : {
@@ -347,11 +360,6 @@
       "UNEXPECTED_STATIC_METHOD" : {
         "message" : [
           "cannot find a static method <methodName> that matches the argument types in <className>"
-        ]
-      },
-      "UNSPECIFIED_FRAME" : {
-        "message" : [
-          "Cannot use an UnspecifiedFrame. This should have been converted during analysis."
         ]
       },
       "UNSUPPORTED_INPUT_TYPE" : {
@@ -474,15 +482,15 @@
       "Aggregate functions are not allowed in GROUP BY, but found <sqlExpr>."
     ]
   },
-  "GROUP_BY_POS_OUT_OF_RANGE" : {
+  "GROUP_BY_POS_AGGREGATE" : {
     "message" : [
-      "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
+      "GROUP BY <index> refers to an expression <aggExpr> that contains an aggregate function. Aggregate functions are not allowed in GROUP BY."
     ],
     "sqlState" : "42000"
   },
-  "GROUP_BY_POS_REFERS_AGG_EXPR" : {
+  "GROUP_BY_POS_OUT_OF_RANGE" : {
     "message" : [
-      "GROUP BY <index> refers to an expression <aggExpr> that contains an aggregate function. Aggregate functions are not allowed in GROUP BY."
+      "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
     ],
     "sqlState" : "42000"
   },
@@ -629,6 +637,23 @@
     "message" : [
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
     ]
+  },
+  "INVALID_LIKE_PATTERN" : {
+    "message" : [
+      "The pattern <pattern> is invalid."
+    ],
+    "subClass" : {
+      "ESC_IN_THE_MIDDLE" : {
+        "message" : [
+          "the escape character is not allowed to precede <char>."
+        ]
+      },
+      "ESC_AT_THE_END" : {
+        "message" : [
+          "the escape character is not allowed to end with."
+        ]
+      }
+    }
   },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [
@@ -2679,11 +2704,6 @@
   "_LEGACY_ERROR_TEMP_1215" : {
     "message" : [
       "char/varchar type can only be used in the table schema. You can set <config> to true, so that Spark treat them as string type as same as Spark 3.0 and earlier."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1216" : {
-    "message" : [
-      "The pattern '<pattern>' is invalid, <message>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1218" : {

@@ -31,6 +31,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
@@ -3713,12 +3714,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM df").collect()
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1216",
+        errorClass = "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
         parameters = Map(
-          "pattern" -> "'m%@ca'",
-          "message" -> "the escape character is not allowed to precede '@'"))
+          "pattern" -> toSQLValue("m%@ca", StringType),
+          "char" -> toSQLValue("@", StringType)))
 
       checkAnswer(sql("SELECT s LIKE 'm@@ca' ESCAPE '@' FROM df"), Row(true))
+    }
+  }
+
+  test("the escape character is not allowed to end with") {
+    withTempView("df") {
+      Seq("jialiuping").toDF("a").createOrReplaceTempView("df")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT a LIKE 'jialiuping%' ESCAPE '%' FROM df").collect()
+        },
+        errorClass = "INVALID_LIKE_PATTERN.ESC_AT_THE_END",
+        parameters = Map("pattern" -> toSQLValue("jialiuping%", StringType)))
     }
   }
 
