@@ -557,7 +557,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     checkError(
       exception = parseException(v3),
       errorClass = "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE",
-      parameters = Map("database" -> "a"),
+      parameters = Map("actualName" -> "a.b"),
       context = ExpectedContext(
         fragment = v3,
         start = 0,

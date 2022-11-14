@@ -542,11 +542,11 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def notAllowedToAddDBPrefixForTempViewError(
-      database: String,
+      viewName: String,
       ctx: CreateViewContext): Throwable = {
     new ParseException(
       errorClass = "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE",
-      messageParameters = Map("database" -> database),
+      messageParameters = Map("actualName" -> viewName),
       ctx)
   }
 

@@ -3809,7 +3809,7 @@ class Dataset[T] private[sql](
       // Temporary view names should NOT contain database prefix like "database.table"
       throw new AnalysisException(
         errorClass = "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE",
-        messageParameters = Map("database" -> tableIdentifier.database.get))
+        messageParameters = Map("actualName" -> tableIdentifier.unquotedString))
     }
 
     CreateViewCommand(

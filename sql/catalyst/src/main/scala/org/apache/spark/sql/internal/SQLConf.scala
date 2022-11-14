@@ -2165,7 +2165,7 @@ object SQLConf {
   val ALLOW_TEMP_VIEW_CREATION_WITH_DATABASE_NAME =
     buildConf("spark.sql.legacy.allowTempViewCreationWithDatabaseName")
       .internal()
-      .doc("When true, DataSet createTempView will allow the view creation even if " +
+      .doc("When true, temp view creation Dataset APIs will allow the view creation even if " +
         "there is a database name in the view name. The database name will be dropped " +
         "during the view creation")
       .version("3.4.0")
