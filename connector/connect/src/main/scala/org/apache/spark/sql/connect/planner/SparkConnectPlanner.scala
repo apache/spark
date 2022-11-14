@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeRef
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LogicalPlan, Sample, SubqueryAlias, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
@@ -58,6 +58,7 @@ class SparkConnectPlanner(session: SparkSession) {
   // The root of the query plan is a relation and we apply the transformations to it.
   def transformRelation(rel: proto.Relation): LogicalPlan = {
     rel.getRelTypeCase match {
+      case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
       case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead)
       case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject)
       case proto.Relation.RelTypeCase.FILTER => transformFilter(rel.getFilter)
@@ -87,6 +88,15 @@ class SparkConnectPlanner(session: SparkSession) {
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
     }
+  }
+
+  private def transformShowString(rel: proto.ShowString): LogicalPlan = {
+    val showString = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .showString(rel.getNumRows, rel.getTruncate, rel.getVertical)
+    LocalRelation.fromProduct(
+      output = AttributeReference("show_string", StringType, false)() :: Nil,
+      data = Tuple1.apply(showString) :: Nil)
   }
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
@@ -235,7 +245,11 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformProject(rel: proto.Project): LogicalPlan = {
-    val baseRel = transformRelation(rel.getInput)
+    val baseRel = if (rel.hasInput) {
+      transformRelation(rel.getInput)
+    } else {
+      logical.OneRowRelation()
+    }
     // TODO: support the target field for *.
     val projection =
       if (rel.getExpressionsCount == 1 && rel.getExpressions(0).hasUnresolvedStar) {

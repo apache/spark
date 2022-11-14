@@ -78,6 +78,7 @@ class Relation(google.protobuf.message.Message):
     REPARTITION_FIELD_NUMBER: builtins.int
     RENAME_COLUMNS_BY_SAME_LENGTH_NAMES_FIELD_NUMBER: builtins.int
     RENAME_COLUMNS_BY_NAME_TO_NAME_MAP_FIELD_NUMBER: builtins.int
+    SHOW_STRING_FIELD_NUMBER: builtins.int
     SUMMARY_FIELD_NUMBER: builtins.int
     CROSSTAB_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
@@ -120,6 +121,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def rename_columns_by_name_to_name_map(self) -> global___RenameColumnsByNameToNameMap: ...
     @property
+    def show_string(self) -> global___ShowString: ...
+    @property
     def summary(self) -> global___StatSummary:
         """stat functions"""
     @property
@@ -148,6 +151,7 @@ class Relation(google.protobuf.message.Message):
         repartition: global___Repartition | None = ...,
         rename_columns_by_same_length_names: global___RenameColumnsBySameLengthNames | None = ...,
         rename_columns_by_name_to_name_map: global___RenameColumnsByNameToNameMap | None = ...,
+        show_string: global___ShowString | None = ...,
         summary: global___StatSummary | None = ...,
         crosstab: global___StatCrosstab | None = ...,
         unknown: global___Unknown | None = ...,
@@ -191,6 +195,8 @@ class Relation(google.protobuf.message.Message):
             b"sample",
             "set_op",
             b"set_op",
+            "show_string",
+            b"show_string",
             "sort",
             b"sort",
             "sql",
@@ -242,6 +248,8 @@ class Relation(google.protobuf.message.Message):
             b"sample",
             "set_op",
             b"set_op",
+            "show_string",
+            b"show_string",
             "sort",
             b"sort",
             "sql",
@@ -275,6 +283,7 @@ class Relation(google.protobuf.message.Message):
         "repartition",
         "rename_columns_by_same_length_names",
         "rename_columns_by_name_to_name_map",
+        "show_string",
         "summary",
         "crosstab",
         "unknown",
@@ -437,7 +446,11 @@ class Project(google.protobuf.message.Message):
     INPUT_FIELD_NUMBER: builtins.int
     EXPRESSIONS_FIELD_NUMBER: builtins.int
     @property
-    def input(self) -> global___Relation: ...
+    def input(self) -> global___Relation:
+        """(Optional) Input relation is optional for Project.
+
+        For example, `SELECT ABS(-1)` is valid plan without an input plan.
+        """
     @property
     def expressions(
         self,
@@ -1097,6 +1110,89 @@ class Repartition(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Repartition = Repartition
+
+class ShowString(google.protobuf.message.Message):
+    """Compose the string representing rows for output.
+    It will invoke 'Dataset.showString' to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    NUMROWS_FIELD_NUMBER: builtins.int
+    TRUNCATE_FIELD_NUMBER: builtins.int
+    VERTICAL_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    numRows: builtins.int
+    """(Required) Number of rows to show."""
+    truncate: builtins.int
+    """(Required) If set to more than 0, truncates strings to
+    `truncate` characters and all cells will be aligned right.
+    """
+    vertical: builtins.bool
+    """(Required) If set to true, prints output rows vertically (one line per column value)."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        numRows: builtins.int | None = ...,
+        truncate: builtins.int | None = ...,
+        vertical: builtins.bool | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_numRows",
+            b"_numRows",
+            "_truncate",
+            b"_truncate",
+            "_vertical",
+            b"_vertical",
+            "input",
+            b"input",
+            "numRows",
+            b"numRows",
+            "truncate",
+            b"truncate",
+            "vertical",
+            b"vertical",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_numRows",
+            b"_numRows",
+            "_truncate",
+            b"_truncate",
+            "_vertical",
+            b"_vertical",
+            "input",
+            b"input",
+            "numRows",
+            b"numRows",
+            "truncate",
+            b"truncate",
+            "vertical",
+            b"vertical",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_numRows", b"_numRows"]
+    ) -> typing_extensions.Literal["numRows"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_truncate", b"_truncate"]
+    ) -> typing_extensions.Literal["truncate"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_vertical", b"_vertical"]
+    ) -> typing_extensions.Literal["vertical"] | None: ...
+
+global___ShowString = ShowString
 
 class StatSummary(google.protobuf.message.Message):
     """Computes specified statistics for numeric and string columns.

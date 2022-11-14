@@ -185,6 +185,11 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         df2 = self.connect.read.table(self.tbl_name_empty)
         self.assertEqual(0, len(df2.take(5)))
 
+    def test_subquery_alias(self) -> None:
+        # SPARK-40938: test subquery alias.
+        plan_text = self.connect.read.table(self.tbl_name).alias("special_alias").explain()
+        self.assertTrue("special_alias" in plan_text)
+
     def test_range(self):
         self.assertTrue(
             self.connect.range(start=0, end=10)
@@ -216,6 +221,17 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
     def test_session(self):
         self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession())
+
+    def test_show(self):
+        # SPARK-41111: Test the show method
+        show_str = self.connect.sql("SELECT 1 AS X, 2 AS Y")._show_string()
+        # +---+---+
+        # |  X|  Y|
+        # +---+---+
+        # |  1|  2|
+        # +---+---+
+        expected = "+---+---+\n|  X|  Y|\n+---+---+\n|  1|  2|\n+---+---+\n"
+        self.assertEqual(show_str, expected)
 
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text
