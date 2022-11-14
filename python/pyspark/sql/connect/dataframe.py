@@ -412,7 +412,7 @@ class DataFrame(object):
             session=self._session,
         ).toPandas()
         assert pdf is not None
-        return pdf.iloc[0, 0]
+        return pdf["show_string"][0]
 
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         """

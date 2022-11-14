@@ -220,6 +220,11 @@ class SparkConnectTests(SparkConnectSQLTestCase):
     def test_show(self):
         # SPARK-41111: Test the show method
         show_str = self.connect.sql("SELECT 1 AS X, 2 AS Y")._show_string()
+        # +---+---+
+        # |  X|  Y|
+        # +---+---+
+        # |  1|  2|
+        # +---+---+
         expected = "+---+---+\n|  X|  Y|\n+---+---+\n|  1|  2|\n+---+---+\n"
         self.assertEqual(show_str, expected)
 

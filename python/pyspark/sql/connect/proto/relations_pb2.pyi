@@ -1120,7 +1120,7 @@ class ShowString(google.protobuf.message.Message):
     VERTICAL_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
-        """(Required). The input relation."""
+        """(Required) The input relation."""
     numRows: builtins.int
     """(Required) Number of rows to show."""
     truncate: builtins.int

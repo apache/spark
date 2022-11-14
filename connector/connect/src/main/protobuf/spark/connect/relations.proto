@@ -257,7 +257,7 @@ message Repartition {
 // Compose the string representing rows for output.
 // It will invoke 'Dataset.showString' to compute the results.
 message ShowString {
-  // (Required). The input relation.
+  // (Required) The input relation.
   Relation input = 1;
 
   // (Required) Number of rows to show.
