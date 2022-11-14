@@ -154,9 +154,6 @@ private[spark] class TaskSchedulerImpl(
       .maximumSize(conf.get(SCHEDULER_MAX_RETAINED_REMOVED_EXECUTORS))
       .build[String, ExecutorDecommissionState]()
 
-  // Max size to keep removed executors due to decommission
-  val REMOVED_EXECUTORS_MAX_SIZE = 10000
-
   def runningTasksByExecutors: Map[String, Int] = synchronized {
     executorIdToRunningTaskIds.toMap.mapValues(_.size).toMap
   }

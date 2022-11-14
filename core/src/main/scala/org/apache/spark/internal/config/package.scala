@@ -2026,6 +2026,7 @@ package object config {
 
   private[spark] val SCHEDULER_MAX_RETAINED_REMOVED_EXECUTORS =
     ConfigBuilder("spark.scheduler.maxRetainedRemovedExecutors")
+      .internal()
       .doc("Max number of removed executors by decommission to retain. This affects " +
         "whether fetch failure caused by removed decommissioned executors could be ignored " +
         "when spark.stage.ignoreDecommissionFetchFailure is enabled.")
