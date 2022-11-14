@@ -242,9 +242,13 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
   test("Fast fail for cast string type to decimal type in ansi mode") {
     checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
       Decimal("12345678901234567890123456789012345678"))
-    checkExceptionInExpression[ArithmeticException](
-      cast("123456789012345678901234567890123456789", DecimalType(38, 0)),
-      "Out of decimal type range")
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        evaluateWithoutCodegen(cast("123456789012345678901234567890123456789", DecimalType(38, 0)))
+      },
+      errorClass = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
+      parameters = Map("value" -> "123456789012345678901234567890123456789")
+    )
     checkExceptionInExpression[ArithmeticException](
       cast("12345678901234567890123456789012345678", DecimalType(38, 1)),
       "cannot be represented as Decimal(38, 1)")
@@ -260,9 +264,13 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
     checkEvaluation(cast("6E+37", DecimalType(38, 0)),
       Decimal("60000000000000000000000000000000000000"))
-    checkExceptionInExpression[ArithmeticException](
-      cast("6E+38", DecimalType(38, 0)),
-      "Out of decimal type range")
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        evaluateWithoutCodegen(cast("6E+38", DecimalType(38, 0)))
+      },
+      errorClass = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
+      parameters = Map("value" -> "6E+38")
+    )
     checkExceptionInExpression[ArithmeticException](
       cast("6E+37", DecimalType(38, 1)),
       "cannot be represented as Decimal(38, 1)")
