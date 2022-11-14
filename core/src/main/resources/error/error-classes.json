@@ -638,6 +638,11 @@
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
     ]
   },
+  "INVALID_LATERAL_JOIN_TYPE" : {
+    "message" : [
+      "The <joinType> JOIN with LATERAL correlation is not allowed because an OUTER subquery cannot correlate to its join partner. Remove the LATERAL correlation or use an INNER JOIN, or LEFT OUTER JOIN instead."
+    ]
+  },
   "INVALID_LIKE_PATTERN" : {
     "message" : [
       "The pattern <pattern> is invalid."
@@ -1138,11 +1143,6 @@
       "INSERT_PARTITION_SPEC_IF_NOT_EXISTS" : {
         "message" : [
           "INSERT INTO <tableName> IF NOT EXISTS in the PARTITION spec."
-        ]
-      },
-      "INVALID_LATERAL_JOIN_TYPE" : {
-        "message" : [
-          "The <joinType> JOIN with LATERAL correlation is not allowed because an OUTER subquery cannot correlate to its join partner. Remove the LATERAL correlation or use an INNER JOIN, or LEFT OUTER JOIN instead."
         ]
       },
       "JDBC_TRANSACTION" : {
