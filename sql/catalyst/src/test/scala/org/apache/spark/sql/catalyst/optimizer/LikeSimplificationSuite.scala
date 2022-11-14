@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToCatalyst
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -260,5 +261,14 @@ class LikeSimplificationSuite extends PlanTest {
     val originalQuery = testRelation.where($"a".substring(1, 5) likeAny("abc%", "", "ab")).analyze
 
     comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
+  test("SPARK-41132: Convert LikeAny and NotLikeAny to InSet if no pattern contains wildcards") {
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" likeAny("ab", "cd", "ef")).analyze),
+      testRelation.where(InSet($"a", Set("ab", "cd", "ef").map(convertToCatalyst))).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" notLikeAny("ab", "cd", "ef")).analyze),
+      testRelation.where(Not(InSet($"a", Set("ab", "cd", "ef").map(convertToCatalyst)))).analyze)
   }
 }

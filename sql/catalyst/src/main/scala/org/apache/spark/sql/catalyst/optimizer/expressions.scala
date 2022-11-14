@@ -780,6 +780,13 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         simplifyLike(input, pattern.toString, escapeChar).getOrElse(l)
       }
+    case LikeAny(child, patterns)
+      if patterns.map(_.toString).forall { case equalTo(_) => true case _ => false } =>
+      InSet(child, patterns.toSet)
+    case NotLikeAny(child, patterns)
+      if patterns.map(_.toString).forall { case equalTo(_) => true case _ => false } =>
+      Not(InSet(child, patterns.toSet))
+
     case l @ LikeAll(child, patterns) if CollapseProject.isCheap(child) =>
       simplifyMultiLike(child, patterns, l)
     case l @ NotLikeAll(child, patterns) if CollapseProject.isCheap(child) =>
