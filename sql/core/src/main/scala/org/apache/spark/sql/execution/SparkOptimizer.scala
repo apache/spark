@@ -51,8 +51,10 @@ class SparkOptimizer(
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
     Batch("PartitionPruning", Once,
       PartitionPruning,
-      RowLevelOperationRuntimeGroupFiltering,
-      OptimizeSubqueries) :+
+      // We can't run `OptimizeSubqueries` in this batch, as it will optimize the subqueries
+      // twice which may break some optimizer rules that can only be applied once. The rule below
+      // only invokes `OptimizeSubqueries` to optimize newly added subqueries.
+      new RowLevelOperationRuntimeGroupFiltering(OptimizeSubqueries)) :+
     Batch("InjectRuntimeFilter", FixedPoint(1),
       InjectRuntimeFilter) :+
     Batch("MergeScalarSubqueries", Once,

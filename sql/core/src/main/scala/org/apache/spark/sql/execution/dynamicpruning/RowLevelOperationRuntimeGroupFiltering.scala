@@ -37,7 +37,8 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, Dat
  *
  * Note this rule only applies to group-based row-level operations.
  */
-object RowLevelOperationRuntimeGroupFiltering extends Rule[LogicalPlan] with PredicateHelper {
+class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPlan])
+  extends Rule[LogicalPlan] with PredicateHelper {
 
   import DataSourceV2Implicits._
 
@@ -64,7 +65,8 @@ object RowLevelOperationRuntimeGroupFiltering extends Rule[LogicalPlan] with Pre
           Filter(dynamicPruningCond, r)
       }
 
-      replaceData.copy(query = newQuery)
+      // optimize subqueries to rewrite them as joins and trigger job planning
+      replaceData.copy(query = optimizeSubqueries(newQuery))
   }
 
   private def buildMatchingRowsPlan(
