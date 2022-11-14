@@ -213,7 +213,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2424",
+  "errorClass" : "GROUP_BY_AGGREGATE",
   "messageParameters" : {
     "sqlExpr" : "count(testdata.b)"
   },

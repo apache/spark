@@ -30,8 +30,8 @@ if TYPE_CHECKING:
 
 def _bin_op(
     name: str, doc: str = "binary function", reverse: bool = False
-) -> Callable[["ColumnRef", Any], "Expression"]:
-    def _(self: "ColumnRef", other: Any) -> "Expression":
+) -> Callable[["Column", Any], "Expression"]:
+    def _(self: "Column", other: Any) -> "Expression":
         if isinstance(other, get_args(PrimitiveType)):
             other = LiteralExpression(other)
         if not reverse:
@@ -163,15 +163,15 @@ class LiteralExpression(Expression):
         return f"Literal({self._value})"
 
 
-class ColumnRef(Expression):
+class Column(Expression):
     """Represents a column reference. There is no guarantee that this column
     actually exists. In the context of this project, we refer by its name and
     treat it as an unresolved attribute. Attributes that have the same fully
     qualified name are identical"""
 
     @classmethod
-    def from_qualified_name(cls, name: str) -> "ColumnRef":
-        return ColumnRef(name)
+    def from_qualified_name(cls, name: str) -> "Column":
+        return Column(name)
 
     def __init__(self, name: str) -> None:
         super().__init__()
@@ -198,7 +198,7 @@ class ColumnRef(Expression):
 
 
 class SortOrder(Expression):
-    def __init__(self, col: ColumnRef, ascending: bool = True, nullsLast: bool = True) -> None:
+    def __init__(self, col: Column, ascending: bool = True, nullsLast: bool = True) -> None:
         super().__init__()
         self.ref = col
         self.ascending = ascending

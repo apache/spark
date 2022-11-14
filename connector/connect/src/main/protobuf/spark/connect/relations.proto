@@ -215,11 +215,7 @@ message Sample {
   double lower_bound = 2;
   double upper_bound = 3;
   bool with_replacement = 4;
-  Seed seed = 5;
-
-  message Seed {
-    int64 seed = 1;
-  }
+  optional int64 seed = 5;
 }
 
 // Relation of type [[Range]] that generates a sequence of integers.
@@ -232,11 +228,7 @@ message Range {
   int64 step = 3;
   // Optional. Default value is assigned by 1) SQL conf "spark.sql.leafNodeDefaultParallelism" if
   // it is set, or 2) spark default parallelism.
-  NumPartitions num_partitions = 4;
-
-  message NumPartitions {
-    int32 num_partitions = 1;
-  }
+  optional int32 num_partitions = 4;
 }
 
 // Relation alias.

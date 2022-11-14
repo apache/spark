@@ -137,6 +137,11 @@
       "Cannot resolve <sqlExpr> due to data type mismatch:"
     ],
     "subClass" : {
+      "ARRAY_FUNCTION_DIFF_TYPES" : {
+        "message" : [
+          "Input to <functionName> should have been <dataType> followed by a value with same element type, but it's [<leftType>, <rightType>]."
+        ]
+      },
       "BINARY_ARRAY_DIFF_TYPES" : {
         "message" : [
           "Input to function <functionName> should have been two <arrayType> with same element type, but it's [<leftType>, <rightType>]."
@@ -249,7 +254,7 @@
           "The <functionName> should all be of type map, but it's <dataType>."
         ]
       },
-      "MAP_CONTAINS_KEY_DIFF_TYPES" : {
+      "MAP_FUNCTION_DIFF_TYPES" : {
         "message" : [
           "Input to <functionName> should have been <dataType> followed by a value with same key type, but it's [<leftType>, <rightType>]."
         ]
@@ -292,6 +297,14 @@
       "RANGE_FRAME_WITHOUT_ORDER" : {
         "message" : [
           "A range window frame cannot be used in an unordered window specification."
+        ]
+      },
+      "SEQUENCE_WRONG_INPUT_TYPES" : {
+        "message" : [
+          "<functionName> uses the wrong parameter type. The parameter type must conform to:",
+          "1. The start and stop expressions must resolve to the same type.",
+          "2. If start and stop expressions resolve to the <startType> type, then the step expression must resolve to the <stepType> type",
+          "3. Otherwise, if start and stop expressions resolve to the <otherStartType> type, then the step expression must resolve to the same type."
         ]
       },
       "SPECIFIED_WINDOW_FRAME_DIFF_TYPES" : {
@@ -347,11 +360,6 @@
       "UNEXPECTED_STATIC_METHOD" : {
         "message" : [
           "cannot find a static method <methodName> that matches the argument types in <className>"
-        ]
-      },
-      "UNSPECIFIED_FRAME" : {
-        "message" : [
-          "Cannot use an UnspecifiedFrame. This should have been converted during analysis."
         ]
       },
       "UNSUPPORTED_INPUT_TYPE" : {
@@ -467,6 +475,11 @@
   "GROUPING_SIZE_LIMIT_EXCEEDED" : {
     "message" : [
       "Grouping sets size cannot be greater than <maxSize>"
+    ]
+  },
+  "GROUP_BY_AGGREGATE" : {
+    "message" : [
+      "Aggregate functions are not allowed in GROUP BY, but found <sqlExpr>."
     ]
   },
   "GROUP_BY_POS_AGGREGATE" : {
@@ -688,6 +701,11 @@
   "MULTI_UDF_INTERFACE_ERROR" : {
     "message" : [
       "Not allowed to implement multiple UDF interfaces, UDF class <className>"
+    ]
+  },
+  "NESTED_AGGREGATE_FUNCTION" : {
+    "message" : [
+      "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
     ]
   },
   "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
@@ -4988,11 +5006,6 @@
       "Input argument tolerance must be non-negative."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2420" : {
-    "message" : [
-      "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2421" : {
     "message" : [
       "nondeterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
@@ -5006,11 +5019,6 @@
   "_LEGACY_ERROR_TEMP_2423" : {
     "message" : [
       "Correlated scalar subquery '<sqlExpr>' is neither present in the group by, nor in an aggregate function. Add it to group by using ordinal position or wrap it in first() (or first_value) if you don't care which value you get."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2424" : {
-    "message" : [
-      "aggregate functions are not allowed in GROUP BY, but found <sqlExpr>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2425" : {
@@ -5105,11 +5113,6 @@
     "message" : [
       "The query operator `<operator>` contains one or more unsupported expression types Aggregate, Window or Generate.",
       "Invalid expressions: [<invalidExprSqls>]"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2442" : {
-    "message" : [
-      "unresolved operator <operator>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2443" : {

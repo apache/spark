@@ -31,7 +31,7 @@ import pandas
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.column import (
-    ColumnRef,
+    Column,
     Expression,
     LiteralExpression,
 )
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString
     from pyspark.sql.connect.client import RemoteSparkSession
 
-ColumnOrName = Union[ColumnRef, str]
+ColumnOrName = Union[Column, str]
 
 
 class GroupingFrame(object):
@@ -52,9 +52,9 @@ class GroupingFrame(object):
     MeasuresType = Union[Sequence[Tuple["ExpressionOrString", str]], Dict[str, str]]
     OptMeasuresType = Optional[MeasuresType]
 
-    def __init__(self, df: "DataFrame", *grouping_cols: Union[ColumnRef, str]) -> None:
+    def __init__(self, df: "DataFrame", *grouping_cols: Union[Column, str]) -> None:
         self._df = df
-        self._grouping_cols = [x if isinstance(x, ColumnRef) else df[x] for x in grouping_cols]
+        self._grouping_cols = [x if isinstance(x, Column) else df[x] for x in grouping_cols]
 
     def agg(self, exprs: Optional[MeasuresType] = None) -> "DataFrame":
 
@@ -76,18 +76,18 @@ class GroupingFrame(object):
         )
         return res
 
-    def _map_cols_to_dict(self, fun: str, cols: List[Union[ColumnRef, str]]) -> Dict[str, str]:
+    def _map_cols_to_dict(self, fun: str, cols: List[Union[Column, str]]) -> Dict[str, str]:
         return {x if isinstance(x, str) else x.name(): fun for x in cols}
 
-    def min(self, *cols: Union[ColumnRef, str]) -> "DataFrame":
+    def min(self, *cols: Union[Column, str]) -> "DataFrame":
         expr = self._map_cols_to_dict("min", list(cols))
         return self.agg(expr)
 
-    def max(self, *cols: Union[ColumnRef, str]) -> "DataFrame":
+    def max(self, *cols: Union[Column, str]) -> "DataFrame":
         expr = self._map_cols_to_dict("max", list(cols))
         return self.agg(expr)
 
-    def sum(self, *cols: Union[ColumnRef, str]) -> "DataFrame":
+    def sum(self, *cols: Union[Column, str]) -> "DataFrame":
         expr = self._map_cols_to_dict("sum", list(cols))
         return self.agg(expr)
 
@@ -129,7 +129,7 @@ class DataFrame(object):
     def alias(self, alias: str) -> "DataFrame":
         return DataFrame.withPlan(plan.SubqueryAlias(self._plan, alias), session=self._session)
 
-    def approxQuantile(self, col: ColumnRef, probabilities: Any, relativeError: Any) -> "DataFrame":
+    def approxQuantile(self, col: Column, probabilities: Any, relativeError: Any) -> "DataFrame":
         ...
 
     def colRegex(self, regex: str) -> "DataFrame":
@@ -140,13 +140,19 @@ class DataFrame(object):
         """Returns the list of columns of the current data frame."""
         if self._plan is None:
             return []
-        if "columns" not in self._cache and self._plan is not None:
-            pdd = self.limit(0).toPandas()
-            if pdd is None:
-                raise Exception("Empty result")
-            # Translate to standard pytho array
-            self._cache["columns"] = pdd.columns.values
-        return self._cache["columns"]
+
+        return self.schema().names
+
+    def sparkSession(self) -> "RemoteSparkSession":
+        """Returns Spark session that created this :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`RemoteSparkSession`
+        """
+        return self._session
 
     def count(self) -> int:
         """Returns the number of rows in the data frame"""
@@ -206,7 +212,7 @@ class DataFrame(object):
             self._session,
         )
 
-    def describe(self, cols: List[ColumnRef]) -> Any:
+    def describe(self, cols: List[Column]) -> Any:
         ...
 
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
@@ -250,7 +256,7 @@ class DataFrame(object):
 
     def drop(self, *cols: "ColumnOrString") -> "DataFrame":
         all_cols = self.columns
-        dropped = set([c.name() if isinstance(c, ColumnRef) else self[c].name() for c in cols])
+        dropped = set([c.name() if isinstance(c, Column) else self[c].name() for c in cols])
         dropped_cols = filter(lambda x: x in dropped, all_cols)
         return DataFrame.withPlan(plan.Project(self._plan, *dropped_cols), session=self._session)
 
@@ -320,11 +326,11 @@ class DataFrame(object):
         """
         return self.limit(num).collect()
 
-    # TODO: extend `on` to also be type List[ColumnRef].
+    # TODO: extend `on` to also be type List[Column].
     def join(
         self,
         other: "DataFrame",
-        on: Optional[Union[str, List[str], ColumnRef]] = None,
+        on: Optional[Union[str, List[str], Column]] = None,
         how: Optional[str] = None,
     ) -> "DataFrame":
         if self._plan is None:
@@ -566,16 +572,16 @@ class DataFrame(object):
             p = p._child
         return None
 
-    def __getattr__(self, name: str) -> "ColumnRef":
+    def __getattr__(self, name: str) -> "Column":
         return self[name]
 
-    def __getitem__(self, name: str) -> "ColumnRef":
+    def __getitem__(self, name: str) -> "Column":
         # Check for alias
         alias = self._get_alias()
         if alias is not None:
-            return ColumnRef(alias)
+            return Column(alias)
         else:
-            return ColumnRef(name)
+            return Column(name)
 
     def _print_plan(self) -> str:
         if self._plan:

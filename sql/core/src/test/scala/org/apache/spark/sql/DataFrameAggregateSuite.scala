@@ -663,10 +663,13 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("aggregate function in GROUP BY") {
-    val e = intercept[AnalysisException] {
-      testData.groupBy(sum($"key")).count()
-    }
-    assert(e.message.contains("aggregate functions are not allowed in GROUP BY"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        testData.groupBy(sum($"key")).count()
+      },
+      errorClass = "GROUP_BY_AGGREGATE",
+      parameters = Map("sqlExpr" -> "sum(key)")
+    )
   }
 
   private def assertNoExceptions(c: Column): Unit = {

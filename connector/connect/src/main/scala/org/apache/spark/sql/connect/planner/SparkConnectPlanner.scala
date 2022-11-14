@@ -19,18 +19,25 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
 
+import com.google.common.collect.{Lists, Maps}
+
+import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.WriteOperation
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LogicalPlan, Sample, SubqueryAlias, Union}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.command.CreateViewCommand
+import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -39,14 +46,17 @@ final case class InvalidPlanInput(
     private val cause: Throwable = None.orNull)
     extends Exception(message, cause)
 
-class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
+final case class InvalidCommandInput(
+    private val message: String = "",
+    private val cause: Throwable = null)
+    extends Exception(message, cause)
 
-  def transform(): LogicalPlan = {
-    transformRelation(plan)
-  }
+class SparkConnectPlanner(session: SparkSession) {
+  lazy val pythonExec =
+    sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
   // The root of the query plan is a relation and we apply the transformations to it.
-  private def transformRelation(rel: proto.Relation): LogicalPlan = {
+  def transformRelation(rel: proto.Relation): LogicalPlan = {
     rel.getRelTypeCase match {
       case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead)
       case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject)
@@ -104,7 +114,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       rel.getLowerBound,
       rel.getUpperBound,
       rel.getWithReplacement,
-      if (rel.hasSeed) rel.getSeed.getSeed else Utils.random.nextLong,
+      if (rel.hasSeed) rel.getSeed else Utils.random.nextLong,
       transformRelation(rel.getInput))
   }
 
@@ -117,7 +127,7 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     val end = rel.getEnd
     val step = rel.getStep
     val numPartitions = if (rel.hasNumPartitions) {
-      rel.getNumPartitions.getNumPartitions
+      rel.getNumPartitions
     } else {
       session.leafNodeDefaultParallelism
     }
@@ -443,6 +453,134 @@ class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       transformAlias(exp.getAlias)
     } else {
       UnresolvedAlias(transformExpression(exp))
+    }
+  }
+
+  def process(command: proto.Command): Unit = {
+    command.getCommandTypeCase match {
+      case proto.Command.CommandTypeCase.CREATE_FUNCTION =>
+        handleCreateScalarFunction(command.getCreateFunction)
+      case proto.Command.CommandTypeCase.WRITE_OPERATION =>
+        handleWriteOperation(command.getWriteOperation)
+      case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
+        handleCreateViewCommand(command.getCreateDataframeView)
+      case _ => throw new UnsupportedOperationException(s"$command not supported.")
+    }
+  }
+
+  /**
+   * This is a helper function that registers a new Python function in the SparkSession.
+   *
+   * Right now this function is very rudimentary and bare-bones just to showcase how it is
+   * possible to remotely serialize a Python function and execute it on the Spark cluster. If the
+   * Python version on the client and server diverge, the execution of the function that is
+   * serialized will most likely fail.
+   *
+   * @param cf
+   */
+  def handleCreateScalarFunction(cf: proto.CreateScalarFunction): Unit = {
+    val function = SimplePythonFunction(
+      cf.getSerializedFunction.toByteArray,
+      Maps.newHashMap(),
+      Lists.newArrayList(),
+      pythonExec,
+      "3.9", // TODO(SPARK-40532) This needs to be an actual Python version.
+      Lists.newArrayList(),
+      null)
+
+    val udf = UserDefinedPythonFunction(
+      cf.getPartsList.asScala.head,
+      function,
+      StringType,
+      PythonEvalType.SQL_BATCHED_UDF,
+      udfDeterministic = false)
+
+    session.udf.registerPython(cf.getPartsList.asScala.head, udf)
+  }
+
+  def handleCreateViewCommand(createView: proto.CreateDataFrameViewCommand): Unit = {
+    val viewType = if (createView.getIsGlobal) GlobalTempView else LocalTempView
+
+    val tableIdentifier =
+      try {
+        session.sessionState.sqlParser.parseTableIdentifier(createView.getName)
+      } catch {
+        case _: ParseException =>
+          throw QueryCompilationErrors.invalidViewNameError(createView.getName)
+      }
+
+    val plan = CreateViewCommand(
+      name = tableIdentifier,
+      userSpecifiedColumns = Nil,
+      comment = None,
+      properties = Map.empty,
+      originalText = None,
+      plan = transformRelation(createView.getInput),
+      allowExisting = false,
+      replace = createView.getReplace,
+      viewType = viewType,
+      isAnalyzed = true)
+
+    Dataset.ofRows(session, plan).queryExecution.commandExecuted
+  }
+
+  /**
+   * Transforms the write operation and executes it.
+   *
+   * The input write operation contains a reference to the input plan and transforms it to the
+   * corresponding logical plan. Afterwards, creates the DataFrameWriter and translates the
+   * parameters of the WriteOperation into the corresponding methods calls.
+   *
+   * @param writeOperation
+   */
+  def handleWriteOperation(writeOperation: WriteOperation): Unit = {
+    // Transform the input plan into the logical plan.
+    val planner = new SparkConnectPlanner(session)
+    val plan = planner.transformRelation(writeOperation.getInput)
+    // And create a Dataset from the plan.
+    val dataset = Dataset.ofRows(session, logicalPlan = plan)
+
+    val w = dataset.write
+    if (writeOperation.getMode != proto.WriteOperation.SaveMode.SAVE_MODE_UNSPECIFIED) {
+      w.mode(DataTypeProtoConverter.toSaveMode(writeOperation.getMode))
+    }
+
+    if (writeOperation.getOptionsCount > 0) {
+      writeOperation.getOptionsMap.asScala.foreach { case (key, value) => w.option(key, value) }
+    }
+
+    if (writeOperation.getSortColumnNamesCount > 0) {
+      val names = writeOperation.getSortColumnNamesList.asScala
+      w.sortBy(names.head, names.tail.toSeq: _*)
+    }
+
+    if (writeOperation.hasBucketBy) {
+      val op = writeOperation.getBucketBy
+      val cols = op.getBucketColumnNamesList.asScala
+      if (op.getNumBuckets <= 0) {
+        throw InvalidCommandInput(
+          s"BucketBy must specify a bucket count > 0, received ${op.getNumBuckets} instead.")
+      }
+      w.bucketBy(op.getNumBuckets, cols.head, cols.tail.toSeq: _*)
+    }
+
+    if (writeOperation.getPartitioningColumnsCount > 0) {
+      val names = writeOperation.getPartitioningColumnsList.asScala
+      w.partitionBy(names.toSeq: _*)
+    }
+
+    if (writeOperation.getSource != null) {
+      w.format(writeOperation.getSource)
+    }
+
+    writeOperation.getSaveTypeCase match {
+      case proto.WriteOperation.SaveTypeCase.PATH => w.save(writeOperation.getPath)
+      case proto.WriteOperation.SaveTypeCase.TABLE_NAME =>
+        w.saveAsTable(writeOperation.getTableName)
+      case _ =>
+        throw new UnsupportedOperationException(
+          "WriteOperation:SaveTypeCase not supported "
+            + s"${writeOperation.getSaveTypeCase.getNumber}")
     }
   }
 

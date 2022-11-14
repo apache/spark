@@ -924,18 +924,6 @@ class Sample(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class Seed(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        SEED_FIELD_NUMBER: builtins.int
-        seed: builtins.int
-        def __init__(
-            self,
-            *,
-            seed: builtins.int = ...,
-        ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["seed", b"seed"]) -> None: ...
-
     INPUT_FIELD_NUMBER: builtins.int
     LOWER_BOUND_FIELD_NUMBER: builtins.int
     UPPER_BOUND_FIELD_NUMBER: builtins.int
@@ -946,8 +934,7 @@ class Sample(google.protobuf.message.Message):
     lower_bound: builtins.float
     upper_bound: builtins.float
     with_replacement: builtins.bool
-    @property
-    def seed(self) -> global___Sample.Seed: ...
+    seed: builtins.int
     def __init__(
         self,
         *,
@@ -955,14 +942,19 @@ class Sample(google.protobuf.message.Message):
         lower_bound: builtins.float = ...,
         upper_bound: builtins.float = ...,
         with_replacement: builtins.bool = ...,
-        seed: global___Sample.Seed | None = ...,
+        seed: builtins.int | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["input", b"input", "seed", b"seed"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_seed", b"_seed", "input", b"input", "seed", b"seed"
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_seed",
+            b"_seed",
             "input",
             b"input",
             "lower_bound",
@@ -975,6 +967,9 @@ class Sample(google.protobuf.message.Message):
             b"with_replacement",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_seed", b"_seed"]
+    ) -> typing_extensions.Literal["seed"] | None: ...
 
 global___Sample = Sample
 
@@ -982,20 +977,6 @@ class Range(google.protobuf.message.Message):
     """Relation of type [[Range]] that generates a sequence of integers."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    class NumPartitions(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        NUM_PARTITIONS_FIELD_NUMBER: builtins.int
-        num_partitions: builtins.int
-        def __init__(
-            self,
-            *,
-            num_partitions: builtins.int = ...,
-        ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["num_partitions", b"num_partitions"]
-        ) -> None: ...
 
     START_FIELD_NUMBER: builtins.int
     END_FIELD_NUMBER: builtins.int
@@ -1007,28 +988,42 @@ class Range(google.protobuf.message.Message):
     """Required."""
     step: builtins.int
     """Required."""
-    @property
-    def num_partitions(self) -> global___Range.NumPartitions:
-        """Optional. Default value is assigned by 1) SQL conf "spark.sql.leafNodeDefaultParallelism" if
-        it is set, or 2) spark default parallelism.
-        """
+    num_partitions: builtins.int
+    """Optional. Default value is assigned by 1) SQL conf "spark.sql.leafNodeDefaultParallelism" if
+    it is set, or 2) spark default parallelism.
+    """
     def __init__(
         self,
         *,
         start: builtins.int = ...,
         end: builtins.int = ...,
         step: builtins.int = ...,
-        num_partitions: global___Range.NumPartitions | None = ...,
+        num_partitions: builtins.int | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["num_partitions", b"num_partitions"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_num_partitions", b"_num_partitions", "num_partitions", b"num_partitions"
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "end", b"end", "num_partitions", b"num_partitions", "start", b"start", "step", b"step"
+            "_num_partitions",
+            b"_num_partitions",
+            "end",
+            b"end",
+            "num_partitions",
+            b"num_partitions",
+            "start",
+            b"start",
+            "step",
+            b"step",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_num_partitions", b"_num_partitions"]
+    ) -> typing_extensions.Literal["num_partitions"] | None: ...
 
 global___Range = Range
 
