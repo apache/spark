@@ -82,7 +82,7 @@ class Expression(object):
     def __str__(self) -> str:
         ...
 
-    def alias(self, *alias: str, **kwargs: Any) -> "Expression":
+    def alias(self, *alias: str, **kwargs: Any) -> "ColumnAlias":
         """
         Returns this column aliased with a new name or names (in the case of expressions that
         return more than one column, such as explode).
