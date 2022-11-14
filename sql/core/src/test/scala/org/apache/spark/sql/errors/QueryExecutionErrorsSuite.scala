@@ -661,6 +661,10 @@ class QueryExecutionErrorsSuite
       ))
   }
 
+  test("FAILED_RENAME_PATH: rename when destination path already exists") {
+    // TODO: adapt code above
+  }
+
   test("UNSUPPORTED_FEATURE.JDBC_TRANSACTION: the target JDBC server does not support " +
     "transactions and can only support ALTER TABLE with a single action") {
     withTempDir { tempDir =>
