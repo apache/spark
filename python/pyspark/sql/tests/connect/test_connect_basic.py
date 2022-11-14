@@ -185,6 +185,11 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         df2 = self.connect.read.table(self.tbl_name_empty)
         self.assertEqual(0, len(df2.take(5)))
 
+    def test_subquery_alias(self) -> None:
+        # SPARK-40938: test subquery alias.
+        plan_text = self.connect.read.table(self.tbl_name).alias("special_alias").explain()
+        self.assertTrue("special_alias" in plan_text)
+
     def test_range(self):
         self.assertTrue(
             self.connect.range(start=0, end=10)

@@ -712,6 +712,8 @@ class SubqueryAlias(LogicalPlan):
 
     def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         rel = proto.Relation()
+        if self._child is not None:
+            rel.subquery_alias.input.CopyFrom(self._child.plan(session))
         rel.subquery_alias.alias = self._alias
         return rel
 
