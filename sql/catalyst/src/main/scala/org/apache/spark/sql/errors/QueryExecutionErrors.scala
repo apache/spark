@@ -2799,10 +2799,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "size" -> elementSize.toString))
   }
 
-  def unsupportedEmptyLocationError(): SparkIllegalArgumentException = {
+  def invalidEmptyLocationError(location: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "INVALID_EMPTY_LOCATION",
-      messageParameters = Map.empty)
+      messageParameters = Map("location" -> location))
   }
 
   def malformedProtobufMessageDetectedInMessageParsingError(e: Throwable): Throwable = {

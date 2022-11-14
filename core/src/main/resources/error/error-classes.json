@@ -618,7 +618,7 @@
   },
   "INVALID_EMPTY_LOCATION" : {
     "message" : [
-      "A specified location cannot be empty."
+      "The location name cannot be empty string or null, but `<location>` given."
     ]
   },
   "INVALID_FIELD_NAME" : {
