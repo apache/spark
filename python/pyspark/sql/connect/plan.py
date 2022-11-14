@@ -174,6 +174,46 @@ class Read(LogicalPlan):
         """
 
 
+class ShowString(LogicalPlan):
+    def __init__(
+        self, child: Optional["LogicalPlan"], numRows: int, truncate: int, vertical: bool
+    ) -> None:
+        super().__init__(child)
+        self.numRows = numRows
+        self.truncate = truncate
+        self.vertical = vertical
+
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.show_string.input.CopyFrom(self._child.plan(session))
+        plan.show_string.numRows = self.numRows
+        plan.show_string.truncate = self.truncate
+        plan.show_string.vertical = self.vertical
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}"
+            f"<ShowString numRows='{self.numRows}', "
+            f"truncate='{self.truncate}', "
+            f"vertical='{self.vertical}'>"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>ShowString</b><br />
+              NumRows: {self.numRows} <br />
+              Truncate: {self.truncate} <br />
+              Vertical: {self.vertical} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
 class Project(LogicalPlan):
     """Logical plan object for a projection.
 
