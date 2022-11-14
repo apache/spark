@@ -170,7 +170,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
 
         // The main thread will wait until 0-th partition is available,
         // then send it to client and wait for the next partition.
-        // Different from the implementation of [[Dataset#collectAsArrowToPython]], it send
+        // Different from the implementation of [[Dataset#collectAsArrowToPython]], it sends
         // the arrow batches in main thread to avoid DAGScheduler thread been blocked for
         // tasks not related to scheduling. This is particularly important if there are
         // multiple users or clients running code at the same time.
