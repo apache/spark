@@ -1140,14 +1140,14 @@
           "INSERT INTO <tableName> IF NOT EXISTS in the PARTITION spec."
         ]
       },
+      "INVALID_LATERAL_JOIN_TYPE" : {
+        "message" : [
+          "The <joinType> JOIN with LATERAL correlation is not allowed because an OUTER subquery cannot correlate to its join partner. Remove the LATERAL correlation or use an INNER JOIN, or LEFT OUTER JOIN instead."
+        ]
+      },
       "JDBC_TRANSACTION" : {
         "message" : [
           "The target JDBC server does not support transactions and can only support ALTER TABLE with a single action."
-        ]
-      },
-      "LATERAL_JOIN_OF_TYPE" : {
-        "message" : [
-          "<joinType> JOIN with LATERAL correlation."
         ]
       },
       "LATERAL_JOIN_USING" : {

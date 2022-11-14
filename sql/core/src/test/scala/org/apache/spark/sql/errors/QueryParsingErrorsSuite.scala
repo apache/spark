@@ -60,7 +60,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       "LEFT ANTI" -> (17, 72)).foreach { case (joinType, (start, stop)) =>
       checkError(
         exception = parseException(s"SELECT * FROM t1 $joinType JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3"),
-        errorClass = "UNSUPPORTED_FEATURE.LATERAL_JOIN_OF_TYPE",
+        errorClass = "UNSUPPORTED_FEATURE.INVALID_LATERAL_JOIN_TYPE",
         sqlState = "0A000",
         parameters = Map("joinType" -> joinType),
         context = ExpectedContext(
