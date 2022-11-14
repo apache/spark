@@ -207,11 +207,7 @@
     <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
     <tink.version>1.7.0</tink.version>
-    <!-- When upgrading `netty.version`, need to check whether
-         the version of `netty-tcnative-classes.version` also needs to be upgraded
-    -->
     <netty.version>4.1.84.Final</netty.version>
-    <netty-tcnative-classes.version>2.0.54.Final</netty-tcnative-classes.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -927,16 +923,6 @@
         <artifactId>netty-transport-native-kqueue</artifactId>
         <version>${netty.version}</version>
         <classifier>osx-x86_64</classifier>
-      </dependency>
-      <!-- SPARK-38541: Add the explicit dependency on `netty-tcnative-classes` because the dependency on
-           `netty-tcnative-classes` is changed to `Optional` in [netty](https://github.com/netty/netty/pull/12146).
-           `netty-tcnative-classes` module is mainly used by SSL package in `netty-handler`.
-           We need to ensure that `netty-tcnative-classes` uses the corresponding version when Netty upgrade.
-      -->
-      <dependency>
-        <groupId>io.netty</groupId>
-        <artifactId>netty-tcnative-classes</artifactId>
-        <version>${netty-tcnative-classes.version}</version>
       </dependency>
       <!-- Netty End -->
 

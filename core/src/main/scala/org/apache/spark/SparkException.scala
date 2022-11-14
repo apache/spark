@@ -68,11 +68,17 @@ class SparkException(
 }
 
 object SparkException {
-  def internalError(msg: String): SparkException = {
+  def internalError(msg: String, context: Array[QueryContext], summary: String): SparkException = {
     new SparkException(
       errorClass = "INTERNAL_ERROR",
       messageParameters = Map("message" -> msg),
-      cause = null)
+      cause = null,
+      context,
+      summary)
+  }
+
+  def internalError(msg: String): SparkException = {
+    internalError(msg, context = Array.empty[QueryContext], summary = "")
   }
 
   def internalError(msg: String, cause: Throwable): SparkException = {

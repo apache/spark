@@ -28,7 +28,7 @@ from typing import (
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.column import (
-    ColumnRef,
+    Column,
     Expression,
     SortOrder,
 )
@@ -64,7 +64,7 @@ class LogicalPlan(object):
         if type(col) is str:
             return self.unresolved_attr(col)
         else:
-            return cast(ColumnRef, col).to_plan(session)
+            return cast(Column, col).to_plan(session)
 
     def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         ...
@@ -170,6 +170,46 @@ class Read(LogicalPlan):
                 <b>Read</b><br />
                 table name: {self.table_name}
             </li>
+        </ul>
+        """
+
+
+class ShowString(LogicalPlan):
+    def __init__(
+        self, child: Optional["LogicalPlan"], numRows: int, truncate: int, vertical: bool
+    ) -> None:
+        super().__init__(child)
+        self.numRows = numRows
+        self.truncate = truncate
+        self.vertical = vertical
+
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.show_string.input.CopyFrom(self._child.plan(session))
+        plan.show_string.numRows = self.numRows
+        plan.show_string.truncate = self.truncate
+        plan.show_string.vertical = self.vertical
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}"
+            f"<ShowString numRows='{self.numRows}', "
+            f"truncate='{self.truncate}', "
+            f"vertical='{self.vertical}'>"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>ShowString</b><br />
+              NumRows: {self.numRows} <br />
+              Truncate: {self.truncate} <br />
+              Vertical: {self.vertical} <br />
+              {self._child_repr_()}
+           </li>
         </ul>
         """
 
@@ -360,7 +400,7 @@ class Sort(LogicalPlan):
     def __init__(
         self,
         child: Optional["LogicalPlan"],
-        columns: List[Union[SortOrder, ColumnRef, str]],
+        columns: List[Union[SortOrder, Column, str]],
         is_global: bool,
     ) -> None:
         super().__init__(child)
@@ -368,7 +408,7 @@ class Sort(LogicalPlan):
         self.is_global = is_global
 
     def col_to_sort_field(
-        self, col: Union[SortOrder, ColumnRef, str], session: "RemoteSparkSession"
+        self, col: Union[SortOrder, Column, str], session: "RemoteSparkSession"
     ) -> proto.Sort.SortField:
         if isinstance(col, SortOrder):
             sf = proto.Sort.SortField()
@@ -387,7 +427,7 @@ class Sort(LogicalPlan):
         else:
             sf = proto.Sort.SortField()
             # Check string
-            if isinstance(col, ColumnRef):
+            if isinstance(col, Column):
                 sf.expression.CopyFrom(col.to_plan(session))
             else:
                 sf.expression.CopyFrom(self.unresolved_attr(col))
@@ -443,7 +483,7 @@ class Sample(LogicalPlan):
         plan.sample.upper_bound = self.upper_bound
         plan.sample.with_replacement = self.with_replacement
         if self.seed is not None:
-            plan.sample.seed.seed = self.seed
+            plan.sample.seed = self.seed
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -478,7 +518,7 @@ class Aggregate(LogicalPlan):
     def __init__(
         self,
         child: Optional["LogicalPlan"],
-        grouping_cols: List[ColumnRef],
+        grouping_cols: List[Column],
         measures: OptMeasuresType,
     ) -> None:
         super().__init__(child)
@@ -532,7 +572,7 @@ class Join(LogicalPlan):
         self,
         left: Optional["LogicalPlan"],
         right: "LogicalPlan",
-        on: Optional[Union[str, List[str], ColumnRef]],
+        on: Optional[Union[str, List[str], Column]],
         how: Optional[str],
     ) -> None:
         super().__init__(left)
@@ -712,6 +752,8 @@ class SubqueryAlias(LogicalPlan):
 
     def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         rel = proto.Relation()
+        if self._child is not None:
+            rel.subquery_alias.input.CopyFrom(self._child.plan(session))
         rel.subquery_alias.alias = self._alias
         return rel
 
@@ -777,9 +819,7 @@ class Range(LogicalPlan):
         rel.range.end = self._end
         rel.range.step = self._step
         if self._num_partitions is not None:
-            num_partitions_proto = rel.range.NumPartitions()
-            num_partitions_proto.num_partitions = self._num_partitions
-            rel.range.num_partitions.CopyFrom(num_partitions_proto)
+            rel.range.num_partitions = self._num_partitions
         return rel
 
     def print(self, indent: int = 0) -> str:

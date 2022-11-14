@@ -36,11 +36,11 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         df = self.connect.with_plan(p.Read("table"))
 
         c1 = df.col_name
-        self.assertIsInstance(c1, col.ColumnRef)
+        self.assertIsInstance(c1, col.Column)
         c2 = df["col_name"]
-        self.assertIsInstance(c2, col.ColumnRef)
+        self.assertIsInstance(c2, col.Column)
         c3 = fun.col("col_name")
-        self.assertIsInstance(c3, col.ColumnRef)
+        self.assertIsInstance(c3, col.Column)
 
         # All Protos should be identical
         cp1 = c1.to_plan(None)
