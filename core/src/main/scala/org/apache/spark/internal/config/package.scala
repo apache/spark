@@ -2029,7 +2029,7 @@ package object config {
       .internal()
       .doc("Max number of removed executors by decommission to retain. This affects " +
         "whether fetch failure caused by removed decommissioned executors could be ignored " +
-        "when spark.stage.ignoreDecommissionFetchFailure is enabled.")
+        s"when ${STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key} is enabled.")
       .version("3.4.0")
       .longConf
       .createWithDefault(10000)
