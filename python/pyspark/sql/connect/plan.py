@@ -868,14 +868,14 @@ class NAFill(LogicalPlan):
         self.cols = cols
         self.values = values
 
-    def _convert_value(self, v: Any) -> proto.NAFill.Type:
-        value = proto.NAFill.Type()
+    def _convert_value(self, v: Any) -> proto.Expression.Literal:
+        value = proto.Expression.Literal()
         if isinstance(v, bool):
-            value.bool = v
+            value.boolean = v
         elif isinstance(v, int):
-            value.long = v
+            value.i64 = v
         elif isinstance(v, float):
-            value.double = v
+            value.fp64 = v
         else:
             value.string = v
         return value

@@ -1297,7 +1297,7 @@ class NAFill(google.protobuf.message.Message):
     It will invoke 'Dataset.na.fill' (same as 'DataFrameNaFunctions.fill') to compute the results.
     Following 3 parameter combinations are supported:
      1, 'values' only contains 1 item, 'cols' is empty:
-       replaces null values in all type-matched columns.
+       replaces null values in all type-compatible columns.
      2, 'values' only contains 1 item, 'cols' is not empty:
        replaces null values in specified columns.
      3, 'values' contains more than 1 items, then 'cols' is required to have the same length:
@@ -1305,61 +1305,6 @@ class NAFill(google.protobuf.message.Message):
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    class Type(google.protobuf.message.Message):
-        """Available data types."""
-
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        BOOL_FIELD_NUMBER: builtins.int
-        LONG_FIELD_NUMBER: builtins.int
-        DOUBLE_FIELD_NUMBER: builtins.int
-        STRING_FIELD_NUMBER: builtins.int
-        bool: builtins.bool
-        long: builtins.int
-        double: builtins.float
-        string: builtins.str
-        def __init__(
-            self,
-            *,
-            bool: builtins.bool = ...,
-            long: builtins.int = ...,
-            double: builtins.float = ...,
-            string: builtins.str = ...,
-        ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "bool",
-                b"bool",
-                "double",
-                b"double",
-                "kind",
-                b"kind",
-                "long",
-                b"long",
-                "string",
-                b"string",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "bool",
-                b"bool",
-                "double",
-                b"double",
-                "kind",
-                b"kind",
-                "long",
-                b"long",
-                "string",
-                b"string",
-            ],
-        ) -> None: ...
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["kind", b"kind"]
-        ) -> typing_extensions.Literal["bool", "long", "double", "string"] | None: ...
 
     INPUT_FIELD_NUMBER: builtins.int
     COLS_FIELD_NUMBER: builtins.int
@@ -1375,14 +1320,23 @@ class NAFill(google.protobuf.message.Message):
     @property
     def values(
         self,
-    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___NAFill.Type]:
-        """(Required) Values to replace null values with. Should contains at least 1 item."""
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+    ]:
+        """(Required) Values to replace null values with.
+
+        Should contain at least 1 item.
+        Only 4 data types are supported now: bool, long, double, string
+        """
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
         cols: collections.abc.Iterable[builtins.str] | None = ...,
-        values: collections.abc.Iterable[global___NAFill.Type] | None = ...,
+        values: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+        ]
+        | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]

@@ -162,26 +162,26 @@ class SparkConnectPlanner(session: SparkSession) {
     val values = rel.getValuesList.asScala.toArray
     if (values.length == 1) {
       val value = values.head
-      value.getKindCase match {
-        case org.apache.spark.connect.proto.NAFill.Type.KindCase.BOOL =>
+      value.getLiteralTypeCase match {
+        case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
           if (cols.nonEmpty) {
-            dataset.na.fill(value = value.getBool, cols = cols).logicalPlan
+            dataset.na.fill(value = value.getBoolean, cols = cols).logicalPlan
           } else {
-            dataset.na.fill(value = value.getBool).logicalPlan
+            dataset.na.fill(value = value.getBoolean).logicalPlan
           }
-        case org.apache.spark.connect.proto.NAFill.Type.KindCase.LONG =>
+        case proto.Expression.Literal.LiteralTypeCase.I64 =>
           if (cols.nonEmpty) {
-            dataset.na.fill(value = value.getLong, cols = cols).logicalPlan
+            dataset.na.fill(value = value.getI64, cols = cols).logicalPlan
           } else {
-            dataset.na.fill(value = value.getLong).logicalPlan
+            dataset.na.fill(value = value.getI64).logicalPlan
           }
-        case org.apache.spark.connect.proto.NAFill.Type.KindCase.DOUBLE =>
+        case proto.Expression.Literal.LiteralTypeCase.FP64 =>
           if (cols.nonEmpty) {
-            dataset.na.fill(value = value.getDouble, cols = cols).logicalPlan
+            dataset.na.fill(value = value.getFp64, cols = cols).logicalPlan
           } else {
-            dataset.na.fill(value = value.getDouble).logicalPlan
+            dataset.na.fill(value = value.getFp64).logicalPlan
           }
-        case org.apache.spark.connect.proto.NAFill.Type.KindCase.STRING =>
+        case proto.Expression.Literal.LiteralTypeCase.STRING =>
           if (cols.nonEmpty) {
             dataset.na.fill(value = value.getString, cols = cols).logicalPlan
           } else {
@@ -192,14 +192,14 @@ class SparkConnectPlanner(session: SparkSession) {
     } else {
       val valueMap = mutable.Map.empty[String, Any]
       cols.zip(values).foreach { case (col, value) =>
-        value.getKindCase match {
-          case org.apache.spark.connect.proto.NAFill.Type.KindCase.BOOL =>
-            valueMap.update(col, value.getBool)
-          case org.apache.spark.connect.proto.NAFill.Type.KindCase.LONG =>
-            valueMap.update(col, value.getLong)
-          case org.apache.spark.connect.proto.NAFill.Type.KindCase.DOUBLE =>
-            valueMap.update(col, value.getDouble)
-          case org.apache.spark.connect.proto.NAFill.Type.KindCase.STRING =>
+        value.getLiteralTypeCase match {
+          case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
+            valueMap.update(col, value.getBoolean)
+          case proto.Expression.Literal.LiteralTypeCase.I64 =>
+            valueMap.update(col, value.getI64)
+          case proto.Expression.Literal.LiteralTypeCase.FP64 =>
+            valueMap.update(col, value.getFp64)
+          case proto.Expression.Literal.LiteralTypeCase.STRING =>
             valueMap.update(col, value.getString)
           case other => throw InvalidPlanInput(s"Unsupported value type: $other")
         }
