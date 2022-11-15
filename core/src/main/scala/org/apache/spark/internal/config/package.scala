@@ -2024,16 +2024,6 @@ package object config {
       .stringConf
       .createOptional
 
-  private[spark] val SCHEDULER_MAX_RETAINED_REMOVED_EXECUTORS =
-    ConfigBuilder("spark.scheduler.maxRetainedRemovedDecommissionExecutors")
-      .internal()
-      .doc("Max number of removed executors by decommission to retain. This affects " +
-        "whether fetch failure caused by removed decommissioned executors could be ignored " +
-        s"when ${STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key} is enabled.")
-      .version("3.4.0")
-      .intConf
-      .createWithDefault(10000)
-
   private[spark] val SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO =
     ConfigBuilder("spark.scheduler.minRegisteredResourcesRatio")
       .version("1.1.1")
@@ -2239,6 +2229,16 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val SCHEDULER_MAX_RETAINED_REMOVED_EXECUTORS =
+    ConfigBuilder("spark.scheduler.maxRetainedRemovedDecommissionExecutors")
+      .internal()
+      .doc("Max number of removed executors by decommission to retain. This affects " +
+        "whether fetch failure caused by removed decommissioned executors could be ignored " +
+        s"when ${STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key} is enabled.")
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(10000)
+      
   private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
     ConfigBuilder("spark.shuffle.push.enabled")
       .doc("Set to true to enable push-based shuffle on the client side and this works in " +
