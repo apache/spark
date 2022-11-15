@@ -1,6 +1,6 @@
 # Required, Optional and default values
 
-Connect adopts proto3, which does not support `required` constraint anymore. 
+Spark Connect adopts proto3, which does not support the use of the `required` constraint anymore. 
 For non-message proto fields, there is also no `has_field_name` functions to easy tell
 if a filed is set or not-set. (Read [proto3 field rules](https://developers.google.com/protocol-buffers/docs/proto3#specifying_field_rules))
 
