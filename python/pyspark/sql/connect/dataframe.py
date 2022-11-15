@@ -120,7 +120,7 @@ class DataFrame(object):
         new_frame._plan = plan
         return new_frame
 
-    def select(self, *cols: ColumnOrName) -> "DataFrame":
+    def select(self, *cols: "ExpressionOrString") -> "DataFrame":
         return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
 
     def agg(self, exprs: Optional[GroupingFrame.MeasuresType]) -> "DataFrame":
