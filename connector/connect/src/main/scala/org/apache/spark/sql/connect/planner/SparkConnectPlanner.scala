@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
 
@@ -32,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeRef
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LogicalPlan, Sample, SubqueryAlias, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
@@ -58,6 +59,7 @@ class SparkConnectPlanner(session: SparkSession) {
   // The root of the query plan is a relation and we apply the transformations to it.
   def transformRelation(rel: proto.Relation): LogicalPlan = {
     rel.getRelTypeCase match {
+      case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
       case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead)
       case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject)
       case proto.Relation.RelTypeCase.FILTER => transformFilter(rel.getFilter)
@@ -76,6 +78,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.SUBQUERY_ALIAS =>
         transformSubqueryAlias(rel.getSubqueryAlias)
       case proto.Relation.RelTypeCase.REPARTITION => transformRepartition(rel.getRepartition)
+      case proto.Relation.RelTypeCase.FILL_NA => transformNAFill(rel.getFillNa)
       case proto.Relation.RelTypeCase.SUMMARY => transformStatSummary(rel.getSummary)
       case proto.Relation.RelTypeCase.CROSSTAB =>
         transformStatCrosstab(rel.getCrosstab)
@@ -87,6 +90,15 @@ class SparkConnectPlanner(session: SparkSession) {
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
     }
+  }
+
+  private def transformShowString(rel: proto.ShowString): LogicalPlan = {
+    val showString = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .showString(rel.getNumRows, rel.getTruncate, rel.getVertical)
+    LocalRelation.fromProduct(
+      output = AttributeReference("show_string", StringType, false)() :: Nil,
+      data = Tuple1.apply(showString) :: Nil)
   }
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
@@ -132,6 +144,68 @@ class SparkConnectPlanner(session: SparkSession) {
       session.leafNodeDefaultParallelism
     }
     logical.Range(start, end, step, numPartitions)
+  }
+
+  private def transformNAFill(rel: proto.NAFill): LogicalPlan = {
+    if (rel.getValuesCount == 0) {
+      throw InvalidPlanInput(s"values must contains at least 1 item!")
+    }
+    if (rel.getValuesCount > 1 && rel.getValuesCount != rel.getColsCount) {
+      throw InvalidPlanInput(
+        s"When values contains more than 1 items, " +
+          s"values and cols should have the same length!")
+    }
+
+    val dataset = Dataset.ofRows(session, transformRelation(rel.getInput))
+
+    val cols = rel.getColsList.asScala.toArray
+    val values = rel.getValuesList.asScala.toArray
+    if (values.length == 1) {
+      val value = values.head
+      value.getLiteralTypeCase match {
+        case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
+          if (cols.nonEmpty) {
+            dataset.na.fill(value = value.getBoolean, cols = cols).logicalPlan
+          } else {
+            dataset.na.fill(value = value.getBoolean).logicalPlan
+          }
+        case proto.Expression.Literal.LiteralTypeCase.I64 =>
+          if (cols.nonEmpty) {
+            dataset.na.fill(value = value.getI64, cols = cols).logicalPlan
+          } else {
+            dataset.na.fill(value = value.getI64).logicalPlan
+          }
+        case proto.Expression.Literal.LiteralTypeCase.FP64 =>
+          if (cols.nonEmpty) {
+            dataset.na.fill(value = value.getFp64, cols = cols).logicalPlan
+          } else {
+            dataset.na.fill(value = value.getFp64).logicalPlan
+          }
+        case proto.Expression.Literal.LiteralTypeCase.STRING =>
+          if (cols.nonEmpty) {
+            dataset.na.fill(value = value.getString, cols = cols).logicalPlan
+          } else {
+            dataset.na.fill(value = value.getString).logicalPlan
+          }
+        case other => throw InvalidPlanInput(s"Unsupported value type: $other")
+      }
+    } else {
+      val valueMap = mutable.Map.empty[String, Any]
+      cols.zip(values).foreach { case (col, value) =>
+        value.getLiteralTypeCase match {
+          case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
+            valueMap.update(col, value.getBoolean)
+          case proto.Expression.Literal.LiteralTypeCase.I64 =>
+            valueMap.update(col, value.getI64)
+          case proto.Expression.Literal.LiteralTypeCase.FP64 =>
+            valueMap.update(col, value.getFp64)
+          case proto.Expression.Literal.LiteralTypeCase.STRING =>
+            valueMap.update(col, value.getString)
+          case other => throw InvalidPlanInput(s"Unsupported value type: $other")
+        }
+      }
+      dataset.na.fill(valueMap = valueMap.toMap).logicalPlan
+    }
   }
 
   private def transformStatSummary(rel: proto.StatSummary): LogicalPlan = {
@@ -235,7 +309,11 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformProject(rel: proto.Project): LogicalPlan = {
-    val baseRel = transformRelation(rel.getInput)
+    val baseRel = if (rel.hasInput) {
+      transformRelation(rel.getInput)
+    } else {
+      logical.OneRowRelation()
+    }
     // TODO: support the target field for *.
     val projection =
       if (rel.getExpressionsCount == 1 && rel.getExpressions(0).hasUnresolvedStar) {
@@ -441,11 +519,14 @@ class SparkConnectPlanner(session: SparkSession) {
           case x => UnresolvedAlias(x)
         }
 
+    // Retain group columns in aggregate expressions:
+    val aggExprs =
+      groupingExprs ++ rel.getResultExpressionsList.asScala.map(transformResultExpression)
+
     logical.Aggregate(
       child = transformRelation(rel.getInput),
       groupingExpressions = groupingExprs.toSeq,
-      aggregateExpressions =
-        rel.getResultExpressionsList.asScala.map(transformResultExpression).toSeq)
+      aggregateExpressions = aggExprs.toSeq)
   }
 
   private def transformResultExpression(exp: proto.Expression): expressions.NamedExpression = {

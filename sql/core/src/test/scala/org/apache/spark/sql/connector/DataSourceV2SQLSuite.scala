@@ -2729,6 +2729,52 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     }
   }
 
+  test("Overwrite: overwrite by expression: True") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("id", "data")
+    df2.createOrReplaceTempView("source2")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+
+      spark.sql(s"INSERT INTO $t REPLACE WHERE TRUE SELECT * FROM source2")
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    }
+  }
+
+  test("Overwrite: overwrite by expression: id = 3") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("id", "data")
+    df2.createOrReplaceTempView("source2")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+
+      spark.sql(s"INSERT INTO $t REPLACE WHERE id = 3 SELECT * FROM source2")
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    }
+  }
+
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     checkError(
       exception = intercept[AnalysisException] {

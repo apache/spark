@@ -41,7 +41,7 @@ from pyspark.sql.types import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString
+    from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString, LiteralType
     from pyspark.sql.connect.client import RemoteSparkSession
 
 ColumnOrName = Union[Column, str]
@@ -388,8 +388,51 @@ class DataFrame(object):
             session=self._session,
         )
 
-    def show(self, n: int, truncate: Optional[Union[bool, int]], vertical: Optional[bool]) -> None:
-        ...
+    def _show_string(
+        self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False
+    ) -> str:
+        if not isinstance(n, int) or isinstance(n, bool):
+            raise TypeError("Parameter 'n' (number of rows) must be an int")
+        if not isinstance(vertical, bool):
+            raise TypeError("Parameter 'vertical' must be a bool")
+
+        _truncate: int = -1
+        if isinstance(truncate, bool) and truncate:
+            _truncate = 20
+        else:
+            try:
+                _truncate = int(truncate)
+            except ValueError:
+                raise TypeError(
+                    "Parameter 'truncate={}' should be either bool or int.".format(truncate)
+                )
+
+        pdf = DataFrame.withPlan(
+            plan.ShowString(child=self._plan, numRows=n, truncate=_truncate, vertical=vertical),
+            session=self._session,
+        ).toPandas()
+        assert pdf is not None
+        return pdf["show_string"][0]
+
+    def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
+        """
+        Prints the first ``n`` rows to the console.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        n : int, optional
+            Number of rows to show.
+        truncate : bool or int, optional
+            If set to ``True``, truncate strings longer than 20 chars by default.
+            If set to a number greater than one, truncates long strings to length ``truncate``
+            and align cells right.
+        vertical : bool, optional
+            If set to ``True``, print output rows vertically (one line
+            per column value).
+        """
+        print(self._show_string(n, truncate, vertical))
 
     def union(self, other: "DataFrame") -> "DataFrame":
         return self.unionAll(other)
@@ -506,6 +549,94 @@ class DataFrame(object):
 
     def where(self, condition: Expression) -> "DataFrame":
         return self.filter(condition)
+
+    @property
+    def na(self) -> "DataFrameNaFunctions":
+        """Returns a :class:`DataFrameNaFunctions` for handling missing values.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`DataFrameNaFunctions`
+        """
+        return DataFrameNaFunctions(self)
+
+    def fillna(
+        self,
+        value: Union["LiteralType", Dict[str, "LiteralType"]],
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
+    ) -> "DataFrame":
+        """Replace null values, alias for ``na.fill()``.
+        :func:`DataFrame.fillna` and :func:`DataFrameNaFunctions.fill` are aliases of each other.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        value : int, float, string, bool or dict
+            Value to replace null values with.
+            If the value is a dict, then `subset` is ignored and `value` must be a mapping
+            from column name (string) to replacement value. The replacement value must be
+            an int, float, boolean, or string.
+        subset : str, tuple or list, optional
+            optional list of column names to consider.
+            Columns specified in subset that do not have matching data type are ignored.
+            For example, if `value` is a string, and cols contains a non-string column,
+            then the non-string column is simply ignored.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with replaced null values.
+        """
+        if not isinstance(value, (float, int, str, bool, dict)):
+            raise TypeError(
+                f"value should be a float, int, string, bool or dict, "
+                f"but got {type(value).__name__}"
+            )
+        if isinstance(value, dict):
+            if len(value) == 0:
+                raise ValueError("value dict can not be empty")
+            for c, v in value.items():
+                if not isinstance(c, str):
+                    raise TypeError(
+                        f"key type of dict should be string, but got {type(c).__name__}"
+                    )
+                if not isinstance(v, (bool, int, float, str)):
+                    raise TypeError(
+                        f"value type of dict should be float, int, string or bool, "
+                        f"but got {type(v).__name__}"
+                    )
+
+        _cols: List[str] = []
+        if subset is not None:
+            if isinstance(subset, str):
+                _cols = [subset]
+            elif isinstance(subset, (tuple, list)):
+                for c in subset:
+                    if not isinstance(c, str):
+                        raise TypeError(
+                            f"cols should be a str, tuple[str] or list[str], "
+                            f"but got {type(c).__name__}"
+                        )
+                _cols = list(subset)
+            else:
+                raise TypeError(
+                    f"cols should be a str, tuple[str] or list[str], "
+                    f"but got {type(subset).__name__}"
+                )
+
+        if isinstance(value, dict):
+            _cols = list(value.keys())
+            _values = [value[c] for c in _cols]
+        else:
+            _values = [value]
+
+        return DataFrame.withPlan(
+            plan.NAFill(child=self._plan, cols=_cols, values=_values),
+            session=self._session,
+        )
 
     @property
     def stat(self) -> "DataFrameStatFunctions":
@@ -632,6 +763,59 @@ class DataFrame(object):
             return self._session.explain_string(query)
         else:
             return ""
+
+    def createGlobalTempView(self, name: str) -> None:
+        """Creates a global temporary view with this :class:`DataFrame`.
+
+        The lifetime of this temporary view is tied to this Spark application.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        name : str
+            Name of the view.
+        """
+        command = plan.CreateView(
+            child=self._plan, name=name, is_global=True, replace=False
+        ).command(session=self._session)
+        self._session.execute_command(command)
+
+    def createOrReplaceGlobalTempView(self, name: str) -> None:
+        """Creates or replaces a global temporary view using the given name.
+
+        The lifetime of this temporary view is tied to this Spark application.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        name : str
+            Name of the view.
+        """
+        command = plan.CreateView(
+            child=self._plan, name=name, is_global=True, replace=True
+        ).command(session=self._session)
+        self._session.execute_command(command)
+
+
+class DataFrameNaFunctions:
+    """Functionality for working with missing data in :class:`DataFrame`.
+
+    .. versionadded:: 3.4.0
+    """
+
+    def __init__(self, df: DataFrame):
+        self.df = df
+
+    def fill(
+        self,
+        value: Union["LiteralType", Dict[str, "LiteralType"]],
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
+    ) -> DataFrame:
+        return self.df.fillna(value=value, subset=subset)
+
+    fill.__doc__ = DataFrame.fillna.__doc__
 
 
 class DataFrameStatFunctions:

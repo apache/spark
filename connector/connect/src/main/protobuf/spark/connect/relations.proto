@@ -49,6 +49,10 @@ message Relation {
     Repartition repartition = 17;
     RenameColumnsBySameLengthNames rename_columns_by_same_length_names = 18;
     RenameColumnsByNameToNameMap rename_columns_by_name_to_name_map = 19;
+    ShowString show_string = 20;
+
+    // NA functions
+    NAFill fill_na = 90;
 
     // stat functions
     StatSummary summary = 100;
@@ -98,6 +102,9 @@ message Read {
 // The input relation must be specified.
 // The projected expression can be an arbitrary expression.
 message Project {
+  // (Optional) Input relation is optional for Project.
+  //
+  // For example, `SELECT ABS(-1)` is valid plan without an input plan.
   Relation input = 1;
   repeated Expression expressions = 3;
 }
@@ -253,6 +260,23 @@ message Repartition {
   bool shuffle = 3;
 }
 
+// Compose the string representing rows for output.
+// It will invoke 'Dataset.showString' to compute the results.
+message ShowString {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Number of rows to show.
+  optional int32 numRows = 2;
+
+  // (Required) If set to more than 0, truncates strings to
+  // `truncate` characters and all cells will be aligned right.
+  optional int32 truncate = 3;
+
+  // (Required) If set to true, prints output rows vertically (one line per column value).
+  optional bool vertical = 4;
+}
+
 // Computes specified statistics for numeric and string columns.
 // It will invoke 'Dataset.summary' (same as 'StatFunctions.summary')
 // to compute the results.
@@ -293,6 +317,29 @@ message StatCrosstab {
   //
   // Distinct items will make the column names of the DataFrame.
   string col2 = 3;
+}
+
+// Replaces null values.
+// It will invoke 'Dataset.na.fill' (same as 'DataFrameNaFunctions.fill') to compute the results.
+// Following 3 parameter combinations are supported:
+//  1, 'values' only contains 1 item, 'cols' is empty:
+//    replaces null values in all type-compatible columns.
+//  2, 'values' only contains 1 item, 'cols' is not empty:
+//    replaces null values in specified columns.
+//  3, 'values' contains more than 1 items, then 'cols' is required to have the same length:
+//    replaces each specified column with corresponding value.
+message NAFill {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Optional) Optional list of column names to consider.
+  repeated string cols = 2;
+
+  // (Required) Values to replace null values with.
+  //
+  // Should contain at least 1 item.
+  // Only 4 data types are supported now: bool, long, double, string
+  repeated Expression.Literal values = 3;
 }
 
 // Rename columns on the input relation by the same length of names.

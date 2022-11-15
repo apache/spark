@@ -20,8 +20,9 @@ import shutil
 import tempfile
 
 import grpc  # type: ignore
+from grpc._channel import _MultiThreadedRendezvous  # type: ignore
 
-from pyspark.testing.sqlutils import have_pandas
+from pyspark.testing.sqlutils import have_pandas, SQLTestUtils
 
 if have_pandas:
     import pandas
@@ -39,7 +40,7 @@ from pyspark.testing.utils import ReusedPySparkTestCase
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class SparkConnectSQLTestCase(ReusedPySparkTestCase):
+class SparkConnectSQLTestCase(ReusedPySparkTestCase, SQLTestUtils):
     """Parent test fixture class for all Spark Connect related
     test cases."""
 
@@ -185,6 +186,11 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         df2 = self.connect.read.table(self.tbl_name_empty)
         self.assertEqual(0, len(df2.take(5)))
 
+    def test_subquery_alias(self) -> None:
+        # SPARK-40938: test subquery alias.
+        plan_text = self.connect.read.table(self.tbl_name).alias("special_alias").explain()
+        self.assertTrue("special_alias" in plan_text)
+
     def test_range(self):
         self.assertTrue(
             self.connect.range(start=0, end=10)
@@ -202,6 +208,58 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             .equals(self.spark.range(start=0, end=10, step=3, numPartitions=2).toPandas())
         )
 
+    def test_create_global_temp_view(self):
+        # SPARK-41127: test global temp view creation.
+        with self.tempView("view_1"):
+            self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
+            self.connect.sql("SELECT 2 AS X LIMIT 1").createOrReplaceGlobalTempView("view_1")
+            self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
+
+            # Test when creating a view which is alreayd exists but
+            self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
+            with self.assertRaises(_MultiThreadedRendezvous):
+                self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
+
+    def test_fill_na(self):
+        # SPARK-41128: Test fill na
+        query = """
+            SELECT * FROM VALUES
+            (false, 1, NULL), (false, NULL, 2.0), (NULL, 3, 3.0)
+            AS tab(a, b, c)
+            """
+        # +-----+----+----+
+        # |    a|   b|   c|
+        # +-----+----+----+
+        # |false|   1|null|
+        # |false|null| 2.0|
+        # | null|   3| 3.0|
+        # +-----+----+----+
+
+        self.assertTrue(
+            self.connect.sql(query)
+            .fillna(True)
+            .toPandas()
+            .equals(self.spark.sql(query).fillna(True).toPandas())
+        )
+        self.assertTrue(
+            self.connect.sql(query)
+            .fillna(2)
+            .toPandas()
+            .equals(self.spark.sql(query).fillna(2).toPandas())
+        )
+        self.assertTrue(
+            self.connect.sql(query)
+            .fillna(2, ["a", "b"])
+            .toPandas()
+            .equals(self.spark.sql(query).fillna(2, ["a", "b"]).toPandas())
+        )
+        self.assertTrue(
+            self.connect.sql(query)
+            .na.fill({"a": True, "b": 2})
+            .toPandas()
+            .equals(self.spark.sql(query).na.fill({"a": True, "b": 2}).toPandas())
+        )
+
     def test_empty_dataset(self):
         # SPARK-41005: Test arrow based collection with empty dataset.
         self.assertTrue(
@@ -216,6 +274,17 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
     def test_session(self):
         self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession())
+
+    def test_show(self):
+        # SPARK-41111: Test the show method
+        show_str = self.connect.sql("SELECT 1 AS X, 2 AS Y")._show_string()
+        # +---+---+
+        # |  X|  Y|
+        # +---+---+
+        # |  1|  2|
+        # +---+---+
+        expected = "+---+---+\n|  X|  Y|\n+---+---+\n|  1|  2|\n+---+---+\n"
+        self.assertEqual(show_str, expected)
 
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text
