@@ -73,16 +73,16 @@ object UnsupportedOperationChecker extends Logging {
   }
 
   /**
-   * This method, combined with isStreamingStatefulOperation, determines all disallowed
+   * This method, combined with isStatefulOperationPossiblyEmitLateRows, determines all disallowed
    * behaviors in multiple stateful operators.
    * Concretely, All conditions defined below cannot be followed by any streaming stateful
-   * operator as defined in isStreamingStatefulOperation.
+   * operator as defined in isStatefulOperationPossiblyEmitLateRows.
    * @param p logical plan to be checked
    * @param outputMode query output mode
    * @return true if it is not allowed when followed by any streaming stateful
-   * operator as defined in isStreamingStatefulOperation.
+   * operator as defined in isStatefulOperationPossiblyEmitLateRows.
    */
-  private def isStatefulOperationPossiblyEmitLateRows(
+  private def ifCannotBeFollowedByStatefulOperation(
       p: LogicalPlan, outputMode: OutputMode): Boolean = p match {
     case ExtractEquiJoinKeys(_, _, _, otherCondition, _, left, right, _) =>
       left.isStreaming && right.isStreaming &&
@@ -102,14 +102,15 @@ object UnsupportedOperationChecker extends Logging {
   }
 
   /**
-   * This method is only used with isStatefulOperationPossiblyEmitLateRows.
-   * Despite the name, it doesn't contain ALL streaming stateful operations,
+   * This method is only used with ifCannotBeFollowedByStatefulOperation.
+   * As can tell from the name, it doesn't contain ALL streaming stateful operations,
+   * only the stateful operations that are possible to emit late rows.
    * for example, a Deduplicate without a event time column is still a stateful operation
    * but of less interested because it won't emit late records because of watermark.
    * @param p the logical plan to be checked
-   * @return true if there is a streaming staetful operation
+   * @return true if there is a streaming stateful operation
    */
-  private def isStreamingStatefulOperation(p: LogicalPlan): Boolean = p match {
+  private def isStatefulOperationPossiblyEmitLateRows(p: LogicalPlan): Boolean = p match {
     case s: Aggregate if s.isStreaming => true
     // Since the Distinct node will be replaced to Aggregate in the optimizer rule
     // [[ReplaceDistinctWithAggregate]], here we also need to check all Distinct node by
@@ -134,9 +135,9 @@ object UnsupportedOperationChecker extends Logging {
     val failWhenDetected = SQLConf.get.statefulOperatorCorrectnessCheckEnabled
     try {
       plan.foreach { subPlan =>
-        if (isStreamingStatefulOperation(subPlan)) {
+        if (isStatefulOperationPossiblyEmitLateRows(subPlan)) {
           subPlan.find { p =>
-            (p ne subPlan) && isStatefulOperationPossiblyEmitLateRows(p, outputMode)
+            (p ne subPlan) && ifCannotBeFollowedByStatefulOperation(p, outputMode)
           }.foreach { _ =>
             val errorMsg = "Detected pattern of possible 'correctness' issue " +
               "due to global watermark. " +
