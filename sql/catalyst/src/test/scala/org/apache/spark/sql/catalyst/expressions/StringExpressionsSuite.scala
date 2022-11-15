@@ -1025,19 +1025,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(
       // The format string must not be empty.
       ("454", "") -> DataTypeMismatch(
-        errorSubClass = "NUM_FORMAT_EMPTY",
+        errorSubClass = "FORMAT_EMPTY",
         messageParameters = Map.empty),
       // Make sure the format string does not contain any unrecognized characters.
       ("454", "999@") ->
         DataTypeMismatch(
-          errorSubClass = "NUM_FORMAT_UNEXPECTED_TOKEN",
+          errorSubClass = "FORMAT_UNEXPECTED_TOKEN",
           messageParameters = Map(
             "token" -> "character '@''",
             "format" -> toSQLValue("999@", StringType))
         ),
       ("454", "999M") ->
         DataTypeMismatch(
-          errorSubClass = "NUM_FORMAT_UNEXPECTED_TOKEN",
+          errorSubClass = "FORMAT_UNEXPECTED_TOKEN",
           messageParameters = Map(
             "token" -> "character 'M''",
             "format" -> toSQLValue("999M", StringType)
@@ -1045,19 +1045,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         ),
       ("454", "999P") ->
         DataTypeMismatch(
-          errorSubClass = "NUM_FORMAT_UNEXPECTED_TOKEN",
+          errorSubClass = "FORMAT_UNEXPECTED_TOKEN",
           messageParameters = Map(
             "token" -> "character 'P''",
             "format" -> toSQLValue("999P", StringType))
         ),
       // Make sure the format string contains at least one digit.
       ("454", "$") -> DataTypeMismatch(
-        errorSubClass = "NUM_FORMAT_WRONG_NUM_DIGIT",
+        errorSubClass = "FORMAT_WRONG_NUM_DIGIT",
         messageParameters = Map.empty),
       // Make sure the format string contains at most one decimal point.
       ("454", "99.99.99") ->
         DataTypeMismatch(
-          errorSubClass = "NUM_FORMAT_WRONG_NUM_TOKEN",
+          errorSubClass = "FORMAT_WRONG_NUM_TOKEN",
           messageParameters = Map(
             "token" -> ". or D",
             "format" -> toSQLValue("99.99.99", StringType))
@@ -1065,7 +1065,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // Make sure the format string contains at most one dollar sign.
       ("454", "$$99") ->
         DataTypeMismatch(
-          errorSubClass = "NUM_FORMAT_WRONG_NUM_TOKEN",
+          errorSubClass = "FORMAT_WRONG_NUM_TOKEN",
           messageParameters = Map(
             "token" -> "$", "" +
             "format" -> toSQLValue("$$99", StringType))
@@ -1073,90 +1073,90 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // Make sure the format string contains at most one minus sign at the beginning or end.
       ("$4-4", "$9MI9") ->
         DataTypeMismatch(
-          errorSubClass = "NUM_FORMAT_UNEXPECTED_TOKEN",
+          errorSubClass = "FORMAT_UNEXPECTED_TOKEN",
           messageParameters = Map(
             "token" -> "digit sequence",
             "format" -> toSQLValue("$9MI9", StringType))
         ),
       ("--4", "SMI9") ->
         DataTypeMismatch(
-          errorSubClass = "NUM_FORMAT_UNEXPECTED_TOKEN",
+          errorSubClass = "FORMAT_UNEXPECTED_TOKEN",
           messageParameters = Map(
             "token" -> "digit sequence",
             "format" -> toSQLValue("SMI9", StringType))
         ),
       ("--$54", "SS$99") ->
         DataTypeMismatch(
-          errorSubClass = "NUM_FORMAT_WRONG_NUM_TOKEN",
+          errorSubClass = "FORMAT_WRONG_NUM_TOKEN",
           messageParameters = Map(
             "token" -> "S",
             "format" -> toSQLValue("SS$99", StringType))
         ),
       ("-$54", "MI$99MI") ->
         DataTypeMismatch(
-          errorSubClass = "NUM_FORMAT_WRONG_NUM_TOKEN",
+          errorSubClass = "FORMAT_WRONG_NUM_TOKEN",
           messageParameters = Map(
             "token" -> "MI",
             "format" -> toSQLValue("MI$99MI", StringType))
         ),
       ("$4-4", "$9MI9MI") ->
         DataTypeMismatch(
-          errorSubClass = "NUM_FORMAT_WRONG_NUM_TOKEN",
+          errorSubClass = "FORMAT_WRONG_NUM_TOKEN",
           messageParameters = Map("token" -> "MI",
             "format" -> toSQLValue("$9MI9MI", StringType))
         ),
       // Make sure the format string contains at most one closing angle bracket at the end.
       ("<$45>", "PR$99") ->
         DataTypeMismatch(
-          errorSubClass = "NUM_FORMAT_UNEXPECTED_TOKEN",
+          errorSubClass = "FORMAT_UNEXPECTED_TOKEN",
           messageParameters = Map(
             "token" -> "$",
             "format" -> toSQLValue("PR$99", StringType))
         ),
       ("$4<4>", "$9PR9") ->
         DataTypeMismatch(
-          errorSubClass = "NUM_FORMAT_UNEXPECTED_TOKEN",
+          errorSubClass = "FORMAT_UNEXPECTED_TOKEN",
           messageParameters = Map(
             "token" -> "digit sequence",
             "format" -> toSQLValue("$9PR9", StringType))
         ),
       ("<<454>>", "999PRPR") ->
         DataTypeMismatch(
-          errorSubClass = "NUM_FORMAT_WRONG_NUM_TOKEN",
+          errorSubClass = "FORMAT_WRONG_NUM_TOKEN",
           messageParameters = Map(
             "token" -> "PR",
             "format" -> toSQLValue("999PRPR", StringType))
         ),
       // Make sure that any dollar sign in the format string occurs before any digits.
       ("4$54", "9$99") -> DataTypeMismatch(
-        errorSubClass = "NUM_FORMAT_CUR_MUST_BEFORE_DIGIT",
+        errorSubClass = "FORMAT_CUR_MUST_BEFORE_DIGIT",
         messageParameters = Map("format" -> toSQLValue("9$99", StringType))),
       // Make sure that any dollar sign in the format string occurs before any decimal point.
       (".$99", ".$99") -> DataTypeMismatch(
-        errorSubClass = "NUM_FORMAT_CUR_MUST_BEFORE_DEC",
+        errorSubClass = "FORMAT_CUR_MUST_BEFORE_DEC",
         messageParameters = Map("format" -> toSQLValue(".$99", StringType))),
       // Thousands separators must have digits in between them.
       (",123", ",099") -> DataTypeMismatch(
-        errorSubClass = "NUM_FORMAT_CONT_THOUSANDS_SEPS",
+        errorSubClass = "FORMAT_CONT_THOUSANDS_SEPS",
         messageParameters = Map("format" -> toSQLValue(",099", StringType))),
       (",123,456", ",999,099") -> DataTypeMismatch(
-        errorSubClass = "NUM_FORMAT_CONT_THOUSANDS_SEPS",
+        errorSubClass = "FORMAT_CONT_THOUSANDS_SEPS",
         messageParameters = Map("format" -> toSQLValue(",999,099", StringType))),
       (",,345", "9,,09.99") -> DataTypeMismatch(
-        errorSubClass = "NUM_FORMAT_CONT_THOUSANDS_SEPS",
+        errorSubClass = "FORMAT_CONT_THOUSANDS_SEPS",
         messageParameters = Map("format" -> toSQLValue("9,,09.99", StringType))),
       (",,345", "9,99,.99") -> DataTypeMismatch(
-        errorSubClass = "NUM_FORMAT_CONT_THOUSANDS_SEPS",
+        errorSubClass = "FORMAT_CONT_THOUSANDS_SEPS",
         messageParameters = Map("format" -> toSQLValue("9,99,.99", StringType))),
       (",,345", "9,99,") -> DataTypeMismatch(
-        errorSubClass = "NUM_FORMAT_CONT_THOUSANDS_SEPS",
+        errorSubClass = "FORMAT_CONT_THOUSANDS_SEPS",
         messageParameters = Map("format" -> toSQLValue("9,99,", StringType))),
       (",,345", ",,999,099.99") -> DataTypeMismatch(
-        errorSubClass = "NUM_FORMAT_CONT_THOUSANDS_SEPS",
+        errorSubClass = "FORMAT_CONT_THOUSANDS_SEPS",
         messageParameters = Map("format" -> toSQLValue(",,999,099.99", StringType))),
       // Thousands separators must not appear after the decimal point.
       ("123.45,6", "099.99,9") -> DataTypeMismatch(
-        errorSubClass = "NUM_FORMAT_THOUSANDS_SEPS_MUST_BEFORE_DEC",
+        errorSubClass = "FORMAT_THOUSANDS_SEPS_MUST_BEFORE_DEC",
         messageParameters = Map("format" -> toSQLValue("099.99,9", StringType)))
     ).foreach { case ((str: String, format: String), dataTypeMismatch: DataTypeMismatch) =>
       val toNumberResult = ToNumber(Literal(str), Literal(format)).checkInputDataTypes()

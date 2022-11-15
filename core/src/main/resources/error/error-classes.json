@@ -215,6 +215,46 @@
           "Input to <functionName> should all be the same type, but it's <dataType>."
         ]
       },
+      "FORMAT_CONT_THOUSANDS_SEPS" : {
+        "message" : [
+          "Thousands separators (, or G) must have digits in between them in the number format: <format>."
+        ]
+      },
+      "FORMAT_CUR_MUST_BEFORE_DEC" : {
+        "message" : [
+          "Currency characters must appear before any decimal point in the number format: <format>."
+        ]
+      },
+      "FORMAT_CUR_MUST_BEFORE_DIGIT" : {
+        "message" : [
+          "Currency characters must appear before digits in the number format: <format>."
+        ]
+      },
+      "FORMAT_EMPTY" : {
+        "message" : [
+          "The number format string cannot be empty."
+        ]
+      },
+      "FORMAT_THOUSANDS_SEPS_MUST_BEFORE_DEC" : {
+        "message" : [
+          "Thousands separators (, or G) may not appear after the decimal point in the number format: <format>."
+        ]
+      },
+      "FORMAT_UNEXPECTED_TOKEN" : {
+        "message" : [
+          "Unexpected <token> found in the format string <format>; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
+        ]
+      },
+      "FORMAT_WRONG_NUM_DIGIT" : {
+        "message" : [
+          "The format string requires at least one number digit."
+        ]
+      },
+      "FORMAT_WRONG_NUM_TOKEN" : {
+        "message" : [
+          "At most one <token> is allowed in the number format: <format>."
+        ]
+      },
       "FRAME_LESS_OFFSET_WITHOUT_FOLDABLE" : {
         "message" : [
           "Offset expression <offset> must be a literal."
@@ -288,46 +328,6 @@
       "NULL_TYPE" : {
         "message" : [
           "Null typed values cannot be used as arguments of <functionName>."
-        ]
-      },
-      "NUM_FORMAT_CONT_THOUSANDS_SEPS" : {
-        "message" : [
-          "Thousands separators (, or G) must have digits in between them in the number format: <format>."
-        ]
-      },
-      "NUM_FORMAT_CUR_MUST_BEFORE_DEC" : {
-        "message" : [
-          "Currency characters must appear before any decimal point in the number format: <format>."
-        ]
-      },
-      "NUM_FORMAT_CUR_MUST_BEFORE_DIGIT" : {
-        "message" : [
-          "Currency characters must appear before digits in the number format: <format>."
-        ]
-      },
-      "NUM_FORMAT_EMPTY" : {
-        "message" : [
-          "The number format string cannot be empty."
-        ]
-      },
-      "NUM_FORMAT_THOUSANDS_SEPS_MUST_BEFORE_DEC" : {
-        "message" : [
-          "Thousands separators (, or G) may not appear after the decimal point in the number format: <format>."
-        ]
-      },
-      "NUM_FORMAT_UNEXPECTED_TOKEN" : {
-        "message" : [
-          "Unexpected <token> found in the format string <format>; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
-        ]
-      },
-      "NUM_FORMAT_WRONG_NUM_DIGIT" : {
-        "message" : [
-          "The format string requires at least one number digit."
-        ]
-      },
-      "NUM_FORMAT_WRONG_NUM_TOKEN" : {
-        "message" : [
-          "At most one <token> is allowed in the number format: <format>."
         ]
       },
       "PARAMETER_CONSTRAINT_VIOLATION" : {

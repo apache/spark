@@ -4712,7 +4712,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NUM_FORMAT_THOUSANDS_SEPS_MUST_BEFORE_DEC",
+  "errorClass" : "DATATYPE_MISMATCH.FORMAT_THOUSANDS_SEPS_MUST_BEFORE_DEC",
   "messageParameters" : {
     "format" : "'99G999G999D999G999'",
     "sqlExpr" : "\"to_number(-34,338,492.654,878, 99G999G999D999G999)\""
@@ -4774,7 +4774,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NUM_FORMAT_CONT_THOUSANDS_SEPS",
+  "errorClass" : "DATATYPE_MISMATCH.FORMAT_CONT_THOUSANDS_SEPS",
   "messageParameters" : {
     "format" : "'999G'",
     "sqlExpr" : "\"to_number(123,000, 999G)\""
