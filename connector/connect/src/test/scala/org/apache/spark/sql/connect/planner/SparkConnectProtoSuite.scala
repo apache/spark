@@ -342,6 +342,25 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       sparkTestRelation.na.fill(Map("id" -> 1L, "name" -> "xyz")))
   }
 
+  test("SPARK-41148: Test drop na") {
+    comparePlans(connectTestRelation.na.drop(), sparkTestRelation.na.drop())
+    comparePlans(
+      connectTestRelation.na.drop(cols = Seq("id")),
+      sparkTestRelation.na.drop(cols = Seq("id")))
+    comparePlans(
+      connectTestRelation.na.drop(how = Some("all")),
+      sparkTestRelation.na.drop(how = "all"))
+    comparePlans(
+      connectTestRelation.na.drop(how = Some("all"), cols = Seq("id", "name")),
+      sparkTestRelation.na.drop(how = "all", cols = Seq("id", "name")))
+    comparePlans(
+      connectTestRelation.na.drop(minNonNulls = Some(1)),
+      sparkTestRelation.na.drop(minNonNulls = 1))
+    comparePlans(
+      connectTestRelation.na.drop(minNonNulls = Some(1), cols = Seq("id", "name")),
+      sparkTestRelation.na.drop(minNonNulls = 1, cols = Seq("id", "name")))
+  }
+
   test("Test summary") {
     comparePlans(
       connectTestRelation.summary("count", "mean", "stddev"),

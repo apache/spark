@@ -102,6 +102,22 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.fill_na.values[1].string, "abc")
         self.assertEqual(plan.root.fill_na.cols, ["col_a", "col_b"])
 
+    def test_drop_na(self):
+        # SPARK-41148: Test drop na
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        plan = df.dropna()._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.drop_na.cols, [])
+        self.assertEqual(plan.root.drop_na.HasField("min_non_nulls"), False)
+
+        plan = df.na.drop(thresh=2, subset=("col_a", "col_b"))._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.drop_na.cols, ["col_a", "col_b"])
+        self.assertEqual(plan.root.drop_na.min_non_nulls, 2)
+
+        plan = df.dropna(how="all", subset="col_c")._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.drop_na.cols, ["col_c"])
+        self.assertEqual(plan.root.drop_na.min_non_nulls, 1)
+
     def test_summary(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.filter(df.col_name > 3).summary()._plan.to_proto(self.connect)

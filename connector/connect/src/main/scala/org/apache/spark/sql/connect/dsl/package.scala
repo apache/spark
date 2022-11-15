@@ -278,6 +278,39 @@ package object dsl {
               .build())
           .build()
       }
+
+      def drop(
+          how: Option[String] = None,
+          minNonNulls: Option[Int] = None,
+          cols: Seq[String] = Seq.empty): Relation = {
+        require(!(how.nonEmpty && minNonNulls.nonEmpty))
+        require(how.isEmpty || Seq("any", "all").contains(how.get))
+
+        val dropna = proto.NADrop
+          .newBuilder()
+          .setInput(logicalPlan)
+
+        if (cols.nonEmpty) {
+          dropna.addAllCols(cols.asJava)
+        }
+
+        var _minNonNulls = -1
+        how match {
+          case Some("all") => _minNonNulls = 1
+          case _ =>
+        }
+        if (minNonNulls.nonEmpty) {
+          _minNonNulls = minNonNulls.get
+        }
+        if (_minNonNulls > 0) {
+          dropna.setMinNonNulls(_minNonNulls)
+        }
+
+        Relation
+          .newBuilder()
+          .setDropNa(dropna.build())
+          .build()
+      }
     }
 
     implicit class DslStatFunctions(val logicalPlan: Relation) {
