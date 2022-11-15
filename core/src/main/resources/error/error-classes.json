@@ -638,19 +638,24 @@
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
     ]
   },
+  "INVALID_LATERAL_JOIN_TYPE" : {
+    "message" : [
+      "The <joinType> JOIN with LATERAL correlation is not allowed because an OUTER subquery cannot correlate to its join partner. Remove the LATERAL correlation or use an INNER JOIN, or LEFT OUTER JOIN instead."
+    ]
+  },
   "INVALID_LIKE_PATTERN" : {
     "message" : [
       "The pattern <pattern> is invalid."
     ],
     "subClass" : {
-      "ESC_IN_THE_MIDDLE" : {
-        "message" : [
-          "the escape character is not allowed to precede <char>."
-        ]
-      },
       "ESC_AT_THE_END" : {
         "message" : [
           "the escape character is not allowed to end with."
+        ]
+      },
+      "ESC_IN_THE_MIDDLE" : {
+        "message" : [
+          "the escape character is not allowed to precede <char>."
         ]
       }
     }
@@ -946,6 +951,11 @@
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
     ]
   },
+  "STREAM_FAILED" : {
+    "message" : [
+      "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
+    ]
+  },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create table or view <relationName> because it already exists.",
@@ -1143,11 +1153,6 @@
       "JDBC_TRANSACTION" : {
         "message" : [
           "The target JDBC server does not support transactions and can only support ALTER TABLE with a single action."
-        ]
-      },
-      "LATERAL_JOIN_OF_TYPE" : {
-        "message" : [
-          "<joinType> JOIN with LATERAL correlation."
         ]
       },
       "LATERAL_JOIN_USING" : {
