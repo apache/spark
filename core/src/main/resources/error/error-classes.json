@@ -946,6 +946,11 @@
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
     ]
   },
+  "STREAM_FAILED" : {
+    "message" : [
+      "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
+    ]
+  },
   "TABLE_FUNCTION_DUPLICATED_NAMED_ARGUMENTS" : {
     "message" : [
       "Found a duplicated argument <name> being set at position <pos>."
