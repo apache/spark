@@ -643,14 +643,14 @@
       "The pattern <pattern> is invalid."
     ],
     "subClass" : {
-      "ESC_IN_THE_MIDDLE" : {
-        "message" : [
-          "the escape character is not allowed to precede <char>."
-        ]
-      },
       "ESC_AT_THE_END" : {
         "message" : [
           "the escape character is not allowed to end with."
+        ]
+      },
+      "ESC_IN_THE_MIDDLE" : {
+        "message" : [
+          "the escape character is not allowed to precede <char>."
         ]
       }
     }
