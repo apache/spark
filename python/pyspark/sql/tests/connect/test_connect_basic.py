@@ -258,7 +258,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         )
         self.assertEqual("name", col0)
 
-        with self.assertRaises(Exception) as exc:
+        with self.assertRaises(grpc.RpcError) as exc:
             self.connect.range(1, 10).select(col("id").alias("this", "is", "not")).collect()
         self.assertIn("Buffer(this, is, not)", str(exc.exception))
 
