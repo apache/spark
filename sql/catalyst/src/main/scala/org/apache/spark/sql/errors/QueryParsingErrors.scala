@@ -545,7 +545,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       viewName: String,
       ctx: CreateViewContext): Throwable = {
     new ParseException(
-      errorClass = "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE",
+      errorClass = "TEMP_VIEW_NAME_CONTAINS_UNSUPPORTED_NAME_PARTS",
       messageParameters = Map("actualName" -> viewName),
       ctx)
   }

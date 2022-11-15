@@ -18,15 +18,12 @@
 package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
-
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-
 import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
@@ -35,13 +32,12 @@ import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
-import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QueryPlanningTracker, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JSONOptions, JacksonGenerator}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
@@ -3799,21 +3795,21 @@ class Dataset[T] private[sql](
       global: Boolean): CreateViewCommand = {
     val viewType = if (global) GlobalTempView else LocalTempView
 
-    val tableIdentifier = try {
-      sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName)
+    val identifier = try {
+      sparkSession.sessionState.sqlParser.parseMultipartIdentifier(viewName)
     } catch {
       case _: ParseException => throw QueryCompilationErrors.invalidViewNameError(viewName)
     }
 
-    if (!SQLConf.get.allowsTempViewCreationWithDatabaseName && tableIdentifier.database.isDefined) {
+    if (!SQLConf.get.allowsTempViewCreationWithMultipleNameparts && identifier.size > 1) {
       // Temporary view names should NOT contain database prefix like "database.table"
       throw new AnalysisException(
-        errorClass = "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE",
-        messageParameters = Map("actualName" -> tableIdentifier.unquotedString))
+        errorClass = "TEMP_VIEW_NAME_CONTAINS_UNSUPPORTED_NAME_PARTS",
+        messageParameters = Map("actualName" -> viewName))
     }
 
     CreateViewCommand(
-      name = tableIdentifier,
+      name = TableIdentifier.apply(identifier.head),
       userSpecifiedColumns = Nil,
       comment = None,
       properties = Map.empty,

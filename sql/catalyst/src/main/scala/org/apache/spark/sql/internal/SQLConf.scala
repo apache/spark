@@ -2162,11 +2162,11 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val ALLOW_TEMP_VIEW_CREATION_WITH_DATABASE_NAME =
-    buildConf("spark.sql.legacy.allowTempViewCreationWithDatabaseName")
+  val ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS =
+    buildConf("spark.sql.legacy.allowTempViewCreationWithMultipleNameparts")
       .internal()
       .doc("When true, temp view creation Dataset APIs will allow the view creation even if " +
-        "there is a database name in the view name. The database name will be dropped " +
+        "the view name is multiple name parts. The extra name parts will be dropped " +
         "during the view creation")
       .version("3.4.0")
       .booleanConf
@@ -4818,8 +4818,8 @@ class SQLConf extends Serializable with Logging {
 
   def defaultDatabase: String = getConf(StaticSQLConf.CATALOG_DEFAULT_DATABASE)
 
-  def allowsTempViewCreationWithDatabaseName: Boolean =
-    getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_DATABASE_NAME)
+  def allowsTempViewCreationWithMultipleNameparts: Boolean =
+    getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
 
   /** ********************** SQLConf functionality methods ************ */
 

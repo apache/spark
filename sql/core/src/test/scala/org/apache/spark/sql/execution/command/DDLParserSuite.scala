@@ -556,7 +556,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val v3 = "CREATE TEMPORARY VIEW a.b AS SELECT 1"
     checkError(
       exception = parseException(v3),
-      errorClass = "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE",
+      errorClass = "TEMP_VIEW_NAME_CONTAINS_UNSUPPORTED_NAME_PARTS",
       parameters = Map("actualName" -> "a.b"),
       context = ExpectedContext(
         fragment = v3,
