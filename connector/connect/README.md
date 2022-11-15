@@ -28,8 +28,8 @@ or
 ### Build with user-defined `protoc` and `protoc-gen-grpc-java`
 
 When the user cannot use the official `protoc` and `protoc-gen-grpc-java` binary files to build the `connect` module in the compilation environment,
-for example, compiling `connect` module on CentOS 6 or CentOS 7, we can try to compile and test by specifying the user-defined `protoc` and 
-`protoc-gen-grpc-java` binary files as follows:
+for example, compiling `connect` module on CentOS 6 or CentOS 7 which the default `glibc` version is less than 2.14, we can try to compile and test by 
+specifying the user-defined `protoc` and `protoc-gen-grpc-java` binary files as follows:
 
 ```bash
 export CONNECT_PROTOC_EXEC_PATH=/path-to-protoc-exe
