@@ -71,34 +71,35 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(len(plan.root.filter.condition.unresolved_function.arguments), 2)
 
     def test_fill_na(self):
+        # SPARK-41128: Test fill na
         df = self.connect.readTable(table_name=self.tbl_name)
 
         plan = df.fillna(value=1)._plan.to_proto(self.connect)
         self.assertEqual(len(plan.root.fill_na.values), 1)
-        self.assertEqual(plan.root.fill_na.values[0].long_value, 1)
+        self.assertEqual(plan.root.fill_na.values[0].long, 1)
         self.assertEqual(plan.root.fill_na.cols, [])
 
         plan = df.na.fill(value="xyz")._plan.to_proto(self.connect)
         self.assertEqual(len(plan.root.fill_na.values), 1)
-        self.assertEqual(plan.root.fill_na.values[0].string_value, "xyz")
+        self.assertEqual(plan.root.fill_na.values[0].string, "xyz")
         self.assertEqual(plan.root.fill_na.cols, [])
 
         plan = df.na.fill(value="xyz", subset=["col_a", "col_b"])._plan.to_proto(self.connect)
         self.assertEqual(len(plan.root.fill_na.values), 1)
-        self.assertEqual(plan.root.fill_na.values[0].string_value, "xyz")
+        self.assertEqual(plan.root.fill_na.values[0].string, "xyz")
         self.assertEqual(plan.root.fill_na.cols, ["col_a", "col_b"])
 
         plan = df.na.fill(value=True, subset=("col_a", "col_b", "col_c"))._plan.to_proto(
             self.connect
         )
         self.assertEqual(len(plan.root.fill_na.values), 1)
-        self.assertEqual(plan.root.fill_na.values[0].bool_value, True)
+        self.assertEqual(plan.root.fill_na.values[0].bool, True)
         self.assertEqual(plan.root.fill_na.cols, ["col_a", "col_b", "col_c"])
 
         plan = df.fillna({"col_a": 1.5, "col_b": "abc"})._plan.to_proto(self.connect)
         self.assertEqual(len(plan.root.fill_na.values), 2)
-        self.assertEqual(plan.root.fill_na.values[0].double_value, 1.5)
-        self.assertEqual(plan.root.fill_na.values[1].string_value, "abc")
+        self.assertEqual(plan.root.fill_na.values[0].double, 1.5)
+        self.assertEqual(plan.root.fill_na.values[1].string, "abc")
         self.assertEqual(plan.root.fill_na.cols, ["col_a", "col_b"])
 
     def test_summary(self):

@@ -868,16 +868,16 @@ class NAFill(LogicalPlan):
         self.cols = cols
         self.values = values
 
-    def _convert_value(self, v: Any) -> proto.NAFill.ValueType:
-        value = proto.NAFill.ValueType()
+    def _convert_value(self, v: Any) -> proto.NAFill.Type:
+        value = proto.NAFill.Type()
         if isinstance(v, bool):
-            value.bool_value = v
+            value.bool = v
         elif isinstance(v, int):
-            value.long_value = v
+            value.long = v
         elif isinstance(v, float):
-            value.double_value = v
+            value.double = v
         else:
-            value.string_value = v
+            value.string = v
         return value
 
     def plan(self, session: "RemoteSparkSession") -> proto.Relation:

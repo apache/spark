@@ -230,10 +230,10 @@ package object dsl {
 
       private def convertValue(value: Any) = {
         value match {
-          case b: Boolean => proto.NAFill.ValueType.newBuilder().setBoolValue(b).build()
-          case l: Long => proto.NAFill.ValueType.newBuilder().setLongValue(l).build()
-          case d: Double => proto.NAFill.ValueType.newBuilder().setDoubleValue(d).build()
-          case s: String => proto.NAFill.ValueType.newBuilder().setStringValue(s).build()
+          case b: Boolean => proto.NAFill.Type.newBuilder().setBool(b).build()
+          case l: Long => proto.NAFill.Type.newBuilder().setLong(l).build()
+          case d: Double => proto.NAFill.Type.newBuilder().setDouble(d).build()
+          case s: String => proto.NAFill.Type.newBuilder().setString(s).build()
           case o => throw new Exception(s"Unsupported value type: $o")
         }
       }

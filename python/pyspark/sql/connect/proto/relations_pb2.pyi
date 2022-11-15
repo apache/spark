@@ -1306,62 +1306,60 @@ class NAFill(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class ValueType(google.protobuf.message.Message):
+    class Type(google.protobuf.message.Message):
         """Available data types."""
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        BOOL_VALUE_FIELD_NUMBER: builtins.int
-        LONG_VALUE_FIELD_NUMBER: builtins.int
-        DOUBLE_VALUE_FIELD_NUMBER: builtins.int
-        STRING_VALUE_FIELD_NUMBER: builtins.int
-        bool_value: builtins.bool
-        long_value: builtins.int
-        double_value: builtins.float
-        string_value: builtins.str
+        BOOL_FIELD_NUMBER: builtins.int
+        LONG_FIELD_NUMBER: builtins.int
+        DOUBLE_FIELD_NUMBER: builtins.int
+        STRING_FIELD_NUMBER: builtins.int
+        bool: builtins.bool
+        long: builtins.int
+        double: builtins.float
+        string: builtins.str
         def __init__(
             self,
             *,
-            bool_value: builtins.bool = ...,
-            long_value: builtins.int = ...,
-            double_value: builtins.float = ...,
-            string_value: builtins.str = ...,
+            bool: builtins.bool = ...,
+            long: builtins.int = ...,
+            double: builtins.float = ...,
+            string: builtins.str = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "bool_value",
-                b"bool_value",
-                "double_value",
-                b"double_value",
-                "long_value",
-                b"long_value",
-                "string_value",
-                b"string_value",
-                "value",
-                b"value",
+                "bool",
+                b"bool",
+                "double",
+                b"double",
+                "kind",
+                b"kind",
+                "long",
+                b"long",
+                "string",
+                b"string",
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "bool_value",
-                b"bool_value",
-                "double_value",
-                b"double_value",
-                "long_value",
-                b"long_value",
-                "string_value",
-                b"string_value",
-                "value",
-                b"value",
+                "bool",
+                b"bool",
+                "double",
+                b"double",
+                "kind",
+                b"kind",
+                "long",
+                b"long",
+                "string",
+                b"string",
             ],
         ) -> None: ...
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["value", b"value"]
-        ) -> typing_extensions.Literal[
-            "bool_value", "long_value", "double_value", "string_value"
-        ] | None: ...
+            self, oneof_group: typing_extensions.Literal["kind", b"kind"]
+        ) -> typing_extensions.Literal["bool", "long", "double", "string"] | None: ...
 
     INPUT_FIELD_NUMBER: builtins.int
     COLS_FIELD_NUMBER: builtins.int
@@ -1377,16 +1375,14 @@ class NAFill(google.protobuf.message.Message):
     @property
     def values(
         self,
-    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        global___NAFill.ValueType
-    ]:
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___NAFill.Type]:
         """(Required) Values to replace null values with. Should contains at least 1 item."""
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
         cols: collections.abc.Iterable[builtins.str] | None = ...,
-        values: collections.abc.Iterable[global___NAFill.ValueType] | None = ...,
+        values: collections.abc.Iterable[global___NAFill.Type] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]

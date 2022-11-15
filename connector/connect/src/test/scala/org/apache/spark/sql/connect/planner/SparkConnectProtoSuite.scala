@@ -273,7 +273,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan2, sparkPlan2)
   }
 
-  test("Test fill na") {
+  test("SPARK-41128: Test fill na") {
     comparePlans(connectTestRelation.na.fillValue(1L), sparkTestRelation.na.fill(1L))
     comparePlans(connectTestRelation.na.fillValue(1.5), sparkTestRelation.na.fill(1.5))
     comparePlans(connectTestRelation.na.fillValue("str"), sparkTestRelation.na.fill("str"))
