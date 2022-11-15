@@ -4564,6 +4564,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-41144: Unresolved hint should not cause query failure") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1(c1 bigint) USING PARQUET")
+      sql("CREATE TABLE t2(c2 bigint) USING PARQUET")
+      sql("SELECT /*+ hash(t2) */ * FROM t1 join t2 on c1 = c2")
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
