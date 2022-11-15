@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString
     from pyspark.sql.connect.client import RemoteSparkSession
 
-ColumnOrName = Union[Expression, str]
+ColumnOrName = Union[Column, str]
 
 
 class GroupingFrame(object):
