@@ -704,6 +704,12 @@
       }
     }
   },
+  "INVALID_WHERE_CONDITION" : {
+    "message" : [
+      "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
+      "Rewrite the query to avoid window functions, aggregate functions, and generator functions in the WHERE clause."
+    ]
+  },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
       "Cannot name the managed table as <identifier>, as its associated location <location> already exists. Please pick a different table name, or remove the existing location first."
@@ -5117,13 +5123,6 @@
       "nondeterministic expressions are only allowed in Project, Filter, Aggregate or Window, found:",
       "<sqlExprs>",
       "in operator <operator>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2440" : {
-    "message" : [
-      "Aggregate/Window/Generate expressions are not valid in where clause of the query.",
-      "Expression in where clause: [<condition>]",
-      "Invalid expressions: [<invalidExprSqls>]"
     ]
   },
   "_LEGACY_ERROR_TEMP_2441" : {
