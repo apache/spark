@@ -17,6 +17,7 @@
 import uuid
 from typing import cast, get_args, TYPE_CHECKING, Callable, Any
 
+import json
 import decimal
 import datetime
 
@@ -134,8 +135,6 @@ class ColumnAlias(Expression):
             exp.alias.expr.CopyFrom(self._parent.to_plan(session))
 
             if self._metadata:
-                import json
-
                 exp.alias.metadata = json.dumps(self._metadata)
             return exp
         else:
