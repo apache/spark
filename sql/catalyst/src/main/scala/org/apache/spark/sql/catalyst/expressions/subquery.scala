@@ -203,20 +203,48 @@ object SubExprUtils extends PredicateHelper {
    */
   def getOuterReferences(expr: Expression): Seq[Expression] = {
     val outerExpressions = ArrayBuffer.empty[Expression]
-    def collectOutRefs(input: Expression): Unit = input match {
+
+    /*
+     * if true, means check if parent qualifies to be part of outer ref
+     * and if true, then delay adding to outerExpression till it bubbles up.
+     * If false, indicates that parent should not be considered as part of outer ref
+     */
+    def collectOutRefs(input: Expression): Boolean = input match {
       case a: AggregateExpression if containsOuter(a) =>
         if (a.references.nonEmpty) {
           throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql, a.origin)
         } else {
           // Collect and update the sub-tree so that outer references inside this aggregate
           // expression will not be collected. For example: min(outer(a)) -> min(a).
-          val newExpr = stripOuterReference(a)
-          outerExpressions += newExpr
+          // delay collecting outer expression as we want to go as much up as possible
+          // we will collect & strip outer ref once we have reached condition where parent
+          // expression is dependent on more than 1 refs.
+          true
         }
-      case OuterReference(e) => outerExpressions += e
-      case _ => input.children.foreach(collectOutRefs)
+      case OuterReference(e) =>
+        outerExpressions += e
+        false
+      case _ =>
+        val exprsOfInterestIndex = input.children.zipWithIndex.collect {
+          case (child, index) if collectOutRefs(child) => index
+        }
+        if (exprsOfInterestIndex.isEmpty) {
+          false
+        } else if (exprsOfInterestIndex.size == 1 && input.references.isEmpty) {
+          // outer reference will not yield any references hence size == 0 is checked
+          // in which case let parent decide whether the outer reference should include
+          // itself or not
+          true
+        } else {
+          exprsOfInterestIndex.foreach(i =>
+            outerExpressions += stripOuterReference(input.children(i)))
+          false
+        }
     }
-    collectOutRefs(expr)
+
+    if (collectOutRefs(expr) && expr.references.isEmpty) {
+      outerExpressions += stripOuterReference(expr)
+    }
     outerExpressions.toSeq
   }
 

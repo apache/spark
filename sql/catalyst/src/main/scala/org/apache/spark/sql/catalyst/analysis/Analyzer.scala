@@ -2741,13 +2741,30 @@ class Analyzer(override val catalogManager: CatalogManager)
         aggExprList: ArrayBuffer[NamedExpression]): Expression = {
       // Avoid adding an extra aggregate expression if it's already present in
       // `agg.aggregateExpressions`.
-      val index = agg.aggregateExpressions.indexWhere {
-        case Alias(child, _) => child semanticEquals expr
-        case other => other semanticEquals expr
+      object AggregateMatcher {
+        def unapply(namedExpression: NamedExpression): Option[Expression] = {
+          val extractedAggExpr = namedExpression match {
+            case Alias(child, _) => child
+            case other => other
+          }
+          var exprExistsInAggExprs = false
+          val maybeModified = expr transformDown {
+            case subexpr if subexpr semanticEquals extractedAggExpr =>
+              exprExistsInAggExprs = true
+              namedExpression.toAttribute
+          }
+          if (exprExistsInAggExprs) {
+            Option(maybeModified)
+          } else {
+            None
+          }
+        }
       }
-      if (index >= 0) {
-        agg.aggregateExpressions(index).toAttribute
-      } else {
+
+      // check if expr has aggregate expression as subtree
+      agg.aggregateExpressions.collectFirst {
+        case AggregateMatcher(matchedExpr) => matchedExpr
+      }.getOrElse {
         expr match {
           case ae: AggregateExpression =>
             val cleaned = RemoveTempResolvedColumn.trimTempResolvedColumn(ae)

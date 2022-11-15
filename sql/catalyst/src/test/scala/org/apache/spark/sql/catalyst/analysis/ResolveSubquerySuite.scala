@@ -20,10 +20,16 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{CreateArray, Expression, GetStructField, InSubquery, LateralSubquery, ListQuery, OuterReference, ScalarSubquery}
-import org.apache.spark.sql.catalyst.expressions.aggregate.Count
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Cos, CreateArray, Exists, Expression, GetStructField, InSubquery, LateralSubquery, ListQuery, OuterReference, ScalarSubquery, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, Count}
+import org.apache.spark.sql.catalyst.optimizer.{PropagateEmptyRelation, SimpleTestOptimizer}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
+
+import org.junit.Assert
+
+import scala.collection.mutable
 
 /**
  * Unit tests for [[ResolveSubquery]].
@@ -269,5 +275,70 @@ class ResolveSubquerySuite extends AnalysisTest {
         CreateArray(Seq(OuterReference(a), OuterReference(b))).as("arr") :: Nil, t0
       ), Seq(a, b)).as("sub") :: Nil, t1)
     )
+  }
+
+  test("SPARK-41141 aggregates of outer query referenced in subquery should not create" +
+    " new aggregates if possible") {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> s"${PropagateEmptyRelation.ruleName}") {
+      val a = 'a.int
+      val b = 'b.int
+      val c = 'c.int
+      val d = 'd.int
+
+      val t1 = LocalRelation(a, b)
+      val t2 = LocalRelation(c, d)
+      val optimizer = new SimpleTestOptimizer()
+
+      val plansToTest = Seq(
+
+        t1.select($"a", $"b").
+          having($"b")(Cos(sum($"a")))(Exists(t2.select($"c").
+            where($"d" === Cos(sum($"a"))))) -> 1,
+
+        t1.select($"a", $"b").
+          having($"b")(sum($"a"))(Exists(t2.select($"c").
+            where($"d" === Cos(sum($"a"))))) -> 1,
+
+        t1.select($"a", $"b").
+          having($"b")(sum($"a"), Cos(sum($"b")))(Exists(t2.select($"c").
+            where($"d" === Cos(sum($"a")) + sum($"a") + sum($"b") + Cos(sum($"b"))))) -> 3,
+
+        t1.select($"a", $"b").
+          having($"b")(Cos(sum($"a")))(Exists(t2.select($"c").
+            where($"d" === sum($"a")))) -> 2
+      )
+
+      plansToTest.foreach {
+        case (logicalPlan: LogicalPlan, numAggFunctions) =>
+          assertAnalysis(logicalPlan, numAggFunctions)
+      }
+
+      def assertAnalysis(logicalPlan: LogicalPlan, expectedAggregateFunctions: Int): Unit = {
+        val analyzedQuery = logicalPlan.analyze
+        Assert.assertTrue(analyzedQuery.analyzed)
+        val optimizedQuery = optimizer.execute(analyzedQuery)
+        Assert.assertTrue(optimizedQuery.resolved)
+        // the analyzed query should contain only one aggregate function
+        val buff = mutable.ArrayBuffer[AggregateFunction]()
+        analyzedQuery.transformAllExpressions {
+          case aggFunc: AggregateFunction => buff += aggFunc
+            aggFunc
+        }
+
+        Assert.assertEquals(expectedAggregateFunctions, buff.size)
+
+        val aggAttribs = AttributeSet(analyzedQuery.collect {
+          case agg: Aggregate => agg
+        }.flatMap(_.aggregateExpressions.map(_.toAttribute)))
+
+        val allSubqueryExprs = analyzedQuery.collect {
+          case lp => lp.expressions.filter {
+            case _: SubqueryExpression => true
+            case _ => false
+          }
+        }.flatMap(_.map(_.asInstanceOf[SubqueryExpression]))
+        Assert.assertTrue(allSubqueryExprs.forall(sq => sq.references.subsetOf(aggAttribs)))
+      }
+    }
   }
 }
