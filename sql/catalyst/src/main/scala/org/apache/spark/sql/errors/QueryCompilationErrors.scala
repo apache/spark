@@ -3380,4 +3380,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "unsupported" -> unsupported.toString,
         "class" -> unsupported.getClass.toString))
   }
+
+  def tableFunctionDuplicateNamedArguments(name: String, pos: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_FUNCTION_DUPLICATED_NAMED_ARGUMENTS",
+      messageParameters = Map(
+        "name" -> name,
+        "pos" -> pos.toString))
+  }
+
+  def tableFunctionUnexpectedArgument(e: Expression, pos: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_FUNCTION_UNEXPECTED_ARGUMENT",
+      messageParameters = Map(
+        "expression" -> e.toString,
+        "pos" -> pos.toString))
+  }
 }

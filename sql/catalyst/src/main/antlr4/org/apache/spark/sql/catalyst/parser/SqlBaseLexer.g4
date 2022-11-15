@@ -413,6 +413,7 @@ COLON: ':';
 ARROW: '->';
 HENT_START: '/*+';
 HENT_END: '*/';
+FAT_ARROW: '=>';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

@@ -324,6 +324,21 @@ object LiteralTreeBits {
   val nullLiteralBits: BitSet = new ImmutableBitSet(TreePattern.maxId, LITERAL.id, NULL_LITERAL.id)
 }
 
+case class NamedArgumentExpression(key: String, value: Expression) extends LeafExpression {
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw new UnsupportedOperationException(
+      "NamedArgumentExpression cannot generate code directly")
+
+  override def dataType: DataType = StringType
+
+  override def toString: String = s"""$key => $value"""
+}
+
 /**
  * In order to do type checking, use Literal.create() instead of constructor
  */

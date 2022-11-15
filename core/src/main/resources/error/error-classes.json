@@ -946,6 +946,18 @@
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
     ]
   },
+  "TABLE_FUNCTION_DUPLICATED_NAMED_ARGUMENTS" : {
+    "message" : [
+      "Found a duplicated argument <name> being set at position <pos>."
+    ],
+    "sqlState" : "42000"
+  },
+  "TABLE_FUNCTION_UNEXPECTED_ARGUMENT" : {
+    "message" : [
+      "Found an unexpected argument <expression> at position <pos>, an unnamed argument can not be provided after a named argument."
+    ],
+    "sqlState" : "42000"
+  },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create table or view <relationName> because it already exists.",

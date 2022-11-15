@@ -852,6 +852,31 @@ class PlanParserSuite extends AnalysisTest {
         stop = 43))
   }
 
+  test("table valued function with named arguments") {
+    // All named arguments
+    assertEqual(
+      "select * from my_tvf(arg1 => 'value1', arg2 => true)",
+      UnresolvedTableValuedFunction("my_tvf",
+        NamedArgumentExpression("arg1", Literal("value1")) ::
+          NamedArgumentExpression("arg2", Literal(true)) :: Nil, Seq.empty).select(star()))
+
+    // Unnamed and named arguments
+    assertEqual(
+      "select * from my_tvf(2, arg1 => 'value1', arg2 => true)",
+      UnresolvedTableValuedFunction("my_tvf",
+        Literal(2) ::
+          NamedArgumentExpression("arg1", Literal("value1")) ::
+          NamedArgumentExpression("arg2", Literal(true)) :: Nil, Seq.empty).select(star()))
+
+    // Mixed arguments
+    assertEqual(
+      "select * from my_tvf(arg1 => 'value1', 2, arg2 => true)",
+      UnresolvedTableValuedFunction("my_tvf",
+        NamedArgumentExpression("arg1", Literal("value1")) ::
+          Literal(2) ::
+          NamedArgumentExpression("arg2", Literal(true)) :: Nil, Seq.empty).select(star()))
+  }
+
   test("SPARK-20311 range(N) as alias") {
     assertEqual(
       "SELECT * FROM range(10) AS t",

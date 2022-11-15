@@ -769,7 +769,7 @@ inlineTable
     ;
 
 functionTable
-    : funcName=functionName LEFT_PAREN (expression (COMMA expression)*)? RIGHT_PAREN tableAlias
+    : funcName=functionName LEFT_PAREN (functionArgument (COMMA functionArgument)*)? RIGHT_PAREN tableAlias
     ;
 
 tableAlias
@@ -840,6 +840,15 @@ transformArgument
 
 expression
     : booleanExpression
+    ;
+
+namedArgumentExpression
+    : key=identifier FAT_ARROW value=expression
+    ;
+
+functionArgument
+    : expression
+    | namedArgumentExpression
     ;
 
 expressionSeq
