@@ -879,7 +879,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       expectedErrorClass = "INVALID_WHERE_CONDITION",
       expectedMessageParameters = Map(
         "condition" -> "\"(a = max(DISTINCT b))\"",
-        "invalidExprs" -> "max(DISTINCT b)"))
+        "expressionList" -> "max(DISTINCT b)"))
   }
 
   test("SPARK-30811: CTE should not cause stack overflow when " +
