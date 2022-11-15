@@ -214,6 +214,46 @@
           "Input to <functionName> should all be the same type, but it's <dataType>."
         ]
       },
+      "FORMAT_CONT_THOUSANDS_SEPS" : {
+        "message" : [
+          "Thousands separators (, or G) must have digits in between them in the number format: <format>."
+        ]
+      },
+      "FORMAT_CUR_MUST_BEFORE_DEC" : {
+        "message" : [
+          "Currency characters must appear before any decimal point in the number format: <format>."
+        ]
+      },
+      "FORMAT_CUR_MUST_BEFORE_DIGIT" : {
+        "message" : [
+          "Currency characters must appear before digits in the number format: <format>."
+        ]
+      },
+      "FORMAT_EMPTY" : {
+        "message" : [
+          "The number format string cannot be empty."
+        ]
+      },
+      "FORMAT_THOUSANDS_SEPS_MUST_BEFORE_DEC" : {
+        "message" : [
+          "Thousands separators (, or G) may not appear after the decimal point in the number format: <format>."
+        ]
+      },
+      "FORMAT_UNEXPECTED_TOKEN" : {
+        "message" : [
+          "Unexpected <token> found in the format string <format>; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
+        ]
+      },
+      "FORMAT_WRONG_NUM_DIGIT" : {
+        "message" : [
+          "The format string requires at least one number digit."
+        ]
+      },
+      "FORMAT_WRONG_NUM_TOKEN" : {
+        "message" : [
+          "At most one <token> is allowed in the number format: <format>."
+        ]
+      },
       "HASH_MAP_TYPE" : {
         "message" : [
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
