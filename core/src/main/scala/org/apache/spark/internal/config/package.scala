@@ -2238,7 +2238,7 @@ package object config {
       .version("3.4.0")
       .intConf
       .createWithDefault(10000)
-      
+
   private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
     ConfigBuilder("spark.shuffle.push.enabled")
       .doc("Set to true to enable push-based shuffle on the client side and this works in " +
