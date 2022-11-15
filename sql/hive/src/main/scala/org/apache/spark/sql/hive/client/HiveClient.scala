@@ -127,8 +127,8 @@ private[hive] trait HiveClient {
    */
   def alterTable(dbName: String, tableName: String, table: CatalogTable): Unit
 
-  /** Alter a table stats */
-  def alterTableStats(dbName: String, tableName: String, parameters: Map[String, String]): Unit
+  /** Alter a table properties */
+  def alterTableProps(dbName: String, tableName: String, newProps: Map[String, String]): Unit
 
   /**
    * Updates the given table with a new data schema and table properties, and keep everything else

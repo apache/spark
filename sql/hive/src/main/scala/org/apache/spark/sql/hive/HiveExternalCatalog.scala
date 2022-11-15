@@ -24,11 +24,13 @@ import java.util
 import java.util.Locale
 
 import scala.collection.mutable
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.DDL_TIME
+import org.apache.hadoop.hive.ql.metadata.{Table => HiveTable}
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_FORMAT
 import org.apache.thrift.TException
@@ -721,8 +723,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       stats: Option[CatalogStatistics]): Unit = withClient {
     requireTableExists(db, table)
-    val rawTable = getRawTable(db, table)
-    val oldTableNonStatsProps = rawTable.properties.filterNot(_._1.startsWith(STATISTICS_PREFIX))
+    val hiveTable = client.getRawHiveTable(db, table).rawTable.asInstanceOf[HiveTable]
+    val oldTableNonStatsProps =
+      hiveTable.getParameters.asScala.toMap.filterNot(_._1.startsWith(STATISTICS_PREFIX))
     val statsProperties =
       if (stats.isDefined) {
         statsToProperties(stats.get)
@@ -730,7 +733,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         new mutable.HashMap[String, String]()
       }
 
-    client.alterTableStats(db, table, parameters = oldTableNonStatsProps ++ statsProperties)
+    client.alterTableProps(db, table, newProps = oldTableNonStatsProps ++ statsProperties)
   }
 
   override def getTable(db: String, table: String): CatalogTable = withClient {

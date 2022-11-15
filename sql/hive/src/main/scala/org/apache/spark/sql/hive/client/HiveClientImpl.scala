@@ -609,15 +609,13 @@ private[hive] class HiveClientImpl(
     shim.alterTable(client, qualifiedTableName, hiveTable)
   }
 
-  override def alterTableStats(
+  override def alterTableProps(
       dbName: String,
       tableName: String,
-      parameters: Map[String, String]): Unit = withHiveState {
-    val hiveTable =
-      getRawTableOption(dbName, tableName).getOrElse(
-        throw new NoSuchTableException(dbName, tableName))
+      newProps: Map[String, String]): Unit = withHiveState {
+    val hiveTable = getRawHiveTable(dbName, tableName).rawTable.asInstanceOf[HiveTable]
     val newParameters = new JHashMap[String, String]()
-    newParameters.putAll(parameters.asJava)
+    newParameters.putAll(newProps.asJava)
     hiveTable.getTTable.setParameters(newParameters)
     shim.alterTable(client, s"$dbName.$tableName", hiveTable)
   }
