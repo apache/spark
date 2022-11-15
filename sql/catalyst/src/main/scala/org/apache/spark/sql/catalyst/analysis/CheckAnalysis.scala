@@ -217,10 +217,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             hof.checkArgumentDataTypes() match {
               case checkRes: TypeCheckResult.DataTypeMismatch =>
                 hof.dataTypeMismatch(hof, checkRes)
-              case TypeCheckResult.TypeCheckFailure(message) =>
-                hof.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2314",
-                  messageParameters = Map("sqlExpr" -> hof.sql, "msg" -> message))
             }
 
           // If an attribute can't be resolved as a map key of string type, either the key should be
@@ -243,15 +239,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               case checkRes: TypeCheckResult.DataTypeMismatch =>
                 e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
                 e.dataTypeMismatch(e, checkRes)
-              case TypeCheckResult.TypeCheckFailure(message) =>
-                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
-                extraHintForAnsiTypeCoercionExpression(operator)
-                e.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2315",
-                  messageParameters = Map(
-                    "sqlExpr" -> e.sql,
-                    "msg" -> message,
-                    "hint" -> extraHintForAnsiTypeCoercionExpression(operator)))
             }
 
           case c: Cast if !c.resolved =>
@@ -767,7 +754,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         case e: Expression if e.getTagValue(DATA_TYPE_MISMATCH_ERROR).contains(true) &&
             e.checkInputDataTypes().isFailure =>
           e.checkInputDataTypes() match {
-            case TypeCheckResult.TypeCheckFailure(_) | _: TypeCheckResult.DataTypeMismatch =>
+            case _: TypeCheckResult.DataTypeMismatch =>
               issueFixedIfAnsiOff = false
           }
 

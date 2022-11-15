@@ -36,14 +36,6 @@ object TypeCheckResult {
   }
 
   /**
-   * Represents the failing result of `Expression.checkInputDataTypes`,
-   * with an error message to show the reason of failure.
-   */
-  case class TypeCheckFailure(message: String) extends TypeCheckResult {
-    def isSuccess: Boolean = false
-  }
-
-  /**
    * Represents an error of data type mismatch with the `DATATYPE_MISMATCH` error class.
    *
    * @param errorSubClass A sub-class of `DATATYPE_MISMATCH`.

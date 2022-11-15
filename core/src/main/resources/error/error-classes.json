@@ -4874,16 +4874,6 @@
       "Hint not found: <name>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2314" : {
-    "message" : [
-      "cannot resolve '<sqlExpr>' due to argument data type mismatch: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2315" : {
-    "message" : [
-      "cannot resolve '<sqlExpr>' due to data type mismatch: <msg><hint>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2316" : {
     "message" : [
       "observed metrics should be named: <operator>"
