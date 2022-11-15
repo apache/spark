@@ -3812,7 +3812,7 @@ class Dataset[T] private[sql](
     }
 
     CreateViewCommand(
-      name = TableIdentifier.apply(identifier.head),
+      name = TableIdentifier.apply(identifier.last),
       userSpecifiedColumns = Nil,
       comment = None,
       properties = Map.empty,

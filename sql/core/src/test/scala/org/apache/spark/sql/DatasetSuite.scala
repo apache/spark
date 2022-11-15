@@ -1157,7 +1157,7 @@ class DatasetSuite extends QueryTest
         val e = intercept[AnalysisException](
           dataset.createTempView("test_db.tempView"))
         checkError(e,
-          errorClass = "TEMP_VIEW_DOES_NOT_BELONG_TO_A_DATABASE",
+          errorClass = "TEMP_VIEW_NAME_CONTAINS_UNSUPPORTED_NAME_PARTS",
           parameters = Map("actualName" -> "test_db.tempView"))
       }
 
