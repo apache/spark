@@ -644,10 +644,6 @@ class DataFrame(object):
         ----------
         name : str
             Name of the view.
-
-        Returns
-        -------
-        None
         """
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=False
@@ -665,10 +661,6 @@ class DataFrame(object):
         ----------
         name : str
             Name of the view.
-
-        Returns
-        -------
-        None
         """
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=True
