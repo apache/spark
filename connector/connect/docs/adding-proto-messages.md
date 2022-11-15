@@ -7,13 +7,12 @@ if a filed is set or not-set. (Read [proto3 field rules](https://developers.goog
 
 ### Required field
 
-Even proto3 does not offer `required` constraint, there are still some fields that
-are semantically required. For such case, we shall add comment `(Required)` on the
-field to indicate it as required. The expectation for client implementation 
-(or any submitted proto plan) is that such fields should be always set, and server will
-always assume such fields are set and use whatever values from the fields directly.
-It is the client side's fault to not offer meaningful value for `required` field and in that case,
-the behavior on the server side is decided by the default value of the field.
+When adding fields that have required semantics, developers are required to follow
+the outlined process. Fields that are semantically required for the server to 
+correctly process the incoming message must be documented with `(Required)`. For scalar
+fields the server will not perform any additional input validation. For compound fields,
+the server will perform minimal checks to avoid null pointer exceptions but will not
+perform any semantic validation.
 
 Example:
 ```protobuf
@@ -24,13 +23,13 @@ message DataSource {
 ```
 
 
-### Optional field and default value
+### Optional fields
 
-Semantically optional fields should be marked by proto3 `optional`. The server side will decide
-if to use the generated `has_field_name` to tell the field is set (when its default value
-is different from the Spark parameter default value) or use the field default value directly
-(when its default value is the same as Spark parameter default value). It is also required
-to use `(Optional)` in the comment to indicate this field is optional.
+Semantically optional fields must be marked by `optional`. The server side will
+then use this information to branch into different behaviors based on the presence or absence of this field. 
+
+Due to the lack of configurable default values for scalar types, the pure presence of
+an optional value does not define its default value. The server side implementation will interpret the observed value based on its own rules.
 
 Example:
 ```protobuf
