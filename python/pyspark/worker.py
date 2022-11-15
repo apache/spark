@@ -80,6 +80,15 @@ from pyspark.worker_util import (
 )
 
 
+def assign_cols_by_name(runner_conf):
+    return (
+        runner_conf.get(
+            "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true"
+        ).lower()
+        == "true"
+    )
+
+
 def report_times(outfile, boot, init, finish):
     write_int(SpecialLengths.TIMING_DATA, outfile)
     write_long(int(1000 * boot), outfile)
@@ -368,7 +377,18 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
     return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), to_arrow_type(return_type))]
 
 
-def wrap_grouped_map_arrow_udf(f, return_type, argspec):
+def wrap_grouped_map_arrow_udf(f, return_type, argspec, runner_conf):
+    _assign_cols_by_name = assign_cols_by_name(runner_conf)
+
+    if _assign_cols_by_name:
+        expected_cols_and_types = {
+            col.name: to_arrow_type(col.dataType) for col in return_type.fields
+        }
+    else:
+        expected_cols_and_types = [
+            (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
+        ]
+
     def wrapped(key_table, value_table):
         import pyarrow as pa
 
@@ -384,17 +404,83 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec):
                 "pyarrow.Table, but is {}".format(type(result))
             )
 
-        # the number of columns of result have to match the return type
-        # but it is fine for result to have no columns at all if it is empty
-        if not (
-            len(result.columns) == len(return_type)
-            or (len(result.columns) == 0 and result.num_rows == 0)
-        ):
-            raise RuntimeError(
-                "Number of columns of the returned pyarrow.Table "
-                "doesn't match specified schema. "
-                "Expected: {} Actual: {}".format(len(return_type), len(result.columns))
-            )
+        # the types of the fields have to be identical to return type
+        # an empty table can have no columns; if there are columns, they have to match
+        if len(result.columns) != 0 or result.num_rows != 0:
+            # columns are either mapped by name or position
+            if _assign_cols_by_name:
+                actual_cols_and_types = {
+                    name: dataType
+                    for name, dataType in zip(result.schema.names, result.schema.types)
+                }
+                missing = sorted(
+                    list(
+                        set(expected_cols_and_types.keys()).difference(actual_cols_and_types.keys())
+                    )
+                )
+                extra = sorted(
+                    list(
+                        set(actual_cols_and_types.keys()).difference(expected_cols_and_types.keys())
+                    )
+                )
+
+                if missing or extra:
+                    # limit missing columns to at most $limit
+                    limit = 5
+                    if len(missing) > limit:
+                        missing = f"  Missing (first {limit} of {len(missing)}): " + ", ".join(
+                            missing[:limit]
+                        )
+                    elif missing:
+                        missing = "  Missing: " + (", ".join(missing))
+                    else:
+                        missing = ""
+
+                    # limit unexpected columns to at most $limit
+                    if len(extra) > limit:
+                        extra = f"  Unexpected (first {limit} of {len(extra)}): " + ", ".join(
+                            extra[:limit]
+                        )
+                    elif extra:
+                        extra = "  Unexpected: " + (", ".join(extra))
+                    else:
+                        extra = ""
+
+                    raise RuntimeError(
+                        "Column names of the returned pyarrow.Table do not match specified schema."
+                        "{}{}".format(missing, extra)
+                    )
+
+                column_types = [
+                    (name, expected_cols_and_types[name], actual_cols_and_types[name])
+                    for name in sorted(expected_cols_and_types.keys())
+                ]
+            else:
+                actual_cols_and_types = [
+                    (name, dataType)
+                    for name, dataType in zip(result.schema.names, result.schema.types)
+                ]
+                column_types = [
+                    (expected_name, expected_type, actual_type)
+                    for (expected_name, expected_type), (actual_name, actual_type) in zip(
+                        expected_cols_and_types, actual_cols_and_types
+                    )
+                ]
+
+            type_mismatch = [
+                (name, expected, actual)
+                for name, expected, actual in column_types
+                if actual != expected
+            ]
+            if type_mismatch:
+                raise RuntimeError(
+                    "Columns do not match in their data type: {}".format(
+                        ", ".join(
+                            "column '{}' (expected {}, actual {})".format(name, expected, actual)
+                            for name, expected, actual in type_mismatch
+                        )
+                    )
+                )
 
         return result.to_batches()
 
@@ -690,7 +776,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
         argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
-        return arg_offsets, wrap_grouped_map_arrow_udf(func, return_type, argspec)
+        return arg_offsets, wrap_grouped_map_arrow_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
         return args_offsets, wrap_grouped_map_pandas_udf_with_state(func, return_type)
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
@@ -1281,11 +1367,13 @@ def read_udfs(pickleSer, infile, eval_type):
             runner_conf.get("spark.sql.execution.pandas.convertToArrowArraySafely", "false").lower()
             == "true"
         )
+        # Used by SQL_GROUPED_MAP_PANDAS_UDF and SQL_SCALAR_PANDAS_UDF when returning StructType
+        _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
         if eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
             ser = CogroupArrowUDFSerializer()
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
-            ser = CogroupPandasUDFSerializer(timezone, safecheck, assign_cols_by_name(runner_conf))
+            ser = CogroupPandasUDFSerializer(timezone, safecheck, _assign_cols_by_name)
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
             arrow_max_records_per_batch = runner_conf.get(
                 "spark.sql.execution.arrow.maxRecordsPerBatch", 10000
@@ -1295,7 +1383,7 @@ def read_udfs(pickleSer, infile, eval_type):
             ser = ApplyInPandasWithStateSerializer(
                 timezone,
                 safecheck,
-                assign_cols_by_name(runner_conf),
+                _assign_cols_by_name,
                 state_object_schema,
                 arrow_max_records_per_batch,
             )
@@ -1321,7 +1409,7 @@ def read_udfs(pickleSer, infile, eval_type):
             ser = ArrowStreamPandasUDFSerializer(
                 timezone,
                 safecheck,
-                assign_cols_by_name(runner_conf),
+                _assign_cols_by_name,
                 df_for_struct,
                 struct_in_pandas,
                 ndarray_as_list,
