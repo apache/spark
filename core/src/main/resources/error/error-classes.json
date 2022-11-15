@@ -701,9 +701,8 @@
   },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
-      "Found the invalid expressions: <invalidExprs>",
-      "in the where condition: [<condition>]",
-      "Please, rewrite your query and avoid using of the expressions because any window, aggregate or generator expressions are not allowed in where/filter clauses."
+      "The WHERE condition <condition> contains invalid expressions: <expressionList>."
+      "Rewrite the query to avoid window functions, aggregate functions, and generator functions in the WHERE clause."
     ]
   },
   "LOCATION_ALREADY_EXISTS" : {
