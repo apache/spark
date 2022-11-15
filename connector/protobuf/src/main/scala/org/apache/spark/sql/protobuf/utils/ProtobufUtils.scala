@@ -195,9 +195,9 @@ private[sql] object ProtobufUtils extends Logging {
       protobufClass
         .getDeclaredMethod("getDescriptor")
     } catch {
-      case _: NoSuchMethodError => // This is usually not expected.
-        throw new IllegalArgumentException(
-          s"Could not find getDescriptor() method in Protobuf class '$protobufClassName'")
+      case e: NoSuchMethodError => // This is usually not expected.
+        throw QueryCompilationErrors.protobufClassLoadError(
+          protobufClassName, "Could not find getDescriptor() method", e)
     }
 
     getDescriptorMethod
