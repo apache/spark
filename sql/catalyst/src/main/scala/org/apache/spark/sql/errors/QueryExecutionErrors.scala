@@ -2799,7 +2799,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "size" -> elementSize.toString))
   }
 
-  def invalidEmptyLocationError(location: Option[String]): SparkIllegalArgumentException = {
+  def invalidEmptyLocationError(location: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "INVALID_EMPTY_LOCATION",
       messageParameters = Map("location" -> location.toString))

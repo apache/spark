@@ -353,7 +353,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case SetNamespaceLocation(ResolvedNamespace(catalog, ns), location) =>
       if (StringUtils.isEmpty(location)) {
-        throw QueryExecutionErrors.invalidEmptyLocationError(location)
+        throw QueryExecutionErrors.invalidEmptyLocationError(location.toString)
       }
       AlterNamespaceSetPropertiesExec(
         catalog.asNamespaceCatalog,

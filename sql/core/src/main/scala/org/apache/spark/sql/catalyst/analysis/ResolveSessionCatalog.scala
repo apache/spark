@@ -243,7 +243,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
       val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
       if (location.isDefined && location.get.isEmpty) {
-        throw QueryExecutionErrors.invalidEmptyLocationError(location)
+        throw QueryExecutionErrors.invalidEmptyLocationError(location.toString)
       }
       CreateDatabaseCommand(name, c.ifNotExists, location, comment, newProperties)
 
