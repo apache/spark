@@ -791,7 +791,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "INVALID_FUNCTION_ARGUMENT",
   "messageParameters" : {
     "actualNumber" : "0",
     "expectedInfo" : "2",
@@ -814,7 +814,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "INVALID_FUNCTION_ARGUMENT",
   "messageParameters" : {
     "actualNumber" : "1",
     "expectedInfo" : "2",

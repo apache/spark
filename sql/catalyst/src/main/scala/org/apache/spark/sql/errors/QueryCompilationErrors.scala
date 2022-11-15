@@ -639,7 +639,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def invalidFunctionArgumentsError(
       name: String, expectedInfo: String, actualNumber: Int): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1042",
+      errorClass = "INVALID_FUNCTION_ARGUMENT",
       messageParameters = Map(
         "name" -> name,
         "expectedInfo" -> expectedInfo,

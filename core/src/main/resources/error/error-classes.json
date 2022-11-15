@@ -628,6 +628,11 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_FUNCTION_ARGUMENT" : {
+    "message" : [
+      "Invalid number of arguments for function <name>. Expected: <expectedInfo>; Found: <actualNumber>."
+    ]
+  },
   "INVALID_IDENTIFIER" : {
     "message" : [
       "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
@@ -1867,11 +1872,6 @@
   "_LEGACY_ERROR_TEMP_1041" : {
     "message" : [
       "Undefined function <name>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1042" : {
-    "message" : [
-      "Invalid number of arguments for function <name>. Expected: <expectedInfo>; Found: <actualNumber>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1043" : {
