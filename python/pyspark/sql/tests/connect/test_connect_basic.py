@@ -220,6 +220,46 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             with self.assertRaises(_MultiThreadedRendezvous):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
 
+    def test_fill_na(self):
+        # SPARK-41128: Test fill na
+        query = """
+            SELECT * FROM VALUES
+            (false, 1, NULL), (false, NULL, 2.0), (NULL, 3, 3.0)
+            AS tab(a, b, c)
+            """
+        # +-----+----+----+
+        # |    a|   b|   c|
+        # +-----+----+----+
+        # |false|   1|null|
+        # |false|null| 2.0|
+        # | null|   3| 3.0|
+        # +-----+----+----+
+
+        self.assertTrue(
+            self.connect.sql(query)
+            .fillna(True)
+            .toPandas()
+            .equals(self.spark.sql(query).fillna(True).toPandas())
+        )
+        self.assertTrue(
+            self.connect.sql(query)
+            .fillna(2)
+            .toPandas()
+            .equals(self.spark.sql(query).fillna(2).toPandas())
+        )
+        self.assertTrue(
+            self.connect.sql(query)
+            .fillna(2, ["a", "b"])
+            .toPandas()
+            .equals(self.spark.sql(query).fillna(2, ["a", "b"]).toPandas())
+        )
+        self.assertTrue(
+            self.connect.sql(query)
+            .na.fill({"a": True, "b": 2})
+            .toPandas()
+            .equals(self.spark.sql(query).na.fill({"a": True, "b": 2}).toPandas())
+        )
+
     def test_empty_dataset(self):
         # SPARK-41005: Test arrow based collection with empty dataset.
         self.assertTrue(

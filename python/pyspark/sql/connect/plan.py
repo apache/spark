@@ -16,6 +16,7 @@
 #
 
 from typing import (
+    Any,
     List,
     Optional,
     Sequence,
@@ -844,6 +845,63 @@ class Range(LogicalPlan):
                 {self._child_repr_()}
             </li>
         </uL>
+        """
+
+
+class NAFill(LogicalPlan):
+    def __init__(
+        self, child: Optional["LogicalPlan"], cols: Optional[List[str]], values: List[Any]
+    ) -> None:
+        super().__init__(child)
+
+        assert (
+            isinstance(values, list)
+            and len(values) > 0
+            and all(isinstance(v, (bool, int, float, str)) for v in values)
+        )
+
+        if cols is not None and len(cols) > 0:
+            assert isinstance(cols, list) and all(isinstance(c, str) for c in cols)
+            if len(values) > 1:
+                assert len(cols) == len(values)
+
+        self.cols = cols
+        self.values = values
+
+    def _convert_value(self, v: Any) -> proto.Expression.Literal:
+        value = proto.Expression.Literal()
+        if isinstance(v, bool):
+            value.boolean = v
+        elif isinstance(v, int):
+            value.i64 = v
+        elif isinstance(v, float):
+            value.fp64 = v
+        else:
+            value.string = v
+        return value
+
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.fill_na.input.CopyFrom(self._child.plan(session))
+        if self.cols is not None and len(self.cols) > 0:
+            plan.fill_na.cols.extend(self.cols)
+        plan.fill_na.values.extend([self._convert_value(v) for v in self.values])
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        return f"""{" " * indent}<NAFill cols='{self.cols}', values='{self.values}'>"""
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>NAFill</b><br />
+              Cols: {self.cols} <br />
+              Values: {self.values} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
         """
 
 
