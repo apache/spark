@@ -2031,7 +2031,7 @@ package object config {
         "whether fetch failure caused by removed decommissioned executors could be ignored " +
         s"when ${STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key} is enabled.")
       .version("3.4.0")
-      .longConf
+      .intConf
       .createWithDefault(10000)
 
   private[spark] val SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO =
