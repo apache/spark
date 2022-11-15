@@ -42,23 +42,46 @@ object UnsupportedOperationChecker extends Logging {
     }
   }
 
-  private def hasRangeExprAgainstEventTimeCol(e: Expression): Boolean = e.exists {
-    case neq @ (_: LessThanOrEqual | _: LessThan | _: GreaterThanOrEqual | _: GreaterThan) =>
-      hasEventTimeColNeq(neq)
+  /**
+   * Checks if the expression has a event time column
+   * @param exp the expression to be checked
+   * @return true if it is a event time column.
+   */
+  private def hasEventTimeCol(exp: Expression): Boolean = exp.exists {
+    case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
     case _ => false
   }
 
-  private def hasEventTimeColNeq(neq: Expression): Boolean = {
-    val exp = neq.asInstanceOf[BinaryComparison]
-    hasEventTimeCol(exp.left) || hasEventTimeCol(exp.right)
-  }
-
-  private def hasEventTimeCol(exps: Expression): Boolean =
-    exps.exists {
-      case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
-      case _ => false
+  /**
+   * Checks if the expression contains a range comparison, in which
+   * either side of the comparison is an event-time column. This is used for checking
+   * stream-stream time interval join.
+   * @param e the expression to be checked
+   * @return true if there is a time-interval join.
+   */
+  private def hasRangeExprAgainstEventTimeCol(e: Expression): Boolean = {
+    def hasEventTimeColBinaryComp(neq: Expression): Boolean = {
+      val exp = neq.asInstanceOf[BinaryComparison]
+      hasEventTimeCol(exp.left) || hasEventTimeCol(exp.right)
     }
 
+    e.exists {
+      case neq @ (_: LessThanOrEqual | _: LessThan | _: GreaterThanOrEqual | _: GreaterThan) =>
+        hasEventTimeColBinaryComp(neq)
+      case _ => false
+    }
+  }
+
+  /**
+   * This method, combined with isStreamingStatefulOperation, determines all disallowed
+   * behaviors in multiple stateful operators.
+   * Concretely, All conditions defined below cannot be followed by any streaming stateful
+   * operator as defined in isStreamingStatefulOperation.
+   * @param p logical plan to be checked
+   * @param outputMode query output mode
+   * @return true if it is not allowed when followed by any streaming stateful
+   * operator as defined in isStreamingStatefulOperation.
+   */
   private def isStatefulOperationPossiblyEmitLateRows(
       p: LogicalPlan, outputMode: OutputMode): Boolean = p match {
     case ExtractEquiJoinKeys(_, _, _, otherCondition, _, left, right, _) =>
@@ -78,6 +101,14 @@ object UnsupportedOperationChecker extends Logging {
     case _ => false
   }
 
+  /**
+   * This method is only used with isStatefulOperationPossiblyEmitLateRows.
+   * Despite the name, it doesn't contain ALL streaming stateful operations,
+   * for example, a Deduplicate without a event time column is still a stateful operation
+   * but of less interested because it won't emit late records because of watermark.
+   * @param p the logical plan to be checked
+   * @return true if there is a streaming staetful operation
+   */
   private def isStreamingStatefulOperation(p: LogicalPlan): Boolean = p match {
     case s: Aggregate if s.isStreaming => true
     // Since the Distinct node will be replaced to Aggregate in the optimizer rule

@@ -525,28 +525,32 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     "multiple stateful ops - FlatMapGroupsWithState followed by agg",
     Aggregate(Nil, aggExprs("c"),
       TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
-        isMapGroupsWithState = false, GroupStateTimeout.EventTimeTimeout(), streamRelation)))
+        isMapGroupsWithState = false, GroupStateTimeout.EventTimeTimeout(), streamRelation)),
+    outputMode = Append)
 
   // But allows if the FlatMapGroupsWithState has timeout on processing time
   assertPassOnGlobalWatermarkLimit(
     "multiple stateful ops - FlatMapGroupsWithState(process time) followed by agg",
     Aggregate(Nil, aggExprs("c"),
       TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
-        isMapGroupsWithState = false, GroupStateTimeout.ProcessingTimeTimeout(), streamRelation)))
+        isMapGroupsWithState = false, GroupStateTimeout.ProcessingTimeTimeout(), streamRelation)),
+    outputMode = Append)
 
   // MapGroupsWithState followed by any stateful op not allowed, here test aggregation
   assertFailOnGlobalWatermarkLimit(
     "multiple stateful ops - MapGroupsWithState followed by agg",
     Aggregate(Nil, aggExprs("c"),
       TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Update,
-        isMapGroupsWithState = true, GroupStateTimeout.EventTimeTimeout(), streamRelation)))
+        isMapGroupsWithState = true, GroupStateTimeout.EventTimeTimeout(), streamRelation)),
+    outputMode = Append)
 
   // But allows if the MapGroupsWithState has timeout on processing time
   assertPassOnGlobalWatermarkLimit(
     "multiple stateful ops - MapGroupsWithState(process time) followed by agg",
     Aggregate(Nil, aggExprs("c"),
       TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Update,
-        isMapGroupsWithState = true, GroupStateTimeout.ProcessingTimeTimeout(), streamRelation)))
+        isMapGroupsWithState = true, GroupStateTimeout.ProcessingTimeTimeout(), streamRelation)),
+    outputMode = Append)
 
   // stream-stream relation, time interval join can't be followed by any stateful operators
   assertFailOnGlobalWatermarkLimit(
@@ -554,14 +558,16 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     Aggregate(Nil, aggExprs("c"),
       streamRelation.join(streamRelation, joinType = Inner,
         condition = Some(attribute === attribute &&
-          attributeWithWatermark > attributeWithWatermark + 10))))
+          attributeWithWatermark > attributeWithWatermark + 10))),
+    outputMode = Append)
 
   // stream-stream relation, only equality join can be followed by any stateful operators
   assertPassOnGlobalWatermarkLimit(
     "multiple stateful ops - stream-stream equality join followed by agg",
     Aggregate(Nil, aggExprs("c"),
       streamRelation.join(streamRelation, joinType = Inner,
-        condition = Some(attribute === attribute))))
+        condition = Some(attribute === attribute))),
+    outputMode = Append)
 
   // Deduplication checks:
   // Deduplication, if on event time column, is a stateful operator
@@ -571,7 +577,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       "dedup (with event-time)",
     Deduplicate(Seq(attributeWithWatermark),
       TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
-        isMapGroupsWithState = false, GroupStateTimeout.EventTimeTimeout(), streamRelation)))
+        isMapGroupsWithState = false, GroupStateTimeout.EventTimeTimeout(), streamRelation)),
+    outputMode = Append)
 
   // Deduplication, if not on event time column,
   // although it is still a stateful operator,
@@ -581,7 +588,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       "dedup (without event-time)",
     Deduplicate(Seq(att),
       TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
-        isMapGroupsWithState = false, null, streamRelation)))
+        isMapGroupsWithState = false, null, streamRelation)),
+    outputMode = Append)
 
   // Deduplication, if on event time column, is a stateful operator
   // and cannot be placed after aggregation
@@ -612,7 +620,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     Deduplicate(Seq(attributeWithWatermark),
       streamRelation.join(streamRelation, joinType = Inner,
         condition = Some(attribute === attribute &&
-          attributeWithWatermark > attributeWithWatermark + 10))))
+          attributeWithWatermark > attributeWithWatermark + 10))),
+    outputMode = Append)
 
   // Deduplication, if not on event time column,
   // although it is still a stateful operator,
@@ -623,7 +632,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     Deduplicate(Seq(att),
       streamRelation.join(streamRelation, joinType = Inner,
         condition = Some(attribute === attribute &&
-          attributeWithWatermark > attributeWithWatermark + 10))))
+          attributeWithWatermark > attributeWithWatermark + 10))),
+    outputMode = Append)
 
   // for a stream-stream join followed by a stateful operator,
   // if the join is keyed on time-interval inequality conditions (inequality on watermarked cols),
@@ -637,7 +647,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         streamRelation.join(streamRelation, joinType = joinType,
           condition = Some(attributeWithWatermark === attribute &&
             attributeWithWatermark < attributeWithWatermark + 10))
-          .groupBy("a")(count("*")))
+          .groupBy("a")(count("*")),
+        outputMode = Append)
 
       assertPassOnGlobalWatermarkLimit(
         s"single $joinType join in Append mode",
@@ -649,7 +660,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           s"stream-stream $joinType join keyed on time equality in Append mode are supported",
         streamRelation.join(streamRelation, joinType = joinType,
           condition = Some(attributeWithWatermark === attribute))
-          .groupBy("a")(count("*")))
+          .groupBy("a")(count("*")),
+        outputMode = Append)
 
       Seq(Inner, LeftOuter, RightOuter).foreach { joinType2 =>
         assertPassOnGlobalWatermarkLimit(
@@ -658,7 +670,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
             streamRelation.join(streamRelation, joinType = joinType,
               condition = Some(attributeWithWatermark === attribute)),
             joinType = joinType2,
-            condition = Some(attributeWithWatermark === attribute)))
+            condition = Some(attributeWithWatermark === attribute)),
+          outputMode = Append)
       }
 
       assertPassOnGlobalWatermarkLimit(
@@ -667,12 +680,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           null, att, att, Seq(att), Seq(att), att, null, Append,
           isMapGroupsWithState = false, null,
           streamRelation.join(streamRelation, joinType = joinType,
-            condition = Some(attributeWithWatermark === attribute))))
+            condition = Some(attributeWithWatermark === attribute))),
+        outputMode = Append)
 
       assertPassOnGlobalWatermarkLimit(
         s"deduplicate after stream-stream $joinType join in Append mode",
         Deduplicate(Seq(attribute), streamRelation.join(streamRelation, joinType = joinType,
-          condition = Some(attributeWithWatermark === attribute))))
+          condition = Some(attributeWithWatermark === attribute))),
+        outputMode = Append)
   }
 
   // Cogroup: only batch-batch is allowed
@@ -762,35 +777,36 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       null,
       null,
       null,
-      new TestStreamingRelationV2(attribute)), OutputMode.Append())
+      new TestStreamingRelationV2(attribute)), outputMode = Append)
 
   // streaming aggregation
   {
     assertPassOnGlobalWatermarkLimit(
       "single streaming aggregation in Append mode",
-      streamRelation.groupBy("a")(count("*")))
+      streamRelation.groupBy("a")(count("*")), outputMode = Append)
 
     assertPassOnGlobalWatermarkLimit(
       "chained streaming aggregations in Append mode",
-      streamRelation.groupBy("a")(count("*")).groupBy()(count("*")))
+      streamRelation.groupBy("a")(count("*")).groupBy()(count("*")), outputMode = Append)
 
     Seq(Inner, LeftOuter, RightOuter).foreach { joinType =>
       val plan = streamRelation.join(streamRelation.groupBy("a")(count("*")), joinType = joinType)
       assertPassOnGlobalWatermarkLimit(
         s"$joinType join after streaming aggregation in Append mode",
-        streamRelation.join(streamRelation.groupBy("a")(count("*")), joinType = joinType))
+        streamRelation.join(streamRelation.groupBy("a")(count("*")), joinType = joinType),
+        OutputMode.Append())
     }
 
     assertPassOnGlobalWatermarkLimit(
       "deduplicate after streaming aggregation in Append mode",
-      Deduplicate(Seq(attribute), streamRelation.groupBy("a")(count("*"))))
+      Deduplicate(Seq(attribute), streamRelation.groupBy("a")(count("*"))), OutputMode.Append())
 
     assertPassOnGlobalWatermarkLimit(
       "FlatMapGroupsWithState after streaming aggregation in Append mode",
       TestFlatMapGroupsWithState(
         null, att, att, Seq(att), Seq(att), att, null, Append,
         isMapGroupsWithState = false, null,
-        streamRelation.groupBy("a")(count("*"))))
+        streamRelation.groupBy("a")(count("*"))), outputMode = Append)
   }
 
   // FlatMapGroupsWithState
@@ -799,14 +815,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       "single FlatMapGroupsWithState in Append mode",
       TestFlatMapGroupsWithState(
         null, att, att, Seq(att), Seq(att), att, null, Append,
-        isMapGroupsWithState = false, null, streamRelation))
+        isMapGroupsWithState = false, null, streamRelation), outputMode = Append)
 
     assertFailOnGlobalWatermarkLimit(
       "streaming aggregation after FlatMapGroupsWithState in Append mode",
       TestFlatMapGroupsWithState(
         null, att, att, Seq(att), Seq(att), att, null, Append,
         isMapGroupsWithState = false, GroupStateTimeout.EventTimeTimeout(),
-        streamRelation).groupBy("*")(count("*")))
+        streamRelation).groupBy("*")(count("*")), outputMode = Append)
 
     Seq(Inner, LeftOuter, RightOuter).foreach { joinType =>
       assertFailOnGlobalWatermarkLimit(
@@ -815,7 +831,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
           isMapGroupsWithState = false, GroupStateTimeout.EventTimeTimeout(),
             streamRelation), joinType = joinType,
-          condition = Some(attributeWithWatermark === attribute)))
+          condition = Some(attributeWithWatermark === attribute)), outputMode = Append)
     }
 
     assertFailOnGlobalWatermarkLimit(
@@ -823,26 +839,27 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
         isMapGroupsWithState = false, null,
         TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
-          isMapGroupsWithState = false, GroupStateTimeout.EventTimeTimeout(), streamRelation)))
+          isMapGroupsWithState = false, GroupStateTimeout.EventTimeTimeout(), streamRelation)),
+      outputMode = Append)
 
     assertPassOnGlobalWatermarkLimit(
       s"deduplicate after FlatMapGroupsWithState in Append mode",
       Deduplicate(Seq(attribute),
         TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
-          isMapGroupsWithState = false, null, streamRelation)))
+          isMapGroupsWithState = false, null, streamRelation)), outputMode = Append)
   }
 
   // deduplicate
   {
     assertPassOnGlobalWatermarkLimit(
       "streaming aggregation after deduplicate in Append mode",
-      Deduplicate(Seq(attribute), streamRelation).groupBy("a")(count("*")))
+      Deduplicate(Seq(attribute), streamRelation).groupBy("a")(count("*")), outputMode = Append)
 
     Seq(Inner, LeftOuter, RightOuter).foreach { joinType =>
       assertPassOnGlobalWatermarkLimit(
         s"$joinType join after deduplicate in Append mode",
         streamRelation.join(Deduplicate(Seq(attribute), streamRelation), joinType = joinType,
-          condition = Some(attributeWithWatermark === attribute)))
+          condition = Some(attributeWithWatermark === attribute)), outputMode = Append)
     }
 
     assertPassOnGlobalWatermarkLimit(
@@ -850,7 +867,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       TestFlatMapGroupsWithState(
         null, att, att, Seq(att), Seq(att), att, null, Append,
         isMapGroupsWithState = false, null,
-        Deduplicate(Seq(attribute), streamRelation)))
+        Deduplicate(Seq(attribute), streamRelation)), outputMode = Append)
   }
 
   /*
@@ -1056,14 +1073,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   def assertPassOnGlobalWatermarkLimit(
       testNamePostfix: String,
       plan: LogicalPlan,
-      outputMode: OutputMode = OutputMode.Append()): Unit = {
+      outputMode: OutputMode): Unit = {
     testGlobalWatermarkLimit(testNamePostfix, plan, expectFailure = false, outputMode)
   }
 
   def assertFailOnGlobalWatermarkLimit(
       testNamePostfix: String,
       plan: LogicalPlan,
-      outputMode: OutputMode = OutputMode.Append()): Unit = {
+      outputMode: OutputMode): Unit = {
     testGlobalWatermarkLimit(testNamePostfix, plan, expectFailure = true, outputMode)
   }
 
@@ -1071,7 +1088,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       testNamePostfix: String,
       plan: LogicalPlan,
       expectFailure: Boolean,
-      outputMode: OutputMode = OutputMode.Append()): Unit = {
+      outputMode: OutputMode): Unit = {
     test(s"Global watermark limit - $testNamePostfix") {
       if (expectFailure) {
         withSQLConf(SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "true") {
