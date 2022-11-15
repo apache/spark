@@ -2236,7 +2236,9 @@ class DatasetLargeResultCollectingSuite extends QueryTest
 
   override protected def sparkConf: SparkConf = super.sparkConf.set(MAX_RESULT_SIZE.key, "4g")
   test("collect data with single partition larger than 2GB bytes array limit") {
-
+    // This test requires large memory and leads to OOM in Github Action so we skip it. Developer
+    // should verify it in local build.
+    assume(!sys.env.contains("GITHUB_ACTIONS"))
     import org.apache.spark.sql.functions.udf
 
     val genData = udf((id: Long, bytesSize: Int) => {

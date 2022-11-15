@@ -1382,7 +1382,7 @@ object TestSettings {
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
         "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
         "-Djdk.reflect.useDirectMethodHandle=false").mkString(" ")
-      s"-Xmx5g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
+      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
         .split(" ").toSeq
     },
     javaOptions ++= {
