@@ -494,7 +494,8 @@ object QueryExecution {
   private[sql] def toInternalError(msg: String, e: Throwable): Throwable = e match {
     case e @ (_: java.lang.NullPointerException | _: java.lang.AssertionError) =>
       SparkException.internalError(
-        msg + " Please, fill a bug report in, and provide the full stack trace.",
+        msg + " You hit a bug in Spark or the Spark plugins you use. Please, report this bug " +
+          "to the corresponding communities or vendors, and provide the full stack trace.",
         e)
     case e: Throwable =>
       e
