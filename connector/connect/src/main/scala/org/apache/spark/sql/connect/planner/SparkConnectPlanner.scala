@@ -519,11 +519,14 @@ class SparkConnectPlanner(session: SparkSession) {
           case x => UnresolvedAlias(x)
         }
 
+    // Retain group columns in aggregate expressions:
+    val aggExprs =
+      groupingExprs ++ rel.getResultExpressionsList.asScala.map(transformResultExpression)
+
     logical.Aggregate(
       child = transformRelation(rel.getInput),
       groupingExpressions = groupingExprs.toSeq,
-      aggregateExpressions =
-        rel.getResultExpressionsList.asScala.map(transformResultExpression).toSeq)
+      aggregateExpressions = aggExprs.toSeq)
   }
 
   private def transformResultExpression(exp: proto.Expression): expressions.NamedExpression = {
