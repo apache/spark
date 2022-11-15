@@ -653,7 +653,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       assertPassOnGlobalWatermarkLimit(
         s"single $joinType join in Append mode",
         streamRelation.join(streamRelation, joinType = RightOuter,
-          condition = Some(attributeWithWatermark === attribute)))
+          condition = Some(attributeWithWatermark === attribute)),
+        outputMode = Append)
 
       assertPassOnGlobalWatermarkLimit(
         s"streaming aggregation after " +
