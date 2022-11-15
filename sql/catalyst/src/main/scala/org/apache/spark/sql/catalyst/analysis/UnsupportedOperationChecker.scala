@@ -19,13 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, GroupingSets, LocalTimestamp, MonotonicallyIncreasingID, SessionWindow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BinaryComparison, CurrentDate, CurrentTimestampLike, Expression, GreaterThan, GreaterThanOrEqual, GroupingSets, LessThan, LessThanOrEqual, LocalTimestamp, MonotonicallyIncreasingID, SessionWindow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 
 /**
  * Analyzes the presence of unsupported operations in a logical plan.
@@ -41,41 +42,70 @@ object UnsupportedOperationChecker extends Logging {
     }
   }
 
+  private def hasRangeExprAgainstEventTimeCol(e: Expression): Boolean = e.exists {
+    case neq @ (_: LessThanOrEqual | _: LessThan | _: GreaterThanOrEqual | _: GreaterThan) =>
+      hasEventTimeColNeq(neq)
+    case _ => false
+  }
+
+  private def hasEventTimeColNeq(neq: Expression): Boolean = {
+    val exp = neq.asInstanceOf[BinaryComparison]
+    hasEventTimeCol(exp.left) || hasEventTimeCol(exp.right)
+  }
+
+  private def hasEventTimeCol(exps: Expression): Boolean =
+    exps.exists {
+      case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
+      case _ => false
+    }
+
+  private def isStatefulOperationPossiblyEmitLateRows(
+      p: LogicalPlan, outputMode: OutputMode): Boolean = p match {
+    case ExtractEquiJoinKeys(_, _, _, otherCondition, _, left, right, _) =>
+      left.isStreaming && right.isStreaming &&
+        otherCondition.isDefined && hasRangeExprAgainstEventTimeCol(otherCondition.get)
+    // FlatMapGroupsWithState configured with event time
+    case f @ FlatMapGroupsWithState(_, _, _, _, _, _, _, _, _, timeout, _, _, _, _, _, _)
+      if f.isStreaming && timeout == GroupStateTimeout.EventTimeTimeout => true
+    case p @ FlatMapGroupsInPandasWithState(_, _, _, _, _, timeout, _)
+      if p.isStreaming && timeout == GroupStateTimeout.EventTimeTimeout => true
+    case a: Aggregate if a.isStreaming && outputMode != InternalOutputModes.Append => true
+    // Since the Distinct node will be replaced to Aggregate in the optimizer rule
+    // [[ReplaceDistinctWithAggregate]], here we also need to check all Distinct node by
+    // assuming it as Aggregate.
+    case d @ Distinct(_: LogicalPlan) if d.isStreaming
+      && outputMode != InternalOutputModes.Append => true
+    case _ => false
+  }
+
+  private def isStreamingStatefulOperation(p: LogicalPlan): Boolean = p match {
+    case s: Aggregate if s.isStreaming => true
+    // Since the Distinct node will be replaced to Aggregate in the optimizer rule
+    // [[ReplaceDistinctWithAggregate]], here we also need to check all Distinct node by
+    // assuming it as Aggregate.
+    case d @ Distinct(_: LogicalPlan) if d.isStreaming => true
+    case _ @ Join(left, right, _, _, _) if left.isStreaming && right.isStreaming => true
+    case f: FlatMapGroupsWithState if f.isStreaming => true
+    case f: FlatMapGroupsInPandasWithState if f.isStreaming => true
+    // Deduplicate also works without event time column even in streaming,
+    // in such cases, although Dedup is still a stateful operation in a streaming
+    // query, it could be ignored in all checks below, so let it return false.
+    case d: Deduplicate if d.isStreaming && d.keys.exists(hasEventTimeCol) => true
+    case _ => false
+  }
   /**
    * Checks for possible correctness issue in chained stateful operators. The behavior is
    * controlled by SQL config `spark.sql.streaming.statefulOperator.checkCorrectness.enabled`.
    * Once it is enabled, an analysis exception will be thrown. Otherwise, Spark will just
    * print a warning message.
    */
-  def checkStreamingQueryGlobalWatermarkLimit(
-      plan: LogicalPlan,
-      outputMode: OutputMode): Unit = {
-    def isStatefulOperationPossiblyEmitLateRows(p: LogicalPlan): Boolean = p match {
-      case s: Aggregate
-        if s.isStreaming && outputMode == InternalOutputModes.Append => true
-      case Join(left, right, joinType, _, _)
-        if left.isStreaming && right.isStreaming && joinType != Inner => true
-      case f: FlatMapGroupsWithState
-        if f.isStreaming && f.outputMode == OutputMode.Append() => true
-      case _ => false
-    }
-
-    def isStatefulOperation(p: LogicalPlan): Boolean = p match {
-      case s: Aggregate if s.isStreaming => true
-      case _ @ Join(left, right, _, _, _) if left.isStreaming && right.isStreaming => true
-      case f: FlatMapGroupsWithState if f.isStreaming => true
-      case f: FlatMapGroupsInPandasWithState if f.isStreaming => true
-      case d: Deduplicate if d.isStreaming => true
-      case _ => false
-    }
-
+  def checkStreamingQueryGlobalWatermarkLimit(plan: LogicalPlan, outputMode: OutputMode): Unit = {
     val failWhenDetected = SQLConf.get.statefulOperatorCorrectnessCheckEnabled
-
     try {
       plan.foreach { subPlan =>
-        if (isStatefulOperation(subPlan)) {
+        if (isStreamingStatefulOperation(subPlan)) {
           subPlan.find { p =>
-            (p ne subPlan) && isStatefulOperationPossiblyEmitLateRows(p)
+            (p ne subPlan) && isStatefulOperationPossiblyEmitLateRows(p, outputMode)
           }.foreach { _ =>
             val errorMsg = "Detected pattern of possible 'correctness' issue " +
               "due to global watermark. " +
@@ -154,15 +184,7 @@ object UnsupportedOperationChecker extends Logging {
           "DataFrames/Datasets")(plan)
     }
 
-    // Disallow multiple streaming aggregations
     val aggregates = collectStreamingAggregates(plan)
-
-    if (aggregates.size > 1) {
-      throwError(
-        "Multiple streaming aggregations are not supported with " +
-          "streaming DataFrames/Datasets")(plan)
-    }
-
     // Disallow some output mode
     outputMode match {
       case InternalOutputModes.Append if aggregates.nonEmpty =>
@@ -266,12 +288,8 @@ object UnsupportedOperationChecker extends Logging {
               " DataFrame/Dataset")
           }
           if (m.isMapGroupsWithState) {                       // check mapGroupsWithState
-            // allowed only in update query output mode and without aggregation
-            if (aggsInQuery.nonEmpty) {
-              throwError(
-                "mapGroupsWithState is not supported with aggregation " +
-                  "on a streaming DataFrame/Dataset")
-            } else if (outputMode != InternalOutputModes.Update) {
+            // allowed only in update query output mode
+            if (outputMode != InternalOutputModes.Update) {
               throwError(
                 "mapGroupsWithState is not supported with " +
                   s"$outputMode output mode on a streaming DataFrame/Dataset")
@@ -294,15 +312,10 @@ object UnsupportedOperationChecker extends Logging {
                 case _ =>
               }
             } else {
-              // flatMapGroupsWithState with aggregation: update operation mode not allowed, and
-              // *groupsWithState after aggregation not allowed
+              // flatMapGroupsWithState with aggregation: update operation mode not allowed
               if (m.outputMode == InternalOutputModes.Update) {
                 throwError(
                   "flatMapGroupsWithState in update mode is not supported with " +
-                    "aggregation on a streaming DataFrame/Dataset")
-              } else if (collectStreamingAggregates(m).nonEmpty) {
-                throwError(
-                  "flatMapGroupsWithState in append mode is not supported after " +
                     "aggregation on a streaming DataFrame/Dataset")
               }
             }
@@ -372,10 +385,6 @@ object UnsupportedOperationChecker extends Logging {
                   "watermark.")(plan)
             }
           }
-
-        case d: Deduplicate if collectStreamingAggregates(d).nonEmpty =>
-          throwError("dropDuplicates is not supported after aggregation on a " +
-            "streaming DataFrame/Dataset")
 
         case j @ Join(left, right, joinType, condition, _) =>
           if (left.isStreaming && right.isStreaming && outputMode != InternalOutputModes.Append) {
