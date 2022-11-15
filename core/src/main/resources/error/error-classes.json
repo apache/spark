@@ -701,7 +701,7 @@
   },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
-      "The WHERE condition <condition> contains invalid expressions: <expressionList>."
+      "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
       "Rewrite the query to avoid window functions, aggregate functions, and generator functions in the WHERE clause."
     ]
   },

@@ -696,7 +696,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "INVALID_WHERE_CONDITION",
               messageParameters = Map(
                 "condition" -> toSQLExpr(condition),
-                "invalidExprs" -> invalidExprSqls.mkString(", ")))
+                "expressionList" -> invalidExprSqls.mkString(", ")))
 
           case other if PlanHelper.specialExpressionsInUnsupportedOperator(other).nonEmpty =>
             val invalidExprSqls =

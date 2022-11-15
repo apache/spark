@@ -628,7 +628,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "INVALID_WHERE_CONDITION",
   "messageParameters" : {
     "condition" : "\"(count(1) > 1)\"",
-    "invalidExprs" : "count(1)"
+    "expressionList" : "count(1)"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -650,7 +650,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "INVALID_WHERE_CONDITION",
   "messageParameters" : {
     "condition" : "\"((count(1) + 1) > 1)\"",
-    "invalidExprs" : "count(1)"
+    "expressionList" : "count(1)"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -672,7 +672,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "INVALID_WHERE_CONDITION",
   "messageParameters" : {
     "condition" : "\"(((k = 1) OR (k = 2)) OR (((count(1) + 1) > 1) OR (max(k) > 1)))\"",
-    "invalidExprs" : "count(1), max(test_agg.k)"
+    "expressionList" : "count(1), max(test_agg.k)"
   },
   "queryContext" : [ {
     "objectType" : "",
