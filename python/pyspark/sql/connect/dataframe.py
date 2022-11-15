@@ -676,6 +676,40 @@ class DataFrame(object):
         else:
             return ""
 
+    def createGlobalTempView(self, name: str) -> None:
+        """Creates a global temporary view with this :class:`DataFrame`.
+
+        The lifetime of this temporary view is tied to this Spark application.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        name : str
+            Name of the view.
+        """
+        command = plan.CreateView(
+            child=self._plan, name=name, is_global=True, replace=False
+        ).command(session=self._session)
+        self._session.execute_command(command)
+
+    def createOrReplaceGlobalTempView(self, name: str) -> None:
+        """Creates or replaces a global temporary view using the given name.
+
+        The lifetime of this temporary view is tied to this Spark application.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        name : str
+            Name of the view.
+        """
+        command = plan.CreateView(
+            child=self._plan, name=name, is_global=True, replace=True
+        ).command(session=self._session)
+        self._session.execute_command(command)
+
 
 class DataFrameStatFunctions:
     """Functionality for statistic functions with :class:`DataFrame`.

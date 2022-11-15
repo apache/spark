@@ -69,6 +69,9 @@ class LogicalPlan(object):
     def plan(self, session: "RemoteSparkSession") -> proto.Relation:
         ...
 
+    def command(self, session: "RemoteSparkSession") -> proto.Command:
+        ...
+
     def _verify(self, session: "RemoteSparkSession") -> bool:
         """This method is used to verify that the current logical plan
         can be serialized to Proto and back and afterwards is identical."""
@@ -899,6 +902,48 @@ class StatCrosstab(LogicalPlan):
               Col1: {self.col1} <br />
               Col2: {self.col2} <br />
               {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class CreateView(LogicalPlan):
+    def __init__(
+        self, child: Optional["LogicalPlan"], name: str, is_global: bool, replace: bool
+    ) -> None:
+        super().__init__(child)
+        self._name = name
+        self._is_gloal = is_global
+        self._replace = replace
+
+    def command(self, session: "RemoteSparkSession") -> proto.Command:
+        assert self._child is not None
+
+        plan = proto.Command()
+        plan.create_dataframe_view.replace = self._replace
+        plan.create_dataframe_view.is_global = self._is_gloal
+        plan.create_dataframe_view.name = self._name
+        plan.create_dataframe_view.input.CopyFrom(self._child.plan(session))
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return (
+            f"{i}"
+            f"<CreateView name='{self._name}' "
+            f"is_global='{self._is_gloal} "
+            f"replace='{self._replace}'>"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>CreateView</b><br />
+              name: {self._name} <br />
+              is_global: {self._is_gloal} <br />
+              replace: {self._replace} <br />
+            {self._child_repr_()}
            </li>
         </ul>
         """
