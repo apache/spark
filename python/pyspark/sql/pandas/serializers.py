@@ -164,11 +164,23 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
 
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
     """
-    Loads arrow record batches as `[[pa.RecordBatch]]` (one `[pa.RecordBatch]` per group)
+    Serializes pyarrow.RecordBatch data with Arrow streaming format.
+
+    Loads Arrow record batches as `[[pa.RecordBatch]]` (one `[pa.RecordBatch]` per group)
     and serializes `[([pa.RecordBatch], arrow_type)]`.
+
+    Parameters
+    ----------
+    assign_cols_by_name : bool
+        If True, then DataFrames will get columns by name
     """
+    def __init__(self, assign_cols_by_name):
+        super(ArrowStreamGroupUDFSerializer, self).__init__()
+        self._assign_cols_by_name = assign_cols_by_name
 
     def dump_stream(self, iterator, stream):
+        import pyarrow as pa
+
         # flatten inner list [([pa.RecordBatch], arrow_type)] into [(pa.RecordBatch, arrow_type)]
         # so strip off inner iterator induced by ArrowStreamUDFSerializer.load_stream
         batch_iter = [
@@ -176,6 +188,16 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
             for batches, arrow_type in iterator  # tuple constructed in wrap_grouped_map_arrow_udf
             for batch in batches
         ]
+
+        if self._assign_cols_by_name:
+            batch_iter = [
+                (pa.RecordBatch.from_arrays(
+                    [batch.column(field.name) for field in arrow_type],
+                    names=[field.name for field in arrow_type]
+                ), arrow_type)
+                for batch, arrow_type in batch_iter
+            ]
+
         super(ArrowStreamGroupUDFSerializer, self).dump_stream(batch_iter, stream)
 
 
@@ -652,9 +674,18 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
 
 class CogroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
     """
-    Loads arrow record batches as `[([pa.RecordBatch], [pa.RecordBatch])]` (one tuple per group)
+    Serializes pyarrow.RecordBatch data with Arrow streaming format.
+
+    Loads Arrow record batches as `[([pa.RecordBatch], [pa.RecordBatch])]` (one tuple per group)
     and serializes `[([pa.RecordBatch], arrow_type)]`.
+
+    Parameters
+    ----------
+    assign_cols_by_name : bool
+        If True, then DataFrames will get columns by name
     """
+    def __init__(self, assign_cols_by_name):
+        super(CogroupArrowUDFSerializer, self).__init__(assign_cols_by_name)
 
     def load_stream(self, stream):
         """

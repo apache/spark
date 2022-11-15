@@ -281,19 +281,6 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
         )
         self.assertEqual(expected, result)
 
-        def column_name_typo(table):
-            return table.remove_column(0).insert_column(0, "iid", table.column("id"))
-
-        def invalid_positional_types(_):
-            return pa.Table.from_pydict({"id": [1], "v": [datetime.date(2020, 10, 5)]})
-
-        with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
-            with QuietTest(self.sc):
-                with self.assertRaisesRegex(Exception, "KeyError: 'id'"):
-                    grouped_df.applyInArrow(column_name_typo, "id long, v long").collect()
-                with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
-                    grouped_df.apply(invalid_positional_types, "id long, v decimal").collect()
-
     def test_positional_assignment_conf(self):
         with self.sql_conf(
             {"spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}
