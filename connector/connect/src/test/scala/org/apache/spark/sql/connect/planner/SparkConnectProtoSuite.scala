@@ -149,7 +149,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan2, sparkPlan2)
   }
 
-  test("[SPARK-40809] column alias") {
+  test("SPARK-40809: column alias") {
     // Simple Test.
     val connectPlan = connectTestRelation.select("id".protoAttr.as("id2"))
     val sparkPlan = sparkTestRelation.select(Column("id").alias("id2"))
