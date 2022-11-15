@@ -49,11 +49,7 @@ case class SparkListenerSQLExecutionStart(
     sparkPlanInfo: SparkPlanInfo,
     time: Long,
     modifiedConfigs: Map[String, String] = Map.empty)
-  extends SparkListenerEvent {
-
-  // The `QueryExecution` instance that represents the SQL execution
-  @JsonIgnore private[sql] var qe: QueryExecution = null
-}
+  extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerSQLExecutionEnd(

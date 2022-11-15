@@ -16,17 +16,22 @@
  */
 package org.apache.spark.sql.connect.planner
 
+import java.nio.file.{Files, Paths}
+
+import org.apache.spark.SparkClassNotFoundException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
-import org.apache.spark.sql.{Column, DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
+import org.apache.spark.sql.connect.dsl.commands._
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
@@ -56,9 +61,17 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       new java.util.ArrayList[Row](),
       StructType(Seq(StructField("id", IntegerType), StructField("name", StringType))))
 
+  lazy val localRelation = createLocalRelationProto(Seq(AttributeReference("id", IntegerType)()))
+
   test("Basic select") {
     val connectPlan = connectTestRelation.select("id".protoAttr)
     val sparkPlan = sparkTestRelation.select("id")
+    comparePlans(connectPlan, sparkPlan)
+  }
+
+  test("Test select expression in strings") {
+    val connectPlan = connectTestRelation.selectExpr("abs(id)", "name")
+    val sparkPlan = sparkTestRelation.selectExpr("abs(id)", "name")
     comparePlans(connectPlan, sparkPlan)
   }
 
@@ -141,6 +154,22 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       val sparkPlan =
         sparkTestRelation.groupBy(Column("id"), Column("name")).agg(Map.empty[String, String])
       comparePlans(connectPlan, sparkPlan)
+    }
+  }
+
+  test("Aggregate expressions") {
+    withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
+      val connectPlan =
+        connectTestRelation.groupBy("id".protoAttr)(proto_min("name".protoAttr))
+      val sparkPlan =
+        sparkTestRelation.groupBy(Column("id")).agg(min(Column("name")))
+      comparePlans(connectPlan, sparkPlan)
+
+      val connectPlan2 =
+        connectTestRelation.groupBy("id".protoAttr)(proto_min("name".protoAttr).as("agg1"))
+      val sparkPlan2 =
+        sparkTestRelation.groupBy(Column("id")).agg(min(Column("name")).as("agg1"))
+      comparePlans(connectPlan2, sparkPlan2)
     }
   }
 
@@ -232,6 +261,176 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   test("Test Session.sql") {
     comparePlans(connect.sql("SELECT 1"), spark.sql("SELECT 1"))
+  }
+
+  test("Test Repartition") {
+    val connectPlan1 = connectTestRelation.repartition(12)
+    val sparkPlan1 = sparkTestRelation.repartition(12)
+    comparePlans(connectPlan1, sparkPlan1)
+
+    val connectPlan2 = connectTestRelation.coalesce(2)
+    val sparkPlan2 = sparkTestRelation.coalesce(2)
+    comparePlans(connectPlan2, sparkPlan2)
+  }
+
+  test("Test summary") {
+    comparePlans(
+      connectTestRelation.summary("count", "mean", "stddev"),
+      sparkTestRelation.summary("count", "mean", "stddev"))
+  }
+
+  test("Test crosstab") {
+    comparePlans(
+      connectTestRelation.stat.crosstab("id", "name"),
+      sparkTestRelation.stat.crosstab("id", "name"))
+  }
+
+  test("Test toDF") {
+    comparePlans(connectTestRelation.toDF("col1", "col2"), sparkTestRelation.toDF("col1", "col2"))
+  }
+
+  test("Test withColumnsRenamed") {
+    comparePlans(
+      connectTestRelation.withColumnsRenamed(Map("id" -> "id1")),
+      sparkTestRelation.withColumnsRenamed(Map("id" -> "id1")))
+    comparePlans(
+      connectTestRelation.withColumnsRenamed(Map("id" -> "id1", "name" -> "name1")),
+      sparkTestRelation.withColumnsRenamed(Map("id" -> "id1", "name" -> "name1")))
+    comparePlans(
+      connectTestRelation.withColumnsRenamed(Map("id" -> "id1", "col1" -> "col2")),
+      sparkTestRelation.withColumnsRenamed(Map("id" -> "id1", "col1" -> "col2")))
+    comparePlans(
+      connectTestRelation.withColumnsRenamed(Map("id" -> "id1", "id" -> "id2")),
+      sparkTestRelation.withColumnsRenamed(Map("id" -> "id1", "id" -> "id2")))
+
+    val e = intercept[AnalysisException](
+      transform(connectTestRelation.withColumnsRenamed(
+        Map("id" -> "duplicatedCol", "name" -> "duplicatedCol"))))
+    assert(e.getMessage.contains("Found duplicate column(s)"))
+  }
+
+  test("Writes fails without path or table") {
+    assertThrows[UnsupportedOperationException] {
+      transform(localRelation.write())
+    }
+  }
+
+  test("Write fails with unknown table - AnalysisException") {
+    val cmd = readRel.write(tableName = Some("dest"))
+    assertThrows[AnalysisException] {
+      transform(cmd)
+    }
+  }
+
+  test("Write with partitions") {
+    val cmd = localRelation.write(
+      tableName = Some("testtable"),
+      format = Some("parquet"),
+      partitionByCols = Seq("noid"))
+    assertThrows[AnalysisException] {
+      transform(cmd)
+    }
+  }
+
+  test("Write with invalid bucketBy configuration") {
+    val cmd = localRelation.write(bucketByCols = Seq("id"), numBuckets = Some(0))
+    assertThrows[InvalidCommandInput] {
+      transform(cmd)
+    }
+  }
+
+  test("Write to Path") {
+    withTempDir { f =>
+      val cmd = localRelation.write(
+        format = Some("parquet"),
+        path = Some(f.getPath),
+        mode = Some("Overwrite"))
+      transform(cmd)
+      assert(Files.exists(Paths.get(f.getPath)), s"Output file must exist: ${f.getPath}")
+    }
+  }
+
+  test("Write to Path with invalid input") {
+    // Wrong data source.
+    assertThrows[SparkClassNotFoundException](
+      transform(
+        localRelation.write(path = Some("/tmp/tmppath"), format = Some("ThisAintNoFormat"))))
+
+    // Default data source not found.
+    assertThrows[SparkClassNotFoundException](
+      transform(localRelation.write(path = Some("/tmp/tmppath"))))
+  }
+
+  test("Write with sortBy") {
+    // Sort by existing column.
+    withTable("testtable") {
+      transform(
+        localRelation.write(
+          tableName = Some("testtable"),
+          format = Some("parquet"),
+          sortByColumns = Seq("id"),
+          bucketByCols = Seq("id"),
+          numBuckets = Some(10)))
+    }
+
+    // Sort by non-existing column
+    assertThrows[AnalysisException](
+      transform(
+        localRelation
+          .write(
+            tableName = Some("testtable"),
+            format = Some("parquet"),
+            sortByColumns = Seq("noid"),
+            bucketByCols = Seq("id"),
+            numBuckets = Some(10))))
+  }
+
+  test("Write to Table") {
+    withTable("testtable") {
+      val cmd = localRelation.write(format = Some("parquet"), tableName = Some("testtable"))
+      transform(cmd)
+      // Check that we can find and drop the table.
+      spark.sql(s"select count(*) from testtable").collect()
+    }
+  }
+
+  test("SaveMode conversion tests") {
+    assertThrows[IllegalArgumentException](
+      DataTypeProtoConverter.toSaveMode(proto.WriteOperation.SaveMode.SAVE_MODE_UNSPECIFIED))
+
+    val combinations = Seq(
+      (SaveMode.Append, proto.WriteOperation.SaveMode.SAVE_MODE_APPEND),
+      (SaveMode.Ignore, proto.WriteOperation.SaveMode.SAVE_MODE_IGNORE),
+      (SaveMode.Overwrite, proto.WriteOperation.SaveMode.SAVE_MODE_OVERWRITE),
+      (SaveMode.ErrorIfExists, proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS))
+    combinations.foreach { a =>
+      assert(DataTypeProtoConverter.toSaveModeProto(a._1) == a._2)
+      assert(DataTypeProtoConverter.toSaveMode(a._2) == a._1)
+    }
+  }
+
+  test("Test CreateView") {
+    withView("view1", "view2", "view3", "view4") {
+      transform(localRelation.createView("view1", global = true, replace = true))
+      assert(spark.catalog.tableExists("global_temp.view1"))
+
+      transform(localRelation.createView("view2", global = false, replace = true))
+      assert(spark.catalog.tableExists("view2"))
+
+      transform(localRelation.createView("view3", global = true, replace = false))
+      assertThrows[AnalysisException] {
+        transform(localRelation.createView("view3", global = true, replace = false))
+      }
+
+      transform(localRelation.createView("view4", global = false, replace = false))
+      assertThrows[AnalysisException] {
+        transform(localRelation.createView("view4", global = false, replace = false))
+      }
+    }
+  }
+
+  test("Project does not require an input") {
+    comparePlans(select(1), spark.sql("SELECT 1"))
   }
 
   private def createLocalRelationProtoByQualifiedAttributes(

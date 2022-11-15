@@ -55,7 +55,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "name" : "limit",
     "v" : "-1"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 30,
+    "stopIndex" : 31,
+    "fragment" : "-1"
+  } ]
 }
 
 
@@ -70,7 +77,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "name" : "limit",
     "v" : "-1"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 37,
+    "stopIndex" : 38,
+    "fragment" : "-1"
+  } ]
 }
 
 
@@ -93,7 +107,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "limitExpr" : "CAST(NULL AS INT)",
     "name" : "limit"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 30,
+    "stopIndex" : 46,
+    "fragment" : "CAST(NULL AS INT)"
+  } ]
 }
 
 
@@ -108,7 +129,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "limitExpr" : "(spark_catalog.default.testdata.key > 3)",
     "name" : "limit"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 30,
+    "stopIndex" : 36,
+    "fragment" : "key > 3"
+  } ]
 }
 
 
@@ -138,7 +166,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "dataType" : "string",
     "name" : "limit"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 30,
+    "stopIndex" : 32,
+    "fragment" : "'a'"
+  } ]
 }
 
 

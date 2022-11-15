@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.{DelegateSymlinkTextInputFormat, SymlinkTextInputFormat}
 import org.apache.hadoop.mapred.FileSplit;
@@ -228,9 +227,6 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
   }
 
   test("SPARK-40815: DelegateSymlinkTextInputFormat serialization") {
-    // Ignored due to JDK 11 failures reported in https://github.com/apache/spark/pull/38277.
-    assume(!SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
-
     def assertSerDe(split: DelegateSymlinkTextInputFormat.DelegateSymlinkTextInputSplit): Unit = {
       val buf = new ByteArrayOutputStream()
       val out = new DataOutputStream(buf)
@@ -266,9 +262,6 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
   }
 
   test("SPARK-40815: Read SymlinkTextInputFormat") {
-    // Ignored due to JDK 11 failures reported in https://github.com/apache/spark/pull/38277.
-    assume(!SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
-
     withTable("t") {
       withTempDir { root =>
         val dataPath = new File(root, "data")
@@ -298,6 +291,12 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
         checkAnswer(
           sql("SELECT id FROM t ORDER BY id ASC"),
           (0 until 10).map(Row(_))
+        )
+
+        // Verify limit since we bypass ExecMapper.getDone().
+        checkAnswer(
+          sql("SELECT id FROM t ORDER BY id ASC LIMIT 2"),
+          (0 until 2).map(Row(_))
         )
 
         // Verify that with the flag disabled, we use the original SymlinkTextInputFormat

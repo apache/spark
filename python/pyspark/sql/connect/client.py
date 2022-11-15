@@ -18,6 +18,7 @@
 
 import io
 import logging
+import os
 import typing
 import urllib.parse
 import uuid
@@ -125,12 +126,29 @@ class ChannelBuilder:
 
     @property
     def secure(self) -> bool:
+        if self._token is not None:
+            return True
+
         value = self.params.get(ChannelBuilder.PARAM_USE_SSL, "")
         return value.lower() == "true"
 
     @property
     def endpoint(self) -> str:
         return f"{self.host}:{self.port}"
+
+    @property
+    def _token(self) -> Optional[str]:
+        return self.params.get(ChannelBuilder.PARAM_TOKEN, None)
+
+    @property
+    def userId(self) -> Optional[str]:
+        """
+        Returns
+        -------
+        The user_id extracted from the parameters of the connection string or `None` if not
+        specified.
+        """
+        return self.params.get(ChannelBuilder.PARAM_USER_ID, None)
 
     def get(self, key: str) -> Any:
         """
@@ -145,7 +163,7 @@ class ChannelBuilder:
         """
         return self.params[key]
 
-    def to_channel(self) -> grpc.Channel:
+    def toChannel(self) -> grpc.Channel:
         """
         Applies the parameters of the connection string and creates a new
         GRPC channel according to the configuration.
@@ -155,9 +173,16 @@ class ChannelBuilder:
         GRPC Channel instance.
         """
         destination = f"{self.host}:{self.port}"
-        if not self.secure:
-            if self.params.get(ChannelBuilder.PARAM_TOKEN, None) is not None:
-                raise AttributeError("Token based authentication cannot be used without TLS")
+
+        # Setting a token implicitly sets the `use_ssl` to True.
+        if not self.secure and self._token is not None:
+            use_secure = True
+        elif self.secure:
+            use_secure = True
+        else:
+            use_secure = False
+
+        if not use_secure:
             return grpc.insecure_channel(destination)
         else:
             # Default SSL Credentials.
@@ -235,25 +260,32 @@ class AnalyzeResult:
 class RemoteSparkSession(object):
     """Conceptually the remote spark session that communicates with the server"""
 
-    def __init__(self, user_id: str, connection_string: str = "sc://localhost"):
+    def __init__(self, connectionString: str = "sc://localhost", userId: Optional[str] = None):
         """
         Creates a new RemoteSparkSession for the Spark Connect interface.
 
         Parameters
         ----------
-        user_id : str
-            Unique User ID that is used to differentiate multiple users and
-            isolate their Spark Sessions.
-        connection_string: str
+        connectionString: Optional[str]
             Connection string that is used to extract the connection parameters and configure
-            the GRPC connection.
+            the GRPC connection. Defaults to `sc://localhost`.
+        userId : Optional[str]
+            Optional unique user ID that is used to differentiate multiple users and
+            isolate their Spark Sessions. If the `user_id` is not set, will default to
+            the $USER environment. Defining the user ID as part of the connection string
+            takes precedence.
         """
-
         # Parse the connection string.
-        self._builder = ChannelBuilder(connection_string)
-        self._user_id = user_id
+        self._builder = ChannelBuilder(connectionString)
+        self._user_id = None
+        if self._builder.userId is not None:
+            self._user_id = self._builder.userId
+        elif userId is not None:
+            self._user_id = userId
+        else:
+            self._user_id = os.getenv("USER", None)
 
-        self._channel = self._builder.to_channel()
+        self._channel = self._builder.toChannel()
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
 
         # Create the reader
@@ -270,7 +302,8 @@ class RemoteSparkSession(object):
         fun.serialized_function = cloudpickle.dumps((function, return_type))
 
         req = pb2.Request()
-        req.user_context.user_id = self._user_id
+        if self._user_id is not None:
+            req.user_context.user_id = self._user_id
         req.plan.command.create_function.CopyFrom(fun)
 
         self._execute_and_fetch(req)
@@ -325,7 +358,8 @@ class RemoteSparkSession(object):
 
     def _to_pandas(self, plan: pb2.Plan) -> Optional[pandas.DataFrame]:
         req = pb2.Request()
-        req.user_context.user_id = self._user_id
+        if self._user_id is not None:
+            req.user_context.user_id = self._user_id
         req.plan.CopyFrom(plan)
         return self._execute_and_fetch(req)
 
@@ -368,7 +402,8 @@ class RemoteSparkSession(object):
 
     def _analyze(self, plan: pb2.Plan) -> AnalyzeResult:
         req = pb2.Request()
-        req.user_context.user_id = self._user_id
+        if self._user_id:
+            req.user_context.user_id = self._user_id
         req.plan.CopyFrom(plan)
 
         resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
@@ -377,8 +412,8 @@ class RemoteSparkSession(object):
     def _process_batch(self, b: pb2.Response) -> Optional[pandas.DataFrame]:
         import pandas as pd
 
-        if b.batch is not None and len(b.batch.data) > 0:
-            with pa.ipc.open_stream(b.batch.data) as rd:
+        if b.arrow_batch is not None and len(b.arrow_batch.data) > 0:
+            with pa.ipc.open_stream(b.arrow_batch.data) as rd:
                 return rd.read_pandas()
         elif b.json_batch is not None and len(b.json_batch.data) > 0:
             return pd.read_json(io.BytesIO(b.json_batch.data), lines=True)
@@ -400,6 +435,13 @@ class RemoteSparkSession(object):
 
         if len(result_dfs) > 0:
             df = pd.concat(result_dfs)
+
+            # pd.concat generates non-consecutive index like:
+            #   Int64Index([0, 1, 0, 1, 2, 0, 1, 0, 1, 2], dtype='int64')
+            # set it to RangeIndex to be consistent with pyspark
+            n = len(df)
+            df.set_index(pd.RangeIndex(start=0, stop=n, step=1), inplace=True)
+
             # Attach the metrics to the DataFrame attributes.
             if m is not None:
                 df.attrs["metrics"] = self._build_metrics(m)

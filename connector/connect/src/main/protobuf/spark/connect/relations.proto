@@ -46,6 +46,14 @@ message Relation {
     Deduplicate deduplicate = 14;
     Range range = 15;
     SubqueryAlias subquery_alias = 16;
+    Repartition repartition = 17;
+    RenameColumnsBySameLengthNames rename_columns_by_same_length_names = 18;
+    RenameColumnsByNameToNameMap rename_columns_by_name_to_name_map = 19;
+    ShowString show_string = 20;
+
+    // stat functions
+    StatSummary summary = 100;
+    StatCrosstab crosstab = 101;
 
     Unknown unknown = 999;
   }
@@ -91,6 +99,9 @@ message Read {
 // The input relation must be specified.
 // The projected expression can be an arbitrary expression.
 message Project {
+  // (Optional) Input relation is optional for Project.
+  //
+  // For example, `SELECT ABS(-1)` is valid plan without an input plan.
   Relation input = 1;
   repeated Expression expressions = 3;
 }
@@ -161,12 +172,7 @@ message Offset {
 message Aggregate {
   Relation input = 1;
   repeated Expression grouping_expressions = 2;
-  repeated AggregateFunction result_expressions = 3;
-
-  message AggregateFunction {
-    string name = 1;
-    repeated Expression arguments = 2;
-  }
+  repeated Expression result_expressions = 3;
 }
 
 // Relation of type [[Sort]].
@@ -213,11 +219,7 @@ message Sample {
   double lower_bound = 2;
   double upper_bound = 3;
   bool with_replacement = 4;
-  Seed seed = 5;
-
-  message Seed {
-    int64 seed = 1;
-  }
+  optional int64 seed = 5;
 }
 
 // Relation of type [[Range]] that generates a sequence of integers.
@@ -230,11 +232,7 @@ message Range {
   int64 step = 3;
   // Optional. Default value is assigned by 1) SQL conf "spark.sql.leafNodeDefaultParallelism" if
   // it is set, or 2) spark default parallelism.
-  NumPartitions num_partitions = 4;
-
-  message NumPartitions {
-    int32 num_partitions = 1;
-  }
+  optional int32 num_partitions = 4;
 }
 
 // Relation alias.
@@ -245,4 +243,103 @@ message SubqueryAlias {
   string alias = 2;
   // Optional. Qualifier of the alias.
   repeated string qualifier = 3;
+}
+
+// Relation repartition.
+message Repartition {
+  // Required. The input relation.
+  Relation input = 1;
+
+  // Required. Must be positive.
+  int32 num_partitions = 2;
+
+  // Optional. Default value is false.
+  bool shuffle = 3;
+}
+
+// Compose the string representing rows for output.
+// It will invoke 'Dataset.showString' to compute the results.
+message ShowString {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Number of rows to show.
+  optional int32 numRows = 2;
+
+  // (Required) If set to more than 0, truncates strings to
+  // `truncate` characters and all cells will be aligned right.
+  optional int32 truncate = 3;
+
+  // (Required) If set to true, prints output rows vertically (one line per column value).
+  optional bool vertical = 4;
+}
+
+// Computes specified statistics for numeric and string columns.
+// It will invoke 'Dataset.summary' (same as 'StatFunctions.summary')
+// to compute the results.
+message StatSummary {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Optional) Statistics from to be computed.
+  //
+  // Available statistics are:
+  //  count
+  //  mean
+  //  stddev
+  //  min
+  //  max
+  //  arbitrary approximate percentiles specified as a percentage (e.g. 75%)
+  //  count_distinct
+  //  approx_count_distinct
+  //
+  // If no statistics are given, this function computes 'count', 'mean', 'stddev', 'min',
+  // 'approximate quartiles' (percentiles at 25%, 50%, and 75%), and 'max'.
+  repeated string statistics = 2;
+}
+
+// Computes a pair-wise frequency table of the given columns. Also known as a contingency table.
+// It will invoke 'Dataset.stat.crosstab' (same as 'StatFunctions.crossTabulate')
+// to compute the results.
+message StatCrosstab {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The name of the first column.
+  //
+  // Distinct items will make the first item of each row.
+  string col1 = 2;
+
+  // (Required) The name of the second column.
+  //
+  // Distinct items will make the column names of the DataFrame.
+  string col2 = 3;
+}
+
+// Rename columns on the input relation by the same length of names.
+message RenameColumnsBySameLengthNames {
+  // Required. The input relation.
+  Relation input = 1;
+
+  // Required.
+  //
+  // The number of columns of the input relation must be equal to the length
+  // of this field. If this is not true, an exception will be returned.
+  repeated string column_names = 2;
+}
+
+
+// Rename columns on the input relation by a map with name to name mapping.
+message RenameColumnsByNameToNameMap {
+  // Required. The input relation.
+  Relation input = 1;
+
+
+  // Required.
+  //
+  // Renaming column names of input relation from A to B where A is the map key
+  // and B is the map value. This is a no-op if schema doesn't contain any A. It
+  // does not require that all input relation column names to present as keys.
+  // duplicated B are not allowed.
+  map<string, string> rename_columns_map = 2;
 }

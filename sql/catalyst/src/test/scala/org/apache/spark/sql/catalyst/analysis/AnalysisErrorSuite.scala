@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.Assertions._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -257,11 +258,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
       "IGNORE NULLS"), "Function aggregate does not support IGNORE NULLS" :: Nil)
 
-  errorTest(
-    "nested aggregate functions",
+  errorClassTest(
+    name = "nested aggregate functions",
     testRelation.groupBy($"a")(
       Max(Count(Literal(1)).toAggregateExpression()).toAggregateExpression()),
-    "not allowed to use an aggregate function in the argument of another aggregate function." :: Nil
+    errorClass = "NESTED_AGGREGATE_FUNCTION",
+    messageParameters = Map.empty
   )
 
   errorTest(
@@ -382,10 +384,13 @@ class AnalysisErrorSuite extends AnalysisTest {
     Map("fieldName" -> "`c`", "fields" -> "`aField`, `bField`, `cField`"),
     caseSensitive = false)
 
-  errorTest(
-    "catch all unresolved plan",
-    UnresolvedTestPlan(),
-    "unresolved" :: Nil)
+  checkError(
+    exception = intercept[SparkException] {
+      val analyzer = getAnalyzer
+      analyzer.checkAnalysis(analyzer.execute(UnresolvedTestPlan()))
+    },
+    errorClass = "INTERNAL_ERROR",
+    parameters = Map("message" -> "Found the unresolved operator: 'UnresolvedTestPlan"))
 
   errorTest(
     "union with unequal number of columns",
@@ -770,10 +775,11 @@ class AnalysisErrorSuite extends AnalysisTest {
           AttributeReference("a", IntegerType)(exprId = ExprId(2)),
           AttributeReference("b", IntegerType)(exprId = ExprId(1))))
 
-    assertAnalysisError(
-      plan,
-      "It is not allowed to use an aggregate function in the argument of " +
-        "another aggregate function." :: Nil)
+    assertAnalysisErrorClass(
+      inputPlan = plan,
+      expectedErrorClass = "NESTED_AGGREGATE_FUNCTION",
+      expectedMessageParameters = Map.empty
+    )
   }
 
   test("Join can work on binary types but can't work on map types") {

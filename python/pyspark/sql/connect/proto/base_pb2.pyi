@@ -178,38 +178,17 @@ class Response(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         ROW_COUNT_FIELD_NUMBER: builtins.int
-        UNCOMPRESSED_BYTES_FIELD_NUMBER: builtins.int
-        COMPRESSED_BYTES_FIELD_NUMBER: builtins.int
         DATA_FIELD_NUMBER: builtins.int
-        SCHEMA_FIELD_NUMBER: builtins.int
         row_count: builtins.int
-        uncompressed_bytes: builtins.int
-        compressed_bytes: builtins.int
         data: builtins.bytes
-        schema: builtins.bytes
         def __init__(
             self,
             *,
             row_count: builtins.int = ...,
-            uncompressed_bytes: builtins.int = ...,
-            compressed_bytes: builtins.int = ...,
             data: builtins.bytes = ...,
-            schema: builtins.bytes = ...,
         ) -> None: ...
         def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "compressed_bytes",
-                b"compressed_bytes",
-                "data",
-                b"data",
-                "row_count",
-                b"row_count",
-                "schema",
-                b"schema",
-                "uncompressed_bytes",
-                b"uncompressed_bytes",
-            ],
+            self, field_name: typing_extensions.Literal["data", b"data", "row_count", b"row_count"]
         ) -> None: ...
 
     class JSONBatch(google.protobuf.message.Message):
@@ -339,12 +318,12 @@ class Response(google.protobuf.message.Message):
         ) -> None: ...
 
     CLIENT_ID_FIELD_NUMBER: builtins.int
-    BATCH_FIELD_NUMBER: builtins.int
+    ARROW_BATCH_FIELD_NUMBER: builtins.int
     JSON_BATCH_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     @property
-    def batch(self) -> global___Response.ArrowBatch: ...
+    def arrow_batch(self) -> global___Response.ArrowBatch: ...
     @property
     def json_batch(self) -> global___Response.JSONBatch: ...
     @property
@@ -356,15 +335,15 @@ class Response(google.protobuf.message.Message):
         self,
         *,
         client_id: builtins.str = ...,
-        batch: global___Response.ArrowBatch | None = ...,
+        arrow_batch: global___Response.ArrowBatch | None = ...,
         json_batch: global___Response.JSONBatch | None = ...,
         metrics: global___Response.Metrics | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "batch",
-            b"batch",
+            "arrow_batch",
+            b"arrow_batch",
             "json_batch",
             b"json_batch",
             "metrics",
@@ -376,8 +355,8 @@ class Response(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "batch",
-            b"batch",
+            "arrow_batch",
+            b"arrow_batch",
             "client_id",
             b"client_id",
             "json_batch",
@@ -390,7 +369,7 @@ class Response(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> typing_extensions.Literal["batch", "json_batch"] | None: ...
+    ) -> typing_extensions.Literal["arrow_batch", "json_batch"] | None: ...
 
 global___Response = Response
 

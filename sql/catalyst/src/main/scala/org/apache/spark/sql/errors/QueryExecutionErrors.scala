@@ -367,7 +367,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "_LEGACY_ERROR_TEMP_2008",
       messageParameters = Map(
         "url" -> url.toString,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      cause = e)
   }
 
   def illegalUrlError(url: UTF8String): Throwable = {
@@ -714,12 +715,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def createStreamingSourceNotSpecifySchemaError(): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2048",
-      messageParameters = Map.empty)
-  }
-
-  def inferDateWithLegacyTimeParserError(): Throwable = {
-    new SparkIllegalArgumentException(
-      errorClass = "CANNOT_INFER_DATE",
       messageParameters = Map.empty)
   }
 
@@ -1232,7 +1227,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       stats: String, e: NumberFormatException): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2113",
-      messageParameters = Map("stats" -> stats))
+      messageParameters = Map("stats" -> stats),
+      cause = e)
   }
 
   def statisticNotRecognizedError(stats: String): SparkIllegalArgumentException = {
@@ -2770,7 +2766,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def multipleRowSubqueryError(context: SQLQueryContext): Throwable = {
     new SparkException(
-      errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+      errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
       messageParameters = Map.empty,
       cause = null,
       context = getQueryContext(context),
@@ -2815,5 +2811,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "failFastMode" -> FailFastMode.name),
       cause = e)
+  }
+
+  def locationAlreadyExists(tableId: TableIdentifier, location: Path): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "LOCATION_ALREADY_EXISTS",
+      messageParameters = Map(
+        "location" -> toSQLValue(location.toString, StringType),
+        "identifier" -> toSQLId(tableId.nameParts)))
   }
 }

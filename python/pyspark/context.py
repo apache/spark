@@ -67,7 +67,7 @@ from pyspark.rdd import RDD, _load_from_socket
 from pyspark.taskcontext import TaskContext
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
-from pyspark.profiler import ProfilerCollector, BasicProfiler, UDFBasicProfiler
+from pyspark.profiler import ProfilerCollector, BasicProfiler, UDFBasicProfiler, MemoryProfiler
 from py4j.java_gateway import is_instance_of, JavaGateway, JavaObject, JVMView
 
 if TYPE_CHECKING:
@@ -177,6 +177,7 @@ class SparkContext:
         jsc: Optional[JavaObject] = None,
         profiler_cls: Type[BasicProfiler] = BasicProfiler,
         udf_profiler_cls: Type[UDFBasicProfiler] = UDFBasicProfiler,
+        memory_profiler_cls: Type[MemoryProfiler] = MemoryProfiler,
     ):
 
         if conf is None or conf.get("spark.executor.allowSparkContext", "false").lower() != "true":
@@ -204,6 +205,7 @@ class SparkContext:
                 jsc,
                 profiler_cls,
                 udf_profiler_cls,
+                memory_profiler_cls,
             )
         except BaseException:
             # If an error occurs, clean up in order to allow future SparkContext creation:
@@ -223,6 +225,7 @@ class SparkContext:
         jsc: JavaObject,
         profiler_cls: Type[BasicProfiler] = BasicProfiler,
         udf_profiler_cls: Type[UDFBasicProfiler] = UDFBasicProfiler,
+        memory_profiler_cls: Type[MemoryProfiler] = MemoryProfiler,
     ) -> None:
         self.environment = environment or {}
         # java gateway must have been launched at this point.
@@ -354,9 +357,14 @@ class SparkContext:
         ).getAbsolutePath()
 
         # profiling stats collected for each PythonRDD
-        if self._conf.get("spark.python.profile", "false") == "true":
+        if (
+            self._conf.get("spark.python.profile", "false") == "true"
+            or self._conf.get("spark.python.profile.memory", "false") == "true"
+        ):
             dump_path = self._conf.get("spark.python.profile.dump", None)
-            self.profiler_collector = ProfilerCollector(profiler_cls, udf_profiler_cls, dump_path)
+            self.profiler_collector = ProfilerCollector(
+                profiler_cls, udf_profiler_cls, memory_profiler_cls, dump_path
+            )
         else:
             self.profiler_collector = None  # type: ignore[assignment]
 
@@ -2320,8 +2328,8 @@ class SparkContext:
             self.profiler_collector.show_profiles()
         else:
             raise RuntimeError(
-                "'spark.python.profile' configuration must be set "
-                "to 'true' to enable Python profile."
+                "'spark.python.profile' or 'spark.python.profile.memory' configuration"
+                " must be set to 'true' to enable Python profile."
             )
 
     def dump_profiles(self, path: str) -> None:
@@ -2337,8 +2345,8 @@ class SparkContext:
             self.profiler_collector.dump_profiles(path)
         else:
             raise RuntimeError(
-                "'spark.python.profile' configuration must be set "
-                "to 'true' to enable Python profile."
+                "'spark.python.profile' or 'spark.python.profile.memory' configuration"
+                " must be set to 'true' to enable Python profile."
             )
 
     def getConf(self) -> SparkConf:

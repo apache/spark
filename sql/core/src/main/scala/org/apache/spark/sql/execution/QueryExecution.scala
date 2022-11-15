@@ -213,11 +213,9 @@ class QueryExecution(
     append("\n")
   }
 
-  def explainString(
-      mode: ExplainMode,
-      maxFields: Int = SQLConf.get.maxToStringFields): String = {
+  def explainString(mode: ExplainMode): String = {
     val concat = new PlanStringConcat()
-    explainString(mode, maxFields, concat.append)
+    explainString(mode, SQLConf.get.maxToStringFields, concat.append)
     withRedaction {
       concat.toString
     }
@@ -495,11 +493,9 @@ object QueryExecution {
    */
   private[sql] def toInternalError(msg: String, e: Throwable): Throwable = e match {
     case e @ (_: java.lang.NullPointerException | _: java.lang.AssertionError) =>
-      new SparkException(
-        errorClass = "INTERNAL_ERROR",
-        messageParameters = Map("message" -> (msg +
-          " Please, fill a bug report in, and provide the full stack trace.")),
-        cause = e)
+      SparkException.internalError(
+        msg + " Please, fill a bug report in, and provide the full stack trace.",
+        e)
     case e: Throwable =>
       e
   }
