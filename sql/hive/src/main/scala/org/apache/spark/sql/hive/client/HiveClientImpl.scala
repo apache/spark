@@ -62,7 +62,7 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.HiveExternalCatalog
-import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
+import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA, STATISTICS_PREFIX}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -609,13 +609,16 @@ private[hive] class HiveClientImpl(
     shim.alterTable(client, qualifiedTableName, hiveTable)
   }
 
-  override def alterTableProps(
+  override def alterTableStats(
       dbName: String,
       tableName: String,
-      newProps: Map[String, String]): Unit = withHiveState {
+      stats: Map[String, String]): Unit = withHiveState {
     val hiveTable = getRawHiveTable(dbName, tableName).rawTable.asInstanceOf[HiveTable]
     val newParameters = new JHashMap[String, String]()
-    newParameters.putAll(newProps.asJava)
+    hiveTable.getParameters.asScala.toMap.filterNot(_._1.startsWith(STATISTICS_PREFIX))
+      .map(kv => newParameters.put(kv._1, kv._2))
+
+    newParameters.putAll(stats.asJava)
     hiveTable.getTTable.setParameters(newParameters)
     shim.alterTable(client, s"$dbName.$tableName", hiveTable)
   }
