@@ -1157,7 +1157,7 @@ class DatasetSuite extends QueryTest
         val e = intercept[AnalysisException](
           dataset.createTempView("test_db.tempView"))
         checkError(e,
-          errorClass = "TEMP_VIEW_NAME_CONTAINS_UNSUPPORTED_NAME_PARTS",
+          errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
           parameters = Map("actualName" -> "test_db.tempView"))
       }
 

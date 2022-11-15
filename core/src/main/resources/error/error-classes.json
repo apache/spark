@@ -933,7 +933,7 @@
     ],
     "sqlState" : "42000"
   },
-  "TEMP_VIEW_NAME_CONTAINS_UNSUPPORTED_NAME_PARTS" : {
+  "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS" : {
     "message" : [
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>"
     ]

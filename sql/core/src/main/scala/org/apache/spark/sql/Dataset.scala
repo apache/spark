@@ -3807,12 +3807,12 @@ class Dataset[T] private[sql](
     if (!SQLConf.get.allowsTempViewCreationWithMultipleNameparts && identifier.size > 1) {
       // Temporary view names should NOT contain database prefix like "database.table"
       throw new AnalysisException(
-        errorClass = "TEMP_VIEW_NAME_CONTAINS_UNSUPPORTED_NAME_PARTS",
+        errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
         messageParameters = Map("actualName" -> viewName))
     }
 
     CreateViewCommand(
-      name = TableIdentifier.apply(identifier.last),
+      name = TableIdentifier(identifier.last),
       userSpecifiedColumns = Nil,
       comment = None,
       properties = Map.empty,
