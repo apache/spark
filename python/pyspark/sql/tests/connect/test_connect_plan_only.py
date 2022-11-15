@@ -172,6 +172,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.alias("table_alias")._plan.to_proto(self.connect)
         self.assertEqual(plan.root.subquery_alias.alias, "table_alias")
+        self.assertIsNotNone(plan.root.subquery_alias.input)
 
     def test_range(self):
         plan = self.connect.range(start=10, end=20, step=3, num_partitions=4)._plan.to_proto(

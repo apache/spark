@@ -388,8 +388,51 @@ class DataFrame(object):
             session=self._session,
         )
 
-    def show(self, n: int, truncate: Optional[Union[bool, int]], vertical: Optional[bool]) -> None:
-        ...
+    def _show_string(
+        self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False
+    ) -> str:
+        if not isinstance(n, int) or isinstance(n, bool):
+            raise TypeError("Parameter 'n' (number of rows) must be an int")
+        if not isinstance(vertical, bool):
+            raise TypeError("Parameter 'vertical' must be a bool")
+
+        _truncate: int = -1
+        if isinstance(truncate, bool) and truncate:
+            _truncate = 20
+        else:
+            try:
+                _truncate = int(truncate)
+            except ValueError:
+                raise TypeError(
+                    "Parameter 'truncate={}' should be either bool or int.".format(truncate)
+                )
+
+        pdf = DataFrame.withPlan(
+            plan.ShowString(child=self._plan, numRows=n, truncate=_truncate, vertical=vertical),
+            session=self._session,
+        ).toPandas()
+        assert pdf is not None
+        return pdf["show_string"][0]
+
+    def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
+        """
+        Prints the first ``n`` rows to the console.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        n : int, optional
+            Number of rows to show.
+        truncate : bool or int, optional
+            If set to ``True``, truncate strings longer than 20 chars by default.
+            If set to a number greater than one, truncates long strings to length ``truncate``
+            and align cells right.
+        vertical : bool, optional
+            If set to ``True``, print output rows vertically (one line
+            per column value).
+        """
+        print(self._show_string(n, truncate, vertical))
 
     def union(self, other: "DataFrame") -> "DataFrame":
         return self.unionAll(other)
