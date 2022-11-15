@@ -9,11 +9,11 @@ if a filed is set or not-set. (Read [proto3 field rules](https://developers.goog
 
 Even proto3 does not offer `required` constraint, there are still some fields that
 are semantically required. For such case, we shall add comment `(Required)` on the
-field to indicate it as required. The expectation for client implementation (or any submitted proto plan)
-is that such fields should be always set, and server will always assume such fields
-are set and use whatever values from the fields directly. It is the client side's fault
-to not offer meaningful value for `required` field and in that case, the behavior on
-the server side is decided by the default value of the field.
+field to indicate it as required. The expectation for client implementation 
+(or any submitted proto plan) is that such fields should be always set, and server will
+always assume such fields are set and use whatever values from the fields directly.
+It is the client side's fault to not offer meaningful value for `required` field and in that case,
+the behavior on the server side is decided by the default value of the field.
 
 Example:
 ```protobuf
@@ -38,5 +38,4 @@ message DataSource {
   // (Optional) If not set, Spark will infer the schema.
   optional string schema = 2;
 }
-
 ```
