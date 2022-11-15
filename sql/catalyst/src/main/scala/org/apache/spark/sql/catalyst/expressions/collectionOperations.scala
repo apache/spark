@@ -249,7 +249,7 @@ case class MapContainsKey(left: Expression, right: Expression)
         TypeUtils.checkForOrderingExpr(kt, prettyName)
       case _ =>
         DataTypeMismatch(
-          errorSubClass = "MAP_CONTAINS_KEY_DIFF_TYPES",
+          errorSubClass = "MAP_FUNCTION_DIFF_TYPES",
           messageParameters = Map(
             "functionName" -> toSQLId(prettyName),
             "dataType" -> toSQLType(MapType),
@@ -1047,7 +1047,7 @@ object ArraySortLike {
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class SortArray(base: Expression, ascendingOrder: Expression)
-  extends BinaryExpression with ArraySortLike with NullIntolerant {
+  extends BinaryExpression with ArraySortLike with NullIntolerant with QueryErrorsBase {
 
   def this(e: Expression) = this(e, Literal(true))
 
@@ -1065,15 +1065,32 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
         case Literal(_: Boolean, BooleanType) =>
           TypeCheckResult.TypeCheckSuccess
         case _ =>
-          TypeCheckResult.TypeCheckFailure(
-            "Sort order in second argument requires a boolean literal.")
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> "2",
+              "requiredType" -> toSQLType(BooleanType),
+              "inputSql" -> toSQLExpr(ascendingOrder),
+              "inputType" -> toSQLType(ascendingOrder.dataType))
+          )
       }
     case ArrayType(dt, _) =>
-      val dtSimple = dt.catalogString
-      TypeCheckResult.TypeCheckFailure(
-        s"$prettyName does not support sorting array of type $dtSimple which is not orderable")
+      DataTypeMismatch(
+        errorSubClass = "INVALID_ORDERING_TYPE",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> toSQLType(base.dataType)
+        )
+      )
     case _ =>
-      TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> toSQLType(ArrayType),
+          "inputSql" -> toSQLExpr(base),
+          "inputType" -> toSQLType(base.dataType))
+      )
   }
 
   override def nullSafeEval(array: Any, ascending: Any): Any = {
@@ -1277,7 +1294,8 @@ case class Reverse(child: Expression)
   group = "array_funcs",
   since = "1.5.0")
 case class ArrayContains(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Predicate {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Predicate
+  with QueryErrorsBase {
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(right.dataType)
@@ -1296,13 +1314,31 @@ case class ArrayContains(left: Expression, right: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
-      case (_, NullType) =>
-        TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
+      case (_, NullType) | (NullType, _) =>
+        DataTypeMismatch(
+          errorSubClass = "NULL_TYPE",
+          messageParameters = Map("functionName" -> toSQLId(prettyName)))
+      case (l, _) if !ArrayType.acceptsType(l) =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "1",
+            "requiredType" -> toSQLType(ArrayType),
+            "inputSql" -> toSQLExpr(left),
+            "inputType" -> toSQLType(left.dataType))
+        )
       case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
         TypeUtils.checkForOrderingExpr(e2, prettyName)
-      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
-        s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
-        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> toSQLId(prettyName),
+            "dataType" -> toSQLType(ArrayType),
+            "leftType" -> toSQLType(left.dataType),
+            "rightType" -> toSQLType(right.dataType)
+          )
+        )
     }
   }
 
@@ -2051,7 +2087,7 @@ case class ArrayMax(child: Expression)
   group = "array_funcs",
   since = "2.4.0")
 case class ArrayPosition(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with QueryErrorsBase {
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(right.dataType)
@@ -2071,11 +2107,31 @@ case class ArrayPosition(left: Expression, right: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
+      case (NullType, _) | (_, NullType) =>
+        DataTypeMismatch(
+          errorSubClass = "NULL_TYPE",
+          Map("functionName" -> toSQLId(prettyName)))
+      case (t, _) if !ArrayType.acceptsType(t) =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "1",
+            "requiredType" -> toSQLType(ArrayType),
+            "inputSql" -> toSQLExpr(left),
+            "inputType" -> toSQLType(left.dataType))
+        )
       case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
         TypeUtils.checkForOrderingExpr(e2, prettyName)
-      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
-        s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
-        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> toSQLId(prettyName),
+            "dataType" -> toSQLType(ArrayType),
+            "leftType" -> toSQLType(left.dataType),
+            "rightType" -> toSQLType(right.dataType)
+          )
+        )
     }
   }
 
@@ -2179,7 +2235,8 @@ case class ElementAt(
     // The value to return if index is out of bound
     defaultValueOutOfBound: Option[Literal] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant with SupportQueryContext {
+  extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant with SupportQueryContext
+  with QueryErrorsBase {
 
   def this(left: Expression, right: Expression) = this(left, right, None, SQLConf.get.ansiEnabled)
 
@@ -2215,17 +2272,33 @@ case class ElementAt(
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
       case (_: ArrayType, e2) if e2 != IntegerType =>
-        TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
-          s"been ${ArrayType.simpleString} followed by a ${IntegerType.simpleString}, but it's " +
-          s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "2",
+            "requiredType" -> toSQLType(IntegerType),
+            "inputSql" -> toSQLExpr(right),
+            "inputType" -> toSQLType(right.dataType))
+        )
       case (MapType(e1, _, _), e2) if (!e2.sameType(e1)) =>
-        TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
-          s"been ${MapType.simpleString} followed by a value of same key type, but it's " +
-          s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+        DataTypeMismatch(
+          errorSubClass = "MAP_FUNCTION_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> toSQLId(prettyName),
+            "dataType" -> toSQLType(MapType),
+            "leftType" -> toSQLType(left.dataType),
+            "rightType" -> toSQLType(right.dataType)
+          )
+        )
       case (e1, _) if (!e1.isInstanceOf[MapType] && !e1.isInstanceOf[ArrayType]) =>
-        TypeCheckResult.TypeCheckFailure(s"The first argument to function $prettyName should " +
-          s"have been ${ArrayType.simpleString} or ${MapType.simpleString} type, but its " +
-          s"${left.dataType.catalogString} type.")
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "1",
+            "requiredType" -> toSQLType(TypeCollection(ArrayType, MapType)),
+            "inputSql" -> toSQLExpr(left),
+            "inputType" -> toSQLType(left.dataType))
+        )
       case _ => TypeCheckResult.TypeCheckSuccess
     }
   }
@@ -2411,7 +2484,8 @@ case class TryElementAt(left: Expression, right: Expression, replacement: Expres
   """,
   group = "collection_funcs",
   since = "1.5.0")
-case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
+case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression
+  with QueryErrorsBase {
 
   private def allowedTypes: Seq[AbstractDataType] = Seq(StringType, BinaryType, ArrayType)
 
@@ -2421,14 +2495,21 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     if (children.isEmpty) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      val childTypes = children.map(_.dataType)
-      if (childTypes.exists(tpe => !allowedTypes.exists(_.acceptsType(tpe)))) {
-        return TypeCheckResult.TypeCheckFailure(
-          s"input to function $prettyName should have been ${StringType.simpleString}," +
-            s" ${BinaryType.simpleString} or ${ArrayType.simpleString}, but it's " +
-            childTypes.map(_.catalogString).mkString("[", ", ", "]"))
+      val dataTypeMismatch = children.zipWithIndex.collectFirst {
+        case (e, idx) if !allowedTypes.exists(_.acceptsType(e.dataType)) =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> (idx + 1).toString,
+              "requiredType" -> toSQLType(TypeCollection(allowedTypes: _*)),
+              "inputSql" -> toSQLExpr(e),
+              "inputType" -> toSQLType(e.dataType))
+          )
       }
-      TypeUtils.checkForSameTypeInputExpr(childTypes, prettyName)
+      dataTypeMismatch match {
+        case Some(mismatch) => mismatch
+        case _ => TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), prettyName)
+      }
     }
   }
 
@@ -2615,7 +2696,8 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   """,
   group = "array_funcs",
   since = "2.4.0")
-case class Flatten(child: Expression) extends UnaryExpression with NullIntolerant {
+case class Flatten(child: Expression) extends UnaryExpression with NullIntolerant
+  with QueryErrorsBase {
 
   private def childDataType: ArrayType = child.dataType.asInstanceOf[ArrayType]
 
@@ -2631,9 +2713,13 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
     case ArrayType(_: ArrayType, _) =>
       TypeCheckResult.TypeCheckSuccess
     case _ =>
-      TypeCheckResult.TypeCheckFailure(
-        s"The argument should be an array of arrays, " +
-        s"but '${child.sql}' is of ${child.dataType.catalogString} type."
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> s"${toSQLType(ArrayType)} of ${toSQLType(ArrayType)}",
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType))
       )
   }
 
@@ -2759,7 +2845,8 @@ case class Sequence(
     stepOpt: Option[Expression],
     timeZoneId: Option[String] = None)
   extends Expression
-  with TimeZoneAwareExpression {
+  with TimeZoneAwareExpression
+  with QueryErrorsBase {
 
   import Sequence._
 
@@ -2811,15 +2898,16 @@ case class Sequence(
     if (typesCorrect) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"""
-           |$prettyName uses the wrong parameter type. The parameter type must conform to:
-           |1. The start and stop expressions must resolve to the same type.
-           |2. If start and stop expressions resolve to the 'date' or 'timestamp' type
-           |then the step expression must resolve to the 'interval' or
-           |'${YearMonthIntervalType.simpleString}' or '${DayTimeIntervalType.simpleString}' type,
-           |otherwise to the same type as the start and stop expressions.
-         """.stripMargin)
+      DataTypeMismatch(
+        errorSubClass = "SEQUENCE_WRONG_INPUT_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "startType" -> toSQLType(TypeCollection(TimestampType, TimestampNTZType, DateType)),
+          "stepType" -> toSQLType(
+            TypeCollection(CalendarIntervalType, YearMonthIntervalType, DayTimeIntervalType)),
+          "otherStartType" -> toSQLType(IntegralType)
+        )
+      )
     }
   }
 
@@ -3464,7 +3552,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
   group = "array_funcs",
   since = "2.4.0")
 case class ArrayRemove(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with QueryErrorsBase {
 
   override def dataType: DataType = left.dataType
 
@@ -3483,9 +3571,16 @@ case class ArrayRemove(left: Expression, right: Expression)
     (left.dataType, right.dataType) match {
       case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
         TypeUtils.checkForOrderingExpr(e2, prettyName)
-      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
-        s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
-        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> toSQLId(prettyName),
+            "dataType" -> toSQLType(ArrayType),
+            "leftType" -> toSQLType(left.dataType),
+            "rightType" -> toSQLType(right.dataType)
+          )
+        )
     }
   }
 

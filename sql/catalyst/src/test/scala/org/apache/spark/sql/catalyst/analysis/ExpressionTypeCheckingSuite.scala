@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -810,11 +810,13 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       UnresolvedAttribute("a") :: Nil,
       SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
       UnspecifiedFrame)
-    assert(wsd.checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "UNSPECIFIED_FRAME",
-        messageParameters = Map.empty
-      )
+    checkError(
+      exception = intercept[SparkException] {
+        wsd.checkInputDataTypes()
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> ("Cannot use an UnspecifiedFrame. " +
+        "This should have been converted during analysis."))
     )
   }
 }

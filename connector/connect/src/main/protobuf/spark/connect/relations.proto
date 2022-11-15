@@ -49,6 +49,7 @@ message Relation {
     Repartition repartition = 17;
     RenameColumnsBySameLengthNames rename_columns_by_same_length_names = 18;
     RenameColumnsByNameToNameMap rename_columns_by_name_to_name_map = 19;
+    ShowString show_string = 20;
 
     // stat functions
     StatSummary summary = 100;
@@ -98,6 +99,9 @@ message Read {
 // The input relation must be specified.
 // The projected expression can be an arbitrary expression.
 message Project {
+  // (Optional) Input relation is optional for Project.
+  //
+  // For example, `SELECT ABS(-1)` is valid plan without an input plan.
   Relation input = 1;
   repeated Expression expressions = 3;
 }
@@ -215,11 +219,7 @@ message Sample {
   double lower_bound = 2;
   double upper_bound = 3;
   bool with_replacement = 4;
-  Seed seed = 5;
-
-  message Seed {
-    int64 seed = 1;
-  }
+  optional int64 seed = 5;
 }
 
 // Relation of type [[Range]] that generates a sequence of integers.
@@ -232,11 +232,7 @@ message Range {
   int64 step = 3;
   // Optional. Default value is assigned by 1) SQL conf "spark.sql.leafNodeDefaultParallelism" if
   // it is set, or 2) spark default parallelism.
-  NumPartitions num_partitions = 4;
-
-  message NumPartitions {
-    int32 num_partitions = 1;
-  }
+  optional int32 num_partitions = 4;
 }
 
 // Relation alias.
@@ -259,6 +255,23 @@ message Repartition {
 
   // Optional. Default value is false.
   bool shuffle = 3;
+}
+
+// Compose the string representing rows for output.
+// It will invoke 'Dataset.showString' to compute the results.
+message ShowString {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Number of rows to show.
+  optional int32 numRows = 2;
+
+  // (Required) If set to more than 0, truncates strings to
+  // `truncate` characters and all cells will be aligned right.
+  optional int32 truncate = 3;
+
+  // (Required) If set to true, prints output rows vertically (one line per column value).
+  optional bool vertical = 4;
 }
 
 // Computes specified statistics for numeric and string columns.
