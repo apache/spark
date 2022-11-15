@@ -110,7 +110,8 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
                 1, "v", pc.divide(pc.subtract(v, pc.mean(v)), pc.stddev(v, ddof=1))
             )
 
-        # casting doubles to floats to get rid of numerical precision isses comparing Arrow and Spark values
+        # casting doubles to floats to get rid of numerical precision issues
+        # when comparing Arrow and Spark values
         actual = (
             df.groupby()
             .applyInArrow(normalize, "id long, v double")

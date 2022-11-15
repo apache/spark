@@ -398,7 +398,8 @@ class PandasGroupedOpsMixin:
         ...     ("id", "v"))  # doctest: +SKIP
         >>> def normalize(table):
         ...     v = table.column("v")
-        ...     return table.set_column(1, "v", pc.divide(pc.subtract(v, pc.mean(v)), pc.stddev(v, ddof=1)))
+        ...     norm = pc.divide(pc.subtract(v, pc.mean(v)), pc.stddev(v, ddof=1))
+        ...     return table.set_column(1, "v", norm)
         >>> df.groupby("id").applyInArrow(
         ...     normalize, schema="id long, v double").show()  # doctest: +SKIP
         +---+-------------------+

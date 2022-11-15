@@ -174,6 +174,7 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
     assign_cols_by_name : bool
         If True, then DataFrames will get columns by name
     """
+
     def __init__(self, assign_cols_by_name):
         super(ArrowStreamGroupUDFSerializer, self).__init__()
         self._assign_cols_by_name = assign_cols_by_name
@@ -191,10 +192,13 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
 
         if self._assign_cols_by_name:
             batch_iter = [
-                (pa.RecordBatch.from_arrays(
-                    [batch.column(field.name) for field in arrow_type],
-                    names=[field.name for field in arrow_type]
-                ), arrow_type)
+                (
+                    pa.RecordBatch.from_arrays(
+                        [batch.column(field.name) for field in arrow_type],
+                        names=[field.name for field in arrow_type],
+                    ),
+                    arrow_type,
+                )
                 for batch, arrow_type in batch_iter
             ]
 
@@ -684,6 +688,7 @@ class CogroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
     assign_cols_by_name : bool
         If True, then DataFrames will get columns by name
     """
+
     def __init__(self, assign_cols_by_name):
         super(CogroupArrowUDFSerializer, self).__init__(assign_cols_by_name)
 
