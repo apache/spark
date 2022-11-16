@@ -557,7 +557,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     checkError(
       exception = parseException(v3),
       errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
-      parameters = Map("actualName" -> "a.b"),
+      parameters = Map("actualName" -> "`a`.`b`"),
       context = ExpectedContext(
         fragment = v3,
         start = 0,
